@@ -3,12 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>{% block title %}Crypto alertsysteem{% endblock %}</title>
+<title>{% block title %}HesPulse{% endblock %}</title>
+<link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
 <header class="topbar">
-  <a href="/" class="brand">Crypto alerts</a>
+  <a href="/" class="brand">
+    <img src="/static/hespulse-logo.svg" alt="HesPulse logo">
+    <span>HesPulse</span>
+  </a>
   <nav>
     <a href="/">Dashboard</a>
     {% for c in coins %}

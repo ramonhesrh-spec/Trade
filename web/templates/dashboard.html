@@ -1,16 +1,18 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — Crypto alertsysteem{% endblock %}
+{% block title %}Dashboard — HesPulse{% endblock %}
 {% block content %}
 
 <section class="cards">
   <div class="card">
     <h3>Hoog vertrouwen</h3>
     <p class="big">{{ winrate.hoog_vertrouwen.winrate }}%</p>
+    <div class="winrate-bar"><div style="width: {{ winrate.hoog_vertrouwen.winrate }}%"></div></div>
     <p class="muted">{{ winrate.hoog_vertrouwen.wins }} van {{ winrate.hoog_vertrouwen.total }} gesloten trades</p>
   </div>
   <div class="card">
     <h3>Laag vertrouwen</h3>
     <p class="big">{{ winrate.laag_vertrouwen.winrate }}%</p>
+    <div class="winrate-bar"><div style="width: {{ winrate.laag_vertrouwen.winrate }}%"></div></div>
     <p class="muted">{{ winrate.laag_vertrouwen.wins }} van {{ winrate.laag_vertrouwen.total }} gesloten trades</p>
   </div>
   <div class="card">

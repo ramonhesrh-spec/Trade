@@ -18,7 +18,7 @@ from app import config, db, exchange, indicators, repo, security
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 
-app = FastAPI(title="Crypto alertsysteem")
+app = FastAPI(title="HesPulse")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 SESSION_COOKIE = "session"

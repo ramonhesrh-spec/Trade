@@ -1,17 +1,17 @@
 (function () {
   const container = document.getElementById("chart");
   const chart = LightweightCharts.createChart(container, {
-    layout: { background: { color: "#0f1115" }, textColor: "#e6e8eb" },
-    grid: { vertLines: { color: "#2a2e38" }, horzLines: { color: "#2a2e38" } },
+    layout: { background: { color: "#ffffff" }, textColor: "#1a1a1a" },
+    grid: { vertLines: { color: "#e1e8e7" }, horzLines: { color: "#e1e8e7" } },
     timeScale: { timeVisible: true },
   });
 
   const candleSeries = chart.addCandlestickSeries({
-    upColor: "#2ecc71", downColor: "#e74c3c",
-    borderVisible: false, wickUpColor: "#2ecc71", wickDownColor: "#e74c3c",
+    upColor: "#2f855a", downColor: "#c53030",
+    borderVisible: false, wickUpColor: "#2f855a", wickDownColor: "#c53030",
   });
-  const ema9Series = chart.addLineSeries({ color: "#4d8dff", lineWidth: 1, title: "EMA9" });
-  const ema21Series = chart.addLineSeries({ color: "#f5a623", lineWidth: 1, title: "EMA21" });
+  const ema9Series = chart.addLineSeries({ color: "#0ABAB5", lineWidth: 1, title: "EMA9" });
+  const ema21Series = chart.addLineSeries({ color: "#6b7280", lineWidth: 1, title: "EMA21" });
 
   fetch(`/api/candles/${SYMBOL}`)
     .then((r) => r.json())
@@ -22,18 +22,18 @@
 
       openTrades.forEach((trade) => {
         candleSeries.createPriceLine({
-          price: trade.entry_price, color: "#8a8f9a", lineWidth: 1,
+          price: trade.entry_price, color: "#1a1a1a", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Solid, title: `entry ${trade.direction}`,
         });
         if (trade.stop_loss) {
           candleSeries.createPriceLine({
-            price: trade.stop_loss, color: "#e74c3c", lineWidth: 1,
+            price: trade.stop_loss, color: "#c53030", lineWidth: 1,
             lineStyle: LightweightCharts.LineStyle.Solid, title: "stop loss",
           });
         }
         if (trade.take_profit) {
           candleSeries.createPriceLine({
-            price: trade.take_profit, color: "#2ecc71", lineWidth: 1,
+            price: trade.take_profit, color: "#2f855a", lineWidth: 1,
             lineStyle: LightweightCharts.LineStyle.Solid, title: "take profit",
           });
         }
@@ -41,7 +41,7 @@
 
       sourceLevels.forEach((lvl) => {
         candleSeries.createPriceLine({
-          price: lvl.price_level, color: "#f5a623", lineWidth: 1,
+          price: lvl.price_level, color: "#0ABAB5", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed,
           title: `analyse Discord${lvl.pattern_name ? ": " + lvl.pattern_name : ""}`,
         });

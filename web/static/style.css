@@ -1,13 +1,14 @@
 :root {
-  color-scheme: light dark;
-  --bg: #0f1115;
-  --panel: #171a21;
-  --border: #2a2e38;
-  --text: #e6e8eb;
-  --muted: #8a8f9a;
-  --green: #2ecc71;
-  --red: #e74c3c;
-  --accent: #4d8dff;
+  color-scheme: light;
+  --bg: #f7f9f9;
+  --panel: #ffffff;
+  --border: #e1e8e7;
+  --text: #1a1a1a;
+  --muted: #6b7280;
+  --green: #2f855a;
+  --red: #c53030;
+  --accent: #0abab5;
+  --accent-dark: #089490;
 }
 
 * { box-sizing: border-box; }
@@ -16,7 +17,7 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   font-size: 14px;
 }
 
@@ -28,15 +29,18 @@ body {
   background: var(--panel);
   border-bottom: 1px solid var(--border);
 }
-.topbar .brand { font-weight: 700; color: var(--text); text-decoration: none; }
+.topbar .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.topbar .brand img { height: 26px; width: auto; display: block; }
+.topbar .brand span { font-weight: 700; color: var(--text); font-size: 16px; letter-spacing: -0.01em; }
 .topbar nav { display: flex; gap: 14px; flex: 1; flex-wrap: wrap; }
 .topbar nav a { color: var(--muted); text-decoration: none; }
-.topbar nav a:hover { color: var(--text); }
+.topbar nav a:hover { color: var(--accent); }
 .logout-form { display: flex; align-items: center; gap: 10px; }
 .logout-form button {
   background: none; border: 1px solid var(--border); color: var(--muted);
   padding: 6px 12px; border-radius: 4px; cursor: pointer;
 }
+.logout-form button:hover { color: var(--text); border-color: var(--muted); }
 
 main { padding: 20px; max-width: 1200px; margin: 0 auto; }
 
@@ -49,6 +53,12 @@ main { padding: 20px; max-width: 1200px; margin: 0 auto; }
 .card .big { font-size: 28px; font-weight: 700; margin: 0; }
 .muted { color: var(--muted); }
 
+.winrate-bar {
+  height: 6px; border-radius: 3px; background: var(--border);
+  margin: 10px 0; overflow: hidden;
+}
+.winrate-bar > div { height: 100%; background: var(--accent); }
+
 table.signals { width: 100%; border-collapse: collapse; margin-top: 12px; }
 table.signals th, table.signals td {
   padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; font-size: 13px;
@@ -56,7 +66,7 @@ table.signals th, table.signals td {
 table.signals th { color: var(--muted); font-weight: 500; }
 .long { color: var(--green); font-weight: 600; }
 .short { color: var(--red); font-weight: 600; }
-.hoog { color: var(--green); }
+.hoog { color: var(--accent-dark); font-weight: 600; }
 .laag { color: var(--muted); }
 .pos { color: var(--green); }
 .neg { color: var(--red); }
@@ -67,21 +77,25 @@ form.inline-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: w
 form.inline-form label { display: flex; flex-direction: column; font-size: 12px; color: var(--muted); gap: 4px; }
 
 input, select, button {
-  background: #0d0f14; color: var(--text); border: 1px solid var(--border);
+  background: #ffffff; color: var(--text); border: 1px solid var(--border);
   border-radius: 4px; padding: 6px 8px; font-size: 13px;
+  font-family: inherit;
 }
-button { cursor: pointer; background: var(--accent); border-color: var(--accent); color: white; }
-button:hover { opacity: 0.9; }
+button { cursor: pointer; background: var(--accent); border-color: var(--accent); color: white; font-weight: 600; }
+button:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
 
 .status-form, .close-form, .note-form { display: flex; gap: 6px; align-items: center; }
 .status-form input, .close-form input { width: 100px; }
 .note-form input { width: 140px; }
 
-.login-body { display: flex; align-items: center; justify-content: center; height: 100vh; }
+.login-body { display: flex; align-items: center; justify-content: center; height: 100vh; background: var(--bg); }
 .login-card {
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
   padding: 32px; display: flex; flex-direction: column; gap: 14px; width: 320px;
 }
+.login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+.login-brand img { height: 32px; width: auto; }
+.login-brand span { font-weight: 700; font-size: 20px; letter-spacing: -0.01em; }
 .login-card label { display: flex; flex-direction: column; gap: 6px; }
 .error { color: var(--red); margin: 0; }
 
