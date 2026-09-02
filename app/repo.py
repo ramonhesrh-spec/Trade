@@ -254,6 +254,15 @@ def get_signal(signal_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
+def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM signals WHERE coin = ? ORDER BY created_at DESC LIMIT ?",
+            (coin.upper(), limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # Logboek: eigen per gebruiker, gekoppeld aan een gedeeld signaal
 # ---------------------------------------------------------------------------

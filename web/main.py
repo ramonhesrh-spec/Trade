@@ -272,12 +272,18 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     source_levels = repo.list_source_levels(symbol)
     entries = repo.list_journal_for_coin(user["id"], symbol)
     open_trades = [e for e in entries if e["entry_price"] is not None and e["exit_price"] is None]
+    open_signal_ids = {e["signal_id"] for e in open_trades}
+    recent_signals = [
+        s for s in repo.list_recent_signals(symbol)
+        if s["id"] not in open_signal_ids and (s["stop_loss"] or s["take_profit"])
+    ]
 
     return templates.TemplateResponse(request, "coin.html", {
         "user": user,
         "symbol": symbol,
         "source_levels": source_levels,
         "open_trades": open_trades,
+        "recent_signals": recent_signals,
         "coins": repo.list_coins(),
     })
 
