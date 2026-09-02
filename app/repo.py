@@ -430,8 +430,8 @@ def update_journal_status(
 
 def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_time: str) -> None:
     entry = get_journal_entry(entry_id, user_id)
-    if not entry or entry["entry_price"] is None:
-        raise ValueError("kan alleen sluiten als er een entry prijs is ingevuld")
+    if not entry or entry["entry_price"] is None or entry["status"] == "genegeerd":
+        raise ValueError("kan alleen sluiten als er een entry prijs is ingevuld en de trade niet genegeerd is")
 
     entry_price = entry["entry_price"]
     direction = entry["direction"].lower()

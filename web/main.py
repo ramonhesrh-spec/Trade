@@ -3,6 +3,7 @@ login, eigen portfolio en eigen logboek. Iedereen ziet dezelfde signalen.
 Open registratie op /registreer. Draai met:
 uvicorn web.main:app --host 0.0.0.0 --port 8000
 """
+import asyncio
 import csv
 import io
 import re
@@ -191,10 +192,12 @@ def _add_signal_context(entries: list[dict], winrate: dict) -> list[dict]:
     return entries
 
 
-def _enrich_open_positions(entries: list[dict]) -> list[dict]:
+async def _enrich_open_positions(entries: list[dict]) -> list[dict]:
     """Vult elke open positie (entry_price al ingevuld) aan met de actuele
     prijs en het nog niet gerealiseerde resultaat. Eén prijs-opvraag per
-    coin, ook als er meerdere open trades op dezelfde coin staan."""
+    coin, ook als er meerdere open trades op dezelfde coin staan. De
+    exchange-aanroep loopt via to_thread, anders blokkeert die synchrone
+    netwerkcall de hele server voor iedereen tegelijk."""
     price_cache: dict[str, Optional[float]] = {}
     for entry in entries:
         entry["position_size"] = (
@@ -208,7 +211,7 @@ def _enrich_open_positions(entries: list[dict]) -> list[dict]:
             continue
         if entry["coin"] not in price_cache:
             try:
-                price_cache[entry["coin"]] = exchange.fetch_last_price(entry["coin"])
+                price_cache[entry["coin"]] = await asyncio.to_thread(exchange.fetch_last_price, entry["coin"])
             except Exception:
                 price_cache[entry["coin"]] = None
         current_price = price_cache[entry["coin"]]
@@ -222,17 +225,30 @@ def _enrich_open_positions(entries: list[dict]) -> list[dict]:
     return entries
 
 
+def _filter_journal(all_entries: list[dict], status: str) -> list[dict]:
+    """Filtert een al opgehaalde lijst logboekregels op status, dezelfde
+    regels als repo.list_journal, zonder een tweede databasebevraging."""
+    if status == "open":
+        return [e for e in all_entries if e["status"] != "genegeerd" and e["exit_price"] is None]
+    if status == "gesloten":
+        return [e for e in all_entries if e["exit_price"] is not None]
+    if status == "genegeerd":
+        return [e for e in all_entries if e["status"] == "genegeerd"]
+    return all_entries
+
+
 @app.get("/dashboard")
 async def dashboard(request: Request, status: str = "alle", user: dict = Depends(require_login)):
-    entries = repo.list_journal(user["id"], status=None if status == "alle" else status)
-    for entry in entries:
+    all_entries = repo.list_journal(user["id"], status=None)
+    for entry in all_entries:
         entry["position_size"] = (
             risk.compute_position_size(entry["risk_eur"], entry["price"], entry["stop_loss"])
             if entry["risk_eur"] and entry["price"] and entry["stop_loss"] else None
         )
+    entries = _filter_journal(all_entries, status)
     winrate = repo.winrate_stats(user["id"])
     open_entries = _add_signal_context(
-        _enrich_open_positions(repo.list_journal(user["id"], status="open")), winrate,
+        await _enrich_open_positions(_filter_journal(all_entries, "open")), winrate,
     )
     cumulative = repo.cumulative_result_series(user["id"])
     coin_stats = repo.coin_stats(user["id"])
@@ -254,7 +270,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
 async def api_open_positions(user: dict = Depends(require_login)):
     """Ververst de live prijs en PnL van open posities, gebruikt door het
     dashboard om zonder volledige herlaad bij te werken."""
-    entries = _enrich_open_positions(repo.list_journal(user["id"], status="open"))
+    entries = await _enrich_open_positions(repo.list_journal(user["id"], status="open"))
     return [
         {
             "id": e["id"], "current_price": e["current_price"],
@@ -350,7 +366,7 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     symbol = symbol.upper()
     source_levels = repo.list_source_levels(symbol)
     entries = repo.list_journal_for_coin(user["id"], symbol)
-    open_trades = _enrich_open_positions(
+    open_trades = await _enrich_open_positions(
         [e for e in entries if e["entry_price"] is not None and e["exit_price"] is None]
     )
     open_signal_ids = {e["signal_id"] for e in open_trades}
@@ -394,7 +410,7 @@ async def api_coins(user: dict = Depends(require_login)):
 
 @app.get("/api/candles/{symbol}")
 async def api_candles(symbol: str, user: dict = Depends(require_login)):
-    df = exchange.fetch_ohlcv(symbol.upper(), timeframe=config.TIMEFRAME, limit=200)
+    df = await asyncio.to_thread(exchange.fetch_ohlcv, symbol.upper(), config.TIMEFRAME, 200)
     ema9, ema21 = indicators.ema_series(df)
 
     candles = [
