@@ -418,12 +418,14 @@ def reset_journal_entry(entry_id: int, user_id: int) -> None:
     'nieuw', geen entry/exit prijs, geen resultaat. Voor als er per ongeluk
     een verkeerde prijs of status is ingevuld, zonder de hele trade
     kwijt te raken (de melding zelf, stop loss en take profit blijven
-    gewoon staan)."""
+    gewoon staan). level_alert_sent gaat ook weer op 0, anders krijgt een
+    teruggezet signaal nooit meer een niveau-seintje."""
     with db.session() as conn:
         conn.execute(
             """UPDATE journal_entries
                SET status = 'nieuw', entry_price = NULL, exit_price = NULL,
-                   exit_time = NULL, result_eur = NULL, result_pct = NULL
+                   exit_time = NULL, result_eur = NULL, result_pct = NULL,
+                   level_alert_sent = 0
                WHERE id = ? AND user_id = ?""",
             (entry_id, user_id),
         )
@@ -473,7 +475,8 @@ def list_open_entries_with_levels() -> list[dict]:
     """Alle open logboekregels (eigen entry ingevuld, nog niet gesloten, nog
     geen seintje verstuurd), van alle gebruikers, met de coin, richting,
     stop loss/take profit en het telegram_chat_id erbij. Voor de periodieke
-    check of een open trade zijn niveau al geraakt heeft."""
+    check of een open trade zijn niveau al geraakt heeft. Oefentrades zijn
+    niet echt, daar hoort geen Telegram seintje bij."""
     with db.session() as conn:
         rows = conn.execute(
             """SELECT je.id AS id, je.user_id AS user_id, je.entry_price AS entry_price,
@@ -484,7 +487,31 @@ def list_open_entries_with_levels() -> list[dict]:
                JOIN signals s ON s.id = je.signal_id
                JOIN users u ON u.id = je.user_id
                WHERE je.entry_price IS NOT NULL AND je.exit_price IS NULL
-                     AND je.level_alert_sent = 0"""
+                     AND je.level_alert_sent = 0 AND s.is_practice = 0"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_pending_entries_with_price() -> list[dict]:
+    """Alle logboekregels die nog niet genomen zijn (nog geen eigen entry
+    ingevuld, niet genegeerd, nog geen seintje verstuurd), met het
+    oorspronkelijke signaalniveau en de ATR erbij. Voor de periodieke check
+    of de prijs weer dicht bij het niveau van een nog niet genomen signaal
+    komt. Gebruikt dezelfde level_alert_sent vlag als de SL/TP check op
+    open trades: een regel zonder eigen entry kan die twee nooit
+    tegelijk nodig hebben, dus hergebruik is hier veilig."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT je.id AS id, je.user_id AS user_id,
+                      s.coin AS coin, s.direction AS direction, s.price AS signal_price,
+                      s.atr AS atr, s.confidence AS confidence,
+                      u.username AS username, u.telegram_chat_id AS telegram_chat_id
+               FROM journal_entries je
+               JOIN signals s ON s.id = je.signal_id
+               JOIN users u ON u.id = je.user_id
+               WHERE je.entry_price IS NULL AND je.exit_price IS NULL
+                     AND je.status != 'genegeerd' AND je.level_alert_sent = 0
+                     AND s.is_practice = 0"""
         ).fetchall()
         return [dict(r) for r in rows]
 

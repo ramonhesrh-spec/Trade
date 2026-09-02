@@ -41,8 +41,10 @@ blijft voor elke gebruiker apart.
 - `app/repo.py`, `app/db.py`, `app/schema.sql` — sqlite logging
 - `app/backup.py` — dagelijkse back-up, optioneel ook naar een externe locatie
 - `app/heartbeat.py` — dagelijks levensteken via Telegram
-- `app/level_check.py` — periodieke check of een open trade zijn stop
-  loss of take profit al geraakt heeft
+- `app/level_check.py` — periodieke check: heeft een open trade zijn stop
+  loss of take profit al geraakt, en is de prijs weer terug bij het niveau
+  van een nog niet genomen signaal (proactief, niet alleen bij een nieuw
+  Discord bericht)
 - `web/` — FastAPI dashboard met login, inclusief een berichtenoverzicht op
   `/berichten` van alles wat wel en niet tot een melding leidde, een
   trackrecord per coin, en een csv export van je logboek
@@ -200,8 +202,17 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now crypto-level-check.timer
 ```
 
-Checkt elke 15 minuten of een open trade (eigen entry ingevuld, nog niet
-gesloten) de stop loss of take profit al geraakt heeft op de live prijs.
+Checkt elke 15 minuten twee dingen:
+- Heeft een open trade (eigen entry ingevuld, nog niet gesloten) de stop
+  loss of take profit al geraakt op de live prijs.
+- Is de prijs weer terug binnen 0,5x ATR van het niveau van een signaal dat
+  nog niet als eigen trade genomen is. Zo krijg je ook een seintje als een
+  eerder gemiste kans weer interessant wordt, niet alleen op het moment
+  dat het bericht zelf binnenkomt.
+
+Beide sturen één keer een seintje per logboekregel, geen herhaling zolang
+er niets verandert. Een reset in het dashboard maakt een nieuw seintje
+weer mogelijk.
 Zo ja, dan krijg je daar één keer een Telegram bericht over, met het
 verzoek om de trade zelf te sluiten in het dashboard. Er wordt niets
 automatisch gesloten, en je krijgt niet elke 15 minuten opnieuw hetzelfde

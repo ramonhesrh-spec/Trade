@@ -1,5 +1,5 @@
 [Unit]
-Description=HesPulse - check of open trades hun stop loss of take profit hebben geraakt
+Description=HesPulse - check open trades op SL/TP en nog niet genomen signalen op prijsniveau
 
 [Service]
 Type=oneshot
