@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Inloggen — Crypto alertsysteem</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body class="login-body">
+<form class="login-card" method="post" action="/login">
+  <h1>Crypto alertsysteem</h1>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <label>Gebruikersnaam
+    <input type="text" name="username" autocomplete="username" required>
+  </label>
+  <label>Wachtwoord
+    <input type="password" name="password" autocomplete="current-password" required>
+  </label>
+  <button type="submit">Inloggen</button>
+</form>
+</body>
+</html>

@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}Crypto alertsysteem{% endblock %}</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="topbar">
+  <a href="/" class="brand">Crypto alerts</a>
+  <nav>
+    <a href="/">Dashboard</a>
+    {% for c in coins %}
+      <a href="/coins/{{ c.symbol }}">{{ c.symbol }}</a>
+    {% endfor %}
+  </nav>
+  <form action="/logout" method="post" class="logout-form">
+    <button type="submit">Uitloggen</button>
+  </form>
+</header>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

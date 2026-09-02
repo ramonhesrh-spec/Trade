@@ -1,0 +1,9 @@
+[Unit]
+Description=Draai de crypto alertsysteem back-up dagelijks
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{{ symbol }} — Crypto alertsysteem{% endblock %}
+{% block content %}
+
+<h2>{{ symbol }}</h2>
+
+<div id="chart" style="height: 500px;"></div>
+
+<section>
+  <h3>Bron niveaus (analyse Discord)</h3>
+  {% if source_levels %}
+  <ul class="levels">
+    {% for lvl in source_levels %}
+      <li>{{ lvl.price_level }} {% if lvl.pattern_name %}— {{ lvl.pattern_name }}{% endif %} ({{ lvl.created_at[:10] }})</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="muted">Geen bron niveaus voor deze coin.</p>
+  {% endif %}
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+  const SYMBOL = {{ symbol | tojson }};
+  const openTrades = {{ open_trades | tojson }};
+  const sourceLevels = {{ source_levels | tojson }};
+</script>
+<script src="/static/coin.js"></script>
+{% endblock %}

@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Crypto alertsysteem{% endblock %}
+{% block content %}
+
+<section class="cards">
+  <div class="card">
+    <h3>Hoog vertrouwen</h3>
+    <p class="big">{{ winrate.hoog_vertrouwen.winrate }}%</p>
+    <p class="muted">{{ winrate.hoog_vertrouwen.wins }} van {{ winrate.hoog_vertrouwen.total }} gesloten trades</p>
+  </div>
+  <div class="card">
+    <h3>Laag vertrouwen</h3>
+    <p class="big">{{ winrate.laag_vertrouwen.winrate }}%</p>
+    <p class="muted">{{ winrate.laag_vertrouwen.wins }} van {{ winrate.laag_vertrouwen.total }} gesloten trades</p>
+  </div>
+  <div class="card">
+    <h3>Portfolio</h3>
+    <form action="/settings/portfolio" method="post" class="inline-form">
+      <label>Omvang in euro's
+        <input type="number" step="0.01" name="portfolio_eur" value="{{ portfolio_eur }}" required>
+      </label>
+      <label>Risico per trade (%)
+        <input type="number" step="0.1" name="risk_percent" value="{{ risk_percent }}" required>
+      </label>
+      <button type="submit">Opslaan</button>
+    </form>
+  </div>
+</section>
+
+<section>
+  <h2>Cumulatief resultaat</h2>
+  <canvas id="cumulative-chart" height="80"></canvas>
+</section>
+
+<section>
+  <div class="table-header">
+    <h2>Meldingen</h2>
+    <form method="get" action="/" class="inline-form">
+      <label>Filter
+        <select name="status" onchange="this.form.submit()">
+          <option value="alle" {% if status_filter == "alle" %}selected{% endif %}>Alle</option>
+          <option value="open" {% if status_filter == "open" %}selected{% endif %}>Open</option>
+          <option value="gesloten" {% if status_filter == "gesloten" %}selected{% endif %}>Gesloten</option>
+          <option value="genegeerd" {% if status_filter == "genegeerd" %}selected{% endif %}>Genegeerd</option>
+        </select>
+      </label>
+    </form>
+  </div>
+
+  <table class="signals">
+    <thead>
+      <tr>
+        <th>Tijdstip</th>
+        <th>Coin</th>
+        <th>Richting</th>
+        <th>Vertrouwen</th>
+        <th>Entry</th>
+        <th>Stop loss</th>
+        <th>Take profit</th>
+        <th>Status</th>
+        <th>Resultaat</th>
+        <th>Notitie</th>
+        <th>Acties</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for s in signals %}
+      <tr>
+        <td>{{ s.created_at[:16] | replace("T", " ") }}</td>
+        <td><a href="/coins/{{ s.coin }}">{{ s.coin }}</a></td>
+        <td class="{{ s.direction }}">{{ s.direction | upper }}</td>
+        <td class="{{ 'hoog' if s.confidence == 'hoog vertrouwen' else 'laag' }}">{{ s.confidence }}</td>
+        <td>{{ "%.4f"|format(s.price) if s.price else "-" }}</td>
+        <td>{{ "%.4f"|format(s.stop_loss) if s.stop_loss else "-" }}</td>
+        <td>{{ "%.4f"|format(s.take_profit) if s.take_profit else "-" }}</td>
+        <td>{{ s.status }}</td>
+        <td>
+          {% if s.result_eur is not none %}
+            <span class="{{ 'pos' if s.result_eur >= 0 else 'neg' }}">
+              €{{ "%.2f"|format(s.result_eur) }} ({{ "%.1f"|format(s.result_pct) }}%)
+            </span>
+          {% else %}-{% endif %}
+        </td>
+        <td>
+          <form action="/signals/{{ s.id }}/note" method="post" class="note-form">
+            <input type="text" name="note" value="{{ s.note or '' }}" placeholder="toelichting">
+            <button type="submit">Opslaan</button>
+          </form>
+        </td>
+        <td class="actions">
+          {% if s.status == "nieuw" %}
+          <form action="/signals/{{ s.id }}/status" method="post" class="status-form">
+            <select name="status">
+              <option value="genomen">Genomen</option>
+              <option value="aangepast">Aangepast</option>
+              <option value="genegeerd">Genegeerd</option>
+            </select>
+            <input type="number" step="any" name="entry_price" placeholder="eigen entry">
+            <button type="submit">Bevestig</button>
+          </form>
+          {% elif s.entry_price is not none and s.exit_price is none %}
+          <form action="/signals/{{ s.id }}/close" method="post" class="close-form">
+            <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
+            <input type="datetime-local" name="exit_time" required>
+            <button type="submit">Sluiten</button>
+          </form>
+          {% else %}
+            <span class="muted">-</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="11" class="muted">Nog geen meldingen.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+  const cumulativeData = {{ cumulative | tojson }};
+</script>
+<script src="/static/dashboard.js"></script>
+{% endblock %}
