@@ -263,21 +263,6 @@ async def update_journal_note(
 
 
 # ---------------------------------------------------------------------------
-# Berichtenoverzicht: ook wat niet tot een melding leidde
-# ---------------------------------------------------------------------------
-
-@app.get("/berichten")
-async def messages_page(request: Request, user: dict = Depends(require_login)):
-    coins = repo.list_coins()
-    return templates.TemplateResponse(request, "messages.html", {
-        "user": user,
-        "messages": repo.list_messages(),
-        "coins": coins,
-        "tracked_symbols": {c["symbol"] for c in coins},
-    })
-
-
-# ---------------------------------------------------------------------------
 # Grafiekpagina per coin
 # ---------------------------------------------------------------------------
 
