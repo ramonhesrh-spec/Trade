@@ -107,3 +107,10 @@ CREATE TABLE IF NOT EXISTS login_attempts (
     success INTEGER NOT NULL,
     ip_address TEXT
 );
+
+-- Voor het beperken van het aantal registraties per IP, tegen geautomatiseerde spam.
+CREATE TABLE IF NOT EXISTS registration_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    attempted_at TEXT NOT NULL,
+    ip_address TEXT NOT NULL
+);

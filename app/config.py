@@ -25,11 +25,15 @@ EXCHANGE_ID = _get("EXCHANGE_ID", "binance")
 QUOTE_CURRENCY = _get("QUOTE_CURRENCY", "USDT")
 TIMEFRAME = "4h"
 
-# Dashboard accounts staan in de database (tabel users), aangemaakt via
-# scripts/create_user.py. Geen open registratie.
+# Dashboard accounts staan in de database (tabel users). Open registratie
+# staat aan op /registreer, daarnaast kan een account ook via
+# scripts/create_user.py worden aangemaakt of bijgewerkt.
 JWT_SECRET = _get("JWT_SECRET", "change-me-to-a-random-secret")
 JWT_ALGORITHM = "HS256"
 SESSION_HOURS = 24 * 7
+
+# Maximum aantal registraties per IP per uur, tegen geautomatiseerde spam.
+MAX_REGISTRATIONS_PER_HOUR = int(_get("MAX_REGISTRATIONS_PER_HOUR", "5"))
 
 # Standaard risicopercentage voor een nieuwe gebruiker, aan te passen per
 # gebruiker in het dashboard.

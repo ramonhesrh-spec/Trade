@@ -1,6 +1,5 @@
-"""Wachtwoord hashing, JWT sessies en het beperken van inlogpogingen.
-Meerdere gebruikers mogelijk, elk met een eigen account, maar geen open
-registratie: accounts worden toegevoegd via scripts/create_user.py."""
+"""Wachtwoord hashing, JWT sessies, en het beperken van inlog- en
+registratiepogingen."""
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -60,3 +59,26 @@ def record_login_attempt(username: str, success: bool, ip_address: str = "") -> 
         if success:
             # Reset historie voor deze gebruiker na een geslaagde login.
             conn.execute("DELETE FROM login_attempts WHERE username = ? AND success = 0", (username,))
+
+
+# ---------------------------------------------------------------------------
+# Beperken van registraties, per IP, tegen geautomatiseerde spam
+# ---------------------------------------------------------------------------
+
+def is_registration_rate_limited(ip_address: str) -> bool:
+    cutoff = (datetime.now(timezone.utc) - timedelta(minutes=60)).isoformat()
+    with db.session() as conn:
+        row = conn.execute(
+            """SELECT COUNT(*) AS n FROM registration_attempts
+               WHERE ip_address = ? AND attempted_at > ?""",
+            (ip_address, cutoff),
+        ).fetchone()
+    return row["n"] >= config.MAX_REGISTRATIONS_PER_HOUR
+
+
+def record_registration_attempt(ip_address: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "INSERT INTO registration_attempts (attempted_at, ip_address) VALUES (?, ?)",
+            (db.now_iso(), ip_address),
+        )

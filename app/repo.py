@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import db
+from app import config, db
 
 
 # ---------------------------------------------------------------------------
@@ -155,8 +155,10 @@ def create_user(
     risk_percent: float, telegram_chat_id: Optional[str],
 ) -> int:
     """Maakt een gebruiker aan, of werkt een bestaande bij (zelfde
-    gebruikersnaam). Gebruikt door scripts/create_user.py, geen open
-    registratie via het dashboard zelf."""
+    gebruikersnaam). Gebruikt door scripts/create_user.py, een beheerder die
+    bewust een account aanmaakt of bijwerkt. Overschrijft desgewenst het
+    wachtwoord van een bestaande gebruiker, gebruik hiervoor nooit
+    gebruikersinvoer van een openbaar formulier, dat is register_user()."""
     with db.session() as conn:
         conn.execute(
             """INSERT INTO users
@@ -171,6 +173,27 @@ def create_user(
         )
         row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
         return row["id"]
+
+
+def register_user(username: str, password_hash: str) -> Optional[int]:
+    """Voor open registratie via /registreer. In tegenstelling tot
+    create_user() faalt dit gewoon (geeft None) als de gebruikersnaam al
+    bestaat, in plaats van het bestaande account te overschrijven. Portfolio
+    en risicopercentage starten op 0 / de standaardwaarde, telegram_chat_id
+    leeg, in te stellen na het inloggen."""
+    with db.session() as conn:
+        existing = conn.execute(
+            "SELECT 1 FROM users WHERE username = ?", (username,)
+        ).fetchone()
+        if existing:
+            return None
+        cur = conn.execute(
+            """INSERT INTO users
+               (username, password_hash, portfolio_eur, risk_percent, telegram_chat_id, created_at)
+               VALUES (?, ?, 0, ?, NULL, ?)""",
+            (username, password_hash, config.DEFAULT_RISK_PERCENT, db.now_iso()),
+        )
+        return cur.lastrowid
 
 
 def get_user(user_id: int) -> Optional[dict]:

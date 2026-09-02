@@ -97,6 +97,7 @@ button:hover { background: var(--accent-dark); border-color: var(--accent-dark);
 .login-brand img { height: 32px; width: auto; }
 .login-brand span { font-weight: 700; font-size: 20px; letter-spacing: -0.01em; }
 .login-card label { display: flex; flex-direction: column; gap: 6px; }
+.login-card a { color: var(--accent-dark); }
 .error { color: var(--red); margin: 0; }
 
 ul.levels { padding-left: 18px; }
@@ -129,6 +130,8 @@ main + .footer { border-top: 1px solid var(--border); }
 }
 .hero h1 { font-size: 40px; line-height: 1.15; margin: 0 0 16px; letter-spacing: -0.02em; }
 .hero p { font-size: 17px; color: var(--muted); margin: 0 0 32px; line-height: 1.6; }
+.hero-secondary { display: block; margin-top: 14px; color: var(--muted); font-size: 14px; text-decoration: none; }
+.hero-secondary:hover { color: var(--accent-dark); }
 .button-primary {
   display: inline-block; background: var(--accent); color: white; text-decoration: none;
   padding: 12px 28px; border-radius: 4px; font-weight: 600; font-size: 15px;

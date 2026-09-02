@@ -1,10 +1,11 @@
 """FastAPI webdashboard. Meerdere gebruikers mogelijk, elk met een eigen
 login, eigen portfolio en eigen logboek. Iedereen ziet dezelfde signalen.
-Geen open registratie, accounts via scripts/create_user.py. Draai met:
+Open registratie op /registreer. Draai met:
 uvicorn web.main:app --host 0.0.0.0 --port 8000
 """
 import csv
 import io
+import re
 import sys
 from pathlib import Path
 
@@ -105,6 +106,54 @@ async def login_submit(request: Request, username: str = Form(...), password: st
 async def logout():
     response = RedirectResponse(url="/login", status_code=303)
     response.delete_cookie(SESSION_COOKIE)
+    return response
+
+
+# ---------------------------------------------------------------------------
+# Registreren
+# ---------------------------------------------------------------------------
+
+USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{3,32}$")
+
+
+@app.get("/registreer")
+async def register_form(request: Request):
+    return templates.TemplateResponse(request, "register.html", {"error": None})
+
+
+@app.post("/registreer")
+async def register_submit(
+    request: Request,
+    username: str = Form(...),
+    password: str = Form(...),
+    password_confirm: str = Form(...),
+):
+    ip = request.client.host if request.client else ""
+
+    def error(message: str, status_code: int = 400):
+        return templates.TemplateResponse(
+            request, "register.html", {"error": message}, status_code=status_code,
+        )
+
+    if security.is_registration_rate_limited(ip):
+        return error("Te veel registraties vanaf dit adres. Probeer het later opnieuw.", 429)
+
+    username = username.strip()
+    if not USERNAME_PATTERN.match(username):
+        return error("Gebruikersnaam moet 3 tot 32 tekens zijn: letters, cijfers, - of _.")
+    if len(password) < 8:
+        return error("Wachtwoord moet minstens 8 tekens zijn.")
+    if password != password_confirm:
+        return error("Wachtwoorden komen niet overeen.")
+
+    security.record_registration_attempt(ip)
+    user_id = repo.register_user(username, security.hash_password(password))
+    if user_id is None:
+        return error("Deze gebruikersnaam is al in gebruik.")
+
+    token = security.create_session_token(user_id)
+    response = RedirectResponse(url="/dashboard", status_code=303)
+    response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 
 

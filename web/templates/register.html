@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Inloggen — HesPulse</title>
+<title>Registreren — HesPulse</title>
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -11,20 +11,23 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body class="login-body">
-<form class="login-card" method="post" action="/login">
+<form class="login-card" method="post" action="/registreer">
   <div class="login-brand">
     <img src="/static/hespulse-logo.svg" alt="HesPulse logo">
     <span>HesPulse</span>
   </div>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}
   <label>Gebruikersnaam
-    <input type="text" name="username" autocomplete="username" required>
+    <input type="text" name="username" autocomplete="username" minlength="3" maxlength="32" required>
   </label>
   <label>Wachtwoord
-    <input type="password" name="password" autocomplete="current-password" required>
+    <input type="password" name="password" autocomplete="new-password" minlength="8" required>
   </label>
-  <button type="submit">Inloggen</button>
-  <p class="muted" style="text-align: center; margin: 0;">Nog geen account? <a href="/registreer">Registreren</a></p>
+  <label>Wachtwoord herhalen
+    <input type="password" name="password_confirm" autocomplete="new-password" minlength="8" required>
+  </label>
+  <button type="submit">Account aanmaken</button>
+  <p class="muted" style="text-align: center; margin: 0;">Al een account? <a href="/login">Inloggen</a></p>
   <p class="footer">{{ disclaimer }}</p>
 </form>
 </body>

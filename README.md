@@ -20,9 +20,11 @@ eigen logboek: status, entry, exit en notities. De ene gebruiker kan het
 logboek van de andere niet zien of wijzigen.
 
 De website heeft een openbaar deel en een besloten deel. Op `/` staat een
-publieke landingspagina, met een korte uitleg, een over ons sectie, en geen
-open registratie. Na inloggen kom je op `/dashboard`, het besloten
-logboek.
+publieke landingspagina, met een korte uitleg en een over ons sectie.
+Iedereen die de site bezoekt kan via `/registreer` zelf een account
+aanmaken, dat is een bewuste keuze, geen invite-only systeem. Na
+registreren of inloggen kom je op `/dashboard`, het besloten logboek, dat
+blijft voor elke gebruiker apart.
 
 ## Onderdelen
 
@@ -83,14 +85,15 @@ cp .env.example .env
 # vul .env verder aan met je tokens, en kies een lange willekeurige JWT_SECRET
 
 python3 scripts/create_user.py
-# maakt de database aan (als die nog niet bestaat) en vraagt om
-# gebruikersnaam, wachtwoord, portfolio, risicopercentage en Telegram
-# chat ID. Draai dit script nogmaals voor elke extra gebruiker, bijvoorbeeld
-# een vriend die hetzelfde systeem gebruikt met zijn eigen logboek.
+# maakt de database aan (als die nog niet bestaat) en je eigen account,
+# met gebruikersnaam, wachtwoord, portfolio, risicopercentage en Telegram
+# chat ID.
 ```
 
-Geen open registratie: alleen accounts die jij zelf op de server aanmaakt
-via dit script kunnen inloggen.
+Dit script is voor jou als beheerder: handig om je eigen eerste account
+aan te maken, of om iemands wachtwoord of instellingen te herstellen.
+Voor je vrienden hoeft dat niet, die maken zelf een account aan via
+`/registreer` op de site zelf, zie hieronder.
 
 ### 5. Testen, per bouwstap
 
@@ -226,24 +229,27 @@ inloggen tijdelijk geblokkeerd.
 
 Wil een vriend hetzelfde systeem gebruiken, met zijn eigen login, eigen
 portfolio en eigen Telegram meldingen, maar op basis van dezelfde
-signalen die jij al binnenkrijgt via Discord? Draai op de VPS:
+signalen die jij al binnenkrijgt via Discord? Hij gaat zelf naar
+`https://jouw-domein.nl/registreer` en maakt daar zijn eigen account aan
+met een gebruikersnaam en wachtwoord. Jij hoeft niets te doen.
 
-```bash
-cd /opt/crypto-alerts
-sudo -u crypto .venv/bin/python3 scripts/create_user.py
-```
+Na het inloggen zet hij zelf, via de portfolio kaart op zijn dashboard,
+zijn eigen portfolio in euro's, risicopercentage en Telegram chat ID
+(die hij zelf ophaalt via `@userinfobot` nadat hij een bericht naar
+jullie gedeelde Telegram bot heeft gestuurd). Hij ziet dezelfde signalen
+als jij, maar zijn eigen risicobedrag, zijn eigen statusknoppen, en zijn
+eigen winrate en resultaat. Wat jij invult bij een melding (genomen,
+entry, exit, notitie) is niet zichtbaar voor hem, en andersom.
 
-Vul zijn gebruikersnaam, wachtwoord, portfolio in euro's, risicopercentage
-en Telegram chat ID in (die hij zelf ophaalt via `@userinfobot` nadat hij
-een bericht naar jullie gedeelde Telegram bot heeft gestuurd). Hij logt
-daarna in op dezelfde dashboard URL, met zijn eigen wachtwoord. Hij ziet
-dezelfde meldingen als jij, maar zijn eigen risicobedrag, zijn eigen
-statusknoppen, en zijn eigen winrate en resultaat. Wat jij invult bij een
-melding (genomen, entry, exit, notitie) is niet zichtbaar voor hem, en
-andersom.
+Registratie is open voor iedereen die de link heeft, dat is bewust zo
+gekozen. Tegen geautomatiseerde spam-registraties zit een limiet van
+`MAX_REGISTRATIONS_PER_HOUR` (standaard 5) per IP-adres per uur, in te
+stellen in `.env`.
 
-Hij hoeft zelf niets te installeren of te forwarden, alleen jij stuurt
-berichten door naar de bot.
+Wil je zelf iemands wachtwoord herstellen, of een account beheren zonder
+dat diegene toegang tot zijn eigen account heeft, gebruik dan nog steeds
+`scripts/create_user.py` op de VPS, dat werkt voor elk account, ook een
+dat via `/registreer` is aangemaakt.
 
 ## Dagelijkse werkwijze
 
