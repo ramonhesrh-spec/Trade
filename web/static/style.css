@@ -90,6 +90,7 @@ main h3 { font-size: 15px; gap: 8px; }
 
 .open-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin: 14px 0 28px; }
 .open-card { min-width: 0; }
+.practice-card { border-style: dashed; border-color: var(--border-strong); opacity: 0.92; }
 .open-card .status-form, .open-card .close-form { flex-wrap: wrap; margin-top: 8px; }
 .open-card .status-form select, .open-card .status-form input,
 .open-card .close-form input { flex: 1; min-width: 90px; }
@@ -328,6 +329,12 @@ main + .footer { border-top: 1px solid var(--border); }
 }
 .kraken-card .button-primary { margin-top: 12px; }
 .kraken-card .fine-print { font-size: 12px; margin-top: 12px; margin-bottom: 0; }
+
+.practice-box {
+  background: var(--panel); border: 1px dashed var(--border-strong); border-radius: var(--radius);
+  padding: 16px 18px; margin-bottom: 16px;
+}
+.practice-box .inline-form { margin: 0; }
 
 .coin-layout { display: flex; gap: 16px; align-items: flex-start; }
 .coin-chart {

@@ -115,6 +115,13 @@ def list_recent_images_for_coin(coin: str, limit: int = 8) -> list[dict]:
 # Dynamische coinlijst
 # ---------------------------------------------------------------------------
 
+def coin_is_tracked(symbol: str) -> bool:
+    with db.session() as conn:
+        return conn.execute(
+            "SELECT 1 FROM coins WHERE symbol = ?", (symbol.upper(),)
+        ).fetchone() is not None
+
+
 def add_coin_if_new(symbol: str, market: str) -> bool:
     """Voegt een coin toe aan de dynamische lijst als die nog niet bestaat.
     Geeft True terug als de coin nieuw was."""
@@ -228,9 +235,9 @@ def insert_signal(data: dict) -> int:
         "message_id", "coin", "direction", "category", "price", "rsi", "macd",
         "macd_signal", "volume_ratio", "ema9", "ema21", "atr",
         "technical_confirmed", "confidence", "reason", "stop_loss", "take_profit",
-        "context_note",
+        "context_note", "is_practice",
     ]
-    values = [data.get(f) for f in fields]
+    values = [data.get("is_practice", 0) if f == "is_practice" else data.get(f) for f in fields]
     placeholders = ", ".join("?" for _ in fields)
     with db.session() as conn:
         cur = conn.execute(
@@ -248,9 +255,12 @@ def get_signal(signal_id: int) -> Optional[dict]:
 
 
 def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
+    """Gedeelde, echte signalen voor deze coin, hetzelfde voor iedereen.
+    Oefentrades zijn persoonlijk en horen hier niet tussen, anders lijkt
+    een handmatige oefening net een echt signaal voor alle gebruikers."""
     with db.session() as conn:
         rows = conn.execute(
-            "SELECT * FROM signals WHERE coin = ? ORDER BY created_at DESC LIMIT ?",
+            "SELECT * FROM signals WHERE coin = ? AND is_practice = 0 ORDER BY created_at DESC LIMIT ?",
             (coin.upper(), limit),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -309,7 +319,8 @@ _JOURNAL_SELECT = """
         s.confidence AS confidence, s.technical_confirmed AS technical_confirmed,
         s.rsi AS rsi, s.ema9 AS ema9, s.ema21 AS ema21,
         s.macd AS macd, s.macd_signal AS macd_signal, s.volume_ratio AS volume_ratio,
-        s.reason AS reason, s.context_note AS context_note, s.created_at AS created_at
+        s.reason AS reason, s.context_note AS context_note, s.created_at AS created_at,
+        s.is_practice AS is_practice
     FROM journal_entries je
     JOIN signals s ON s.id = je.signal_id
 """
@@ -493,7 +504,7 @@ def winrate_stats(user_id: int) -> dict:
             """SELECT s.confidence AS confidence, je.result_eur AS result_eur,
                       je.result_pct AS result_pct
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
-               WHERE je.user_id = ? AND je.exit_price IS NOT NULL""",
+               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0""",
             (user_id,),
         ).fetchall()
 
@@ -520,8 +531,10 @@ def winrate_stats(user_id: int) -> dict:
 def cumulative_result_series(user_id: int) -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT exit_time, result_eur FROM journal_entries
-               WHERE user_id = ? AND exit_price IS NOT NULL ORDER BY exit_time ASC""",
+            """SELECT je.exit_time AS exit_time, je.result_eur AS result_eur
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
+               ORDER BY je.exit_time ASC""",
             (user_id,),
         ).fetchall()
     series = []
@@ -540,7 +553,7 @@ def coin_stats(user_id: int) -> list[dict]:
         rows = conn.execute(
             """SELECT s.coin AS coin, je.result_eur AS result_eur
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
-               WHERE je.user_id = ? AND je.exit_price IS NOT NULL""",
+               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0""",
             (user_id,),
         ).fetchall()
 

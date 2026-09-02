@@ -245,11 +245,21 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
             risk.compute_position_size(entry["risk_eur"], entry["price"], entry["stop_loss"])
             if entry["risk_eur"] and entry["price"] and entry["stop_loss"] else None
         )
-    entries = _filter_journal(all_entries, status)
+    # Oefentrades zijn handmatig aangemaakt om te oefenen, geen echt signaal.
+    # Die blijven apart, tellen niet mee in de winrate en staan niet tussen
+    # de echte meldingen, anders lijkt het net of het een echt signaal was.
+    real_entries = [e for e in all_entries if not e["is_practice"]]
+    practice_entries = [e for e in all_entries if e["is_practice"]]
+
+    entries = _filter_journal(real_entries, status)
     winrate = repo.winrate_stats(user["id"])
     open_entries = _add_signal_context(
-        await _enrich_open_positions(_filter_journal(all_entries, "open")), winrate,
+        await _enrich_open_positions(_filter_journal(real_entries, "open")), winrate,
     )
+    practice_open = _add_signal_context(
+        await _enrich_open_positions([e for e in practice_entries if e["exit_price"] is None]), winrate,
+    )
+    practice_closed = [e for e in practice_entries if e["exit_price"] is not None]
     cumulative = repo.cumulative_result_series(user["id"])
     coin_stats = repo.coin_stats(user["id"])
     coins = repo.list_coins()
@@ -258,6 +268,8 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "user": user,
         "entries": entries,
         "open_entries": open_entries,
+        "practice_open": practice_open,
+        "practice_closed": practice_closed,
         "winrate": winrate,
         "cumulative": cumulative,
         "coin_stats": coin_stats,
@@ -370,6 +382,49 @@ async def update_journal_note(
 
 
 # ---------------------------------------------------------------------------
+# Oefentrades: handmatig een richting kiezen om te oefenen met de volledige
+# technische toetsing en risicoberekening, zonder dat er een echt signaal
+# via Discord voor nodig is. Telt niet mee in de echte winrate/resultaten.
+# ---------------------------------------------------------------------------
+
+@app.post("/coins/{symbol}/oefen")
+async def create_practice_trade(
+    symbol: str,
+    direction: str = Form(...),
+    user: dict = Depends(require_login),
+):
+    symbol = symbol.upper()
+    if direction not in ("long", "short") or not repo.coin_is_tracked(symbol):
+        return RedirectResponse(url=f"/coins/{symbol}", status_code=303)
+
+    df = await asyncio.to_thread(exchange.fetch_ohlcv, symbol)
+    ind = indicators.compute_indicators(df)
+    swing_low, swing_high = indicators.swing_levels(df)
+    confirmed, reason = indicators.confirms_direction(ind, direction)
+    stop_take = risk.compute_stop_take(direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high)
+
+    message_id = repo.insert_message("Handmatige oefentrade", [])
+    repo.mark_message_processed(
+        message_id, symbol, direction, "oefening", False,
+        note="Handmatige oefentrade, aangemaakt vanaf het dashboard",
+    )
+    signal_id = repo.insert_signal({
+        "message_id": message_id, "coin": symbol, "direction": direction, "category": "oefening",
+        "price": ind.price, "rsi": ind.rsi, "macd": ind.macd, "macd_signal": ind.macd_signal,
+        "volume_ratio": ind.volume_ratio, "ema9": ind.ema9, "ema21": ind.ema21, "atr": ind.atr,
+        "technical_confirmed": int(confirmed),
+        "confidence": "hoog vertrouwen" if confirmed else "laag vertrouwen",
+        "reason": reason, "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,
+        "context_note": None, "is_practice": 1,
+    })
+    risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
+    entry_id = repo.create_journal_entry(signal_id, user["id"], risk_eur)
+    repo.update_journal_status(entry_id, user["id"], "genomen", entry_price=ind.price)
+
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+# ---------------------------------------------------------------------------
 # Grafiekpagina per coin
 # ---------------------------------------------------------------------------
 
@@ -377,7 +432,7 @@ async def update_journal_note(
 async def coin_page(request: Request, symbol: str, user: dict = Depends(require_login)):
     symbol = symbol.upper()
     source_levels = repo.list_source_levels(symbol)
-    entries = repo.list_journal_for_coin(user["id"], symbol)
+    entries = [e for e in repo.list_journal_for_coin(user["id"], symbol) if not e["is_practice"]]
     open_trades = await _enrich_open_positions(
         [e for e in entries if e["entry_price"] is not None and e["exit_price"] is None]
     )

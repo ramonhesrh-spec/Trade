@@ -36,6 +36,16 @@ def session():
 def init_db() -> None:
     with session() as conn:
         conn.executescript(SCHEMA_PATH.read_text())
+        _migrate(conn)
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """CREATE TABLE IF NOT EXISTS raakt geen bestaande tabel aan, dus een
+    nieuwe kolom op een tabel die al bestaat moet hier expliciet bij. Elke
+    migratie is idempotent: al aanwezig is geen probleem."""
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(signals)")}
+    if "is_practice" not in existing:
+        conn.execute("ALTER TABLE signals ADD COLUMN is_practice INTEGER NOT NULL DEFAULT 0")
 
 
 def get_setting(key: str, default: str = "") -> str:

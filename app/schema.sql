@@ -70,6 +70,7 @@ CREATE TABLE IF NOT EXISTS signals (
     stop_loss REAL,
     take_profit REAL,
     context_note TEXT,
+    is_practice INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
 

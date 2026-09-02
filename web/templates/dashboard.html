@@ -68,6 +68,67 @@
   {% endif %}
 </section>
 
+{% if practice_open or practice_closed %}
+<section>
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Oefentrades</h2>
+  <p class="muted" style="margin: 0 0 12px;">Handmatig aangemaakt om te oefenen. Telt niet mee in je echte winrate hierboven.</p>
+  {% if practice_open %}
+  <div class="open-grid">
+    {% for e in practice_open %}
+    <div class="card open-card practice-card">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <a href="/coins/{{ e.coin }}" style="font-weight: 700; color: var(--text); text-decoration: none; font-size: 15px;">{{ e.coin }}</a>
+          <span class="badge badge-{{ e.direction }}" style="margin-left: 6px;">{{ e.direction }}</span>
+        </div>
+        <span class="badge badge-status">oefening</span>
+      </div>
+      <div style="display: flex; gap: 6px; align-items: center; margin: 8px 0;">
+        <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
+      </div>
+      <div class="open-numbers">
+        <span class="muted">Entry <b style="color: var(--text);">{{ "%.4f"|format(e.entry_price) }}</b></span>
+        <span class="muted">Nu <b data-price="{{ e.id }}" style="color: var(--text);">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</b></span>
+        <span class="muted">SL <b class="neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</b></span>
+        <span class="muted">TP <b class="pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</b></span>
+      </div>
+      <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="{{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
+        {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
+        <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
+      </p>
+      <p class="muted advice-text">{{ e.advice }}</p>
+      <form action="/journal/{{ e.id }}/close" method="post" class="close-form">
+        <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
+        <input type="datetime-local" name="exit_time" required>
+        <button type="submit">Sluiten</button>
+      </form>
+      <form action="/journal/{{ e.id }}/reset" method="post" class="reset-form"
+            onsubmit="return confirm('Deze oefentrade weggooien?');">
+        <button type="submit" class="button-reset">Weggooien</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if practice_closed %}
+  <div class="table-scroll" style="margin-top: 12px;">
+  <table class="signals">
+    <thead><tr><th>Coin</th><th>Richting</th><th>Resultaat</th></tr></thead>
+    <tbody>
+      {% for e in practice_closed %}
+      <tr>
+        <td><a href="/coins/{{ e.coin }}">{{ e.coin }}</a></td>
+        <td><span class="badge badge-{{ e.direction }}">{{ e.direction }}</span></td>
+        <td class="{{ 'pos' if (e.result_eur or 0) >= 0 else 'neg' }}">€{{ "%.2f"|format(e.result_eur) if e.result_eur is not none else "-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
 <section class="cards">
   <div class="card">
     <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><polyline points="9,12 11,14 15,10"/></svg>Hoog vertrouwen</h3>
