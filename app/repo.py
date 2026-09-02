@@ -48,6 +48,19 @@ def list_messages(limit: int = 200) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def list_messages_for_coin(coin: str, limit: int = 100) -> list[dict]:
+    """Alle berichten over deze coin, ook analyses die niet tot een melding
+    leidden (lange termijn, aandelen). Voor op de grafiekpagina, zodat de
+    onderbouwing bij de coin blijft staan, niet alleen in het algemene
+    berichtenoverzicht."""
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM messages WHERE coin = ? ORDER BY id DESC LIMIT ?",
+            (coin.upper(), limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # Bron niveaus (uit Discord afbeeldingen)
 # ---------------------------------------------------------------------------
