@@ -20,6 +20,17 @@ logger = logging.getLogger("discord_bot")
 MessageHandler = Callable[[int, str, list[str]], Awaitable[None]]
 
 
+def _effective_content(message: discord.Message) -> str:
+    """Discord's 'doorsturen' knop levert een leeg message.content op, de
+    echte tekst zit dan in message_snapshots. Val daarop terug als het
+    bericht zelf geen tekst bevat."""
+    if message.content:
+        return message.content
+    snapshots = getattr(message, "message_snapshots", [])
+    texts = [snap.content for snap in snapshots if snap.content]
+    return "\n\n".join(texts)
+
+
 def _build_intents() -> discord.Intents:
     intents = discord.Intents.none()
     intents.dm_messages = True
@@ -43,23 +54,28 @@ class DMListenerBot(discord.Client):
         if not isinstance(message.channel, discord.DMChannel):
             return  # alleen DM's verwerken
 
+        content = _effective_content(message)
         image_paths = await self._save_images(message)
         logger.info("DM ontvangen van %s: %r (%d afbeelding(en))",
-                    message.author, message.content[:80], len(image_paths))
+                    message.author, content[:80], len(image_paths))
 
         # Late import om circulaire import met signal_processor te voorkomen.
         from app import repo
-        message_id = repo.insert_message(message.content, image_paths)
+        message_id = repo.insert_message(content, image_paths)
 
         if self.on_dm is not None:
             try:
-                await self.on_dm(message_id, message.content, image_paths)
+                await self.on_dm(message_id, content, image_paths)
             except Exception:
                 logger.exception("Verwerking van bericht %s is mislukt", message_id)
 
     async def _save_images(self, message: discord.Message) -> list[str]:
+        attachments = list(message.attachments)
+        for snapshot in getattr(message, "message_snapshots", []):
+            attachments.extend(snapshot.attachments)
+
         paths = []
-        for i, attachment in enumerate(message.attachments):
+        for i, attachment in enumerate(attachments):
             if not (attachment.content_type or "").startswith("image/"):
                 continue
             filename = f"{message.id}_{i}_{attachment.filename}"
