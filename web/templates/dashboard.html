@@ -4,21 +4,21 @@
 
 <section class="cards">
   <div class="card">
-    <h3>Hoog vertrouwen</h3>
+    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><polyline points="9,12 11,14 15,10"/></svg>Hoog vertrouwen</h3>
     <p class="big">{{ winrate.hoog_vertrouwen.winrate }}%</p>
     <div class="winrate-bar"><div style="width: {{ winrate.hoog_vertrouwen.winrate }}%"></div></div>
     <p class="muted">{{ winrate.hoog_vertrouwen.wins }} van {{ winrate.hoog_vertrouwen.total }} gesloten trades</p>
     <p class="muted">gemiddeld <span class="{{ 'pos' if winrate.hoog_vertrouwen.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(winrate.hoog_vertrouwen.avg_result_eur) }} ({{ "%.1f"|format(winrate.hoog_vertrouwen.avg_result_pct) }}%)</span> per trade</p>
   </div>
   <div class="card">
-    <h3>Laag vertrouwen</h3>
+    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Laag vertrouwen</h3>
     <p class="big">{{ winrate.laag_vertrouwen.winrate }}%</p>
     <div class="winrate-bar"><div style="width: {{ winrate.laag_vertrouwen.winrate }}%"></div></div>
     <p class="muted">{{ winrate.laag_vertrouwen.wins }} van {{ winrate.laag_vertrouwen.total }} gesloten trades</p>
     <p class="muted">gemiddeld <span class="{{ 'pos' if winrate.laag_vertrouwen.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(winrate.laag_vertrouwen.avg_result_eur) }} ({{ "%.1f"|format(winrate.laag_vertrouwen.avg_result_pct) }}%)</span> per trade</p>
   </div>
   <div class="card">
-    <h3>Portfolio ({{ user.username }})</h3>
+    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h3"/><path d="M3 10h18"/></svg>Portfolio ({{ user.username }})</h3>
     <form action="/settings/portfolio" method="post" class="inline-form">
       <label>Omvang in euro's
         <input type="number" step="0.01" name="portfolio_eur" value="{{ user.portfolio_eur }}" required>
@@ -35,12 +35,12 @@
 </section>
 
 <section>
-  <h2>Cumulatief resultaat</h2>
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,17 9,11 13,15 21,5"/><polyline points="15,5 21,5 21,11"/></svg>Cumulatief resultaat</h2>
   <canvas id="cumulative-chart" height="80"></canvas>
 </section>
 
 <section>
-  <h2>Resultaat per coin</h2>
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="19" x2="5" y2="10"/><line x1="12" y1="19" x2="12" y2="5"/><line x1="19" y1="19" x2="19" y2="13"/></svg>Resultaat per coin</h2>
   {% if coin_stats %}
   <table class="signals">
     <thead>
@@ -69,7 +69,7 @@
 
 <section>
   <div class="table-header">
-    <h2>Meldingen</h2>
+    <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Meldingen</h2>
     <form method="get" action="/dashboard" class="inline-form">
       <label>Filter
         <select name="status" onchange="this.form.submit()">

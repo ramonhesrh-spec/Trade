@@ -2,12 +2,12 @@
 {% block title %}{{ symbol }} — HesPulse{% endblock %}
 {% block content %}
 
-<h2>{{ symbol }}</h2>
+<h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>{{ symbol }}</h2>
 
 <div id="chart" style="height: 500px;"></div>
 
 <section>
-  <h3>Bron niveaus (analyse Discord)</h3>
+  <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9" stroke-dasharray="3,3"/><line x1="4" y1="16" x2="20" y2="16" stroke-dasharray="3,3"/></svg>Bron niveaus (analyse Discord)</h3>
   {% if source_levels %}
   <ul class="levels">
     {% for lvl in source_levels %}
