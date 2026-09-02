@@ -43,7 +43,7 @@
         candleSeries.createPriceLine({
           price: lvl.price_level, color: "#0ABAB5", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed,
-          title: `analyse Discord${lvl.pattern_name ? ": " + lvl.pattern_name : ""}`,
+          title: lvl.pattern_name || "",
         });
       });
 
