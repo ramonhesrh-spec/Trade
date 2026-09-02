@@ -20,11 +20,17 @@ def format_signal_message(signal: dict) -> str:
         f"Stop loss: {signal['stop_loss']:.4f}",
         f"Take profit: {signal['take_profit']:.4f}",
         f"Risicobedrag: €{signal['risk_eur']:.2f}",
+    ]
+    if signal.get("position_size"):
+        lines.append(f"Voorgestelde grootte: {signal['position_size']:.6f} {signal['coin']}")
+    lines += [
         "",
         f"Technisch bevestigd: {'ja' if signal['technical_confirmed'] else 'nee'}",
     ]
     if not signal["technical_confirmed"]:
         lines.append(f"Reden: {signal['reason']}")
+
+    lines += ["", config.DISCLAIMER]
 
     return "\n".join(lines)
 

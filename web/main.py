@@ -13,10 +13,11 @@ from fastapi.responses import RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from app import config, db, exchange, indicators, repo, security
+from app import config, db, exchange, indicators, repo, risk, security
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.globals["disclaimer"] = config.DISCLAIMER
 
 app = FastAPI(title="HesPulse")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
@@ -95,6 +96,11 @@ async def logout():
 @app.get("/")
 async def dashboard(request: Request, status: str = "alle", user: dict = Depends(require_login)):
     entries = repo.list_journal(user["id"], status=None if status == "alle" else status)
+    for entry in entries:
+        entry["position_size"] = (
+            risk.compute_position_size(entry["risk_eur"], entry["price"], entry["stop_loss"])
+            if entry["risk_eur"] and entry["price"] and entry["stop_loss"] else None
+        )
     winrate = repo.winrate_stats(user["id"])
     cumulative = repo.cumulative_result_series(user["id"])
     coins = repo.list_coins()
@@ -156,6 +162,21 @@ async def update_journal_note(
 ):
     repo.update_journal_note(entry_id, user["id"], note)
     return RedirectResponse(url="/", status_code=303)
+
+
+# ---------------------------------------------------------------------------
+# Berichtenoverzicht: ook wat niet tot een melding leidde
+# ---------------------------------------------------------------------------
+
+@app.get("/berichten")
+async def messages_page(request: Request, user: dict = Depends(require_login)):
+    coins = repo.list_coins()
+    return templates.TemplateResponse(request, "messages.html", {
+        "user": user,
+        "messages": repo.list_messages(),
+        "coins": coins,
+        "tracked_symbols": {c["symbol"] for c in coins},
+    })
 
 
 # ---------------------------------------------------------------------------

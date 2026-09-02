@@ -100,3 +100,9 @@ button:hover { background: var(--accent-dark); border-color: var(--accent-dark);
 .error { color: var(--red); margin: 0; }
 
 ul.levels { padding-left: 18px; }
+
+.footer {
+  text-align: center; color: var(--muted); font-size: 12px;
+  padding: 20px; margin: 0;
+}
+main + .footer { border-top: 1px solid var(--border); }

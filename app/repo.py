@@ -23,21 +23,27 @@ def insert_message(raw_text: str, image_paths: list[str]) -> int:
 
 def mark_message_processed(
     message_id: int, coin: Optional[str], direction: Optional[str],
-    category: Optional[str], unclear: bool,
+    category: Optional[str], unclear: bool, note: str = "",
 ) -> None:
     with db.session() as conn:
         conn.execute(
             """UPDATE messages
-               SET coin = ?, direction = ?, category = ?, unclear = ?, processed_at = ?
+               SET coin = ?, direction = ?, category = ?, unclear = ?, note = ?, processed_at = ?
                WHERE id = ?""",
-            (coin, direction, category, int(unclear), db.now_iso(), message_id),
+            (coin, direction, category, int(unclear), note or None, db.now_iso(), message_id),
         )
 
 
 def list_messages(limit: int = 200) -> list[dict]:
+    """Alle berichten met hun uitkomst: kwam er een signaal uit, of niet en
+    waarom. Gedeeld overzicht, hetzelfde voor iedereen, want de berichten
+    zelf zijn objectief."""
     with db.session() as conn:
         rows = conn.execute(
-            "SELECT * FROM messages ORDER BY id DESC LIMIT ?", (limit,)
+            """SELECT m.*,
+                      EXISTS(SELECT 1 FROM signals s WHERE s.message_id = m.id) AS has_signal
+               FROM messages m ORDER BY m.id DESC LIMIT ?""",
+            (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
 

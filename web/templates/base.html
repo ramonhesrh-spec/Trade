@@ -18,6 +18,7 @@
   </a>
   <nav>
     <a href="/">Dashboard</a>
+    <a href="/berichten">Berichten</a>
     {% for c in coins %}
       <a href="/coins/{{ c.symbol }}">{{ c.symbol }}</a>
     {% endfor %}
@@ -30,5 +31,6 @@
 <main>
 {% block content %}{% endblock %}
 </main>
+<footer class="footer">{{ disclaimer }}</footer>
 </body>
 </html>

@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Berichten — HesPulse{% endblock %}
+{% block content %}
+
+<h2>Berichten</h2>
+<p class="muted">Elk bericht dat binnenkwam via Discord, ook wat niet tot een melding leidde. Gedeeld overzicht, hetzelfde voor iedereen.</p>
+
+<table class="signals">
+  <thead>
+    <tr>
+      <th>Tijdstip</th>
+      <th>Tekst</th>
+      <th>Coin</th>
+      <th>Richting</th>
+      <th>Categorie</th>
+      <th>Uitkomst</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for m in messages %}
+    <tr>
+      <td>{{ m.received_at[:16] | replace("T", " ") }}</td>
+      <td>{{ m.raw_text[:80] }}{% if m.raw_text|length > 80 %}…{% endif %}</td>
+      <td>
+        {% if m.coin and m.coin in tracked_symbols %}
+          <a href="/coins/{{ m.coin }}">{{ m.coin }}</a>
+        {% elif m.coin %}
+          {{ m.coin }}
+        {% else %}-{% endif %}
+      </td>
+      <td>{{ m.direction | upper if m.direction else "-" }}</td>
+      <td>{{ m.category or "-" }}</td>
+      <td>
+        {% if m.has_signal %}
+          <span class="pos">melding verstuurd</span>
+        {% elif m.unclear %}
+          <span class="neg">onduidelijk{% if m.note %}: {{ m.note }}{% endif %}</span>
+        {% elif m.category and m.category != "day_trading" %}
+          <span class="muted">alleen gelogd ({{ m.category }})</span>
+        {% elif not m.processed_at %}
+          <span class="muted">nog niet verwerkt</span>
+        {% else %}
+          <span class="muted">{{ m.note or "geen melding" }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% else %}
+    <tr><td colspan="6" class="muted">Nog geen berichten.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

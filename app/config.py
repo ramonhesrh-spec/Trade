@@ -38,6 +38,13 @@ DEFAULT_RISK_PERCENT = float(_get("DEFAULT_RISK_PERCENT", "1.0"))
 DATABASE_PATH = str(BASE_DIR / _get("DATABASE_PATH", "data/trading.db"))
 IMAGE_STORAGE_PATH = str(BASE_DIR / _get("IMAGE_STORAGE_PATH", "data/images"))
 BACKUP_PATH = str(BASE_DIR / _get("BACKUP_PATH", "data/backups"))
+# Externe locatie voor de dagelijkse back-up, via rsync over SSH,
+# bijvoorbeeld user@andere-server:/pad/naar/backups/. Leeg = geen externe
+# kopie, alleen lokaal op de VPS.
+BACKUP_REMOTE = _get("BACKUP_REMOTE")
 
 MAX_LOGIN_ATTEMPTS = int(_get("MAX_LOGIN_ATTEMPTS", "5"))
 LOGIN_LOCKOUT_MINUTES = int(_get("LOGIN_LOCKOUT_MINUTES", "15"))
+
+# Vaste toelichting, op elk Telegram bericht en onderaan het dashboard.
+DISCLAIMER = "Geen advies. Regels, geen garantie. Jij beslist zelf."

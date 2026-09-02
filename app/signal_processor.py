@@ -6,17 +6,48 @@ regels. Elke trade blijft een handmatige beslissing.
 """
 import asyncio
 import logging
+import time
 
 from app import coinlist, exchange, indicators, repo, risk, telegram_notify
 from app.anthropic_interpret import Interpretation, interpret_message
 
 logger = logging.getLogger("signal_processor")
 
+INTERPRET_ATTEMPTS = 3
+INTERPRET_BACKOFF_SECONDS = 3
+
+
+def _interpret_with_retry(raw_text: str, image_paths: list[str]) -> Interpretation:
+    """Probeert de Anthropic interpretatie een paar keer bij een tijdelijke
+    fout (timeout, overbelasting), voordat het bericht als mislukt wordt
+    gelogd in plaats van stil onverwerkt te blijven."""
+    last_exc: Exception | None = None
+    for attempt in range(1, INTERPRET_ATTEMPTS + 1):
+        try:
+            return interpret_message(raw_text, image_paths)
+        except Exception as exc:
+            last_exc = exc
+            logger.warning("Anthropic interpretatie poging %s/%s mislukt: %s",
+                            attempt, INTERPRET_ATTEMPTS, exc)
+            if attempt < INTERPRET_ATTEMPTS:
+                time.sleep(INTERPRET_BACKOFF_SECONDS * attempt)
+    raise last_exc
+
 
 async def handle_message(message_id: int, raw_text: str, image_paths: list[str]) -> None:
-    interp = await asyncio.to_thread(interpret_message, raw_text, image_paths)
+    try:
+        interp = await asyncio.to_thread(_interpret_with_retry, raw_text, image_paths)
+    except Exception as exc:
+        logger.exception("Interpretatie van bericht %s definitief mislukt na %s pogingen",
+                          message_id, INTERPRET_ATTEMPTS)
+        repo.mark_message_processed(
+            message_id, None, None, None, True,
+            note=f"API fout, kon niet verwerkt worden: {exc}",
+        )
+        return
 
-    repo.mark_message_processed(message_id, interp.coin, interp.direction, interp.category, interp.unclear)
+    repo.mark_message_processed(message_id, interp.coin, interp.direction, interp.category,
+                                 interp.unclear, note=interp.reason)
 
     if interp.unclear:
         logger.info("Bericht %s is onduidelijk (%s), overgeslagen voor verdere verwerking",
@@ -89,9 +120,12 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
                         user["username"])
             continue
 
+        position_size = risk.compute_position_size(risk_eur, ind.price, stop_take.stop_loss)
         try:
-            await telegram_notify.send_signal({**signal_data, "risk_eur": risk_eur},
-                                               chat_id=user["telegram_chat_id"])
+            await telegram_notify.send_signal(
+                {**signal_data, "risk_eur": risk_eur, "position_size": position_size},
+                chat_id=user["telegram_chat_id"],
+            )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
             logger.exception("Telegram melding voor gebruiker %s, signaal %s is mislukt",

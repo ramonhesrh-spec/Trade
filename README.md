@@ -1,7 +1,8 @@
-# Crypto day trading alertsysteem
+# HesPulse
 
-Combineert Discord DM berichten en live technische data, en stuurt meldingen
-via Telegram. Het systeem voert geen trades uit. Jij beslist zelf.
+Crypto day trading alertsysteem. Combineert Discord DM berichten en live
+technische data, en stuurt meldingen via Telegram. Het systeem voert geen
+trades uit. Jij beslist zelf.
 
 ## Hoe het werkt
 
@@ -25,11 +26,15 @@ logboek van de andere niet zien of wijzigen.
 - `app/coinlist.py` — dynamische coinlijst
 - `app/exchange.py`, `app/indicators.py` — live koersdata en indicatoren (4h)
 - `app/risk.py` — stop loss, take profit, risicobedrag op basis van ATR
-- `app/signal_processor.py` — verbindt alle stappen
-- `app/telegram_notify.py` — Telegram meldingen
+- `app/signal_processor.py` — verbindt alle stappen, met een paar
+  herhaalpogingen bij een tijdelijke Anthropic storing
+- `app/telegram_notify.py` — Telegram meldingen, inclusief positiegrootte
+  en een vaste disclaimer
 - `app/repo.py`, `app/db.py`, `app/schema.sql` — sqlite logging
-- `app/backup.py` — dagelijkse back-up
-- `web/` — FastAPI dashboard met login
+- `app/backup.py` — dagelijkse back-up, optioneel ook naar een externe locatie
+- `app/heartbeat.py` — dagelijks levensteken via Telegram
+- `web/` — FastAPI dashboard met login, inclusief een berichtenoverzicht op
+  `/berichten` van alles wat wel en niet tot een melding leidde
 
 ## Opzet, stap voor stap
 
@@ -142,9 +147,35 @@ sudo systemctl enable --now crypto-backup.timer
 ```
 
 Dit maakt elke nacht om 03:00 een kopie van de database in `data/backups/`,
-en bewaart de laatste 30 back-ups. Kopieer die map ook periodiek naar een
-andere locatie (bijvoorbeeld met `rsync` naar je eigen computer of een
-andere server), zodat je niet afhankelijk bent van alleen deze ene VPS.
+en bewaart de laatste 30 back-ups.
+
+Een lokale kopie op dezelfde VPS beschermt niet tegen schijfschade op die
+VPS. Zet daarom ook `BACKUP_REMOTE` in `.env`, bijvoorbeeld
+`user@andere-server:/pad/naar/backups/`. Elke back-up wordt dan automatisch
+ook naar die locatie gestuurd via `rsync` over SSH. Dit vereist een SSH
+sleutel zonder wachtwoord tussen de VPS en die andere locatie:
+
+```bash
+sudo -u crypto ssh-keygen -t ed25519 -f /opt/crypto-alerts/.ssh/id_ed25519 -N ""
+sudo -u crypto ssh-copy-id -i /opt/crypto-alerts/.ssh/id_ed25519.pub user@andere-server
+```
+
+Zonder `BACKUP_REMOTE` blijft de back-up alleen lokaal staan, dat werkt
+prima om per ongeluk verwijderde data terug te halen, maar niet als de VPS
+zelf uitvalt.
+
+### Levensteken
+
+```bash
+sudo cp deploy/crypto-heartbeat.service /etc/systemd/system/
+sudo cp deploy/crypto-heartbeat.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-heartbeat.timer
+```
+
+Stuurt elke ochtend om 09:00 een kort Telegram bericht naar elke gebruiker
+met een ingevuld chat ID: "HesPulse draait nog." Zonder dit merk je een
+crash pas op als er een tijd lang geen meldingen meer binnenkomen.
 
 ### HTTPS met Let's Encrypt
 
@@ -211,6 +242,17 @@ trade blijft een handmatige beslissing.
 - Technische bevestiging kijkt naar EMA9/EMA21 trend, MACD momentum, RSI
   extremen en volume ten opzichte van het gemiddelde. Aanpasbaar in
   `app/indicators.py`.
+- Elk Telegram bericht toont ook een voorgestelde positiegrootte in coin
+  eenheden: risicobedrag gedeeld door de afstand tussen entry en stop loss.
+  Dat is de hoeveelheid die bij dat risicobedrag hoort, niet alleen het
+  bedrag zelf.
+- Mislukt de Anthropic interpretatie door een tijdelijke fout (timeout,
+  overbelasting), dan probeert het systeem het tot drie keer, met een
+  oplopende pauze ertussen. Lukt het dan nog niet, dan wordt het bericht
+  gelogd als onduidelijk met de foutmelding erbij, in plaats van stil
+  onverwerkt te blijven. Zie dit terug op `/berichten` in het dashboard.
+- Elk Telegram bericht en het dashboard tonen een vaste toelichting: geen
+  advies, regels, geen garantie, jij beslist zelf.
 
 ## Later uitbreidingen (bewust niet in deze versie)
 

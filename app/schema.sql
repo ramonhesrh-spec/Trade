@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS messages (
     direction TEXT,
     category TEXT,
     unclear INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
     processed_at TEXT
 );
 
