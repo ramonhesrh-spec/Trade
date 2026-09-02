@@ -64,12 +64,19 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
                     message_id, interp.reason)
         return
 
-    # Bron niveaus uit afbeeldingen worden altijd bewaard, ongeacht categorie.
-    if interp.source_levels:
+    # Bron niveaus en trendlijnen uit afbeeldingen worden altijd bewaard,
+    # ongeacht categorie.
+    if interp.source_levels or interp.trendlines:
         tracked = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
         if tracked:
             for level in interp.source_levels:
                 repo.insert_source_level(message_id, interp.coin, level.price_level, level.pattern_name)
+            for tl in interp.trendlines:
+                repo.insert_source_trendline(
+                    message_id, interp.coin, tl.label,
+                    tl.point1_price, tl.point1_days_ago,
+                    tl.point2_price, tl.point2_days_ago,
+                )
         else:
             logger.info("Coin %s uit bron niveaus bestaat niet op de exchange, niveaus niet bewaard",
                         interp.coin)
@@ -110,8 +117,11 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
 
     df = await asyncio.to_thread(exchange.fetch_ohlcv, interp.coin)
     ind = indicators.compute_indicators(df)
+    swing_low, swing_high = indicators.swing_levels(df)
     confirmed, reason = indicators.confirms_direction(ind, interp.direction)
-    stop_take = risk.compute_stop_take(interp.direction, ind.price, ind.atr)
+    stop_take = risk.compute_stop_take(
+        interp.direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high,
+    )
     context_note = _build_context_note(interp.coin, interp.direction)
 
     confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"
@@ -143,19 +153,25 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         repo.update_signal(signal_id, signal_data)
         logger.info("Signaal %s bijgewerkt (was al open voor %s %s), bevestigd=%s",
                     signal_id, interp.coin, interp.direction, confirmed)
-        await _notify_signal_update(signal_id, signal_data, ind.price, stop_take.stop_loss)
+        if confirmed:
+            await _notify_signal_update(signal_id, signal_data, ind.price, stop_take.stop_loss)
+        else:
+            logger.info("Signaal %s is laag vertrouwen, geen Telegram update verstuurd", signal_id)
         return
 
     signal_id = repo.insert_signal(signal_data)
     logger.info("Signaal %s opgeslagen: %s %s, bevestigd=%s", signal_id, interp.coin,
                 interp.direction, confirmed)
 
-    # Elke gebruiker krijgt zijn eigen logboekregel en zijn eigen Telegram
-    # melding, met een risicobedrag op basis van zijn eigen portfolio.
+    # Elke gebruiker krijgt zijn eigen logboekregel, ongeacht vertrouwen, zo
+    # blijft de trackrecord per vertrouwen-niveau compleet. Telegram is
+    # alleen voor hoog vertrouwen, dat zijn de enige "perfecte setups".
     for user in repo.list_users():
         risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
         entry_id = repo.create_journal_entry(signal_id, user["id"], risk_eur)
 
+        if not confirmed:
+            continue
         if not user["telegram_chat_id"]:
             logger.info("Gebruiker %s heeft geen telegram_chat_id, geen melding verstuurd",
                         user["username"])
@@ -171,6 +187,8 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         except Exception:
             logger.exception("Telegram melding voor gebruiker %s, signaal %s is mislukt",
                               user["username"], signal_id)
+    if not confirmed:
+        logger.info("Signaal %s is laag vertrouwen, geen Telegram melding verstuurd", signal_id)
 
 
 async def _notify_signal_update(signal_id: int, signal_data: dict, price: float, stop_loss: float) -> None:

@@ -39,6 +39,23 @@ CREATE TABLE IF NOT EXISTS source_levels (
     created_at TEXT NOT NULL
 );
 
+-- Schuine patroonlijnen (trendlijn, wig, driehoekzijde) uit een Discord
+-- afbeelding. Twee punten, elk met een geschatte "dagen geleden" op basis
+-- van de tijd-as in de bronfoto, zodat de lijn tegen onze eigen echte
+-- koersdata getekend kan worden in plaats van tegen de andere tijdschaal
+-- van de bronfoto zelf.
+CREATE TABLE IF NOT EXISTS source_trendlines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL REFERENCES messages(id),
+    coin TEXT NOT NULL,
+    label TEXT,
+    point1_price REAL NOT NULL,
+    point1_days_ago REAL NOT NULL,
+    point2_price REAL NOT NULL,
+    point2_days_ago REAL NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 -- Coins die genoemd zijn in verwerkte berichten, geeft een eigen
 -- grafiekpagina in het dashboard.
 CREATE TABLE IF NOT EXISTS coins (

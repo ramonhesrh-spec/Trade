@@ -52,6 +52,16 @@ def compute_indicators(df: pd.DataFrame) -> Indicators:
     )
 
 
+def swing_levels(df: pd.DataFrame, lookback: int = 20) -> tuple[float, float]:
+    """Recente swing low en swing high over de laatste `lookback` candles op
+    de 4 uur candle. Gebruikt om een stop loss op echte marktstructuur te
+    zetten (net onder de laatste 4h low bij een long), in plaats van een
+    vaste ATR-afstand die niets zegt over waar de markt zelf steun of
+    weerstand heeft laten zien."""
+    window = df.tail(lookback)
+    return float(window["low"].min()), float(window["high"].max())
+
+
 def ema_series(df: pd.DataFrame) -> tuple[list[float], list[float]]:
     """Volledige EMA9 en EMA21 reeksen, voor de candlestick grafiek."""
     close = df["close"]

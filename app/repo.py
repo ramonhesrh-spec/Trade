@@ -120,6 +120,34 @@ def list_source_levels(coin: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def insert_source_trendline(
+    message_id: int, coin: str, label: Optional[str],
+    point1_price: float, point1_days_ago: float,
+    point2_price: float, point2_days_ago: float,
+) -> int:
+    with db.session() as conn:
+        cur = conn.execute(
+            """INSERT INTO source_trendlines
+               (message_id, coin, label, point1_price, point1_days_ago,
+                point2_price, point2_days_ago, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (message_id, coin.upper(), label, point1_price, point1_days_ago,
+             point2_price, point2_days_ago, db.now_iso()),
+        )
+        return cur.lastrowid
+
+
+def list_source_trendlines(coin: str, limit: int = 10) -> list[dict]:
+    """Meest recente trendlijnen eerst, met een limiet zodat de grafiek niet
+    dichtslibt met oude, allang niet meer relevante lijnen."""
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM source_trendlines WHERE coin = ? ORDER BY created_at DESC LIMIT ?",
+            (coin.upper(), limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 # ---------------------------------------------------------------------------
 # Dynamische coinlijst
 # ---------------------------------------------------------------------------

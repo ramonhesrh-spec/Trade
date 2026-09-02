@@ -1,11 +1,13 @@
-"""Risicomanagement: stop loss en take profit op basis van ATR (gedeeld,
-hetzelfde voor iedereen), en risicobedrag in euro's op basis van een eigen
+"""Risicomanagement: stop loss op echte marktstructuur (recente 4h swing
+low/high, gedeeld, hetzelfde voor iedereen), take profit op basis van de
+zo ontstane risicoafstand, en risicobedrag in euro's op basis van een eigen
 portfoliobedrag per gebruiker."""
 from dataclasses import dataclass
 from typing import Optional
 
-ATR_STOP_MULTIPLIER = 1.5
-ATR_TARGET_MULTIPLIER = 3.0  # risk:reward van 1:2
+ATR_BUFFER_MULTIPLIER = 0.25  # ruimte onder/boven de swing, tegen een korte wick-stop
+ATR_STOP_MULTIPLIER_FALLBACK = 1.5  # als er geen swing-data is
+RISK_REWARD_RATIO = 2.0  # take profit op 2x de werkelijke stop-afstand
 
 
 @dataclass
@@ -14,14 +16,33 @@ class StopTake:
     take_profit: float
 
 
-def compute_stop_take(direction: str, entry_price: float, atr: float) -> StopTake:
+def compute_stop_take(
+    direction: str, entry_price: float, atr: float,
+    swing_low: Optional[float] = None, swing_high: Optional[float] = None,
+) -> StopTake:
+    """Stop loss net onder de recente 4h swing low bij een long (of net
+    boven de swing high bij een short), met een kleine ATR-buffer zodat een
+    korte wick niet meteen uitstopt. Valt terug op een vaste ATR-afstand als
+    er geen bruikbare swing-data is. Take profit volgt de risk:reward
+    verhouding op de zo ontstane, echte stop-afstand, niet op een losse
+    vaste ATR-afstand."""
     direction = direction.lower()
+    buffer = ATR_BUFFER_MULTIPLIER * atr
+
     if direction == "long":
-        stop_loss = entry_price - ATR_STOP_MULTIPLIER * atr
-        take_profit = entry_price + ATR_TARGET_MULTIPLIER * atr
+        if swing_low is not None and swing_low < entry_price:
+            stop_loss = swing_low - buffer
+        else:
+            stop_loss = entry_price - ATR_STOP_MULTIPLIER_FALLBACK * atr
+        risk_distance = entry_price - stop_loss
+        take_profit = entry_price + RISK_REWARD_RATIO * risk_distance
     elif direction == "short":
-        stop_loss = entry_price + ATR_STOP_MULTIPLIER * atr
-        take_profit = entry_price - ATR_TARGET_MULTIPLIER * atr
+        if swing_high is not None and swing_high > entry_price:
+            stop_loss = swing_high + buffer
+        else:
+            stop_loss = entry_price + ATR_STOP_MULTIPLIER_FALLBACK * atr
+        risk_distance = stop_loss - entry_price
+        take_profit = entry_price - RISK_REWARD_RATIO * risk_distance
     else:
         raise ValueError(f"onbekende richting: {direction}")
 

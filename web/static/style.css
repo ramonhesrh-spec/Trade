@@ -112,6 +112,21 @@ table.signals tbody tr:last-child td { border-bottom: none; }
 .badge-laag { background: var(--border); color: var(--muted); }
 .badge-status { background: var(--panel-hover); color: var(--text-dim); border: 1px solid var(--border-strong); }
 
+.confidence-detail summary {
+  cursor: pointer; list-style: none; display: inline-block;
+}
+.confidence-detail summary::-webkit-details-marker { display: none; }
+.confidence-detail[open] summary .badge { box-shadow: 0 0 0 2px var(--accent-bg); }
+.reason-popup {
+  position: relative; margin-top: 6px; padding: 10px 12px; background: var(--bg-elevated);
+  border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  white-space: normal; width: max-content; max-width: 260px; box-shadow: var(--shadow-md);
+}
+.reason-popup p { margin: 0 0 4px; font-size: 12px; font-weight: 400; text-transform: none; letter-spacing: 0; }
+.reason-popup p:last-child { margin-bottom: 0; }
+.factor-ok { color: var(--green); }
+.factor-bad { color: var(--red); }
+
 .long { color: var(--green); font-weight: 600; }
 .short { color: var(--red); font-weight: 600; }
 .hoog { color: var(--accent); font-weight: 600; }

@@ -110,7 +110,16 @@
         <td>{{ e.created_at[:16] | replace("T", " ") }}</td>
         <td><a href="/coins/{{ e.coin }}">{{ e.coin }}</a></td>
         <td><span class="badge badge-{{ e.direction }}">{{ e.direction }}</span></td>
-        <td title="{{ e.reason }}"><span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span></td>
+        <td>
+          <details class="confidence-detail">
+            <summary><span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span></summary>
+            <div class="reason-popup">
+              {% for factor in e.reason.split(" | ") %}
+                <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}">{{ factor }}</p>
+              {% endfor %}
+            </div>
+          </details>
+        </td>
         <td>{{ "%.4f"|format(e.price) if e.price else "-" }}</td>
         <td>{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</td>
         <td>{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</td>

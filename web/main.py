@@ -297,6 +297,7 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "user": user,
         "symbol": symbol,
         "source_levels": source_levels,
+        "trendlines": repo.list_source_trendlines(symbol),
         "open_trades": open_trades,
         "recent_signals": recent_signals,
         "coins": repo.list_coins(),
