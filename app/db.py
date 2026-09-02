@@ -36,19 +36,6 @@ def session():
 def init_db() -> None:
     with session() as conn:
         conn.executescript(SCHEMA_PATH.read_text())
-        _seed_settings(conn)
-
-
-def _seed_settings(conn: sqlite3.Connection) -> None:
-    defaults = {
-        "portfolio_eur": "0",
-        "risk_percent": str(config.DEFAULT_RISK_PERCENT),
-    }
-    for key, value in defaults.items():
-        conn.execute(
-            "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
-            (key, value),
-        )
 
 
 def get_setting(key: str, default: str = "") -> str:

@@ -7,7 +7,7 @@ regels. Elke trade blijft een handmatige beslissing.
 import asyncio
 import logging
 
-from app import coinlist, config, db, exchange, indicators, repo, risk, telegram_notify
+from app import coinlist, exchange, indicators, repo, risk, telegram_notify
 from app.anthropic_interpret import Interpretation, interpret_message
 
 logger = logging.getLogger("signal_processor")
@@ -51,10 +51,7 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     df = await asyncio.to_thread(exchange.fetch_ohlcv, interp.coin)
     ind = indicators.compute_indicators(df)
     confirmed, reason = indicators.confirms_direction(ind, interp.direction)
-
-    portfolio_eur = float(db.get_setting("portfolio_eur", "0"))
-    risk_percent = float(db.get_setting("risk_percent", str(config.DEFAULT_RISK_PERCENT)))
-    levels = risk.compute_levels(interp.direction, ind.price, ind.atr, portfolio_eur, risk_percent)
+    stop_take = risk.compute_stop_take(interp.direction, ind.price, ind.atr)
 
     confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"
 
@@ -74,17 +71,28 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         "technical_confirmed": int(confirmed),
         "confidence": confidence,
         "reason": reason,
-        "stop_loss": levels.stop_loss,
-        "take_profit": levels.take_profit,
-        "risk_eur": levels.risk_eur,
-        "telegram_sent": 0,
+        "stop_loss": stop_take.stop_loss,
+        "take_profit": stop_take.take_profit,
     }
     signal_id = repo.insert_signal(signal_data)
     logger.info("Signaal %s opgeslagen: %s %s, bevestigd=%s", signal_id, interp.coin,
                 interp.direction, confirmed)
 
-    try:
-        await telegram_notify.send_signal(signal_data)
-        repo.mark_telegram_sent(signal_id)
-    except Exception:
-        logger.exception("Telegram melding voor signaal %s is mislukt", signal_id)
+    # Elke gebruiker krijgt zijn eigen logboekregel en zijn eigen Telegram
+    # melding, met een risicobedrag op basis van zijn eigen portfolio.
+    for user in repo.list_users():
+        risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
+        entry_id = repo.create_journal_entry(signal_id, user["id"], risk_eur)
+
+        if not user["telegram_chat_id"]:
+            logger.info("Gebruiker %s heeft geen telegram_chat_id, geen melding verstuurd",
+                        user["username"])
+            continue
+
+        try:
+            await telegram_notify.send_signal({**signal_data, "risk_eur": risk_eur},
+                                               chat_id=user["telegram_chat_id"])
+            repo.mark_journal_telegram_sent(entry_id)
+        except Exception:
+            logger.exception("Telegram melding voor gebruiker %s, signaal %s is mislukt",
+                              user["username"], signal_id)

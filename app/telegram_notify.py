@@ -29,12 +29,15 @@ def format_signal_message(signal: dict) -> str:
     return "\n".join(lines)
 
 
-async def send_signal(signal: dict) -> None:
-    if not config.TELEGRAM_BOT_TOKEN or not config.TELEGRAM_CHAT_ID:
+async def send_signal(signal: dict, chat_id: str) -> None:
+    """Verstuurt de melding naar één specifieke chat ID. Elke gebruiker heeft
+    zijn eigen chat ID en dus zijn eigen risicobedrag in het bericht."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
         logger.warning("Telegram token of chat ID ontbreekt, melding niet verstuurd")
         return
 
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
     text = format_signal_message(signal)
-    await bot.send_message(chat_id=config.TELEGRAM_CHAT_ID, text=text)
-    logger.info("Telegram melding verstuurd voor %s %s", signal["coin"], signal["direction"])
+    await bot.send_message(chat_id=chat_id, text=text)
+    logger.info("Telegram melding verstuurd voor %s %s naar chat %s",
+                signal["coin"], signal["direction"], chat_id)

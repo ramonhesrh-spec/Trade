@@ -11,6 +11,13 @@ interpreteert de tekst via de Anthropic API, toetst dat tegen live koersdata
 op Binance, en stuurt een Telegram melding. Alles wordt gelogd in een sqlite
 database en is terug te zien in het webdashboard.
 
+Meerdere mensen kunnen hetzelfde systeem gebruiken. Iedereen ziet dezelfde
+signalen (dezelfde Discord berichten, dezelfde technische toetsing), maar
+elke gebruiker heeft zijn eigen login, eigen portfolio, eigen risico
+instelling, eigen Telegram meldingen met zijn eigen risicobedrag, en zijn
+eigen logboek: status, entry, exit en notities. De ene gebruiker kan het
+logboek van de andere niet zien of wijzigen.
+
 ## Onderdelen
 
 - `app/discord_bot.py` — leest DM's, alleen leesrechten
@@ -40,32 +47,36 @@ database en is terug te zien in het webdashboard.
 
 ### 2. Telegram bot aanmaken
 
-1. Zoek in Telegram naar BotFather, stuur `/newbot`, bewaar de token.
-2. Stuur zelf een bericht naar je nieuwe bot.
-3. Haal je chat ID op, bijvoorbeeld via `@userinfobot`.
-4. Zet token en chat ID in `.env` als `TELEGRAM_BOT_TOKEN` en
-   `TELEGRAM_CHAT_ID`.
+1. Zoek in Telegram naar BotFather, stuur `/newbot`, bewaar de token. Dit is
+   één bot voor iedereen, elke gebruiker krijgt straks zijn eigen chat ID.
+2. Zet de token in `.env` als `TELEGRAM_BOT_TOKEN`.
+3. Voor elke gebruiker apart: stuur zelf een bericht naar de nieuwe bot
+   vanaf je eigen Telegram account, en haal je chat ID op, bijvoorbeeld via
+   `@userinfobot`. Dit chat ID vul je zo in bij het aanmaken van het account
+   (stap 4), niet in `.env`.
 
 ### 3. Anthropic API sleutel
 
 Zet je Anthropic API sleutel in `.env` als `ANTHROPIC_API_KEY`.
 
-### 4. Lokale installatie en dashboard wachtwoord
+### 4. Lokale installatie en accounts aanmaken
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 cp .env.example .env
-# vul .env verder aan met je tokens
+# vul .env verder aan met je tokens, en kies een lange willekeurige JWT_SECRET
 
 python3 scripts/create_user.py
-# zet de output als DASHBOARD_PASSWORD_HASH in .env, en kies een lange
-# willekeurige JWT_SECRET
-
-python3 -m app.db
-# maakt de sqlite database en tabellen aan
+# maakt de database aan (als die nog niet bestaat) en vraagt om
+# gebruikersnaam, wachtwoord, portfolio, risicopercentage en Telegram
+# chat ID. Draai dit script nogmaals voor elke extra gebruiker, bijvoorbeeld
+# een vriend die hetzelfde systeem gebruikt met zijn eigen logboek.
 ```
+
+Geen open registratie: alleen accounts die jij zelf op de server aanmaakt
+via dit script kunnen inloggen.
 
 ### 5. Testen, per bouwstap
 
@@ -104,7 +115,9 @@ sudo -u crypto python3 -m venv .venv
 sudo -u crypto .venv/bin/pip install -r requirements.txt
 sudo -u crypto cp .env.example .env
 # vul .env in als vaste gebruiker crypto
-sudo -u crypto .venv/bin/python3 -m app.db
+sudo -u crypto .venv/bin/python3 scripts/create_user.py
+# maakt de database aan en je eigen account. Draai dit nogmaals voor elke
+# extra gebruiker.
 ```
 
 ### Achtergrondprocessen met automatisch herstarten
@@ -150,6 +163,29 @@ automatische vernieuwing van het certificaat.
 Het dashboard beperkt zelf ook het aantal inlogpogingen: na een aantal
 mislukte pogingen (instelbaar via `MAX_LOGIN_ATTEMPTS` in `.env`) wordt
 inloggen tijdelijk geblokkeerd.
+
+### Een tweede gebruiker toevoegen
+
+Wil een vriend hetzelfde systeem gebruiken, met zijn eigen login, eigen
+portfolio en eigen Telegram meldingen, maar op basis van dezelfde
+signalen die jij al binnenkrijgt via Discord? Draai op de VPS:
+
+```bash
+cd /opt/crypto-alerts
+sudo -u crypto .venv/bin/python3 scripts/create_user.py
+```
+
+Vul zijn gebruikersnaam, wachtwoord, portfolio in euro's, risicopercentage
+en Telegram chat ID in (die hij zelf ophaalt via `@userinfobot` nadat hij
+een bericht naar jullie gedeelde Telegram bot heeft gestuurd). Hij logt
+daarna in op dezelfde dashboard URL, met zijn eigen wachtwoord. Hij ziet
+dezelfde meldingen als jij, maar zijn eigen risicobedrag, zijn eigen
+statusknoppen, en zijn eigen winrate en resultaat. Wat jij invult bij een
+melding (genomen, entry, exit, notitie) is niet zichtbaar voor hem, en
+andersom.
+
+Hij hoeft zelf niets te installeren of te forwarden, alleen jij stuurt
+berichten door naar de bot.
 
 ## Dagelijkse werkwijze
 

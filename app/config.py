@@ -17,19 +17,22 @@ DISCORD_BOT_TOKEN = _get("DISCORD_BOT_TOKEN")
 ANTHROPIC_API_KEY = _get("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = _get("ANTHROPIC_MODEL", "claude-sonnet-5")
 
+# Eén gedeelde Telegram bot, stuurt elke gebruiker zijn eigen bericht naar
+# zijn eigen chat ID (opgeslagen per gebruiker in de database).
 TELEGRAM_BOT_TOKEN = _get("TELEGRAM_BOT_TOKEN")
-TELEGRAM_CHAT_ID = _get("TELEGRAM_CHAT_ID")
 
 EXCHANGE_ID = _get("EXCHANGE_ID", "binance")
 QUOTE_CURRENCY = _get("QUOTE_CURRENCY", "USDT")
 TIMEFRAME = "4h"
 
-DASHBOARD_USERNAME = _get("DASHBOARD_USERNAME", "admin")
-DASHBOARD_PASSWORD_HASH = _get("DASHBOARD_PASSWORD_HASH")
+# Dashboard accounts staan in de database (tabel users), aangemaakt via
+# scripts/create_user.py. Geen open registratie.
 JWT_SECRET = _get("JWT_SECRET", "change-me-to-a-random-secret")
 JWT_ALGORITHM = "HS256"
 SESSION_HOURS = 24 * 7
 
+# Standaard risicopercentage voor een nieuwe gebruiker, aan te passen per
+# gebruiker in het dashboard.
 DEFAULT_RISK_PERCENT = float(_get("DEFAULT_RISK_PERCENT", "1.0"))
 
 DATABASE_PATH = str(BASE_DIR / _get("DATABASE_PATH", "data/trading.db"))

@@ -32,6 +32,7 @@ body {
 .topbar nav { display: flex; gap: 14px; flex: 1; flex-wrap: wrap; }
 .topbar nav a { color: var(--muted); text-decoration: none; }
 .topbar nav a:hover { color: var(--text); }
+.logout-form { display: flex; align-items: center; gap: 10px; }
 .logout-form button {
   background: none; border: 1px solid var(--border); color: var(--muted);
   padding: 6px 12px; border-radius: 4px; cursor: pointer;

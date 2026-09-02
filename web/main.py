@@ -1,5 +1,6 @@
-"""FastAPI webdashboard. Eén vaste gebruiker, login met JWT sessiecookie,
-beperkt aantal inlogpogingen. Draai met:
+"""FastAPI webdashboard. Meerdere gebruikers mogelijk, elk met een eigen
+login, eigen portfolio en eigen logboek. Iedereen ziet dezelfde signalen.
+Geen open registratie, accounts via scripts/create_user.py. Draai met:
 uvicorn web.main:app --host 0.0.0.0 --port 8000
 """
 import sys
@@ -33,11 +34,13 @@ async def redirect_to_login(request: Request, exc: HTTPException):
     return RedirectResponse(url="/login", status_code=303)
 
 
-def require_login(request: Request) -> str:
+def require_login(request: Request) -> dict:
     token = request.cookies.get(SESSION_COOKIE)
-    if not token or not security.verify_session_token(token):
+    user_id = security.verify_session_token(token) if token else None
+    user = repo.get_user(user_id) if user_id else None
+    if not user:
         raise HTTPException(status_code=401)
-    return config.DASHBOARD_USERNAME
+    return user
 
 
 # ---------------------------------------------------------------------------
@@ -51,7 +54,7 @@ async def login_form(request: Request):
 
 @app.post("/login")
 async def login_submit(request: Request, username: str = Form(...), password: str = Form(...)):
-    if security.is_locked_out():
+    if security.is_locked_out(username):
         return templates.TemplateResponse(
             request,
             "login.html",
@@ -59,10 +62,10 @@ async def login_submit(request: Request, username: str = Form(...), password: st
             status_code=429,
         )
 
-    ok = username == config.DASHBOARD_USERNAME and security.verify_password(
-        password, config.DASHBOARD_PASSWORD_HASH
-    )
-    security.record_login_attempt(success=ok, ip_address=request.client.host if request.client else "")
+    user = repo.get_user_by_username(username)
+    ok = user is not None and security.verify_password(password, user["password_hash"])
+    security.record_login_attempt(username, success=ok,
+                                   ip_address=request.client.host if request.client else "")
 
     if not ok:
         return templates.TemplateResponse(
@@ -72,7 +75,7 @@ async def login_submit(request: Request, username: str = Form(...), password: st
             status_code=401,
         )
 
-    token = security.create_session_token(username)
+    token = security.create_session_token(user["id"])
     response = RedirectResponse(url="/", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
@@ -90,21 +93,18 @@ async def logout():
 # ---------------------------------------------------------------------------
 
 @app.get("/")
-async def dashboard(request: Request, status: str = "alle", user: str = Depends(require_login)):
-    signals = repo.list_signals(status=None if status == "alle" else status)
-    winrate = repo.winrate_stats()
-    cumulative = repo.cumulative_result_series()
+async def dashboard(request: Request, status: str = "alle", user: dict = Depends(require_login)):
+    entries = repo.list_journal(user["id"], status=None if status == "alle" else status)
+    winrate = repo.winrate_stats(user["id"])
+    cumulative = repo.cumulative_result_series(user["id"])
     coins = repo.list_coins()
-    portfolio_eur = db.get_setting("portfolio_eur", "0")
-    risk_percent = db.get_setting("risk_percent", str(config.DEFAULT_RISK_PERCENT))
 
     return templates.TemplateResponse(request, "dashboard.html", {
-        "signals": signals,
+        "user": user,
+        "entries": entries,
         "winrate": winrate,
         "cumulative": cumulative,
         "coins": coins,
-        "portfolio_eur": portfolio_eur,
-        "risk_percent": risk_percent,
         "status_filter": status,
     })
 
@@ -113,43 +113,48 @@ async def dashboard(request: Request, status: str = "alle", user: str = Depends(
 async def update_settings(
     portfolio_eur: float = Form(...),
     risk_percent: float = Form(...),
-    user: str = Depends(require_login),
+    telegram_chat_id: str = Form(""),
+    user: dict = Depends(require_login),
 ):
-    db.set_setting("portfolio_eur", str(portfolio_eur))
-    db.set_setting("risk_percent", str(risk_percent))
+    repo.update_user_settings(user["id"], portfolio_eur, risk_percent, telegram_chat_id.strip() or None)
     return RedirectResponse(url="/", status_code=303)
 
 
-@app.post("/signals/{signal_id}/status")
-async def update_signal_status(
-    signal_id: int,
+@app.post("/journal/{entry_id}/status")
+async def update_journal_status(
+    entry_id: int,
     status: str = Form(...),
     entry_price: str = Form(""),
-    user: str = Depends(require_login),
+    user: dict = Depends(require_login),
 ):
     entry = float(entry_price) if entry_price.strip() else None
-    repo.update_status(signal_id, status, entry_price=entry)
+    repo.update_journal_status(entry_id, user["id"], status, entry_price=entry)
     return RedirectResponse(url="/", status_code=303)
 
 
-@app.post("/signals/{signal_id}/close")
-async def close_signal(
-    signal_id: int,
+@app.post("/journal/{entry_id}/close")
+async def close_journal(
+    entry_id: int,
     exit_price: float = Form(...),
     exit_time: str = Form(...),
-    user: str = Depends(require_login),
+    user: dict = Depends(require_login),
 ):
-    repo.close_trade(signal_id, exit_price, exit_time)
+    try:
+        repo.close_journal_trade(entry_id, user["id"], exit_price, exit_time)
+    except ValueError:
+        # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
+        # entry prijs ingevuld). Stil negeren, niets om te sluiten.
+        pass
     return RedirectResponse(url="/", status_code=303)
 
 
-@app.post("/signals/{signal_id}/note")
-async def update_note(
-    signal_id: int,
+@app.post("/journal/{entry_id}/note")
+async def update_journal_note(
+    entry_id: int,
     note: str = Form(""),
-    user: str = Depends(require_login),
+    user: dict = Depends(require_login),
 ):
-    repo.update_note(signal_id, note)
+    repo.update_journal_note(entry_id, user["id"], note)
     return RedirectResponse(url="/", status_code=303)
 
 
@@ -158,13 +163,14 @@ async def update_note(
 # ---------------------------------------------------------------------------
 
 @app.get("/coins/{symbol}")
-async def coin_page(request: Request, symbol: str, user: str = Depends(require_login)):
+async def coin_page(request: Request, symbol: str, user: dict = Depends(require_login)):
     symbol = symbol.upper()
     source_levels = repo.list_source_levels(symbol)
-    signals = repo.list_signals_for_coin(symbol)
-    open_trades = [s for s in signals if s["entry_price"] is not None and s["exit_price"] is None]
+    entries = repo.list_journal_for_coin(user["id"], symbol)
+    open_trades = [e for e in entries if e["entry_price"] is not None and e["exit_price"] is None]
 
     return templates.TemplateResponse(request, "coin.html", {
+        "user": user,
         "symbol": symbol,
         "source_levels": source_levels,
         "open_trades": open_trades,
@@ -173,12 +179,12 @@ async def coin_page(request: Request, symbol: str, user: str = Depends(require_l
 
 
 @app.get("/api/coins")
-async def api_coins(user: str = Depends(require_login)):
+async def api_coins(user: dict = Depends(require_login)):
     return repo.list_coins()
 
 
 @app.get("/api/candles/{symbol}")
-async def api_candles(symbol: str, user: str = Depends(require_login)):
+async def api_candles(symbol: str, user: dict = Depends(require_login)):
     df = exchange.fetch_ohlcv(symbol.upper(), timeframe=config.TIMEFRAME, limit=200)
     ema9, ema21 = indicators.ema_series(df)
 

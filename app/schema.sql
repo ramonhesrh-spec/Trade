@@ -1,5 +1,18 @@
 -- Schema voor het crypto alertsysteem.
 
+-- Gebruikers van het dashboard. Geen open registratie, accounts worden
+-- toegevoegd via scripts/create_user.py. Iedereen ziet dezelfde signalen,
+-- maar houdt zijn eigen logboek bij met een eigen portfolio en risico.
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    portfolio_eur REAL NOT NULL DEFAULT 0,
+    risk_percent REAL NOT NULL DEFAULT 1.0,
+    telegram_chat_id TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     received_at TEXT NOT NULL,
@@ -34,8 +47,8 @@ CREATE TABLE IF NOT EXISTS coins (
     active INTEGER NOT NULL DEFAULT 1
 );
 
--- Verwerkte day trading signalen, met technische toetsing, risico en
--- Telegram melding, plus mijn eigen trade administratie.
+-- Verwerkte day trading signalen: gedeelde technische toetsing. Objectief,
+-- hetzelfde voor iedereen die het dashboard gebruikt.
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message_id INTEGER NOT NULL REFERENCES messages(id),
@@ -55,17 +68,27 @@ CREATE TABLE IF NOT EXISTS signals (
     reason TEXT,
     stop_loss REAL,
     take_profit REAL,
+    created_at TEXT NOT NULL
+);
+
+-- Eigen trade logboek per gebruiker en per signaal: eigen risicobedrag
+-- (op basis van eigen portfolio), eigen status, eigen entry/exit en
+-- notitie, en of de Telegram melding naar deze gebruiker is verstuurd.
+CREATE TABLE IF NOT EXISTS journal_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    signal_id INTEGER NOT NULL REFERENCES signals(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
     risk_eur REAL,
     telegram_sent INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT NOT NULL,
-
     status TEXT NOT NULL DEFAULT 'nieuw',
     entry_price REAL,
     exit_price REAL,
     exit_time TEXT,
     result_eur REAL,
     result_pct REAL,
-    note TEXT
+    note TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (signal_id, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS settings (
@@ -73,9 +96,10 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL
 );
 
--- Voor het beperken van het aantal inlogpogingen.
+-- Voor het beperken van het aantal inlogpogingen, per gebruikersnaam.
 CREATE TABLE IF NOT EXISTS login_attempts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT NOT NULL,
     attempted_at TEXT NOT NULL,
     success INTEGER NOT NULL,
     ip_address TEXT

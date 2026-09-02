@@ -1,5 +1,6 @@
-"""Risicomanagement: stop loss, take profit op basis van ATR, en risicobedrag
-in euro's op basis van handmatig ingevuld portfoliobedrag."""
+"""Risicomanagement: stop loss en take profit op basis van ATR (gedeeld,
+hetzelfde voor iedereen), en risicobedrag in euro's op basis van een eigen
+portfoliobedrag per gebruiker."""
 from dataclasses import dataclass
 
 ATR_STOP_MULTIPLIER = 1.5
@@ -7,19 +8,12 @@ ATR_TARGET_MULTIPLIER = 3.0  # risk:reward van 1:2
 
 
 @dataclass
-class RiskLevels:
+class StopTake:
     stop_loss: float
     take_profit: float
-    risk_eur: float
 
 
-def compute_levels(
-    direction: str,
-    entry_price: float,
-    atr: float,
-    portfolio_eur: float,
-    risk_percent: float,
-) -> RiskLevels:
+def compute_stop_take(direction: str, entry_price: float, atr: float) -> StopTake:
     direction = direction.lower()
     if direction == "long":
         stop_loss = entry_price - ATR_STOP_MULTIPLIER * atr
@@ -30,6 +24,8 @@ def compute_levels(
     else:
         raise ValueError(f"onbekende richting: {direction}")
 
-    risk_eur = portfolio_eur * (risk_percent / 100.0)
+    return StopTake(stop_loss=stop_loss, take_profit=take_profit)
 
-    return RiskLevels(stop_loss=stop_loss, take_profit=take_profit, risk_eur=risk_eur)
+
+def compute_risk_eur(portfolio_eur: float, risk_percent: float) -> float:
+    return portfolio_eur * (risk_percent / 100.0)
