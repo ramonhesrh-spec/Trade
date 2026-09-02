@@ -333,6 +333,8 @@ _JOURNAL_SELECT = """
         s.coin AS coin, s.direction AS direction, s.category AS category,
         s.price AS price, s.stop_loss AS stop_loss, s.take_profit AS take_profit,
         s.confidence AS confidence, s.technical_confirmed AS technical_confirmed,
+        s.rsi AS rsi, s.ema9 AS ema9, s.ema21 AS ema21,
+        s.macd AS macd, s.macd_signal AS macd_signal, s.volume_ratio AS volume_ratio,
         s.reason AS reason, s.context_note AS context_note, s.created_at AS created_at
     FROM journal_entries je
     JOIN signals s ON s.id = je.signal_id

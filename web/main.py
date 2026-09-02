@@ -17,6 +17,7 @@ from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from app import advice as advice_module
 from app import config, db, exchange, indicators, repo, risk, security
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -177,6 +178,19 @@ async def register_submit(
 # Dashboard startpagina
 # ---------------------------------------------------------------------------
 
+def _add_signal_context(entries: list[dict], winrate: dict) -> list[dict]:
+    """Voegt aan elk signaal het concrete advies toe (wat kan je beter
+    doen dan nu instappen) en een slagingskans op basis van de eigen
+    trackrecord van dit vertrouwen-niveau tot nu toe."""
+    for entry in entries:
+        entry["advice"] = advice_module.build_advice(entry)
+        bucket = "hoog_vertrouwen" if entry.get("confidence") == "hoog vertrouwen" else "laag_vertrouwen"
+        stats = winrate[bucket]
+        entry["success_rate"] = stats["winrate"]
+        entry["success_sample"] = stats["total"]
+    return entries
+
+
 def _enrich_open_positions(entries: list[dict]) -> list[dict]:
     """Vult elke open positie (entry_price al ingevuld) aan met de actuele
     prijs en het nog niet gerealiseerde resultaat. Eén prijs-opvraag per
@@ -216,8 +230,10 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
             risk.compute_position_size(entry["risk_eur"], entry["price"], entry["stop_loss"])
             if entry["risk_eur"] and entry["price"] and entry["stop_loss"] else None
         )
-    open_entries = _enrich_open_positions(repo.list_journal(user["id"], status="open"))
     winrate = repo.winrate_stats(user["id"])
+    open_entries = _add_signal_context(
+        _enrich_open_positions(repo.list_journal(user["id"], status="open")), winrate,
+    )
     cumulative = repo.cumulative_result_series(user["id"])
     coin_stats = repo.coin_stats(user["id"])
     coins = repo.list_coins()
@@ -334,12 +350,19 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     symbol = symbol.upper()
     source_levels = repo.list_source_levels(symbol)
     entries = repo.list_journal_for_coin(user["id"], symbol)
-    open_trades = [e for e in entries if e["entry_price"] is not None and e["exit_price"] is None]
+    open_trades = _enrich_open_positions(
+        [e for e in entries if e["entry_price"] is not None and e["exit_price"] is None]
+    )
     open_signal_ids = {e["signal_id"] for e in open_trades}
     recent_signals = [
         s for s in repo.list_recent_signals(symbol)
         if s["id"] not in open_signal_ids and (s["stop_loss"] or s["take_profit"])
     ]
+    for s in recent_signals:
+        s.setdefault("entry_price", None)  # signalen zijn geen journal-rijen, dat veld bestaat niet
+    winrate = repo.winrate_stats(user["id"])
+    open_trades = _add_signal_context(open_trades, winrate)
+    recent_signals = _add_signal_context(recent_signals, winrate)
 
     return templates.TemplateResponse(request, "coin.html", {
         "user": user,

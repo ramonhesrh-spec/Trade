@@ -4,26 +4,31 @@
 
 <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>{{ symbol }}</h2>
 
-{% if recent_signals %}
+{% set primary = open_trades[0] if open_trades else (recent_signals[0] if recent_signals else none) %}
+{% if primary %}
 <section class="cards" style="margin-bottom: 16px;">
-  {% for s in recent_signals[:1] %}
   <div class="card">
-    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>Laatste signaal</h3>
-    <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 10px;">
-      <span class="badge badge-{{ s.direction }}">{{ s.direction }}</span>
-      <span class="badge {{ 'badge-hoog' if s.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ s.confidence.split(" ")[0] }}</span>
+    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>{{ "Jouw open trade" if open_trades else "Laatste signaal" }}</h3>
+    <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
+      <span class="badge badge-{{ primary.direction }}">{{ primary.direction }}</span>
+      <span class="badge {{ 'badge-hoog' if primary.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ primary.confidence.split(" ")[0] }}</span>
+      <span class="muted" style="font-size: 12px;">slagingskans {{ primary.success_rate }}%{% if primary.success_sample < 5 %} (nog weinig data){% else %} (n={{ primary.success_sample }}){% endif %}</span>
     </div>
-    <p class="muted" style="margin: 0 0 4px;">Entry <span style="color: var(--text); font-variant-numeric: tabular-nums;">{{ "%.4f"|format(s.price) if s.price else "-" }}</span></p>
-    <p class="muted" style="margin: 0 0 4px;">Stop loss <span class="neg" style="font-variant-numeric: tabular-nums;">{{ "%.4f"|format(s.stop_loss) if s.stop_loss else "-" }}</span></p>
-    <p class="muted" style="margin: 0;">Take profit <span class="pos" style="font-variant-numeric: tabular-nums;">{{ "%.4f"|format(s.take_profit) if s.take_profit else "-" }}</span></p>
+    {% if primary.entry_price is defined and primary.entry_price is not none %}
+      <p class="muted" style="margin: 0 0 4px;">Entry <span style="color: var(--text); font-variant-numeric: tabular-nums;">{{ "%.4f"|format(primary.entry_price) }}</span></p>
+    {% else %}
+      <p class="muted" style="margin: 0 0 4px;">Entry <span style="color: var(--text); font-variant-numeric: tabular-nums;">{{ "%.4f"|format(primary.price) if primary.price else "-" }}</span></p>
+    {% endif %}
+    <p class="muted" style="margin: 0 0 4px;">Stop loss <span class="neg" style="font-variant-numeric: tabular-nums;">{{ "%.4f"|format(primary.stop_loss) if primary.stop_loss else "-" }}</span></p>
+    <p class="muted" style="margin: 0;">Take profit <span class="pos" style="font-variant-numeric: tabular-nums;">{{ "%.4f"|format(primary.take_profit) if primary.take_profit else "-" }}</span></p>
   </div>
   <div class="card">
-    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>Waarom {{ s.confidence.split(" ")[0] }}</h3>
-    {% for factor in s.reason.split(" | ") %}
+    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>Waarom {{ primary.confidence.split(" ")[0] }}</h3>
+    {% for factor in primary.reason.split(" | ") %}
       <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}" style="margin: 0 0 5px; font-size: 12.5px;">{{ factor }}</p>
     {% endfor %}
+    <p class="muted advice-text" style="margin-top: 8px;">{{ primary.advice }}</p>
   </div>
-  {% endfor %}
 </section>
 {% endif %}
 

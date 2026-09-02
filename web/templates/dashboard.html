@@ -15,15 +15,37 @@
         </div>
         <span class="badge badge-status">{{ e.status }}</span>
       </div>
+      <div style="display: flex; gap: 6px; align-items: center; margin: 8px 0;">
+        <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
+        <span class="muted" style="font-size: 12px;">
+          slagingskans {{ e.success_rate }}%
+          {% if e.success_sample < 5 %}(nog weinig data){% else %}(n={{ e.success_sample }}){% endif %}
+        </span>
+      </div>
       {% if e.entry_price is not none %}
-        <p class="muted" style="margin: 10px 0 2px;">Entry <span style="color: var(--text); font-variant-numeric: tabular-nums;">{{ "%.4f"|format(e.entry_price) }}</span></p>
-        <p class="muted" style="margin: 0 0 8px;">Nu <span data-price="{{ e.id }}" style="color: var(--text); font-variant-numeric: tabular-nums;">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</span></p>
-        <p style="margin: 0; font-size: 20px; font-weight: 700;" class="{{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
+        <div class="open-numbers">
+          <span class="muted">Entry <b style="color: var(--text);">{{ "%.4f"|format(e.entry_price) }}</b></span>
+          <span class="muted">Nu <b data-price="{{ e.id }}" style="color: var(--text);">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</b></span>
+          <span class="muted">SL <b class="neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</b></span>
+          <span class="muted">TP <b class="pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</b></span>
+        </div>
+        <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="{{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
           {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
           <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
         </p>
+        <p class="muted advice-text">{{ e.advice }}</p>
+        <form action="/journal/{{ e.id }}/close" method="post" class="close-form">
+          <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
+          <input type="datetime-local" name="exit_time" required>
+          <button type="submit">Sluiten</button>
+        </form>
       {% else %}
-        <p class="muted" style="margin: 10px 0;">Nog niet bevestigd. Entry {{ "%.4f"|format(e.price) if e.price else "-" }}, stop loss {{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}, take profit {{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}.</p>
+        <div class="open-numbers">
+          <span class="muted">Entry <b style="color: var(--text);">{{ "%.4f"|format(e.price) if e.price else "-" }}</b></span>
+          <span class="muted">SL <b class="neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</b></span>
+          <span class="muted">TP <b class="pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</b></span>
+        </div>
+        <p class="muted advice-text">{{ e.advice }}</p>
         <form action="/journal/{{ e.id }}/status" method="post" class="status-form">
           <select name="status">
             <option value="genomen">Genomen</option>

@@ -68,9 +68,15 @@ main h3 { font-size: 15px; gap: 8px; }
 
 .open-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin: 14px 0 28px; }
 .open-card { min-width: 0; }
-.open-card .status-form { flex-wrap: wrap; }
-.open-card .status-form select, .open-card .status-form input { flex: 1; min-width: 90px; }
-.open-card .status-form button { width: 100%; }
+.open-card .status-form, .open-card .close-form { flex-wrap: wrap; margin-top: 8px; }
+.open-card .status-form select, .open-card .status-form input,
+.open-card .close-form input { flex: 1; min-width: 90px; }
+.open-card .status-form button, .open-card .close-form button { width: 100%; }
+.open-numbers {
+  display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px;
+}
+.open-numbers b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.advice-text { font-size: 12px; line-height: 1.5; margin: 8px 0 0; }
 
 .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
 .card {
