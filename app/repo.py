@@ -79,8 +79,9 @@ def list_messages_for_coin(coin: str, limit: int = 100) -> list[dict]:
 
 def latest_long_term_direction(coin: str) -> Optional[dict]:
     """Meest recente lange termijn bericht over deze coin met een bekende
-    richting. Gebruikt om een nieuw day trading signaal tegen recente
-    community visie af te zetten, zonder daar een eigen pagina van te maken."""
+    richting, inclusief "neutraal" voor een verdeelde conclusie. Gebruikt om
+    een nieuw day trading signaal tegen recente community visie af te
+    zetten, zonder daar een eigen pagina van te maken."""
     with db.session() as conn:
         row = conn.execute(
             """SELECT direction, received_at FROM messages
@@ -89,6 +90,7 @@ def latest_long_term_direction(coin: str) -> Optional[dict]:
             (coin.upper(),),
         ).fetchone()
         return dict(row) if row else None
+
 
 
 # ---------------------------------------------------------------------------

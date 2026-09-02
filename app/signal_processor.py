@@ -92,6 +92,9 @@ def _build_context_note(coin: str, direction: str) -> str:
         return ""
 
     when = latest["received_at"][:10]
+    if latest["direction"] == "neutraal":
+        return (f"Let op: recente lange termijn analyse is verdeeld over deze coin, "
+                f"geen duidelijke richting ({when}). Dit signaal staat op zichzelf.")
     if latest["direction"] == direction.lower():
         return f"Sluit aan bij recente lange termijn analyse ({direction}, {when})."
     return (f"Let op: recente lange termijn analyse wijst op "

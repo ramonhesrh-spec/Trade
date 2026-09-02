@@ -23,8 +23,17 @@ Haal op:
 - coin: het ticker symbool van de coin waar het bericht over gaat, \
 bijvoorbeeld BTC, ETH, SOL. Leeg laten als dit niet met voldoende zekerheid \
 te bepalen is.
-- direction: "long" of "short". Leeg laten als dit niet met voldoende \
-zekerheid te bepalen is.
+- direction: "long", "short", of bij category "lange_termijn" ook \
+"neutraal". Gebruik "neutraal" voor een lange termijn analyse die zelf \
+argumenten voor én tegen een richting geeft, zonder duidelijke conclusie \
+(bijvoorbeeld "misschien de bodem, misschien niet"). Dat is een geldige, \
+bruikbare conclusie, geen onduidelijk bericht: het systeem leert net zo \
+goed van "de mening is verdeeld" als van een duidelijke richting, dus \
+gebruik "neutraal" in plaats van leeg laten of unclear zetten zodra de \
+coin wel duidelijk is. Voor category "day_trading" is direction altijd \
+"long" of "short", nooit "neutraal", een concrete trade opzet kiest een \
+kant. Leeg laten alleen als zelfs geen enkele richting of afweging uit \
+het bericht te halen is.
 - category: "day_trading" voor een concrete kortetermijn trade opzet met \
 een entry op de 4 uur candle of korter. "lange_termijn" voor een analyse \
 zonder korte termijn horizon: onderbouwing op de weekly of monthly candle, \
@@ -34,8 +43,11 @@ kans bij staat. "aandelen" als het bericht over aandelen gaat in plaats \
 van crypto. Bij twijfel tussen day_trading en lange_termijn: kies \
 lange_termijn, want zonder concrete kortetermijn entry heeft toetsen op \
 de 4 uur candle geen betekenis.
-- unclear: true als coin of direction niet met voldoende zekerheid te \
-bepalen zijn. Bij twijfel altijd unclear op true zetten.
+- unclear: true als de coin niet met voldoende zekerheid te bepalen is, \
+of als het bij day_trading gaat om een concrete trade opzet zonder \
+duidelijke long/short richting. Een lange termijn analyse met een \
+verdeelde conclusie (direction "neutraal") is NIET unclear, die is prima \
+te bepalen, alleen niet eenduidig.
 - reason: korte reden waarom het bericht onduidelijk is, alleen invullen \
 als unclear true is.
 
@@ -77,8 +89,8 @@ TOOL = {
             },
             "direction": {
                 "type": "string",
-                "enum": ["long", "short", ""],
-                "description": "Leeg laten indien onbekend.",
+                "enum": ["long", "short", "neutraal", ""],
+                "description": "\"neutraal\" alleen bij lange_termijn met een verdeelde conclusie. Leeg laten indien onbekend.",
             },
             "category": {
                 "type": "string",
@@ -166,10 +178,17 @@ def interpret_message(raw_text: str, image_paths: Optional[list[str]] = None) ->
         for lvl in payload.get("source_levels", [])
     ]
 
-    if coin is None or direction is None:
+    if coin is None:
         unclear = True
         if not reason:
-            reason = "coin of richting niet duidelijk uit het bericht te halen"
+            reason = "coin niet duidelijk uit het bericht te halen"
+    elif category == "day_trading" and direction is None:
+        # Alleen bij een concrete day trading opzet is een echte long/short
+        # richting verplicht. Een lange termijn analyse mag ook "neutraal"
+        # zijn, dat is een geldige, bruikbare conclusie, geen onduidelijkheid.
+        unclear = True
+        if not reason:
+            reason = "richting niet duidelijk uit het bericht te halen"
 
     return Interpretation(
         coin=coin, direction=direction, category=category,
