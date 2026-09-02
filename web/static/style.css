@@ -112,6 +112,10 @@ button:hover { background: var(--accent-dark); border-color: var(--accent-dark);
 .login-card label { display: flex; flex-direction: column; gap: 6px; }
 .login-card a { color: var(--accent-dark); }
 .error { color: var(--red); margin: 0; }
+.warning {
+  background: #fff7e6; border: 1px solid #f0c36d; color: #8a5a00;
+  border-radius: 4px; padding: 8px 10px; font-size: 12px; margin: 0 0 10px;
+}
 
 ul.levels { padding-left: 18px; }
 
