@@ -199,11 +199,12 @@ main + .footer { border-top: 1px solid var(--border); }
 
 /* Coin grafiek: zone-blok voor gegroepeerde niveaus (bijvoorbeeld een box) */
 .chart-zone {
-  position: absolute; left: 0; right: 60px; pointer-events: none;
-  background: rgba(10, 186, 181, 0.08); border-top: 1px dashed rgba(10, 186, 181, 0.4);
-  border-bottom: 1px dashed rgba(10, 186, 181, 0.4);
+  position: absolute; left: 0; right: 60px; pointer-events: none; min-height: 6px;
+  background: rgba(10, 186, 181, 0.16); border-top: 1px dashed rgba(8, 148, 144, 0.7);
+  border-bottom: 1px dashed rgba(8, 148, 144, 0.7);
 }
 .chart-zone span {
-  position: absolute; top: 2px; left: 8px; font-size: 11px; color: var(--accent-dark);
-  background: rgba(255, 255, 255, 0.85); padding: 1px 5px; border-radius: 3px;
+  position: absolute; top: 2px; left: 8px; font-size: 11px; font-weight: 600;
+  color: var(--accent-dark); background: rgba(255, 255, 255, 0.9); padding: 1px 6px;
+  border-radius: 3px; white-space: nowrap;
 }

@@ -10,8 +10,12 @@
     upColor: "#2f855a", downColor: "#c53030",
     borderVisible: false, wickUpColor: "#2f855a", wickDownColor: "#c53030",
   });
-  const ema9Series = chart.addLineSeries({ color: "#0ABAB5", lineWidth: 1, title: "EMA9" });
-  const ema21Series = chart.addLineSeries({ color: "#6b7280", lineWidth: 1, title: "EMA21" });
+  const ema9Series = chart.addLineSeries({
+    color: "#0ABAB5", lineWidth: 1, title: "EMA9", lastValueVisible: false, priceLineVisible: false,
+  });
+  const ema21Series = chart.addLineSeries({
+    color: "#6b7280", lineWidth: 1, title: "EMA21", lastValueVisible: false, priceLineVisible: false,
+  });
 
   // Zones (bijvoorbeeld een "box" of "retest" gebied uit twee bij elkaar
   // horende niveaus) worden als vlak, doorzichtig blok over de grafiek
@@ -53,21 +57,24 @@
         addTradeLines(signal, `signaal ${signal.direction} (${signal.confidence})`);
       });
 
+      // Geen axis-label bij bron niveaus: bij dicht bij elkaar liggende
+      // niveaus vallen die badges anders over elkaar heen en worden
+      // onleesbaar. Alleen de lijn zelf blijft zichtbaar, de exacte
+      // waarde staat in de lijst onder de grafiek.
       zoneGroups.forEach((group) => {
         candleSeries.createPriceLine({
           price: group.high, color: "#0ABAB5", lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.Dashed, title: group.label,
+          lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
         candleSeries.createPriceLine({
           price: group.low, color: "#0ABAB5", lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.Dashed, title: "",
+          lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
       });
       singleLevels(sourceLevels, zoneGroups).forEach((lvl) => {
         candleSeries.createPriceLine({
           price: lvl.price_level, color: "#0ABAB5", lineWidth: 1,
-          lineStyle: LightweightCharts.LineStyle.Dashed,
-          title: lvl.pattern_name || "",
+          lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
       });
 
