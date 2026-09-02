@@ -263,6 +263,42 @@ def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def find_open_signal(coin: str, direction: str) -> Optional[dict]:
+    """Het meest recente signaal voor deze coin en richting, alleen als
+    minstens één gebruiker die nog niet gesloten heeft. Een nieuw bericht
+    over dezelfde coin en richting werkt dit signaal bij in plaats van er
+    een los signaal naast te zetten."""
+    with db.session() as conn:
+        row = conn.execute(
+            """SELECT * FROM signals WHERE coin = ? AND direction = ?
+               ORDER BY created_at DESC LIMIT 1""",
+            (coin.upper(), direction.lower()),
+        ).fetchone()
+        if not row:
+            return None
+        signal = dict(row)
+        still_open = conn.execute(
+            "SELECT COUNT(*) FROM journal_entries WHERE signal_id = ? AND exit_price IS NULL",
+            (signal["id"],),
+        ).fetchone()[0]
+        return signal if still_open > 0 else None
+
+
+def update_signal(signal_id: int, data: dict) -> None:
+    fields = [
+        "price", "rsi", "macd", "macd_signal", "volume_ratio", "ema9", "ema21", "atr",
+        "technical_confirmed", "confidence", "reason", "stop_loss", "take_profit",
+        "context_note",
+    ]
+    values = [data.get(f) for f in fields]
+    with db.session() as conn:
+        conn.execute(
+            f"""UPDATE signals SET {", ".join(f"{f} = ?" for f in fields)}, created_at = ?
+                WHERE id = ?""",
+            (*values, db.now_iso(), signal_id),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Logboek: eigen per gebruiker, gekoppeld aan een gedeeld signaal
 # ---------------------------------------------------------------------------
@@ -336,6 +372,14 @@ def get_journal_entry(entry_id: int, user_id: int) -> Optional[dict]:
             _JOURNAL_SELECT + "WHERE je.id = ? AND je.user_id = ?", (entry_id, user_id),
         ).fetchone()
         return dict(row) if row else None
+
+
+def list_journal_entries_for_signal(signal_id: int) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            _JOURNAL_SELECT + "WHERE je.signal_id = ?", (signal_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def list_journal_for_coin(user_id: int, coin: str) -> list[dict]:

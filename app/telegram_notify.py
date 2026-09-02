@@ -38,6 +38,34 @@ def format_signal_message(signal: dict) -> str:
     return "\n".join(lines)
 
 
+def format_update_message(signal: dict) -> str:
+    lines = [
+        f"UPDATE — {signal['coin']} {'LONG' if signal['direction'] == 'long' else 'SHORT'}",
+        "",
+        f"Nieuwe prijs: {signal['price']:.4f}",
+        f"Nieuwe stop loss: {signal['stop_loss']:.4f}",
+        f"Nieuw take profit: {signal['take_profit']:.4f}",
+    ]
+    if signal.get("context_note"):
+        lines += ["", signal["context_note"]]
+    lines += ["", config.DISCLAIMER]
+    return "\n".join(lines)
+
+
+async def send_signal_update(signal: dict, chat_id: str) -> None:
+    """Kort bericht als een bestaand, nog openstaand signaal is bijgewerkt
+    door een nieuw bericht over dezelfde coin en richting."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        logger.warning("Telegram token of chat ID ontbreekt, update niet verstuurd")
+        return
+
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = format_update_message(signal)
+    await bot.send_message(chat_id=chat_id, text=text)
+    logger.info("Telegram update verstuurd voor %s %s naar chat %s",
+                signal["coin"], signal["direction"], chat_id)
+
+
 async def send_signal(signal: dict, chat_id: str) -> None:
     """Verstuurt de melding naar één specifieke chat ID. Elke gebruiker heeft
     zijn eigen chat ID en dus zijn eigen risicobedrag in het bericht."""

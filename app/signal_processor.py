@@ -133,6 +133,16 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         "take_profit": stop_take.take_profit,
         "context_note": context_note or None,
     }
+    existing = repo.find_open_signal(interp.coin, interp.direction)
+
+    if existing:
+        signal_id = existing["id"]
+        repo.update_signal(signal_id, signal_data)
+        logger.info("Signaal %s bijgewerkt (was al open voor %s %s), bevestigd=%s",
+                    signal_id, interp.coin, interp.direction, confirmed)
+        await _notify_signal_update(signal_id, signal_data, ind.price, stop_take.stop_loss)
+        return
+
     signal_id = repo.insert_signal(signal_data)
     logger.info("Signaal %s opgeslagen: %s %s, bevestigd=%s", signal_id, interp.coin,
                 interp.direction, confirmed)
@@ -157,4 +167,19 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
             logger.exception("Telegram melding voor gebruiker %s, signaal %s is mislukt",
+                              user["username"], signal_id)
+
+
+async def _notify_signal_update(signal_id: int, signal_data: dict, price: float, stop_loss: float) -> None:
+    """Stuurt een korte update-melding naar gebruikers die dit signaal nog
+    open hebben staan. Maakt geen nieuwe logboekregel aan, die bestaat al."""
+    entries = {e["user_id"]: e for e in repo.list_journal_entries_for_signal(signal_id)}
+    for user in repo.list_users():
+        entry = entries.get(user["id"])
+        if not entry or entry["exit_price"] is not None or not user["telegram_chat_id"]:
+            continue
+        try:
+            await telegram_notify.send_signal_update(signal_data, chat_id=user["telegram_chat_id"])
+        except Exception:
+            logger.exception("Telegram update voor gebruiker %s, signaal %s is mislukt",
                               user["username"], signal_id)
