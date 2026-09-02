@@ -152,6 +152,21 @@ main + .footer { border-top: 1px solid var(--border); }
 .step p { margin: 0; color: var(--text); }
 .step strong { display: block; margin-bottom: 2px; }
 
+.factor-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 20px 0;
+}
+.factor {
+  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
+  padding: 18px 20px;
+}
+.factor h3 {
+  margin: 0 0 8px; font-size: 15px; color: var(--accent-dark);
+}
+.factor p { margin: 0; color: var(--text); font-size: 14px; line-height: 1.6; }
+@media (max-width: 560px) {
+  .factor-grid { grid-template-columns: 1fr; }
+}
+
 .kraken-card {
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
   padding: 24px; margin-top: 12px;
