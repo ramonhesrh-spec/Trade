@@ -26,9 +26,8 @@ def format_signal_message(signal: dict) -> str:
     lines += [
         "",
         f"Technisch bevestigd: {'ja' if signal['technical_confirmed'] else 'nee'}",
+        signal["reason"],
     ]
-    if not signal["technical_confirmed"]:
-        lines.append(f"Reden: {signal['reason']}")
 
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
@@ -39,12 +38,17 @@ def format_signal_message(signal: dict) -> str:
 
 
 def format_update_message(signal: dict) -> str:
+    confidence_label = signal["confidence"].upper()
     lines = [
-        f"UPDATE — {signal['coin']} {'LONG' if signal['direction'] == 'long' else 'SHORT'}",
+        f"UPDATE, {confidence_label} — {signal['coin']} "
+        f"{'LONG' if signal['direction'] == 'long' else 'SHORT'}",
         "",
         f"Nieuwe prijs: {signal['price']:.4f}",
         f"Nieuwe stop loss: {signal['stop_loss']:.4f}",
         f"Nieuw take profit: {signal['take_profit']:.4f}",
+        "",
+        f"Technisch bevestigd: {'ja' if signal['technical_confirmed'] else 'nee'}",
+        signal["reason"],
     ]
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]

@@ -106,7 +106,7 @@
         <td>{{ e.created_at[:16] | replace("T", " ") }}</td>
         <td><a href="/coins/{{ e.coin }}">{{ e.coin }}</a></td>
         <td class="{{ e.direction }}">{{ e.direction | upper }}</td>
-        <td class="{{ 'hoog' if e.confidence == 'hoog vertrouwen' else 'laag' }}">{{ e.confidence }}</td>
+        <td class="{{ 'hoog' if e.confidence == 'hoog vertrouwen' else 'laag' }}" title="{{ e.reason }}">{{ e.confidence }}</td>
         <td>{{ "%.4f"|format(e.price) if e.price else "-" }}</td>
         <td>{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</td>
         <td>{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</td>

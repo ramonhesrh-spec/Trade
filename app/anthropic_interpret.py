@@ -47,6 +47,22 @@ de naam van het patroon indien aangegeven. Verzin zelf geen niveaus of \
 patronen die niet zichtbaar zijn ingetekend. Als er geen afbeelding is, of \
 er is niets ingetekend, laat source_levels leeg.
 
+Lees elk cijfer zorgvuldig af, crypto grafieken hebben vaak 2 tot 4 \
+decimalen, een verkeerd geplaatste komma maakt het niveau waardeloos. Kijk \
+bij twijfel nog een keer goed naar de exacte positie van het label op de \
+afbeelding voor je het cijfer doorgeeft.
+
+Controleer daarna of het label van elk niveau logisch is bij de richting \
+van de trade en de huidige prijs op de afbeelding: bij long hoort een \
+"target" boven de huidige prijs te liggen en een support/retest niveau \
+eronder, bij short precies andersom. Klopt een niveau niet met zijn eigen \
+label (bijvoorbeeld een "target" die onder de prijs ligt bij een long), \
+neem het label dan niet klakkeloos over: geef in pattern_name liever de \
+rol die logisch bij de positie past (bijvoorbeeld "support" of "retest \
+niveau" in plaats van "target"), of laat dit ene niveau weg als je niet \
+zeker weet wat het voorstelt. Verzin nooit een richting om het kloppend \
+te maken, de prijs die je afleest blijft altijd leidend.
+
 Roep altijd de tool record_interpretation aan met je bevindingen."""
 
 TOOL = {

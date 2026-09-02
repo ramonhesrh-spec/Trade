@@ -63,42 +63,51 @@ def ema_series(df: pd.DataFrame) -> tuple[list[float], list[float]]:
 def confirms_direction(ind: Indicators, direction: str) -> tuple[bool, str]:
     """Bepaalt of de technische data de richting uit het Discord bericht steunt.
 
-    Regels, eenvoudig en uitlegbaar:
+    Vier factoren, elk met een duidelijke ✓ of ✗, zodat "hoog vertrouwen"
+    geen zwarte doos is maar altijd naast de vier losse redenen staat:
     - trend: EMA9 t.o.v. EMA21 moet de richting volgen
     - momentum: MACD lijn t.o.v. signaallijn moet de richting volgen
     - RSI mag niet al extreem tegen de richting in zitten (overbought bij
       long, oversold bij short)
     - volume moet minstens gemiddeld zijn, anders is de beweging niet
       overtuigend
+
+    "Hoog vertrouwen" betekent: alle vier factoren staan op ✓. Al is er
+    maar één ✗, dan is het "laag vertrouwen", ook al zijn de andere drie
+    wel gunstig.
     """
     direction = direction.lower()
-    reasons_against = []
-
     trend_up = ind.ema9 > ind.ema21
     momentum_up = ind.macd > ind.macd_signal
 
     if direction == "long":
-        if not trend_up:
-            reasons_against.append("EMA9 staat onder EMA21, geen opwaartse trend")
-        if not momentum_up:
-            reasons_against.append("MACD staat onder de signaallijn, geen opwaarts momentum")
-        if ind.rsi >= 75:
-            reasons_against.append(f"RSI staat op {ind.rsi:.0f}, overbought")
+        trend_ok = trend_up
+        trend_detail = "EMA9 boven EMA21" if trend_up else "EMA9 onder EMA21, geen opwaartse trend"
+        momentum_ok = momentum_up
+        momentum_detail = ("MACD boven signaallijn" if momentum_up
+                            else "MACD onder signaallijn, geen opwaarts momentum")
+        rsi_ok = ind.rsi < 75
+        rsi_detail = f"RSI {ind.rsi:.0f}" if rsi_ok else f"RSI {ind.rsi:.0f}, overbought"
     elif direction == "short":
-        if trend_up:
-            reasons_against.append("EMA9 staat boven EMA21, geen neerwaartse trend")
-        if momentum_up:
-            reasons_against.append("MACD staat boven de signaallijn, geen neerwaarts momentum")
-        if ind.rsi <= 25:
-            reasons_against.append(f"RSI staat op {ind.rsi:.0f}, oversold")
+        trend_ok = not trend_up
+        trend_detail = "EMA9 onder EMA21" if trend_ok else "EMA9 boven EMA21, geen neerwaartse trend"
+        momentum_ok = not momentum_up
+        momentum_detail = ("MACD onder signaallijn" if momentum_ok
+                            else "MACD boven signaallijn, geen neerwaarts momentum")
+        rsi_ok = ind.rsi > 25
+        rsi_detail = f"RSI {ind.rsi:.0f}" if rsi_ok else f"RSI {ind.rsi:.0f}, oversold"
     else:
         return False, f"onbekende richting: {direction}"
 
-    if ind.volume_ratio < 1.0:
-        reasons_against.append(
-            f"volume ligt op {ind.volume_ratio:.2f}x het gemiddelde, onder gemiddeld"
-        )
+    volume_ok = ind.volume_ratio >= 1.0
+    volume_detail = f"volume {ind.volume_ratio:.2f}x gemiddeld" + ("" if volume_ok else ", onder gemiddeld")
 
-    if reasons_against:
-        return False, "; ".join(reasons_against)
-    return True, "trend, momentum en volume ondersteunen de richting"
+    factors = [
+        ("Trend", trend_ok, trend_detail),
+        ("Momentum", momentum_ok, momentum_detail),
+        ("RSI", rsi_ok, rsi_detail),
+        ("Volume", volume_ok, volume_detail),
+    ]
+    breakdown = " | ".join(f"{'✓' if ok else '✗'} {name}: {detail}" for name, ok, detail in factors)
+    confirmed = all(ok for _, ok, _ in factors)
+    return confirmed, breakdown
