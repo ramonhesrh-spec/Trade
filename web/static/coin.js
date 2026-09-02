@@ -1,20 +1,21 @@
 (function () {
   const container = document.getElementById("chart");
   const chart = LightweightCharts.createChart(container, {
-    layout: { background: { color: "#ffffff" }, textColor: "#1a1a1a" },
-    grid: { vertLines: { color: "#e1e8e7" }, horzLines: { color: "#e1e8e7" } },
-    timeScale: { timeVisible: true },
+    layout: { background: { color: "#131a1b" }, textColor: "#b7c4c2" },
+    grid: { vertLines: { color: "#1c2526" }, horzLines: { color: "#1c2526" } },
+    timeScale: { timeVisible: true, borderColor: "#232d2f" },
+    rightPriceScale: { borderColor: "#232d2f" },
   });
 
   const candleSeries = chart.addCandlestickSeries({
-    upColor: "#2f855a", downColor: "#c53030",
-    borderVisible: false, wickUpColor: "#2f855a", wickDownColor: "#c53030",
+    upColor: "#33d69f", downColor: "#f2685c",
+    borderVisible: false, wickUpColor: "#33d69f", wickDownColor: "#f2685c",
   });
   const ema9Series = chart.addLineSeries({
-    color: "#0ABAB5", lineWidth: 1, title: "EMA9", lastValueVisible: false, priceLineVisible: false,
+    color: "#17e5d6", lineWidth: 1, title: "EMA9", lastValueVisible: false, priceLineVisible: false,
   });
   const ema21Series = chart.addLineSeries({
-    color: "#6b7280", lineWidth: 1, title: "EMA21", lastValueVisible: false, priceLineVisible: false,
+    color: "#7d8c8a", lineWidth: 1, title: "EMA21", lastValueVisible: false, priceLineVisible: false,
   });
 
   // Zones (bijvoorbeeld een "box" of "retest" gebied uit twee bij elkaar
@@ -63,17 +64,17 @@
       // waarde staat in de lijst onder de grafiek.
       zoneGroups.forEach((group) => {
         candleSeries.createPriceLine({
-          price: group.high, color: "#0ABAB5", lineWidth: 1,
+          price: group.high, color: "#17e5d6", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
         candleSeries.createPriceLine({
-          price: group.low, color: "#0ABAB5", lineWidth: 1,
+          price: group.low, color: "#17e5d6", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
       });
       singleLevels(sourceLevels, zoneGroups).forEach((lvl) => {
         candleSeries.createPriceLine({
-          price: lvl.price_level, color: "#0ABAB5", lineWidth: 1,
+          price: lvl.price_level, color: "#17e5d6", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
       });
@@ -85,19 +86,19 @@
   function addTradeLines(trade, label) {
     if (trade.entry_price) {
       candleSeries.createPriceLine({
-        price: trade.entry_price, color: "#1a1a1a", lineWidth: 1,
+        price: trade.entry_price, color: "#eaf1f0", lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Solid, title: label,
       });
     }
     if (trade.stop_loss) {
       candleSeries.createPriceLine({
-        price: trade.stop_loss, color: "#c53030", lineWidth: 1,
+        price: trade.stop_loss, color: "#f2685c", lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Solid, title: "stop loss",
       });
     }
     if (trade.take_profit) {
       candleSeries.createPriceLine({
-        price: trade.take_profit, color: "#2f855a", lineWidth: 1,
+        price: trade.take_profit, color: "#33d69f", lineWidth: 1,
         lineStyle: LightweightCharts.LineStyle.Solid, title: "take profit",
       });
     }

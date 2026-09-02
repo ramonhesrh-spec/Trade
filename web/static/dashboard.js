@@ -9,18 +9,18 @@
       datasets: [{
         label: "Cumulatief resultaat (euro)",
         data: cumulativeData.map((p) => p.cumulative_eur),
-        borderColor: "#0ABAB5",
-        backgroundColor: "rgba(10, 186, 181, 0.12)",
+        borderColor: "#17e5d6",
+        backgroundColor: "rgba(23, 229, 214, 0.12)",
         fill: true,
         tension: 0.1,
       }],
     },
     options: {
       scales: {
-        x: { ticks: { color: "#6b7280" }, grid: { color: "#e1e8e7" } },
-        y: { ticks: { color: "#6b7280" }, grid: { color: "#e1e8e7" } },
+        x: { ticks: { color: "#7d8c8a" }, grid: { color: "#1c2526" } },
+        y: { ticks: { color: "#7d8c8a" }, grid: { color: "#1c2526" } },
       },
-      plugins: { legend: { labels: { color: "#1a1a1a" } } },
+      plugins: { legend: { labels: { color: "#eaf1f0" } } },
     },
   });
 })();
