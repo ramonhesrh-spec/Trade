@@ -68,7 +68,8 @@ main h3 { font-size: 16px; gap: 8px; }
 }
 .winrate-bar > div { height: 100%; background: var(--accent); }
 
-table.signals { width: 100%; border-collapse: collapse; margin-top: 12px; }
+.table-scroll { overflow-x: auto; }
+table.signals { width: 100%; min-width: 900px; border-collapse: collapse; margin-top: 12px; }
 table.signals th, table.signals td {
   padding: 8px 10px; border-bottom: 1px solid var(--border); text-align: left; font-size: 13px;
 }
