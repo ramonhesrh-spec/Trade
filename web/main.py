@@ -347,6 +347,18 @@ async def close_journal(
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
+@app.post("/journal/{entry_id}/reset")
+async def reset_journal(
+    entry_id: int,
+    user: dict = Depends(require_login),
+):
+    """Zet een verkeerd ingevulde regel terug naar 'nieuw', zonder de
+    melding zelf kwijt te raken. Voor als er een typefout in de entry
+    prijs is geslopen of de verkeerde status is gekozen."""
+    repo.reset_journal_entry(entry_id, user["id"])
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
 @app.post("/journal/{entry_id}/note")
 async def update_journal_note(
     entry_id: int,

@@ -24,7 +24,11 @@
 
 * { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html {
+  -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
+  max-width: 100%;
+}
 
 body {
   margin: 0;
@@ -90,6 +94,12 @@ main h3 { font-size: 15px; gap: 8px; }
 .open-card .status-form select, .open-card .status-form input,
 .open-card .close-form input { flex: 1; min-width: 90px; }
 .open-card .status-form button, .open-card .close-form button { width: 100%; }
+.reset-form { margin-top: 6px; }
+.button-reset {
+  width: 100%; background: transparent; border: 1px solid transparent; color: var(--muted);
+  font-weight: 500; font-size: 11px; padding: 4px 6px; text-decoration: underline;
+}
+.button-reset:hover { color: var(--red); background: transparent; border-color: transparent; }
 .open-numbers {
   display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px;
 }
@@ -117,8 +127,13 @@ main h3 { font-size: 15px; gap: 8px; }
 .winrate-bar > div { height: 100%; background: var(--accent); }
 
 .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
-table.signals { width: 100%; min-width: 900px; border-collapse: collapse; margin-top: 12px; }
+table.signals { width: 100%; border-collapse: collapse; margin-top: 12px; }
 .table-scroll table.signals { margin-top: 0; border: none; }
+/* Alleen de brede tabellen met veel kolommen krijgen een minimumbreedte
+   en scrollen zijwaarts. Een kleine tabel van 3 of 4 kolommen hoeft niet
+   naar 900px opgerekt te worden, dat duwde op een telefoon de hele
+   pagina breder dan het scherm met lege ruimte erin. */
+table.signals.table-wide { min-width: 900px; }
 table.signals th, table.signals td {
   padding: 10px 12px; border-bottom: 1px solid var(--border); text-align: left;
   font-size: 13px; font-variant-numeric: tabular-nums; white-space: nowrap;

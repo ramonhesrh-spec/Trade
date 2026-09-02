@@ -43,7 +43,11 @@ def _cleanup_old_backups(keep: int) -> None:
 
 def _push_offsite(dest: Path) -> None:
     if not config.BACKUP_REMOTE:
-        logger.info("BACKUP_REMOTE niet ingesteld, back-up blijft alleen lokaal op de VPS")
+        logger.warning(
+            "BACKUP_REMOTE niet ingesteld: back-up blijft alleen lokaal op de VPS. "
+            "Bij schijfschade of verlies van de VPS is dan alles kwijt, ook de lokale "
+            "back-ups. Zie de README voor het instellen van een externe back-up locatie."
+        )
         return
     try:
         subprocess.run(

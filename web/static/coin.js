@@ -1,6 +1,16 @@
 (function () {
   const container = document.getElementById("chart");
+  if (!container) return;
+
+  // iOS Safari meet de container soms verkeerd op het eerste moment (voor
+  // de layout klaar is), en het "resize" event van het window gaat daar
+  // niet betrouwbaar af als de adresbalk in- of uitschuift. Vandaar een
+  // expliciete startbreedte/hoogte plus een ResizeObserver die de
+  // container zelf in de gaten houdt, niet het window.
+  const startRect = container.getBoundingClientRect();
   const chart = LightweightCharts.createChart(container, {
+    width: Math.round(startRect.width) || window.innerWidth,
+    height: Math.round(startRect.height) || 320,
     layout: { background: { color: "#131a1b" }, textColor: "#b7c4c2" },
     grid: { vertLines: { color: "#1c2526" }, horzLines: { color: "#1c2526" } },
     timeScale: { timeVisible: true, borderColor: "#232d2f" },
@@ -127,8 +137,22 @@
   chart.timeScale().subscribeVisibleTimeRangeChange(positionZones);
   chart.timeScale().subscribeVisibleLogicalRangeChange(positionZones);
 
-  window.addEventListener("resize", () => {
-    chart.applyOptions({ width: container.clientWidth });
-    positionZones();
-  });
+  if (window.ResizeObserver) {
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0];
+      if (!entry) return;
+      const width = Math.round(entry.contentRect.width);
+      const height = Math.round(entry.contentRect.height);
+      if (width > 0 && height > 0) {
+        chart.applyOptions({ width, height });
+        positionZones();
+      }
+    });
+    resizeObserver.observe(container);
+  } else {
+    window.addEventListener("resize", () => {
+      chart.applyOptions({ width: container.clientWidth, height: container.clientHeight });
+      positionZones();
+    });
+  }
 })();

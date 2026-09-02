@@ -114,3 +114,19 @@ CREATE TABLE IF NOT EXISTS registration_attempts (
     attempted_at TEXT NOT NULL,
     ip_address TEXT NOT NULL
 );
+
+-- Indexen op kolommen waar steeds op gefilterd of gesorteerd wordt. Zonder
+-- deze doorzoekt SQLite bij elke dashboard- of coinpagina de volledige
+-- tabel, dat wordt merkbaar trager naarmate er meer berichten en trades
+-- bijkomen.
+CREATE INDEX IF NOT EXISTS idx_messages_coin ON messages(coin);
+CREATE INDEX IF NOT EXISTS idx_messages_coin_category ON messages(coin, category);
+CREATE INDEX IF NOT EXISTS idx_source_levels_coin ON source_levels(coin);
+CREATE INDEX IF NOT EXISTS idx_signals_coin ON signals(coin);
+CREATE INDEX IF NOT EXISTS idx_signals_coin_direction ON signals(coin, direction);
+CREATE INDEX IF NOT EXISTS idx_signals_message_id ON signals(message_id);
+CREATE INDEX IF NOT EXISTS idx_journal_user_id ON journal_entries(user_id);
+CREATE INDEX IF NOT EXISTS idx_journal_signal_id ON journal_entries(signal_id);
+CREATE INDEX IF NOT EXISTS idx_journal_open ON journal_entries(entry_price, exit_price);
+CREATE INDEX IF NOT EXISTS idx_login_attempts_username_time ON login_attempts(username, attempted_at);
+CREATE INDEX IF NOT EXISTS idx_registration_attempts_ip_time ON registration_attempts(ip_address, attempted_at);

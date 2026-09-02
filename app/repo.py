@@ -51,32 +51,6 @@ def mark_message_processed(
         )
 
 
-def list_messages(limit: int = 200) -> list[dict]:
-    """Alle berichten met hun uitkomst: kwam er een signaal uit, of niet en
-    waarom. Gedeeld overzicht, hetzelfde voor iedereen, want de berichten
-    zelf zijn objectief."""
-    with db.session() as conn:
-        rows = conn.execute(
-            """SELECT m.*,
-                      EXISTS(SELECT 1 FROM signals s WHERE s.message_id = m.id) AS has_signal
-               FROM messages m ORDER BY m.id DESC LIMIT ?""",
-            (limit,),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-
-def list_messages_for_coin(coin: str, limit: int = 100) -> list[dict]:
-    """Alle berichten over deze coin, ook berichten die niet tot een melding
-    leidden. Achtergrond, geen eigen pagina, gebruikt om lange termijn
-    context mee te wegen bij nieuwe day trading signalen."""
-    with db.session() as conn:
-        rows = conn.execute(
-            "SELECT * FROM messages WHERE coin = ? ORDER BY id DESC LIMIT ?",
-            (coin.upper(), limit),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-
 def latest_long_term_direction(coin: str) -> Optional[dict]:
     """Meest recente lange termijn bericht over deze coin met een bekende
     richting, inclusief "neutraal" voor een verdeelde conclusie. Gebruikt om
@@ -426,6 +400,22 @@ def update_journal_status(
                 "UPDATE journal_entries SET status = ? WHERE id = ? AND user_id = ?",
                 (status, entry_id, user_id),
             )
+
+
+def reset_journal_entry(entry_id: int, user_id: int) -> None:
+    """Zet een logboekregel helemaal terug naar de beginstaat: status
+    'nieuw', geen entry/exit prijs, geen resultaat. Voor als er per ongeluk
+    een verkeerde prijs of status is ingevuld, zonder de hele trade
+    kwijt te raken (de melding zelf, stop loss en take profit blijven
+    gewoon staan)."""
+    with db.session() as conn:
+        conn.execute(
+            """UPDATE journal_entries
+               SET status = 'nieuw', entry_price = NULL, exit_price = NULL,
+                   exit_time = NULL, result_eur = NULL, result_pct = NULL
+               WHERE id = ? AND user_id = ?""",
+            (entry_id, user_id),
+        )
 
 
 def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_time: str) -> None:

@@ -39,6 +39,10 @@
           <input type="datetime-local" name="exit_time" required>
           <button type="submit">Sluiten</button>
         </form>
+        <form action="/journal/{{ e.id }}/reset" method="post" class="reset-form"
+              onsubmit="return confirm('Terugzetten naar nieuw? Ingevulde entry en status gaan verloren.');">
+          <button type="submit" class="button-reset">Verkeerd ingevuld? Terugzetten</button>
+        </form>
       {% else %}
         <div class="open-numbers">
           <span class="muted">Entry <b style="color: var(--text);">{{ "%.4f"|format(e.price) if e.price else "-" }}</b></span>
@@ -149,7 +153,7 @@
   </div>
 
   <div class="table-scroll">
-  <table class="signals">
+  <table class="signals table-wide">
     <thead>
       <tr>
         <th>Tijdstip</th>
