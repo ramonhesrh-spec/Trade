@@ -25,9 +25,15 @@ bijvoorbeeld BTC, ETH, SOL. Leeg laten als dit niet met voldoende zekerheid \
 te bepalen is.
 - direction: "long" of "short". Leeg laten als dit niet met voldoende \
 zekerheid te bepalen is.
-- category: "day_trading" voor een kortetermijn trade opzet, \
-"lange_termijn" voor een positie zonder korte termijn horizon, "aandelen" \
-als het bericht over aandelen gaat in plaats van crypto.
+- category: "day_trading" voor een concrete kortetermijn trade opzet met \
+een entry op de 4 uur candle of korter. "lange_termijn" voor een analyse \
+zonder korte termijn horizon: onderbouwing op de weekly of monthly candle, \
+een cyclusanalyse, on-chain data, of een algemene marktvisie ("dit is de \
+bodem", "dit wordt een bullrun"), ook als er een richting of percentage \
+kans bij staat. "aandelen" als het bericht over aandelen gaat in plaats \
+van crypto. Bij twijfel tussen day_trading en lange_termijn: kies \
+lange_termijn, want zonder concrete kortetermijn entry heeft toetsen op \
+de 4 uur candle geen betekenis.
 - unclear: true als coin of direction niet met voldoende zekerheid te \
 bepalen zijn. Bij twijfel altijd unclear op true zetten.
 - reason: korte reden waarom het bericht onduidelijk is, alleen invullen \
