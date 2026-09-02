@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Uitleg — HesPulse{% endblock %}
+{% block content %}
+
+<h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Uitleg</h2>
+
+<section class="landing-section" id="telegram-koppelen" style="padding-left:0; padding-right:0; border-top:none;">
+  <h2>Telegram koppelen</h2>
+  <p>HesPulse draait op één gedeelde Telegram bot. Koppel je eigen chat,
+  zodat meldingen bij jou persoonlijk binnenkomen, met je eigen
+  risicobedrag.</p>
+  <div class="steps">
+    <div class="step">
+      <div class="num">1</div>
+      <p><strong>Stuur de bot een bericht</strong> Open <a href="https://t.me/Hespulse_Alerts_bot" target="_blank" rel="noopener">@Hespulse_Alerts_bot</a> in Telegram en stuur er een willekeurig berichtje naartoe. Dat moet, een bot mag pas terugschrijven naar wie eerst zelf schreef.</p>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <p><strong>Haal je chat ID op</strong> Zoek naar @userinfobot, stuur ook daar een bericht naartoe, en je krijgt je eigen Telegram ID terug. Dat cijferreeksje gebruikt elke bot om jou persoonlijk te herkennen.</p>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <p><strong>Plak het in je dashboard</strong> Vul je chat ID in bij Telegram chat ID op de portfolio kaart op het <a href="/dashboard">dashboard</a>, en klik Opslaan. Vanaf dan krijg jij zelf de meldingen, het levensteken en het seintje bij een geraakte stop loss of take profit.</p>
+    </div>
+  </div>
+</section>
+
+<section class="landing-section" id="hoog-vertrouwen" style="padding-left:0; padding-right:0;">
+  <h2>Wanneer is een signaal hoog vertrouwen?</h2>
+  <p>Elke melding wordt op het moment zelf getoetst op de 4 uur candle, tegen
+  vier vaste factoren. Ze moeten allemaal dezelfde kant op wijzen als de
+  gevraagde richting, anders wordt het label laag vertrouwen, met de reden
+  erbij in de melding.</p>
+  <div class="factor-grid">
+    <div class="factor">
+      <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,17 9,11 13,15 21,5"/><polyline points="15,5 21,5 21,11"/></svg>Trend</h3>
+      <p>EMA9 tegenover EMA21. Bij long moet de kortetermijn gemiddelde
+      boven de langere staan, bij short eronder.</p>
+    </div>
+    <div class="factor">
+      <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h4l2.5-7 4 14 2.5-7H20"/></svg>Momentum</h3>
+      <p>MACD lijn tegenover de signaallijn. Bij long moet de MACD lijn
+      erboven staan, bij short eronder.</p>
+    </div>
+    <div class="factor">
+      <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15c2.5-8 5.5-8 8 0s5.5 8 8 0"/></svg>RSI</h3>
+      <p>Bij long mag de RSI nog niet boven 75 staan, bij short nog niet
+      onder 25.</p>
+    </div>
+    <div class="factor">
+      <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="19" x2="5" y2="10"/><line x1="12" y1="19" x2="12" y2="5"/><line x1="19" y1="19" x2="19" y2="13"/></svg>Volume</h3>
+      <p>Het volume moet minstens gelijk zijn aan het gemiddelde van de
+      laatste 20 candles.</p>
+    </div>
+  </div>
+  <p>Voldoet een signaal aan alle vier, dan is het hoog vertrouwen. Beide
+  worden gemeld, met stop loss en take profit erbij. Ook hoog vertrouwen
+  is geen garantie, het is een optelsom van regels, geen voorspelling.</p>
+</section>
+
+<section class="landing-section" style="padding-left:0; padding-right:0;">
+  <h2>Zelf handelen op Kraken</h2>
+  <div class="kraken-card">
+    <p>Handel je zelf crypto, of wil je een account openen? Via onderstaande
+    link krijgen we allebei een beloning bij aanmelden op Kraken Pro.</p>
+    <p>Referral code: <span class="code">{{ kraken_referral_code }}</span></p>
+    <a href="{{ kraken_referral_url }}" class="button-primary" target="_blank" rel="noopener">Naar Kraken Pro</a>
+    <p class="fine-print muted">Referral link. Geen onderdeel van HesPulse zelf, en geen advies om te gaan handelen.</p>
+  </div>
+</section>
+
+{% endblock %}

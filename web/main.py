@@ -64,6 +64,21 @@ async def landing(request: Request):
     })
 
 
+@app.get("/uitleg")
+async def uitleg(request: Request, user: dict = Depends(require_login)):
+    """Dezelfde uitleg als de openbare landingspagina (hoe het werkt,
+    Telegram koppelen, hoog vertrouwen), maar bereikbaar voor wie al is
+    ingelogd. De landingspagina zelf stuurt ingelogde gebruikers meteen
+    door naar het dashboard, dus zonder deze pagina was die uitleg
+    onbereikbaar na het inloggen."""
+    return templates.TemplateResponse(request, "uitleg.html", {
+        "user": user,
+        "coins": repo.list_coins(),
+        "kraken_referral_url": config.KRAKEN_REFERRAL_URL,
+        "kraken_referral_code": config.KRAKEN_REFERRAL_CODE,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Login
 # ---------------------------------------------------------------------------

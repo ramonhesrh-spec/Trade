@@ -21,6 +21,7 @@
     {% for c in coins %}
       <a href="/coins/{{ c.symbol }}">{{ c.symbol }}</a>
     {% endfor %}
+    <a href="/uitleg">Uitleg</a>
   </nav>
   <form action="/logout" method="post" class="logout-form">
     {% if user %}<span class="muted">{{ user.username }}</span>{% endif %}
