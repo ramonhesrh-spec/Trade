@@ -44,71 +44,12 @@
     });
   }
 
-  // Schuine patroonlijnen (trendlijn, wig, driehoekzijde): de bron geeft
-  // twee punten met een geschatte "dagen geleden", die tekenen we tegen
-  // onze eigen echte tijdas, geankerd op de meest recente candle.
-  const trendlineEls = [];
-
-  function renderTrendlines(latestTime) {
-    trendlines.forEach((tl) => {
-      const d1 = Math.max(0, tl.point1_days_ago || 0);
-      const d2 = Math.max(0, tl.point2_days_ago || 0);
-      if (d1 === d2) return; // twee punten op dezelfde tijd is geen lijn
-
-      const points = [
-        { time: latestTime - d1 * 86400, value: tl.point1_price },
-        { time: latestTime - d2 * 86400, value: tl.point2_price },
-      ].sort((a, b) => a.time - b.time);
-
-      const series = chart.addLineSeries({
-        color: "#f2b03e", lineWidth: 2, lineStyle: LightweightCharts.LineStyle.Dashed,
-        lastValueVisible: false, priceLineVisible: false, crosshairMarkerVisible: false,
-      });
-      series.setData(points);
-
-      const el = document.createElement("div");
-      el.className = "chart-zone";
-      el.style.background = "none";
-      el.style.borderTop = "none";
-      el.style.borderBottom = "none";
-      el.innerHTML = `<span style="color:#f2b03e;">${tl.label || "trendlijn"}</span>`;
-      container.appendChild(el);
-      trendlineEls.push({ series, point: points[points.length - 1], el });
-    });
-  }
-
-  function positionTrendlineLabels() {
-    trendlineEls.forEach(({ series, point, el }) => {
-      const y = series.priceToCoordinate(point.value);
-      const x = chart.timeScale().timeToCoordinate(point.time);
-      if (y === null || x === null) {
-        el.style.display = "none";
-        return;
-      }
-      el.style.display = "block";
-      el.style.top = `${y - 18}px`;
-      el.style.left = `${x + 6}px`;
-      el.style.right = "auto";
-    });
-  }
-
-  // Genoeg historie opvragen om de oudste trendlijn ook echt in beeld te
-  // krijgen, anders valt het beginpunt buiten de geladen candles en trekt
-  // de lijn krom.
-  const maxDaysAgo = trendlines.reduce(
-    (max, tl) => Math.max(max, tl.point1_days_ago || 0, tl.point2_days_ago || 0), 0,
-  );
-
-  fetch(`/api/candles/${SYMBOL}?days=${Math.ceil(maxDaysAgo) + 3}`)
+  fetch(`/api/candles/${SYMBOL}`)
     .then((r) => r.json())
     .then((data) => {
       candleSeries.setData(data.candles);
       ema9Series.setData(data.ema9);
       ema21Series.setData(data.ema21);
-
-      if (data.candles.length) {
-        renderTrendlines(data.candles[data.candles.length - 1].time);
-      }
 
       openTrades.forEach((trade) => {
         addTradeLines(trade, `eigen trade ${trade.direction}`);
@@ -140,7 +81,6 @@
 
       chart.timeScale().fitContent();
       positionZones();
-      positionTrendlineLabels();
     });
 
   function addTradeLines(trade, label) {
@@ -186,12 +126,9 @@
 
   chart.timeScale().subscribeVisibleTimeRangeChange(positionZones);
   chart.timeScale().subscribeVisibleLogicalRangeChange(positionZones);
-  chart.timeScale().subscribeVisibleTimeRangeChange(positionTrendlineLabels);
-  chart.timeScale().subscribeVisibleLogicalRangeChange(positionTrendlineLabels);
 
   window.addEventListener("resize", () => {
     chart.applyOptions({ width: container.clientWidth });
     positionZones();
-    positionTrendlineLabels();
   });
 })();

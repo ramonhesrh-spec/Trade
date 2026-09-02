@@ -24,3 +24,37 @@
     },
   });
 })();
+
+// Live prijs en PnL van open posities, elke 20 seconden bijgewerkt zonder
+// de pagina opnieuw te laden.
+(function () {
+  const priceEls = document.querySelectorAll("[data-price]");
+  if (!priceEls.length) return;
+
+  function refresh() {
+    fetch("/api/open_positions")
+      .then((r) => r.json())
+      .then((positions) => {
+        positions.forEach((p) => {
+          const priceEl = document.querySelector(`[data-price="${p.id}"]`);
+          const pnlEl = document.querySelector(`[data-pnl="${p.id}"]`);
+          const pnlPctEl = document.querySelector(`[data-pnl-pct="${p.id}"]`);
+          if (priceEl && p.current_price !== null) {
+            priceEl.textContent = p.current_price.toFixed(4);
+          }
+          if (pnlEl && p.pnl_eur !== null) {
+            pnlEl.firstChild.textContent = `€${p.pnl_eur.toFixed(2)} `;
+            pnlEl.classList.toggle("pos", p.pnl_eur >= 0);
+            pnlEl.classList.toggle("neg", p.pnl_eur < 0);
+          }
+          if (pnlPctEl) {
+            pnlPctEl.textContent = `(${p.pnl_pct.toFixed(1)}%)`;
+          }
+        });
+      })
+      .catch(() => {});
+  }
+
+  refresh();
+  setInterval(refresh, 20000);
+})();

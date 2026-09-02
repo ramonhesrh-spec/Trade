@@ -120,32 +120,21 @@ def list_source_levels(coin: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def insert_source_trendline(
-    message_id: int, coin: str, label: Optional[str],
-    point1_price: float, point1_days_ago: float,
-    point2_price: float, point2_days_ago: float,
-) -> int:
-    with db.session() as conn:
-        cur = conn.execute(
-            """INSERT INTO source_trendlines
-               (message_id, coin, label, point1_price, point1_days_ago,
-                point2_price, point2_days_ago, created_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (message_id, coin.upper(), label, point1_price, point1_days_ago,
-             point2_price, point2_days_ago, db.now_iso()),
-        )
-        return cur.lastrowid
-
-
-def list_source_trendlines(coin: str, limit: int = 10) -> list[dict]:
-    """Meest recente trendlijnen eerst, met een limiet zodat de grafiek niet
-    dichtslibt met oude, allang niet meer relevante lijnen."""
+def list_recent_images_for_coin(coin: str, limit: int = 8) -> list[dict]:
+    """De originele screenshots die bij berichten over deze coin zijn
+    meegestuurd, meest recente eerst. Toont het patroon exact zoals de bron
+    het heeft ingetekend, in plaats van het na te bouwen."""
     with db.session() as conn:
         rows = conn.execute(
-            "SELECT * FROM source_trendlines WHERE coin = ? ORDER BY created_at DESC LIMIT ?",
+            """SELECT id, received_at, image_paths FROM messages
+               WHERE coin = ? AND has_image = 1 ORDER BY id DESC LIMIT ?""",
             (coin.upper(), limit),
         ).fetchall()
-        return [dict(r) for r in rows]
+    images = []
+    for row in rows:
+        for path in json.loads(row["image_paths"] or "[]"):
+            images.append({"message_id": row["id"], "received_at": row["received_at"], "path": path})
+    return images[:limit]
 
 
 # ---------------------------------------------------------------------------

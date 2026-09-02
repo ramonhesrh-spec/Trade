@@ -61,3 +61,28 @@ def compute_position_size(risk_eur: float, entry_price: float, stop_loss: float)
     if distance <= 0:
         return None
     return risk_eur / distance
+
+
+def compute_unrealized_pnl(
+    direction: str, entry_price: float, current_price: float,
+    stop_loss: Optional[float], risk_eur: Optional[float],
+) -> tuple[Optional[float], float]:
+    """Nog niet gerealiseerd resultaat van een open trade tegen de actuele
+    prijs, dezelfde rekenwijze als bij het sluiten van een trade: het
+    risicobedrag geschaald met hoe ver de prijs al bewogen is ten opzichte
+    van de afstand tot de stop loss. Geeft (pnl_eur of None, pnl_pct)."""
+    direction = direction.lower()
+    if direction == "long":
+        pnl_pct = (current_price - entry_price) / entry_price * 100
+        risk_per_unit = entry_price - stop_loss if stop_loss else None
+        move = current_price - entry_price
+    else:
+        pnl_pct = (entry_price - current_price) / entry_price * 100
+        risk_per_unit = stop_loss - entry_price if stop_loss else None
+        move = entry_price - current_price
+
+    pnl_eur = None
+    if risk_eur and risk_per_unit and risk_per_unit > 0:
+        pnl_eur = risk_eur * (move / risk_per_unit)
+
+    return pnl_eur, pnl_pct

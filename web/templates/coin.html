@@ -27,11 +27,27 @@
 </section>
 {% endif %}
 
-<div id="chart" class="coin-chart"></div>
+<div class="coin-layout">
+  <div id="chart" class="coin-chart"></div>
+
+  <aside class="screenshot-rail">
+    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>Bron screenshots</h3>
+    {% if images %}
+      {% for img in images %}
+      <a href="/media/{{ img.path.split('/')[-1] }}" target="_blank" rel="noopener" class="screenshot-thumb">
+        <img src="/media/{{ img.path.split('/')[-1] }}" alt="Screenshot {{ img.received_at[:10] }}" loading="lazy">
+        <span class="muted">{{ img.received_at[:10] }}</span>
+      </a>
+      {% endfor %}
+    {% else %}
+      <p class="muted">Nog geen screenshots voor deze coin.</p>
+    {% endif %}
+  </aside>
+</div>
 
 <section>
   <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9" stroke-dasharray="3,3"/><line x1="4" y1="16" x2="20" y2="16" stroke-dasharray="3,3"/></svg>Bron niveaus</h3>
-  {% if source_levels or trendlines %}
+  {% if source_levels %}
   <div class="table-scroll">
   <table class="signals">
     <thead>
@@ -43,13 +59,6 @@
         <td>{{ lvl.price_level }}</td>
         <td>{{ lvl.pattern_name or "-" }}</td>
         <td class="muted">{{ lvl.created_at[:10] }}</td>
-      </tr>
-      {% endfor %}
-      {% for tl in trendlines %}
-      <tr>
-        <td>{{ tl.point1_price }} → {{ tl.point2_price }}</td>
-        <td>{{ tl.label or "trendlijn" }}</td>
-        <td class="muted">{{ tl.created_at[:10] }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -66,7 +75,6 @@
   const openTrades = {{ open_trades | tojson }};
   const recentSignals = {{ recent_signals | tojson }};
   const sourceLevels = {{ source_levels | tojson }};
-  const trendlines = {{ trendlines | tojson }};
 </script>
 <script src="/static/coin.js"></script>
 {% endblock %}

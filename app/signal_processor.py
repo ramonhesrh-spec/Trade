@@ -64,19 +64,12 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
                     message_id, interp.reason)
         return
 
-    # Bron niveaus en trendlijnen uit afbeeldingen worden altijd bewaard,
-    # ongeacht categorie.
-    if interp.source_levels or interp.trendlines:
+    # Bron niveaus uit afbeeldingen worden altijd bewaard, ongeacht categorie.
+    if interp.source_levels:
         tracked = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
         if tracked:
             for level in interp.source_levels:
                 repo.insert_source_level(message_id, interp.coin, level.price_level, level.pattern_name)
-            for tl in interp.trendlines:
-                repo.insert_source_trendline(
-                    message_id, interp.coin, tl.label,
-                    tl.point1_price, tl.point1_days_ago,
-                    tl.point2_price, tl.point2_days_ago,
-                )
         else:
             logger.info("Coin %s uit bron niveaus bestaat niet op de exchange, niveaus niet bewaard",
                         interp.coin)

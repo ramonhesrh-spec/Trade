@@ -2,6 +2,46 @@
 {% block title %}Dashboard — HesPulse{% endblock %}
 {% block content %}
 
+<section>
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.2 4.2l4.2 4.2m7.2 7.2 4.2 4.2M1 12h6m10 0h6M4.2 19.8l4.2-4.2m7.2-7.2 4.2-4.2"/></svg>Open nu</h2>
+  {% if open_entries %}
+  <div class="open-grid">
+    {% for e in open_entries %}
+    <div class="card open-card">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <a href="/coins/{{ e.coin }}" style="font-weight: 700; color: var(--text); text-decoration: none; font-size: 15px;">{{ e.coin }}</a>
+          <span class="badge badge-{{ e.direction }}" style="margin-left: 6px;">{{ e.direction }}</span>
+        </div>
+        <span class="badge badge-status">{{ e.status }}</span>
+      </div>
+      {% if e.entry_price is not none %}
+        <p class="muted" style="margin: 10px 0 2px;">Entry <span style="color: var(--text); font-variant-numeric: tabular-nums;">{{ "%.4f"|format(e.entry_price) }}</span></p>
+        <p class="muted" style="margin: 0 0 8px;">Nu <span data-price="{{ e.id }}" style="color: var(--text); font-variant-numeric: tabular-nums;">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</span></p>
+        <p style="margin: 0; font-size: 20px; font-weight: 700;" class="{{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
+          {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
+          <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
+        </p>
+      {% else %}
+        <p class="muted" style="margin: 10px 0;">Nog niet bevestigd. Entry {{ "%.4f"|format(e.price) if e.price else "-" }}, stop loss {{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}, take profit {{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}.</p>
+        <form action="/journal/{{ e.id }}/status" method="post" class="status-form">
+          <select name="status">
+            <option value="genomen">Genomen</option>
+            <option value="aangepast">Aangepast</option>
+            <option value="genegeerd">Genegeerd</option>
+          </select>
+          <input type="number" step="any" name="entry_price" placeholder="eigen entry">
+          <button type="submit">Bevestig</button>
+        </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <p class="muted">Niets open op dit moment.</p>
+  {% endif %}
+</section>
+
 <section class="cards">
   <div class="card">
     <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><polyline points="9,12 11,14 15,10"/></svg>Hoog vertrouwen</h3>

@@ -8,11 +8,12 @@ import io
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse, Response
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -176,6 +177,37 @@ async def register_submit(
 # Dashboard startpagina
 # ---------------------------------------------------------------------------
 
+def _enrich_open_positions(entries: list[dict]) -> list[dict]:
+    """Vult elke open positie (entry_price al ingevuld) aan met de actuele
+    prijs en het nog niet gerealiseerde resultaat. Eén prijs-opvraag per
+    coin, ook als er meerdere open trades op dezelfde coin staan."""
+    price_cache: dict[str, Optional[float]] = {}
+    for entry in entries:
+        entry["position_size"] = (
+            risk.compute_position_size(entry["risk_eur"], entry["price"], entry["stop_loss"])
+            if entry["risk_eur"] and entry["price"] and entry["stop_loss"] else None
+        )
+        entry["current_price"] = None
+        entry["pnl_eur"] = None
+        entry["pnl_pct"] = None
+        if entry["entry_price"] is None:
+            continue
+        if entry["coin"] not in price_cache:
+            try:
+                price_cache[entry["coin"]] = exchange.fetch_last_price(entry["coin"])
+            except Exception:
+                price_cache[entry["coin"]] = None
+        current_price = price_cache[entry["coin"]]
+        if current_price is None:
+            continue
+        entry["current_price"] = current_price
+        entry["pnl_eur"], entry["pnl_pct"] = risk.compute_unrealized_pnl(
+            entry["direction"], entry["entry_price"], current_price,
+            entry["stop_loss"], entry["risk_eur"],
+        )
+    return entries
+
+
 @app.get("/dashboard")
 async def dashboard(request: Request, status: str = "alle", user: dict = Depends(require_login)):
     entries = repo.list_journal(user["id"], status=None if status == "alle" else status)
@@ -184,6 +216,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
             risk.compute_position_size(entry["risk_eur"], entry["price"], entry["stop_loss"])
             if entry["risk_eur"] and entry["price"] and entry["stop_loss"] else None
         )
+    open_entries = _enrich_open_positions(repo.list_journal(user["id"], status="open"))
     winrate = repo.winrate_stats(user["id"])
     cumulative = repo.cumulative_result_series(user["id"])
     coin_stats = repo.coin_stats(user["id"])
@@ -192,12 +225,27 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     return templates.TemplateResponse(request, "dashboard.html", {
         "user": user,
         "entries": entries,
+        "open_entries": open_entries,
         "winrate": winrate,
         "cumulative": cumulative,
         "coin_stats": coin_stats,
         "coins": coins,
         "status_filter": status,
     })
+
+
+@app.get("/api/open_positions")
+async def api_open_positions(user: dict = Depends(require_login)):
+    """Ververst de live prijs en PnL van open posities, gebruikt door het
+    dashboard om zonder volledige herlaad bij te werken."""
+    entries = _enrich_open_positions(repo.list_journal(user["id"], status="open"))
+    return [
+        {
+            "id": e["id"], "current_price": e["current_price"],
+            "pnl_eur": e["pnl_eur"], "pnl_pct": e["pnl_pct"],
+        }
+        for e in entries if e["entry_price"] is not None
+    ]
 
 
 @app.get("/export/logboek.csv")
@@ -297,11 +345,23 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "user": user,
         "symbol": symbol,
         "source_levels": source_levels,
-        "trendlines": repo.list_source_trendlines(symbol),
+        "images": repo.list_recent_images_for_coin(symbol),
         "open_trades": open_trades,
         "recent_signals": recent_signals,
         "coins": repo.list_coins(),
     })
+
+
+@app.get("/media/{filename}")
+async def media(filename: str, user: dict = Depends(require_login)):
+    """Toont een origineel doorgestuurde screenshot. Alleen ingelogde
+    gebruikers, en alleen bestanden die echt in de afbeeldingenmap staan,
+    tegen het opvragen van willekeurige bestanden via de bestandsnaam."""
+    base = Path(config.IMAGE_STORAGE_PATH).resolve()
+    target = (base / Path(filename).name).resolve()
+    if base not in target.parents or not target.is_file():
+        raise HTTPException(status_code=404)
+    return FileResponse(target)
 
 
 @app.get("/api/coins")
@@ -310,14 +370,8 @@ async def api_coins(user: dict = Depends(require_login)):
 
 
 @app.get("/api/candles/{symbol}")
-async def api_candles(symbol: str, days: int = 0, user: dict = Depends(require_login)):
-    # `days` laat de coin-pagina meer historie opvragen zodat een
-    # trendlijn die verder terug begint dan de standaard 200 candles
-    # (ruim 33 dagen op de 4h candle) ook echt binnen de grafiek valt,
-    # in plaats van een punt buiten beeld dat de lijn krom trekt.
-    candles_per_day = 6  # 24 uur / 4h candle
-    limit = max(200, min(int(days) * candles_per_day + 20, 1500))
-    df = exchange.fetch_ohlcv(symbol.upper(), timeframe=config.TIMEFRAME, limit=limit)
+async def api_candles(symbol: str, user: dict = Depends(require_login)):
+    df = exchange.fetch_ohlcv(symbol.upper(), timeframe=config.TIMEFRAME, limit=200)
     ema9, ema21 = indicators.ema_series(df)
 
     candles = [

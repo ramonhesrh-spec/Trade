@@ -57,40 +57,11 @@ horizontale lijnen, een driehoek, een hoofd-schouderpatroon met labels). \
 Neem deze een op een over in source_levels, met de prijs van elk niveau en \
 de naam van het patroon indien aangegeven. Verzin zelf geen niveaus of \
 patronen die niet zichtbaar zijn ingetekend. Als er geen afbeelding is, of \
-er is niets ingetekend, laat source_levels leeg.
-
-Staat er een schuine lijn ingetekend (een trendlijn, de rand van een \
-driehoek of wig, de nek van een hoofd-schouderpatroon)? Zet die dan ook in \
-trendlines, met twee punten: het beginpunt en het eindpunt van die lijn, \
-elk met een prijs en een schatting van hoeveel dagen geleden dat punt op \
-de tijd-as van de afbeelding staat (bijvoorbeeld "point1_days_ago": 12 als \
-het beginpunt 12 dagen voor het laatste zichtbare punt ligt, en \
-"point2_days_ago": 0 voor het meest recente punt, nu).
-
-Ga hier stap voor stap te werk, dit gaat vaak mis:
-1. Bepaal eerst hoeveel dagen de HELE afbeelding in totaal beslaat, van de \
-oudste tot de nieuwste candle op de tijd-as onderaan. Gebruik daarvoor de \
-datum- of tijd-labels op de x-as, niet een gok.
-2. Bepaal daarna voor elk punt hoeveel dagen geleden het ligt, als \
-fractie van die totale periode (een punt op driekwart van de x-as, bij \
-een periode van 40 dagen, ligt op ongeveer 10 dagen geleden).
-3. Staan er meerdere lijnen in dezelfde afbeelding (bijvoorbeeld de \
-boven- en onderkant van een wig of driehoek)? Gebruik dan voor allemaal \
-diezelfde totale periode als referentie, zodat de lijnen onderling \
-kloppen en niet willekeurig door elkaar heen lopen. Bij een \
-convergerend patroon (wig, driehoek) lopen de twee lijnen naar elkaar \
-toe richting het recente punt, ze kruisen elkaar niet ver terug in de \
-tijd en ook niet ver in de toekomst.
-4. Een punt ligt nooit verder terug dan de totale periode uit stap 1, en \
-point2 (het meest recente punt) ligt altijd dichterbij dan point1.
-
-Een ruwe schatting is beter dan niets, maar verzin geen lijn die er niet \
-staat, en verzin geen precisie die je niet hebt: bij twijfel een ronde \
-schatting (5, 10, 20 dagen) in plaats van een exact ogend maar onzeker \
-getal. Dit wordt gebruikt om dezelfde lijn na te tekenen op onze eigen, \
-actuele koersdata, dus de prijs en de relatieve tijdsafstand tussen de \
-punten zijn wat telt, niet de exacte pixelpositie in de afbeelding zelf. \
-Laat trendlines leeg als er geen schuine lijn is ingetekend.
+er is niets ingetekend, laat source_levels leeg. Schuine lijnen \
+(trendlijnen, de rand van een driehoek of wig) hoef je niet over te nemen \
+als los niveau, de originele afbeelding zelf wordt getoond op de \
+coin-pagina zodat het patroon altijd exact te zien is, dat hoeft dit \
+systeem niet na te bouwen.
 
 Lees elk cijfer zorgvuldig af, crypto grafieken hebben vaak 2 tot 4 \
 decimalen, een verkeerd geplaatste komma maakt het niveau waardeloos. Kijk \
@@ -149,21 +120,6 @@ TOOL = {
                     "required": ["price_level"],
                 },
             },
-            "trendlines": {
-                "type": "array",
-                "description": "Schuine lijnen (trendlijn, wig, driehoekzijde) die de bron zelf heeft ingetekend, met twee punten en een geschatte tijdsafstand in dagen.",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "label": {"type": "string"},
-                        "point1_price": {"type": "number"},
-                        "point1_days_ago": {"type": "number", "description": "Hoeveel dagen voor het meest recente zichtbare punt dit punt ligt."},
-                        "point2_price": {"type": "number"},
-                        "point2_days_ago": {"type": "number", "description": "Meestal 0 voor het meest recente punt."},
-                    },
-                    "required": ["point1_price", "point1_days_ago", "point2_price", "point2_days_ago"],
-                },
-            },
         },
         "required": ["category", "unclear"],
     },
@@ -177,15 +133,6 @@ class SourceLevel:
 
 
 @dataclass
-class SourceTrendline:
-    point1_price: float
-    point1_days_ago: float
-    point2_price: float
-    point2_days_ago: float
-    label: Optional[str] = None
-
-
-@dataclass
 class Interpretation:
     coin: Optional[str]
     direction: Optional[str]
@@ -193,7 +140,6 @@ class Interpretation:
     unclear: bool
     reason: str = ""
     source_levels: list[SourceLevel] = field(default_factory=list)
-    trendlines: list[SourceTrendline] = field(default_factory=list)
 
 
 def _image_block(path: str) -> dict:
@@ -234,14 +180,6 @@ def interpret_message(raw_text: str, image_paths: Optional[list[str]] = None) ->
     source_levels = [
         SourceLevel(price_level=lvl["price_level"], pattern_name=lvl.get("pattern_name") or None)
         for lvl in payload.get("source_levels", [])
-    ]
-    trendlines = [
-        SourceTrendline(
-            point1_price=tl["point1_price"], point1_days_ago=tl["point1_days_ago"],
-            point2_price=tl["point2_price"], point2_days_ago=tl["point2_days_ago"],
-            label=tl.get("label") or None,
-        )
-        for tl in payload.get("trendlines", [])
     ]
 
     if coin is None:
