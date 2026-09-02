@@ -2,6 +2,7 @@
 signalen. Wordt gebruikt door de Discord bot, de verwerkingspijplijn en het
 webdashboard."""
 import json
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app import db
@@ -19,6 +20,22 @@ def insert_message(raw_text: str, image_paths: list[str]) -> int:
             (db.now_iso(), raw_text, int(bool(image_paths)), json.dumps(image_paths)),
         )
         return cur.lastrowid
+
+
+def find_recent_duplicate(raw_text: str, exclude_id: int, hours: int = 24) -> Optional[dict]:
+    """Zoekt een eerder bericht met exact dezelfde tekst, al verwerkt binnen
+    de laatste uren. Voorkomt een dubbele melding als hetzelfde bericht per
+    ongeluk twee keer wordt doorgestuurd."""
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    with db.session() as conn:
+        row = conn.execute(
+            """SELECT * FROM messages
+               WHERE raw_text = ? AND id != ? AND processed_at IS NOT NULL
+                     AND received_at > ?
+               ORDER BY id DESC LIMIT 1""",
+            (raw_text, exclude_id, cutoff.isoformat()),
+        ).fetchone()
+        return dict(row) if row else None
 
 
 def mark_message_processed(
@@ -354,23 +371,58 @@ def update_journal_note(entry_id: int, user_id: int, note: str) -> None:
         )
 
 
-def winrate_stats(user_id: int) -> dict:
-    """Winrate apart voor hoog en laag vertrouwen, op basis van gesloten trades
-    van deze gebruiker."""
+def list_open_entries_with_levels() -> list[dict]:
+    """Alle open logboekregels (eigen entry ingevuld, nog niet gesloten, nog
+    geen seintje verstuurd), van alle gebruikers, met de coin, richting,
+    stop loss/take profit en het telegram_chat_id erbij. Voor de periodieke
+    check of een open trade zijn niveau al geraakt heeft."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT s.confidence AS confidence, je.result_eur AS result_eur
+            """SELECT je.id AS id, je.user_id AS user_id, je.entry_price AS entry_price,
+                      s.coin AS coin, s.direction AS direction,
+                      s.stop_loss AS stop_loss, s.take_profit AS take_profit,
+                      u.username AS username, u.telegram_chat_id AS telegram_chat_id
+               FROM journal_entries je
+               JOIN signals s ON s.id = je.signal_id
+               JOIN users u ON u.id = je.user_id
+               WHERE je.entry_price IS NOT NULL AND je.exit_price IS NULL
+                     AND je.level_alert_sent = 0"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def mark_level_alert_sent(entry_id: int) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE journal_entries SET level_alert_sent = 1 WHERE id = ?", (entry_id,))
+
+
+def winrate_stats(user_id: int) -> dict:
+    """Winrate en gemiddeld resultaat apart voor hoog en laag vertrouwen,
+    op basis van gesloten trades van deze gebruiker. Winrate alleen zegt
+    weinig over de verhouding tussen winst en verlies per trade, het
+    gemiddelde resultaat erbij geeft een eerlijker beeld."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT s.confidence AS confidence, je.result_eur AS result_eur,
+                      je.result_pct AS result_pct
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL""",
             (user_id,),
         ).fetchall()
 
     def stats_for(confidence: str) -> dict:
-        subset = [r["result_eur"] for r in rows if r["confidence"] == confidence]
+        subset = [r for r in rows if r["confidence"] == confidence]
         total = len(subset)
-        wins = len([r for r in subset if r is not None and r > 0])
+        wins = len([r for r in subset if r["result_eur"] is not None and r["result_eur"] > 0])
         winrate = (wins / total * 100) if total else 0.0
-        return {"total": total, "wins": wins, "winrate": round(winrate, 1)}
+        eur_values = [r["result_eur"] for r in subset if r["result_eur"] is not None]
+        pct_values = [r["result_pct"] for r in subset if r["result_pct"] is not None]
+        avg_eur = sum(eur_values) / len(eur_values) if eur_values else 0.0
+        avg_pct = sum(pct_values) / len(pct_values) if pct_values else 0.0
+        return {
+            "total": total, "wins": wins, "winrate": round(winrate, 1),
+            "avg_result_eur": round(avg_eur, 2), "avg_result_pct": round(avg_pct, 1),
+        }
 
     return {
         "hoog_vertrouwen": stats_for("hoog vertrouwen"),
@@ -391,3 +443,36 @@ def cumulative_result_series(user_id: int) -> list[dict]:
         running += row["result_eur"] or 0.0
         series.append({"time": row["exit_time"], "cumulative_eur": round(running, 2)})
     return series
+
+
+def coin_stats(user_id: int) -> list[dict]:
+    """Winrate en gemiddeld resultaat per coin, op basis van gesloten trades
+    van deze gebruiker. Laat zien welke coin het goed doet met dit systeem,
+    en welke niet."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT s.coin AS coin, je.result_eur AS result_eur
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.exit_price IS NOT NULL""",
+            (user_id,),
+        ).fetchall()
+
+    by_coin: dict[str, list] = {}
+    for row in rows:
+        by_coin.setdefault(row["coin"], []).append(row["result_eur"])
+
+    stats = []
+    for coin, results in by_coin.items():
+        total = len(results)
+        wins = len([r for r in results if r is not None and r > 0])
+        values = [r for r in results if r is not None]
+        stats.append({
+            "coin": coin,
+            "total": total,
+            "wins": wins,
+            "winrate": round(wins / total * 100, 1) if total else 0.0,
+            "avg_result_eur": round(sum(values) / len(values), 2) if values else 0.0,
+        })
+
+    stats.sort(key=lambda s: s["total"], reverse=True)
+    return stats

@@ -3,13 +3,15 @@ login, eigen portfolio en eigen logboek. Iedereen ziet dezelfde signalen.
 Geen open registratie, accounts via scripts/create_user.py. Draai met:
 uvicorn web.main:app --host 0.0.0.0 --port 8000
 """
+import csv
+import io
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -120,6 +122,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         )
     winrate = repo.winrate_stats(user["id"])
     cumulative = repo.cumulative_result_series(user["id"])
+    coin_stats = repo.coin_stats(user["id"])
     coins = repo.list_coins()
 
     return templates.TemplateResponse(request, "dashboard.html", {
@@ -127,9 +130,38 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "entries": entries,
         "winrate": winrate,
         "cumulative": cumulative,
+        "coin_stats": coin_stats,
         "coins": coins,
         "status_filter": status,
     })
+
+
+@app.get("/export/logboek.csv")
+async def export_journal_csv(user: dict = Depends(require_login)):
+    entries = repo.list_journal(user["id"], status=None, limit=100000)
+
+    buffer = io.StringIO()
+    writer = csv.writer(buffer)
+    writer.writerow([
+        "tijdstip", "coin", "richting", "vertrouwen", "technisch_bevestigd",
+        "prijs", "stop_loss", "take_profit", "risicobedrag_eur", "status",
+        "entry_price", "exit_price", "exit_time", "resultaat_eur", "resultaat_pct", "notitie",
+    ])
+    for e in entries:
+        writer.writerow([
+            e["created_at"], e["coin"], e["direction"], e["confidence"],
+            "ja" if e["technical_confirmed"] else "nee",
+            e["price"], e["stop_loss"], e["take_profit"], e["risk_eur"], e["status"],
+            e["entry_price"], e["exit_price"], e["exit_time"], e["result_eur"], e["result_pct"],
+            e["note"] or "",
+        ])
+
+    filename = f"hespulse-logboek-{user['username']}.csv"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.post("/settings/portfolio")

@@ -35,6 +35,16 @@ def _interpret_with_retry(raw_text: str, image_paths: list[str]) -> Interpretati
 
 
 async def handle_message(message_id: int, raw_text: str, image_paths: list[str]) -> None:
+    duplicate = repo.find_recent_duplicate(raw_text, exclude_id=message_id) if raw_text.strip() else None
+    if duplicate:
+        logger.info("Bericht %s is een duplicaat van bericht %s, niet opnieuw verwerkt",
+                    message_id, duplicate["id"])
+        repo.mark_message_processed(
+            message_id, duplicate["coin"], duplicate["direction"], duplicate["category"],
+            bool(duplicate["unclear"]), note=f"duplicaat van bericht #{duplicate['id']}, niet opnieuw verwerkt",
+        )
+        return
+
     try:
         interp = await asyncio.to_thread(_interpret_with_retry, raw_text, image_paths)
     except Exception as exc:

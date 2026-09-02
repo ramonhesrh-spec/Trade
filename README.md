@@ -32,14 +32,18 @@ logboek.
 - `app/exchange.py`, `app/indicators.py` — live koersdata en indicatoren (4h)
 - `app/risk.py` — stop loss, take profit, risicobedrag op basis van ATR
 - `app/signal_processor.py` — verbindt alle stappen, met een paar
-  herhaalpogingen bij een tijdelijke Anthropic storing
+  herhaalpogingen bij een tijdelijke Anthropic storing, herkent dubbele
+  berichten, en zet een nieuw signaal af tegen recente lange termijn context
 - `app/telegram_notify.py` — Telegram meldingen, inclusief positiegrootte
   en een vaste disclaimer
 - `app/repo.py`, `app/db.py`, `app/schema.sql` — sqlite logging
 - `app/backup.py` — dagelijkse back-up, optioneel ook naar een externe locatie
 - `app/heartbeat.py` — dagelijks levensteken via Telegram
+- `app/level_check.py` — periodieke check of een open trade zijn stop
+  loss of take profit al geraakt heeft
 - `web/` — FastAPI dashboard met login, inclusief een berichtenoverzicht op
-  `/berichten` van alles wat wel en niet tot een melding leidde
+  `/berichten` van alles wat wel en niet tot een melding leidde, een
+  trackrecord per coin, en een csv export van je logboek
 
 ## Opzet, stap voor stap
 
@@ -184,6 +188,22 @@ met een ingevuld chat ID: "Goedemorgen trader. Nieuwe dag, nieuwe kansen.
 HesPulse draait, laatste controle: ..." Zonder dit merk je een
 crash pas op als er een tijd lang geen meldingen meer binnenkomen.
 
+### Seintje bij geraakte stop loss of take profit
+
+```bash
+sudo cp deploy/crypto-level-check.service /etc/systemd/system/
+sudo cp deploy/crypto-level-check.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-level-check.timer
+```
+
+Checkt elke 15 minuten of een open trade (eigen entry ingevuld, nog niet
+gesloten) de stop loss of take profit al geraakt heeft op de live prijs.
+Zo ja, dan krijg je daar één keer een Telegram bericht over, met het
+verzoek om de trade zelf te sluiten in het dashboard. Er wordt niets
+automatisch gesloten, en je krijgt niet elke 15 minuten opnieuw hetzelfde
+seintje.
+
 ### HTTPS met Let's Encrypt
 
 ```bash
@@ -268,6 +288,17 @@ trade blijft een handmatige beslissing.
   hoog/laag vertrouwen label zelf verandert hier niet door, dat blijft
   puur op de vier technische factoren gebaseerd. Zie `app/signal_processor.py`
   (`_build_context_note`).
+- Stuur je hetzelfde bericht binnen 24 uur nogmaals door (bijvoorbeeld per
+  ongeluk twee keer geforward), dan herkent het systeem dat aan de exacte
+  tekst en verwerkt het niet opnieuw: geen tweede Anthropic aanroep, geen
+  tweede signaal, geen dubbele Telegram melding. Het tweede bericht wordt
+  wel gelogd, met een verwijzing naar het eerste.
+- Winrate alleen zegt weinig over hoe goed het systeem werkt, een hoge
+  winrate met kleine winsten en een paar grote verliezen kan alsnog
+  verlieslatend zijn. Het dashboard toont daarom ook het gemiddelde
+  resultaat in euro's en procenten per vertrouwen-niveau, en een
+  trackrecord per coin, zodat je kan zien welke coin het goed doet met dit
+  systeem en welke niet.
 
 ## Later uitbreidingen (bewust niet in deze versie)
 

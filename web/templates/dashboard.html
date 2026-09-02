@@ -8,12 +8,14 @@
     <p class="big">{{ winrate.hoog_vertrouwen.winrate }}%</p>
     <div class="winrate-bar"><div style="width: {{ winrate.hoog_vertrouwen.winrate }}%"></div></div>
     <p class="muted">{{ winrate.hoog_vertrouwen.wins }} van {{ winrate.hoog_vertrouwen.total }} gesloten trades</p>
+    <p class="muted">gemiddeld <span class="{{ 'pos' if winrate.hoog_vertrouwen.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(winrate.hoog_vertrouwen.avg_result_eur) }} ({{ "%.1f"|format(winrate.hoog_vertrouwen.avg_result_pct) }}%)</span> per trade</p>
   </div>
   <div class="card">
     <h3>Laag vertrouwen</h3>
     <p class="big">{{ winrate.laag_vertrouwen.winrate }}%</p>
     <div class="winrate-bar"><div style="width: {{ winrate.laag_vertrouwen.winrate }}%"></div></div>
     <p class="muted">{{ winrate.laag_vertrouwen.wins }} van {{ winrate.laag_vertrouwen.total }} gesloten trades</p>
+    <p class="muted">gemiddeld <span class="{{ 'pos' if winrate.laag_vertrouwen.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(winrate.laag_vertrouwen.avg_result_eur) }} ({{ "%.1f"|format(winrate.laag_vertrouwen.avg_result_pct) }}%)</span> per trade</p>
   </div>
   <div class="card">
     <h3>Portfolio ({{ user.username }})</h3>
@@ -38,6 +40,34 @@
 </section>
 
 <section>
+  <h2>Resultaat per coin</h2>
+  {% if coin_stats %}
+  <table class="signals">
+    <thead>
+      <tr>
+        <th>Coin</th>
+        <th>Trades</th>
+        <th>Winrate</th>
+        <th>Gemiddeld resultaat</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in coin_stats %}
+      <tr>
+        <td><a href="/coins/{{ c.coin }}">{{ c.coin }}</a></td>
+        <td>{{ c.total }}</td>
+        <td>{{ c.winrate }}%</td>
+        <td class="{{ 'pos' if c.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(c.avg_result_eur) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Nog geen gesloten trades om een trackrecord per coin te tonen.</p>
+  {% endif %}
+</section>
+
+<section>
   <div class="table-header">
     <h2>Meldingen</h2>
     <form method="get" action="/dashboard" class="inline-form">
@@ -49,6 +79,7 @@
           <option value="genegeerd" {% if status_filter == "genegeerd" %}selected{% endif %}>Genegeerd</option>
         </select>
       </label>
+      <a href="/export/logboek.csv" class="button-primary">Exporteer csv</a>
     </form>
   </div>
 

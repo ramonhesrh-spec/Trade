@@ -89,6 +89,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     result_eur REAL,
     result_pct REAL,
     note TEXT,
+    level_alert_sent INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
     UNIQUE (signal_id, user_id)
 );

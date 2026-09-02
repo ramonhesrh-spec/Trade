@@ -1,0 +1,9 @@
+[Unit]
+Description=Draai de HesPulse stop loss/take profit check elke 15 minuten
+
+[Timer]
+OnCalendar=*:0/15
+Persistent=true
+
+[Install]
+WantedBy=timers.target
