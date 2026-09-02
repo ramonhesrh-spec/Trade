@@ -51,9 +51,13 @@
 
   function renderTrendlines(latestTime) {
     trendlines.forEach((tl) => {
+      const d1 = Math.max(0, tl.point1_days_ago || 0);
+      const d2 = Math.max(0, tl.point2_days_ago || 0);
+      if (d1 === d2) return; // twee punten op dezelfde tijd is geen lijn
+
       const points = [
-        { time: latestTime - tl.point1_days_ago * 86400, value: tl.point1_price },
-        { time: latestTime - tl.point2_days_ago * 86400, value: tl.point2_price },
+        { time: latestTime - d1 * 86400, value: tl.point1_price },
+        { time: latestTime - d2 * 86400, value: tl.point2_price },
       ].sort((a, b) => a.time - b.time);
 
       const series = chart.addLineSeries({
@@ -88,7 +92,14 @@
     });
   }
 
-  fetch(`/api/candles/${SYMBOL}`)
+  // Genoeg historie opvragen om de oudste trendlijn ook echt in beeld te
+  // krijgen, anders valt het beginpunt buiten de geladen candles en trekt
+  // de lijn krom.
+  const maxDaysAgo = trendlines.reduce(
+    (max, tl) => Math.max(max, tl.point1_days_ago || 0, tl.point2_days_ago || 0), 0,
+  );
+
+  fetch(`/api/candles/${SYMBOL}?days=${Math.ceil(maxDaysAgo) + 3}`)
     .then((r) => r.json())
     .then((data) => {
       candleSeries.setData(data.candles);

@@ -310,8 +310,14 @@ async def api_coins(user: dict = Depends(require_login)):
 
 
 @app.get("/api/candles/{symbol}")
-async def api_candles(symbol: str, user: dict = Depends(require_login)):
-    df = exchange.fetch_ohlcv(symbol.upper(), timeframe=config.TIMEFRAME, limit=200)
+async def api_candles(symbol: str, days: int = 0, user: dict = Depends(require_login)):
+    # `days` laat de coin-pagina meer historie opvragen zodat een
+    # trendlijn die verder terug begint dan de standaard 200 candles
+    # (ruim 33 dagen op de 4h candle) ook echt binnen de grafiek valt,
+    # in plaats van een punt buiten beeld dat de lijn krom trekt.
+    candles_per_day = 6  # 24 uur / 4h candle
+    limit = max(200, min(int(days) * candles_per_day + 20, 1500))
+    df = exchange.fetch_ohlcv(symbol.upper(), timeframe=config.TIMEFRAME, limit=limit)
     ema9, ema21 = indicators.ema_series(df)
 
     candles = [

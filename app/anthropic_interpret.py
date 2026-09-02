@@ -65,13 +65,32 @@ trendlines, met twee punten: het beginpunt en het eindpunt van die lijn, \
 elk met een prijs en een schatting van hoeveel dagen geleden dat punt op \
 de tijd-as van de afbeelding staat (bijvoorbeeld "point1_days_ago": 12 als \
 het beginpunt 12 dagen voor het laatste zichtbare punt ligt, en \
-"point2_days_ago": 0 voor het meest recente punt, nu). Kijk naar de \
-datums of tijd-labels onderaan de afbeelding om deze schatting te maken, \
-een ruwe schatting is beter dan niets, maar verzin geen lijn die er niet \
-staat. Dit wordt gebruikt om dezelfde lijn na te tekenen op onze eigen, \
+"point2_days_ago": 0 voor het meest recente punt, nu).
+
+Ga hier stap voor stap te werk, dit gaat vaak mis:
+1. Bepaal eerst hoeveel dagen de HELE afbeelding in totaal beslaat, van de \
+oudste tot de nieuwste candle op de tijd-as onderaan. Gebruik daarvoor de \
+datum- of tijd-labels op de x-as, niet een gok.
+2. Bepaal daarna voor elk punt hoeveel dagen geleden het ligt, als \
+fractie van die totale periode (een punt op driekwart van de x-as, bij \
+een periode van 40 dagen, ligt op ongeveer 10 dagen geleden).
+3. Staan er meerdere lijnen in dezelfde afbeelding (bijvoorbeeld de \
+boven- en onderkant van een wig of driehoek)? Gebruik dan voor allemaal \
+diezelfde totale periode als referentie, zodat de lijnen onderling \
+kloppen en niet willekeurig door elkaar heen lopen. Bij een \
+convergerend patroon (wig, driehoek) lopen de twee lijnen naar elkaar \
+toe richting het recente punt, ze kruisen elkaar niet ver terug in de \
+tijd en ook niet ver in de toekomst.
+4. Een punt ligt nooit verder terug dan de totale periode uit stap 1, en \
+point2 (het meest recente punt) ligt altijd dichterbij dan point1.
+
+Een ruwe schatting is beter dan niets, maar verzin geen lijn die er niet \
+staat, en verzin geen precisie die je niet hebt: bij twijfel een ronde \
+schatting (5, 10, 20 dagen) in plaats van een exact ogend maar onzeker \
+getal. Dit wordt gebruikt om dezelfde lijn na te tekenen op onze eigen, \
 actuele koersdata, dus de prijs en de relatieve tijdsafstand tussen de \
-twee punten zijn wat telt, niet de exacte pixelpositie in de afbeelding \
-zelf. Laat trendlines leeg als er geen schuine lijn is ingetekend.
+punten zijn wat telt, niet de exacte pixelpositie in de afbeelding zelf. \
+Laat trendlines leeg als er geen schuine lijn is ingetekend.
 
 Lees elk cijfer zorgvuldig af, crypto grafieken hebben vaak 2 tot 4 \
 decimalen, een verkeerd geplaatste komma maakt het niveau waardeloos. Kijk \
