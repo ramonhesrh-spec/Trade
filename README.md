@@ -180,7 +180,8 @@ sudo systemctl enable --now crypto-heartbeat.timer
 ```
 
 Stuurt elke ochtend om 09:00 een kort Telegram bericht naar elke gebruiker
-met een ingevuld chat ID: "HesPulse draait nog." Zonder dit merk je een
+met een ingevuld chat ID: "Goedemorgen trader. Nieuwe dag, nieuwe kansen.
+HesPulse draait, laatste controle: ..." Zonder dit merk je een
 crash pas op als er een tijd lang geen meldingen meer binnenkomen.
 
 ### HTTPS met Let's Encrypt

@@ -20,7 +20,7 @@ async def send_heartbeats() -> None:
 
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
     timestamp = db.now_iso()[:16].replace("T", " ")
-    text = f"HesPulse draait nog. Laatste controle: {timestamp}."
+    text = f"Goedemorgen trader. Nieuwe dag, nieuwe kansen. HesPulse draait, laatste controle: {timestamp}."
 
     for user in repo.list_users():
         if not user["telegram_chat_id"]:
