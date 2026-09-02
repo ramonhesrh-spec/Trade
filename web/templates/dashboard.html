@@ -40,7 +40,7 @@
 <section>
   <div class="table-header">
     <h2>Meldingen</h2>
-    <form method="get" action="/" class="inline-form">
+    <form method="get" action="/dashboard" class="inline-form">
       <label>Filter
         <select name="status" onchange="this.form.submit()">
           <option value="alle" {% if status_filter == "alle" %}selected{% endif %}>Alle</option>

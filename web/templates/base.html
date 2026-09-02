@@ -12,12 +12,12 @@
 </head>
 <body>
 <header class="topbar">
-  <a href="/" class="brand">
+  <a href="/dashboard" class="brand">
     <img src="/static/hespulse-logo.svg" alt="HesPulse logo">
     <span>HesPulse</span>
   </a>
   <nav>
-    <a href="/">Dashboard</a>
+    <a href="/dashboard">Dashboard</a>
     <a href="/berichten">Berichten</a>
     {% for c in coins %}
       <a href="/coins/{{ c.symbol }}">{{ c.symbol }}</a>

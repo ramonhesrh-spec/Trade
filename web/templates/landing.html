@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HesPulse</title>
+<meta name="description" content="HesPulse combineert Discord signalen met live technische data. Regels, geen garantie. Jij beslist zelf.">
+<link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header class="landing-header">
+  <a href="/" class="brand">
+    <img src="/static/hespulse-logo.svg" alt="HesPulse logo">
+    <span>HesPulse</span>
+  </a>
+  <nav>
+    <a href="#over-ons">Over ons</a>
+    <a href="#hoe-het-werkt">Hoe het werkt</a>
+    <a href="/login" class="button">Inloggen</a>
+  </nav>
+</header>
+
+<section class="hero">
+  <h1>Regels in plaats van giswerk</h1>
+  <p>HesPulse leest signalen uit een Discord community, toetst ze tegen live
+  koersdata, en stuurt een melding via Telegram. Geen automatische trades,
+  geen garanties. Jij beslist zelf.</p>
+  <a href="/login" class="button-primary">Inloggen</a>
+</section>
+
+<section class="landing-section" id="over-ons">
+  <h2>Over ons</h2>
+  <p>HesPulse is een persoonlijk project, gebouwd om structuur te brengen in
+  het volgen van crypto signalen. Geen los overzicht van berichten meer,
+  maar één plek waar tekst, techniek en risico samenkomen voordat er een
+  melding uitgaat.</p>
+  <p>Op dit moment is HesPulse een besloten tool, voor eigen gebruik en een
+  klein aantal genodigden. Er wordt nog geen dienst verkocht.</p>
+</section>
+
+<section class="landing-section" id="hoe-het-werkt">
+  <h2>Hoe het werkt</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="num">1</div>
+      <p><strong>Bericht doorsturen</strong> Een relevant bericht uit een betaalde Discord community gaat via Forward naar een eigen bot account.</p>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <p><strong>Interpretatie en toetsing</strong> De tekst wordt gelezen, de coin en richting gehaald eruit, en getoetst tegen live indicatoren op de 4 uur candle.</p>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <p><strong>Melding via Telegram</strong> Coin, richting, prijs, stop loss, take profit en risicobedrag, met een label hoog of laag vertrouwen. De trade blijft een eigen beslissing.</p>
+    </div>
+  </div>
+</section>
+
+<section class="landing-section">
+  <h2>Zelf handelen op Kraken</h2>
+  <div class="kraken-card">
+    <p>Handel je zelf crypto, of wil je een account openen? Via onderstaande
+    link krijgen we allebei een beloning bij aanmelden op Kraken Pro.</p>
+    <p>Referral code: <span class="code">{{ kraken_referral_code }}</span></p>
+    <a href="{{ kraken_referral_url }}" class="button-primary" target="_blank" rel="noopener">Naar Kraken Pro</a>
+    <p class="fine-print muted">Referral link. Geen onderdeel van HesPulse zelf, en geen advies om te gaan handelen.</p>
+  </div>
+</section>
+
+<footer class="footer">{{ disclaimer }}</footer>
+</body>
+</html>

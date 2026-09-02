@@ -19,6 +19,11 @@ instelling, eigen Telegram meldingen met zijn eigen risicobedrag, en zijn
 eigen logboek: status, entry, exit en notities. De ene gebruiker kan het
 logboek van de andere niet zien of wijzigen.
 
+De website heeft een openbaar deel en een besloten deel. Op `/` staat een
+publieke landingspagina, met een korte uitleg, een over ons sectie, en geen
+open registratie. Na inloggen kom je op `/dashboard`, het besloten
+logboek.
+
 ## Onderdelen
 
 - `app/discord_bot.py` — leest DM's, alleen leesrechten
@@ -95,7 +100,8 @@ python3 main.py
 
 # Stap 6 t/m 8: dashboard starten
 uvicorn web.main:app --reload
-# open http://127.0.0.1:8000 en log in met je dashboard wachtwoord
+# open http://127.0.0.1:8000, dat is de openbare landingspagina.
+# Klik op Inloggen, of ga direct naar /login, en log in met je wachtwoord.
 ```
 
 Stuur daarna een testbericht (eventueel met een screenshot van een

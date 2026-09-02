@@ -45,6 +45,23 @@ def require_login(request: Request) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Openbare landingspagina
+# ---------------------------------------------------------------------------
+
+@app.get("/")
+async def landing(request: Request):
+    token = request.cookies.get(SESSION_COOKIE)
+    user_id = security.verify_session_token(token) if token else None
+    if user_id and repo.get_user(user_id):
+        return RedirectResponse(url="/dashboard", status_code=303)
+
+    return templates.TemplateResponse(request, "landing.html", {
+        "kraken_referral_url": config.KRAKEN_REFERRAL_URL,
+        "kraken_referral_code": config.KRAKEN_REFERRAL_CODE,
+    })
+
+
+# ---------------------------------------------------------------------------
 # Login
 # ---------------------------------------------------------------------------
 
@@ -77,7 +94,7 @@ async def login_submit(request: Request, username: str = Form(...), password: st
         )
 
     token = security.create_session_token(user["id"])
-    response = RedirectResponse(url="/", status_code=303)
+    response = RedirectResponse(url="/dashboard", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 
@@ -93,7 +110,7 @@ async def logout():
 # Dashboard startpagina
 # ---------------------------------------------------------------------------
 
-@app.get("/")
+@app.get("/dashboard")
 async def dashboard(request: Request, status: str = "alle", user: dict = Depends(require_login)):
     entries = repo.list_journal(user["id"], status=None if status == "alle" else status)
     for entry in entries:
@@ -123,7 +140,7 @@ async def update_settings(
     user: dict = Depends(require_login),
 ):
     repo.update_user_settings(user["id"], portfolio_eur, risk_percent, telegram_chat_id.strip() or None)
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 
 @app.post("/journal/{entry_id}/status")
@@ -135,7 +152,7 @@ async def update_journal_status(
 ):
     entry = float(entry_price) if entry_price.strip() else None
     repo.update_journal_status(entry_id, user["id"], status, entry_price=entry)
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 
 @app.post("/journal/{entry_id}/close")
@@ -151,7 +168,7 @@ async def close_journal(
         # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
         # entry prijs ingevuld). Stil negeren, niets om te sluiten.
         pass
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 
 @app.post("/journal/{entry_id}/note")
@@ -161,7 +178,7 @@ async def update_journal_note(
     user: dict = Depends(require_login),
 ):
     repo.update_journal_note(entry_id, user["id"], note)
-    return RedirectResponse(url="/", status_code=303)
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 
 # ---------------------------------------------------------------------------
