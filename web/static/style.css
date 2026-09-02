@@ -178,22 +178,3 @@ main + .footer { border-top: 1px solid var(--border); }
 }
 .kraken-card .button-primary { margin-top: 12px; }
 .kraken-card .fine-print { font-size: 12px; margin-top: 12px; margin-bottom: 0; }
-
-.message-text { max-width: 420px; }
-.message-text details, .analysis { cursor: pointer; }
-.message-text summary, .analysis summary {
-  cursor: pointer; color: var(--text);
-}
-.message-text summary:hover, .analysis summary:hover { color: var(--accent-dark); }
-.message-text pre, .analysis pre {
-  white-space: pre-wrap; font-family: inherit; font-size: 13px; color: var(--text);
-  background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
-  padding: 12px 14px; margin: 8px 0 0; max-width: 640px;
-}
-
-.analyses { display: flex; flex-direction: column; gap: 10px; }
-.analysis {
-  background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-  padding: 12px 16px;
-}
-.analysis summary { font-size: 13px; font-weight: 500; }

@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS signals (
     reason TEXT,
     stop_loss REAL,
     take_profit REAL,
+    context_note TEXT,
     created_at TEXT NOT NULL
 );
 

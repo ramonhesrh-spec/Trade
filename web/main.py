@@ -207,16 +207,11 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     entries = repo.list_journal_for_coin(user["id"], symbol)
     open_trades = [e for e in entries if e["entry_price"] is not None and e["exit_price"] is None]
 
-    # Analyses zonder day trading melding (lange termijn, aandelen) blijven
-    # apart zichtbaar bij de coin, ook al leidden ze niet tot een signaal.
-    analyses = [m for m in repo.list_messages_for_coin(symbol) if m["category"] != "day_trading"]
-
     return templates.TemplateResponse(request, "coin.html", {
         "user": user,
         "symbol": symbol,
         "source_levels": source_levels,
         "open_trades": open_trades,
-        "analyses": analyses,
         "coins": repo.list_coins(),
     })
 

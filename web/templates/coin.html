@@ -19,23 +19,6 @@
   {% endif %}
 </section>
 
-<section>
-  <h3>Analyses (lange termijn, aandelen)</h3>
-  <p class="muted">Berichten over deze coin die niet tot een day trading melding leidden, maar wel bewaard blijven als onderbouwing.</p>
-  {% if analyses %}
-  <div class="analyses">
-    {% for a in analyses %}
-    <details class="analysis">
-      <summary>{{ a.received_at[:16] | replace("T", " ") }} — {{ a.category }}{% if a.direction %} — {{ a.direction | upper }}{% endif %}</summary>
-      <pre>{{ a.raw_text }}</pre>
-    </details>
-    {% endfor %}
-  </div>
-  {% else %}
-  <p class="muted">Geen analyses voor deze coin.</p>
-  {% endif %}
-</section>
-
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
 <script>
   const SYMBOL = {{ symbol | tojson }};

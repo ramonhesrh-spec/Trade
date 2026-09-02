@@ -260,6 +260,14 @@ trade blijft een handmatige beslissing.
   onverwerkt te blijven. Zie dit terug op `/berichten` in het dashboard.
 - Elk Telegram bericht en het dashboard tonen een vaste toelichting: geen
   advies, regels, geen garantie, jij beslist zelf.
+- Lange termijn berichten (categorie `lange_termijn`) worden niet getoond
+  in een aparte pagina, ze blijven op de achtergrond in de database staan.
+  Komt er daarna een nieuw day trading signaal voor dezelfde coin, dan
+  wordt dat afgezet tegen de meest recente lange termijn richting: sluit
+  het aan, dan staat dat in de melding, wijkt het af, dan ook. Het
+  hoog/laag vertrouwen label zelf verandert hier niet door, dat blijft
+  puur op de vier technische factoren gebaseerd. Zie `app/signal_processor.py`
+  (`_build_context_note`).
 
 ## Later uitbreidingen (bewust niet in deze versie)
 

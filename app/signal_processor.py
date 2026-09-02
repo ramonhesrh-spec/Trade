@@ -72,6 +72,22 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
     await process_day_trading_signal(message_id, interp)
 
 
+def _build_context_note(coin: str, direction: str) -> str:
+    """Zet dit signaal af tegen het meest recente lange termijn bericht over
+    dezelfde coin. Verandert niets aan het hoog/laag vertrouwen label, dat
+    blijft puur op de vier technische factoren gebaseerd, dit is extra
+    achtergrond die meegaat in de melding."""
+    latest = repo.latest_long_term_direction(coin)
+    if not latest:
+        return ""
+
+    when = latest["received_at"][:10]
+    if latest["direction"] == direction.lower():
+        return f"Sluit aan bij recente lange termijn analyse ({direction}, {when})."
+    return (f"Let op: recente lange termijn analyse wijst op "
+            f"{latest['direction']}, dit signaal wijkt daarvan af ({when}).")
+
+
 async def process_day_trading_signal(message_id: int, interp: Interpretation) -> None:
     tracked = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
     if not tracked:
@@ -83,6 +99,7 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     ind = indicators.compute_indicators(df)
     confirmed, reason = indicators.confirms_direction(ind, interp.direction)
     stop_take = risk.compute_stop_take(interp.direction, ind.price, ind.atr)
+    context_note = _build_context_note(interp.coin, interp.direction)
 
     confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"
 
@@ -104,6 +121,7 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         "reason": reason,
         "stop_loss": stop_take.stop_loss,
         "take_profit": stop_take.take_profit,
+        "context_note": context_note or None,
     }
     signal_id = repo.insert_signal(signal_data)
     logger.info("Signaal %s opgeslagen: %s %s, bevestigd=%s", signal_id, interp.coin,

@@ -49,16 +49,29 @@ def list_messages(limit: int = 200) -> list[dict]:
 
 
 def list_messages_for_coin(coin: str, limit: int = 100) -> list[dict]:
-    """Alle berichten over deze coin, ook analyses die niet tot een melding
-    leidden (lange termijn, aandelen). Voor op de grafiekpagina, zodat de
-    onderbouwing bij de coin blijft staan, niet alleen in het algemene
-    berichtenoverzicht."""
+    """Alle berichten over deze coin, ook berichten die niet tot een melding
+    leidden. Achtergrond, geen eigen pagina, gebruikt om lange termijn
+    context mee te wegen bij nieuwe day trading signalen."""
     with db.session() as conn:
         rows = conn.execute(
             "SELECT * FROM messages WHERE coin = ? ORDER BY id DESC LIMIT ?",
             (coin.upper(), limit),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def latest_long_term_direction(coin: str) -> Optional[dict]:
+    """Meest recente lange termijn bericht over deze coin met een bekende
+    richting. Gebruikt om een nieuw day trading signaal tegen recente
+    community visie af te zetten, zonder daar een eigen pagina van te maken."""
+    with db.session() as conn:
+        row = conn.execute(
+            """SELECT direction, received_at FROM messages
+               WHERE coin = ? AND category = 'lange_termijn' AND direction IS NOT NULL
+               ORDER BY id DESC LIMIT 1""",
+            (coin.upper(),),
+        ).fetchone()
+        return dict(row) if row else None
 
 
 # ---------------------------------------------------------------------------
@@ -182,6 +195,7 @@ def insert_signal(data: dict) -> int:
         "message_id", "coin", "direction", "category", "price", "rsi", "macd",
         "macd_signal", "volume_ratio", "ema9", "ema21", "atr",
         "technical_confirmed", "confidence", "reason", "stop_loss", "take_profit",
+        "context_note",
     ]
     values = [data.get(f) for f in fields]
     placeholders = ", ".join("?" for _ in fields)
@@ -215,7 +229,7 @@ _JOURNAL_SELECT = """
         s.coin AS coin, s.direction AS direction, s.category AS category,
         s.price AS price, s.stop_loss AS stop_loss, s.take_profit AS take_profit,
         s.confidence AS confidence, s.technical_confirmed AS technical_confirmed,
-        s.reason AS reason, s.created_at AS created_at
+        s.reason AS reason, s.context_note AS context_note, s.created_at AS created_at
     FROM journal_entries je
     JOIN signals s ON s.id = je.signal_id
 """

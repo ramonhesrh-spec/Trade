@@ -20,16 +20,7 @@
     {% for m in messages %}
     <tr>
       <td>{{ m.received_at[:16] | replace("T", " ") }}</td>
-      <td class="message-text">
-        {% if m.raw_text|length > 80 %}
-        <details>
-          <summary>{{ m.raw_text[:80] }}…</summary>
-          <pre>{{ m.raw_text }}</pre>
-        </details>
-        {% else %}
-          {{ m.raw_text }}
-        {% endif %}
-      </td>
+      <td>{{ m.raw_text[:80] }}{% if m.raw_text|length > 80 %}…{% endif %}</td>
       <td>
         {% if m.coin and m.coin in tracked_symbols %}
           <a href="/coins/{{ m.coin }}">{{ m.coin }}</a>

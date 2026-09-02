@@ -30,6 +30,9 @@ def format_signal_message(signal: dict) -> str:
     if not signal["technical_confirmed"]:
         lines.append(f"Reden: {signal['reason']}")
 
+    if signal.get("context_note"):
+        lines += ["", signal["context_note"]]
+
     lines += ["", config.DISCLAIMER]
 
     return "\n".join(lines)
