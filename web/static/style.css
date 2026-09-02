@@ -100,10 +100,14 @@ button:hover { background: var(--accent-dark); border-color: var(--accent-dark);
 .status-form input, .close-form input { width: 100px; }
 .note-form input { width: 140px; }
 
-.login-body { display: flex; align-items: center; justify-content: center; height: 100vh; background: var(--bg); }
+.login-body {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 100vh; background: var(--bg); padding: 20px 0;
+}
 .login-card {
   background: var(--panel); border: 1px solid var(--border); border-radius: 8px;
-  padding: 32px; display: flex; flex-direction: column; gap: 14px; width: 320px;
+  padding: 32px; display: flex; flex-direction: column; gap: 14px;
+  width: 320px; max-width: calc(100vw - 32px);
 }
 .login-brand { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
 .login-brand img { height: 32px; width: auto; }
@@ -188,6 +192,12 @@ main + .footer { border-top: 1px solid var(--border); }
 .factor-icon { width: 18px; height: 18px; flex-shrink: 0; }
 @media (max-width: 560px) {
   .factor-grid { grid-template-columns: 1fr; }
+  .hero { padding: 48px 20px 40px; }
+  .hero h1 { font-size: 30px; }
+  .hero p { font-size: 15px; }
+  .landing-section { padding: 36px 20px; }
+  .landing-header { padding: 16px 20px; }
+  .landing-header nav { gap: 12px; }
 }
 
 .kraken-card {
@@ -201,6 +211,11 @@ main + .footer { border-top: 1px solid var(--border); }
 }
 .kraken-card .button-primary { margin-top: 12px; }
 .kraken-card .fine-print { font-size: 12px; margin-top: 12px; margin-bottom: 0; }
+
+.coin-chart { height: 500px; position: relative; }
+@media (max-width: 560px) {
+  .coin-chart { height: 320px; }
+}
 
 /* Coin grafiek: zone-blok voor gegroepeerde niveaus (bijvoorbeeld een box) */
 .chart-zone {
