@@ -6,12 +6,15 @@
 <meta name="theme-color" content="#0a0e0f">
 <title>{% block title %}HesPulse{% endblock %}</title>
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="manifest" href="/static/manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<div id="offline-banner" class="offline-banner" hidden role="status">Geen internetverbinding. Koersen en meldingen worden niet bijgewerkt tot je weer online bent.</div>
 {% if request.url.path == "/dashboard" %}
 <div id="boot-pulse" class="boot-pulse" hidden aria-hidden="true">
   <svg class="boot-pulse-logo" viewBox="0 0 32 32" fill="none">
@@ -62,10 +65,10 @@
     </a>
     <div class="topbar-right">
       <span class="live-pill"><span class="ping"></span><span id="live-clock">--:--:--</span></span>
-      <button type="button" id="system-status" class="system-status" title="Systeemstatus" aria-label="Systeemstatus tonen">
+      <button type="button" id="system-status" class="system-status" title="Systeemstatus" aria-label="Systeemstatus tonen" aria-expanded="false" aria-controls="system-status-popover">
         <span class="status-dot"></span><span class="status-label">systeem</span>
       </button>
-      <div id="system-status-popover" class="status-popover" hidden role="status">
+      <div id="system-status-popover" class="status-popover" hidden aria-live="polite">
         <p class="status-row"><span class="muted">Exchange</span><span id="status-exchange">controleren...</span></p>
         <p class="status-row"><span class="muted">Laatste Discord bericht</span><span id="status-message">-</span></p>
         <p class="status-row"><span class="muted">Server actief sinds</span><span id="status-uptime">-</span></p>
@@ -121,10 +124,11 @@
   <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="Snel zoeken">
     <div class="cmdk-input-row">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input id="cmdk-input" type="text" placeholder="Zoek een coin of pagina... (bv. eth, uitleg)" autocomplete="off" aria-label="Zoeken">
+      <input id="cmdk-input" type="text" placeholder="Zoek een coin of pagina... (bv. eth, uitleg)" autocomplete="off"
+             role="combobox" aria-expanded="true" aria-controls="cmdk-results" aria-autocomplete="list" aria-label="Zoeken">
       <kbd>Esc</kbd>
     </div>
-    <div id="cmdk-results" class="cmdk-results"></div>
+    <div id="cmdk-results" class="cmdk-results" role="listbox" aria-label="Zoekresultaten"></div>
   </div>
 </div>
 
@@ -283,10 +287,16 @@
     function setActive(i) {
       active = i;
       Array.prototype.forEach.call(resultsEl.children, function (el, idx) {
-        el.classList.toggle("active", idx === active);
+        var isActive = idx === active;
+        el.classList.toggle("active", isActive);
+        if (el.getAttribute("role") === "option") el.setAttribute("aria-selected", String(isActive));
       });
       var el = resultsEl.children[active];
       if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+      // aria-activedescendant houdt focus op het invoerveld (standaard
+      // combobox-patroon) terwijl een schermlezer toch aankondigt welke
+      // optie nu geselecteerd is, exact wat de pijltjestoetsen al doen.
+      input.setAttribute("aria-activedescendant", el && el.id ? el.id : "");
     }
 
     function render() {
@@ -298,11 +308,14 @@
         empty.className = "cmdk-empty muted";
         empty.textContent = "Niets gevonden.";
         resultsEl.appendChild(empty);
+        input.removeAttribute("aria-activedescendant");
         return;
       }
       filtered.forEach(function (it, i) {
         var row = document.createElement("a");
         row.href = it.href;
+        row.id = "cmdk-option-" + i;
+        row.setAttribute("role", "option");
         row.className = "cmdk-result";
         row.innerHTML = "<span>" + it.label + "</span><span class=\"cmdk-hint muted\">" + it.hint + "</span>";
         row.addEventListener("mouseenter", function () { setActive(i); });
@@ -311,7 +324,10 @@
       setActive(0);
     }
 
+    var openedFrom = null;
+
     function open() {
+      openedFrom = document.activeElement;
       items = buildItems();
       overlay.hidden = false;
       input.value = "";
@@ -320,6 +336,10 @@
     }
     function close() {
       overlay.hidden = true;
+      // Focus terug naar waar de palette geopend werd, zodat toetsenbord-
+      // gebruikers niet blijven "hangen" op een nu onzichtbaar veld.
+      if (openedFrom && document.contains(openedFrom) && openedFrom.focus) openedFrom.focus();
+      openedFrom = null;
     }
 
     document.addEventListener("keydown", function (e) {
@@ -396,13 +416,22 @@
 
     function togglePopover() {
       popover.hidden = !popover.hidden;
+      btn.setAttribute("aria-expanded", String(!popover.hidden));
+    }
+    function closePopover() {
+      if (popover.hidden) return;
+      popover.hidden = true;
+      btn.setAttribute("aria-expanded", "false");
     }
 
     btn.addEventListener("click", togglePopover);
     document.addEventListener("click", function (e) {
       if (!popover.hidden && !popover.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
-        popover.hidden = true;
+        closePopover();
       }
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !popover.hidden) { closePopover(); btn.focus(); }
     });
 
     refresh();
@@ -435,6 +464,29 @@
       requestAnimationFrame(step);
     });
   })();
+
+  // Offline-banner: direct zichtbaar zodra de browser meldt dat de
+  // verbinding weg is, niet pas als je toevallig een actie probeert.
+  // navigator.onLine is niet waterdicht (kan "online" blijven zeggen bij
+  // een kapotte verbinding zonder echte internettoegang), maar vangt wel
+  // het duidelijke geval (vliegtuigmodus, geen wifi) meteen op.
+  (function () {
+    var banner = document.getElementById("offline-banner");
+    if (!banner) return;
+    function update() { banner.hidden = navigator.onLine; }
+    window.addEventListener("online", update);
+    window.addEventListener("offline", update);
+    update();
+  })();
+
+  // Service worker: maakt de site installeerbaar en toont een nette
+  // offline-pagina bij een mislukte navigatie. Cachet bewust geen
+  // koersen, meldingen of trade-status, zie service-worker.js.
+  if ("serviceWorker" in navigator) {
+    window.addEventListener("load", function () {
+      navigator.serviceWorker.register("/static/service-worker.js").catch(function () {});
+    });
+  }
 </script>
 </body>
 </html>

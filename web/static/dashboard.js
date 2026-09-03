@@ -105,8 +105,26 @@
       });
     } catch (err) {
       if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+      // Geen verbinding: een gewone form.submit() zou hier gegarandeerd
+      // ook mislukken, met een kale browserfoutmelding als resultaat.
+      // Toon in plaats daarvan een duidelijk bericht in de kaart zelf,
+      // de gebruiker kan het opnieuw proberen zodra hij weer online is.
+      if (!navigator.onLine) {
+        showInlineError(form, "Geen verbinding. Probeer het opnieuw zodra je weer online bent.");
+        return;
+      }
       form.submit();
     }
+  }
+
+  function showInlineError(form, message) {
+    let el = form.querySelector(".ajax-error");
+    if (!el) {
+      el = document.createElement("p");
+      el.className = "error ajax-error";
+      form.insertBefore(el, form.firstChild);
+    }
+    el.textContent = message;
   }
 
   document.addEventListener("submit", handleSubmit);

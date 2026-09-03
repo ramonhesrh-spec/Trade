@@ -6,6 +6,8 @@
 <meta name="theme-color" content="#0a0e0f">
 <title>Inloggen — HesPulse</title>
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="manifest" href="/static/manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -14,18 +16,23 @@
 <body class="login-body">
 <form class="login-card" method="post" action="/login">
   <div class="login-brand">
-    <img src="/static/hespulse-logo.svg" alt="HesPulse logo">
+    <span class="brand-logo-wrap">
+      <svg class="brand-logo" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <circle cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="2"/>
+        <path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#0ABAB5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
     <span>HesPulse</span>
   </div>
   <svg class="login-chart" viewBox="0 0 220 46" aria-hidden="true">
-    <polyline points="10,36 46,28 82,32 118,18 154,22 210,8" fill="none" stroke="#17e5d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.5"/>
+    <polyline class="hero-trendline" pathLength="1" points="10,36 46,28 82,32 118,18 154,22 210,8" fill="none" stroke="#17e5d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.5"/>
     <g stroke-width="2">
-      <line x1="10" y1="28" x2="10" y2="42" stroke="#f2685c"/><rect x="6" y="30" width="8" height="8" fill="#f2685c"/>
-      <line x1="46" y1="20" x2="46" y2="36" stroke="#33d69f"/><rect x="42" y="22" width="8" height="10" fill="#33d69f"/>
-      <line x1="82" y1="24" x2="82" y2="38" stroke="#f2685c"/><rect x="78" y="26" width="8" height="9" fill="#f2685c"/>
-      <line x1="118" y1="10" x2="118" y2="26" stroke="#33d69f"/><rect x="114" y="12" width="8" height="10" fill="#33d69f"/>
-      <line x1="154" y1="14" x2="154" y2="30" stroke="#f2685c"/><rect x="150" y="16" width="8" height="10" fill="#f2685c"/>
-      <line x1="210" y1="0" x2="210" y2="18" stroke="#33d69f"/><rect x="206" y="2" width="8" height="10" fill="#33d69f"/>
+      <g class="hero-candle" style="--i: 0"><line x1="10" y1="28" x2="10" y2="42" stroke="#f2685c"/><rect x="6" y="30" width="8" height="8" fill="#f2685c"/></g>
+      <g class="hero-candle" style="--i: 1"><line x1="46" y1="20" x2="46" y2="36" stroke="#33d69f"/><rect x="42" y="22" width="8" height="10" fill="#33d69f"/></g>
+      <g class="hero-candle" style="--i: 2"><line x1="82" y1="24" x2="82" y2="38" stroke="#f2685c"/><rect x="78" y="26" width="8" height="9" fill="#f2685c"/></g>
+      <g class="hero-candle" style="--i: 3"><line x1="118" y1="10" x2="118" y2="26" stroke="#33d69f"/><rect x="114" y="12" width="8" height="10" fill="#33d69f"/></g>
+      <g class="hero-candle" style="--i: 4"><line x1="154" y1="14" x2="154" y2="30" stroke="#f2685c"/><rect x="150" y="16" width="8" height="10" fill="#f2685c"/></g>
+      <g class="hero-candle" style="--i: 5"><line x1="210" y1="0" x2="210" y2="18" stroke="#33d69f"/><rect x="206" y="2" width="8" height="10" fill="#33d69f"/></g>
     </g>
   </svg>
   {% if error %}<p class="error">{{ error }}</p>{% endif %}

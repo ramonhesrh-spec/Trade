@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e0f">
+<title>Geen verbinding — HesPulse</title>
+<style>
+  /* Volledig zelfstandige pagina, geen externe fonts of stylesheet: dit
+     moet ook renderen als er echt geen verbinding is, puur uit de
+     service worker cache. */
+  html, body {
+    margin: 0; height: 100%; background: #0a0e0f; color: #eaf1f0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex; align-items: center; justify-content: center; text-align: center;
+  }
+  .box { max-width: 340px; padding: 24px; }
+  svg { width: 56px; height: 56px; margin-bottom: 16px; }
+  h1 { font-size: 17px; margin: 0 0 8px; }
+  p { font-size: 14px; color: #b7c4c2; line-height: 1.6; margin: 0 0 20px; }
+  button {
+    background: #17e5d6; color: #052624; border: none; border-radius: 8px;
+    padding: 10px 20px; font-size: 14px; font-weight: 700; cursor: pointer;
+  }
+</style>
+</head>
+<body>
+  <div class="box">
+    <svg viewBox="0 0 32 32" fill="none" aria-hidden="true">
+      <circle cx="16" cy="16" r="15" stroke="#17e5d6" stroke-width="2"/>
+      <path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#17e5d6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity="0.35"/>
+    </svg>
+    <h1>Geen verbinding</h1>
+    <p>HesPulse is nu niet bereikbaar. Controleer je internetverbinding en probeer het opnieuw. Je koersen en meldingen staan nog gewoon klaar zodra je weer online bent.</p>
+    <button onclick="location.reload()">Opnieuw proberen</button>
+  </div>
+</body>
+</html>

@@ -7,6 +7,8 @@
 <title>HesPulse</title>
 <meta name="description" content="HesPulse toetst signalen tegen live technische data. Regels, geen garantie. Jij beslist zelf.">
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="manifest" href="/static/manifest.json">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,7 +18,12 @@
 
 <header class="landing-header">
   <a href="/" class="brand">
-    <img src="/static/hespulse-logo.svg" alt="HesPulse logo">
+    <span class="brand-logo-wrap">
+      <svg class="brand-logo" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+        <circle cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="2"/>
+        <path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#0ABAB5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </span>
     <span>HesPulse</span>
   </a>
   <nav>
@@ -29,7 +36,8 @@
   </nav>
 </header>
 
-<section class="hero">
+<main>
+<section class="hero" style="--i: 0">
   <h1>Regels in plaats van giswerk</h1>
   <p>HesPulse leest een signaal, toetst het tegen live koersdata, en stuurt
   een melding via Telegram. Geen automatische trades, geen garanties.
@@ -38,34 +46,34 @@
   <a href="/login" class="hero-secondary">Al een account? Inloggen</a>
 
   <svg class="hero-chart" viewBox="0 0 555 170" aria-hidden="true">
-    <polyline points="30,133 85,118 140,107 195,112 250,92 305,78 360,83 415,59 470,45 525,32"
+    <polyline class="hero-trendline" pathLength="1" points="30,133 85,118 140,107 195,112 250,92 305,78 360,83 415,59 470,45 525,32"
       fill="none" stroke="#17e5d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.55"/>
     <g stroke-width="2">
-      <line x1="30" y1="118" x2="30" y2="150" stroke="#f2685c"/>
-      <rect x="21" y="122" width="18" height="22" fill="#f2685c"/>
-      <line x1="85" y1="100" x2="85" y2="140" stroke="#33d69f"/>
-      <rect x="76" y="104" width="18" height="28" fill="#33d69f"/>
-      <line x1="140" y1="90" x2="140" y2="128" stroke="#33d69f"/>
-      <rect x="131" y="96" width="18" height="22" fill="#33d69f"/>
-      <line x1="195" y1="96" x2="195" y2="132" stroke="#f2685c"/>
-      <rect x="186" y="100" width="18" height="24" fill="#f2685c"/>
-      <line x1="250" y1="70" x2="250" y2="116" stroke="#33d69f"/>
-      <rect x="241" y="76" width="18" height="32" fill="#33d69f"/>
-      <line x1="305" y1="60" x2="305" y2="100" stroke="#33d69f"/>
-      <rect x="296" y="64" width="18" height="28" fill="#33d69f"/>
-      <line x1="360" y1="66" x2="360" y2="104" stroke="#f2685c"/>
-      <rect x="351" y="70" width="18" height="26" fill="#f2685c"/>
-      <line x1="415" y1="40" x2="415" y2="86" stroke="#33d69f"/>
-      <rect x="406" y="44" width="18" height="30" fill="#33d69f"/>
-      <line x1="470" y1="28" x2="470" y2="70" stroke="#33d69f"/>
-      <rect x="461" y="32" width="18" height="26" fill="#33d69f"/>
-      <line x1="525" y1="16" x2="525" y2="56" stroke="#33d69f"/>
-      <rect x="516" y="20" width="18" height="24" fill="#33d69f"/>
+      <g class="hero-candle" style="--i: 0"><line x1="30" y1="118" x2="30" y2="150" stroke="#f2685c"/>
+      <rect x="21" y="122" width="18" height="22" fill="#f2685c"/></g>
+      <g class="hero-candle" style="--i: 1"><line x1="85" y1="100" x2="85" y2="140" stroke="#33d69f"/>
+      <rect x="76" y="104" width="18" height="28" fill="#33d69f"/></g>
+      <g class="hero-candle" style="--i: 2"><line x1="140" y1="90" x2="140" y2="128" stroke="#33d69f"/>
+      <rect x="131" y="96" width="18" height="22" fill="#33d69f"/></g>
+      <g class="hero-candle" style="--i: 3"><line x1="195" y1="96" x2="195" y2="132" stroke="#f2685c"/>
+      <rect x="186" y="100" width="18" height="24" fill="#f2685c"/></g>
+      <g class="hero-candle" style="--i: 4"><line x1="250" y1="70" x2="250" y2="116" stroke="#33d69f"/>
+      <rect x="241" y="76" width="18" height="32" fill="#33d69f"/></g>
+      <g class="hero-candle" style="--i: 5"><line x1="305" y1="60" x2="305" y2="100" stroke="#33d69f"/>
+      <rect x="296" y="64" width="18" height="28" fill="#33d69f"/></g>
+      <g class="hero-candle" style="--i: 6"><line x1="360" y1="66" x2="360" y2="104" stroke="#f2685c"/>
+      <rect x="351" y="70" width="18" height="26" fill="#f2685c"/></g>
+      <g class="hero-candle" style="--i: 7"><line x1="415" y1="40" x2="415" y2="86" stroke="#33d69f"/>
+      <rect x="406" y="44" width="18" height="30" fill="#33d69f"/></g>
+      <g class="hero-candle" style="--i: 8"><line x1="470" y1="28" x2="470" y2="70" stroke="#33d69f"/>
+      <rect x="461" y="32" width="18" height="26" fill="#33d69f"/></g>
+      <g class="hero-candle" style="--i: 9"><line x1="525" y1="16" x2="525" y2="56" stroke="#33d69f"/>
+      <rect x="516" y="20" width="18" height="24" fill="#33d69f"/></g>
     </g>
   </svg>
 </section>
 
-<section class="landing-section" id="over-ons">
+<section class="landing-section" id="over-ons" style="--i: 1">
   <h2>Over ons</h2>
   <p>HesPulse is een persoonlijk project, gebouwd om structuur te brengen in
   het volgen van crypto signalen. Geen los overzicht van berichten meer,
@@ -75,7 +83,7 @@
   klein aantal genodigden. Er wordt nog geen dienst verkocht.</p>
 </section>
 
-<section class="landing-section" id="hoe-het-werkt">
+<section class="landing-section" id="hoe-het-werkt" style="--i: 2">
   <h2>Hoe het werkt</h2>
   <div class="steps">
     <div class="step">
@@ -93,7 +101,7 @@
   </div>
 </section>
 
-<section class="landing-section" id="telegram-koppelen">
+<section class="landing-section" id="telegram-koppelen" style="--i: 3">
   <h2>Telegram koppelen</h2>
   <p>HesPulse draait op één gedeelde Telegram bot. Na het registreren
   koppel je in drie stappen je eigen chat, zodat meldingen bij jou
@@ -114,7 +122,7 @@
   </div>
 </section>
 
-<section class="landing-section" id="hoog-vertrouwen">
+<section class="landing-section" id="hoog-vertrouwen" style="--i: 4">
   <h2>Wanneer is een signaal hoog vertrouwen?</h2>
   <p>Elke melding wordt op het moment zelf getoetst op de 4 uur candle, tegen
   vier vaste factoren. Ze moeten allemaal dezelfde kant op wijzen als de
@@ -152,7 +160,7 @@
   is geen garantie, het is een optelsom van regels, geen voorspelling.</p>
 </section>
 
-<section class="landing-section">
+<section class="landing-section" style="--i: 5">
   <h2>Zelf handelen op Kraken</h2>
   <div class="kraken-card">
     <p>Handel je zelf crypto, of wil je een account openen? Via onderstaande
@@ -162,6 +170,8 @@
     <p class="fine-print muted">Referral link. Geen onderdeel van HesPulse zelf, en geen advies om te gaan handelen.</p>
   </div>
 </section>
+
+</main>
 
 <footer class="footer">{{ disclaimer }}</footer>
 </body>
