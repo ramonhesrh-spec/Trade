@@ -7,11 +7,57 @@
   if (!priceEls.length) return;
 
   const previous = {};
+  const vibrated = new Set();
+  const defaultTitle = document.title;
+  const faviconEl = document.querySelector('link[rel="icon"]');
+  const defaultFaviconHref = faviconEl ? faviconEl.getAttribute("href") : null;
 
   function flash(el, up) {
     el.classList.remove("flash-up", "flash-down");
     void el.offsetWidth; // herstart de animatie ook als dezelfde richting twee keer op rij voorkomt
     el.classList.add(up ? "flash-up" : "flash-down");
+  }
+
+  // Tabblad-titel en favicon tonen je live resultaat zonder dat je het
+  // tabblad hoeft te bekijken, alleen op echte trades, oefengeld hoort
+  // niet in dat glimpje mee te tellen.
+  function setFavicon(color) {
+    if (!faviconEl) return;
+    if (!color) {
+      if (defaultFaviconHref) faviconEl.setAttribute("href", defaultFaviconHref);
+      return;
+    }
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32"><circle cx="16" cy="16" r="14" fill="${color}"/></svg>`;
+    faviconEl.setAttribute("href", "data:image/svg+xml," + encodeURIComponent(svg));
+  }
+
+  function updateTitleAndFavicon(positions) {
+    const real = positions.filter((p) => !p.is_practice && p.pnl_eur !== null);
+    if (!real.length) {
+      document.title = defaultTitle;
+      setFavicon(null);
+      return;
+    }
+    const total = real.reduce((sum, p) => sum + p.pnl_eur, 0);
+    const sign = total >= 0 ? "+" : "";
+    document.title = `${sign}€${total.toFixed(0)} · HesPulse`;
+    setFavicon(total > 0 ? "%2333d69f" : total < 0 ? "%23f2685c" : "%2317e5d6");
+  }
+
+  // Korte triltik op het moment dat een echte trade zijn stop loss of
+  // take profit raakt, terwijl je het tabblad open hebt. Eenmalig per
+  // trade, niet elke 20 seconden herhalen zolang hij eroverheen blijft.
+  function checkVibration(p) {
+    if (p.is_practice || p.current_price === null || !p.stop_loss || !p.take_profit || !navigator.vibrate) return;
+    const hit = p.direction === "long"
+      ? (p.current_price <= p.stop_loss || p.current_price >= p.take_profit)
+      : (p.current_price >= p.stop_loss || p.current_price <= p.take_profit);
+    if (hit && !vibrated.has(p.id)) {
+      vibrated.add(p.id);
+      navigator.vibrate([80, 40, 80]);
+    } else if (!hit) {
+      vibrated.delete(p.id);
+    }
   }
 
   function refresh() {
@@ -44,13 +90,41 @@
           if (pnlPctEl) {
             pnlPctEl.textContent = `(${p.pnl_pct.toFixed(1)}%)`;
           }
+          checkVibration(p);
         });
+        updateTitleAndFavicon(positions);
       })
       .catch(() => {});
   }
 
   refresh();
   setInterval(refresh, 20000);
+})();
+
+// Deel-knop op een gesloten trade: via het native deelmenu als de browser
+// dat ondersteunt, anders naar het klembord, met korte bevestiging in de
+// knoptekst zelf zodat je weet dat het gelukt is.
+(function () {
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest(".share-btn");
+    if (!btn) return;
+    const text = btn.dataset.share;
+    if (!text) return;
+
+    const original = btn.textContent;
+    function confirmed(label) {
+      btn.textContent = label;
+      setTimeout(function () { btn.textContent = original; }, 1800);
+    }
+
+    if (navigator.share) {
+      navigator.share({ text: text }).catch(function () {});
+      return;
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(function () { confirmed("Gekopieerd"); }).catch(function () {});
+    }
+  });
 })();
 
 // Trade nemen/sluiten/terugzetten zonder volledige paginaherlaad: het

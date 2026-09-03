@@ -545,6 +545,19 @@ def mark_level_alert_sent(entry_id: int) -> None:
         conn.execute("UPDATE journal_entries SET level_alert_sent = 1 WHERE id = ?", (entry_id,))
 
 
+def count_pending_signals(user_id: int) -> int:
+    """Aantal echte meldingen die nog op een keuze wachten (nog niet
+    Genomen/Aangepast/Genegeerd). Basis voor het cijfer op het app-icoon."""
+    with db.session() as conn:
+        row = conn.execute(
+            """SELECT COUNT(*) AS n
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.status = 'nieuw' AND s.is_practice = 0""",
+            (user_id,),
+        ).fetchone()
+        return row["n"]
+
+
 def winrate_stats(user_id: int) -> dict:
     """Winrate en gemiddeld resultaat apart voor hoog en laag vertrouwen,
     op basis van gesloten trades van deze gebruiker. Winrate alleen zegt

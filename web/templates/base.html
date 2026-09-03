@@ -398,6 +398,18 @@
       return Math.round(hours / 24) + " dagen geleden";
     }
 
+    // De klop-snelheid van de live-pill is geen decoratie maar een echte
+    // vitale waarde: net een bericht gehad, snelle puls, al uren stil,
+    // langzame puls. Drempels in minuten sinds het laatste bericht.
+    function heartbeatDuration(iso) {
+      if (!iso) return "2.6s";
+      var mins = (Date.now() - new Date(iso).getTime()) / 60000;
+      if (mins < 15) return "1.2s";
+      if (mins < 60) return "1.8s";
+      if (mins < 360) return "2.6s";
+      return "3.6s";
+    }
+
     function refresh() {
       fetch("/api/system_status")
         .then(function (r) { return r.json(); })
@@ -407,6 +419,16 @@
           document.getElementById("status-exchange").textContent = s.exchange_ok ? "bereikbaar" : "niet bereikbaar";
           document.getElementById("status-message").textContent = timeAgo(s.last_message_at);
           document.getElementById("status-uptime").textContent = timeAgo(s.server_started_at);
+          document.documentElement.style.setProperty("--heartbeat-duration", heartbeatDuration(s.last_message_at));
+
+          // App-icoon badge: aantal meldingen dat nog op een keuze wacht.
+          // Werkt alleen zolang deze pagina ergens open staat (tab of
+          // geïnstalleerde app), geen vervanging van de Telegram-melding
+          // die ook bereikt als alles dicht is.
+          if ("setAppBadge" in navigator) {
+            if (s.pending_count > 0) navigator.setAppBadge(s.pending_count).catch(function () {});
+            else navigator.clearAppBadge().catch(function () {});
+          }
         })
         .catch(function () {
           dot.classList.remove("status-ok");

@@ -370,6 +370,9 @@
             <input type="datetime-local" name="exit_time" required>
             <button type="submit">Sluiten</button>
           </form>
+          {% elif e.result_eur is not none %}
+            <button type="button" class="button-link share-btn"
+                    data-share="{{ e.coin }} {{ e.direction|upper }} — entry {{ '%.4f'|format(e.entry_price) }} naar exit {{ '%.4f'|format(e.exit_price) }} — {{ '%+.2f'|format(e.result_eur) }} euro ({{ '%+.1f'|format(e.result_pct) }}%) — via HesPulse" title="Deel dit resultaat">Delen</button>
           {% else %}
             <span class="muted">-</span>
           {% endif %}

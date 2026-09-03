@@ -302,6 +302,8 @@ async def api_open_positions(user: dict = Depends(require_login)):
         {
             "id": e["id"], "current_price": e["current_price"],
             "pnl_eur": e["pnl_eur"], "pnl_pct": e["pnl_pct"],
+            "is_practice": bool(e["is_practice"]),
+            "direction": e["direction"], "stop_loss": e["stop_loss"], "take_profit": e["take_profit"],
         }
         for e in entries if e["entry_price"] is not None
     ]
@@ -323,6 +325,7 @@ async def api_system_status(user: dict = Depends(require_login)):
         "last_message_at": repo.last_message_received_at(),
         "server_started_at": SERVER_STARTED_AT,
         "checked_at": db.now_iso(),
+        "pending_count": repo.count_pending_signals(user["id"]),
     }
 
 
