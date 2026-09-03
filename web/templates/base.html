@@ -20,6 +20,7 @@
     </a>
     <div class="topbar-right">
       <span class="live-pill"><span class="ping"></span><span id="live-clock">--:--:--</span></span>
+      <button type="button" id="shortcuts-hint" class="shortcuts-hint" title="Sneltoetsen (?)" aria-label="Sneltoetsen tonen">?</button>
       <form action="/logout" method="post" class="logout-form">
         {% if user %}<span class="muted">{{ user.username }}</span>{% endif %}
         <button type="submit">Uitloggen</button>
@@ -46,6 +47,21 @@
 {% block content %}{% endblock %}
 </main>
 <footer class="footer">{{ disclaimer }}</footer>
+
+<div id="shortcuts-help" class="shortcuts-help" hidden>
+  <div class="shortcuts-panel" role="dialog" aria-modal="true" aria-labelledby="shortcuts-title">
+    <div class="shortcuts-head">
+      <h2 id="shortcuts-title">Sneltoetsen</h2>
+      <button type="button" class="shortcuts-close" aria-label="Sluiten">&times;</button>
+    </div>
+    <div class="shortcuts-row"><span class="shortcuts-keys"><kbd>g</kbd> <kbd>d</kbd></span><span>naar dashboard</span></div>
+    <div class="shortcuts-row"><span class="shortcuts-keys"><kbd>g</kbd> <kbd>c</kbd></span><span>coins openen</span></div>
+    <div class="shortcuts-row"><span class="shortcuts-keys"><kbd>?</kbd></span><span>dit overzicht</span></div>
+    <div class="shortcuts-row"><span class="shortcuts-keys"><kbd>Esc</kbd></span><span>sluiten</span></div>
+    <p class="muted shortcuts-note">Werkt niet terwijl je in een veld typt. Geen sneltoets sluit ooit een trade of verwijdert iets, dat blijft altijd een bewuste klik.</p>
+  </div>
+</div>
+
 <script>
   // Toont dat de pagina leeft, geen decoratie: een stilstaande klok in een
   // "live" balk zou juist wantrouwen wekken.
@@ -57,6 +73,57 @@
     }
     tick();
     setInterval(tick, 1000);
+  })();
+
+  // Sneltoetsen, alleen voor navigatie. Bewust geen sneltoets voor iets
+  // dat een trade sluit of verwijdert, dat blijft altijd een bewuste klik
+  // op een echte knop, nooit één toets per ongeluk.
+  (function () {
+    var helpEl = document.getElementById("shortcuts-help");
+    var lastKey = null;
+    var lastKeyTime = 0;
+
+    function isTyping(target) {
+      var tag = target.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || target.isContentEditable;
+    }
+    function openHelp() { if (helpEl) { helpEl.hidden = false; helpEl.querySelector(".shortcuts-close").focus(); } }
+    function closeHelp() { if (helpEl) helpEl.hidden = true; }
+
+    document.addEventListener("keydown", function (e) {
+      if (isTyping(e.target)) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+
+      if (e.key === "Escape") {
+        closeHelp();
+        var openMenu = document.querySelector(".coin-menu[open]");
+        if (openMenu) openMenu.removeAttribute("open");
+        return;
+      }
+      if (e.key === "?") { openHelp(); return; }
+      if (e.key === "g") { lastKey = "g"; lastKeyTime = Date.now(); return; }
+
+      if (lastKey === "g" && Date.now() - lastKeyTime < 700) {
+        if (e.key === "d") {
+          window.location.href = "/dashboard";
+        } else if (e.key === "c") {
+          var menu = document.querySelector(".coin-menu");
+          if (menu) {
+            menu.setAttribute("open", "");
+            var summary = menu.querySelector("summary");
+            if (summary) summary.focus();
+          }
+        }
+      }
+      lastKey = null;
+    });
+
+    if (helpEl) {
+      helpEl.querySelector(".shortcuts-close").addEventListener("click", closeHelp);
+      helpEl.addEventListener("click", function (e) { if (e.target === helpEl) closeHelp(); });
+    }
+    var hintBtn = document.getElementById("shortcuts-hint");
+    if (hintBtn) hintBtn.addEventListener("click", openHelp);
   })();
 </script>
 </body>

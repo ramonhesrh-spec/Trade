@@ -4,6 +4,18 @@
 
 <section>
   <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.2 4.2l4.2 4.2m7.2 7.2 4.2 4.2M1 12h6m10 0h6M4.2 19.8l4.2-4.2m7.2-7.2 4.2-4.2"/></svg>Open nu</h2>
+  {% if open_risk_eur > 0 %}
+  <div class="risk-gauge">
+    <div class="risk-gauge-head">
+      <span class="muted">Risico nu open</span>
+      <span class="mono">€{{ "%.2f"|format(open_risk_eur) }} <span class="muted">({{ "%.1f"|format(open_risk_pct) }}% van portfolio)</span></span>
+    </div>
+    <div class="risk-gauge-bar">
+      <div class="risk-gauge-fill {{ 'risk-high' if open_risk_pct >= 25 else ('risk-mid' if open_risk_pct >= 10 else '') }}"
+           style="width: {{ [open_risk_pct, 100] | min }}%"></div>
+    </div>
+  </div>
+  {% endif %}
   {% if open_entries %}
   <div class="open-grid">
     {% for e in open_entries %}

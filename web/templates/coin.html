@@ -4,6 +4,18 @@
 
 <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>{{ symbol }}</h2>
 
+{% if sparkline %}
+<div class="sparkline">
+  <div class="spark-bars" aria-hidden="true">
+    {% for s in sparkline %}
+      <span class="spark-bar {{ 'spark-hoog' if s.technical_confirmed else 'spark-laag' }} {{ 'spark-long' if s.direction == 'long' else 'spark-short' }}"
+            title="{{ s.direction }}, {{ 'hoog' if s.technical_confirmed else 'laag' }} vertrouwen, {{ s.created_at[:10] }}"></span>
+    {% endfor %}
+  </div>
+  <span class="muted sparkline-label">laatste {{ sparkline|length }} {{ "signaal" if sparkline|length == 1 else "signalen" }} voor {{ symbol }}</span>
+</div>
+{% endif %}
+
 {% set primary = open_trades[0] if open_trades else (recent_signals[0] if recent_signals else none) %}
 {% if primary %}
 <section class="cards" style="margin-bottom: 16px;">

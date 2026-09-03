@@ -264,10 +264,20 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     coin_stats = repo.coin_stats(user["id"])
     coins = repo.list_coins()
 
+    # Risico dat nu echt in de markt staat: alleen trades die al genomen
+    # zijn (eigen entry ingevuld), niet nog niet bevestigde signalen, die
+    # hebben nog geen kapitaal gekost.
+    open_risk_eur = sum(
+        e["risk_eur"] or 0 for e in open_entries if e["entry_price"] is not None
+    )
+    open_risk_pct = (open_risk_eur / user["portfolio_eur"] * 100) if user["portfolio_eur"] else 0
+
     return templates.TemplateResponse(request, "dashboard.html", {
         "user": user,
         "entries": entries,
         "open_entries": open_entries,
+        "open_risk_eur": open_risk_eur,
+        "open_risk_pct": open_risk_pct,
         "practice_open": practice_open,
         "practice_closed": practice_closed,
         "winrate": winrate,
@@ -447,6 +457,12 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     open_trades = _add_signal_context(open_trades, winrate)
     recent_signals = _add_signal_context(recent_signals, winrate)
 
+    # Sparkline: laatste signalen op een rij, oudste eerst zodat het als
+    # tijdlijn leest. Puur signaal-geschiedenis (niet oefentrades, dat zijn
+    # geen signalen), alleen om in één oogopslag te zien hoe vaak deze coin
+    # recent hoog vertrouwen gaf.
+    sparkline = list(reversed(repo.list_recent_signals(symbol, limit=14)))
+
     return templates.TemplateResponse(request, "coin.html", {
         "user": user,
         "symbol": symbol,
@@ -454,6 +470,7 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "images": repo.list_recent_images_for_coin(symbol),
         "open_trades": open_trades,
         "recent_signals": recent_signals,
+        "sparkline": sparkline,
         "coins": repo.list_coins(),
     })
 

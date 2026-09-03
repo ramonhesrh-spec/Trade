@@ -6,6 +6,13 @@
   --panel-hover: #182021;
   --border: #232d2f;
   --border-strong: #34423f;
+  /* --border-strong meet maar 1.75:1 tegen de paneelkleuren, ruim onder de
+     3:1 die WCAG 1.4.11 eist voor de rand van een bedienbaar element (een
+     invoerveld, een knop). Voor decoratieve randen (kaarten, tabellen)
+     is dat prima, dat is geen "boundary" die je moet kunnen onderscheiden
+     om te kunnen bedienen. Voor invoervelden en knoppen wel: die krijgen
+     deze net iets lichtere variant, gemeten op 3.1-3.3:1. */
+  --border-interactive: #556c67;
   --text: #eaf1f0;
   --text-dim: #b7c4c2;
   --muted: #7d8c8a;
@@ -100,9 +107,17 @@ a { color: var(--accent); }
   text-decoration: none; white-space: nowrap;
 }
 .coin-menu-list a:hover { background: var(--panel-hover); color: var(--accent); }
+.shortcuts-hint {
+  width: 22px; height: 22px; padding: 0; border-radius: 50%; flex-shrink: 0;
+  background: transparent; border: 1px solid var(--border-interactive); color: var(--muted);
+  font-size: 12px; font-family: var(--mono); line-height: 1;
+}
+.shortcuts-hint:hover { color: var(--text); border-color: var(--muted); background: var(--panel-hover); }
+@media (max-width: 560px) { .shortcuts-hint { display: none; } }
+
 .logout-form { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .logout-form button {
-  background: transparent; border: 1px solid var(--border-strong); color: var(--text-dim);
+  background: transparent; border: 1px solid var(--border-interactive); color: var(--text-dim);
   padding: 6px 14px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 500;
 }
 .logout-form button:hover { color: var(--text); border-color: var(--muted); background: var(--panel-hover); }
@@ -234,6 +249,60 @@ main h3 { font-size: 15px; gap: 8px; }
 }
 .winrate-bar > div { height: 100%; background: var(--accent); }
 
+/* Risicogauge: totaal risico van alle genomen open trades tegen je
+   portfolio, in een oogopslag. Kleurt om bij een hoger percentage,
+   niet omdat het mooier is maar omdat het dan echt uitkijken is. */
+.risk-gauge { margin: 10px 0 20px; }
+.risk-gauge-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12.5px; margin-bottom: 6px; }
+.risk-gauge-bar { height: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+.risk-gauge-fill { height: 100%; background: var(--accent); transition: width .3s ease; }
+.risk-gauge-fill.risk-mid { background: #f2b03e; }
+.risk-gauge-fill.risk-high { background: var(--red); }
+
+/* Sparkline: recente signalen in één rij, hoogte voor vertrouwen, kleur
+   voor richting. Geen vervanging voor de echte tabel, puur een snel
+   patroon herkennen, daarom ook geen tekst die alleen hierin staat. */
+.sparkline { display: flex; align-items: center; gap: 10px; margin: 2px 0 18px; }
+.spark-bars { display: flex; align-items: flex-end; gap: 3px; height: 22px; flex-shrink: 0; }
+.spark-bar { width: 6px; border-radius: 2px 2px 0 0; background: var(--border-strong); cursor: default; }
+.spark-bar.spark-hoog { height: 22px; }
+.spark-bar.spark-laag { height: 11px; opacity: 0.75; }
+.spark-bar.spark-long { background: var(--green); }
+.spark-bar.spark-short { background: var(--red); }
+.sparkline-label { font-size: 11.5px; }
+
+/* Sneltoetsen-overzicht: eenvoudig dialoogje, geen focus-trap library.
+   Sluit via Escape, de kruisknop, of een klik op de achtergrond. */
+.shortcuts-help {
+  position: fixed; inset: 0; z-index: 50; display: none; align-items: center; justify-content: center;
+  background: rgba(10, 14, 15, 0.7); padding: 20px;
+}
+/* [hidden] heeft dezelfde specificiteit (0,1,0) als een gewone class-regel,
+   dus de laatst geladen stylesheet-regel wint, niet per se het hidden-
+   attribuut. :not([hidden]) heeft een hogere specificiteit (0,2,0) en wint
+   altijd, dus het paneel blokkeert nooit onzichtbaar de rest van de site
+   wanneer het dicht hoort te zijn. */
+.shortcuts-help:not([hidden]) { display: flex; }
+.shortcuts-panel {
+  background: var(--panel); border: 1px solid var(--border-strong); border-radius: var(--radius);
+  box-shadow: var(--shadow-md); padding: 22px 24px; width: 320px; max-width: calc(100vw - 40px);
+}
+.shortcuts-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.shortcuts-head h2 { font-size: 15px; margin: 0; }
+.shortcuts-close {
+  background: transparent; border: none; color: var(--muted); font-size: 20px; line-height: 1;
+  padding: 2px 6px; cursor: pointer;
+}
+.shortcuts-close:hover { color: var(--text); background: var(--panel-hover); }
+.shortcuts-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 7px 0; font-size: 13px; color: var(--text-dim); }
+.shortcuts-keys { display: flex; gap: 4px; flex-shrink: 0; }
+.shortcuts-row kbd {
+  font-family: var(--mono); font-size: 11.5px; background: var(--bg-elevated); color: var(--text);
+  border: 1px solid var(--border-interactive); border-radius: 4px; padding: 2px 6px; min-width: 18px;
+  text-align: center; display: inline-block;
+}
+.shortcuts-note { font-size: 11.5px; margin: 10px 0 0; line-height: 1.5; }
+
 .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: var(--radius); }
 table.signals { width: 100%; border-collapse: collapse; margin-top: 12px; }
 .table-scroll table.signals { margin-top: 0; border: none; }
@@ -309,7 +378,7 @@ form.inline-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: w
 form.inline-form label { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); gap: 5px; font-weight: 500; }
 
 input, select, button {
-  background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border-strong);
+  background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border-interactive);
   border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px;
   font-family: inherit; transition: border-color .15s, box-shadow .15s;
   -webkit-appearance: none; -moz-appearance: none; appearance: none;
