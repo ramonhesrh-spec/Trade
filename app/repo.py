@@ -12,14 +12,25 @@ from app import config, db
 # Berichten
 # ---------------------------------------------------------------------------
 
-def insert_message(raw_text: str, image_paths: list[str]) -> int:
+def insert_message(raw_text: str, image_paths: list[str], discord_user_id: Optional[str] = None) -> int:
     with db.session() as conn:
         cur = conn.execute(
-            """INSERT INTO messages (received_at, raw_text, has_image, image_paths)
-               VALUES (?, ?, ?, ?)""",
-            (db.now_iso(), raw_text, int(bool(image_paths)), json.dumps(image_paths)),
+            """INSERT INTO messages (received_at, raw_text, has_image, image_paths, discord_user_id)
+               VALUES (?, ?, ?, ?, ?)""",
+            (db.now_iso(), raw_text, int(bool(image_paths)), json.dumps(image_paths), discord_user_id),
         )
         return cur.lastrowid
+
+
+def is_first_message_from(discord_user_id: str, exclude_message_id: int) -> bool:
+    """True als er, dit bericht niet meegerekend, nog geen eerder bericht van
+    deze Discord gebruiker binnenkwam. Bepaalt of het welkomstbericht gaat."""
+    with db.session() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM messages WHERE discord_user_id = ? AND id != ? LIMIT 1",
+            (discord_user_id, exclude_message_id),
+        ).fetchone()
+        return row is None
 
 
 def last_message_received_at() -> Optional[str]:

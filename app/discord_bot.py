@@ -19,6 +19,16 @@ logger = logging.getLogger("discord_bot")
 
 MessageHandler = Callable[[int, str, list[str]], Awaitable[None]]
 
+WELCOME_MESSAGE = (
+    "Welkom bij HesPulse.\n\n"
+    "Stuur hier een analyse door, tekst of screenshot, zoals je net deed. "
+    "Elk bericht wordt gelezen en getoetst tegen vaste technische regels, "
+    "los van wat de analyse zelf beweert.\n\n"
+    f"Wil je de uitkomst zien, met stop loss, take profit en je eigen "
+    f"resultaat? Maak een gratis dashboard account op {config.DASHBOARD_URL}/registreer.\n\n"
+    f"{config.DISCLAIMER}"
+)
+
 
 def _effective_content(message: discord.Message) -> str:
     """Discord's 'doorsturen' knop levert een leeg message.content op, de
@@ -61,7 +71,15 @@ class DMListenerBot(discord.Client):
 
         # Late import om circulaire import met signal_processor te voorkomen.
         from app import repo
-        message_id = repo.insert_message(content, image_paths)
+        discord_user_id = str(message.author.id)
+        message_id = repo.insert_message(content, image_paths, discord_user_id=discord_user_id)
+
+        if repo.is_first_message_from(discord_user_id, exclude_message_id=message_id):
+            try:
+                await message.channel.send(WELCOME_MESSAGE)
+                logger.info("Welkomstbericht verstuurd naar %s", message.author)
+            except Exception:
+                logger.exception("Welkomstbericht naar %s kon niet verstuurd worden", message.author)
 
         if self.on_dm is not None:
             try:

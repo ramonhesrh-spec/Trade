@@ -53,6 +53,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "plain_explanation" not in existing:
         conn.execute("ALTER TABLE signals ADD COLUMN plain_explanation TEXT")
 
+    existing_messages = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+    if "discord_user_id" not in existing_messages:
+        conn.execute("ALTER TABLE messages ADD COLUMN discord_user_id TEXT")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_discord_user_id ON messages(discord_user_id)")
+
     existing_journal = {row["name"] for row in conn.execute("PRAGMA table_info(journal_entries)")}
     if "stop_loss_override" not in existing_journal:
         conn.execute("ALTER TABLE journal_entries ADD COLUMN stop_loss_override REAL")
