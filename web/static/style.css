@@ -152,6 +152,51 @@ a { color: var(--accent); }
 }
 .topbar-watermark svg { height: 100%; width: 50%; flex-shrink: 0; }
 @keyframes watermark-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+
+/* Achtergrondlaag voor de hele pagina, achter alle content: drie zachte,
+   langzaam driftende gloed-cirkels in de merkkleuren, plus een grote,
+   flauwe ECG-lijn die over de pagina scrolt. Zelfde motief als het
+   watermerk in de topbar, nu uitgevergroot naar de hele pagina, in plaats
+   van een los, nieuw effect. Snelheid van de lijn is gekoppeld aan
+   --ambient-scroll-duration (base.html): hoe recenter een echt bericht
+   binnenkwam, hoe levendiger de achtergrond meebeweegt, geen losstaande
+   decoratie. Vast achter de content (position: fixed, z-index: -1),
+   nooit invloed op klikbaarheid of leesbaarheid van cijfers erboven. */
+.page-ambient { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
+.ambient-glow {
+  position: absolute; width: 46vw; height: 46vw; max-width: 620px; max-height: 620px;
+  border-radius: 50%; filter: blur(90px); will-change: transform;
+}
+.glow-accent { background: var(--accent); top: -14%; left: -10%; opacity: 0.10; animation: ambient-drift-1 32s ease-in-out infinite; }
+.glow-green { background: var(--green); bottom: -16%; right: -8%; opacity: 0.08; animation: ambient-drift-2 40s ease-in-out infinite; }
+.glow-red {
+  background: var(--red); top: 38%; right: 18%; width: 30vw; height: 30vw;
+  opacity: 0.045; animation: ambient-drift-3 46s ease-in-out infinite;
+}
+@keyframes ambient-drift-1 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(6vw, 8vh) scale(1.12); }
+}
+@keyframes ambient-drift-2 {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  50% { transform: translate(-7vw, -6vh) scale(1.08); }
+}
+@keyframes ambient-drift-3 {
+  0%, 100% { transform: translate(0, 0) scale(1); opacity: 0.045; }
+  50% { transform: translate(-4vw, 5vh) scale(1.15); opacity: 0.075; }
+}
+.ambient-pulse-line {
+  position: absolute; left: 0; top: 60%; height: 160px; width: 200%;
+  display: flex; opacity: 0.04;
+  animation: watermark-scroll var(--ambient-scroll-duration, 46s) linear infinite;
+}
+.ambient-pulse-line svg { height: 100%; width: 50%; flex-shrink: 0; }
+@media (max-width: 700px) {
+  .ambient-glow { width: 70vw; height: 70vw; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ambient-glow, .ambient-pulse-line { animation: none; }
+}
 .topbar nav { display: flex; align-items: center; gap: 18px; margin-top: 10px; }
 .topbar nav a {
   color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 500;
