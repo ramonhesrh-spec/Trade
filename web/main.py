@@ -195,6 +195,16 @@ def _add_signal_context(entries: list[dict], winrate: dict) -> list[dict]:
     return entries
 
 
+def _position_size(entry: dict) -> Optional[float]:
+    """Eigen positiegrootte als die is ingevuld, anders de berekende waarde
+    op basis van risicobedrag en stop-afstand."""
+    if entry.get("position_size_override") is not None:
+        return entry["position_size_override"]
+    if entry["risk_eur"] and entry["price"] and entry["stop_loss"]:
+        return risk.compute_position_size(entry["risk_eur"], entry["price"], entry["stop_loss"])
+    return None
+
+
 async def _enrich_open_positions(entries: list[dict]) -> list[dict]:
     """Vult elke open positie (entry_price al ingevuld) aan met de actuele
     prijs en het nog niet gerealiseerde resultaat. Eén prijs-opvraag per
@@ -203,10 +213,7 @@ async def _enrich_open_positions(entries: list[dict]) -> list[dict]:
     netwerkcall de hele server voor iedereen tegelijk."""
     price_cache: dict[str, Optional[float]] = {}
     for entry in entries:
-        entry["position_size"] = (
-            risk.compute_position_size(entry["risk_eur"], entry["price"], entry["stop_loss"])
-            if entry["risk_eur"] and entry["price"] and entry["stop_loss"] else None
-        )
+        entry["position_size"] = _position_size(entry)
         entry["current_price"] = None
         entry["pnl_eur"] = None
         entry["pnl_pct"] = None
@@ -244,10 +251,7 @@ def _filter_journal(all_entries: list[dict], status: str) -> list[dict]:
 async def dashboard(request: Request, status: str = "alle", user: dict = Depends(require_login)):
     all_entries = repo.list_journal(user["id"], status=None)
     for entry in all_entries:
-        entry["position_size"] = (
-            risk.compute_position_size(entry["risk_eur"], entry["price"], entry["stop_loss"])
-            if entry["risk_eur"] and entry["price"] and entry["stop_loss"] else None
-        )
+        entry["position_size"] = _position_size(entry)
     # Oefentrades zijn handmatig aangemaakt om te oefenen, geen echt signaal.
     # Die blijven apart, tellen niet mee in de winrate en staan niet tussen
     # de echte meldingen, anders lijkt het net of het een echt signaal was.
@@ -417,6 +421,31 @@ async def delete_practice_trade(
     dus 'weggooien' verwijdert de regel echt, anders dan de 'Terugzetten'
     knop bij een echte trade."""
     repo.delete_practice_entry(entry_id, user["id"])
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+def _parse_optional_float(raw: str) -> Optional[float]:
+    raw = raw.strip()
+    return float(raw) if raw else None
+
+
+@app.post("/journal/{entry_id}/levels")
+async def update_journal_levels(
+    entry_id: int,
+    stop_loss: str = Form(""),
+    take_profit: str = Form(""),
+    position_size: str = Form(""),
+    user: dict = Depends(require_login),
+):
+    """Eigen stop loss, take profit en/of positiegrootte op een open trade.
+    Leeg gelaten veld zet de eigen waarde weer terug op de berekende
+    standaard in plaats van hem verplicht te maken."""
+    repo.update_journal_levels(
+        entry_id, user["id"],
+        stop_loss=_parse_optional_float(stop_loss),
+        take_profit=_parse_optional_float(take_profit),
+        position_size=_parse_optional_float(position_size),
+    )
     return RedirectResponse(url="/dashboard", status_code=303)
 
 

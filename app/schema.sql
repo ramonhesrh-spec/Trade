@@ -94,6 +94,9 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     note TEXT,
     level_alert_sent INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL,
+    stop_loss_override REAL,
+    take_profit_override REAL,
+    position_size_override REAL,
     UNIQUE (signal_id, user_id)
 );
 

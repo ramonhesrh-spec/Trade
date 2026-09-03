@@ -51,6 +51,14 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "atr_avg20" not in existing:
         conn.execute("ALTER TABLE signals ADD COLUMN atr_avg20 REAL")
 
+    existing_journal = {row["name"] for row in conn.execute("PRAGMA table_info(journal_entries)")}
+    if "stop_loss_override" not in existing_journal:
+        conn.execute("ALTER TABLE journal_entries ADD COLUMN stop_loss_override REAL")
+    if "take_profit_override" not in existing_journal:
+        conn.execute("ALTER TABLE journal_entries ADD COLUMN take_profit_override REAL")
+    if "position_size_override" not in existing_journal:
+        conn.execute("ALTER TABLE journal_entries ADD COLUMN position_size_override REAL")
+
 
 def get_setting(key: str, default: str = "") -> str:
     with session() as conn:

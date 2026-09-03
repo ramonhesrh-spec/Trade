@@ -101,6 +101,39 @@
   setInterval(refresh, 20000);
 })();
 
+// Exit-tijd vult zichzelf in met het huidige moment, en de "nu"-knop zet de
+// laatst bekende live koers in het exit-prijsveld. Een datum en tijd met de
+// hand intikken op een telefoon is omslachtig, terwijl het op het moment
+// dat je een trade sluit vrijwel altijd toch "nu" is.
+(function () {
+  function pad(n) { return String(n).padStart(2, "0"); }
+  function nowLocal() {
+    const d = new Date();
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function prefillExitTimes(scope) {
+    scope.querySelectorAll('.close-form input[name="exit_time"]').forEach(function (el) {
+      if (!el.value) el.value = nowLocal();
+    });
+  }
+
+  prefillExitTimes(document);
+  window.hpPrefillExitTimes = prefillExitTimes;
+
+  document.addEventListener("click", function (e) {
+    const btn = e.target.closest("[data-fill-price]");
+    if (!btn) return;
+    const id = btn.getAttribute("data-fill-price");
+    const priceEl = document.querySelector(`[data-price="${id}"]`);
+    const form = btn.closest(".close-form");
+    const input = form ? form.querySelector('input[name="exit_price"]') : null;
+    if (priceEl && input && priceEl.textContent !== "-") {
+      input.value = priceEl.textContent;
+    }
+  });
+})();
+
 // Deel-knop op een gesloten trade: via het native deelmenu als de browser
 // dat ondersteunt, anders naar het klembord, met korte bevestiging in de
 // knoptekst zelf zodat je weet dat het gelukt is.
@@ -140,7 +173,7 @@
   function isTracked(form) {
     return (
       form instanceof HTMLFormElement &&
-      form.matches(".status-form, .close-form, .reset-form") &&
+      form.matches(".status-form, .close-form, .reset-form, .levels-form") &&
       form.closest("#open-nu-body")
     );
   }
@@ -167,6 +200,7 @@
       const fresh = doc.getElementById("open-nu-body");
       const current = document.getElementById("open-nu-body");
       if (!fresh || !current) throw new Error("open-nu-body niet gevonden in respons");
+      if (window.hpPrefillExitTimes) window.hpPrefillExitTimes(fresh);
 
       current.style.transition = "opacity .16s ease";
       current.style.opacity = "0";

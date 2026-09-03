@@ -59,8 +59,27 @@
           <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
         </p>
         <p class="muted advice-text">{{ e.advice }}</p>
+        <details class="confidence-detail levels-detail js-accordion">
+          <summary class="confidence-why">SL, TP of grootte aanpassen</summary>
+          <form action="/journal/{{ e.id }}/levels" method="post" class="levels-form">
+            <label>Stop loss
+              <input type="number" step="any" name="stop_loss" value="{{ '%.4f'|format(e.stop_loss) if e.stop_loss else '' }}">
+            </label>
+            <label>Take profit
+              <input type="number" step="any" name="take_profit" value="{{ '%.4f'|format(e.take_profit) if e.take_profit else '' }}">
+            </label>
+            <label>Grootte ({{ e.coin }})
+              <input type="number" step="any" name="position_size"
+                     value="{{ '%.6f'|format(e.position_size_override) if e.position_size_override is not none else '' }}"
+                     placeholder="{{ '%.6f'|format(e.position_size) if e.position_size else 'auto' }}">
+            </label>
+            <button type="submit">Opslaan</button>
+          </form>
+          <p class="muted levels-hint">Leeg laten zet een veld terug op de berekende standaard.</p>
+        </details>
         <form action="/journal/{{ e.id }}/close" method="post" class="close-form">
           <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
+          <button type="button" class="button-link fill-price-btn" data-fill-price="{{ e.id }}">nu</button>
           <input type="datetime-local" name="exit_time" required>
           <button type="submit">Sluiten</button>
         </form>
@@ -141,8 +160,27 @@
         <button type="submit" class="button-reset">Weggooien</button>
       </form>
       {% else %}
+      <details class="confidence-detail levels-detail js-accordion">
+        <summary class="confidence-why">SL, TP of grootte aanpassen</summary>
+        <form action="/journal/{{ e.id }}/levels" method="post" class="levels-form">
+          <label>Stop loss
+            <input type="number" step="any" name="stop_loss" value="{{ '%.4f'|format(e.stop_loss) if e.stop_loss else '' }}">
+          </label>
+          <label>Take profit
+            <input type="number" step="any" name="take_profit" value="{{ '%.4f'|format(e.take_profit) if e.take_profit else '' }}">
+          </label>
+          <label>Grootte ({{ e.coin }})
+            <input type="number" step="any" name="position_size"
+                   value="{{ '%.6f'|format(e.position_size_override) if e.position_size_override is not none else '' }}"
+                   placeholder="{{ '%.6f'|format(e.position_size) if e.position_size else 'auto' }}">
+          </label>
+          <button type="submit">Opslaan</button>
+        </form>
+        <p class="muted levels-hint">Leeg laten zet een veld terug op de berekende standaard.</p>
+      </details>
       <form action="/journal/{{ e.id }}/close" method="post" class="close-form">
         <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
+        <button type="button" class="button-link fill-price-btn" data-fill-price="{{ e.id }}">nu</button>
         <input type="datetime-local" name="exit_time" required>
         <button type="submit">Sluiten</button>
       </form>

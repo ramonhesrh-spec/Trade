@@ -341,8 +341,12 @@ _JOURNAL_SELECT = """
         je.exit_price AS exit_price, je.exit_time AS exit_time,
         je.result_eur AS result_eur, je.result_pct AS result_pct,
         je.note AS note,
+        je.position_size_override AS position_size_override,
         s.coin AS coin, s.direction AS direction, s.category AS category,
-        s.price AS price, s.stop_loss AS stop_loss, s.take_profit AS take_profit,
+        s.price AS price,
+        COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss,
+        COALESCE(je.take_profit_override, s.take_profit) AS take_profit,
+        s.stop_loss AS stop_loss_default, s.take_profit AS take_profit_default,
         s.confidence AS confidence, s.technical_confirmed AS technical_confirmed,
         s.rsi AS rsi, s.ema9 AS ema9, s.ema21 AS ema21,
         s.macd AS macd, s.macd_signal AS macd_signal, s.volume_ratio AS volume_ratio,
@@ -518,6 +522,25 @@ def update_journal_note(entry_id: int, user_id: int, note: str) -> None:
         )
 
 
+def update_journal_levels(
+    entry_id: int, user_id: int,
+    stop_loss: Optional[float], take_profit: Optional[float], position_size: Optional[float],
+) -> None:
+    """Eigen stop loss, take profit en/of positiegrootte op een open trade,
+    los van wat het signaal zelf berekende. Leeg gelaten in het formulier
+    betekent None hier, en dat zet de override weer terug op de berekende
+    standaardwaarde (COALESCE in _JOURNAL_SELECT valt dan terug op het
+    signaal, position_size_override op None valt terug op de berekening
+    in web/main.py)."""
+    with db.session() as conn:
+        conn.execute(
+            """UPDATE journal_entries
+               SET stop_loss_override = ?, take_profit_override = ?, position_size_override = ?
+               WHERE id = ? AND user_id = ?""",
+            (stop_loss, take_profit, position_size, entry_id, user_id),
+        )
+
+
 def list_open_entries_with_levels() -> list[dict]:
     """Alle open logboekregels (eigen entry ingevuld, nog niet gesloten, nog
     geen seintje verstuurd), van alle gebruikers, met de coin, richting,
@@ -528,7 +551,8 @@ def list_open_entries_with_levels() -> list[dict]:
         rows = conn.execute(
             """SELECT je.id AS id, je.user_id AS user_id, je.entry_price AS entry_price,
                       s.coin AS coin, s.direction AS direction,
-                      s.stop_loss AS stop_loss, s.take_profit AS take_profit,
+                      COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss,
+                      COALESCE(je.take_profit_override, s.take_profit) AS take_profit,
                       u.username AS username, u.telegram_chat_id AS telegram_chat_id
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id

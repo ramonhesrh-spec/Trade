@@ -581,6 +581,19 @@ button:hover { background: var(--accent-dark); border-color: var(--accent-dark);
 .note-form input { width: 140px; }
 .actions { white-space: nowrap; }
 
+.close-form { flex-wrap: wrap; }
+.fill-price-btn { flex: 0 0 auto; padding: 8px 10px; font-size: 12px; }
+
+.levels-detail summary { margin-top: 6px; }
+.levels-form { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 6px; }
+.levels-form label {
+  display: flex; flex-direction: column; gap: 3px; font-size: 11px;
+  color: var(--muted); flex: 1; min-width: 76px;
+}
+.levels-form input { width: 100%; }
+.levels-form button { flex: 0 0 auto; }
+.levels-hint { font-size: 11px; margin: 4px 0 0; }
+
 .login-body {
   display: flex; align-items: center; justify-content: center;
   min-height: 100vh; min-height: 100dvh; background: var(--bg); padding: 20px 0;
