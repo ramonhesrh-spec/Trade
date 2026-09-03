@@ -69,3 +69,13 @@ def fetch_last_price(coin: str) -> float:
     symbol = to_symbol(coin)
     ticker = _with_retry(f"fetch_ticker {symbol}", exchange.fetch_ticker, symbol)
     return float(ticker["last"])
+
+
+def fetch_24h_quote_volume(coin: str) -> float:
+    """Handelsvolume van de laatste 24 uur in quote-valuta (meestal USDT),
+    voor de liquiditeitscheck: een technisch perfecte setup op een dun
+    verhandelde coin is in de praktijk niet fatsoenlijk uit te voeren."""
+    exchange = get_exchange()
+    symbol = to_symbol(coin)
+    ticker = _with_retry(f"fetch_ticker {symbol}", exchange.fetch_ticker, symbol)
+    return float(ticker["quoteVolume"])

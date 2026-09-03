@@ -218,6 +218,34 @@ verzoek om de trade zelf te sluiten in het dashboard. Er wordt niets
 automatisch gesloten, en je krijgt niet elke 15 minuten opnieuw hetzelfde
 seintje.
 
+### Uitgebreide technische factoren (optioneel)
+
+Naast de vier basisfactoren (trend, momentum, RSI, volume) kan het systeem
+zes extra factoren toetsen: trendsterkte (ADX), volatiliteit (ATR t.o.v.
+zijn eigen gemiddelde), BTC-trend als filter voor andere coins, bevestiging
+op het 1 uur tijdsbestek naast de 4 uur, RSI/prijs-divergentie, en een
+liquiditeitsgrens (24u handelsvolume). Trend, Momentum, 1u bevestiging en
+BTC-trend meten in de kern allemaal "is er een trend" en tellen daarom als
+groep: 3 van de 4 moet kloppen. De rest blijft allemaal apart hard vereist.
+
+Staat standaard uit. De drempels (ADX 20, ATR moet stijgen, 2 miljoen
+volume) zijn leerboek-standaarden, nog niet getoetst aan je eigen
+signaalgeschiedenis. Draai eerst het backtest-script om te zien hoe streng
+dat in de praktijk uitpakt voor jouw eigen signalen:
+
+```bash
+python3 scripts/backtest_factors.py --limit 50
+```
+
+Bevalt het beeld, zet dan in `.env`:
+
+```
+ENABLE_ADVANCED_FACTORS=true
+```
+
+en herstart `crypto-bot`. Terug naar de basisversie kan altijd door de
+regel weer op `false` te zetten of te verwijderen.
+
 ### HTTPS met Let's Encrypt
 
 ```bash

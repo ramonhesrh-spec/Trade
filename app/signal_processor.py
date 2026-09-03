@@ -8,7 +8,7 @@ import asyncio
 import logging
 import time
 
-from app import coinlist, exchange, indicators, repo, risk, telegram_notify
+from app import coinlist, config, exchange, indicators, repo, risk, telegram_notify
 from app.anthropic_interpret import Interpretation, interpret_message
 
 logger = logging.getLogger("signal_processor")
@@ -101,6 +101,47 @@ def _build_context_note(coin: str, direction: str) -> str:
             f"{latest['direction']}, dit signaal wijkt daarvan af ({when}).")
 
 
+async def compute_advanced_extra_factors(coin: str, direction: str, df) -> list[tuple[str, bool, str]]:
+    """Berekent de losse checks voor de uitgebreide factorenset (BTC-trend,
+    1u bevestiging, divergentie, liquiditeit). Elke check faalt individueel
+    en "fail-closed" als de data ervoor niet op te halen is: beter een
+    factor die ten onrechte op ✗ staat door een netwerkhapering, dan een
+    hoog-vertrouwen melding die stilzwijgend op onvolledige data steunt."""
+    factors: list[tuple[str, bool, str]] = []
+
+    if coin.upper() != "BTC":
+        try:
+            btc_df = await asyncio.to_thread(exchange.fetch_ohlcv, "BTC")
+            btc_ind = indicators.compute_indicators(btc_df)
+            factors.append(indicators.check_btc_trend(direction, btc_ind))
+        except Exception:
+            logger.exception("BTC-trend kon niet berekend worden")
+            factors.append(("BTC-trend", False, "kon niet opgehaald worden, telt als niet bevestigd"))
+
+    try:
+        df_1h = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1h")
+        ind_1h = indicators.compute_indicators(df_1h)
+        factors.append(indicators.check_1h_trend(direction, ind_1h))
+    except Exception:
+        logger.exception("1u bevestiging voor %s kon niet berekend worden", coin)
+        factors.append(("1u bevestiging", False, "kon niet opgehaald worden, telt als niet bevestigd"))
+
+    try:
+        factors.append(indicators.check_divergence(df, direction))
+    except Exception:
+        logger.exception("Divergentiecheck voor %s kon niet berekend worden", coin)
+        factors.append(("Divergentie", False, "kon niet berekend worden, telt als niet bevestigd"))
+
+    try:
+        quote_volume = await asyncio.to_thread(exchange.fetch_24h_quote_volume, coin)
+        factors.append(indicators.check_liquidity(quote_volume))
+    except Exception:
+        logger.exception("Liquiditeitscheck voor %s kon niet berekend worden", coin)
+        factors.append(("Liquiditeit", False, "kon niet opgehaald worden, telt als niet bevestigd"))
+
+    return factors
+
+
 async def process_day_trading_signal(message_id: int, interp: Interpretation) -> None:
     tracked = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
     if not tracked:
@@ -111,7 +152,14 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     df = await asyncio.to_thread(exchange.fetch_ohlcv, interp.coin)
     ind = indicators.compute_indicators(df)
     swing_low, swing_high = indicators.swing_levels(df)
-    confirmed, reason = indicators.confirms_direction(ind, interp.direction)
+
+    extra_factors = None
+    if config.ENABLE_ADVANCED_FACTORS:
+        extra_factors = await compute_advanced_extra_factors(interp.coin, interp.direction, df)
+
+    confirmed, reason = indicators.confirms_direction(
+        ind, interp.direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
+    )
     stop_take = risk.compute_stop_take(
         interp.direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high,
     )
@@ -132,6 +180,8 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         "ema9": ind.ema9,
         "ema21": ind.ema21,
         "atr": ind.atr,
+        "atr_avg20": ind.atr_avg20,
+        "adx": ind.adx,
         "technical_confirmed": int(confirmed),
         "confidence": confidence,
         "reason": reason,

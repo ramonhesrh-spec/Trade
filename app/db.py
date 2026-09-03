@@ -46,6 +46,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(signals)")}
     if "is_practice" not in existing:
         conn.execute("ALTER TABLE signals ADD COLUMN is_practice INTEGER NOT NULL DEFAULT 0")
+    if "adx" not in existing:
+        conn.execute("ALTER TABLE signals ADD COLUMN adx REAL")
+    if "atr_avg20" not in existing:
+        conn.execute("ALTER TABLE signals ADD COLUMN atr_avg20 REAL")
 
 
 def get_setting(key: str, default: str = "") -> str:

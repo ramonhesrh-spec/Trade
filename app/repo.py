@@ -233,7 +233,7 @@ def update_user_settings(
 def insert_signal(data: dict) -> int:
     fields = [
         "message_id", "coin", "direction", "category", "price", "rsi", "macd",
-        "macd_signal", "volume_ratio", "ema9", "ema21", "atr",
+        "macd_signal", "volume_ratio", "ema9", "ema21", "atr", "atr_avg20", "adx",
         "technical_confirmed", "confidence", "reason", "stop_loss", "take_profit",
         "context_note", "is_practice",
     ]
@@ -252,6 +252,20 @@ def get_signal(signal_id: int) -> Optional[dict]:
     with db.session() as conn:
         row = conn.execute("SELECT * FROM signals WHERE id = ?", (signal_id,)).fetchone()
         return dict(row) if row else None
+
+
+def list_day_trading_signals_for_backtest(limit: int = 50) -> list[dict]:
+    """Echte (niet-oefen) day trading signalen, meest recent eerst, voor
+    scripts/backtest_factors.py: hoeveel van je eigen historische signalen
+    zouden de nieuwe factoren gehaald hebben."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, coin, direction, created_at FROM signals
+               WHERE category = 'day_trading' AND is_practice = 0
+               ORDER BY created_at DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
 
 
 def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
@@ -290,6 +304,7 @@ def find_open_signal(coin: str, direction: str) -> Optional[dict]:
 def update_signal(signal_id: int, data: dict) -> None:
     fields = [
         "price", "rsi", "macd", "macd_signal", "volume_ratio", "ema9", "ema21", "atr",
+        "atr_avg20", "adx",
         "technical_confirmed", "confidence", "reason", "stop_loss", "take_profit",
         "context_note",
     ]
@@ -319,6 +334,7 @@ _JOURNAL_SELECT = """
         s.confidence AS confidence, s.technical_confirmed AS technical_confirmed,
         s.rsi AS rsi, s.ema9 AS ema9, s.ema21 AS ema21,
         s.macd AS macd, s.macd_signal AS macd_signal, s.volume_ratio AS volume_ratio,
+        s.atr_avg20 AS atr_avg20, s.adx AS adx,
         s.reason AS reason, s.context_note AS context_note, s.created_at AS created_at,
         s.is_practice AS is_practice
     FROM journal_entries je

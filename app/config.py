@@ -25,6 +25,13 @@ EXCHANGE_ID = _get("EXCHANGE_ID", "binance")
 QUOTE_CURRENCY = _get("QUOTE_CURRENCY", "USDT")
 TIMEFRAME = "4h"
 
+# De uitgebreide factoren (ADX, volatiliteit, BTC-trend, 1u bevestiging,
+# divergentie, liquiditeit) staan standaard uit. De drempels zijn
+# leerboek-standaarden, nog niet getoetst aan de eigen signaalgeschiedenis.
+# Draai eerst scripts/backtest_factors.py en zet deze pas aan als dat
+# overzicht laat zien dat de drempels niet bijna alles wegfilteren.
+ENABLE_ADVANCED_FACTORS = _get("ENABLE_ADVANCED_FACTORS", "false").lower() == "true"
+
 # Dashboard accounts staan in de database (tabel users). Open registratie
 # staat aan op /registreer, daarnaast kan een account ook via
 # scripts/create_user.py worden aangemaakt of bijgewerkt.

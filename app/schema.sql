@@ -64,6 +64,8 @@ CREATE TABLE IF NOT EXISTS signals (
     ema9 REAL,
     ema21 REAL,
     atr REAL,
+    atr_avg20 REAL,
+    adx REAL,
     technical_confirmed INTEGER NOT NULL DEFAULT 0,
     confidence TEXT NOT NULL,
     reason TEXT,

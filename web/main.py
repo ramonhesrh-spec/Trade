@@ -20,6 +20,7 @@ from fastapi.templating import Jinja2Templates
 
 from app import advice as advice_module
 from app import config, db, exchange, indicators, repo, risk, security
+from app.signal_processor import compute_advanced_extra_factors
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -410,7 +411,13 @@ async def create_practice_trade(
     df = await asyncio.to_thread(exchange.fetch_ohlcv, symbol)
     ind = indicators.compute_indicators(df)
     swing_low, swing_high = indicators.swing_levels(df)
-    confirmed, reason = indicators.confirms_direction(ind, direction)
+
+    extra_factors = None
+    if config.ENABLE_ADVANCED_FACTORS:
+        extra_factors = await compute_advanced_extra_factors(symbol, direction, df)
+    confirmed, reason = indicators.confirms_direction(
+        ind, direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
+    )
     stop_take = risk.compute_stop_take(direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high)
 
     message_id = repo.insert_message("Handmatige oefentrade", [])
@@ -422,6 +429,7 @@ async def create_practice_trade(
         "message_id": message_id, "coin": symbol, "direction": direction, "category": "oefening",
         "price": ind.price, "rsi": ind.rsi, "macd": ind.macd, "macd_signal": ind.macd_signal,
         "volume_ratio": ind.volume_ratio, "ema9": ind.ema9, "ema21": ind.ema21, "atr": ind.atr,
+        "atr_avg20": ind.atr_avg20, "adx": ind.adx,
         "technical_confirmed": int(confirmed),
         "confidence": "hoog vertrouwen" if confirmed else "laag vertrouwen",
         "reason": reason, "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,
