@@ -60,8 +60,8 @@ LOGIN_LOCKOUT_MINUTES = int(_get("LOGIN_LOCKOUT_MINUTES", "15"))
 # Vaste toelichting, op elk Telegram bericht en onderaan het dashboard.
 DISCLAIMER = "Geen advies. Regels, geen garantie. Jij beslist zelf."
 
-# Voor het welkomstbericht dat de Discord bot terugstuurt bij iemands eerste
-# DM, en voor toekomstige links naar het dashboard vanuit een bot-bericht.
+# Voor het welkomstbericht dat de Telegram bot terugstuurt bij /start, en
+# voor toekomstige links naar het dashboard vanuit een bot-bericht.
 DASHBOARD_URL = _get("DASHBOARD_URL", "https://hespulse.duckdns.org")
 
 # Kraken Pro referral, getoond op de openbare landingspagina.

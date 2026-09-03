@@ -22,17 +22,6 @@ def insert_message(raw_text: str, image_paths: list[str], discord_user_id: Optio
         return cur.lastrowid
 
 
-def is_first_message_from(discord_user_id: str, exclude_message_id: int) -> bool:
-    """True als er, dit bericht niet meegerekend, nog geen eerder bericht van
-    deze Discord gebruiker binnenkwam. Bepaalt of het welkomstbericht gaat."""
-    with db.session() as conn:
-        row = conn.execute(
-            "SELECT 1 FROM messages WHERE discord_user_id = ? AND id != ? LIMIT 1",
-            (discord_user_id, exclude_message_id),
-        ).fetchone()
-        return row is None
-
-
 def last_message_received_at() -> Optional[str]:
     """Tijdstip van het laatst binnengekomen Discord bericht, ongeacht van
     wie. Simpele graadmeter of de bot uberhaupt nog berichten ontvangt."""
