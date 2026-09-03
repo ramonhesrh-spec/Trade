@@ -42,22 +42,31 @@ body {
 
 a { color: var(--accent); }
 
+/* Twee vaste rijen in plaats van één flex-rij die alles tegelijk moet
+   verdelen: brand+uitloggen boven, coinlijst eronder los en met eigen
+   horizontale scroll. Dat blijft kloppen ongeacht schermbreedte en
+   ongeacht hoeveel coins er ooit bijkomen, in plaats van een layout die
+   afhangt van hoeveel er precies op één regel past. */
 .topbar {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  padding: 14px 24px;
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 10;
+  padding: 12px 24px 10px;
 }
-.topbar .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.topbar-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.topbar .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
 .topbar .brand img { height: 26px; width: auto; display: block; }
 .topbar .brand span { font-weight: 700; color: var(--text); font-size: 16px; letter-spacing: -0.01em; }
-.topbar nav { display: flex; gap: 18px; flex: 1; flex-wrap: wrap; }
-.topbar nav a { color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 500; transition: color .15s; }
+.topbar nav {
+  display: flex; gap: 18px; margin-top: 10px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+}
+.topbar nav a {
+  color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 500;
+  white-space: nowrap; flex-shrink: 0; transition: color .15s;
+}
 .topbar nav a:hover { color: var(--accent); }
-.logout-form { display: flex; align-items: center; gap: 12px; }
+.logout-form { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .logout-form button {
   background: transparent; border: 1px solid var(--border-strong); color: var(--text-dim);
   padding: 6px 14px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 500;
@@ -65,14 +74,10 @@ a { color: var(--accent); }
 .logout-form button:hover { color: var(--text); border-color: var(--muted); background: var(--panel-hover); }
 
 @media (max-width: 700px) {
-  .topbar { padding: 8px 14px; gap: 6px; row-gap: 8px; }
+  .topbar { padding: 10px 14px 8px; }
   .topbar .brand img { height: 20px; }
   .topbar .brand span { font-size: 14px; }
-  .topbar nav {
-    order: 3; width: 100%; flex: 0 0 100%; flex-wrap: nowrap;
-    overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 16px;
-  }
-  .topbar nav a { white-space: nowrap; flex-shrink: 0; }
+  .topbar nav { gap: 14px; margin-top: 8px; }
   .logout-form { gap: 8px; }
   .logout-form span.muted { display: none; }
   .logout-form button { padding: 5px 10px; font-size: 12px; }
@@ -355,6 +360,12 @@ main + .footer { border-top: 1px solid var(--border); }
 .screenshot-thumb span { display: block; padding: 4px 8px; font-size: 11px; }
 @media (max-width: 900px) {
   .coin-layout { flex-direction: column; }
+  /* .coin-chart had flex:1 voor de rij-layout op desktop (breedte delen met
+     de screenshot-rail). Zodra flex-direction naar column omschakelt, is
+     dat opeens de verticale as: flex-basis:0 wint dan van de expliciete
+     height, en de grafiek klapt in tot een paar pixels. Terug naar een
+     vaste hoogte zodra het geen rij meer is. */
+  .coin-chart { flex: none; width: 100%; }
   .screenshot-rail { width: 100%; max-height: none; display: flex; gap: 12px; overflow-x: auto; overflow-y: visible; }
   .screenshot-thumb { flex-shrink: 0; width: 160px; margin-bottom: 0; }
 }

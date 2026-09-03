@@ -13,10 +13,16 @@
 </head>
 <body>
 <header class="topbar">
-  <a href="/dashboard" class="brand">
-    <img src="/static/hespulse-logo.svg" alt="HesPulse logo">
-    <span>HesPulse</span>
-  </a>
+  <div class="topbar-top">
+    <a href="/dashboard" class="brand">
+      <img src="/static/hespulse-logo.svg" alt="HesPulse logo">
+      <span>HesPulse</span>
+    </a>
+    <form action="/logout" method="post" class="logout-form">
+      {% if user %}<span class="muted">{{ user.username }}</span>{% endif %}
+      <button type="submit">Uitloggen</button>
+    </form>
+  </div>
   <nav>
     <a href="/dashboard">Dashboard</a>
     {% for c in coins %}
@@ -24,10 +30,6 @@
     {% endfor %}
     <a href="/uitleg">Uitleg</a>
   </nav>
-  <form action="/logout" method="post" class="logout-form">
-    {% if user %}<span class="muted">{{ user.username }}</span>{% endif %}
-    <button type="submit">Uitloggen</button>
-  </form>
 </header>
 <main>
 {% block content %}{% endblock %}
