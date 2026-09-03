@@ -2,8 +2,15 @@
 logboekregels, voor een frisse start. Laat accounts, portfolio-instellingen,
 de gevolgde coinlijst en de website-instellingen ongemoeid.
 
+Zet eerst crypto-bot stil (sudo systemctl stop crypto-bot): komt er tijdens
+het wissen een nieuw Discord bericht binnen, dan botst die nieuwe rij met
+de tabel die net leeggemaakt wordt. Alles gebeurt in één transactie, dus
+bij zo'n botsing wordt automatisch alles teruggedraaid, er raakt nooit iets
+half verwijderd, maar dan moet je dit gewoon nog een keer draaien.
+
 Onomkeerbaar. Draai met: python3 scripts/fresh_start.py
 """
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -38,6 +45,8 @@ def main() -> None:
     print("Accounts, portfolio-bedragen, risicopercentages, Telegram chat ID's, "
           "de gevolgde coinlijst en de website-instellingen blijven gewoon staan.")
     print()
+    print("Zorg dat crypto-bot stilstaat voor je verder gaat: sudo systemctl stop crypto-bot")
+    print()
 
     if sum(counts.values()) == 0:
         print("Er staat al niets, geen actie nodig.")
@@ -48,14 +57,22 @@ def main() -> None:
         print("Geannuleerd, niets verwijderd.")
         return
 
-    with db.session() as conn:
-        conn.execute("DELETE FROM journal_entries")
-        conn.execute("DELETE FROM signals")
-        conn.execute("DELETE FROM source_levels")
-        conn.execute("DELETE FROM trendlines")
-        conn.execute("DELETE FROM messages")
+    try:
+        with db.session() as conn:
+            conn.execute("DELETE FROM journal_entries")
+            conn.execute("DELETE FROM signals")
+            conn.execute("DELETE FROM source_levels")
+            conn.execute("DELETE FROM trendlines")
+            conn.execute("DELETE FROM messages")
+    except sqlite3.IntegrityError:
+        print("\nEr kwam tussendoor een nieuw bericht binnen (crypto-bot draaide nog), "
+              "niets is gewist, alles staat nog precies zoals het was.")
+        print("Draai eerst: sudo systemctl stop crypto-bot")
+        print("En probeer dit script daarna nog een keer.")
+        sys.exit(1)
 
     print("\nGewist. Iedereen begint weer met een leeg dashboard, eigen instellingen blijven staan.")
+    print("Vergeet niet crypto-bot weer te starten: sudo systemctl start crypto-bot")
 
     keep_images = input("Ook de opgeslagen screenshots verwijderen? (ja/nee) [nee]: ").strip().lower()
     if keep_images == "ja":
