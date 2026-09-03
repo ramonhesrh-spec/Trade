@@ -748,14 +748,22 @@ main + .footer { border-top: 1px solid var(--border); }
 .practice-box .inline-form { margin: 0; }
 
 .trendline-toolbar {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 4px;
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;
 }
-.trendline-toolbar .button-link {
-  border: 1px solid var(--border-interactive); border-radius: var(--radius-sm); padding: 6px 10px;
-  text-decoration: none;
+.trendline-draw-btn {
+  background: var(--panel-hover); color: var(--text); border: 1px solid var(--border-interactive);
+  border-radius: var(--radius-sm); padding: 8px 14px; font-weight: 600; font-size: 13px;
 }
-.trendline-toolbar .button-link.is-active { color: var(--accent); border-color: var(--accent); }
-.trendline-hint { font-size: 12px; }
+.trendline-draw-btn:hover { background: var(--accent-bg); border-color: var(--accent); }
+.trendline-draw-btn.is-active {
+  background: var(--accent); border-color: var(--accent); color: #052624;
+}
+.chart-draw-hint {
+  position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 3;
+  background: rgba(10, 14, 15, 0.92); color: var(--accent); border: 1px solid var(--accent);
+  border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 600;
+  white-space: nowrap; pointer-events: none;
+}
 .trendline-list { display: flex; gap: 6px; flex-wrap: wrap; }
 .trendline-chip {
   display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-dim);

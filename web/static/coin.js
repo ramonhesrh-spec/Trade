@@ -220,6 +220,7 @@
       drawBtn.textContent = "+ Lijn tekenen";
       container.classList.remove("is-drawing");
       setHint(null);
+      candleSeries.setMarkers([]);
     }
 
     function drawLine(t) {
@@ -281,7 +282,13 @@
 
       if (!pendingPoint) {
         pendingPoint = { time: param.time, value: price };
-        setHint("Klik het tweede punt van de lijn");
+        // Direct zichtbare bevestiging op de grafiek zelf dat de eerste klik
+        // geregistreerd is, niet alleen een tekstwijziging boven de grafiek
+        // die makkelijk over het hoofd gezien wordt.
+        candleSeries.setMarkers([{
+          time: param.time, position: "inBar", color: "#c084fc", shape: "circle", text: "1",
+        }]);
+        setHint("Punt 1 gezet. Klik nu het tweede punt van de lijn.");
         return;
       }
 
