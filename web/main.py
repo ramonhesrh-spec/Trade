@@ -19,7 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import advice as advice_module
-from app import config, db, exchange, indicators, repo, risk, security
+from app import config, db, exchange, explain, indicators, repo, risk, security
 from app.signal_processor import compute_advanced_extra_factors
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -487,6 +487,12 @@ async def create_practice_trade(
     )
     stop_take = risk.compute_stop_take(direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high)
 
+    confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"
+    plain_explanation = await asyncio.to_thread(
+        explain.explain_signal, symbol, direction, confidence, reason,
+        ind.price, stop_take.stop_loss, stop_take.take_profit,
+    )
+
     message_id = repo.insert_message("Handmatige oefentrade", [])
     repo.mark_message_processed(
         message_id, symbol, direction, "oefening", False,
@@ -498,9 +504,9 @@ async def create_practice_trade(
         "volume_ratio": ind.volume_ratio, "ema9": ind.ema9, "ema21": ind.ema21, "atr": ind.atr,
         "atr_avg20": ind.atr_avg20, "adx": ind.adx,
         "technical_confirmed": int(confirmed),
-        "confidence": "hoog vertrouwen" if confirmed else "laag vertrouwen",
+        "confidence": confidence,
         "reason": reason, "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,
-        "context_note": None, "is_practice": 1,
+        "context_note": None, "is_practice": 1, "plain_explanation": plain_explanation or None,
     })
     risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
     entry_id = repo.create_journal_entry(signal_id, user["id"], risk_eur)

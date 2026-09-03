@@ -8,7 +8,7 @@ import asyncio
 import logging
 import time
 
-from app import coinlist, config, exchange, indicators, repo, risk, telegram_notify
+from app import coinlist, config, exchange, explain, indicators, repo, risk, telegram_notify
 from app.anthropic_interpret import Interpretation, interpret_message
 
 logger = logging.getLogger("signal_processor")
@@ -167,6 +167,11 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
 
     confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"
 
+    plain_explanation = await asyncio.to_thread(
+        explain.explain_signal, interp.coin, interp.direction, confidence, reason,
+        ind.price, stop_take.stop_loss, stop_take.take_profit,
+    )
+
     signal_data = {
         "message_id": message_id,
         "coin": interp.coin,
@@ -188,6 +193,7 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         "stop_loss": stop_take.stop_loss,
         "take_profit": stop_take.take_profit,
         "context_note": context_note or None,
+        "plain_explanation": plain_explanation or None,
     }
     existing = repo.find_open_signal(interp.coin, interp.direction)
 

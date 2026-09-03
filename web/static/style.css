@@ -542,6 +542,16 @@ table.signals tbody tr.short td:first-child::before { background: var(--red); }
 .factor-ok { color: var(--green); }
 .factor-bad { color: var(--red); }
 
+/* Uitleg in gewone taal (via Anthropic), boven de rauwe ✓/✗ factoren: een
+   duidelijk ander uiterlijk dan de cijfermatige regels eronder, zodat het
+   meteen leest als "wat betekent dit" in plaats van nog meer rauwe data. */
+.plain-explanation {
+  margin: 0 0 8px; padding: 8px 10px; background: var(--accent-bg);
+  border-left: 2px solid var(--accent); border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  font-size: 12.5px; font-weight: 400; line-height: 1.5; color: var(--text);
+  text-transform: none; letter-spacing: 0;
+}
+
 .long { color: var(--green); font-weight: 600; }
 .short { color: var(--red); font-weight: 600; }
 .hoog { color: var(--accent); font-weight: 600; }

@@ -50,6 +50,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE signals ADD COLUMN adx REAL")
     if "atr_avg20" not in existing:
         conn.execute("ALTER TABLE signals ADD COLUMN atr_avg20 REAL")
+    if "plain_explanation" not in existing:
+        conn.execute("ALTER TABLE signals ADD COLUMN plain_explanation TEXT")
 
     existing_journal = {row["name"] for row in conn.execute("PRAGMA table_info(journal_entries)")}
     if "stop_loss_override" not in existing_journal:

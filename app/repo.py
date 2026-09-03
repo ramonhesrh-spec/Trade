@@ -280,7 +280,7 @@ def insert_signal(data: dict) -> int:
         "message_id", "coin", "direction", "category", "price", "rsi", "macd",
         "macd_signal", "volume_ratio", "ema9", "ema21", "atr", "atr_avg20", "adx",
         "technical_confirmed", "confidence", "reason", "stop_loss", "take_profit",
-        "context_note", "is_practice",
+        "context_note", "is_practice", "plain_explanation",
     ]
     values = [data.get("is_practice", 0) if f == "is_practice" else data.get(f) for f in fields]
     placeholders = ", ".join("?" for _ in fields)
@@ -351,7 +351,7 @@ def update_signal(signal_id: int, data: dict) -> None:
         "price", "rsi", "macd", "macd_signal", "volume_ratio", "ema9", "ema21", "atr",
         "atr_avg20", "adx",
         "technical_confirmed", "confidence", "reason", "stop_loss", "take_profit",
-        "context_note",
+        "context_note", "plain_explanation",
     ]
     values = [data.get(f) for f in fields]
     with db.session() as conn:
@@ -385,7 +385,7 @@ _JOURNAL_SELECT = """
         s.macd AS macd, s.macd_signal AS macd_signal, s.volume_ratio AS volume_ratio,
         s.atr_avg20 AS atr_avg20, s.adx AS adx,
         s.reason AS reason, s.context_note AS context_note, s.created_at AS created_at,
-        s.is_practice AS is_practice
+        s.is_practice AS is_practice, s.plain_explanation AS plain_explanation
     FROM journal_entries je
     JOIN signals s ON s.id = je.signal_id
 """

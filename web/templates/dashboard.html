@@ -40,6 +40,7 @@
       <details class="confidence-detail js-accordion">
         <summary class="confidence-why">waarom {{ e.confidence.split(" ")[0] }}?</summary>
         <div class="reason-popup">
+          {% if e.plain_explanation %}<p class="plain-explanation">{{ e.plain_explanation }}</p>{% endif %}
           {% for factor in e.reason.split(" | ") %}
             <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}">{{ factor }}</p>
           {% endfor %}
@@ -136,6 +137,7 @@
       <details class="confidence-detail js-accordion">
         <summary class="confidence-why">waarom {{ e.confidence.split(" ")[0] }}?</summary>
         <div class="reason-popup">
+          {% if e.plain_explanation %}<p class="plain-explanation">{{ e.plain_explanation }}</p>{% endif %}
           {% for factor in e.reason.split(" | ") %}
             <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}">{{ factor }}</p>
           {% endfor %}
@@ -374,6 +376,7 @@
               <span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>
             </summary>
             <div class="reason-popup">
+              {% if e.plain_explanation %}<p class="plain-explanation">{{ e.plain_explanation }}</p>{% endif %}
               {% for factor in e.reason.split(" | ") %}
                 <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}">{{ factor }}</p>
               {% endfor %}

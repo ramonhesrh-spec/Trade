@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS signals (
     take_profit REAL,
     context_note TEXT,
     is_practice INTEGER NOT NULL DEFAULT 0,
+    plain_explanation TEXT,
     created_at TEXT NOT NULL
 );
 
