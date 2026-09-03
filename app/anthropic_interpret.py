@@ -197,5 +197,4 @@ def interpret_message(raw_text: str, image_paths: Optional[list[str]] = None) ->
     return Interpretation(
         coin=coin, direction=direction, category=category,
         unclear=unclear, reason=reason, source_levels=source_levels,
-        trendlines=trendlines,
     )

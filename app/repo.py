@@ -33,13 +33,17 @@ def last_message_received_at() -> Optional[str]:
 def find_recent_duplicate(raw_text: str, exclude_id: int, hours: int = 24) -> Optional[dict]:
     """Zoekt een eerder bericht met exact dezelfde tekst, al verwerkt binnen
     de laatste uren. Voorkomt een dubbele melding als hetzelfde bericht per
-    ongeluk twee keer wordt doorgestuurd."""
+    ongeluk twee keer wordt doorgestuurd. Een bericht dat technisch mislukte
+    (API fout, geen geldige interpretatie) telt niet mee: anders blokkeert
+    een tijdelijke storing een identiek bericht voor de rest van de dag,
+    ook nadat de storing allang voorbij is."""
     cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
     with db.session() as conn:
         row = conn.execute(
             """SELECT * FROM messages
                WHERE raw_text = ? AND id != ? AND processed_at IS NOT NULL
                      AND received_at > ?
+                     AND (note IS NULL OR note NOT LIKE 'API fout%')
                ORDER BY id DESC LIMIT 1""",
             (raw_text, exclude_id, cutoff.isoformat()),
         ).fetchone()

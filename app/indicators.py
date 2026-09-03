@@ -6,8 +6,17 @@ import ta
 
 # Vanaf welke ADX-waarde een trend sterk genoeg is om op te varen. Onder
 # deze grens is de markt zijwaarts, en zijn EMA-kruisingen en MACD-signalen
-# veel minder betrouwbaar (whipsaws).
-ADX_MIN = 20.0
+# minder betrouwbaar (whipsaws). 15 in plaats van de klassieke 20-25: bij
+# 20 filterde dit vrijwel alle signalen weg (zie scripts/backtest_factors.py),
+# 15 laat een ontluikende trend nog meetellen in plaats van alleen een al
+# bevestigde.
+ADX_MIN = 15.0
+
+# Hoeveel lager de ATR mag liggen dan zijn eigen 20-candle gemiddelde en nog
+# als "niet duidelijk aan het samentrekken" tellen. Een harde eis van ATR
+# >= gemiddelde is vrijwel een muntworp in een rustige markt; 10% marge
+# voorkomt dat kleine, betekenisloze schommelingen de factor laten falen.
+ATR_TOLERANCE = 0.9
 
 # Minimaal handelsvolume in de laatste 24 uur (in quote-valuta, meestal
 # USDT) voor een hoog vertrouwen signaal. Een technisch perfecte setup op
@@ -167,11 +176,20 @@ def check_liquidity(quote_volume_24h: float, minimum: float = MIN_QUOTE_VOLUME_2
     return ("Liquiditeit", ok, detail)
 
 
-# Deze factoren meten allemaal in de kern hetzelfde ("is er een trend"),
-# dus tellen ze niet als vier onafhankelijke stemmen. Eén afwijking in deze
-# groep is toegestaan (3 van 4; bij een BTC-signaal zelf blijven er maar 3
-# over, dan is dat 2 van 3), de rest van de factoren blijft hard vereist.
-DIRECTION_GROUP = {"Trend", "Momentum", "1u bevestiging", "BTC-trend"}
+# Deze factoren meten allemaal in de kern hetzelfde ("is er een trend, en
+# hoe sterk"), dus tellen ze niet als losse, onafhankelijke stemmen. Hoeveel
+# afwijkingen in deze groep toegestaan zijn, schaalt mee met de groepsgrootte
+# (zie GROUP_TOLERANCE hieronder) in plaats van altijd hard op 1: anders
+# filtert een groep van 6 bijna alles weg op een enkele twijfelachtige
+# factor, terwijl een groep van 3 (bij een BTC-signaal zelf, dan ontbreekt
+# BTC-trend) juist te soepel zou worden bij dezelfde vaste marge.
+DIRECTION_GROUP = {"Trend", "Momentum", "1u bevestiging", "BTC-trend", "Trendsterkte", "Volatiliteit"}
+
+
+def _group_tolerance(group_size: int) -> int:
+    """Hoeveel afwijkingen in DIRECTION_GROUP toegestaan zijn: ruwweg 1 op
+    elke 3 leden, met een ondergrens van 1 zodra de groep niet leeg is."""
+    return max(1, group_size // 3) if group_size else 0
 
 
 def confirms_direction(
@@ -195,10 +213,12 @@ def confirms_direction(
     gemiddelde), plus wat er in `extra_factors` meegegeven wordt
     (BTC-trend, 1u bevestiging, divergentie, liquiditeit: elk een
     (naam, ok, detail) tuple, berekend buiten deze functie omdat ze andere
-    data nodig hebben). Trend, Momentum, 1u bevestiging en BTC-trend meten
-    allemaal in de kern "is er een trend" en zijn dus geen vier
-    onafhankelijke stemmen: in die groep mag één factor afwijken (zie
-    DIRECTION_GROUP), de rest blijft allemaal hard vereist.
+    data nodig hebben). Trend, Momentum, 1u bevestiging, BTC-trend,
+    Trendsterkte en Volatiliteit meten allemaal in de kern "is er een trend,
+    en hoe sterk" en zijn dus geen zes onafhankelijke stemmen: in die groep
+    mogen enkele factoren afwijken, schalend met de groepsgrootte (zie
+    DIRECTION_GROUP en _group_tolerance). Divergentie en Liquiditeit blijven
+    hard vereist, dat zijn geen trendfactoren.
 
     Ontbreekt een extra check (bijvoorbeeld BTC-trend bij een BTC-signaal
     zelf), dan wordt hij simpelweg niet meegegeven en telt hij niet mee.
@@ -244,9 +264,9 @@ def confirms_direction(
     adx_ok = ind.adx >= ADX_MIN
     adx_detail = f"ADX {ind.adx:.0f}" + ("" if adx_ok else ", trend te zwak/zijwaarts")
 
-    volatility_ok = ind.atr >= ind.atr_avg20
+    volatility_ok = ind.atr >= ind.atr_avg20 * ATR_TOLERANCE
     volatility_detail = f"ATR {ind.atr:.4f}" + (
-        " (stijgend)" if volatility_ok else f" onder het 20-candle gemiddelde ({ind.atr_avg20:.4f}), markt trekt samen"
+        " (stijgend)" if volatility_ok else f" ruim onder het 20-candle gemiddelde ({ind.atr_avg20:.4f}), markt trekt samen"
     )
     factors += [
         ("Trendsterkte", adx_ok, adx_detail),
@@ -260,7 +280,7 @@ def confirms_direction(
     group = [(name, ok) for name, ok, _ in factors if name in DIRECTION_GROUP]
     rest = [ok for name, ok, _ in factors if name not in DIRECTION_GROUP]
     group_fails = sum(1 for _, ok in group if not ok)
-    group_ok = group_fails <= 1 if group else True
+    group_ok = group_fails <= _group_tolerance(len(group))
 
     confirmed = group_ok and all(rest)
     return confirmed, breakdown
