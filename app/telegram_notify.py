@@ -122,7 +122,13 @@ async def run_telegram_listener() -> None:
 
     async with application:
         await application.start()
-        await application.updater.start_polling()
+        # drop_pending_updates=True: bij elke herstart van deze service (en
+        # dat gebeurt vaak tijdens actief ontwikkelen) anders alle /start
+        # commando's die binnenkwamen terwijl de bot niet luisterde in één
+        # keer alsnog afvuurt, inclusief oude van dagen geleden. Zonder dit
+        # kreeg één gebruiker bij de eerste herstart 15 welkomstberichten
+        # achter elkaar.
+        await application.updater.start_polling(drop_pending_updates=True)
         logger.info("Telegram /start listener gestart")
         try:
             await asyncio.Event().wait()

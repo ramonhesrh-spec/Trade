@@ -15,6 +15,11 @@
     grid: { vertLines: { color: "#1c2526" }, horzLines: { color: "#1c2526" } },
     timeScale: { timeVisible: true, borderColor: "#232d2f" },
     rightPriceScale: { borderColor: "#232d2f" },
+    // Standaard "magnet" snapt de crosshair (en dus ook elke klik) naar de
+    // dichtstbijzijnde lijnserie, bijvoorbeeld EMA9/EMA21. Voor het zelf
+    // tekenen van een lijn moet een klik precies de aangewezen prijs onder
+    // de muis pakken, niet de dichtstbijzijnde EMA-waarde.
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
   });
 
   const candleSeries = chart.addCandlestickSeries({

@@ -30,14 +30,18 @@ def last_message_received_at() -> Optional[str]:
         return row["received_at"] if row else None
 
 
-def find_recent_duplicate(raw_text: str, exclude_id: int, hours: int = 24) -> Optional[dict]:
+def find_recent_duplicate(raw_text: str, exclude_id: int, minutes: int = 3) -> Optional[dict]:
     """Zoekt een eerder bericht met exact dezelfde tekst, al verwerkt binnen
-    de laatste uren. Voorkomt een dubbele melding als hetzelfde bericht per
-    ongeluk twee keer wordt doorgestuurd. Een bericht dat technisch mislukte
-    (API fout, geen geldige interpretatie) telt niet mee: anders blokkeert
-    een tijdelijke storing een identiek bericht voor de rest van de dag,
-    ook nadat de storing allang voorbij is."""
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+    de laatste paar minuten. Voorkomt alleen een dubbele melding als hetzelfde
+    bericht per ongeluk vlak na elkaar twee keer wordt doorgestuurd (bijvoorbeeld
+    een dubbele klik). Bewust een kort venster, geen uren: prijs, koersdata en
+    de technische toetsing veranderen continu, dus eenzelfde tekst een uur
+    later (of na een update van de regels zelf) verdient een verse analyse,
+    niet het stokoude resultaat van de eerste keer. Een bericht dat technisch
+    mislukte (API fout, geen geldige interpretatie) telt niet mee: anders
+    blokkeert een tijdelijke storing een identiek bericht voor de rest van
+    het venster, ook nadat de storing allang voorbij is."""
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=minutes)
     with db.session() as conn:
         row = conn.execute(
             """SELECT * FROM messages
