@@ -489,6 +489,35 @@ def update_journal_status(
             )
 
 
+def auto_ignore_opposite_pending(coin: str, direction: str) -> int:
+    """Negeert automatisch elke nog niet bevestigde logboekregel (geen eigen
+    entry ingevuld) voor de tegenovergestelde richting van deze coin.
+
+    Je kan niet tegelijk een long en een short op dezelfde coin serieus
+    overwegen: zodra er een nieuwe melding voor de ene kant binnenkomt, is
+    een oude, nog niet genomen melding voor de andere kant achterhaald.
+    Welke van de twee richtingen daadwerkelijk klopt, blijft bepaald door
+    de harde regels (de factoren op het nieuwe signaal), niet door een
+    eigen inschatting hier: dit ruimt alleen de overbodige tegenstrijdige
+    rest op. Een trade die al genomen is (eigen entry al ingevuld) is een
+    echte open positie en wordt hier nooit aangeraakt.
+
+    Geeft het aantal geraakte logboekregels terug."""
+    opposite = "short" if direction.lower() == "long" else "long"
+    note = f"automatisch genegeerd: nieuwe {direction} melding voor {coin.upper()} maakt dit tegenovergestelde signaal achterhaald"
+    with db.session() as conn:
+        cur = conn.execute(
+            """UPDATE journal_entries SET status = 'genegeerd', note = ?
+               WHERE entry_price IS NULL AND status != 'genegeerd'
+                     AND signal_id IN (
+                         SELECT id FROM signals
+                         WHERE coin = ? AND direction = ? AND is_practice = 0
+                     )""",
+            (note, coin.upper(), opposite),
+        )
+        return cur.rowcount
+
+
 def reset_journal_entry(entry_id: int, user_id: int) -> None:
     """Zet een logboekregel helemaal terug naar de beginstaat: status
     'nieuw', geen entry/exit prijs, geen resultaat. Voor als er per ongeluk

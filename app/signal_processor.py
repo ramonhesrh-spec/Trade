@@ -195,6 +195,16 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         "context_note": context_note or None,
         "plain_explanation": plain_explanation or None,
     }
+    # Een nog niet genomen melding voor de tegenovergestelde richting van
+    # dezelfde coin is achterhaald zodra hier een nieuwe melding binnenkomt:
+    # je kan niet serieus tegelijk long en short op dezelfde coin overwegen.
+    # Een al genomen trade (eigen entry al ingevuld) is een echte positie en
+    # blijft hier altijd buiten schot.
+    ignored = repo.auto_ignore_opposite_pending(interp.coin, interp.direction)
+    if ignored:
+        logger.info("%s nog niet genomen tegenovergestelde melding(en) voor %s automatisch genegeerd",
+                     ignored, interp.coin)
+
     existing = repo.find_open_signal(interp.coin, interp.direction)
 
     if existing:
