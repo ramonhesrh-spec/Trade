@@ -159,9 +159,11 @@ def check_liquidity(quote_volume_24h: float, minimum: float = MIN_QUOTE_VOLUME_2
     technisch perfecte setup op een dun verhandelde coin levert in de
     praktijk slippage op die de hele edge kan opeten."""
     ok = quote_volume_24h >= minimum
-    detail = f"24u volume €{quote_volume_24h:,.0f}".replace(",", ".") + (
-        "" if ok else f", onder de grens van €{minimum:,.0f}".replace(",", ".")
-    )
+    volume_str = f"€{quote_volume_24h:,.0f}".replace(",", ".")
+    detail = f"24u volume {volume_str}"
+    if not ok:
+        minimum_str = f"€{minimum:,.0f}".replace(",", ".")
+        detail += f", onder de grens van {minimum_str}"
     return ("Liquiditeit", ok, detail)
 
 
