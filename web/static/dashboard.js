@@ -88,7 +88,7 @@
             pnlEl.classList.toggle("neg", p.pnl_eur < 0);
           }
           if (pnlPctEl) {
-            pnlPctEl.textContent = `(${p.pnl_pct.toFixed(1)}%)`;
+            pnlPctEl.textContent = p.pnl_pct !== null ? `(${p.pnl_pct.toFixed(1)}%)` : "";
           }
           checkVibration(p);
         });

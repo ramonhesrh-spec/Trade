@@ -252,6 +252,14 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     all_entries = repo.list_journal(user["id"], status=None)
     for entry in all_entries:
         entry["position_size"] = _position_size(entry)
+        # journal_entries.result_pct is de rauwe koersbeweging van de
+        # onderliggende coin, los van positiegrootte. Naast een risicogewogen
+        # eurobedrag hoort daar de winst/verlies t.o.v. het eigen risicobedrag
+        # van díe trade bij, anders klopt het percentage nooit met het bedrag.
+        entry["result_pct_of_risk"] = (
+            entry["result_eur"] / entry["risk_eur"] * 100
+            if entry["result_eur"] is not None and entry["risk_eur"] else None
+        )
     # Oefentrades zijn handmatig aangemaakt om te oefenen, geen echt signaal.
     # Die blijven apart, tellen niet mee in de winrate en staan niet tussen
     # de echte meldingen, anders lijkt het net of het een echt signaal was.
@@ -280,6 +288,17 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     )
     open_risk_pct = (open_risk_eur / user["portfolio_eur"] * 100) if user["portfolio_eur"] else 0
 
+    # Portfolio-omvang schaalt mee met elke gesloten echte trade (zie
+    # repo.close_journal_trade), dus het ingevulde bedrag is altijd het
+    # actuele kapitaal. "Gestart op" wordt er hier van afgeleid in plaats
+    # van apart bijgehouden: startbedrag = huidig bedrag min alles wat er
+    # sindsdien gerealiseerd is.
+    total_realized_eur = cumulative[-1]["cumulative_eur"] if cumulative else 0.0
+    starting_portfolio_eur = user["portfolio_eur"] - total_realized_eur
+    portfolio_change_pct = (
+        (total_realized_eur / starting_portfolio_eur * 100) if starting_portfolio_eur else 0.0
+    )
+
     return templates.TemplateResponse(request, "dashboard.html", {
         "user": user,
         "entries": entries,
@@ -294,6 +313,9 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "coin_stats": coin_stats,
         "coins": coins,
         "status_filter": status,
+        "starting_portfolio_eur": starting_portfolio_eur,
+        "total_realized_eur": total_realized_eur,
+        "portfolio_change_pct": portfolio_change_pct,
     })
 
 

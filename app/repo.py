@@ -578,6 +578,17 @@ def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_tim
                WHERE id = ? AND user_id = ?""",
             (exit_price, exit_time, result_eur, result_pct, entry_id, user_id),
         )
+        # Positiegrootte en risicobedrag schalen mee met het echte, actuele
+        # kapitaal, niet met een vast bedrag dat nooit meebeweegt met winst
+        # of verlies: zo blijft "risico X% per trade" ook X% betekenen na
+        # een reeks winsten of verliezen, precies zoals professionele
+        # risicomanagement dat toepast. Alleen echte trades tellen mee, een
+        # oefentrade raakt nooit het echte portfoliobedrag.
+        if not entry["is_practice"]:
+            conn.execute(
+                "UPDATE users SET portfolio_eur = portfolio_eur + ? WHERE id = ?",
+                (result_eur, user_id),
+            )
 
 
 def update_journal_note(entry_id: int, user_id: int, note: str) -> None:
@@ -675,11 +686,20 @@ def winrate_stats(user_id: int) -> dict:
     """Winrate en gemiddeld resultaat apart voor hoog en laag vertrouwen,
     op basis van gesloten trades van deze gebruiker. Winrate alleen zegt
     weinig over de verhouding tussen winst en verlies per trade, het
-    gemiddelde resultaat erbij geeft een eerlijker beeld."""
+    gemiddelde resultaat erbij geeft een eerlijker beeld.
+
+    Het percentage hoort bij het risicobedrag, niet bij de rauwe koersbeweging
+    (dat is wat journal_entries.result_pct is: hoeveel de onderliggende prijs
+    zelf bewoog, los van positiegrootte). Naast een risicogewogen euro-bedrag
+    is die koers-% zinloos en zelfs misleidend: een trade die 30x het risico
+    won kan een kleine koersbeweging hebben gehad met een kleine stop loss.
+    Het percentage hier is dus result_eur t.o.v. het eigen risk_eur van die
+    trade, zodat het altijd dezelfde verhouding toont als het eurobedrag
+    ernaast."""
     with db.session() as conn:
         rows = conn.execute(
             """SELECT s.confidence AS confidence, je.result_eur AS result_eur,
-                      je.result_pct AS result_pct
+                      je.risk_eur AS risk_eur
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0""",
             (user_id,),
@@ -691,7 +711,10 @@ def winrate_stats(user_id: int) -> dict:
         wins = len([r for r in subset if r["result_eur"] is not None and r["result_eur"] > 0])
         winrate = (wins / total * 100) if total else 0.0
         eur_values = [r["result_eur"] for r in subset if r["result_eur"] is not None]
-        pct_values = [r["result_pct"] for r in subset if r["result_pct"] is not None]
+        pct_values = [
+            r["result_eur"] / r["risk_eur"] * 100
+            for r in subset if r["result_eur"] is not None and r["risk_eur"]
+        ]
         avg_eur = sum(eur_values) / len(eur_values) if eur_values else 0.0
         avg_pct = sum(pct_values) / len(pct_values) if pct_values else 0.0
         return {
