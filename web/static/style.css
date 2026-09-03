@@ -35,6 +35,51 @@
   *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
 
+/* ===== Beweging =====
+   Twee lagen: (1) een pure-CSS binnenkomst-animatie op elke sectie, speelt
+   op elke paginalaad, geen JS nodig, kan dus nooit content onzichtbaar
+   laten hangen als iets misgaat. (2) de boot-pulse: een eenmalige,
+   JS-gestuurde intro op het dashboard, additief boven de content (de
+   content zelf is nooit van die JS afhankelijk om zichtbaar te worden). */
+main > section, main > .stats-collapse {
+  animation: section-reveal 0.4s ease both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+@keyframes section-reveal {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* [hidden] heeft dezelfde specificiteit als een klasse-selector: de
+   basisregel hieronder mag dus geen display zetten, anders wint hij van
+   het hidden-attribuut zodra deze stylesheet na de UA-stylesheet laadt
+   (zelfde bug als eerder bij .shortcuts-help). display staat daarom
+   alleen op :not([hidden]). */
+.boot-pulse {
+  position: fixed; inset: 0; z-index: 9999;
+  display: none; align-items: center; justify-content: center;
+  background: var(--bg);
+}
+.boot-pulse:not([hidden]) { display: flex; }
+.boot-pulse-logo {
+  width: 120px; height: 120px;
+  filter: drop-shadow(0 0 22px var(--accent-bg));
+}
+/* pathLength wordt niet betrouwbaar ondersteund op <circle> in elke
+   browser, dus de omtrek van de cirkel (2*pi*15) hier vast berekend in
+   plaats van op pathLength="1" te vertrouwen. Het pad zelf gebruikt wel
+   pathLength, dat werkt wel goed op <path>. */
+.boot-circle { stroke-dasharray: 94.25; stroke-dashoffset: 94.25; }
+.boot-path { stroke-dasharray: 1; stroke-dashoffset: 1; }
+.boot-pulse.play .boot-circle { animation: boot-draw-circle .5s ease-out forwards; }
+.boot-pulse.play .boot-path { animation: boot-draw-path .55s ease-out .3s forwards; }
+.boot-pulse.play .boot-pulse-logo { animation: boot-beat .3s ease-in-out .85s; transform-origin: 50% 50%; }
+.boot-pulse.fade-out { animation: boot-fade .35s ease forwards; }
+@keyframes boot-draw-circle { to { stroke-dashoffset: 0; } }
+@keyframes boot-draw-path { to { stroke-dashoffset: 0; } }
+@keyframes boot-beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+@keyframes boot-fade { to { opacity: 0; } }
+
 * { box-sizing: border-box; }
 
 html {
@@ -74,10 +119,39 @@ a { color: var(--accent); }
   position: sticky; top: 0; z-index: 10;
   padding: 12px 24px 10px;
 }
-.topbar-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.topbar-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; position: relative; z-index: 1; }
 .topbar .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
-.topbar .brand img { height: 26px; width: auto; display: block; }
+
+/* Het logo krijgt een zachte, ademende gloed erachter: het systeem "leeft"
+   permanent, niet alleen bij het openen. Puur decoratief pseudo-element,
+   geen invloed op klikbaarheid of layout. */
+.brand-logo-wrap { position: relative; display: flex; }
+.brand-logo-wrap::before {
+  content: ""; position: absolute; inset: -6px; border-radius: 50%;
+  background: radial-gradient(circle, var(--accent-bg) 0%, transparent 70%);
+  animation: brand-breathe 2.6s ease-in-out infinite;
+}
+.brand-logo { height: 26px; width: 26px; display: block; position: relative; }
+@keyframes brand-breathe {
+  0%, 100% { transform: scale(0.85); opacity: 0.5; }
+  50% { transform: scale(1.25); opacity: 0.95; }
+}
 .topbar .brand span { font-weight: 700; color: var(--text); font-size: 16px; letter-spacing: -0.01em; }
+
+/* Zeer subtiel scrollend ECG-lijntje achter de topbar: ambient bewijs dat
+   het systeem continu meeleest, geen aandacht opeisend (lage opacity,
+   achter de content, pointer-events uit). */
+/* Eigen clip-laag, los van de rest van de topbar: de dropdown (coins-menu)
+   moet buiten de topbar kunnen uitsteken, dus overflow:hidden staat hier
+   op een aparte, exact op de topbar passende laag, niet op .topbar zelf. */
+.topbar-watermark-clip { position: absolute; inset: 0; overflow: hidden; z-index: 0; pointer-events: none; }
+.topbar-watermark {
+  position: absolute; left: 0; top: 0; height: 100%; width: 200%;
+  display: flex; opacity: 0.055;
+  animation: watermark-scroll 22s linear infinite;
+}
+.topbar-watermark svg { height: 100%; width: 50%; flex-shrink: 0; }
+@keyframes watermark-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .topbar nav { display: flex; align-items: center; gap: 18px; margin-top: 10px; }
 .topbar nav a {
   color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 500;
@@ -128,17 +202,28 @@ a { color: var(--accent); }
    stil, geen decoratie, een statusfeit. Klok komt uit JS (base.html),
    puntje is puur CSS. */
 .live-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); font-family: var(--mono); }
-.live-pill .ping { width: 6px; height: 6px; border-radius: 50%; background: var(--green); position: relative; flex-shrink: 0; }
+.live-pill .ping {
+  width: 6px; height: 6px; border-radius: 50%; background: var(--green); position: relative; flex-shrink: 0;
+  animation: heartbeat 1.8s ease-in-out infinite;
+}
 .live-pill .ping::after {
   content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1px solid var(--green);
-  animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+  animation: ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
-@keyframes ping { 0% { transform: scale(0.8); opacity: 0.8; } 100% { transform: scale(2.2); opacity: 0; } }
+/* Lub-dub in plaats van één gelijkmatige puls: twee korte hartslagen per
+   cyclus, zoals de naam van het systeem belooft. */
+@keyframes heartbeat {
+  0%, 20%, 100% { transform: scale(1); }
+  8% { transform: scale(1.45); }
+  14% { transform: scale(1); }
+  20% { transform: scale(1.25); }
+}
+@keyframes ping { 0% { transform: scale(0.8); opacity: 0.9; } 30% { transform: scale(2.2); opacity: 0; } 100% { opacity: 0; } }
 @media (max-width: 560px) { .live-pill { display: none; } }
 
 @media (max-width: 700px) {
   .topbar { padding: 10px 14px 8px; }
-  .topbar .brand img { height: 20px; }
+  .brand-logo { height: 20px; width: 20px; }
   .topbar .brand span { font-size: 14px; }
   .topbar nav { gap: 14px; margin-top: 8px; }
   .logout-form { gap: 8px; }
@@ -167,7 +252,8 @@ main h3 { font-size: 15px; gap: 8px; }
 .stats-collapse .cards { margin-bottom: 0; }
 
 .open-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 14px; margin: 14px 0 28px; }
-.open-card { min-width: 0; }
+.open-card { min-width: 0; transition: transform .18s ease, box-shadow .18s ease; }
+.open-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
 .practice-card { border-style: dashed; border-color: var(--border-strong); opacity: 0.92; }
 .open-card .status-form, .open-card .close-form { flex-wrap: wrap; margin-top: 8px; }
 .open-card .status-form select, .open-card .status-form input,
@@ -264,7 +350,12 @@ main h3 { font-size: 15px; gap: 8px; }
    patroon herkennen, daarom ook geen tekst die alleen hierin staat. */
 .sparkline { display: flex; align-items: center; gap: 10px; margin: 2px 0 18px; }
 .spark-bars { display: flex; align-items: flex-end; gap: 3px; height: 22px; flex-shrink: 0; }
-.spark-bar { width: 6px; border-radius: 2px 2px 0 0; background: var(--border-strong); cursor: default; }
+.spark-bar {
+  width: 6px; border-radius: 2px 2px 0 0; background: var(--border-strong); cursor: default;
+  transform-origin: bottom; animation: spark-grow .35s ease both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+@keyframes spark-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
 .spark-bar.spark-hoog { height: 22px; }
 .spark-bar.spark-laag { height: 11px; opacity: 0.75; }
 .spark-bar.spark-long { background: var(--green); }

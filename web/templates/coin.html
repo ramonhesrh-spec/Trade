@@ -9,6 +9,7 @@
   <div class="spark-bars" aria-hidden="true">
     {% for s in sparkline %}
       <span class="spark-bar {{ 'spark-hoog' if s.technical_confirmed else 'spark-laag' }} {{ 'spark-long' if s.direction == 'long' else 'spark-short' }}"
+            style="--i: {{ loop.index0 }}"
             title="{{ s.direction }}, {{ 'hoog' if s.technical_confirmed else 'laag' }} vertrouwen, {{ s.created_at[:10] }}"></span>
     {% endfor %}
   </div>

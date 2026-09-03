@@ -12,10 +12,52 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+{% if request.url.path == "/dashboard" %}
+<div id="boot-pulse" class="boot-pulse" hidden aria-hidden="true">
+  <svg class="boot-pulse-logo" viewBox="0 0 32 32" fill="none">
+    <circle class="boot-circle" cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="1.6"/>
+    <path class="boot-path" d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#0ABAB5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" pathLength="1"/>
+  </svg>
+</div>
+<script>
+  // Meteen na de overlay zelf, vóór alle andere markup en scripts: dit
+  // mag nooit wachten op een trage of mislukte externe resource (bv. de
+  // Chart.js CDN) verderop in de pagina. Puur additief boven de content,
+  // als dit blok niet draait blijft het dashboard eronder gewoon zichtbaar.
+  (function () {
+    var overlay = document.getElementById("boot-pulse");
+    if (!overlay) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    try {
+      if (sessionStorage.getItem("hp_booted")) return;
+      sessionStorage.setItem("hp_booted", "1");
+    } catch (err) {
+      return;
+    }
+    overlay.hidden = false;
+    requestAnimationFrame(function () {
+      overlay.classList.add("play");
+    });
+    setTimeout(function () { overlay.classList.add("fade-out"); }, 1150);
+    setTimeout(function () { overlay.hidden = true; }, 1500);
+  })();
+</script>
+{% endif %}
 <header class="topbar">
+  <div class="topbar-watermark-clip" aria-hidden="true">
+    <div class="topbar-watermark">
+      <svg viewBox="0 0 320 60" preserveAspectRatio="none"><path d="M0 30h40l8-22 16 44 8-22h40l8-14 16 30 8-16h176" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
+      <svg viewBox="0 0 320 60" preserveAspectRatio="none"><path d="M0 30h40l8-22 16 44 8-22h40l8-14 16 30 8-16h176" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
+    </div>
+  </div>
   <div class="topbar-top">
     <a href="/dashboard" class="brand">
-      <img src="/static/hespulse-logo.svg" alt="HesPulse logo">
+      <span class="brand-logo-wrap">
+        <svg class="brand-logo" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <circle cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="2"/>
+          <path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#0ABAB5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
       <span>HesPulse</span>
     </a>
     <div class="topbar-right">
@@ -29,7 +71,7 @@
   </div>
   <nav>
     <a href="/dashboard">Dashboard</a>
-    <details class="coin-menu">
+    <details class="coin-menu js-accordion">
       <summary>
         Coins
         <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
@@ -43,6 +85,7 @@
     <a href="/uitleg">Uitleg</a>
   </nav>
 </header>
+
 <main>
 {% block content %}{% endblock %}
 </main>
@@ -75,6 +118,70 @@
     setInterval(tick, 1000);
   })();
 
+  // Soepel open/dicht voor elke <details class="js-accordion">, in plaats
+  // van het abrupte standaardgedrag: hoogte animeren op basis van de
+  // gemeten inhoud, i.p.v. een CSS-truc die niet overal werkt (o.a. niet
+  // op iOS Safari). Bij prefers-reduced-motion of zonder JS blijft het
+  // gewone, directe <details>-gedrag gewoon werken.
+  (function () {
+    var reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    function contentOf(details) {
+      var summary = details.querySelector(":scope > summary");
+      return summary ? summary.nextElementSibling : null;
+    }
+
+    function openAccordion(details) {
+      if (details.open) return;
+      var content = contentOf(details);
+      if (!content || reduceMotion) { details.open = true; return; }
+      details.open = true;
+      content.style.overflow = "hidden";
+      content.style.height = "0px";
+      var target = content.scrollHeight;
+      requestAnimationFrame(function () {
+        content.style.transition = "height .22s ease";
+        content.style.height = target + "px";
+      });
+      content.addEventListener("transitionend", function done() {
+        content.style.height = "";
+        content.style.overflow = "";
+        content.style.transition = "";
+        content.removeEventListener("transitionend", done);
+      });
+    }
+
+    function closeAccordion(details) {
+      if (!details.open) return;
+      var content = contentOf(details);
+      if (!content || reduceMotion) { details.open = false; return; }
+      content.style.overflow = "hidden";
+      content.style.height = content.scrollHeight + "px";
+      requestAnimationFrame(function () {
+        content.style.transition = "height .18s ease";
+        content.style.height = "0px";
+      });
+      content.addEventListener("transitionend", function done() {
+        content.style.transition = "";
+        content.style.overflow = "";
+        content.style.height = "";
+        details.open = false;
+        content.removeEventListener("transitionend", done);
+      });
+    }
+
+    document.addEventListener("click", function (e) {
+      var summary = e.target.closest("summary");
+      if (!summary) return;
+      var details = summary.closest("details.js-accordion");
+      if (!details) return;
+      e.preventDefault();
+      if (details.open) closeAccordion(details); else openAccordion(details);
+    });
+
+    window.hpAccordion = { open: openAccordion, close: closeAccordion };
+  })();
+
   // Sneltoetsen, alleen voor navigatie. Bewust geen sneltoets voor iets
   // dat een trade sluit of verwijdert, dat blijft altijd een bewuste klik
   // op een echte knop, nooit één toets per ongeluk.
@@ -97,7 +204,7 @@
       if (e.key === "Escape") {
         closeHelp();
         var openMenu = document.querySelector(".coin-menu[open]");
-        if (openMenu) openMenu.removeAttribute("open");
+        if (openMenu && window.hpAccordion) window.hpAccordion.close(openMenu);
         return;
       }
       if (e.key === "?") { openHelp(); return; }
@@ -109,7 +216,7 @@
         } else if (e.key === "c") {
           var menu = document.querySelector(".coin-menu");
           if (menu) {
-            menu.setAttribute("open", "");
+            if (window.hpAccordion) window.hpAccordion.open(menu); else menu.setAttribute("open", "");
             var summary = menu.querySelector("summary");
             if (summary) summary.focus();
           }
