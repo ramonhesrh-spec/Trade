@@ -455,6 +455,25 @@ def reset_journal_entry(entry_id: int, user_id: int) -> None:
         )
 
 
+def delete_practice_entry(entry_id: int, user_id: int) -> None:
+    """Verwijdert een oefentrade helemaal. Anders dan reset_journal_entry:
+    een oefentrade heeft geen echte melding om naar terug te vallen, dus
+    "weggooien" moet de regel echt kwijtraken, niet terugzetten naar een
+    staat zonder entryprijs die de kaart niet kan tonen. De EXISTS-check
+    zorgt dat dit nooit een echte trade kan raken, ook niet per ongeluk
+    met een verkeerd entry_id."""
+    with db.session() as conn:
+        conn.execute(
+            """DELETE FROM journal_entries
+               WHERE id = ? AND user_id = ?
+                 AND EXISTS (
+                     SELECT 1 FROM signals
+                     WHERE signals.id = journal_entries.signal_id AND signals.is_practice = 1
+                 )""",
+            (entry_id, user_id),
+        )
+
+
 def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_time: str) -> None:
     entry = get_journal_entry(entry_id, user_id)
     if not entry or entry["entry_price"] is None or entry["status"] == "genegeerd":

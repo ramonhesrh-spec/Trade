@@ -408,6 +408,18 @@ async def reset_journal(
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
+@app.post("/journal/{entry_id}/delete-practice")
+async def delete_practice_trade(
+    entry_id: int,
+    user: dict = Depends(require_login),
+):
+    """Een oefentrade heeft geen echte melding om naar terug te vallen,
+    dus 'weggooien' verwijdert de regel echt, anders dan de 'Terugzetten'
+    knop bij een echte trade."""
+    repo.delete_practice_entry(entry_id, user["id"])
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
 @app.post("/journal/{entry_id}/note")
 async def update_journal_note(
     entry_id: int,

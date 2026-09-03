@@ -140,7 +140,7 @@
         <input type="datetime-local" name="exit_time" required>
         <button type="submit">Sluiten</button>
       </form>
-      <form action="/journal/{{ e.id }}/reset" method="post" class="reset-form"
+      <form action="/journal/{{ e.id }}/delete-practice" method="post" class="reset-form"
             onsubmit="return confirm('Deze oefentrade weggooien?');">
         <button type="submit" class="button-reset">Weggooien</button>
       </form>
