@@ -293,6 +293,16 @@ main h3 { font-size: 15px; gap: 8px; }
 }
 .data-grid .cell .v.pos { color: var(--green); }
 .data-grid .cell .v.neg { color: var(--red); }
+
+.coin-stat-strip {
+  display: flex; gap: 20px; flex-wrap: wrap; margin: 0 0 16px; padding: 10px 14px;
+  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.coin-stat-strip > div { display: flex; flex-direction: column; gap: 2px; }
+.coin-stat-strip .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); }
+.coin-stat-strip .v { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--text); }
+.coin-stat-strip .v.pos { color: var(--green); }
+.coin-stat-strip .v.neg { color: var(--red); }
 /* Bij een oneven aantal cellen (bijv. Entry/SL/TP, of Entry/Nu/SL/TP/
    Grootte) wrapt de laatste cel alleen naar een nieuwe rij: die laat dan
    de rest van de rij leeg staan, zichtbaar als een lege cel-vormige plek.
@@ -514,6 +524,16 @@ table.signals tbody tr.short td:first-child::before { background: var(--red); }
 .badge-hoog { background: var(--accent-bg); color: var(--accent); }
 .badge-laag { background: var(--border); color: var(--muted); }
 .badge-status { background: var(--panel-hover); color: var(--text-dim); border: 1px solid var(--border-strong); }
+.badge-pending { background: rgba(217, 168, 60, 0.14); color: #d9a83c; border: 1px solid rgba(217, 168, 60, 0.4); }
+
+.open-subheading {
+  font-size: 13px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted);
+  margin: 18px 0 8px; font-weight: 700;
+}
+.open-subheading:first-child { margin-top: 0; }
+/* Nog niet genomen: duidelijk anders dan een echte open trade, een gestippelde
+   rand leest als "nog niet definitief" in plaats van een volle kaart. */
+.pending-card { border-style: dashed; }
 
 .confidence-detail summary {
   cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px;

@@ -4,6 +4,26 @@
 
 <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>{{ symbol }}</h2>
 
+{% if recent_activity %}
+<p class="muted" style="margin: -6px 0 12px; font-size: 13px;">
+  {% if recent_activity.count > 0 %}
+    {{ recent_activity.count }} {{ "signaal" if recent_activity.count == 1 else "signalen" }} deze week
+    {%- if recent_activity.hoog > 0 %}, {{ recent_activity.hoog }} hoog vertrouwen{% endif -%}
+    , laatste op {{ recent_activity.last_at[:10] }}.
+  {% else %}
+    Geen signalen deze week. Laatste op {{ recent_activity.last_at[:10] }}.
+  {% endif %}
+</p>
+{% endif %}
+
+{% if coin_stat %}
+<div class="coin-stat-strip">
+  <div><span class="k">Winrate {{ symbol }}</span><span class="v">{{ coin_stat.winrate }}%</span></div>
+  <div><span class="k">Trades</span><span class="v">{{ coin_stat.wins }}/{{ coin_stat.total }}</span></div>
+  <div><span class="k">Gemiddeld</span><span class="v {{ 'pos' if coin_stat.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(coin_stat.avg_result_eur) }}</span></div>
+</div>
+{% endif %}
+
 {% if sparkline %}
 <div class="sparkline">
   <div class="spark-bars" aria-hidden="true">

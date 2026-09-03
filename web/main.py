@@ -8,6 +8,7 @@ import csv
 import io
 import re
 import sys
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -271,6 +272,12 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     open_entries = _add_signal_context(
         await _enrich_open_positions(_filter_journal(real_entries, "open")), winrate,
     )
+    # Een pending regel (nog geen eigen entry ingevuld) is geen echte trade,
+    # alleen een melding die op een beslissing wacht. Apart getoond van een
+    # trade die al echt genomen is, anders lijkt het net of die "gebeurd"
+    # is zonder dat de gebruiker er zelf iets voor deed.
+    taken_entries = [e for e in open_entries if e["entry_price"] is not None]
+    pending_entries = [e for e in open_entries if e["entry_price"] is None]
     practice_open = _add_signal_context(
         await _enrich_open_positions([e for e in practice_entries if e["exit_price"] is None]), winrate,
     )
@@ -283,9 +290,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     # Risico dat nu echt in de markt staat: alleen trades die al genomen
     # zijn (eigen entry ingevuld), niet nog niet bevestigde signalen, die
     # hebben nog geen kapitaal gekost.
-    open_risk_eur = sum(
-        e["risk_eur"] or 0 for e in open_entries if e["entry_price"] is not None
-    )
+    open_risk_eur = sum(e["risk_eur"] or 0 for e in taken_entries)
     open_risk_pct = (open_risk_eur / user["portfolio_eur"] * 100) if user["portfolio_eur"] else 0
 
     # Portfolio-omvang schaalt mee met elke gesloten echte trade (zie
@@ -303,6 +308,8 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "user": user,
         "entries": entries,
         "open_entries": open_entries,
+        "taken_entries": taken_entries,
+        "pending_entries": pending_entries,
         "open_risk_eur": open_risk_eur,
         "open_risk_pct": open_risk_pct,
         "practice_open": practice_open,
@@ -566,6 +573,19 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     # recent hoog vertrouwen gaf.
     sparkline = list(reversed(repo.list_recent_signals(symbol, limit=14)))
 
+    # Korte context bovenaan de pagina: hoeveel signalen kwamen er recent
+    # binnen voor deze coin, zonder eerst de hele sparkline te moeten
+    # aflezen.
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    recent_week = [s for s in sparkline if s["created_at"] >= week_ago]
+    recent_activity = {
+        "count": len(recent_week),
+        "hoog": sum(1 for s in recent_week if s["technical_confirmed"]),
+        "last_at": sparkline[-1]["created_at"] if sparkline else None,
+    } if sparkline else None
+
+    coin_stat = next((s for s in repo.coin_stats(user["id"]) if s["coin"] == symbol), None)
+
     return templates.TemplateResponse(request, "coin.html", {
         "user": user,
         "symbol": symbol,
@@ -574,6 +594,8 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "open_trades": open_trades,
         "recent_signals": recent_signals,
         "sparkline": sparkline,
+        "recent_activity": recent_activity,
+        "coin_stat": coin_stat,
         "coins": repo.list_coins(),
         "trendlines": repo.list_trendlines(symbol),
     })

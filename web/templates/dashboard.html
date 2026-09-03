@@ -17,9 +17,10 @@
     </div>
   </div>
   {% endif %}
-  {% if open_entries %}
+  {% if taken_entries %}
+  <h3 class="open-subheading">Jouw open trades</h3>
   <div class="open-grid">
-    {% for e in open_entries %}
+    {% for e in taken_entries %}
     <div class="card open-card" data-entry-id="{{ e.id }}">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
@@ -47,68 +48,104 @@
         </div>
       </details>
       {% endif %}
-      {% if e.entry_price is not none %}
-        <div class="data-grid">
-          <div class="cell"><div class="k">Entry</div><div class="v">{{ "%.4f"|format(e.entry_price) }}</div></div>
-          <div class="cell"><div class="k">Nu</div><div class="v" data-price="{{ e.id }}">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</div></div>
-          <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
-          <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
-          <div class="cell"><div class="k">Grootte</div><div class="v">{{ "%.6f"|format(e.position_size) ~ " " ~ e.coin if e.position_size else "-" }}</div></div>
-        </div>
-        <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="mono {{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
-          {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
-          <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
-        </p>
-        <p class="muted advice-text">{{ e.advice }}</p>
-        <details class="confidence-detail levels-detail js-accordion">
-          <summary class="confidence-why">SL, TP of grootte aanpassen</summary>
-          <form action="/journal/{{ e.id }}/levels" method="post" class="levels-form">
-            <label>Stop loss
-              <input type="number" step="any" name="stop_loss" value="{{ '%.4f'|format(e.stop_loss) if e.stop_loss else '' }}">
-            </label>
-            <label>Take profit
-              <input type="number" step="any" name="take_profit" value="{{ '%.4f'|format(e.take_profit) if e.take_profit else '' }}">
-            </label>
-            <label>Grootte ({{ e.coin }})
-              <input type="number" step="any" name="position_size"
-                     value="{{ '%.6f'|format(e.position_size_override) if e.position_size_override is not none else '' }}"
-                     placeholder="{{ '%.6f'|format(e.position_size) if e.position_size else 'auto' }}">
-            </label>
-            <button type="submit">Opslaan</button>
-          </form>
-          <p class="muted levels-hint">Leeg laten zet een veld terug op de berekende standaard.</p>
-        </details>
-        <form action="/journal/{{ e.id }}/close" method="post" class="close-form">
-          <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
-          <button type="button" class="button-link fill-price-btn" data-fill-price="{{ e.id }}">nu</button>
-          <input type="datetime-local" name="exit_time" required>
-          <button type="submit">Sluiten</button>
+      <div class="data-grid">
+        <div class="cell"><div class="k">Entry</div><div class="v">{{ "%.4f"|format(e.entry_price) }}</div></div>
+        <div class="cell"><div class="k">Nu</div><div class="v" data-price="{{ e.id }}">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</div></div>
+        <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
+        <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
+        <div class="cell"><div class="k">Grootte</div><div class="v">{{ "%.6f"|format(e.position_size) ~ " " ~ e.coin if e.position_size else "-" }}</div></div>
+      </div>
+      <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="mono {{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
+        {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
+        <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
+      </p>
+      <p class="muted advice-text">{{ e.advice }}</p>
+      <details class="confidence-detail levels-detail js-accordion">
+        <summary class="confidence-why">SL, TP of grootte aanpassen</summary>
+        <form action="/journal/{{ e.id }}/levels" method="post" class="levels-form">
+          <label>Stop loss
+            <input type="number" step="any" name="stop_loss" value="{{ '%.4f'|format(e.stop_loss) if e.stop_loss else '' }}">
+          </label>
+          <label>Take profit
+            <input type="number" step="any" name="take_profit" value="{{ '%.4f'|format(e.take_profit) if e.take_profit else '' }}">
+          </label>
+          <label>Grootte ({{ e.coin }})
+            <input type="number" step="any" name="position_size"
+                   value="{{ '%.6f'|format(e.position_size_override) if e.position_size_override is not none else '' }}"
+                   placeholder="{{ '%.6f'|format(e.position_size) if e.position_size else 'auto' }}">
+          </label>
+          <button type="submit">Opslaan</button>
         </form>
-        <form action="/journal/{{ e.id }}/reset" method="post" class="reset-form"
-              onsubmit="return confirm('Terugzetten naar nieuw? Ingevulde entry en status gaan verloren.');">
-          <button type="submit" class="button-reset">Verkeerd ingevuld? Terugzetten</button>
-        </form>
-      {% else %}
-        <div class="data-grid">
-          <div class="cell"><div class="k">Entry</div><div class="v">{{ "%.4f"|format(e.price) if e.price else "-" }}</div></div>
-          <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
-          <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
-        </div>
-        <p class="muted advice-text">{{ e.advice }}</p>
-        <form action="/journal/{{ e.id }}/status" method="post" class="status-form">
-          <select name="status">
-            <option value="genomen">Genomen</option>
-            <option value="aangepast">Aangepast</option>
-            <option value="genegeerd">Genegeerd</option>
-          </select>
-          <input type="number" step="any" name="entry_price" placeholder="eigen entry">
-          <button type="submit">Bevestig</button>
-        </form>
-      {% endif %}
+        <p class="muted levels-hint">Leeg laten zet een veld terug op de berekende standaard.</p>
+      </details>
+      <form action="/journal/{{ e.id }}/close" method="post" class="close-form">
+        <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
+        <button type="button" class="button-link fill-price-btn" data-fill-price="{{ e.id }}">nu</button>
+        <input type="datetime-local" name="exit_time" required>
+        <button type="submit">Sluiten</button>
+      </form>
+      <form action="/journal/{{ e.id }}/reset" method="post" class="reset-form"
+            onsubmit="return confirm('Terugzetten naar nieuw? Ingevulde entry en status gaan verloren.');">
+        <button type="submit" class="button-reset">Verkeerd ingevuld? Terugzetten</button>
+      </form>
     </div>
     {% endfor %}
   </div>
-  {% else %}
+  {% endif %}
+
+  {% if pending_entries %}
+  <h3 class="open-subheading">Nog te beslissen</h3>
+  <p class="muted" style="margin: 0 0 10px; font-size: 12.5px;">Nog geen eigen trade, alleen een melding die op jouw beslissing wacht: nemen, aanpassen of negeren.</p>
+  <div class="open-grid">
+    {% for e in pending_entries %}
+    <div class="card open-card pending-card" data-entry-id="{{ e.id }}">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <a href="/coins/{{ e.coin }}" style="font-weight: 700; color: var(--text); text-decoration: none; font-size: 15px;">{{ e.coin }}</a>
+          <span class="badge badge-{{ e.direction }}" style="margin-left: 6px;">{{ e.direction }}</span>
+        </div>
+        <span class="badge badge-pending">nog niet genomen</span>
+      </div>
+      <div class="confidence-line">
+        <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
+        {% if e.reason %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
+        <span class="muted" style="font-size: 12px;">
+          slagingskans {{ e.success_rate }}%
+          {% if e.success_sample < 5 %}(nog weinig data){% else %}(n={{ e.success_sample }}){% endif %}
+        </span>
+      </div>
+      {% if e.reason %}
+      <details class="confidence-detail js-accordion">
+        <summary class="confidence-why">waarom {{ e.confidence.split(" ")[0] }}?</summary>
+        <div class="reason-popup">
+          {% if e.plain_explanation %}<p class="plain-explanation">{{ e.plain_explanation }}</p>{% endif %}
+          {% for factor in e.reason.split(" | ") %}
+            <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}">{{ factor }}</p>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+      <div class="data-grid">
+        <div class="cell"><div class="k">Signaalprijs</div><div class="v">{{ "%.4f"|format(e.price) if e.price else "-" }}</div></div>
+        <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
+        <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
+      </div>
+      <p class="muted advice-text">{{ e.advice }}</p>
+      <form action="/journal/{{ e.id }}/status" method="post" class="status-form">
+        <select name="status">
+          <option value="genomen">Genomen</option>
+          <option value="aangepast">Aangepast</option>
+          <option value="genegeerd">Genegeerd</option>
+        </select>
+        <input type="number" step="any" name="entry_price" placeholder="eigen entry">
+        <button type="submit">Bevestig</button>
+      </form>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if not taken_entries and not pending_entries %}
   <p class="muted">Niets open op dit moment.</p>
   {% endif %}
   </div>
