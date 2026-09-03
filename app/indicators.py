@@ -176,20 +176,14 @@ def check_liquidity(quote_volume_24h: float, minimum: float = MIN_QUOTE_VOLUME_2
     return ("Liquiditeit", ok, detail)
 
 
-# Deze factoren meten allemaal in de kern hetzelfde ("is er een trend, en
-# hoe sterk"), dus tellen ze niet als losse, onafhankelijke stemmen. Hoeveel
-# afwijkingen in deze groep toegestaan zijn, schaalt mee met de groepsgrootte
-# (zie GROUP_TOLERANCE hieronder) in plaats van altijd hard op 1: anders
-# filtert een groep van 6 bijna alles weg op een enkele twijfelachtige
-# factor, terwijl een groep van 3 (bij een BTC-signaal zelf, dan ontbreekt
-# BTC-trend) juist te soepel zou worden bij dezelfde vaste marge.
-DIRECTION_GROUP = {"Trend", "Momentum", "1u bevestiging", "BTC-trend", "Trendsterkte", "Volatiliteit"}
-
-
-def _group_tolerance(group_size: int) -> int:
-    """Hoeveel afwijkingen in DIRECTION_GROUP toegestaan zijn: ruwweg 1 op
-    elke 3 leden, met een ondergrens van 1 zodra de groep niet leeg is."""
-    return max(1, group_size // 3) if group_size else 0
+# In de uitgebreide versie telt geen enkele factor apart als harde eis: met
+# 10 losse factoren blokkeert anders één marginale miss (bijvoorbeeld volume
+# op 0.89x in plaats van 1.0x) een verder overtuigend signaal volledig,
+# terwijl 9 van de 10 factoren wel klopten. Meer dan 6 van de 10 (60%) is
+# hier de grens: is dat gehaald, dan is het een melding waard, en blijft het
+# aan de gebruiker zelf om op basis van de zichtbare ✓/✗ per factor te
+# beslissen of hij hem neemt.
+CONFIRM_THRESHOLD = 0.6
 
 
 def confirms_direction(
@@ -213,12 +207,10 @@ def confirms_direction(
     gemiddelde), plus wat er in `extra_factors` meegegeven wordt
     (BTC-trend, 1u bevestiging, divergentie, liquiditeit: elk een
     (naam, ok, detail) tuple, berekend buiten deze functie omdat ze andere
-    data nodig hebben). Trend, Momentum, 1u bevestiging, BTC-trend,
-    Trendsterkte en Volatiliteit meten allemaal in de kern "is er een trend,
-    en hoe sterk" en zijn dus geen zes onafhankelijke stemmen: in die groep
-    mogen enkele factoren afwijken, schalend met de groepsgrootte (zie
-    DIRECTION_GROUP en _group_tolerance). Divergentie en Liquiditeit blijven
-    hard vereist, dat zijn geen trendfactoren.
+    data nodig hebben). Bevestigd is hier een kwestie van hoeveel van de
+    factoren in totaal kloppen (zie CONFIRM_THRESHOLD), niet van elke losse
+    factor apart hard vereisen: bij 10 factoren samen blokkeert anders één
+    marginale miss een verder overtuigend signaal.
 
     Ontbreekt een extra check (bijvoorbeeld BTC-trend bij een BTC-signaal
     zelf), dan wordt hij simpelweg niet meegegeven en telt hij niet mee.
@@ -277,10 +269,6 @@ def confirms_direction(
 
     breakdown = " | ".join(f"{'✓' if ok else '✗'} {name}: {detail}" for name, ok, detail in factors)
 
-    group = [(name, ok) for name, ok, _ in factors if name in DIRECTION_GROUP]
-    rest = [ok for name, ok, _ in factors if name not in DIRECTION_GROUP]
-    group_fails = sum(1 for _, ok in group if not ok)
-    group_ok = group_fails <= _group_tolerance(len(group))
-
-    confirmed = group_ok and all(rest)
+    passed = sum(1 for _, ok, _ in factors if ok)
+    confirmed = (passed / len(factors)) > CONFIRM_THRESHOLD
     return confirmed, breakdown
