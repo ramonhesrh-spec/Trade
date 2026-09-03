@@ -62,6 +62,17 @@
     </a>
     <div class="topbar-right">
       <span class="live-pill"><span class="ping"></span><span id="live-clock">--:--:--</span></span>
+      <button type="button" id="system-status" class="system-status" title="Systeemstatus" aria-label="Systeemstatus tonen">
+        <span class="status-dot"></span><span class="status-label">systeem</span>
+      </button>
+      <div id="system-status-popover" class="status-popover" hidden role="status">
+        <p class="status-row"><span class="muted">Exchange</span><span id="status-exchange">controleren...</span></p>
+        <p class="status-row"><span class="muted">Laatste Discord bericht</span><span id="status-message">-</span></p>
+        <p class="status-row"><span class="muted">Server actief sinds</span><span id="status-uptime">-</span></p>
+      </div>
+      <button type="button" id="cmdk-hint" class="shortcuts-hint" title="Snel zoeken (Ctrl+K)" aria-label="Snel zoeken">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      </button>
       <button type="button" id="shortcuts-hint" class="shortcuts-hint" title="Sneltoetsen (?)" aria-label="Sneltoetsen tonen">?</button>
       <form action="/logout" method="post" class="logout-form">
         {% if user %}<span class="muted">{{ user.username }}</span>{% endif %}
@@ -97,11 +108,23 @@
       <h2 id="shortcuts-title">Sneltoetsen</h2>
       <button type="button" class="shortcuts-close" aria-label="Sluiten">&times;</button>
     </div>
+    <div class="shortcuts-row"><span class="shortcuts-keys"><kbd>Ctrl</kbd> <kbd>K</kbd></span><span>snel zoeken</span></div>
     <div class="shortcuts-row"><span class="shortcuts-keys"><kbd>g</kbd> <kbd>d</kbd></span><span>naar dashboard</span></div>
     <div class="shortcuts-row"><span class="shortcuts-keys"><kbd>g</kbd> <kbd>c</kbd></span><span>coins openen</span></div>
     <div class="shortcuts-row"><span class="shortcuts-keys"><kbd>?</kbd></span><span>dit overzicht</span></div>
     <div class="shortcuts-row"><span class="shortcuts-keys"><kbd>Esc</kbd></span><span>sluiten</span></div>
     <p class="muted shortcuts-note">Werkt niet terwijl je in een veld typt. Geen sneltoets sluit ooit een trade of verwijdert iets, dat blijft altijd een bewuste klik.</p>
+  </div>
+</div>
+
+<div id="cmdk" class="cmdk-overlay" hidden>
+  <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="Snel zoeken">
+    <div class="cmdk-input-row">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="cmdk-input" type="text" placeholder="Zoek een coin of pagina... (bv. eth, uitleg)" autocomplete="off" aria-label="Zoeken">
+      <kbd>Esc</kbd>
+    </div>
+    <div id="cmdk-results" class="cmdk-results"></div>
   </div>
 </div>
 
@@ -231,6 +254,186 @@
     }
     var hintBtn = document.getElementById("shortcuts-hint");
     if (hintBtn) hintBtn.addEventListener("click", openHelp);
+  })();
+
+  // Command palette: overal met Ctrl/Cmd+K (of de zoek-knop) een coin of
+  // pagina opzoeken en direct openen. Leest de coinlijst uit de al
+  // gerenderde coins-dropdown, geen aparte databron nodig.
+  (function () {
+    var overlay = document.getElementById("cmdk");
+    var input = document.getElementById("cmdk-input");
+    var resultsEl = document.getElementById("cmdk-results");
+    if (!overlay || !input || !resultsEl) return;
+
+    var items = [];
+    var filtered = [];
+    var active = 0;
+
+    function buildItems() {
+      var list = [
+        { label: "Dashboard", href: "/dashboard", hint: "pagina" },
+        { label: "Uitleg", href: "/uitleg", hint: "pagina" },
+      ];
+      document.querySelectorAll(".coin-menu-list a").forEach(function (a) {
+        list.push({ label: a.textContent.trim(), href: a.getAttribute("href"), hint: "coin" });
+      });
+      return list;
+    }
+
+    function setActive(i) {
+      active = i;
+      Array.prototype.forEach.call(resultsEl.children, function (el, idx) {
+        el.classList.toggle("active", idx === active);
+      });
+      var el = resultsEl.children[active];
+      if (el && el.scrollIntoView) el.scrollIntoView({ block: "nearest" });
+    }
+
+    function render() {
+      var q = input.value.trim().toLowerCase();
+      filtered = !q ? items : items.filter(function (it) { return it.label.toLowerCase().indexOf(q) !== -1; });
+      resultsEl.innerHTML = "";
+      if (!filtered.length) {
+        var empty = document.createElement("div");
+        empty.className = "cmdk-empty muted";
+        empty.textContent = "Niets gevonden.";
+        resultsEl.appendChild(empty);
+        return;
+      }
+      filtered.forEach(function (it, i) {
+        var row = document.createElement("a");
+        row.href = it.href;
+        row.className = "cmdk-result";
+        row.innerHTML = "<span>" + it.label + "</span><span class=\"cmdk-hint muted\">" + it.hint + "</span>";
+        row.addEventListener("mouseenter", function () { setActive(i); });
+        resultsEl.appendChild(row);
+      });
+      setActive(0);
+    }
+
+    function open() {
+      items = buildItems();
+      overlay.hidden = false;
+      input.value = "";
+      render();
+      setTimeout(function () { input.focus(); }, 10);
+    }
+    function close() {
+      overlay.hidden = true;
+    }
+
+    document.addEventListener("keydown", function (e) {
+      var mod = e.metaKey || e.ctrlKey;
+      if (mod && (e.key === "k" || e.key === "K")) {
+        e.preventDefault();
+        if (overlay.hidden) open(); else close();
+        return;
+      }
+      if (overlay.hidden) return;
+      if (e.key === "Escape") { close(); return; }
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (filtered.length) setActive((active + 1) % filtered.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (filtered.length) setActive((active - 1 + filtered.length) % filtered.length);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault();
+        var chosen = filtered[active];
+        if (chosen) window.location.href = chosen.href;
+        return;
+      }
+    });
+
+    input.addEventListener("input", render);
+    overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+    var cmdkHint = document.getElementById("cmdk-hint");
+    if (cmdkHint) cmdkHint.addEventListener("click", open);
+  })();
+
+  // Systeemstatus: is de exchange nu bereikbaar, wanneer kwam het laatste
+  // Discord bericht binnen. Eén keer bij laden, daarna elke twee minuten,
+  // niet vaker: dit hoeft geen seconde-precisie te hebben.
+  (function () {
+    var btn = document.getElementById("system-status");
+    var popover = document.getElementById("system-status-popover");
+    if (!btn || !popover) return;
+    var dot = btn.querySelector(".status-dot");
+
+    function timeAgo(iso) {
+      if (!iso) return "nog nooit";
+      // db.now_iso() geeft een ISO-tijdstip met expliciete +00:00 offset,
+      // dat parsen alle browsers al goed zonder er zelf iets aan te
+      // hoeven plakken.
+      var then = new Date(iso);
+      var mins = Math.round((Date.now() - then.getTime()) / 60000);
+      if (mins < 1) return "net nu";
+      if (mins < 60) return mins + " min geleden";
+      var hours = Math.round(mins / 60);
+      if (hours < 24) return hours + " uur geleden";
+      return Math.round(hours / 24) + " dagen geleden";
+    }
+
+    function refresh() {
+      fetch("/api/system_status")
+        .then(function (r) { return r.json(); })
+        .then(function (s) {
+          dot.classList.toggle("status-ok", s.exchange_ok);
+          dot.classList.toggle("status-bad", !s.exchange_ok);
+          document.getElementById("status-exchange").textContent = s.exchange_ok ? "bereikbaar" : "niet bereikbaar";
+          document.getElementById("status-message").textContent = timeAgo(s.last_message_at);
+          document.getElementById("status-uptime").textContent = timeAgo(s.server_started_at);
+        })
+        .catch(function () {
+          dot.classList.remove("status-ok");
+          dot.classList.add("status-bad");
+        });
+    }
+
+    function togglePopover() {
+      popover.hidden = !popover.hidden;
+    }
+
+    btn.addEventListener("click", togglePopover);
+    document.addEventListener("click", function (e) {
+      if (!popover.hidden && !popover.contains(e.target) && e.target !== btn && !btn.contains(e.target)) {
+        popover.hidden = true;
+      }
+    });
+
+    refresh();
+    setInterval(refresh, 120000);
+  })();
+
+  // Tel-op animatie voor de grote statistiek-cijfers (winrate%), alleen
+  // bij het laden van de pagina. Puur cosmetisch: als dit niet draait,
+  // staat het eindcijfer er gewoon meteen, geen afhankelijkheid.
+  (function () {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    document.querySelectorAll(".card .big").forEach(function (el) {
+      var text = el.textContent.trim();
+      var match = text.match(/^(-?\d+(?:\.\d+)?)(.*)$/);
+      if (!match) return;
+      var target = parseFloat(match[1]);
+      var suffix = match[2];
+      if (isNaN(target) || target === 0) return;
+      var duration = 700;
+      var start = null;
+      function step(ts) {
+        if (start === null) start = ts;
+        var progress = Math.min((ts - start) / duration, 1);
+        var eased = 1 - Math.pow(1 - progress, 3);
+        var value = target * eased;
+        el.textContent = (Number.isInteger(target) ? Math.round(value) : value.toFixed(1)) + suffix;
+        if (progress < 1) requestAnimationFrame(step);
+        else el.textContent = text;
+      }
+      requestAnimationFrame(step);
+    });
   })();
 </script>
 </body>

@@ -52,6 +52,7 @@
           <div class="cell"><div class="k">Nu</div><div class="v" data-price="{{ e.id }}">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</div></div>
           <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
           <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
+          <div class="cell"><div class="k">Grootte</div><div class="v">{{ "%.6f"|format(e.position_size) ~ " " ~ e.coin if e.position_size else "-" }}</div></div>
         </div>
         <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="mono {{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
           {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
@@ -127,6 +128,7 @@
         <div class="cell"><div class="k">Nu</div><div class="v" data-price="{{ e.id }}">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</div></div>
         <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
         <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
+        <div class="cell"><div class="k">Grootte</div><div class="v">{{ "%.6f"|format(e.position_size) ~ " " ~ e.coin if e.position_size else "-" }}</div></div>
       </div>
       <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="mono {{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
         {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
@@ -238,6 +240,21 @@
 </section>
 
 <section style="--i: 4">
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Klopt de score met de uitkomst?</h2>
+  {% if ratio_stats %}
+  <p class="muted" style="margin: 0 0 12px;">Per score (hoeveel van de getoonde factoren klopten) de winrate van je
+  eigen gesloten trades. Zo zie je of een hogere score ook echt vaker tot winst leidt, niet alleen in theorie.</p>
+  <canvas id="ratio-chart" height="80"></canvas>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+    <p class="empty-title">Nog geen gesloten trades</p>
+    <p class="empty-body muted">Zodra je eerste trade gesloten is, verschijnt hier of de score ook klopte met de uitkomst.</p>
+  </div>
+  {% endif %}
+</section>
+
+<section style="--i: 5">
   <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="19" x2="5" y2="10"/><line x1="12" y1="19" x2="12" y2="5"/><line x1="19" y1="19" x2="19" y2="13"/></svg>Resultaat per coin</h2>
   {% if coin_stats %}
   <table class="signals">
@@ -265,7 +282,7 @@
   {% endif %}
 </section>
 
-<section style="--i: 5">
+<section style="--i: 6">
   <div class="table-header">
     <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Meldingen</h2>
     <form method="get" action="/dashboard" class="inline-form">
@@ -396,6 +413,41 @@
           y: { ticks: { color: "#7d8c8a" }, grid: { color: "#1c2526" } },
         },
         plugins: { legend: { labels: { color: "#eaf1f0" } } },
+      },
+    });
+  }
+
+  const ratioStats = {{ ratio_stats | tojson }};
+  const ratioCtx = document.getElementById("ratio-chart");
+  if (ratioCtx && typeof Chart !== "undefined" && ratioStats.length) {
+    new Chart(ratioCtx, {
+      type: "bar",
+      data: {
+        labels: ratioStats.map((r) => r.ratio),
+        datasets: [{
+          label: "Winrate",
+          data: ratioStats.map((r) => r.winrate),
+          backgroundColor: ratioStats.map((r) => r.passed / r.total >= 0.75 ? "#17e5d6" : "#556c67"),
+          borderRadius: 4,
+          maxBarThickness: 56,
+        }],
+      },
+      options: {
+        scales: {
+          x: { ticks: { color: "#7d8c8a" }, grid: { display: false } },
+          y: { ticks: { color: "#7d8c8a", callback: (v) => v + "%" }, grid: { color: "#1c2526" }, min: 0, max: 100 },
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => {
+                const r = ratioStats[ctx.dataIndex];
+                return `Winrate ${r.winrate}% (n=${r.trades})`;
+              },
+            },
+          },
+        },
       },
     });
   }

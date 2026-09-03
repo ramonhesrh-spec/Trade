@@ -30,6 +30,7 @@ app = FastAPI(title="HesPulse")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
 SESSION_COOKIE = "session"
+SERVER_STARTED_AT = db.now_iso()
 
 
 @app.on_event("startup")
@@ -263,6 +264,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     )
     practice_closed = [e for e in practice_entries if e["exit_price"] is not None]
     cumulative = repo.cumulative_result_series(user["id"])
+    ratio_stats = repo.winrate_by_ratio(user["id"])
     coin_stats = repo.coin_stats(user["id"])
     coins = repo.list_coins()
 
@@ -284,6 +286,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "practice_closed": practice_closed,
         "winrate": winrate,
         "cumulative": cumulative,
+        "ratio_stats": ratio_stats,
         "coin_stats": coin_stats,
         "coins": coins,
         "status_filter": status,
@@ -302,6 +305,25 @@ async def api_open_positions(user: dict = Depends(require_login)):
         }
         for e in entries if e["entry_price"] is not None
     ]
+
+
+@app.get("/api/system_status")
+async def api_system_status(user: dict = Depends(require_login)):
+    """Levensteken van het systeem zelf, niet van de markt: is de exchange
+    nu bereikbaar, en wanneer kwam het laatste Discord bericht binnen.
+    Eén live check per opvraag, geen opgeslagen status die kan verouderen
+    zonder dat iemand het merkt."""
+    try:
+        await asyncio.to_thread(exchange.fetch_last_price, "BTC")
+        exchange_ok = True
+    except Exception:
+        exchange_ok = False
+    return {
+        "exchange_ok": exchange_ok,
+        "last_message_at": repo.last_message_received_at(),
+        "server_started_at": SERVER_STARTED_AT,
+        "checked_at": db.now_iso(),
+    }
 
 
 @app.get("/export/logboek.csv")

@@ -22,6 +22,14 @@ def insert_message(raw_text: str, image_paths: list[str]) -> int:
         return cur.lastrowid
 
 
+def last_message_received_at() -> Optional[str]:
+    """Tijdstip van het laatst binnengekomen Discord bericht, ongeacht van
+    wie. Simpele graadmeter of de bot uberhaupt nog berichten ontvangt."""
+    with db.session() as conn:
+        row = conn.execute("SELECT received_at FROM messages ORDER BY id DESC LIMIT 1").fetchone()
+        return row["received_at"] if row else None
+
+
 def find_recent_duplicate(raw_text: str, exclude_id: int, hours: int = 24) -> Optional[dict]:
     """Zoekt een eerder bericht met exact dezelfde tekst, al verwerkt binnen
     de laatste uren. Voorkomt een dubbele melding als hetzelfde bericht per
@@ -569,6 +577,41 @@ def winrate_stats(user_id: int) -> dict:
         "hoog_vertrouwen": stats_for("hoog vertrouwen"),
         "laag_vertrouwen": stats_for("laag vertrouwen"),
     }
+
+
+def winrate_by_ratio(user_id: int) -> list[dict]:
+    """Voor elke gesloten, echte trade: hoeveel van de getoonde factoren
+    klopten (bv. "3/4"), en hoe vaak leidde dat tot winst. Losstaand van
+    het hoog/laag vertrouwen label zelf, dit toetst of de score binnen
+    een label ook echt iets voorspelt. Werkt met elk aantal factoren, dus
+    ook ongewijzigd zodra de uitgebreide factoren ooit meetellen."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT s.reason AS reason, je.result_eur AS result_eur
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0""",
+            (user_id,),
+        ).fetchall()
+
+    buckets: dict[tuple[int, int], list[bool]] = {}
+    for row in rows:
+        reason = row["reason"]
+        if not reason:
+            continue
+        factors = reason.split(" | ")
+        total = len(factors)
+        passed = sum(1 for f in factors if f.startswith("✓"))
+        buckets.setdefault((passed, total), []).append((row["result_eur"] or 0) > 0)
+
+    result = []
+    for (passed, total), outcomes in sorted(buckets.items(), key=lambda kv: (kv[0][1], kv[0][0])):
+        wins = sum(1 for ok in outcomes if ok)
+        result.append({
+            "ratio": f"{passed}/{total}",
+            "passed": passed, "total": total, "trades": len(outcomes),
+            "winrate": round(wins / len(outcomes) * 100, 1),
+        })
+    return result
 
 
 def cumulative_result_series(user_id: int) -> list[dict]:
