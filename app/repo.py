@@ -106,6 +106,39 @@ def list_source_levels(coin: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def create_trendline(
+    coin: str, user_id: int, label: str, x1: int, y1: float, x2: int, y2: float,
+) -> int:
+    """Zelf getekende schuine lijn (wig, driehoek, kanaal), twee punten in
+    tijd/prijs. Gedeeld tussen gebruikers, net als source_levels."""
+    with db.session() as conn:
+        cur = conn.execute(
+            """INSERT INTO trendlines (coin, user_id, label, x1, y1, x2, y2, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (coin.upper(), user_id, label or None, x1, y1, x2, y2, db.now_iso()),
+        )
+        return cur.lastrowid
+
+
+def list_trendlines(coin: str) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM trendlines WHERE coin = ? ORDER BY created_at",
+            (coin.upper(),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_trendline(trendline_id: int, user_id: int) -> None:
+    """Alleen de eigen getekende lijn, niet die van een andere gebruiker,
+    ook al is de lijn zelf wel gedeeld zichtbaar."""
+    with db.session() as conn:
+        conn.execute(
+            "DELETE FROM trendlines WHERE id = ? AND user_id = ?",
+            (trendline_id, user_id),
+        )
+
+
 def list_recent_images_for_coin(coin: str, limit: int = 8) -> list[dict]:
     """De originele screenshots die bij berichten over deze coin zijn
     meegestuurd, meest recente eerst. Toont het patroon exact zoals de bron

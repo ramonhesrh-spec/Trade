@@ -39,6 +39,23 @@ CREATE TABLE IF NOT EXISTS source_levels (
     created_at TEXT NOT NULL
 );
 
+-- Zelf getekende schuine lijnen op de coin-grafiek (wig, driehoek, kanaal,
+-- trendlijn), die de automatische toetsing niet kan naberekenen. Gedeeld
+-- tussen gebruikers, net als source_levels: iedereen kijkt naar dezelfde
+-- grafiek van dezelfde coin.
+CREATE TABLE IF NOT EXISTS trendlines (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    label TEXT,
+    x1 INTEGER NOT NULL,
+    y1 REAL NOT NULL,
+    x2 INTEGER NOT NULL,
+    y2 REAL NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_trendlines_coin ON trendlines(coin);
+
 -- Coins die genoemd zijn in verwerkte berichten, geeft een eigen
 -- grafiekpagina in het dashboard.
 CREATE TABLE IF NOT EXISTS coins (

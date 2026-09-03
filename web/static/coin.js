@@ -28,10 +28,27 @@
     color: "#7d8c8a", lineWidth: 1, title: "EMA21", lastValueVisible: false, priceLineVisible: false,
   });
 
+  // Een wig, driehoek, kanaal of trendlijn heeft schuine randen, geen platte
+  // niveaus. Die twee punten als een horizontale zone tekenen (twee vlakke
+  // lijnen) geeft een vorm die niets met het echte patroon te maken heeft.
+  // De originele afbeelding hiernaast toont het patroon exact zoals het
+  // getekend is, dus dit soort patronen wordt hier bewust niet nagebouwd,
+  // alleen platte niveaus (support, retest, box, target) wel.
+  const DIAGONAL_PATTERN_KEYWORDS = [
+    "wig", "wedge", "driehoek", "triangle", "kanaal", "channel",
+    "vlag", "flag", "trendlijn", "trendline",
+  ];
+  function isDiagonalPattern(name) {
+    if (!name) return false;
+    const lower = name.toLowerCase();
+    return DIAGONAL_PATTERN_KEYWORDS.some((kw) => lower.includes(kw));
+  }
+  const chartableLevels = sourceLevels.filter((lvl) => !isDiagonalPattern(lvl.pattern_name));
+
   // Zones (bijvoorbeeld een "box" of "retest" gebied uit twee bij elkaar
   // horende niveaus) worden als vlak, doorzichtig blok over de grafiek
   // getekend, dat volgt op prijs mee als je in- of uitzoomt.
-  const zoneGroups = groupLevelsByPattern(sourceLevels);
+  const zoneGroups = groupLevelsByPattern(chartableLevels);
   const zoneEls = zoneGroups.map((group) => {
     const el = document.createElement("div");
     el.className = "chart-zone";
@@ -54,9 +71,28 @@
     });
   }
 
+  // Een vaste 2-decimalen as-precisie (de standaard) is voor een coin onder
+  // de €1 te grof: 0.09/0.10/0.11 verbergt dan het verschil tussen 0.087 en
+  // 0.093. Precisie schalen met de prijs zelf, zoals de rest van het
+  // dashboard al met %.4f/%.6f doet voor cijfers in tabellen.
+  function pricePrecision(price) {
+    if (price >= 100) return 2;
+    if (price >= 1) return 4;
+    if (price >= 0.1) return 5;
+    if (price >= 0.01) return 6;
+    return 8;
+  }
+
   fetch(`/api/candles/${SYMBOL}`)
     .then((r) => r.json())
     .then((data) => {
+      const lastPrice = data.candles.length ? data.candles[data.candles.length - 1].close : null;
+      if (lastPrice) {
+        const precision = pricePrecision(lastPrice);
+        candleSeries.applyOptions({
+          priceFormat: { type: "price", precision, minMove: 1 / Math.pow(10, precision) },
+        });
+      }
       candleSeries.setData(data.candles);
       ema9Series.setData(data.ema9);
       ema21Series.setData(data.ema21);
@@ -82,7 +118,7 @@
           lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
       });
-      singleLevels(sourceLevels, zoneGroups).forEach((lvl) => {
+      singleLevels(chartableLevels, zoneGroups).forEach((lvl) => {
         candleSeries.createPriceLine({
           price: lvl.price_level, color: "#17e5d6", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
@@ -155,4 +191,123 @@
       positionZones();
     });
   }
+
+  // Zelf een schuine lijn tekenen (wig, driehoek, kanaal): de automatische
+  // toetsing kan dat niet naberekenen, en het bronscreenshot ernaast toont
+  // het patroon wel maar staat los van de live grafiek. Twee klikken op de
+  // grafiek leggen de twee eindpunten vast; de lijn is daarna een gewone
+  // lijnserie tussen die twee punten, en wordt gedeeld met iedereen die
+  // deze coin bekijkt, net als de bron niveaus.
+  (function () {
+    const drawBtn = document.getElementById("draw-trendline-btn");
+    const hintEl = document.getElementById("draw-trendline-hint");
+    const listEl = document.getElementById("trendline-list");
+    if (!drawBtn || !hintEl || !listEl) return;
+
+    const lineSeriesById = {};
+    let drawMode = false;
+    let pendingPoint = null;
+
+    function setHint(text) {
+      if (text) { hintEl.textContent = text; hintEl.hidden = false; }
+      else { hintEl.hidden = true; }
+    }
+
+    function stopDrawing() {
+      drawMode = false;
+      pendingPoint = null;
+      drawBtn.classList.remove("is-active");
+      drawBtn.textContent = "+ Lijn tekenen";
+      container.classList.remove("is-drawing");
+      setHint(null);
+    }
+
+    function drawLine(t) {
+      const series = chart.addLineSeries({
+        color: "#c084fc", lineWidth: 2, lastValueVisible: false,
+        priceLineVisible: false, crosshairMarkerVisible: false,
+      });
+      series.setData([{ time: t.x1, value: t.y1 }, { time: t.x2, value: t.y2 }]);
+      lineSeriesById[t.id] = series;
+    }
+
+    function removeTrendline(id) {
+      fetch(`/trendlines/${id}/delete`, { method: "POST" })
+        .then(() => {
+          if (lineSeriesById[id]) {
+            chart.removeSeries(lineSeriesById[id]);
+            delete lineSeriesById[id];
+          }
+          const idx = trendlines.findIndex((t) => t.id === id);
+          if (idx !== -1) trendlines.splice(idx, 1);
+          renderList();
+        })
+        .catch(() => {});
+    }
+
+    function renderList() {
+      listEl.innerHTML = "";
+      trendlines.forEach((t) => {
+        const chip = document.createElement("span");
+        chip.className = "trendline-chip";
+        chip.appendChild(document.createTextNode(t.label || "eigen lijn"));
+        if (t.user_id === CURRENT_USER_ID) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "trendline-remove";
+          btn.setAttribute("aria-label", "Lijn verwijderen");
+          btn.textContent = "×";
+          btn.addEventListener("click", () => removeTrendline(t.id));
+          chip.appendChild(btn);
+        }
+        listEl.appendChild(chip);
+      });
+    }
+
+    drawBtn.addEventListener("click", () => {
+      if (drawMode) { stopDrawing(); return; }
+      drawMode = true;
+      pendingPoint = null;
+      drawBtn.classList.add("is-active");
+      drawBtn.textContent = "Annuleren";
+      container.classList.add("is-drawing");
+      setHint("Klik het eerste punt van de lijn");
+    });
+
+    chart.subscribeClick((param) => {
+      if (!drawMode || !param.point || param.time === undefined) return;
+      const price = candleSeries.coordinateToPrice(param.point.y);
+      if (price === null) return;
+
+      if (!pendingPoint) {
+        pendingPoint = { time: param.time, value: price };
+        setHint("Klik het tweede punt van de lijn");
+        return;
+      }
+
+      const p1 = pendingPoint;
+      const p2 = { time: param.time, value: price };
+      stopDrawing();
+      if (p1.time === p2.time) return; // zelfde candle aangeklikt, geen lijn om te trekken
+
+      const [a, b] = p1.time < p2.time ? [p1, p2] : [p2, p1];
+      const label = `lijn ${trendlines.length + 1}`;
+      fetch(`/coins/${SYMBOL}/trendlines`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ x1: a.time, y1: a.value, x2: b.time, y2: b.value, label }),
+      })
+        .then((r) => r.json())
+        .then((res) => {
+          const t = { id: res.id, x1: a.time, y1: a.value, x2: b.time, y2: b.value, label, user_id: CURRENT_USER_ID };
+          trendlines.push(t);
+          drawLine(t);
+          renderList();
+        })
+        .catch(() => {});
+    });
+
+    trendlines.forEach(drawLine);
+    renderList();
+  })();
 })();

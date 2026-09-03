@@ -547,7 +547,30 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "recent_signals": recent_signals,
         "sparkline": sparkline,
         "coins": repo.list_coins(),
+        "trendlines": repo.list_trendlines(symbol),
     })
+
+
+@app.post("/coins/{symbol}/trendlines")
+async def create_trendline(
+    symbol: str,
+    x1: int = Form(...), y1: float = Form(...),
+    x2: int = Form(...), y2: float = Form(...),
+    label: str = Form(""),
+    user: dict = Depends(require_login),
+):
+    """Zelf getekende schuine lijn op de coin-grafiek (wig, driehoek,
+    kanaal), voor patronen die de automatische toetsing niet zelf kan
+    naberekenen. Wordt via fetch() aangeroepen vanuit coin.js na de tweede
+    klik op de grafiek, geen paginaherlaad nodig."""
+    trendline_id = repo.create_trendline(symbol.upper(), user["id"], label, x1, y1, x2, y2)
+    return {"id": trendline_id}
+
+
+@app.post("/trendlines/{trendline_id}/delete")
+async def delete_trendline(trendline_id: int, user: dict = Depends(require_login)):
+    repo.delete_trendline(trendline_id, user["id"])
+    return {"ok": True}
 
 
 @app.get("/media/{filename}")

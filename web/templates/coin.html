@@ -67,6 +67,13 @@
   </form>
 </section>
 
+<div class="trendline-toolbar">
+  <button type="button" id="draw-trendline-btn" class="button-link">+ Lijn tekenen</button>
+  <span class="trendline-hint muted" id="draw-trendline-hint" hidden></span>
+  <div class="trendline-list" id="trendline-list"></div>
+</div>
+<p class="muted" style="font-size: 12px; margin: 0 0 8px;">Voor een wig of driehoek: teken de bovenkant en de onderkant apart, elk als losse lijn van twee punten.</p>
+
 <div class="coin-layout">
   <div id="chart" class="coin-chart"></div>
 
@@ -115,6 +122,8 @@
   const openTrades = {{ open_trades | tojson }};
   const recentSignals = {{ recent_signals | tojson }};
   const sourceLevels = {{ source_levels | tojson }};
+  const trendlines = {{ trendlines | tojson }};
+  const CURRENT_USER_ID = {{ user.id | tojson }};
 </script>
 <script src="/static/coin.js"></script>
 {% endblock %}
