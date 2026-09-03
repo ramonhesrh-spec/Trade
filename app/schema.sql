@@ -144,7 +144,6 @@ CREATE TABLE IF NOT EXISTS registration_attempts (
 -- deze doorzoekt SQLite bij elke dashboard- of coinpagina de volledige
 -- tabel, dat wordt merkbaar trager naarmate er meer berichten en trades
 -- bijkomen.
-CREATE INDEX IF NOT EXISTS idx_messages_discord_user_id ON messages(discord_user_id);
 CREATE INDEX IF NOT EXISTS idx_messages_coin ON messages(coin);
 CREATE INDEX IF NOT EXISTS idx_messages_coin_category ON messages(coin, category);
 CREATE INDEX IF NOT EXISTS idx_source_levels_coin ON source_levels(coin);
