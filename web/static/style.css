@@ -440,10 +440,22 @@ table.signals tbody tr.short td:first-child::before { background: var(--red); }
 .badge-status { background: var(--panel-hover); color: var(--text-dim); border: 1px solid var(--border-strong); }
 
 .confidence-detail summary {
-  cursor: pointer; list-style: none; display: inline-block;
+  cursor: pointer; list-style: none; display: inline-flex; align-items: center; gap: 6px;
 }
 .confidence-detail summary::-webkit-details-marker { display: none; }
 .confidence-detail[open] summary .badge { box-shadow: 0 0 0 2px var(--accent-bg); }
+
+/* Ratio (bv. "3/4") staat altijd zichtbaar naast de badge, ook zonder de
+   toelichting open te klappen: het belangrijkste feit in één oogopslag. */
+.confidence-line { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 8px 0 2px; }
+.confidence-ratio { font-size: 11.5px; }
+.confidence-why {
+  color: var(--muted); font-size: 12px; text-decoration: underline;
+  text-underline-offset: 2px; text-decoration-color: var(--border-strong);
+  margin: 2px 0 8px; transition: color .15s;
+}
+.confidence-why::-webkit-details-marker { display: none; }
+.confidence-why:hover { color: var(--accent); text-decoration-color: var(--accent); }
 .reason-popup {
   position: relative; margin-top: 6px; padding: 10px 12px; background: var(--bg-elevated);
   border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
@@ -582,6 +594,22 @@ main + .footer { border-top: 1px solid var(--border); }
 }
 .factor p { margin: 0; color: var(--text-dim); font-size: 13.5px; line-height: 1.6; }
 .factor-icon { width: 18px; height: 18px; flex-shrink: 0; }
+
+/* Zelfde dashed-taal als .practice-card: dit is er al, maar staat nog
+   niet aan. Geen nieuw visueel concept nodig voor "nog niet actief". */
+.factor-preview { border-style: dashed; border-color: var(--border-strong); opacity: 0.9; }
+.factor-preview h3 { color: var(--text-dim); }
+.status-tag {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600;
+  text-transform: uppercase; letter-spacing: 0.04em; padding: 3px 9px; border-radius: 20px;
+  margin-bottom: 4px;
+}
+.status-tag.tag-live { background: var(--green-bg); color: var(--green); }
+.status-tag.tag-soon { background: var(--border); color: var(--muted); }
+.group-note {
+  background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+  padding: 12px 16px; font-size: 13px; color: var(--text-dim); line-height: 1.6; margin: 4px 0 22px;
+}
 @media (max-width: 560px) {
   .factor-grid { grid-template-columns: 1fr; }
   .hero { padding: 48px 20px 40px; }

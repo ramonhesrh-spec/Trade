@@ -80,6 +80,7 @@ async def uitleg(request: Request, user: dict = Depends(require_login)):
         "coins": repo.list_coins(),
         "kraken_referral_url": config.KRAKEN_REFERRAL_URL,
         "kraken_referral_code": config.KRAKEN_REFERRAL_CODE,
+        "advanced_factors_enabled": config.ENABLE_ADVANCED_FACTORS,
     })
 
 

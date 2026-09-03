@@ -3,8 +3,35 @@
 {% block content %}
 
 <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Uitleg</h2>
+<p class="muted" style="margin: -6px 0 4px; max-width: 640px;">Hoe HesPulse van een analyse naar een melding komt, wat hoog en laag
+vertrouwen precies betekent, en wat er gebeurt zodra je een trade neemt.</p>
 
-<section class="landing-section" id="telegram-koppelen" style="padding-left:0; padding-right:0; border-top:none;">
+<section class="landing-section" style="padding-left:0; padding-right:0; border-top:none;">
+  <h2>Hoe een melding tot stand komt</h2>
+  <div class="steps">
+    <div class="step">
+      <div class="num">1</div>
+      <p><strong>Jij stuurt een analyse door</strong> Een screenshot of tekst naar de Discord bot, zoals je nu al doet. Geen vast format nodig.</p>
+    </div>
+    <div class="step">
+      <div class="num">2</div>
+      <p><strong>Anthropic leest wat er staat</strong> Coin, richting (long/short) en eventuele koersniveaus uit de analyse worden eruit gehaald.</p>
+    </div>
+    <div class="step">
+      <div class="num">3</div>
+      <p><strong>HesPulse toetst het zelf</strong> Los van wat de analyse beweert, wordt de actuele 4 uur candle van de coin getoetst tegen vaste, harde regels. Zie hieronder precies welke.</p>
+    </div>
+    <div class="step">
+      <div class="num">4</div>
+      <p><strong>Je krijgt de uitkomst</strong> Op het dashboard staat elke melding met de volledige toetsing erbij. Bij hoog vertrouwen krijg je ook een Telegram bericht, met stop loss, take profit en je eigen positiegrootte op basis van je risicopercentage.</p>
+    </div>
+  </div>
+  <p class="muted" style="font-size: 13px;">Dezelfde toetsing draait ook los van een inkomende analyse: op elke
+  coinpagina kun je zelf een richting kiezen en meteen zien wat de huidige
+  candle daarop zegt, als oefening.</p>
+</section>
+
+<section class="landing-section" id="telegram-koppelen" style="padding-left:0; padding-right:0;">
   <h2>Telegram koppelen</h2>
   <p>HesPulse draait op één gedeelde Telegram bot. Koppel je eigen chat,
   zodat meldingen bij jou persoonlijk binnenkomen, met je eigen
@@ -26,36 +53,157 @@
 </section>
 
 <section class="landing-section" id="hoog-vertrouwen" style="padding-left:0; padding-right:0;">
+  <span class="status-tag tag-live">● Nu live</span>
   <h2>Wanneer is een signaal hoog vertrouwen?</h2>
-  <p>Elke melding wordt op het moment zelf getoetst op de 4 uur candle, tegen
-  vier vaste factoren. Ze moeten allemaal dezelfde kant op wijzen als de
-  gevraagde richting, anders wordt het label laag vertrouwen, met de reden
-  erbij in de melding.</p>
+  <p>Elke melding wordt op het moment zelf getoetst op de 4 uur candle,
+  tegen vier vaste factoren. Overal in het dashboard zie je de score als
+  ratio naast de badge, bijvoorbeeld <span class="mono">3/4</span>. Klik of
+  tik op "waarom?" om te zien welke factor het is.</p>
   <div class="factor-grid">
     <div class="factor">
       <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,17 9,11 13,15 21,5"/><polyline points="15,5 21,5 21,11"/></svg>Trend</h3>
       <p>EMA9 tegenover EMA21. Bij long moet de kortetermijn gemiddelde
-      boven de langere staan, bij short eronder.</p>
+      boven de langere staan, bij short eronder. Dat laat zien dat de
+      recente prijs de trend volgt, niet ertegenin gaat.</p>
     </div>
     <div class="factor">
       <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h4l2.5-7 4 14 2.5-7H20"/></svg>Momentum</h3>
       <p>MACD lijn tegenover de signaallijn. Bij long moet de MACD lijn
-      erboven staan, bij short eronder.</p>
+      erboven staan, bij short eronder. De trend alleen is niet genoeg, het
+      momentum moet meebewegen.</p>
     </div>
     <div class="factor">
       <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15c2.5-8 5.5-8 8 0s5.5 8 8 0"/></svg>RSI</h3>
       <p>Bij long mag de RSI nog niet boven 75 staan, bij short nog niet
-      onder 25.</p>
+      onder 25. Instappen op een niveau dat al oververhit is, verhoogt het
+      risico op een snelle omkeer.</p>
     </div>
     <div class="factor">
       <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="19" x2="5" y2="10"/><line x1="12" y1="19" x2="12" y2="5"/><line x1="19" y1="19" x2="19" y2="13"/></svg>Volume</h3>
       <p>Het volume moet minstens gelijk zijn aan het gemiddelde van de
-      laatste 20 candles.</p>
+      laatste 20 candles. Een beweging zonder volume erachter is minder
+      overtuigend.</p>
     </div>
   </div>
-  <p>Voldoet een signaal aan alle vier, dan is het hoog vertrouwen. Beide
-  worden gemeld, met stop loss en take profit erbij. Ook hoog vertrouwen
-  is geen garantie, het is een optelsom van regels, geen voorspelling.</p>
+  <p>Kloppen alle vier, dan is het <strong>hoog vertrouwen (4/4)</strong>.
+  Mist er één of meer, dan is het <strong>laag vertrouwen</strong>, met de
+  ontbrekende factor(en) erbij. Belangrijk verschil: alleen hoog vertrouwen
+  stuurt een Telegram bericht. Laag vertrouwen zie je alleen op het
+  dashboard, in de Meldingen-tabel, zodat je er niet mee gestoord wordt
+  maar het ook niet kwijt bent. Hoog vertrouwen is geen garantie op winst,
+  het is een optelsom van regels, geen voorspelling.</p>
+</section>
+
+<section class="landing-section" style="padding-left:0; padding-right:0;">
+  <h2>Een trade nemen</h2>
+  <p>Een melding is een voorstel, geen automatische order. Onder elke
+  nog niet genomen melding op het dashboard staan drie knoppen:</p>
+  <div class="factor-grid">
+    <div class="factor">
+      <h3>Genomen</h3>
+      <p>Je bent op het voorgestelde niveau ingestapt. Vul je eigen
+      entryprijs in en bevestig. Vanaf dan telt de trade mee in je
+      winrate en volgt HesPulse hem live: koers, resultaat in euro's en
+      in procent, elke 20 seconden bijgewerkt op het dashboard.</p>
+    </div>
+    <div class="factor">
+      <h3>Aangepast</h3>
+      <p>Je bent wel ingestapt, maar op een ander niveau dan
+      voorgesteld. Zelfde als Genomen, alleen met je eigen entryprijs
+      als uitgangspunt voor het resultaat.</p>
+    </div>
+    <div class="factor">
+      <h3>Genegeerd</h3>
+      <p>Je hebt de melding bewust overgeslagen. Telt niet mee in je
+      winrate, blijft wel zichtbaar in de Meldingen-tabel.</p>
+    </div>
+  </div>
+  <p>Eenmaal genomen, sluit je de trade af met je exitprijs en -tijdstip
+  via de knop Sluiten. Typefout gemaakt? "Verkeerd ingevuld? Terugzetten"
+  zet de regel terug naar nieuw, zonder de melding zelf kwijt te raken.
+  Niets hiervan gaat automatisch, HesPulse plaatst nooit zelf een order,
+  dat blijft altijd jouw eigen, bewuste klik.</p>
+</section>
+
+<section class="landing-section" style="padding-left:0; padding-right:0;">
+  <h2>Wat gebeurt er live, en wat niet</h2>
+  <p>Drie aparte klokken lopen door elkaar, hier op een rij zodat
+  duidelijk is wat je wanneer kunt verwachten:</p>
+  <div class="factor-grid">
+    <div class="factor">
+      <h3>Koers en resultaat op het dashboard</h3>
+      <p>Elke 20 seconden, zolang je het dashboard open hebt staan. Geen
+      herlaad nodig, de cijfers lichten kort op als ze veranderen.</p>
+    </div>
+    <div class="factor">
+      <h3>Seintje bij stop loss of take profit</h3>
+      <p>Elke 15 minuten wordt gecheckt of een lopende trade zijn stop
+      loss of take profit al geraakt heeft. Zo ja, dan krijg je één keer
+      een Telegram bericht, geen herhaling erna.</p>
+    </div>
+    <div class="factor">
+      <h3>Seintje als een gemiste melding terugkomt</h3>
+      <p>Precies waar je naar vroeg: stuur je een analyse door en neem je
+      het signaal niet meteen, dan checkt HesPulse elke 15 minuten of de
+      koers weer dicht genoeg (binnen 0,5x ATR) bij dat oorspronkelijke
+      niveau is gekomen. Zo ja, één Telegram seintje "nog steeds
+      interessant?", zodat je het niet zelf de hele dag hoeft te volgen.</p>
+    </div>
+  </div>
+  <p class="muted" style="font-size: 13px;">Beide Telegram-checks draaien als een aparte, terugkerende taak op de
+  server, los van of je het dashboard open hebt staan.</p>
+</section>
+
+<section class="landing-section" style="padding-left:0; padding-right:0;">
+  <span class="status-tag {{ 'tag-live' if advanced_factors_enabled else 'tag-soon' }}">
+    {{ '● Actief' if advanced_factors_enabled else '○ Nog niet actief' }}
+  </span>
+  <h2>In de maak: zes extra factoren</h2>
+  <p>Naast de vier factoren hierboven staat er al een uitgebreidere
+  toetsing klaar, {% if advanced_factors_enabled %}en die staat nu aan{% else %}maar die staat nog uit{% endif %}.
+  Eerst wordt getoetst hoe streng de nieuwe regels in de praktijk uitpakken
+  op eerdere signalen, voor ze meetellen in een echte melding.</p>
+  <div class="factor-grid">
+    <div class="factor factor-preview">
+      <h3>Trendsterkte (ADX)</h3>
+      <p>ADX van minimaal 20: is er überhaupt een trend om op te varen, of
+      beweegt de coin zijwaarts?</p>
+    </div>
+    <div class="factor factor-preview">
+      <h3>Volatiliteit (ATR)</h3>
+      <p>De actuele ATR moet boven zijn eigen 20-candle gemiddelde liggen:
+      neemt de beweeglijkheid toe, in plaats van uitdovend?</p>
+    </div>
+    <div class="factor factor-preview">
+      <h3>BTC-trend</h3>
+      <p>Voor altcoins: staat Bitcoin zelf niet lijnrecht tegenover de
+      trade in? De hele markt volgt vaak BTC.</p>
+    </div>
+    <div class="factor factor-preview">
+      <h3>1 uur bevestiging</h3>
+      <p>Dezelfde trendcheck als hierboven, maar dan op het kortere 1 uur
+      tijdsbestek, als extra bevestiging naast de 4 uur candle.</p>
+    </div>
+    <div class="factor factor-preview">
+      <h3>Divergentie</h3>
+      <p>Zet de prijs een nieuwe top of bodem neer terwijl de RSI juist
+      verzwakt? Dat is vaak een teken dat het momentum al aan het
+      afzwakken is.</p>
+    </div>
+    <div class="factor factor-preview">
+      <h3>Liquiditeit</h3>
+      <p>Minimaal €2 miljoen 24-uurs handelsvolume. Een technisch perfecte
+      setup op een dun verhandelde coin levert in de praktijk slippage op
+      die de hele edge kan opeten.</p>
+    </div>
+  </div>
+  <div class="group-note">
+    Trend, Momentum, BTC-trend en 1 uur bevestiging meten in de kern
+    allemaal hetzelfde: is er een trend. Daarom telt die groep niet als
+    vier losse stemmen, één afwijking daarbinnen mag (3 van 4). De overige
+    factoren (RSI, Volume, Trendsterkte, Volatiliteit, Divergentie,
+    Liquiditeit) blijven stuk voor stuk hard vereist, geen uitzondering.
+  </div>
 </section>
 
 <section class="landing-section" style="padding-left:0; padding-right:0;">

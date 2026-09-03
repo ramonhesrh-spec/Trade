@@ -1,30 +1,3 @@
-(function () {
-  const ctx = document.getElementById("cumulative-chart");
-  if (!ctx) return;
-
-  new Chart(ctx, {
-    type: "line",
-    data: {
-      labels: cumulativeData.map((p) => p.time.slice(0, 10)),
-      datasets: [{
-        label: "Cumulatief resultaat (euro)",
-        data: cumulativeData.map((p) => p.cumulative_eur),
-        borderColor: "#17e5d6",
-        backgroundColor: "rgba(23, 229, 214, 0.12)",
-        fill: true,
-        tension: 0.1,
-      }],
-    },
-    options: {
-      scales: {
-        x: { ticks: { color: "#7d8c8a" }, grid: { color: "#1c2526" } },
-        y: { ticks: { color: "#7d8c8a" }, grid: { color: "#1c2526" } },
-      },
-      plugins: { legend: { labels: { color: "#eaf1f0" } } },
-    },
-  });
-})();
-
 // Live prijs en PnL van open posities, elke 20 seconden bijgewerkt zonder
 // de pagina opnieuw te laden. Een kort oplicht-moment (groen omhoog, rood
 // omlaag) alleen als de waarde echt anders is dan de vorige poll, niet bij
@@ -78,4 +51,63 @@
 
   refresh();
   setInterval(refresh, 20000);
+})();
+
+// Trade nemen/sluiten/terugzetten zonder volledige paginaherlaad: het
+// "Open nu"-blok (risicogauge + kaarten) wordt na een formulier-submit
+// vervangen door de verse servergerenderde versie, met een korte fade in
+// plaats van een volledige reload. Bij een netwerkfout of onverwachte
+// respons valt dit terug op een gewone formulier-submit met paginaherlaad,
+// nooit een stille mislukking waarbij de gebruiker denkt dat er niets is
+// gebeurd terwijl er wel iets over echt geld gaat.
+(function () {
+  if (!document.getElementById("open-nu-body")) return;
+
+  function isTracked(form) {
+    return (
+      form instanceof HTMLFormElement &&
+      form.matches(".status-form, .close-form, .reset-form") &&
+      form.closest("#open-nu-body")
+    );
+  }
+
+  async function handleSubmit(e) {
+    const form = e.target;
+    // Als het "Terugzetten?"-bevestigingsdialoogje net op Annuleren is
+    // geklikt, is de submit al geannuleerd (defaultPrevented) voor deze
+    // listener hem te zien krijgt. Dan hier ook niets doen, anders
+    // negeert de AJAX-laag die annulering alsnog.
+    if (e.defaultPrevented) return;
+    if (!isTracked(form)) return;
+    e.preventDefault();
+
+    const btn = form.querySelector("button[type=submit]");
+    const originalLabel = btn ? btn.textContent : null;
+    if (btn) { btn.disabled = true; btn.textContent = "Bezig..."; }
+
+    try {
+      const resp = await fetch(form.action, { method: "POST", body: new FormData(form) });
+      if (!resp.ok) throw new Error("verzoek mislukt");
+      const html = await resp.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const fresh = doc.getElementById("open-nu-body");
+      const current = document.getElementById("open-nu-body");
+      if (!fresh || !current) throw new Error("open-nu-body niet gevonden in respons");
+
+      current.style.transition = "opacity .16s ease";
+      current.style.opacity = "0";
+      await new Promise((r) => setTimeout(r, 160));
+      current.replaceWith(fresh);
+      fresh.style.opacity = "0";
+      requestAnimationFrame(() => {
+        fresh.style.transition = "opacity .2s ease";
+        fresh.style.opacity = "1";
+      });
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+      form.submit();
+    }
+  }
+
+  document.addEventListener("submit", handleSubmit);
 })();

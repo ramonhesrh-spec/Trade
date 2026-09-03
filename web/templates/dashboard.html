@@ -4,6 +4,7 @@
 
 <section style="--i: 0">
   <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.2 4.2l4.2 4.2m7.2 7.2 4.2 4.2M1 12h6m10 0h6M4.2 19.8l4.2-4.2m7.2-7.2 4.2-4.2"/></svg>Open nu</h2>
+  <div id="open-nu-body">
   {% if open_risk_eur > 0 %}
   <div class="risk-gauge">
     <div class="risk-gauge-head">
@@ -19,7 +20,7 @@
   {% if open_entries %}
   <div class="open-grid">
     {% for e in open_entries %}
-    <div class="card open-card">
+    <div class="card open-card" data-entry-id="{{ e.id }}">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
           <a href="/coins/{{ e.coin }}" style="font-weight: 700; color: var(--text); text-decoration: none; font-size: 15px;">{{ e.coin }}</a>
@@ -27,13 +28,24 @@
         </div>
         <span class="badge badge-status">{{ e.status }}</span>
       </div>
-      <div style="display: flex; gap: 6px; align-items: center; margin: 8px 0;">
+      <div class="confidence-line">
         <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
+        {% if e.reason %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
         <span class="muted" style="font-size: 12px;">
           slagingskans {{ e.success_rate }}%
           {% if e.success_sample < 5 %}(nog weinig data){% else %}(n={{ e.success_sample }}){% endif %}
         </span>
       </div>
+      {% if e.reason %}
+      <details class="confidence-detail js-accordion">
+        <summary class="confidence-why">waarom {{ e.confidence.split(" ")[0] }}?</summary>
+        <div class="reason-popup">
+          {% for factor in e.reason.split(" | ") %}
+            <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}">{{ factor }}</p>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
       {% if e.entry_price is not none %}
         <div class="data-grid">
           <div class="cell"><div class="k">Entry</div><div class="v">{{ "%.4f"|format(e.entry_price) }}</div></div>
@@ -78,6 +90,7 @@
   {% else %}
   <p class="muted">Niets open op dit moment.</p>
   {% endif %}
+  </div>
 </section>
 
 {% if practice_open or practice_closed %}
@@ -95,9 +108,20 @@
         </div>
         <span class="badge badge-status">oefening</span>
       </div>
-      <div style="display: flex; gap: 6px; align-items: center; margin: 8px 0;">
+      <div class="confidence-line">
         <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
+        {% if e.reason %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
       </div>
+      {% if e.reason %}
+      <details class="confidence-detail js-accordion">
+        <summary class="confidence-why">waarom {{ e.confidence.split(" ")[0] }}?</summary>
+        <div class="reason-popup">
+          {% for factor in e.reason.split(" | ") %}
+            <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}">{{ factor }}</p>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
       <div class="data-grid">
         <div class="cell"><div class="k">Entry</div><div class="v">{{ "%.4f"|format(e.entry_price) }}</div></div>
         <div class="cell"><div class="k">Nu</div><div class="v" data-price="{{ e.id }}">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</div></div>
@@ -283,7 +307,10 @@
         <td><span class="badge badge-{{ e.direction }}">{{ e.direction }}</span></td>
         <td>
           <details class="confidence-detail js-accordion">
-            <summary><span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span></summary>
+            <summary>
+              <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
+              <span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>
+            </summary>
             <div class="reason-popup">
               {% for factor in e.reason.split(" | ") %}
                 <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}">{{ factor }}</p>
@@ -339,9 +366,38 @@
   </div>
 </section>
 
+<script defer src="/static/dashboard.js"></script>
+
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
 <script defer>
+  // Los van dashboard.js: die moet altijd meteen werken (live koersen,
+  // trade nemen/sluiten), ook als de Chart.js CDN traag is of niet
+  // laadt. Zelfde defer-volgorde-garantie, maar in zijn eigen ketting
+  // ná dashboard.js in de broncode, dus dashboard.js wacht er nooit op.
   const cumulativeData = {{ cumulative | tojson }};
+  const cumulativeCtx = document.getElementById("cumulative-chart");
+  if (cumulativeCtx && typeof Chart !== "undefined") {
+    new Chart(cumulativeCtx, {
+      type: "line",
+      data: {
+        labels: cumulativeData.map((p) => p.time.slice(0, 10)),
+        datasets: [{
+          label: "Cumulatief resultaat (euro)",
+          data: cumulativeData.map((p) => p.cumulative_eur),
+          borderColor: "#17e5d6",
+          backgroundColor: "rgba(23, 229, 214, 0.12)",
+          fill: true,
+          tension: 0.1,
+        }],
+      },
+      options: {
+        scales: {
+          x: { ticks: { color: "#7d8c8a" }, grid: { color: "#1c2526" } },
+          y: { ticks: { color: "#7d8c8a" }, grid: { color: "#1c2526" } },
+        },
+        plugins: { legend: { labels: { color: "#eaf1f0" } } },
+      },
+    });
+  }
 </script>
-<script defer src="/static/dashboard.js"></script>
 {% endblock %}
