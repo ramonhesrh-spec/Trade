@@ -26,10 +26,20 @@
 })();
 
 // Live prijs en PnL van open posities, elke 20 seconden bijgewerkt zonder
-// de pagina opnieuw te laden.
+// de pagina opnieuw te laden. Een kort oplicht-moment (groen omhoog, rood
+// omlaag) alleen als de waarde echt anders is dan de vorige poll, niet bij
+// elke tick, en niet bij de allereerste keer laden.
 (function () {
   const priceEls = document.querySelectorAll("[data-price]");
   if (!priceEls.length) return;
+
+  const previous = {};
+
+  function flash(el, up) {
+    el.classList.remove("flash-up", "flash-down");
+    void el.offsetWidth; // herstart de animatie ook als dezelfde richting twee keer op rij voorkomt
+    el.classList.add(up ? "flash-up" : "flash-down");
+  }
 
   function refresh() {
     fetch("/api/open_positions")
@@ -39,10 +49,21 @@
           const priceEl = document.querySelector(`[data-price="${p.id}"]`);
           const pnlEl = document.querySelector(`[data-pnl="${p.id}"]`);
           const pnlPctEl = document.querySelector(`[data-pnl-pct="${p.id}"]`);
+
           if (priceEl && p.current_price !== null) {
+            const key = `price-${p.id}`;
+            if (previous[key] !== undefined && previous[key] !== p.current_price) {
+              flash(priceEl, p.current_price > previous[key]);
+            }
+            previous[key] = p.current_price;
             priceEl.textContent = p.current_price.toFixed(4);
           }
           if (pnlEl && p.pnl_eur !== null) {
+            const key = `pnl-${p.id}`;
+            if (previous[key] !== undefined && previous[key] !== p.pnl_eur) {
+              flash(pnlEl, p.pnl_eur > previous[key]);
+            }
+            previous[key] = p.pnl_eur;
             pnlEl.firstChild.textContent = `€${p.pnl_eur.toFixed(2)} `;
             pnlEl.classList.toggle("pos", p.pnl_eur >= 0);
             pnlEl.classList.toggle("neg", p.pnl_eur < 0);

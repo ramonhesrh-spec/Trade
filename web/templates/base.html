@@ -8,7 +8,7 @@
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -18,10 +18,13 @@
       <img src="/static/hespulse-logo.svg" alt="HesPulse logo">
       <span>HesPulse</span>
     </a>
-    <form action="/logout" method="post" class="logout-form">
-      {% if user %}<span class="muted">{{ user.username }}</span>{% endif %}
-      <button type="submit">Uitloggen</button>
-    </form>
+    <div class="topbar-right">
+      <span class="live-pill"><span class="ping"></span><span id="live-clock">--:--:--</span></span>
+      <form action="/logout" method="post" class="logout-form">
+        {% if user %}<span class="muted">{{ user.username }}</span>{% endif %}
+        <button type="submit">Uitloggen</button>
+      </form>
+    </div>
   </div>
   <nav>
     <a href="/dashboard">Dashboard</a>
@@ -43,5 +46,18 @@
 {% block content %}{% endblock %}
 </main>
 <footer class="footer">{{ disclaimer }}</footer>
+<script>
+  // Toont dat de pagina leeft, geen decoratie: een stilstaande klok in een
+  // "live" balk zou juist wantrouwen wekken.
+  (function () {
+    var el = document.getElementById("live-clock");
+    if (!el) return;
+    function tick() {
+      el.textContent = new Date().toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+    tick();
+    setInterval(tick, 1000);
+  })();
+</script>
 </body>
 </html>

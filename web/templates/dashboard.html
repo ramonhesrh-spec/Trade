@@ -23,13 +23,13 @@
         </span>
       </div>
       {% if e.entry_price is not none %}
-        <div class="open-numbers">
-          <span class="muted">Entry <b style="color: var(--text);">{{ "%.4f"|format(e.entry_price) }}</b></span>
-          <span class="muted">Nu <b data-price="{{ e.id }}" style="color: var(--text);">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</b></span>
-          <span class="muted">SL <b class="neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</b></span>
-          <span class="muted">TP <b class="pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</b></span>
+        <div class="data-grid">
+          <div class="cell"><div class="k">Entry</div><div class="v">{{ "%.4f"|format(e.entry_price) }}</div></div>
+          <div class="cell"><div class="k">Nu</div><div class="v" data-price="{{ e.id }}">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</div></div>
+          <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
+          <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
         </div>
-        <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="{{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
+        <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="mono {{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
           {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
           <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
         </p>
@@ -44,10 +44,10 @@
           <button type="submit" class="button-reset">Verkeerd ingevuld? Terugzetten</button>
         </form>
       {% else %}
-        <div class="open-numbers">
-          <span class="muted">Entry <b style="color: var(--text);">{{ "%.4f"|format(e.price) if e.price else "-" }}</b></span>
-          <span class="muted">SL <b class="neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</b></span>
-          <span class="muted">TP <b class="pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</b></span>
+        <div class="data-grid">
+          <div class="cell"><div class="k">Entry</div><div class="v">{{ "%.4f"|format(e.price) if e.price else "-" }}</div></div>
+          <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
+          <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
         </div>
         <p class="muted advice-text">{{ e.advice }}</p>
         <form action="/journal/{{ e.id }}/status" method="post" class="status-form">
@@ -86,13 +86,13 @@
       <div style="display: flex; gap: 6px; align-items: center; margin: 8px 0;">
         <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
       </div>
-      <div class="open-numbers">
-        <span class="muted">Entry <b style="color: var(--text);">{{ "%.4f"|format(e.entry_price) }}</b></span>
-        <span class="muted">Nu <b data-price="{{ e.id }}" style="color: var(--text);">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</b></span>
-        <span class="muted">SL <b class="neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</b></span>
-        <span class="muted">TP <b class="pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</b></span>
+      <div class="data-grid">
+        <div class="cell"><div class="k">Entry</div><div class="v">{{ "%.4f"|format(e.entry_price) }}</div></div>
+        <div class="cell"><div class="k">Nu</div><div class="v" data-price="{{ e.id }}">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</div></div>
+        <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
+        <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
       </div>
-      <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="{{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
+      <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="mono {{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
         {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
         <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
       </p>
@@ -113,13 +113,13 @@
   {% if practice_closed %}
   <div class="table-scroll" style="margin-top: 12px;">
   <table class="signals">
-    <thead><tr><th>Coin</th><th>Richting</th><th>Resultaat</th></tr></thead>
+    <thead><tr><th>Coin</th><th>Richting</th><th class="num">Resultaat</th></tr></thead>
     <tbody>
       {% for e in practice_closed %}
-      <tr>
+      <tr class="{{ e.direction }}">
         <td><a href="/coins/{{ e.coin }}">{{ e.coin }}</a></td>
         <td><span class="badge badge-{{ e.direction }}">{{ e.direction }}</span></td>
-        <td class="{{ 'pos' if (e.result_eur or 0) >= 0 else 'neg' }}">€{{ "%.2f"|format(e.result_eur) if e.result_eur is not none else "-" }}</td>
+        <td class="num {{ 'pos' if (e.result_eur or 0) >= 0 else 'neg' }}">€{{ "%.2f"|format(e.result_eur) if e.result_eur is not none else "-" }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -138,17 +138,33 @@
 <section class="cards">
   <div class="card">
     <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><polyline points="9,12 11,14 15,10"/></svg>Hoog vertrouwen</h3>
+    {% if winrate.hoog_vertrouwen.total == 0 %}
+    <div class="empty-state">
+      <div class="empty-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8 12 14.7l-3.3-3.4L4 16"/></svg></div>
+      <p class="empty-title">Nog geen hoog vertrouwen trade gesloten</p>
+      <p class="empty-body">Zodra je eerste hoog-vertrouwen signaal gesloten is, verschijnt hier je winrate en gemiddeld resultaat.</p>
+    </div>
+    {% else %}
     <p class="big">{{ winrate.hoog_vertrouwen.winrate }}%</p>
     <div class="winrate-bar"><div style="width: {{ winrate.hoog_vertrouwen.winrate }}%"></div></div>
     <p class="muted">{{ winrate.hoog_vertrouwen.wins }} van {{ winrate.hoog_vertrouwen.total }} gesloten trades</p>
     <p class="muted">gemiddeld <span class="{{ 'pos' if winrate.hoog_vertrouwen.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(winrate.hoog_vertrouwen.avg_result_eur) }} ({{ "%.1f"|format(winrate.hoog_vertrouwen.avg_result_pct) }}%)</span> per trade</p>
+    {% endif %}
   </div>
   <div class="card">
     <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 2 21h20L12 3z"/><line x1="12" y1="9" x2="12" y2="14"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Laag vertrouwen</h3>
+    {% if winrate.laag_vertrouwen.total == 0 %}
+    <div class="empty-state">
+      <div class="empty-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8 12 14.7l-3.3-3.4L4 16"/></svg></div>
+      <p class="empty-title">Nog geen laag vertrouwen trade gesloten</p>
+      <p class="empty-body">Zodra je eerste laag-vertrouwen signaal gesloten is, verschijnt hier je winrate en gemiddeld resultaat.</p>
+    </div>
+    {% else %}
     <p class="big">{{ winrate.laag_vertrouwen.winrate }}%</p>
     <div class="winrate-bar"><div style="width: {{ winrate.laag_vertrouwen.winrate }}%"></div></div>
     <p class="muted">{{ winrate.laag_vertrouwen.wins }} van {{ winrate.laag_vertrouwen.total }} gesloten trades</p>
     <p class="muted">gemiddeld <span class="{{ 'pos' if winrate.laag_vertrouwen.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(winrate.laag_vertrouwen.avg_result_eur) }} ({{ "%.1f"|format(winrate.laag_vertrouwen.avg_result_pct) }}%)</span> per trade</p>
+    {% endif %}
   </div>
   <div class="card">
     <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h3"/><path d="M3 10h18"/></svg>Portfolio ({{ user.username }})</h3>
@@ -192,18 +208,18 @@
     <thead>
       <tr>
         <th>Coin</th>
-        <th>Trades</th>
-        <th>Winrate</th>
-        <th>Gemiddeld resultaat</th>
+        <th class="num">Trades</th>
+        <th class="num">Winrate</th>
+        <th class="num">Gemiddeld resultaat</th>
       </tr>
     </thead>
     <tbody>
       {% for c in coin_stats %}
       <tr>
         <td><a href="/coins/{{ c.coin }}">{{ c.coin }}</a></td>
-        <td>{{ c.total }}</td>
-        <td>{{ c.winrate }}%</td>
-        <td class="{{ 'pos' if c.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(c.avg_result_eur) }}</td>
+        <td class="num">{{ c.total }}</td>
+        <td class="num">{{ c.winrate }}%</td>
+        <td class="num {{ 'pos' if c.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(c.avg_result_eur) }}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -237,19 +253,19 @@
         <th>Coin</th>
         <th>Richting</th>
         <th>Vertrouwen</th>
-        <th>Entry</th>
-        <th>Stop loss</th>
-        <th>Take profit</th>
-        <th>Grootte</th>
+        <th class="num">Entry</th>
+        <th class="num">Stop loss</th>
+        <th class="num">Take profit</th>
+        <th class="num">Grootte</th>
         <th>Status</th>
-        <th>Resultaat</th>
+        <th class="num">Resultaat</th>
         <th>Notitie</th>
         <th>Acties</th>
       </tr>
     </thead>
     <tbody>
       {% for e in entries %}
-      <tr>
+      <tr class="{{ e.direction }}">
         <td>{{ e.created_at[:16] | replace("T", " ") }}</td>
         <td><a href="/coins/{{ e.coin }}">{{ e.coin }}</a></td>
         <td><span class="badge badge-{{ e.direction }}">{{ e.direction }}</span></td>
@@ -263,12 +279,12 @@
             </div>
           </details>
         </td>
-        <td>{{ "%.4f"|format(e.price) if e.price else "-" }}</td>
-        <td>{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</td>
-        <td>{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</td>
-        <td>{{ "%.6f"|format(e.position_size) ~ " " ~ e.coin if e.position_size else "-" }}</td>
+        <td class="num">{{ "%.4f"|format(e.price) if e.price else "-" }}</td>
+        <td class="num">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</td>
+        <td class="num">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</td>
+        <td class="num">{{ "%.6f"|format(e.position_size) ~ " " ~ e.coin if e.position_size else "-" }}</td>
         <td><span class="badge badge-status">{{ e.status }}</span></td>
-        <td>
+        <td class="num">
           {% if e.result_eur is not none %}
             <span class="{{ 'pos' if e.result_eur >= 0 else 'neg' }}">
               €{{ "%.2f"|format(e.result_eur) }} ({{ "%.1f"|format(e.result_pct) }}%)

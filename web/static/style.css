@@ -20,6 +20,12 @@
   --shadow-md: 0 4px 16px -4px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
   --radius: 10px;
   --radius-sm: 6px;
+  --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.001ms !important; animation-iteration-count: 1 !important; transition-duration: 0.001ms !important; }
 }
 
 * { box-sizing: border-box; }
@@ -34,13 +40,21 @@ body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--sans);
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
 }
 
 a { color: var(--accent); }
+
+/* Elk getal dat een koers, resultaat of percentage is, krijgt dezelfde
+   monospace stem: vaste cijferbreedte, kolommen blijven recht staan
+   in plaats van te wiebelen zoals bij een variabele-breedte lettertype.
+   Dit is het typografische signatuurstuk van de site, niet decoratie. */
+.mono, .pos, .neg, .card .big, table.signals td.num, table.signals th.num {
+  font-family: var(--mono);
+}
 
 /* Twee vaste rijen in plaats van één flex-rij die alles tegelijk moet
    verdelen: brand+uitloggen boven, coinlijst eronder los en met eigen
@@ -93,6 +107,20 @@ a { color: var(--accent); }
 }
 .logout-form button:hover { color: var(--text); border-color: var(--muted); background: var(--panel-hover); }
 
+.topbar-right { display: flex; align-items: center; gap: 18px; flex-shrink: 0; }
+
+/* Live-indicator: een terminal toont altijd of hij verbonden is. Klein en
+   stil, geen decoratie, een statusfeit. Klok komt uit JS (base.html),
+   puntje is puur CSS. */
+.live-pill { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; color: var(--muted); font-family: var(--mono); }
+.live-pill .ping { width: 6px; height: 6px; border-radius: 50%; background: var(--green); position: relative; flex-shrink: 0; }
+.live-pill .ping::after {
+  content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1px solid var(--green);
+  animation: ping 2s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+@keyframes ping { 0% { transform: scale(0.8); opacity: 0.8; } 100% { transform: scale(2.2); opacity: 0; } }
+@media (max-width: 560px) { .live-pill { display: none; } }
+
 @media (max-width: 700px) {
   .topbar { padding: 10px 14px 8px; }
   .topbar .brand img { height: 20px; }
@@ -136,10 +164,43 @@ main h3 { font-size: 15px; gap: 8px; }
   font-weight: 500; font-size: 11px; padding: 4px 6px; text-decoration: underline;
 }
 .button-reset:hover { color: var(--red); background: transparent; border-color: transparent; }
-.open-numbers {
-  display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px;
+/* Cijferraster: entry/nu/SL/TP naast elkaar in uitgelijnde kolommen, zoals
+   een orderboek, in plaats van losse label/waarde paren die niet uitlijnen
+   als de cijfers een andere lengte hebben. auto-fit met een minimumbreedte
+   per cel in plaats van een vast aantal kolommen: een kaart van 230px kan
+   geen 4 kolommen met "50000.0000" naast elkaar tonen zonder af te knippen,
+   dus de cellen vallen zelf terug naar 2 (of 1) per rij als het niet past,
+   ongeacht hoeveel cellen er in het raster staan. */
+.data-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 1px;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden;
+  margin: 10px 0 12px; background: var(--border);
 }
-.open-numbers b { font-variant-numeric: tabular-nums; font-weight: 600; }
+.data-grid .cell { background: var(--bg-elevated); padding: 7px 10px; min-width: 0; }
+.data-grid .cell .k { font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 3px; }
+.data-grid .cell .v {
+  font-family: var(--mono); font-size: 13.5px; font-weight: 600; font-variant-numeric: tabular-nums;
+  color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.data-grid .cell .v.pos { color: var(--green); }
+.data-grid .cell .v.neg { color: var(--red); }
+/* Bij een oneven aantal cellen (bijv. Entry/SL/TP) wrapt de laatste cel op
+   smalle schermen alleen naar een nieuwe rij: die laat dan de rest van de
+   rij leeg staan, zichtbaar als een lege cel-vormige plek. Laat hem in dat
+   geval de hele breedte pakken in plaats van half leeg te blijven staan. */
+@media (max-width: 600px) {
+  .data-grid .cell:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+/* Kort oplicht-moment als een cijfer via de 20s-poll een echt andere
+   waarde krijgt (dashboard.js), niet bij elke poll-tick zelf. Groen bij
+   een stijging, rood bij een daling. Respecteert reduced-motion via de
+   globale regel bovenaan dit bestand. */
+.flash-up { animation: flash-up 900ms ease; border-radius: 6px; }
+.flash-down { animation: flash-down 900ms ease; border-radius: 6px; }
+@keyframes flash-up { 0% { background-color: rgba(51, 214, 159, 0.28); } 100% { background-color: rgba(51, 214, 159, 0); } }
+@keyframes flash-down { 0% { background-color: rgba(242, 104, 92, 0.28); } 100% { background-color: rgba(242, 104, 92, 0); } }
+
 .advice-text { font-size: 12px; line-height: 1.5; margin: 8px 0 0; }
 
 .cards { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
@@ -155,6 +216,17 @@ main h3 { font-size: 15px; gap: 8px; }
 .card-icon { width: 15px; height: 15px; flex-shrink: 0; color: var(--accent); }
 .card .big { font-size: 30px; font-weight: 700; margin: 0; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .muted { color: var(--muted); }
+
+/* Lege staat: nul trades is de startsituatie, geen fout. Een kaart die
+   "0.0%" toont ziet er identiek uit als een kaart met echte data, en
+   oogt daardoor kapot in plaats van gewoon nog leeg. */
+.empty-state { display: flex; flex-direction: column; align-items: flex-start; }
+.empty-state .empty-icon {
+  width: 32px; height: 32px; border-radius: 8px; background: var(--bg-elevated); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center; margin-bottom: 10px; color: var(--muted);
+}
+.empty-state .empty-title { font-size: 13.5px; font-weight: 600; margin: 0 0 4px; color: var(--text); }
+.empty-state .empty-body { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.55; }
 
 .winrate-bar {
   height: 6px; border-radius: 3px; background: var(--border);
@@ -181,6 +253,20 @@ table.signals th {
 table.signals tbody tr { transition: background .1s; }
 table.signals tbody tr:hover { background: var(--panel-hover); }
 table.signals tbody tr:last-child td { border-bottom: none; }
+/* Cijferkolommen rechts uitgelijnd, zoals een orderboek: je scant een
+   kolom cijfers op grootte, niet op tekstbegin. */
+table.signals th.num, table.signals td.num { text-align: right; }
+
+/* Kleurrand op de linkerrand van de rij: long/short aftasten zonder de
+   badge te hoeven lezen, hetzelfde patroon als een echt orderboek. */
+table.signals tbody tr.long td:first-child,
+table.signals tbody tr.short td:first-child { position: relative; padding-left: 18px; }
+table.signals tbody tr.long td:first-child::before,
+table.signals tbody tr.short td:first-child::before {
+  content: ""; position: absolute; left: 6px; top: 8px; bottom: 8px; width: 3px; border-radius: 2px;
+}
+table.signals tbody tr.long td:first-child::before { background: var(--green); }
+table.signals tbody tr.short td:first-child::before { background: var(--red); }
 
 .badge {
   display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px;
@@ -359,7 +445,7 @@ main + .footer { border-top: 1px solid var(--border); }
 }
 .kraken-card .code {
   display: inline-block; background: var(--bg-elevated); border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm); padding: 4px 10px; font-family: monospace; font-size: 13px;
+  border-radius: var(--radius-sm); padding: 4px 10px; font-family: var(--mono); font-size: 13px;
   margin: 0 4px; color: var(--accent);
 }
 .kraken-card .button-primary { margin-top: 12px; }

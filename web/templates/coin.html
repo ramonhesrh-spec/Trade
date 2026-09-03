@@ -14,13 +14,18 @@
       <span class="badge {{ 'badge-hoog' if primary.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ primary.confidence.split(" ")[0] }}</span>
       <span class="muted" style="font-size: 12px;">slagingskans {{ primary.success_rate }}%{% if primary.success_sample < 5 %} (nog weinig data){% else %} (n={{ primary.success_sample }}){% endif %}</span>
     </div>
-    {% if primary.entry_price is defined and primary.entry_price is not none %}
-      <p class="muted" style="margin: 0 0 4px;">Entry <span style="color: var(--text); font-variant-numeric: tabular-nums;">{{ "%.4f"|format(primary.entry_price) }}</span></p>
-    {% else %}
-      <p class="muted" style="margin: 0 0 4px;">Entry <span style="color: var(--text); font-variant-numeric: tabular-nums;">{{ "%.4f"|format(primary.price) if primary.price else "-" }}</span></p>
-    {% endif %}
-    <p class="muted" style="margin: 0 0 4px;">Stop loss <span class="neg" style="font-variant-numeric: tabular-nums;">{{ "%.4f"|format(primary.stop_loss) if primary.stop_loss else "-" }}</span></p>
-    <p class="muted" style="margin: 0;">Take profit <span class="pos" style="font-variant-numeric: tabular-nums;">{{ "%.4f"|format(primary.take_profit) if primary.take_profit else "-" }}</span></p>
+    <div class="data-grid">
+      <div class="cell">
+        <div class="k">Entry</div>
+        {% if primary.entry_price is defined and primary.entry_price is not none %}
+          <div class="v">{{ "%.4f"|format(primary.entry_price) }}</div>
+        {% else %}
+          <div class="v">{{ "%.4f"|format(primary.price) if primary.price else "-" }}</div>
+        {% endif %}
+      </div>
+      <div class="cell"><div class="k">Stop loss</div><div class="v neg">{{ "%.4f"|format(primary.stop_loss) if primary.stop_loss else "-" }}</div></div>
+      <div class="cell"><div class="k">Take profit</div><div class="v pos">{{ "%.4f"|format(primary.take_profit) if primary.take_profit else "-" }}</div></div>
+    </div>
   </div>
   <div class="card">
     <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>Waarom {{ primary.confidence.split(" ")[0] }}</h3>
@@ -72,12 +77,12 @@
   <div class="table-scroll">
   <table class="signals">
     <thead>
-      <tr><th>Prijs</th><th>Patroon</th><th>Datum</th></tr>
+      <tr><th class="num">Prijs</th><th>Patroon</th><th>Datum</th></tr>
     </thead>
     <tbody>
       {% for lvl in source_levels %}
       <tr>
-        <td>{{ lvl.price_level }}</td>
+        <td class="num">{{ lvl.price_level }}</td>
         <td>{{ lvl.pattern_name or "-" }}</td>
         <td class="muted">{{ lvl.created_at[:10] }}</td>
       </tr>
