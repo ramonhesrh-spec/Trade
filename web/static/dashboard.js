@@ -193,7 +193,7 @@
     if (btn) { btn.disabled = true; btn.textContent = "Bezig..."; }
 
     try {
-      const resp = await fetch(form.action, { method: "POST", body: new FormData(form) });
+      const resp = await fetch(form.action, { method: "POST", body: new FormData(form), cache: "no-store" });
       if (!resp.ok) throw new Error("verzoek mislukt");
       const html = await resp.text();
       const doc = new DOMParser().parseFromString(html, "text/html");
@@ -211,6 +211,7 @@
         fresh.style.transition = "opacity .2s ease";
         fresh.style.opacity = "1";
       });
+      if (window.HP) window.HP.progressDone();
     } catch (err) {
       if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
       // Geen verbinding: een gewone form.submit() zou hier gegarandeerd
@@ -218,9 +219,12 @@
       // Toon in plaats daarvan een duidelijk bericht in de kaart zelf,
       // de gebruiker kan het opnieuw proberen zodra hij weer online is.
       if (!navigator.onLine) {
+        if (window.HP) window.HP.progressDone();
         showInlineError(form, "Geen verbinding. Probeer het opnieuw zodra je weer online bent.");
         return;
       }
+      // Valt terug op een echte paginaherlaad: de balk mag gewoon door
+      // blijven lopen, die navigatie ruimt hem vanzelf op.
       form.submit();
     }
   }
@@ -236,4 +240,55 @@
   }
 
   document.addEventListener("submit", handleSubmit);
+})();
+
+// Instellingen opslaan zonder volledige paginaherlaad: zelfde aanpak als
+// hierboven (server-gerenderde fragment ophalen, vervangen met een fade),
+// nu voor de portfolio-kaart. Bij een fout gewoon een echte paginaherlaad,
+// nooit een stille mislukking bij iets dat het risicobedrag van elke
+// toekomstige melding beinvloedt.
+//
+// Luistert op document zelf (niet op het formulier direct): na een
+// geslaagde opslag wordt #portfolio-card, inclusief het formulier erin,
+// vervangen door een verse servergerenderde versie. Een listener op het
+// oude formulier-element zou daarna dood zijn, deze blijft werken omdat
+// hij bij elke submit opnieuw kijkt welk element er nu staat.
+(function () {
+  async function handlePortfolioSubmit(e) {
+    const form = e.target;
+    if (e.defaultPrevented) return;
+    if (!(form instanceof HTMLFormElement) || form.getAttribute("action") !== "/settings/portfolio") return;
+    e.preventDefault();
+
+    const btn = form.querySelector("button[type=submit]");
+    const originalLabel = btn ? btn.textContent : null;
+    if (btn) { btn.disabled = true; btn.textContent = "Bezig..."; }
+
+    try {
+      const resp = await fetch(form.action, { method: "POST", body: new FormData(form), cache: "no-store" });
+      if (!resp.ok) throw new Error("verzoek mislukt");
+      const html = await resp.text();
+      const doc = new DOMParser().parseFromString(html, "text/html");
+      const fresh = doc.getElementById("portfolio-card");
+      const current = document.getElementById("portfolio-card");
+      if (!fresh || !current) throw new Error("portfolio-card niet gevonden in respons");
+
+      current.style.transition = "opacity .16s ease";
+      current.style.opacity = "0";
+      await new Promise((r) => setTimeout(r, 160));
+      current.replaceWith(fresh);
+      fresh.style.opacity = "0";
+      requestAnimationFrame(() => {
+        fresh.style.transition = "opacity .2s ease";
+        fresh.style.opacity = "1";
+      });
+      if (window.HP) window.HP.progressDone();
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
+      if (window.HP) window.HP.progressDone();
+      form.submit();
+    }
+  }
+
+  document.addEventListener("submit", handlePortfolioSubmit);
 })();

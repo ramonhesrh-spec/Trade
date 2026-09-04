@@ -162,6 +162,20 @@ a { color: var(--accent); }
    binnenkwam, hoe levendiger de achtergrond meebeweegt, geen losstaande
    decoratie. Vast achter de content (position: fixed, z-index: -1),
    nooit invloed op klikbaarheid of leesbaarheid van cijfers erboven. */
+/* Voortgangsbalk: direct visuele bevestiging dat een klik of submit
+   geregistreerd is, op een site zonder client-side routing waar een
+   paginawissel anders een blanco flits is. */
+#page-progress {
+  position: fixed; top: 0; left: 0; height: 2.5px; width: 0%;
+  background: var(--accent); z-index: 500; opacity: 0; pointer-events: none;
+  transition: width .2s ease, opacity .15s ease;
+  box-shadow: 0 0 8px var(--accent);
+}
+#page-progress.is-active { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  #page-progress { transition: opacity .15s ease; }
+}
+
 .page-ambient { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
 .ambient-glow {
   position: absolute; width: 46vw; height: 46vw; max-width: 620px; max-height: 620px;
@@ -953,6 +967,33 @@ main + .footer { border-top: 1px solid var(--border); }
 .coin-chart {
   height: 560px; position: relative; border: 1px solid var(--border);
   border-radius: var(--radius); overflow: hidden; flex: 1; min-width: 0;
+}
+
+/* Laadstatus zolang de koersdata (soms een paar honderd ms, soms trager op
+   een trage verbinding) nog niet terug is: rustige pulserende staafjes in
+   plaats van een lege, mogelijk "kapot ogende" grafiek. */
+.chart-loading {
+  position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px; background: #131a1b;
+}
+.chart-loading-bars { display: flex; align-items: flex-end; gap: 5px; height: 40px; }
+.chart-loading-bars span {
+  width: 7px; border-radius: 2px; background: var(--accent); opacity: 0.35;
+  animation: chart-loading-bounce 1.1s ease-in-out infinite;
+}
+.chart-loading-bars span:nth-child(1) { height: 40%; animation-delay: 0s; }
+.chart-loading-bars span:nth-child(2) { height: 70%; animation-delay: .1s; }
+.chart-loading-bars span:nth-child(3) { height: 100%; animation-delay: .2s; }
+.chart-loading-bars span:nth-child(4) { height: 60%; animation-delay: .3s; }
+.chart-loading-bars span:nth-child(5) { height: 85%; animation-delay: .4s; }
+@keyframes chart-loading-bounce {
+  0%, 100% { opacity: 0.35; transform: scaleY(0.7); }
+  50% { opacity: 0.9; transform: scaleY(1); }
+}
+.chart-loading.chart-error .chart-loading-bars { display: none; }
+.chart-loading.chart-error p { color: var(--red); }
+@media (prefers-reduced-motion: reduce) {
+  .chart-loading-bars span { animation: none; opacity: 0.6; }
 }
 .screenshot-rail {
   width: 220px; flex-shrink: 0; max-height: 560px; overflow-y: auto;

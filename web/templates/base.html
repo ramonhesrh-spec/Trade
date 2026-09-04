@@ -14,6 +14,7 @@
 <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
+<div id="page-progress" aria-hidden="true"></div>
 <div class="page-ambient" aria-hidden="true">
   <span class="ambient-glow glow-accent"></span>
   <span class="ambient-glow glow-green"></span>
@@ -56,6 +57,55 @@
   })();
 </script>
 {% endif %}
+<script>
+  // Dunne voortgangsbalk bovenaan: geeft meteen feedback bij een klik op een
+  // link of een formulier-verstuur, ook op deze grotendeels server-gerenderde
+  // site zonder client-side routing. Start bij het klikken/versturen, en
+  // verdwijnt vanzelf zodra de browser naar de nieuwe pagina navigeert. Voor
+  // acties die geen paginaherlaad doen (de AJAX-formulieren in dashboard.js
+  // en coin.js) roepen die scripts zelf HP.progressDone() aan.
+  window.HP = window.HP || {};
+  (function () {
+    var bar = document.getElementById("page-progress");
+    if (!bar) return;
+    var timer = null;
+    var width = 0;
+
+    function start() {
+      if (bar.classList.contains("is-active")) return;
+      width = 0;
+      bar.style.width = "0%";
+      bar.classList.add("is-active");
+      clearInterval(timer);
+      timer = setInterval(function () {
+        width += (90 - width) * 0.08;
+        bar.style.width = width + "%";
+      }, 200);
+    }
+    function done() {
+      clearInterval(timer);
+      bar.style.width = "100%";
+      setTimeout(function () {
+        bar.classList.remove("is-active");
+        bar.style.width = "0%";
+      }, 200);
+    }
+    window.HP.progressStart = start;
+    window.HP.progressDone = done;
+
+    document.addEventListener("click", function (e) {
+      var a = e.target.closest("a[href]");
+      if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
+      if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      var url;
+      try { url = new URL(a.href, location.href); } catch (err) { return; }
+      if (url.origin !== location.origin) return;
+      if (url.pathname === location.pathname && url.hash) return; // puur anker binnen dezelfde pagina
+      start();
+    });
+    document.addEventListener("submit", function () { start(); });
+  })();
+</script>
 <header class="topbar">
   <div class="topbar-watermark-clip" aria-hidden="true">
     <div class="topbar-watermark">

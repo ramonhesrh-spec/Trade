@@ -135,6 +135,15 @@
 
       chart.timeScale().fitContent();
       positionZones();
+
+      const loadingEl = document.getElementById("chart-loading");
+      if (loadingEl) loadingEl.remove();
+    })
+    .catch(() => {
+      const loadingEl = document.getElementById("chart-loading");
+      if (!loadingEl) return;
+      loadingEl.classList.add("chart-error");
+      loadingEl.querySelector("p").textContent = "Koersdata kon niet geladen worden. Ververs de pagina om het opnieuw te proberen.";
     });
 
   function addTradeLines(trade, label) {
@@ -357,8 +366,15 @@
       // opbouwen na een wijziging is simpeler en betrouwbaarder dan zelf
       // precies bijhouden welke lijn(en)/zone bij welk niveau hoorden.
       fetch(`/source-levels/${levelId}/${dismiss ? "dismiss" : "restore"}`, { method: "POST" })
-        .then((r) => { if (r.ok) location.reload(); else btn.disabled = false; })
-        .catch(() => { btn.disabled = false; });
+        .then((r) => {
+          if (r.ok) { location.reload(); return; }
+          btn.disabled = false;
+          if (window.HP) window.HP.progressDone();
+        })
+        .catch(() => {
+          btn.disabled = false;
+          if (window.HP) window.HP.progressDone();
+        });
     });
   })();
 })();
