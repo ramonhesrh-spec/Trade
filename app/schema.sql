@@ -37,7 +37,14 @@ CREATE TABLE IF NOT EXISTS source_levels (
     price_level REAL NOT NULL,
     pattern_name TEXT,
     source_label TEXT NOT NULL DEFAULT 'analyse Discord',
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    -- Eén gezamenlijk oordeel, niet per gebruiker: bij een klein groepje
+    -- gebruikers is een niveau dat er echt naast zit voor iedereen fout,
+    -- en is per-gebruiker bijhouden onnodige complexiteit. Wie het eerst
+    -- "klopt niet" klikt, verbergt het niveau voor iedereen uit de
+    -- grafiek; het blijft wel in de lijst staan, doorgestreept, zodat de
+    -- geschiedenis niet verdwijnt.
+    dismissed INTEGER NOT NULL DEFAULT 0
 );
 
 -- Zelf getekende schuine lijnen op de coin-grafiek (wig, driehoek, kanaal,

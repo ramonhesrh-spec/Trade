@@ -413,6 +413,39 @@ main h3 { font-size: 15px; gap: 8px; }
 .risk-gauge-fill.risk-mid { background: #f2b03e; }
 .risk-gauge-fill.risk-high { background: var(--red); }
 
+/* Samenvatting-strip bovenaan het dashboard: in een oogopslag wat er
+   nu toe doet, voordat je door de rest van de pagina scrolt. */
+.summary-strip {
+  display: flex; gap: 10px; margin-bottom: 18px;
+}
+.summary-stat {
+  flex: 1; background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); padding: 12px 14px; text-align: center;
+}
+.summary-value {
+  display: block; font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums;
+  color: var(--accent);
+}
+.summary-value.warn { color: #f2b03e; }
+.summary-value.danger { color: var(--red); }
+.summary-label { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
+@media (max-width: 560px) {
+  .summary-value { font-size: 19px; }
+  .summary-label { font-size: 10.5px; }
+}
+
+/* Onduidelijke berichten: kort en zonder poespas, alleen om te laten
+   zien dat een gedeeld bericht wél is aangekomen maar niet als signaal
+   gelezen kon worden, in plaats van dat het spoorloos verdwijnt. */
+.unclear-list { list-style: none; margin: 0; padding: 0; }
+.unclear-list li {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px;
+  padding: 8px 0; border-top: 1px solid var(--border);
+}
+.unclear-list li:first-child { border-top: none; }
+.unclear-text { font-size: 13px; color: var(--text-dim); }
+.unclear-note { font-size: 12px; }
+
 /* Sparkline: recente signalen in één rij, hoogte voor vertrouwen, kleur
    voor richting. Geen vervanging voor de echte tabel, puur een snel
    patroon herkennen, daarom ook geen tekst die alleen hierin staat. */
@@ -890,6 +923,11 @@ main + .footer { border-top: 1px solid var(--border); }
   button { padding: 9px 14px; }
   .status-form input, .close-form input { width: 90px; }
 }
+
+/* Bron niveau aangevinkt als "klopt niet": blijft in de lijst staan als
+   geschiedenis, duidelijk gedimd en doorgestreept, uit de grafiek gehaald. */
+.level-dismissed td { color: var(--muted); text-decoration: line-through; }
+.level-dismissed .level-restore-btn { text-decoration: underline; }
 
 /* Coin grafiek: zone-blok voor gegroepeerde niveaus (bijvoorbeeld een box) */
 .chart-zone {

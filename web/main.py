@@ -286,6 +286,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     ratio_stats = repo.winrate_by_ratio(user["id"])
     coin_stats = repo.coin_stats(user["id"])
     coins = repo.list_coins()
+    unclear_messages = repo.recent_unclear_messages()
 
     # Risico dat nu echt in de markt staat: alleen trades die al genomen
     # zijn (eigen entry ingevuld), niet nog niet bevestigde signalen, die
@@ -323,6 +324,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "starting_portfolio_eur": starting_portfolio_eur,
         "total_realized_eur": total_realized_eur,
         "portfolio_change_pct": portfolio_change_pct,
+        "unclear_messages": unclear_messages,
     })
 
 
@@ -620,6 +622,21 @@ async def create_trendline(
 @app.post("/trendlines/{trendline_id}/delete")
 async def delete_trendline(trendline_id: int, user: dict = Depends(require_login)):
     repo.delete_trendline(trendline_id, user["id"])
+    return {"ok": True}
+
+
+@app.post("/source-levels/{level_id}/dismiss")
+async def dismiss_source_level(level_id: int, user: dict = Depends(require_login)):
+    """Eén gezamenlijk oordeel: iedereen kijkt naar dezelfde bron niveaus,
+    dus wie het eerst 'klopt niet' klikt verbergt het niveau voor iedereen
+    uit de grafiek. Blijft doorgestreept in de lijst staan."""
+    repo.set_source_level_dismissed(level_id, True)
+    return {"ok": True}
+
+
+@app.post("/source-levels/{level_id}/restore")
+async def restore_source_level(level_id: int, user: dict = Depends(require_login)):
+    repo.set_source_level_dismissed(level_id, False)
     return {"ok": True}
 
 

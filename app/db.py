@@ -63,6 +63,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # onvoorwaardelijk hier zetten goedkoop en veilig, ook bij elke herstart.
     conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_discord_user_id ON messages(discord_user_id)")
 
+    existing_source_levels = {row["name"] for row in conn.execute("PRAGMA table_info(source_levels)")}
+    if "dismissed" not in existing_source_levels:
+        conn.execute("ALTER TABLE source_levels ADD COLUMN dismissed INTEGER NOT NULL DEFAULT 0")
+
     existing_journal = {row["name"] for row in conn.execute("PRAGMA table_info(journal_entries)")}
     if "stop_loss_override" not in existing_journal:
         conn.execute("ALTER TABLE journal_entries ADD COLUMN stop_loss_override REAL")

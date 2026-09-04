@@ -67,6 +67,22 @@ def mark_message_processed(
         )
 
 
+def recent_unclear_messages(limit: int = 15) -> list[dict]:
+    """Berichten die Anthropic niet als duidelijk signaal kon interpreteren,
+    laatste [limit] stuks. Zonder dit verdwijnt zo'n bericht stil: geen
+    signaal, geen melding, geen spoor in het dashboard, terwijl de
+    afzender wel iets deelde. Globaal (niet per gebruiker), net als de
+    rest van de berichtenverwerking."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, received_at, coin, raw_text, note FROM messages
+               WHERE unclear = 1 AND processed_at IS NOT NULL
+               ORDER BY id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def latest_long_term_direction(coin: str) -> Optional[dict]:
     """Meest recente lange termijn bericht over deze coin met een bekende
     richting, inclusief "neutraal" voor een verdeelde conclusie. Gebruikt om
@@ -108,6 +124,19 @@ def list_source_levels(coin: str) -> list[dict]:
             (coin.upper(),),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def set_source_level_dismissed(level_id: int, dismissed: bool) -> Optional[str]:
+    """Zet een bron niveau op klopt niet (verborgen uit de grafiek, blijft
+    doorgestreept in de lijst staan) of weer terug op klopt. Geeft de coin
+    van het niveau terug, zodat de aanroeper terug kan verwijzen naar de
+    juiste coinpagina zonder een aparte lookup."""
+    with db.session() as conn:
+        row = conn.execute(
+            "UPDATE source_levels SET dismissed = ? WHERE id = ? RETURNING coin",
+            (int(dismissed), level_id),
+        ).fetchone()
+        return row["coin"] if row else None
 
 
 def create_trendline(
