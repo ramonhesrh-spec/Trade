@@ -92,9 +92,11 @@
         <p class="muted levels-hint">Leeg laten zet een veld terug op de berekende standaard.</p>
       </details>
       <form action="/journal/{{ e.id }}/close" method="post" class="close-form">
-        <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
-        <button type="button" class="button-link fill-price-btn" data-fill-price="{{ e.id }}">nu</button>
-        <input type="datetime-local" name="exit_time" required>
+        <div class="price-input-group">
+          <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
+          <button type="button" class="fill-price-btn" data-fill-price="{{ e.id }}">nu</button>
+        </div>
+        <input type="datetime-local" name="exit_time" class="exit-time-input" required>
         <button type="submit">Sluiten</button>
       </form>
       <form action="/journal/{{ e.id }}/reset" method="post" class="reset-form"
@@ -250,9 +252,11 @@
         <p class="muted levels-hint">Leeg laten zet een veld terug op de berekende standaard.</p>
       </details>
       <form action="/journal/{{ e.id }}/close" method="post" class="close-form">
-        <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
-        <button type="button" class="button-link fill-price-btn" data-fill-price="{{ e.id }}">nu</button>
-        <input type="datetime-local" name="exit_time" required>
+        <div class="price-input-group">
+          <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
+          <button type="button" class="fill-price-btn" data-fill-price="{{ e.id }}">nu</button>
+        </div>
+        <input type="datetime-local" name="exit_time" class="exit-time-input" required>
         <button type="submit">Sluiten</button>
       </form>
       <form action="/journal/{{ e.id }}/delete-practice" method="post" class="reset-form"
