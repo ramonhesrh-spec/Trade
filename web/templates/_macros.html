@@ -1,0 +1,11 @@
+{# Herbruikbare stukjes template, om te voorkomen dat dezelfde markup op
+   meerdere plekken los van elkaar bijgehouden moet worden (bijvoorbeeld bij
+   een tekstwijziging die overal moet doorwerken). #}
+
+{% macro reason_popup(entry) %}
+{% if entry.plain_explanation %}<p class="plain-explanation">{{ entry.plain_explanation }}</p>{% endif %}
+<p class="muted reason-legend">De vinkjes hieronder zijn nu gemeten (RSI, volume, trend, momentum). De slagingskans hierboven is een inschatting op basis van eerdere trades, geen garantie voor deze trade.</p>
+{% for factor in entry.reason.split(" | ") %}
+<p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}">{{ factor }}</p>
+{% endfor %}
+{% endmacro %}

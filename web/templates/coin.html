@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as macros %}
 {% block title %}{{ symbol }} — HesPulse{% endblock %}
 {% block content %}
 
@@ -64,6 +65,7 @@
   <div class="card">
     <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>Waarom {{ primary.confidence.split(" ")[0] }} ({{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }})</h3>
     {% if primary.plain_explanation %}<p class="plain-explanation">{{ primary.plain_explanation }}</p>{% endif %}
+    <p class="muted reason-legend" style="margin: 0 0 6px;">De vinkjes hieronder zijn nu gemeten (RSI, volume, trend, momentum). De slagingskans hierboven is een inschatting op basis van eerdere trades, geen garantie voor deze trade.</p>
     {% for factor in primary.reason.split(" | ") %}
       <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}" style="margin: 0 0 5px; font-size: 12.5px;">{{ factor }}</p>
     {% endfor %}

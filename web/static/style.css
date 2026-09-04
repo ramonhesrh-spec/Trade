@@ -640,6 +640,20 @@ table.signals tbody tr.short td:first-child::before { background: var(--red); }
 .factor-ok { color: var(--green); }
 .factor-bad { color: var(--red); }
 
+/* Meldingen-tabel verdund: SL en TP samen in één kolom, grootte als
+   subregel bij Entry, notitie achter een toggle in Acties. Minder kolommen
+   om te scannen, zonder dat de data zelf verdwijnt. */
+.sltp-cell span { display: block; font-size: 12px; }
+.entry-size { display: block; font-size: 10.5px; margin-top: 1px; }
+.note-toggle { margin-top: 4px; }
+.note-toggle summary { font-size: 11px; }
+
+/* Onderscheid tussen wat gemeten is (de vinkjes) en wat een inschatting is
+   (de slagingskans): zonder dit leest een percentage als een garantie,
+   terwijl het een statistiek op een klein aantal eerdere trades is. */
+.reason-legend { font-size: 11px; font-style: italic; margin: 0 0 6px; }
+.reason-popup .reason-legend { font-size: 10.5px; }
+
 /* Uitleg in gewone taal (via Anthropic), boven de rauwe ✓/✗ factoren: een
    duidelijk ander uiterlijk dan de cijfermatige regels eronder, zodat het
    meteen leest als "wat betekent dit" in plaats van nog meer rauwe data. */
