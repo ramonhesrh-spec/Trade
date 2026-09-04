@@ -640,21 +640,6 @@ async def delete_trendline(trendline_id: int, user: dict = Depends(require_login
     return {"ok": True}
 
 
-@app.post("/source-levels/{level_id}/dismiss")
-async def dismiss_source_level(level_id: int, user: dict = Depends(require_login)):
-    """Eén gezamenlijk oordeel: iedereen kijkt naar dezelfde bron niveaus,
-    dus wie het eerst 'klopt niet' klikt verbergt het niveau voor iedereen
-    uit de grafiek. Blijft doorgestreept in de lijst staan."""
-    repo.set_source_level_dismissed(level_id, True)
-    return {"ok": True}
-
-
-@app.post("/source-levels/{level_id}/restore")
-async def restore_source_level(level_id: int, user: dict = Depends(require_login)):
-    repo.set_source_level_dismissed(level_id, False)
-    return {"ok": True}
-
-
 @app.get("/media/{filename}")
 async def media(filename: str, user: dict = Depends(require_login)):
     """Toont een origineel doorgestuurde screenshot. Alleen ingelogde

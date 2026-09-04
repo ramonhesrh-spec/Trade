@@ -3,9 +3,11 @@
 1. Heeft een open trade (eigen entry al ingevuld) zijn stop loss of take
    profit al geraakt, terwijl die nog niet gesloten is in het logboek.
 2. Is de prijs weer dicht bij het niveau van een nog niet genomen signaal
-   gekomen, zodat een gebruiker die een melding zag maar nog niet instapte
-   een seintje krijgt als het weer interessant wordt, in plaats van dat
-   alleen een nieuw binnenkomend Discord bericht tot een melding leidt.
+   gekomen, of bij een bron niveau (support/weerstand uit een gedeelde
+   screenshot) van diezelfde coin, zodat een gebruiker die een melding zag
+   maar nog niet instapte een seintje krijgt als het weer interessant
+   wordt, in plaats van dat alleen een nieuw binnenkomend Discord bericht
+   tot een melding leidt.
 
 Zonder dit moet je zelf continu de koers in de gaten houden. Stuurt één
 seintje per logboekregel, geen herhaalde meldingen. Sluit of opent niets
@@ -15,6 +17,7 @@ en .timer.
 """
 import asyncio
 import logging
+from typing import Optional
 
 from telegram import Bot
 
@@ -89,12 +92,26 @@ async def check_open_trades() -> None:
         repo.mark_level_alert_sent(entry["id"])
 
 
+def _nearest_level(current_price: float, atr: float, levels: list[dict]) -> Optional[dict]:
+    """Bron niveau (support/weerstand uit een gedeelde screenshot) binnen
+    dezelfde ATR-marge als het signaalniveau zelf. Geeft het dichtstbijzijnde
+    niveau terug, of None als er geen enkele binnen bereik is."""
+    within_range = [
+        lvl for lvl in levels
+        if abs(current_price - lvl["price_level"]) <= atr * PENDING_LEVEL_ATR_MULTIPLIER
+    ]
+    if not within_range:
+        return None
+    return min(within_range, key=lambda lvl: abs(current_price - lvl["price_level"]))
+
+
 async def check_pending_signals() -> None:
     """Signalen die nog niet genomen zijn: als de prijs weer terugkomt naar
-    het niveau waarop het signaal binnenkwam, is dat voor day trading vaak
-    het beste instapmoment, niet het moment van de eerste melding zelf. Dit
-    is de proactieve kant, naast de reactieve verwerking van een nieuw
-    Discord bericht."""
+    het niveau waarop het signaal binnenkwam, óf naar een bron niveau uit
+    een gedeelde screenshot (support, weerstand, retest), is dat voor day
+    trading vaak het beste instapmoment, niet het moment van de eerste
+    melding zelf. Dit is de proactieve kant, naast de reactieve verwerking
+    van een nieuw Discord bericht."""
     if not config.TELEGRAM_BOT_TOKEN:
         logger.warning("TELEGRAM_BOT_TOKEN ontbreekt, geen seintjes verstuurd")
         return
@@ -104,10 +121,11 @@ async def check_pending_signals() -> None:
     logger.info("%d nog niet genomen signalen om te checken", len(entries))
 
     coin_prices: dict[str, float] = {}
+    coin_levels: dict[str, list[dict]] = {}
 
     for entry in entries:
         coin = entry["coin"]
-        if not entry["signal_price"] or not entry["atr"]:
+        if not entry["atr"]:
             continue
         if coin not in coin_prices:
             try:
@@ -119,18 +137,36 @@ async def check_pending_signals() -> None:
         if current_price is None:
             continue
 
-        distance = abs(current_price - entry["signal_price"])
-        if distance > entry["atr"] * PENDING_LEVEL_ATR_MULTIPLIER:
+        at_signal_level = (
+            entry["signal_price"] is not None
+            and abs(current_price - entry["signal_price"]) <= entry["atr"] * PENDING_LEVEL_ATR_MULTIPLIER
+        )
+
+        matched_level = None
+        if not at_signal_level:
+            if coin not in coin_levels:
+                coin_levels[coin] = repo.list_source_levels(coin)
+            matched_level = _nearest_level(current_price, entry["atr"], coin_levels[coin])
+
+        if not at_signal_level and not matched_level:
             continue
 
         if not entry["telegram_chat_id"]:
             repo.mark_level_alert_sent(entry["id"])
             continue
 
+        if matched_level:
+            level_desc = f"{matched_level['price_level']}"
+            if matched_level["pattern_name"]:
+                level_desc += f" ({matched_level['pattern_name']})"
+            level_line = f"Bron niveau: {level_desc}"
+        else:
+            level_line = f"Signaalniveau: {entry['signal_price']:.4f}"
+
         text = (
-            f"{coin} {entry['direction'].upper()} ({entry['confidence']}) is terug bij het niveau "
+            f"{coin} {entry['direction'].upper()} ({entry['confidence']}) is terug bij een niveau "
             f"van het eerdere signaal.\n"
-            f"Signaalniveau: {entry['signal_price']:.4f}\n"
+            f"{level_line}\n"
             f"Huidige prijs: {current_price:.4f}\n\n"
             f"Nog steeds interessant? Check het dashboard voor de actuele toetsing. {config.DISCLAIMER}"
         )

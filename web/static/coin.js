@@ -48,10 +48,7 @@
     const lower = name.toLowerCase();
     return DIAGONAL_PATTERN_KEYWORDS.some((kw) => lower.includes(kw));
   }
-  // Een niveau dat als "klopt niet" is aangevinkt (zie de lijst onder de
-  // grafiek) staat er soms gewoon naast en hoort niet meer in de grafiek
-  // te staan, ook al blijft het in de lijst zelf zichtbaar als geschiedenis.
-  const chartableLevels = sourceLevels.filter((lvl) => !isDiagonalPattern(lvl.pattern_name) && !lvl.dismissed);
+  const chartableLevels = sourceLevels.filter((lvl) => !isDiagonalPattern(lvl.pattern_name));
 
   // Zones (bijvoorbeeld een "box" of "retest" gebied uit twee bij elkaar
   // horende niveaus) worden als vlak, doorzichtig blok over de grafiek
@@ -351,36 +348,5 @@
 
     trendlines.forEach(drawLine);
     renderList();
-  })();
-
-  // Bron niveaus aanvinken als "klopt niet": verbergt het niveau meteen uit
-  // de grafiek (voor iedereen, het is één gedeeld oordeel) en toont de rij
-  // in de lijst hieronder doorgestreept, zonder paginaherlaad.
-  (function () {
-    const table = document.getElementById("source-levels-table");
-    if (!table) return;
-
-    table.addEventListener("click", (event) => {
-      const btn = event.target.closest(".level-dismiss-btn, .level-restore-btn");
-      if (!btn) return;
-      const dismiss = btn.classList.contains("level-dismiss-btn");
-      const levelId = btn.dataset.levelId;
-      btn.disabled = true;
-
-      // Een niveau kan onderdeel zijn van een gegroepeerde zone (box,
-      // meerdere punten samen), dus de grafiek boven de lijst opnieuw laten
-      // opbouwen na een wijziging is simpeler en betrouwbaarder dan zelf
-      // precies bijhouden welke lijn(en)/zone bij welk niveau hoorden.
-      fetch(`/source-levels/${levelId}/${dismiss ? "dismiss" : "restore"}`, { method: "POST" })
-        .then((r) => {
-          if (r.ok) { location.reload(); return; }
-          btn.disabled = false;
-          if (window.HP) window.HP.progressDone();
-        })
-        .catch(() => {
-          btn.disabled = false;
-          if (window.HP) window.HP.progressDone();
-        });
-    });
   })();
 })();

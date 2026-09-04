@@ -123,25 +123,17 @@
 <section>
   <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9" stroke-dasharray="3,3"/><line x1="4" y1="16" x2="20" y2="16" stroke-dasharray="3,3"/></svg>Bron niveaus</h3>
   {% if source_levels %}
-  <p class="muted" style="margin: 0 0 10px; font-size: 12.5px;">Staat een niveau er duidelijk naast? Vink klopt niet aan: het niveau verdwijnt dan uit de grafiek hierboven voor iedereen, maar blijft hieronder zichtbaar.</p>
   <div class="table-scroll">
-  <table class="signals" id="source-levels-table">
+  <table class="signals">
     <thead>
-      <tr><th class="num">Prijs</th><th>Patroon</th><th>Datum</th><th>Oordeel</th></tr>
+      <tr><th class="num">Prijs</th><th>Patroon</th><th>Datum</th></tr>
     </thead>
     <tbody>
       {% for lvl in source_levels %}
-      <tr class="{{ 'level-dismissed' if lvl.dismissed else '' }}" data-level-id="{{ lvl.id }}">
+      <tr>
         <td class="num">{{ lvl.price_level }}</td>
         <td>{{ lvl.pattern_name or "-" }}</td>
         <td class="muted">{{ lvl.created_at[:10] }}</td>
-        <td>
-          {% if lvl.dismissed %}
-          <button type="button" class="button-link level-restore-btn" data-level-id="{{ lvl.id }}">klopt niet, terugzetten</button>
-          {% else %}
-          <button type="button" class="button-link level-dismiss-btn" data-level-id="{{ lvl.id }}">klopt niet</button>
-          {% endif %}
-        </td>
       </tr>
       {% endfor %}
     </tbody>

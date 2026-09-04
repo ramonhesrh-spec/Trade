@@ -1030,11 +1030,6 @@ main + .footer { border-top: 1px solid var(--border); }
   .status-form input, .close-form input { width: 90px; }
 }
 
-/* Bron niveau aangevinkt als "klopt niet": blijft in de lijst staan als
-   geschiedenis, duidelijk gedimd en doorgestreept, uit de grafiek gehaald. */
-.level-dismissed td { color: var(--muted); text-decoration: line-through; }
-.level-dismissed .level-restore-btn { text-decoration: underline; }
-
 /* Coin grafiek: zone-blok voor gegroepeerde niveaus (bijvoorbeeld een box) */
 .chart-zone {
   position: absolute; left: 0; right: 60px; pointer-events: none; min-height: 6px;

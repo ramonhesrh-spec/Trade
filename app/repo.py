@@ -126,19 +126,6 @@ def list_source_levels(coin: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def set_source_level_dismissed(level_id: int, dismissed: bool) -> Optional[str]:
-    """Zet een bron niveau op klopt niet (verborgen uit de grafiek, blijft
-    doorgestreept in de lijst staan) of weer terug op klopt. Geeft de coin
-    van het niveau terug, zodat de aanroeper terug kan verwijzen naar de
-    juiste coinpagina zonder een aparte lookup."""
-    with db.session() as conn:
-        row = conn.execute(
-            "UPDATE source_levels SET dismissed = ? WHERE id = ? RETURNING coin",
-            (int(dismissed), level_id),
-        ).fetchone()
-        return row["coin"] if row else None
-
-
 def create_trendline(
     coin: str, user_id: int, label: str, x1: int, y1: float, x2: int, y2: float,
 ) -> int:
