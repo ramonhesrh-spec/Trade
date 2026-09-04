@@ -361,6 +361,7 @@ async def api_system_status(user: dict = Depends(require_login)):
         "server_started_at": SERVER_STARTED_AT,
         "checked_at": db.now_iso(),
         "pending_count": repo.count_pending_signals(user["id"]),
+        "week_result_eur": repo.week_result_eur(user["id"]),
     }
 
 

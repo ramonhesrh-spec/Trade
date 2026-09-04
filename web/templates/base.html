@@ -22,6 +22,7 @@
     <svg viewBox="0 0 640 120" preserveAspectRatio="none"><path d="M0 60h80l16-44 32 88 16-44h80l16-28 32 60 16-32h352" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
     <svg viewBox="0 0 640 120" preserveAspectRatio="none"><path d="M0 60h80l16-44 32 88 16-44h80l16-28 32 60 16-32h352" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
   </div>
+  <div id="signal-wave" class="signal-wave"></div>
 </div>
 <div id="offline-banner" class="offline-banner" hidden role="status">Geen internetverbinding. Koersen en meldingen worden niet bijgewerkt tot je weer online bent.</div>
 {% if request.url.path == "/dashboard" %}
@@ -431,6 +432,36 @@
       return "64s";
     }
 
+    // Kleurbalans van de ambient gloed volgt hoe de week gaat: bij een
+    // positief weekresultaat iets meer teal/groen, bij een negatief iets
+    // meer rood. Subtiel (zie de calc() in style.css), geen fel wisselende
+    // kleur, en bij "geen data" (nog niets gesloten deze week) blijft de
+    // balans precies zoals hij al was: 0.
+    function portfolioGlow(weekResultEur) {
+      if (weekResultEur === null || weekResultEur === undefined) return 0;
+      if (weekResultEur > 0) return 1;
+      if (weekResultEur < 0) return -1;
+      return 0;
+    }
+
+    // Een nieuw signaal terwijl het dashboard al open staat, verdient een
+    // eenmalig visueel seintje, niet alleen een stiller wordend cijfer op
+    // het app-icoon. lastPendingCount begint op null: de allereerste keer
+    // dat we weten hoeveel er openstaan is geen "nieuw" signaal, dus geen
+    // golf bij het laden van de pagina zelf.
+    var lastPendingCount = null;
+
+    function triggerSignalWave() {
+      var wave = document.getElementById("signal-wave");
+      if (!wave) return;
+      wave.classList.remove("is-active");
+      // Force reflow zodat de animatie ook afgaat als hij kort na elkaar
+      // twee keer wordt getriggerd (anders blijft de class gewoon staan
+      // en speelt de animatie niet opnieuw af).
+      void wave.offsetWidth;
+      wave.classList.add("is-active");
+    }
+
     function refresh() {
       fetch("/api/system_status")
         .then(function (r) { return r.json(); })
@@ -442,6 +473,12 @@
           document.getElementById("status-uptime").textContent = timeAgo(s.server_started_at);
           document.documentElement.style.setProperty("--heartbeat-duration", heartbeatDuration(s.last_message_at));
           document.documentElement.style.setProperty("--ambient-scroll-duration", ambientScrollDuration(s.last_message_at));
+          document.documentElement.style.setProperty("--portfolio-glow", portfolioGlow(s.week_result_eur));
+
+          if (lastPendingCount !== null && s.pending_count > lastPendingCount) {
+            triggerSignalWave();
+          }
+          lastPendingCount = s.pending_count;
 
           // App-icoon badge: aantal meldingen dat nog op een keuze wacht.
           // Werkt alleen zolang deze pagina ergens open staat (tab of

@@ -792,6 +792,24 @@ def winrate_by_ratio(user_id: int) -> list[dict]:
     return result
 
 
+def week_result_eur(user_id: int) -> Optional[float]:
+    """Resultaat van echte gesloten trades in de laatste 7 dagen. None als
+    er niets gesloten is deze week (niet hetzelfde als 0: 0 is exact
+    quitte, None is 'geen data om iets over te zeggen'). Gebruikt om de
+    ambient achtergrond een beetje mee te laten kleuren met hoe de week
+    gaat, geen harde metric."""
+    week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    with db.session() as conn:
+        row = conn.execute(
+            """SELECT SUM(je.result_eur) AS total, COUNT(*) AS n
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
+                     AND je.exit_time >= ?""",
+            (user_id, week_ago),
+        ).fetchone()
+        return round(row["total"], 2) if row["n"] else None
+
+
 def cumulative_result_series(user_id: int) -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(

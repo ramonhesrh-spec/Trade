@@ -12,7 +12,7 @@
     <span class="summary-value">{{ taken_entries|length }}</span>
     <span class="summary-label">open positie{{ "s" if taken_entries|length != 1 else "" }}</span>
   </div>
-  <div class="summary-stat">
+  <div class="summary-stat {{ 'risk-pulse' if open_risk_pct >= 25 else '' }}">
     <span class="summary-value {{ 'danger' if open_risk_pct >= 25 else ('warn' if open_risk_pct >= 10 else '') }}">{{ "%.0f"|format(open_risk_pct) }}%</span>
     <span class="summary-label">risico open</span>
   </div>
