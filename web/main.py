@@ -416,11 +416,23 @@ async def update_journal_status(
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
+def _safe_next(next_path: str) -> str:
+    """De open-trade formulieren (sluiten/terugzetten/levels aanpassen)
+    staan zowel op het dashboard als op de coinpagina, en horen na het
+    versturen terug te gaan naar waar je vandaan kwam, niet altijd naar
+    /dashboard. Alleen een eigen, relatief pad toestaan (nooit "//host" of
+    "https://...", dat zou een open redirect zijn)."""
+    if next_path and next_path.startswith("/") and not next_path.startswith("//"):
+        return next_path
+    return "/dashboard"
+
+
 @app.post("/journal/{entry_id}/close")
 async def close_journal(
     entry_id: int,
     exit_price: float = Form(...),
     exit_time: str = Form(...),
+    next: str = Form(""),
     user: dict = Depends(require_login),
 ):
     try:
@@ -429,19 +441,20 @@ async def close_journal(
         # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
         # entry prijs ingevuld). Stil negeren, niets om te sluiten.
         pass
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url=_safe_next(next), status_code=303)
 
 
 @app.post("/journal/{entry_id}/reset")
 async def reset_journal(
     entry_id: int,
+    next: str = Form(""),
     user: dict = Depends(require_login),
 ):
     """Zet een verkeerd ingevulde regel terug naar 'nieuw', zonder de
     melding zelf kwijt te raken. Voor als er een typefout in de entry
     prijs is geslopen of de verkeerde status is gekozen."""
     repo.reset_journal_entry(entry_id, user["id"])
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url=_safe_next(next), status_code=303)
 
 
 @app.post("/journal/{entry_id}/delete-practice")
@@ -467,6 +480,7 @@ async def update_journal_levels(
     stop_loss: str = Form(""),
     take_profit: str = Form(""),
     position_size: str = Form(""),
+    next: str = Form(""),
     user: dict = Depends(require_login),
 ):
     """Eigen stop loss, take profit en/of positiegrootte op een open trade.
@@ -478,7 +492,7 @@ async def update_journal_levels(
         take_profit=_parse_optional_float(take_profit),
         position_size=_parse_optional_float(position_size),
     )
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url=_safe_next(next), status_code=303)
 
 
 @app.post("/journal/{entry_id}/note")

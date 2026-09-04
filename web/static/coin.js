@@ -105,12 +105,18 @@
       ema9Series.setData(data.ema9);
       ema21Series.setData(data.ema21);
 
+      // Een open trade (echt geld) krijgt altijd zijn eigen lijnen. Een
+      // niet-genomen signaal alleen als er geen open trade is: met
+      // meerdere signalen voor dezelfde coin stapelden de SL/TP-lijnen
+      // van elk signaal boven op elkaar op, onleesbaar dicht tegen elkaar
+      // aan de rechterkant. Eén set lijnen tegelijk, altijd de relevantste.
       openTrades.forEach((trade) => {
         addTradeLines(trade, `eigen trade ${trade.direction}`);
       });
-      recentSignals.forEach((signal) => {
-        addTradeLines(signal, `signaal ${signal.direction} (${signal.confidence})`);
-      });
+      if (!openTrades.length && recentSignals.length) {
+        const latest = recentSignals[0];
+        addTradeLines(latest, `signaal ${latest.direction} (${latest.confidence})`);
+      }
 
       // Geen axis-label bij bron niveaus: bij dicht bij elkaar liggende
       // niveaus vallen die badges anders over elkaar heen en worden
