@@ -12,6 +12,11 @@ logger = logging.getLogger("telegram_notify")
 
 DIVIDER = "━" * 14
 
+# Alleen de meest herkende symbolen, geen volledigheid nagestreefd: dit is
+# een leuk extra herkenningspunt in een chat met meerdere coins door
+# elkaar, geen vervanging van de tickernaam zelf.
+COIN_SYMBOLS = {"BTC": "₿", "ETH": "Ξ"}
+
 
 def _direction_label(direction: str) -> str:
     return "LONG" if direction == "long" else "SHORT"
@@ -19,6 +24,11 @@ def _direction_label(direction: str) -> str:
 
 def _direction_emoji(direction: str) -> str:
     return "📈" if direction == "long" else "📉"
+
+
+def _coin_label(coin: str) -> str:
+    symbol = COIN_SYMBOLS.get(coin.upper(), "")
+    return f"{symbol}{coin}" if symbol else coin
 
 
 def _factor_link(coin: str) -> str:
@@ -36,7 +46,7 @@ def format_signal_message(signal: dict) -> str:
     positiegrootte staan bewust niet in het bericht, dat is aan de trader
     zelf om op het dashboard te bepalen."""
     lines = [
-        f"{_direction_emoji(signal['direction'])} {signal['coin']} · {_direction_label(signal['direction'])}",
+        f"{_direction_emoji(signal['direction'])} {_coin_label(signal['coin'])} · {_direction_label(signal['direction'])}",
         DIVIDER,
         f"🟢 {signal['confidence'].upper()}",
         "",
@@ -63,7 +73,7 @@ def format_rejected_message(signal: dict) -> str:
     volgen via de periodieke niveau-check, dat wordt hier expliciet
     benoemd."""
     lines = [
-        f"{_direction_emoji(signal['direction'])} {signal['coin']} · {_direction_label(signal['direction'])}",
+        f"{_direction_emoji(signal['direction'])} {_coin_label(signal['coin'])} · {_direction_label(signal['direction'])}",
         DIVIDER,
         "🟡 NOG GEEN STERKE KANS",
         "",
@@ -85,7 +95,7 @@ def format_update_message(signal: dict) -> str:
     confirmed = signal["technical_confirmed"]
     status = "🟢 BEVESTIGD" if confirmed else "🟡 NOG GEEN STERKE KANS"
     lines = [
-        f"🔄 UPDATE · {signal['coin']} · {_direction_label(signal['direction'])}",
+        f"🔄 UPDATE · {_coin_label(signal['coin'])} · {_direction_label(signal['direction'])}",
         DIVIDER,
         f"{status} ({signal['confidence'].upper()})",
         "",
@@ -116,7 +126,7 @@ async def send_signal_update(signal: dict, chat_id: str) -> None:
 
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
     text = format_update_message(signal)
-    await bot.send_message(chat_id=chat_id, text=text)
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=not signal["technical_confirmed"])
     logger.info("Telegram update verstuurd voor %s %s naar chat %s",
                 signal["coin"], signal["direction"], chat_id)
 
@@ -132,10 +142,45 @@ async def send_signal(signal: dict, chat_id: str) -> None:
         return
 
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
-    text = format_signal_message(signal) if signal["technical_confirmed"] else format_rejected_message(signal)
-    await bot.send_message(chat_id=chat_id, text=text)
+    confirmed = signal["technical_confirmed"]
+    text = format_signal_message(signal) if confirmed else format_rejected_message(signal)
+    # Een bevestigde kans mag geluid maken, een afwijzing niet: sinds elke
+    # tip een bericht krijgt (ook een "geen kans"), zou anders elke deling
+    # in de bron-community de telefoon laten afgaan, ook als er niks te
+    # doen valt.
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=not confirmed)
     logger.info("Telegram melding verstuurd voor %s %s naar chat %s",
                 signal["coin"], signal["direction"], chat_id)
+
+
+async def send_new_coin_message(coin: str, chat_id: str) -> None:
+    """Kort, stil bericht zodra een coin voor het eerst ooit gevolgd wordt.
+    Geen actie van de gebruiker nodig, dus geen geluid."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = f"🆕 HesPulse volgt vanaf nu ook {_coin_label(coin)}."
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
+    logger.info("Nieuwe-coin melding verstuurd voor %s naar chat %s", coin, chat_id)
+
+
+async def send_expired_pending_message(coin: str, new_direction: str, chat_id: str) -> None:
+    """Bericht zodra een nog niet genomen kans automatisch is genegeerd
+    omdat er een nieuwe melding voor de tegenovergestelde richting van
+    dezelfde coin binnenkwam (zie repo.auto_ignore_opposite_pending). Stil,
+    want dit is geen nieuwe kans, alleen het intrekken van een oude."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = (
+        f"❌ {_coin_label(coin)}\n"
+        f"{DIVIDER}\n"
+        f"Je eerdere kans op deze coin is niet meer actueel.\n\n"
+        f"Er kwam een nieuwe melding voor de tegenovergestelde richting "
+        f"({_direction_label(new_direction)}) binnen, die maakt dit signaal achterhaald."
+    )
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
+    logger.info("Vervallen-kans melding verstuurd voor %s naar chat %s", coin, chat_id)
 
 
 # ---------------------------------------------------------------------------

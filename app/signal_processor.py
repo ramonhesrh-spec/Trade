@@ -73,7 +73,9 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
 
     # Bron niveaus uit afbeeldingen worden altijd bewaard, ongeacht categorie.
     if interp.source_levels:
-        tracked = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
+        tracked, is_new_coin = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
+        if is_new_coin:
+            await _notify_new_coin(interp.coin)
         if not tracked:
             logger.info("Coin %s uit bron niveaus bestaat niet op de exchange, niveaus niet bewaard",
                         interp.coin)
@@ -161,8 +163,24 @@ async def compute_advanced_extra_factors(coin: str, direction: str, df) -> list[
     return factors
 
 
+async def _notify_new_coin(coin: str) -> None:
+    """Kort bericht naar elke gebruiker met een gekoppelde Telegram chat
+    zodra een coin voor het eerst ooit gezien wordt. Groei van de
+    dynamische coinlijst was tot nu toe volledig stil, alleen in de log."""
+    for user in repo.list_users():
+        if not user["telegram_chat_id"]:
+            continue
+        try:
+            await telegram_notify.send_new_coin_message(coin, chat_id=user["telegram_chat_id"])
+        except Exception:
+            logger.exception("Nieuwe-coin melding voor %s naar gebruiker %s is mislukt",
+                              coin, user["username"])
+
+
 async def process_day_trading_signal(message_id: int, interp: Interpretation) -> None:
-    tracked = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
+    tracked, is_new_coin = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
+    if is_new_coin:
+        await _notify_new_coin(interp.coin)
     if not tracked:
         logger.info("Coin %s bestaat niet als paar op de exchange, geen technische toetsing mogelijk",
                     interp.coin)
@@ -222,7 +240,17 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     ignored = repo.auto_ignore_opposite_pending(interp.coin, interp.direction)
     if ignored:
         logger.info("%s nog niet genomen tegenovergestelde melding(en) voor %s automatisch genegeerd",
-                     ignored, interp.coin)
+                     len(ignored), interp.coin)
+        for user in ignored:
+            if not user["telegram_chat_id"]:
+                continue
+            try:
+                await telegram_notify.send_expired_pending_message(
+                    interp.coin, interp.direction, chat_id=user["telegram_chat_id"],
+                )
+            except Exception:
+                logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt",
+                                  interp.coin, user["username"])
 
     existing = repo.find_open_signal(interp.coin, interp.direction)
 

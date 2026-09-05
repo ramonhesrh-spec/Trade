@@ -64,6 +64,12 @@ DISCLAIMER = "Geen advies. Regels, geen garantie. Jij beslist zelf."
 # voor toekomstige links naar het dashboard vanuit een bot-bericht.
 DASHBOARD_URL = _get("DASHBOARD_URL", "https://hespulse.duckdns.org")
 
+# Telegram chat ID van de beheerder (jijzelf), voor systeemwaarschuwingen
+# die niets met een specifiek handelssignaal te maken hebben: de zelfcheck
+# (app/health_check.py) en herhaalde API-fouten. Leeg = geen van beide
+# stuurt een alert, ze loggen dan alleen naar de serverlog zoals voorheen.
+ADMIN_TELEGRAM_CHAT_ID = _get("ADMIN_TELEGRAM_CHAT_ID")
+
 # Kraken Pro referral, getoond op de openbare landingspagina.
 KRAKEN_REFERRAL_URL = "https://proinvite.kraken.com/9f1e/4zto3wcm"
 KRAKEN_REFERRAL_CODE = "dc992yg8"

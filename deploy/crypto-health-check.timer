@@ -1,0 +1,9 @@
+[Unit]
+Description=Draai de HesPulse zelfcheck elk uur
+
+[Timer]
+OnCalendar=hourly
+Persistent=true
+
+[Install]
+WantedBy=timers.target

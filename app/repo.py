@@ -498,7 +498,7 @@ def update_journal_status(
             )
 
 
-def auto_ignore_opposite_pending(coin: str, direction: str) -> int:
+def auto_ignore_opposite_pending(coin: str, direction: str) -> list[dict]:
     """Negeert automatisch elke nog niet bevestigde logboekregel (geen eigen
     entry ingevuld) voor de tegenovergestelde richting van deze coin.
 
@@ -511,20 +511,29 @@ def auto_ignore_opposite_pending(coin: str, direction: str) -> int:
     rest op. Een trade die al genomen is (eigen entry al ingevuld) is een
     echte open positie en wordt hier nooit aangeraakt.
 
-    Geeft het aantal geraakte logboekregels terug."""
+    Geeft een lijst met username/telegram_chat_id van elke geraakte
+    logboekregel terug, zodat de aanroeper die gebruikers kan laten weten
+    dat hun kans niet meer actueel is in plaats van dit stil te laten
+    gebeuren."""
     opposite = "short" if direction.lower() == "long" else "long"
     note = f"automatisch genegeerd: nieuwe {direction} melding voor {coin.upper()} maakt dit tegenovergestelde signaal achterhaald"
     with db.session() as conn:
-        cur = conn.execute(
-            """UPDATE journal_entries SET status = 'genegeerd', note = ?
-               WHERE entry_price IS NULL AND status != 'genegeerd'
-                     AND signal_id IN (
-                         SELECT id FROM signals
-                         WHERE coin = ? AND direction = ? AND is_practice = 0
-                     )""",
-            (note, coin.upper(), opposite),
-        )
-        return cur.rowcount
+        affected = conn.execute(
+            """SELECT je.id AS id, u.username AS username, u.telegram_chat_id AS telegram_chat_id
+               FROM journal_entries je
+               JOIN signals s ON s.id = je.signal_id
+               JOIN users u ON u.id = je.user_id
+               WHERE je.entry_price IS NULL AND je.status != 'genegeerd'
+                     AND s.coin = ? AND s.direction = ? AND s.is_practice = 0""",
+            (coin.upper(), opposite),
+        ).fetchall()
+        if affected:
+            placeholders = ",".join("?" * len(affected))
+            conn.execute(
+                f"UPDATE journal_entries SET status = 'genegeerd', note = ? WHERE id IN ({placeholders})",
+                (note, *[row["id"] for row in affected]),
+            )
+        return [dict(r) for r in affected]
 
 
 def reset_journal_entry(entry_id: int, user_id: int) -> None:

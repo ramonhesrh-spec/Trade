@@ -193,6 +193,23 @@ met een ingevuld chat ID: "Goedemorgen trader. Nieuwe dag, nieuwe kansen.
 HesPulse draait, laatste controle: ..." Zonder dit merk je een
 crash pas op als er een tijd lang geen meldingen meer binnenkomen.
 
+### Systeemzelfcheck
+
+```bash
+sudo cp deploy/crypto-health-check.service /etc/systemd/system/
+sudo cp deploy/crypto-health-check.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-health-check.timer
+```
+
+Checkt elk uur of alle vijf systeemonderdelen (bot, dashboard, back-up,
+levensteken, niveau-check) echt actief én enabled zijn, en stuurt een
+Telegram bericht naar `ADMIN_TELEGRAM_CHAT_ID` (in `.env`, jouw eigen chat
+ID) zodra er iets ontbreekt. Zonder `ADMIN_TELEGRAM_CHAT_ID` blijft dit
+alleen in de serverlog staan. Dit is ontstaan doordat de back-up- en
+levensteken-timer op deze VPS ooit nooit geïnstalleerd bleken te zijn,
+zonder dat iemand dat opmerkte, zie ook `app/health_check.py`.
+
 ### Seintje bij geraakte stop loss of take profit
 
 ```bash

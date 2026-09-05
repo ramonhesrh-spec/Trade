@@ -22,7 +22,7 @@ from typing import Optional
 from telegram import Bot
 
 from app import config, exchange, repo
-from app.telegram_notify import DIVIDER, _factor_link
+from app.telegram_notify import DIVIDER, _coin_label, _factor_link
 
 logger = logging.getLogger("level_check")
 
@@ -81,7 +81,7 @@ async def check_open_trades() -> None:
 
         hit_emoji = "🎯" if hit == "take profit" else "🛑"
         text = (
-            f"{hit_emoji} {coin} · {entry['direction'].upper()}\n"
+            f"{hit_emoji} {_coin_label(coin)} · {entry['direction'].upper()}\n"
             f"{DIVIDER}\n"
             f"{hit.capitalize()} geraakt\n\n"
             f"Entry: {entry['entry_price']:.4f}\n"
@@ -172,7 +172,7 @@ async def check_pending_signals() -> None:
             level_line = f"Signaalniveau: {entry['signal_price']:.4f}"
 
         text = (
-            f"🔔 {coin} · {entry['direction'].upper()}\n"
+            f"🔔 {_coin_label(coin)} · {entry['direction'].upper()}\n"
             f"{DIVIDER}\n"
             f"Terug bij een interessant niveau ({entry['confidence']})\n\n"
             f"{level_line}\n"

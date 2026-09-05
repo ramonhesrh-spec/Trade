@@ -1,0 +1,9 @@
+[Unit]
+Description=HesPulse - zelfcheck of alle systeemonderdelen actief zijn
+
+[Service]
+Type=oneshot
+User=crypto
+WorkingDirectory=/opt/crypto-alerts
+EnvironmentFile=/opt/crypto-alerts/.env
+ExecStart=/opt/crypto-alerts/.venv/bin/python3 -m app.health_check
