@@ -5,10 +5,10 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from telegram import Bot, Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
-from app import config
+from app import config, exchange, repo
 
 logger = logging.getLogger("telegram_notify")
 
@@ -120,6 +120,8 @@ def format_signal_message(signal: dict) -> str:
         lines += ["", signal["context_note"]]
     if signal.get("open_risk_pct") is not None:
         lines += ["", _open_risk_line(signal["open_risk_pct"])]
+    if signal.get("pending_count", 0) > 1:
+        lines += ["", f"📋 Je hebt nu {signal['pending_count']} openstaande kansen die nog een keuze wachten."]
     lines += ["", _factor_link(signal["coin"])]
     lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
@@ -201,14 +203,29 @@ async def send_signal_update(signal: dict, chat_id: str, force_silent: bool = Fa
                 signal["coin"], signal["direction"], chat_id)
 
 
-async def send_signal(signal: dict, chat_id: str, force_silent: bool = False) -> None:
+def _journal_action_keyboard(entry_id: int) -> InlineKeyboardMarkup:
+    """Genomen zet de status direct op 'genomen' met de live prijs op het
+    moment van klikken als entry, Negeren op 'genegeerd'. Geen bevestigings-
+    stap: de knoppen verdwijnen na de klik (zie _handle_journal_callback),
+    een misklik kan altijd nog teruggedraaid worden op het dashboard."""
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Genomen", callback_data=f"take:{entry_id}"),
+        InlineKeyboardButton("❌ Negeren", callback_data=f"ignore:{entry_id}"),
+    ]])
+
+
+async def send_signal(
+    signal: dict, chat_id: str, force_silent: bool = False, entry_id: int | None = None,
+) -> None:
     """Verstuurt de melding naar één specifieke chat ID. Elke gebruiker heeft
     zijn eigen chat ID en dus zijn eigen risicobedrag in het bericht. Ook een
     afgewezen tip krijgt een bericht (format_rejected_message), stilte voelt
     voor de gebruiker aan als "er is niks gebeurd" in plaats van "getoetst en
     afgekeurd, met reden". force_silent komt van de stille-uren instelling
     van de gebruiker (zie is_quiet_now): onderdrukt geluid ook bij een
-    bevestigde kans, die blijft normaal wel geluid geven."""
+    bevestigde kans, die blijft normaal wel geluid geven. entry_id voegt
+    Genomen/Negeren-knoppen toe onder een bevestigde kans, alleen als
+    meegegeven (een afwijzing heeft geen knoppen, er is niks om te nemen)."""
     if not config.TELEGRAM_BOT_TOKEN or not chat_id:
         logger.warning("Telegram token of chat ID ontbreekt, melding niet verstuurd")
         return
@@ -222,7 +239,8 @@ async def send_signal(signal: dict, chat_id: str, force_silent: bool = False) ->
     # doen valt. Tenzij de gebruiker nu in zijn eigen stille uren zit, dan
     # blijft ook een bevestigde kans stil, hij ziet hem 's ochtends wel.
     silent = force_silent or not confirmed
-    await bot.send_message(chat_id=chat_id, text=text, disable_notification=silent)
+    keyboard = _journal_action_keyboard(entry_id) if (confirmed and entry_id) else None
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=silent, reply_markup=keyboard)
     logger.info("Telegram melding verstuurd voor %s %s naar chat %s",
                 signal["coin"], signal["direction"], chat_id)
 
@@ -298,6 +316,51 @@ async def send_demo_signal_message(chat_id: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Inline knoppen Genomen/Negeren onder een bevestigde kans: direct het
+# logboek bijwerken vanuit Telegram, zonder het dashboard te hoeven openen.
+# ---------------------------------------------------------------------------
+
+async def _handle_journal_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    try:
+        action, entry_id_str = query.data.split(":", 1)
+        entry_id = int(entry_id_str)
+    except (ValueError, AttributeError):
+        return
+    if action not in ("take", "ignore"):
+        return
+
+    user = repo.get_user_by_telegram_chat_id(query.message.chat_id)
+    if not user:
+        return
+    entry = repo.get_journal_entry(entry_id, user["id"])
+    if not entry:
+        # Niet (meer) van deze gebruiker, of al verwijderd: knoppen weghalen,
+        # er valt niks meer te doen.
+        await query.edit_message_reply_markup(reply_markup=None)
+        return
+
+    if action == "take":
+        try:
+            entry_price = await asyncio.to_thread(exchange.fetch_last_price, entry["coin"])
+        except Exception:
+            logger.exception("Live prijs voor %s kon niet opgehaald worden bij Genomen-knop, val terug op signaalprijs", entry["coin"])
+            entry_price = entry["price"]
+        repo.update_journal_status(entry_id, user["id"], "genomen", entry_price=entry_price)
+        confirmation = f"✅ {_coin_label(entry['coin'])} genomen op {entry_price:.4f}."
+    else:
+        repo.update_journal_status(entry_id, user["id"], "genegeerd")
+        confirmation = f"❌ {_coin_label(entry['coin'])} genegeerd."
+
+    # Knoppen weghalen zodra er een keuze gemaakt is, voorkomt een dubbele
+    # klik die de status nog een keer probeert te wijzigen.
+    await query.edit_message_reply_markup(reply_markup=None)
+    await query.message.reply_text(f"{confirmation}\nAan te passen op het dashboard als dit niet klopt.")
+    logger.info("Journaal-knop '%s' verwerkt voor gebruiker %s, entry %s", action, user["username"], entry_id)
+
+
+# ---------------------------------------------------------------------------
 # /start: welkomstbericht zodra iemand voor het eerst met de bot begint te
 # praten, met daarin meteen zijn eigen chat ID, zodat @userinfobot niet meer
 # nodig is om die te achterhalen.
@@ -330,6 +393,7 @@ async def run_telegram_listener() -> None:
 
     application = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", _handle_start))
+    application.add_handler(CallbackQueryHandler(_handle_journal_callback))
 
     async with application:
         await application.start()

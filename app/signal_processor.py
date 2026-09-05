@@ -346,14 +346,18 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
             current_open_risk = repo.total_open_risk_eur(user["id"])
             open_risk_pct = (current_open_risk + risk_eur) / user["portfolio_eur"] * 100
 
+        # Inclusief deze nieuwe kans zelf (net aangemaakt met status 'nieuw').
+        # Bij precies 1 is dit de enige, geen samenvattingsregel nodig.
+        pending_count = repo.count_pending_signals(user["id"])
+
         force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             await telegram_notify.send_signal(
                 {
                     **signal_data, "risk_eur": risk_eur, "position_size": position_size,
-                    "open_risk_pct": open_risk_pct,
+                    "open_risk_pct": open_risk_pct, "pending_count": pending_count,
                 },
-                chat_id=user["telegram_chat_id"], force_silent=force_silent,
+                chat_id=user["telegram_chat_id"], force_silent=force_silent, entry_id=entry_id,
             )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:

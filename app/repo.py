@@ -279,6 +279,15 @@ def list_users() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_user_by_telegram_chat_id(chat_id: str) -> Optional[dict]:
+    """Voor de inline Genomen/Negeren-knoppen: een Telegram callback komt
+    binnen op een chat_id, niet op een dashboard-username, dus moet
+    teruggezocht worden welke gebruiker daarbij hoort."""
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM users WHERE telegram_chat_id = ?", (str(chat_id),)).fetchone()
+        return dict(row) if row else None
+
+
 def update_user_settings(
     user_id: int, portfolio_eur: float, risk_percent: float,
     telegram_chat_id: Optional[str],
