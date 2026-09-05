@@ -281,9 +281,22 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
             continue
 
         position_size = risk.compute_position_size(risk_eur, ind.price, stop_take.stop_loss) if confirmed else None
+
+        # Alleen bij een bevestigde kans zinvol: een afwijzing is toch geen
+        # trade die risico toevoegt. Toont waar het TOTALE open risico
+        # zou uitkomen als deze kans ook genomen wordt, niet alleen het
+        # risicobedrag van deze ene trade op zich.
+        open_risk_pct = None
+        if confirmed and user["portfolio_eur"]:
+            current_open_risk = repo.total_open_risk_eur(user["id"])
+            open_risk_pct = (current_open_risk + risk_eur) / user["portfolio_eur"] * 100
+
         try:
             await telegram_notify.send_signal(
-                {**signal_data, "risk_eur": risk_eur, "position_size": position_size},
+                {
+                    **signal_data, "risk_eur": risk_eur, "position_size": position_size,
+                    "open_risk_pct": open_risk_pct,
+                },
                 chat_id=user["telegram_chat_id"],
             )
             repo.mark_journal_telegram_sent(entry_id)

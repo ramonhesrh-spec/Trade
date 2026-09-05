@@ -31,6 +31,42 @@ def _coin_label(coin: str) -> str:
     return f"{symbol}{coin}" if symbol else coin
 
 
+PROGRESS_BAR_WIDTH = 10
+
+
+def _progress_bar(price: float, stop_loss: float, take_profit: float, direction: str) -> str:
+    """Blokjesbalk die toont waar de huidige prijs zit tussen stop loss (0%)
+    en take profit (100%), puur op basis van velden die het bericht toch
+    al meestuurt, geen aparte 'oorspronkelijke entry' hoeft hiervoor
+    bijgehouden te worden. Bij het risk:reward-ontwerp van risk.py
+    (1:2) staat een gloednieuwe kans al op ongeveer 33%, dat is geen fout,
+    dat is de ingebouwde verhouding tussen de stop-afstand en de
+    doelafstand."""
+    if direction == "long":
+        span = take_profit - stop_loss
+        pos = (price - stop_loss) / span if span else 0.0
+    else:
+        span = stop_loss - take_profit
+        pos = (stop_loss - price) / span if span else 0.0
+    pos = max(0.0, min(1.0, pos))
+    filled = round(pos * PROGRESS_BAR_WIDTH)
+    bar = "▓" * filled + "░" * (PROGRESS_BAR_WIDTH - filled)
+    return f"{bar} {pos * 100:.0f}% naar TP"
+
+
+# Boven welk percentage van de portfolio het totale open risico (som van
+# alle nog open trades, inclusief de kans in dit bericht) een waarschuwing
+# waard is. Leerboek-vuistregel (niet meer dan 5 tot 10% van de
+# portefeuille tegelijk op het spel), geen instelling per gebruiker, dat
+# kan later nog toegevoegd worden.
+OPEN_RISK_WARNING_PCT = 10.0
+
+
+def _open_risk_line(open_risk_pct: float) -> str:
+    marker = "⚠️" if open_risk_pct >= OPEN_RISK_WARNING_PCT else "📊"
+    return f"{marker} Dit zou je totale open risico op {open_risk_pct:.1f}% van je portfolio brengen."
+
+
 def _factor_link(coin: str) -> str:
     """Link naar de coin-pagina, waar alle factoren van de toetsing
     (4 of 10, afhankelijk van ENABLE_ADVANCED_FACTORS) te zien zijn, niet
@@ -53,6 +89,7 @@ def format_signal_message(signal: dict) -> str:
         f"💰 Prijs nu: {signal['price']:.4f}",
         f"🎯 Take profit: {signal['take_profit']:.4f}",
         f"🛑 Stop loss: {signal['stop_loss']:.4f}",
+        _progress_bar(signal["price"], signal["stop_loss"], signal["take_profit"], signal["direction"]),
         DIVIDER,
     ]
     if signal.get("plain_explanation"):
@@ -60,6 +97,8 @@ def format_signal_message(signal: dict) -> str:
     lines.append(signal["reason"])
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
+    if signal.get("open_risk_pct") is not None:
+        lines += ["", _open_risk_line(signal["open_risk_pct"])]
     lines += ["", _factor_link(signal["coin"])]
     lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
@@ -105,6 +144,7 @@ def format_update_message(signal: dict) -> str:
         lines += [
             f"🎯 Nieuw take profit: {signal['take_profit']:.4f}",
             f"🛑 Nieuwe stop loss: {signal['stop_loss']:.4f}",
+            _progress_bar(signal["price"], signal["stop_loss"], signal["take_profit"], signal["direction"]),
         ]
     lines.append(DIVIDER)
     if signal.get("plain_explanation"):

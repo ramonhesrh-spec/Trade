@@ -426,6 +426,23 @@ def mark_journal_telegram_sent(entry_id: int) -> None:
         conn.execute("UPDATE journal_entries SET telegram_sent = 1 WHERE id = ?", (entry_id,))
 
 
+def total_open_risk_eur(user_id: int) -> float:
+    """Som van het risicobedrag van alle echt open trades (eigen entry al
+    ingevuld, nog niet gesloten) van deze gebruiker. Zelfde definitie van
+    "echt open" als de risicogauge op het dashboard: een nog niet genomen
+    signaal heeft nog geen kapitaal gekost, een oefentrade telt nooit mee."""
+    with db.session() as conn:
+        row = conn.execute(
+            """SELECT COALESCE(SUM(je.risk_eur), 0) AS total
+               FROM journal_entries je
+               JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.entry_price IS NOT NULL AND je.exit_price IS NULL
+                     AND s.is_practice = 0""",
+            (user_id,),
+        ).fetchone()
+        return row["total"]
+
+
 def list_journal(user_id: int, status: Optional[str] = None, limit: int = 500) -> list[dict]:
     with db.session() as conn:
         if status == "open":
