@@ -53,11 +53,14 @@ def explain_signal(
         return ""
 
 
-SUMMARY_SYSTEM_PROMPT = """Je herschrijft een bericht uit een crypto trading-community in klare \
-taal voor iemand zonder voorkennis. Gebruik uitsluitend wat er letterlijk in het bericht staat, \
-verzin nooit een nieuw niveau, cijfer of conclusie die er niet in staat. Vat het kernpunt samen \
-in maximaal 3 korte zinnen Nederlands: waar gaat het over, wat is de boodschap. Geen jargon \
-zonder uitleg, geen beleggingsadvies toevoegen, geen mening die er niet al in het bericht stond."""
+SUMMARY_SYSTEM_PROMPT = """Je herschrijft een bericht uit een crypto trading-community in je \
+EIGEN woorden, in klare taal voor iemand zonder voorkennis. Dit is een herschrijving, geen \
+citaat: kopieer geen zinnen letterlijk over, ook geen losse stukken. Gebruik alleen de feiten \
+die in het bericht staan (verzin nooit een nieuw niveau, cijfer of conclusie), maar formuleer \
+ze helemaal opnieuw, zoals je het aan een vriend zou uitleggen. Vat het kernpunt samen in \
+maximaal 3 korte, volledige zinnen Nederlands: waar gaat het over, wat is de boodschap. Rond \
+elke zin altijd volledig af, stop nooit halverwege. Geen jargon zonder uitleg, geen \
+beleggingsadvies toevoegen, geen mening die er niet al in het bericht stond."""
 
 
 def summarize_message(coin: str, raw_text: str) -> str:
@@ -66,7 +69,11 @@ def summarize_message(coin: str, raw_text: str) -> str:
     Een lange of jargon-rijke analyse van een betaalde community is voor
     een beginner vaak niet te volgen, dit maakt de inhoud ervan wel
     toegankelijk. Lege string bij een leeg bericht of een API-fout: de
-    melding zelf blijft dan gewoon zichtbaar zonder samenvatting."""
+    melding zelf blijft dan gewoon zichtbaar zonder samenvatting.
+
+    max_tokens ruim boven wat 3 korte zinnen Nederlands normaal kosten:
+    te krap afgesneden geeft een halve, afgebroken zin terug in plaats van
+    een API-fout, dat is moeilijker te herkennen als iets dat mislukt is."""
     if not raw_text or not raw_text.strip():
         return ""
     client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
@@ -74,7 +81,7 @@ def summarize_message(coin: str, raw_text: str) -> str:
     try:
         response = client.messages.create(
             model=config.ANTHROPIC_MODEL,
-            max_tokens=200,
+            max_tokens=400,
             system=SUMMARY_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
         )

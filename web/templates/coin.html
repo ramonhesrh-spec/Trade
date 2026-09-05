@@ -131,7 +131,11 @@
     <div class="long-term-item">
       <span class="badge badge-{{ m.direction if m.direction in ('long', 'short') else 'status' }}">{{ m.direction }}</span>
       <span class="muted mono" style="font-size: 11px;">{{ m.received_at[:10] }}</span>
-      <p>{{ m.message_summary or (m.raw_text[:200] if m.raw_text else "") }}</p>
+      {% if m.message_summary %}
+      <p>{{ m.message_summary }}</p>
+      {% elif m.raw_text %}
+      <p>{{ m.raw_text | truncate(220) }} <span class="muted" style="font-size: 11px;">(nog geen samenvatting)</span></p>
+      {% endif %}
     </div>
     {% endfor %}
   </div>

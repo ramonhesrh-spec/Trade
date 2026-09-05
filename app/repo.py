@@ -67,6 +67,19 @@ def mark_message_processed(
         )
 
 
+def list_messages_for_summary_backfill() -> list[dict]:
+    """Alle verwerkte, niet-onduidelijke berichten met tekst, oudste eerst.
+    Voor scripts/regenerate_message_summaries.py: eenmalig alsnog een
+    samenvatting genereren voor berichten van voor een prompt-verbetering."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, coin, raw_text, message_summary FROM messages
+               WHERE processed_at IS NOT NULL AND unclear = 0 AND raw_text != ''
+               ORDER BY id"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def set_message_summary(message_id: int, summary: str) -> None:
     """Slaat de klare-taal herschrijving van het originele bericht op (zie
     explain.summarize_message), los van signals.plain_explanation dat de
