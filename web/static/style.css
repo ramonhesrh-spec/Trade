@@ -511,6 +511,17 @@ main h3 { font-size: 15px; gap: 8px; }
   .winrate-ring-fill { animation: none; stroke-dashoffset: var(--ring-offset); }
 }
 
+/* Winst-confetti: overlay die zichzelf opruimt na de val (zie base.html). */
+.confetti-burst { position: fixed; inset: 0; pointer-events: none; z-index: 999; overflow: hidden; }
+.confetti-piece {
+  position: absolute; top: -12px; width: 8px; height: 14px; border-radius: 2px;
+  animation: confetti-fall linear forwards;
+}
+@keyframes confetti-fall {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(105vh) rotate(var(--rot, 360deg)); opacity: 0; }
+}
+
 /* Trade-kalender: GitHub-stijl rooster van dagresultaten. Kleurintensiteit
    is relatief aan de grootste dagwaarde in je eigen data (zie
    _build_heatmap_weeks), dus schaalt vanzelf mee met portfolio-omvang. */

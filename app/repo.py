@@ -820,7 +820,10 @@ def delete_practice_entry(entry_id: int, user_id: int) -> None:
         )
 
 
-def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_time: str) -> None:
+def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_time: str) -> tuple[float, bool]:
+    """Sluit de trade af en geeft (result_eur, is_practice) terug, zodat de
+    caller kan bepalen of dit een echte, winstgevende sluiting was (voor de
+    winst-confetti op het dashboard)."""
     entry = get_journal_entry(entry_id, user_id)
     if not entry or entry["entry_price"] is None or entry["status"] == "genegeerd":
         raise ValueError("kan alleen sluiten als er een entry prijs is ingevuld en de trade niet genegeerd is")
@@ -861,6 +864,7 @@ def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_tim
                 "UPDATE users SET portfolio_eur = portfolio_eur + ? WHERE id = ?",
                 (result_eur, user_id),
             )
+    return result_eur, bool(entry["is_practice"])
 
 
 def update_journal_note(entry_id: int, user_id: int, note: str) -> None:

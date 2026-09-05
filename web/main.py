@@ -12,6 +12,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -600,13 +601,22 @@ async def close_journal(
     next: str = Form(""),
     user: dict = Depends(require_login),
 ):
+    won = False
     try:
-        repo.close_journal_trade(entry_id, user["id"], exit_price, exit_time)
+        result_eur, is_practice = repo.close_journal_trade(entry_id, user["id"], exit_price, exit_time)
+        won = (not is_practice) and result_eur > 0
     except ValueError:
         # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
         # entry prijs ingevuld). Stil negeren, niets om te sluiten.
         pass
-    return RedirectResponse(url=_safe_next(next), status_code=303)
+    target = _safe_next(next)
+    if won:
+        # Seintje voor de winst-confetti (base.html leest dit uit de URL na
+        # een gewone navigatie, dashboard.js uit resp.url na een AJAX-swap).
+        parts = urlsplit(target)
+        query = urlencode(parse_qsl(parts.query) + [("closed_win", "1")])
+        target = urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+    return RedirectResponse(url=target, status_code=303)
 
 
 @app.post("/journal/{entry_id}/reset")

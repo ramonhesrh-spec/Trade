@@ -112,6 +112,43 @@
     document.addEventListener("submit", function () { start(); });
   })();
 </script>
+<script>
+  // Winst-confetti: viert een net gesloten, echt winstgevende trade. Getriggerd
+  // door een echte gebeurtenis (result_eur > 0 bij het sluiten van een
+  // niet-oefentrade, zie /journal/{id}/close), niet decoratief op een timer.
+  (function () {
+    var COLORS = ["#17e5d6", "#33d69f", "#f2c94c", "#eaf1f0"];
+    function fireConfetti() {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      var container = document.createElement("div");
+      container.className = "confetti-burst";
+      container.setAttribute("aria-hidden", "true");
+      for (var i = 0; i < 28; i++) {
+        var piece = document.createElement("span");
+        piece.className = "confetti-piece";
+        piece.style.left = Math.random() * 100 + "vw";
+        piece.style.background = COLORS[i % COLORS.length];
+        piece.style.animationDuration = (1.6 + Math.random() * 1.2) + "s";
+        piece.style.animationDelay = (Math.random() * 0.3) + "s";
+        piece.style.setProperty("--rot", (Math.random() * 720 - 360) + "deg");
+        container.appendChild(piece);
+      }
+      document.body.appendChild(container);
+      setTimeout(function () { container.remove(); }, 3200);
+    }
+    window.HP.confetti = fireConfetti;
+
+    // Bij een gewone paginanavigatie (geen AJAX-swap, bv. vanaf de
+    // coin-pagina) staat het seintje in de URL. Meteen weer verwijderen,
+    // zodat verversen de confetti niet herhaalt.
+    if (location.search.indexOf("closed_win=1") !== -1) {
+      fireConfetti();
+      var url = new URL(location.href);
+      url.searchParams.delete("closed_win");
+      history.replaceState(null, "", url.pathname + url.search + url.hash);
+    }
+  })();
+</script>
 <header class="topbar">
   <div class="topbar-watermark-clip" aria-hidden="true">
     <div class="topbar-watermark">
