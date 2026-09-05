@@ -324,7 +324,12 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     ratio_stats = repo.winrate_by_ratio(user["id"])
     coin_stats = repo.coin_stats(user["id"])
     coins = repo.list_coins()
-    unclear_messages = repo.recent_unclear_messages()
+    # Niet herkende berichten zijn een operator-signaal (is de AI-interpretatie
+    # goed afgesteld?), geen bruikbare informatie voor een gewone gebruiker:
+    # die kan er toch niks mee, en het oogt onbetrouwbaar. Daarom alleen
+    # zichtbaar voor de eigen operator-account (ADMIN_TELEGRAM_CHAT_ID).
+    is_admin = bool(config.ADMIN_TELEGRAM_CHAT_ID) and user["telegram_chat_id"] == config.ADMIN_TELEGRAM_CHAT_ID
+    unclear_messages = repo.recent_unclear_messages() if is_admin else None
 
     # Setup-checklist: alleen zichtbaar zolang niet alle stappen gezet zijn,
     # verdwijnt vanzelf zodra dat wel zo is. "Eerste melding ontvangen" kijkt

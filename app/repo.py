@@ -579,6 +579,40 @@ def auto_ignore_opposite_pending(coin: str, direction: str) -> list[dict]:
         return [dict(r) for r in affected]
 
 
+def auto_ignore_stale_pending_for_coin(coin: str, exclude_signal_id: int) -> list[dict]:
+    """Negeert automatisch elke nog niet bevestigde logboekregel voor deze
+    coin die hoort bij een ánder signaal dan het signaal dat net is
+    aangemaakt.
+
+    auto_ignore_opposite_pending hierboven ruimt de tegenovergestelde
+    richting op, maar dekt niet het geval waarin find_open_signal het vorige
+    signaal voor dezelfde coin en richting niet meer als "open" genoeg
+    beschouwde (bv. iedereen had die kans al afgesloten) en er dus een apart
+    nieuw signaal is aangemaakt in plaats van een update. Zonder dit blijft
+    zo'n oude, nog niet opgevolgde kans met verouderde koers/stop-loss/
+    take-profit niveaus gewoon naast de nieuwe op het dashboard staan.
+
+    Zelfde vorm als auto_ignore_opposite_pending."""
+    note = "automatisch genegeerd: nieuwere melding voor dezelfde coin maakt dit signaal achterhaald"
+    with db.session() as conn:
+        affected = conn.execute(
+            """SELECT je.id AS id, u.username AS username, u.telegram_chat_id AS telegram_chat_id
+               FROM journal_entries je
+               JOIN signals s ON s.id = je.signal_id
+               JOIN users u ON u.id = je.user_id
+               WHERE je.entry_price IS NULL AND je.status != 'genegeerd'
+                     AND s.coin = ? AND s.id != ? AND s.is_practice = 0""",
+            (coin.upper(), exclude_signal_id),
+        ).fetchall()
+        if affected:
+            placeholders = ",".join("?" * len(affected))
+            conn.execute(
+                f"UPDATE journal_entries SET status = 'genegeerd', note = ? WHERE id IN ({placeholders})",
+                (note, *[row["id"] for row in affected]),
+            )
+        return [dict(r) for r in affected]
+
+
 def reset_journal_entry(entry_id: int, user_id: int) -> None:
     """Zet een logboekregel helemaal terug naar de beginstaat: status
     'nieuw', geen entry/exit prijs, geen resultaat. Voor als er per ongeluk

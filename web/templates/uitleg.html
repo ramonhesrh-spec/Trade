@@ -4,7 +4,7 @@
 
 <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>Uitleg</h2>
 <p class="muted" style="margin: -6px 0 4px; max-width: 640px;">Hoe HesPulse van een analyse naar een melding komt, wat hoog en laag
-vertrouwen precies betekent, en wat er gebeurt zodra je een trade neemt.</p>
+vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
 
 <section class="landing-section" id="telegram-koppelen" style="padding-left:0; padding-right:0; border-top:none;">
   <h2>Telegram koppelen</h2>
@@ -30,10 +30,10 @@ vertrouwen precies betekent, en wat er gebeurt zodra je een trade neemt.</p>
 <section class="landing-section" id="hoog-vertrouwen" style="padding-left:0; padding-right:0;">
   <span class="status-tag tag-live">● Nu live</span>
   <h2>Wanneer is een signaal hoog vertrouwen?</h2>
-  <p>Elke melding wordt op het moment zelf getoetst op de 4 uur candle,
-  tegen vier vaste factoren. Overal in het dashboard zie je de score als
-  ratio naast de badge, bijvoorbeeld <span class="mono">3/4</span>. Klik of
-  tik op "waarom?" om te zien welke factor het is.</p>
+  <p>Elke melding wordt getoetst tegen vier vaste factoren. Overal in het
+  dashboard zie je de score als ratio naast de badge, bijvoorbeeld
+  <span class="mono">3/4</span>. Klik of tik op "waarom?" om te zien welke
+  factor het is.</p>
   <div class="factor-grid">
     <div class="factor">
       <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,17 9,11 13,15 21,5"/><polyline points="15,5 21,5 21,11"/></svg>Trend</h3>
@@ -60,13 +60,13 @@ vertrouwen precies betekent, en wat er gebeurt zodra je een trade neemt.</p>
       overtuigend.</p>
     </div>
   </div>
-  <p>Kloppen alle vier, dan is het <strong>hoog vertrouwen (4/4)</strong>.
-  Mist er één of meer, dan is het <strong>laag vertrouwen</strong>, met de
-  ontbrekende factor(en) erbij. Belangrijk verschil: alleen hoog vertrouwen
-  stuurt een Telegram bericht. Laag vertrouwen zie je alleen op het
-  dashboard, in de Meldingen-tabel, zodat je er niet mee gestoord wordt
-  maar het ook niet kwijt bent. Hoog vertrouwen is geen garantie op winst,
-  het is een optelsom van regels, geen voorspelling.</p>
+  <p>Kloppen minstens drie van de vier, dan is het <strong>hoog
+  vertrouwen</strong>. Mist er meer, dan is het <strong>laag vertrouwen</strong>,
+  met de ontbrekende factor(en) erbij. Belangrijk verschil: alleen hoog
+  vertrouwen stuurt een Telegram bericht. Laag vertrouwen zie je alleen op
+  het dashboard, zodat je er niet mee gestoord wordt maar het ook niet
+  kwijt bent. Hoog vertrouwen is geen garantie op winst, het is een optelsom
+  van regels, geen voorspelling.</p>
 </section>
 
 <section class="landing-section" style="padding-left:0; padding-right:0;">
@@ -90,7 +90,7 @@ vertrouwen precies betekent, en wat er gebeurt zodra je een trade neemt.</p>
     <div class="factor">
       <h3>Genegeerd</h3>
       <p>Je hebt de melding bewust overgeslagen. Telt niet mee in je
-      winrate, blijft wel zichtbaar in de Meldingen-tabel.</p>
+      winrate, blijft wel zichtbaar in je overzicht.</p>
     </div>
   </div>
   <p>Eenmaal genomen, sluit je de trade af met je exitprijs en -tijdstip
@@ -101,9 +101,7 @@ vertrouwen precies betekent, en wat er gebeurt zodra je een trade neemt.</p>
 </section>
 
 <section class="landing-section" style="padding-left:0; padding-right:0;">
-  <h2>Wat gebeurt er live, en wat niet</h2>
-  <p>Drie aparte klokken lopen door elkaar, hier op een rij zodat
-  duidelijk is wat je wanneer kunt verwachten:</p>
+  <h2>Wat kun je wanneer verwachten</h2>
   <div class="factor-grid">
     <div class="factor">
       <h3>Koers en resultaat op het dashboard</h3>
@@ -112,32 +110,34 @@ vertrouwen precies betekent, en wat er gebeurt zodra je een trade neemt.</p>
     </div>
     <div class="factor">
       <h3>Seintje bij stop loss of take profit</h3>
-      <p>Elke 15 minuten wordt gecheckt of een lopende trade zijn stop
-      loss of take profit al geraakt heeft. Zo ja, dan krijg je één keer
-      een Telegram bericht, geen herhaling erna.</p>
+      <p>Zodra een lopende trade zijn stop loss of take profit raakt,
+      krijg je één Telegram bericht, geen herhaling erna.</p>
     </div>
     <div class="factor">
       <h3>Seintje als een gemiste melding terugkomt</h3>
-      <p>Precies waar je naar vroeg: stuur je een analyse door en neem je
-      het signaal niet meteen, dan checkt HesPulse elke 15 minuten of de
-      koers weer dicht genoeg (binnen 0,5x ATR) bij dat oorspronkelijke
-      niveau is gekomen. Zo ja, één Telegram seintje "nog steeds
-      interessant?", zodat je het niet zelf de hele dag hoeft te volgen.</p>
+      <p>Neem je een signaal niet meteen, dan krijg je automatisch een
+      seintje "nog steeds interessant?" zodra de koers weer dicht bij dat
+      oorspronkelijke niveau komt. Zo hoef je het niet zelf de hele dag
+      te volgen.</p>
     </div>
   </div>
-  <p class="muted" style="font-size: 13px;">Beide Telegram-checks draaien als een aparte, terugkerende taak op de
-  server, los van of je het dashboard open hebt staan.</p>
 </section>
 
 <section class="landing-section" style="padding-left:0; padding-right:0;">
   <span class="status-tag {{ 'tag-live' if advanced_factors_enabled else 'tag-soon' }}">
     {{ '● Actief' if advanced_factors_enabled else '○ Nog niet actief' }}
   </span>
+  {% if advanced_factors_enabled %}
+  <h2>Zes extra factoren</h2>
+  <p>Naast de vier factoren hierboven toetst HesPulse ook op zes extra
+  factoren. Die tellen nu mee in elke melding.</p>
+  {% else %}
   <h2>In de maak: zes extra factoren</h2>
-  <p>Naast de vier factoren hierboven staat er al een uitgebreidere
-  toetsing klaar, {% if advanced_factors_enabled %}en die staat nu aan{% else %}maar die staat nog uit{% endif %}.
-  Eerst wordt getoetst hoe streng de nieuwe regels in de praktijk uitpakken
-  op eerdere signalen, voor ze meetellen in een echte melding.</p>
+  <p>Naast de vier factoren hierboven staat er een uitgebreidere toetsing
+  klaar, maar die staat nog uit. Eerst wordt getoetst hoe streng de nieuwe
+  regels in de praktijk uitpakken op eerdere signalen, voor ze meetellen in
+  een echte melding.</p>
+  {% endif %}
   <div class="factor-grid">
     <div class="factor factor-preview">
       <h3>Trendsterkte (ADX)</h3>

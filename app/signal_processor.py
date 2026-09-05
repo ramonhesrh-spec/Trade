@@ -334,6 +334,28 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     logger.info("Signaal %s opgeslagen: %s %s, bevestigd=%s", signal_id, interp.coin,
                 interp.direction, confirmed)
 
+    # find_open_signal hierboven kon het vorige signaal voor deze coin niet
+    # meer als "open" beschouwen (bv. iedereen had die kans al afgesloten),
+    # dus er is een apart, nieuw signaal aangemaakt in plaats van een update.
+    # Een oude, nog niet opgevolgde kans voor dezelfde coin (andere richting
+    # ving auto_ignore_opposite_pending hierboven al af) blijft dan zonder
+    # dit los op het dashboard staan met verouderde niveaus, alsof hij nog
+    # actueel is.
+    stale = repo.auto_ignore_stale_pending_for_coin(interp.coin, exclude_signal_id=signal_id)
+    if stale:
+        logger.info("%s oude nog niet genomen melding(en) voor %s automatisch genegeerd (nieuw signaal)",
+                     len(stale), interp.coin)
+        for user in stale:
+            if not user["telegram_chat_id"]:
+                continue
+            try:
+                await telegram_notify.send_stale_pending_message(
+                    interp.coin, chat_id=user["telegram_chat_id"],
+                )
+            except Exception:
+                logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt",
+                                  interp.coin, user["username"])
+
     # Elke gebruiker krijgt zijn eigen logboekregel, ongeacht vertrouwen, zo
     # blijft de trackrecord per vertrouwen-niveau compleet. Ook een afgewezen
     # tip krijgt een Telegram bericht (zonder stop loss/take profit/grootte,

@@ -284,6 +284,23 @@ async def send_expired_pending_message(coin: str, new_direction: str, chat_id: s
         f"({_direction_label(new_direction)}) binnen, die maakt dit signaal achterhaald."
     )
     await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
+
+
+async def send_stale_pending_message(coin: str, chat_id: str) -> None:
+    """Bericht zodra een nog niet genomen kans automatisch is genegeerd
+    omdat er een nieuwere melding voor dezelfde coin binnenkwam (zie
+    repo.auto_ignore_stale_pending_for_coin). Stil, om dezelfde reden als
+    send_expired_pending_message hierboven."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = (
+        f"❌ {_coin_label(coin)}\n"
+        f"{DIVIDER}\n"
+        f"Je eerdere kans op deze coin is niet meer actueel.\n\n"
+        f"Er kwam een nieuwere melding voor deze coin binnen, die maakt dit signaal achterhaald."
+    )
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
     logger.info("Vervallen-kans melding verstuurd voor %s naar chat %s", coin, chat_id)
 
 

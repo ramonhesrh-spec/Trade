@@ -210,6 +210,11 @@ alleen in de serverlog staan. Dit is ontstaan doordat de back-up- en
 levensteken-timer op deze VPS ooit nooit geïnstalleerd bleken te zijn,
 zonder dat iemand dat opmerkte, zie ook `app/health_check.py`.
 
+Dezelfde `ADMIN_TELEGRAM_CHAT_ID` bepaalt ook welk account op het dashboard
+de "niet herkende berichten" sectie te zien krijgt: dat is een
+operator-signaal (staat de AI-interpretatie goed?), geen bruikbare
+informatie voor een gewone gebruiker, zie `web/main.py:dashboard()`.
+
 ### Wekelijkse en maandelijkse samenvatting
 
 ```bash
