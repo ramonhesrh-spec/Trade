@@ -245,6 +245,18 @@ async def send_signal(
                 signal["coin"], signal["direction"], chat_id)
 
 
+async def send_signal_chart(image_bytes: bytes, coin: str, direction: str, chat_id: str) -> None:
+    """Stuurt het prijs-chartje (zie app/chart_image.py) als losse foto na
+    het tekstbericht. Altijd stil: de tekstmelding gaf het geluid al, dit
+    is een visuele aanvulling, geen nieuwe melding op zich."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    caption = f"{_direction_emoji(direction)} {_coin_label(coin)} laatste candles"
+    await bot.send_photo(chat_id=chat_id, photo=image_bytes, caption=caption, disable_notification=True)
+    logger.info("Chart verstuurd voor %s naar chat %s", coin, chat_id)
+
+
 async def send_new_coin_message(coin: str, chat_id: str) -> None:
     """Kort, stil bericht zodra een coin voor het eerst ooit gevolgd wordt.
     Geen actie van de gebruiker nodig, dus geen geluid."""

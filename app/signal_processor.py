@@ -8,7 +8,7 @@ import asyncio
 import logging
 import time
 
-from app import coinlist, config, exchange, explain, indicators, repo, risk, telegram_notify
+from app import chart_image, coinlist, config, exchange, explain, indicators, repo, risk, telegram_notify
 from app.anthropic_interpret import Interpretation, interpret_message
 
 logger = logging.getLogger("signal_processor")
@@ -263,6 +263,19 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     # juist goed uitpakte.
     repeated_factor = None if confirmed else await asyncio.to_thread(_repeated_failing_factor, interp.coin)
 
+    # Eén keer gegenereerd voor iedereen, niet per gebruiker: de grafiek
+    # zelf verschilt niet per ontvanger. Alleen bij een bevestigde kans,
+    # een afwijzing heeft geen stop loss/take profit om te tekenen. Een
+    # mislukte generatie mag de al verstuurde tekstmelding nooit blokkeren.
+    chart_bytes = None
+    if confirmed:
+        try:
+            chart_bytes = await asyncio.to_thread(
+                chart_image.render_signal_chart, df, interp.direction, stop_take.stop_loss, stop_take.take_profit,
+            )
+        except Exception:
+            logger.exception("Kon geen chart genereren voor %s", interp.coin)
+
     signal_data = {
         "message_id": message_id,
         "coin": interp.coin,
@@ -363,6 +376,16 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         except Exception:
             logger.exception("Telegram melding voor gebruiker %s, signaal %s is mislukt",
                               user["username"], signal_id)
+            continue
+
+        if chart_bytes:
+            try:
+                await telegram_notify.send_signal_chart(
+                    chart_bytes, interp.coin, interp.direction, chat_id=user["telegram_chat_id"],
+                )
+            except Exception:
+                logger.exception("Chart versturen voor gebruiker %s, signaal %s is mislukt",
+                                  user["username"], signal_id)
 
 
 async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
