@@ -681,7 +681,7 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     # zegt "1 van de 1" niks.
     primary_signal_id = (
         open_trades[0]["signal_id"] if open_trades
-        else (recent_signals[0]["signal_id"] if recent_signals else None)
+        else (recent_signals[0]["id"] if recent_signals else None)
     )
     community_stat = None
     if primary_signal_id:
