@@ -315,6 +315,48 @@ async def send_demo_signal_message(chat_id: str) -> None:
     logger.info("Voorbeeldmelding verstuurd naar chat %s", chat_id)
 
 
+def format_period_summary(stats: dict, period_label: str) -> str:
+    """Wekelijkse of maandelijkse samenvatting (zie app/periodic_summary.py),
+    dezelfde stijl als de andere berichten. Geen afbeelding: er is geen
+    bestaande beeld-generatie in dit systeem om op aan te sluiten (de
+    "deel"-knop op een gesloten trade is platte tekst, geen plaatje), en
+    tekst in dezelfde stijl als alle andere berichten is consistenter dan
+    er één losse afbeelding tussenuit te laten springen."""
+    lines = [
+        f"📅 Samenvatting {period_label}",
+        DIVIDER,
+        f"🔔 {stats['signal_count']} signalen, waarvan {stats['hoog_count']} hoog vertrouwen",
+    ]
+    if stats["closed_count"]:
+        winrate = stats["wins"] / stats["closed_count"] * 100
+        sign = "+" if stats["total_result_eur"] >= 0 else ""
+        lines += [
+            f"📈 {stats['closed_count']} trades gesloten, {stats['wins']} gewonnen ({winrate:.0f}%)",
+            f"💶 Resultaat: {sign}€{stats['total_result_eur']:.2f}",
+        ]
+        if stats["best"]:
+            b = stats["best"]
+            b_sign = "+" if b["result_eur"] >= 0 else ""
+            lines.append(f"🏆 Beste trade: {_coin_label(b['coin'])} {b_sign}€{b['result_eur']:.2f}")
+        if stats["worst"]:
+            w = stats["worst"]
+            w_sign = "+" if w["result_eur"] >= 0 else ""
+            lines.append(f"📉 Zwakste trade: {_coin_label(w['coin'])} {w_sign}€{w['result_eur']:.2f}")
+    else:
+        lines.append("Geen trades gesloten in deze periode.")
+    lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
+    return "\n".join(lines)
+
+
+async def send_period_summary(stats: dict, period_label: str, chat_id: str) -> None:
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = format_period_summary(stats, period_label)
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
+    logger.info("Periodieke samenvatting (%s) verstuurd naar chat %s", period_label, chat_id)
+
+
 # ---------------------------------------------------------------------------
 # Inline knoppen Genomen/Negeren onder een bevestigde kans: direct het
 # logboek bijwerken vanuit Telegram, zonder het dashboard te hoeven openen.

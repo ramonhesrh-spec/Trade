@@ -1,0 +1,9 @@
+[Unit]
+Description=Draai de HesPulse wekelijkse samenvatting elke zondagavond
+
+[Timer]
+OnCalendar=Sun *-*-* 20:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -866,6 +866,45 @@ def cumulative_result_series(user_id: int) -> list[dict]:
     return series
 
 
+def period_stats(user_id: int, since_iso: str) -> dict:
+    """Samenvatting van deze gebruiker zijn activiteit sinds `since_iso`,
+    voor de wekelijkse/maandelijkse Telegram samenvatting. Signalen = elke
+    logboekregel aangemaakt in de periode (ongeacht vertrouwen), trades =
+    alleen de rijen die ook echt gesloten zijn in de periode. exit_time
+    komt uit een browser datetime-local veld (geen tijdzone), een simpele
+    string-vergelijking is hier goed genoeg voor een week/maand-venster,
+    dezelfde aanpak als recent_activity op de coinpagina gebruikt."""
+    with db.session() as conn:
+        signals_row = conn.execute(
+            """SELECT COUNT(*) AS n, SUM(CASE WHEN s.technical_confirmed THEN 1 ELSE 0 END) AS hoog
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.created_at >= ? AND s.is_practice = 0""",
+            (user_id, since_iso),
+        ).fetchone()
+        closed = conn.execute(
+            """SELECT je.result_eur AS result_eur, s.coin AS coin
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.exit_time >= ? AND je.exit_price IS NOT NULL
+                     AND s.is_practice = 0""",
+            (user_id, since_iso),
+        ).fetchall()
+
+    wins = sum(1 for r in closed if r["result_eur"] is not None and r["result_eur"] > 0)
+    total_result = sum(r["result_eur"] or 0 for r in closed)
+    with_result = [dict(r) for r in closed if r["result_eur"] is not None]
+    best = max(with_result, key=lambda r: r["result_eur"], default=None)
+    worst = min(with_result, key=lambda r: r["result_eur"], default=None)
+    return {
+        "signal_count": signals_row["n"] or 0,
+        "hoog_count": signals_row["hoog"] or 0,
+        "closed_count": len(closed),
+        "wins": wins,
+        "total_result_eur": total_result,
+        "best": best,
+        "worst": worst if worst != best else None,
+    }
+
+
 def coin_stats(user_id: int) -> list[dict]:
     """Winrate en gemiddeld resultaat per coin, op basis van gesloten trades
     van deze gebruiker. Laat zien welke coin het goed doet met dit systeem,

@@ -210,6 +210,23 @@ alleen in de serverlog staan. Dit is ontstaan doordat de back-up- en
 levensteken-timer op deze VPS ooit nooit geïnstalleerd bleken te zijn,
 zonder dat iemand dat opmerkte, zie ook `app/health_check.py`.
 
+### Wekelijkse en maandelijkse samenvatting
+
+```bash
+sudo cp deploy/crypto-weekly-summary.service /etc/systemd/system/
+sudo cp deploy/crypto-weekly-summary.timer /etc/systemd/system/
+sudo cp deploy/crypto-monthly-summary.service /etc/systemd/system/
+sudo cp deploy/crypto-monthly-summary.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-weekly-summary.timer crypto-monthly-summary.timer
+```
+
+Stuurt elke gebruiker met een gekoppelde Telegram chat een korte
+samenvatting: aantal signalen, winrate, resultaat, beste en zwakste
+trade. Wekelijks op zondagavond 20:00, maandelijks op de 1e van de maand
+om 09:00. Geen bericht als er in die periode niks gebeurd is, dat
+voorkomt een lege samenvatting.
+
 ### Seintje bij geraakte stop loss of take profit
 
 ```bash

@@ -1,0 +1,9 @@
+[Unit]
+Description=Draai de HesPulse maandelijkse samenvatting op de 1e van elke maand
+
+[Timer]
+OnCalendar=*-*-01 09:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
