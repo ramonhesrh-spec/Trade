@@ -149,6 +149,69 @@
     }
   })();
 </script>
+<script>
+  // Swipe-to-close op mobiel: op een grof aanwijsapparaat (vinger) kun je de
+  // "Sluiten"-knop ook naar rechts vegen, met een vullende voortgangsbalk als
+  // feedback, als alternatief voor tikken. De knop blijft een gewone <button
+  // type="submit">: een korte tik dient nog altijd meteen in (native click),
+  // klavier- en schermlezer-gebruikers merken niets van deze laag. Alleen
+  // echte aanraking (pointerType "touch") triggert het slepen, een muis op
+  // een grof-aanwijs hybride toestel werkt gewoon als altijd.
+  (function () {
+    if (!window.matchMedia("(pointer: coarse)").matches) return;
+    var THRESHOLD = 0.7;
+
+    function attach(btn) {
+      if (btn.dataset.swipeReady) return;
+      btn.dataset.swipeReady = "1";
+      var startX = 0, width = 0, dragging = false;
+
+      function reset() {
+        btn.classList.remove("is-swiping", "is-armed");
+        btn.style.removeProperty("--swipe-progress");
+        width = 0;
+      }
+
+      btn.addEventListener("pointerdown", function (e) {
+        if (e.pointerType !== "touch") return;
+        startX = e.clientX;
+        width = btn.offsetWidth || 1;
+        dragging = false;
+        try { btn.setPointerCapture(e.pointerId); } catch (err) {}
+      });
+      btn.addEventListener("pointermove", function (e) {
+        if (e.pointerType !== "touch" || !width) return;
+        var dx = e.clientX - startX;
+        if (!dragging && dx > 10) { dragging = true; btn.classList.add("is-swiping"); }
+        if (!dragging) return;
+        e.preventDefault();
+        dx = Math.max(0, Math.min(width, dx));
+        var pct = dx / width;
+        btn.style.setProperty("--swipe-progress", (pct * 100) + "%");
+        btn.classList.toggle("is-armed", pct >= THRESHOLD);
+      });
+      btn.addEventListener("pointerup", function (e) {
+        if (e.pointerType !== "touch") return;
+        var dx = Math.max(0, Math.min(width, e.clientX - startX));
+        var pct = width ? dx / width : 0;
+        var wasDragging = dragging;
+        dragging = false;
+        reset();
+        if (wasDragging && pct >= THRESHOLD) btn.click();
+      });
+      btn.addEventListener("pointercancel", function () { dragging = false; reset(); });
+    }
+
+    function scan() {
+      document.querySelectorAll(".close-form button[type=submit]").forEach(attach);
+    }
+    scan();
+    // Kaarten worden na het sluiten/nemen van een trade vervangen door een
+    // verse servergerenderde versie (AJAX-swap in dashboard.js/coin.js),
+    // dus na elke DOM-wijziging opnieuw scannen op nieuwe knoppen.
+    new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
+  })();
+</script>
 <header class="topbar">
   <div class="topbar-watermark-clip" aria-hidden="true">
     <div class="topbar-watermark">

@@ -522,6 +522,25 @@ main h3 { font-size: 15px; gap: 8px; }
   100% { transform: translateY(105vh) rotate(var(--rot, 360deg)); opacity: 0; }
 }
 
+/* Swipe-to-close op mobiel (zie base.html): de knop zelf vult zich van
+   links naar rechts mee met de vingerpositie, geen aparte schuifbalk. Alleen
+   op een grof aanwijsapparaat, op desktop blijft het gewoon een knop. */
+@media (pointer: coarse) {
+  .close-form button[type="submit"] { position: relative; overflow: hidden; touch-action: pan-y; }
+  .close-form button[type="submit"].is-swiping {
+    color: transparent;
+    background: linear-gradient(to right, var(--accent-dark) var(--swipe-progress, 0%), var(--accent) var(--swipe-progress, 0%));
+  }
+  .close-form button[type="submit"].is-armed {
+    background: linear-gradient(to right, var(--red) var(--swipe-progress, 0%), var(--accent) var(--swipe-progress, 0%));
+  }
+  .close-form button[type="submit"].is-swiping::after {
+    content: "veeg verder om te sluiten \2192"; position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 11.5px; color: #fff;
+  }
+  .close-form button[type="submit"].is-armed::after { content: "loslaten om te sluiten"; }
+}
+
 /* Trade-kalender: GitHub-stijl rooster van dagresultaten. Kleurintensiteit
    is relatief aan de grootste dagwaarde in je eigen data (zie
    _build_heatmap_weeks), dus schaalt vanzelf mee met portfolio-omvang. */
