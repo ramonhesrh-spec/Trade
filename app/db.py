@@ -85,6 +85,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "quiet_hours_end" not in existing_users:
         conn.execute("ALTER TABLE users ADD COLUMN quiet_hours_end TEXT")
 
+    existing_coins = {row["name"] for row in conn.execute("PRAGMA table_info(coins)")}
+    if "note" not in existing_coins:
+        conn.execute("ALTER TABLE coins ADD COLUMN note TEXT")
+
 
 def get_setting(key: str, default: str = "") -> str:
     with session() as conn:
