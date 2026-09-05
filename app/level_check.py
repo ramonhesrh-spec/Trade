@@ -22,6 +22,7 @@ from typing import Optional
 from telegram import Bot
 
 from app import config, exchange, repo
+from app.telegram_notify import DIVIDER, _factor_link
 
 logger = logging.getLogger("level_check")
 
@@ -78,11 +79,18 @@ async def check_open_trades() -> None:
             repo.mark_level_alert_sent(entry["id"])
             continue
 
+        hit_emoji = "🎯" if hit == "take profit" else "🛑"
         text = (
-            f"Je open {coin} {entry['direction'].upper()} trade heeft de {hit} geraakt.\n"
+            f"{hit_emoji} {coin} · {entry['direction'].upper()}\n"
+            f"{DIVIDER}\n"
+            f"{hit.capitalize()} geraakt\n\n"
             f"Entry: {entry['entry_price']:.4f}\n"
-            f"Huidige prijs: {current_price:.4f}\n\n"
-            f"Sluit je hem, vul de exit in op het dashboard. {config.DISCLAIMER}"
+            f"Nu: {current_price:.4f}\n"
+            f"{DIVIDER}\n"
+            f"Sluit je hem? Vul de exit in op het dashboard.\n\n"
+            f"{_factor_link(coin)}\n"
+            f"{DIVIDER}\n"
+            f"⚠️ {config.DISCLAIMER}"
         )
         try:
             await bot.send_message(chat_id=entry["telegram_chat_id"], text=text)
@@ -164,11 +172,16 @@ async def check_pending_signals() -> None:
             level_line = f"Signaalniveau: {entry['signal_price']:.4f}"
 
         text = (
-            f"{coin} {entry['direction'].upper()} ({entry['confidence']}) is terug bij een niveau "
-            f"van het eerdere signaal.\n"
+            f"🔔 {coin} · {entry['direction'].upper()}\n"
+            f"{DIVIDER}\n"
+            f"Terug bij een interessant niveau ({entry['confidence']})\n\n"
             f"{level_line}\n"
-            f"Huidige prijs: {current_price:.4f}\n\n"
-            f"Nog steeds interessant? Check het dashboard voor de actuele toetsing. {config.DISCLAIMER}"
+            f"Nu: {current_price:.4f}\n"
+            f"{DIVIDER}\n"
+            f"Nog steeds interessant? Check de actuele toetsing.\n\n"
+            f"{_factor_link(coin)}\n"
+            f"{DIVIDER}\n"
+            f"⚠️ {config.DISCLAIMER}"
         )
         try:
             await bot.send_message(chat_id=entry["telegram_chat_id"], text=text)

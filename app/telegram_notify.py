@@ -10,81 +10,100 @@ from app import config
 
 logger = logging.getLogger("telegram_notify")
 
+DIVIDER = "━" * 14
+
+
+def _direction_label(direction: str) -> str:
+    return "LONG" if direction == "long" else "SHORT"
+
+
+def _direction_emoji(direction: str) -> str:
+    return "📈" if direction == "long" else "📉"
+
+
+def _factor_link(coin: str) -> str:
+    """Link naar de coin-pagina, waar alle factoren van de toetsing
+    (4 of 10, afhankelijk van ENABLE_ADVANCED_FACTORS) te zien zijn, niet
+    alleen de samenvattende tekstregel die in het bericht zelf past."""
+    factor_count = 10 if config.ENABLE_ADVANCED_FACTORS else 4
+    url = f"{config.DASHBOARD_URL}/coins/{coin}"
+    return f"🔎 Bekijk alle {factor_count} factoren: {url}"
+
 
 def format_signal_message(signal: dict) -> str:
-    """Volledige melding voor een bevestigde kans, met stop loss, take
-    profit en positiegrootte: dit is een echte, uitvoerbare trade opzet."""
-    direction_label = "LONG" if signal["direction"] == "long" else "SHORT"
-    confidence_label = signal["confidence"].upper()
-
+    """Volledige melding voor een bevestigde kans, met stop loss en take
+    profit: dit is een echte, uitvoerbare trade opzet. Risicobedrag en
+    positiegrootte staan bewust niet in het bericht, dat is aan de trader
+    zelf om op het dashboard te bepalen."""
     lines = [
-        f"{confidence_label} — {signal['coin']} {direction_label}",
+        f"{_direction_emoji(signal['direction'])} {signal['coin']} · {_direction_label(signal['direction'])}",
+        DIVIDER,
+        f"🟢 {signal['confidence'].upper()}",
         "",
-        f"Prijs: {signal['price']:.4f}",
-        f"Stop loss: {signal['stop_loss']:.4f}",
-        f"Take profit: {signal['take_profit']:.4f}",
-        f"Risicobedrag: €{signal['risk_eur']:.2f}",
+        f"💰 Prijs nu: {signal['price']:.4f}",
+        f"🎯 Take profit: {signal['take_profit']:.4f}",
+        f"🛑 Stop loss: {signal['stop_loss']:.4f}",
+        DIVIDER,
     ]
-    if signal.get("position_size"):
-        lines.append(f"Voorgestelde grootte: {signal['position_size']:.6f} {signal['coin']}")
     if signal.get("plain_explanation"):
-        lines += ["", signal["plain_explanation"]]
-    lines += ["", signal["reason"]]
-
+        lines += [signal["plain_explanation"], ""]
+    lines.append(signal["reason"])
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
-
-    lines += ["", config.DISCLAIMER]
-
+    lines += ["", _factor_link(signal["coin"])]
+    lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
 
 
 def format_rejected_message(signal: dict) -> str:
     """Melding voor een gedeelde tip die de technische toetsing niet
-    haalt: geen stop loss/take profit/positiegrootte, want dit is geen
-    uitvoerbare trade opzet. Wel altijd een bericht, met de reden in
-    gewone taal, zodat stilte nooit als "geen reactie" aanvoelt. Het
-    systeem blijft deze coin volgen via de periodieke niveau-check, dat
-    wordt hier expliciet benoemd."""
-    direction_label = "LONG" if signal["direction"] == "long" else "SHORT"
+    haalt: geen stop loss/take profit, want dit is geen uitvoerbare trade
+    opzet. Wel altijd een bericht, met de reden in gewone taal, zodat
+    stilte nooit als "geen reactie" aanvoelt. Het systeem blijft deze coin
+    volgen via de periodieke niveau-check, dat wordt hier expliciet
+    benoemd."""
     lines = [
-        f"GEEN STERKE KANS — {signal['coin']} {direction_label}",
+        f"{_direction_emoji(signal['direction'])} {signal['coin']} · {_direction_label(signal['direction'])}",
+        DIVIDER,
+        "🟡 NOG GEEN STERKE KANS",
         "",
-        f"Prijs: {signal['price']:.4f}",
+        f"💰 Prijs nu: {signal['price']:.4f}",
+        DIVIDER,
     ]
     if signal.get("plain_explanation"):
-        lines += ["", signal["plain_explanation"]]
-    lines += ["", signal["reason"]]
-
+        lines += [signal["plain_explanation"], ""]
+    lines.append(signal["reason"])
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
-
-    lines += ["", f"Ik blijf {signal['coin']} volgen en stuur een seintje als het beter wordt."]
-    lines += ["", config.DISCLAIMER]
-
+    lines += ["", f"👀 Ik blijf {signal['coin']} volgen en stuur een seintje als het beter wordt."]
+    lines += ["", _factor_link(signal["coin"])]
+    lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
 
 
 def format_update_message(signal: dict) -> str:
-    confidence_label = signal["confidence"].upper()
-    status = "BEVESTIGD" if signal["technical_confirmed"] else "NOG GEEN STERKE KANS"
+    confirmed = signal["technical_confirmed"]
+    status = "🟢 BEVESTIGD" if confirmed else "🟡 NOG GEEN STERKE KANS"
     lines = [
-        f"UPDATE, {status} ({confidence_label}) — {signal['coin']} "
-        f"{'LONG' if signal['direction'] == 'long' else 'SHORT'}",
+        f"🔄 UPDATE · {signal['coin']} · {_direction_label(signal['direction'])}",
+        DIVIDER,
+        f"{status} ({signal['confidence'].upper()})",
         "",
-        f"Nieuwe prijs: {signal['price']:.4f}",
+        f"💰 Nieuwe prijs: {signal['price']:.4f}",
     ]
-    if signal["technical_confirmed"]:
+    if confirmed:
         lines += [
-            f"Nieuwe stop loss: {signal['stop_loss']:.4f}",
-            f"Nieuw take profit: {signal['take_profit']:.4f}",
+            f"🎯 Nieuw take profit: {signal['take_profit']:.4f}",
+            f"🛑 Nieuwe stop loss: {signal['stop_loss']:.4f}",
         ]
+    lines.append(DIVIDER)
     if signal.get("plain_explanation"):
-        lines += ["", signal["plain_explanation"]]
-    lines += ["", signal["reason"]]
+        lines += [signal["plain_explanation"], ""]
+    lines.append(signal["reason"])
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
-    lines += ["", config.DISCLAIMER]
+    lines += ["", _factor_link(signal["coin"])]
+    lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
 
 
