@@ -1070,6 +1070,29 @@ def cumulative_result_series(user_id: int) -> list[dict]:
     return series
 
 
+def daily_results(user_id: int, days: int = 126) -> dict:
+    """Resultaat per dag (som van result_eur van echte, gesloten trades) van
+    de laatste `days` dagen, als {"YYYY-MM-DD": bedrag}. Basis voor de
+    trade-kalender heatmap op het dashboard: een dag zonder gesloten
+    trades komt simpelweg niet in dit dict voor."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT je.exit_time AS exit_time, je.result_eur AS result_eur
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
+                     AND je.exit_time >= ?""",
+            (user_id, cutoff),
+        ).fetchall()
+    by_day: dict[str, float] = {}
+    for row in rows:
+        if not row["exit_time"]:
+            continue
+        day = row["exit_time"][:10]
+        by_day[day] = by_day.get(day, 0.0) + (row["result_eur"] or 0.0)
+    return by_day
+
+
 def period_stats(user_id: int, since_iso: str) -> dict:
     """Samenvatting van deze gebruiker zijn activiteit sinds `since_iso`,
     voor de wekelijkse/maandelijkse Telegram samenvatting. Signalen = elke

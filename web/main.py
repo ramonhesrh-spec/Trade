@@ -207,6 +207,32 @@ async def register_submit(
 # Dashboard startpagina
 # ---------------------------------------------------------------------------
 
+def _build_heatmap_weeks(daily: dict[str, float], weeks: int = 18) -> list[list[Optional[dict]]]:
+    """Bouwt een GitHub-achtig rooster: kolommen = weken, rijen = maandag
+    t/m zondag, meest recente week uiterst rechts. Kleurintensiteit relatief
+    aan de grootste absolute dagwaarde in de reeks zelf, zodat het altijd
+    goed schaalt ongeacht portfolio-omvang. Een dag na vandaag (nog niet
+    bestaand) wordt None, zodat de template die cel leeg kan laten."""
+    today = datetime.now(timezone.utc).date()
+    start = today - timedelta(days=today.weekday(), weeks=weeks - 1)
+    max_abs = max((abs(v) for v in daily.values()), default=0.0) or 1.0
+    columns = []
+    for w in range(weeks):
+        week = []
+        for d in range(7):
+            day = start + timedelta(days=w * 7 + d)
+            if day > today:
+                week.append(None)
+                continue
+            value = daily.get(day.isoformat())
+            level = 0
+            if value:
+                level = min(3, max(1, round(abs(value) / max_abs * 3)))
+                level = level if value > 0 else -level
+            week.append({"date": day.isoformat(), "value": value, "level": level})
+        columns.append(week)
+    return columns
+
 def _add_signal_context(entries: list[dict], winrate: dict) -> list[dict]:
     """Voegt aan elk signaal het concrete advies toe (wat kan je beter
     doen dan nu instappen) en een slagingskans op basis van de eigen
@@ -379,6 +405,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     )
     practice_closed = [e for e in practice_entries if e["exit_price"] is not None]
     cumulative = repo.cumulative_result_series(user["id"])
+    heatmap_weeks = _build_heatmap_weeks(repo.daily_results(user["id"]))
     ratio_stats = repo.winrate_by_ratio(user["id"])
     coin_stats = repo.coin_stats(user["id"])
     coins = repo.list_coins()
@@ -432,6 +459,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "practice_closed": practice_closed,
         "winrate": winrate,
         "cumulative": cumulative,
+        "heatmap_weeks": heatmap_weeks,
         "ratio_stats": ratio_stats,
         "coin_stats": coin_stats,
         "coins": coins,

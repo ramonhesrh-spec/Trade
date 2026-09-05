@@ -491,11 +491,46 @@ main h3 { font-size: 15px; gap: 8px; }
 .empty-state .empty-title { font-size: 13.5px; font-weight: 600; margin: 0 0 4px; color: var(--text); }
 .empty-state .empty-body { font-size: 12px; color: var(--muted); margin: 0; line-height: 1.55; }
 
-.winrate-bar {
-  height: 6px; border-radius: 3px; background: var(--border);
-  margin: 12px 0; overflow: hidden;
+/* Winrate als ring in plaats van een vlakke balk: springt meer in het oog,
+   zelfde cijfer. Vult zich bij het laden, van leeg naar het echte
+   percentage (zelfde dash-offset truc als de boot-pulse-cirkel). */
+.winrate-ring-wrap { position: relative; width: 64px; height: 64px; margin: 8px 0 12px; }
+.winrate-ring { transform: rotate(-90deg); }
+.winrate-ring-track { fill: none; stroke: var(--border); stroke-width: 6; }
+.winrate-ring-fill {
+  fill: none; stroke: var(--accent); stroke-width: 6; stroke-linecap: round;
+  stroke-dasharray: 163.36; stroke-dashoffset: 163.36;
+  animation: ring-fill 1s ease-out forwards;
 }
-.winrate-bar > div { height: 100%; background: var(--accent); }
+@keyframes ring-fill { to { stroke-dashoffset: var(--ring-offset); } }
+.card .winrate-ring-value {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 15px; font-weight: 700; margin: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .winrate-ring-fill { animation: none; stroke-dashoffset: var(--ring-offset); }
+}
+
+/* Trade-kalender: GitHub-stijl rooster van dagresultaten. Kleurintensiteit
+   is relatief aan de grootste dagwaarde in je eigen data (zie
+   _build_heatmap_weeks), dus schaalt vanzelf mee met portfolio-omvang. */
+.heatmap-section { margin-top: 20px; }
+.heatmap-grid {
+  display: grid; grid-auto-flow: column; grid-auto-columns: 11px; gap: 3px;
+  overflow-x: auto; padding: 10px 0 4px; -webkit-overflow-scrolling: touch;
+}
+.heatmap-week { display: grid; grid-template-rows: repeat(7, 11px); gap: 3px; }
+.heat-cell { width: 11px; height: 11px; border-radius: 3px; background: var(--bg-elevated); }
+.heat-cell.heat-empty { background: transparent; }
+.heat-cell.heat-level-0 { background: var(--bg-elevated); }
+.heat-cell.heat-level-1 { background: var(--green-bg); }
+.heat-cell.heat-level-2 { background: color-mix(in srgb, var(--green) 55%, var(--green-bg)); }
+.heat-cell.heat-level-3 { background: var(--green); }
+.heat-cell.heat-level--1 { background: var(--red-bg); }
+.heat-cell.heat-level--2 { background: color-mix(in srgb, var(--red) 55%, var(--red-bg)); }
+.heat-cell.heat-level--3 { background: var(--red); }
+.heatmap-legend { display: flex; align-items: center; gap: 4px; margin-top: 6px; font-size: 11px; color: var(--muted); }
+.heatmap-legend .heat-cell { width: 10px; height: 10px; }
 
 /* Risicogauge: totaal risico van alle genomen open trades tegen je
    portfolio, in een oogopslag. Kleurt om bij een hoger percentage,

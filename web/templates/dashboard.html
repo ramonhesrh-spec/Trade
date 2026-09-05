@@ -284,8 +284,14 @@
       <p class="empty-body">Zodra je eerste hoog-vertrouwen signaal gesloten is, verschijnt hier je winrate en gemiddeld resultaat.</p>
     </div>
     {% else %}
-    <p class="big">{{ winrate.hoog_vertrouwen.winrate }}%</p>
-    <div class="winrate-bar"><div style="width: {{ winrate.hoog_vertrouwen.winrate }}%"></div></div>
+    <div class="winrate-ring-wrap">
+      <svg class="winrate-ring" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+        <circle class="winrate-ring-track" cx="32" cy="32" r="26"/>
+        <circle class="winrate-ring-fill" cx="32" cy="32" r="26"
+                style="--ring-offset: {{ '%.2f'|format(163.36 * (1 - winrate.hoog_vertrouwen.winrate / 100)) }};"/>
+      </svg>
+      <span class="winrate-ring-value big">{{ winrate.hoog_vertrouwen.winrate }}%</span>
+    </div>
     <p class="muted">{{ winrate.hoog_vertrouwen.wins }} van {{ winrate.hoog_vertrouwen.total }} gesloten trades</p>
     <p class="muted">gemiddeld <span class="{{ 'pos' if winrate.hoog_vertrouwen.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(winrate.hoog_vertrouwen.avg_result_eur) }} ({{ "%.1f"|format(winrate.hoog_vertrouwen.avg_result_pct) }}%)</span> per trade</p>
     {% endif %}
@@ -299,8 +305,14 @@
       <p class="empty-body">Zodra je eerste laag-vertrouwen signaal gesloten is, verschijnt hier je winrate en gemiddeld resultaat.</p>
     </div>
     {% else %}
-    <p class="big">{{ winrate.laag_vertrouwen.winrate }}%</p>
-    <div class="winrate-bar"><div style="width: {{ winrate.laag_vertrouwen.winrate }}%"></div></div>
+    <div class="winrate-ring-wrap">
+      <svg class="winrate-ring" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+        <circle class="winrate-ring-track" cx="32" cy="32" r="26"/>
+        <circle class="winrate-ring-fill" cx="32" cy="32" r="26"
+                style="--ring-offset: {{ '%.2f'|format(163.36 * (1 - winrate.laag_vertrouwen.winrate / 100)) }};"/>
+      </svg>
+      <span class="winrate-ring-value big">{{ winrate.laag_vertrouwen.winrate }}%</span>
+    </div>
     <p class="muted">{{ winrate.laag_vertrouwen.wins }} van {{ winrate.laag_vertrouwen.total }} gesloten trades</p>
     <p class="muted">gemiddeld <span class="{{ 'pos' if winrate.laag_vertrouwen.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(winrate.laag_vertrouwen.avg_result_eur) }} ({{ "%.1f"|format(winrate.laag_vertrouwen.avg_result_pct) }}%)</span> per trade</p>
     {% endif %}
@@ -345,6 +357,42 @@
     {% endif %}
   </div>
 </section>
+{% if heatmap_weeks %}
+<section class="heatmap-section">
+  <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>Trade-kalender</h3>
+  {% set trade_count = namespace(n=0) %}
+  {% for week in heatmap_weeks %}{% for day in week %}{% if day and day.value %}{% set trade_count.n = trade_count.n + 1 %}{% endif %}{% endfor %}{% endfor %}
+  {% if trade_count.n == 0 %}
+  <p class="muted">Nog geen gesloten trades in de laatste weken, hier verschijnt straks per dag je resultaat.</p>
+  {% else %}
+  <div class="heatmap-grid">
+    {% for week in heatmap_weeks %}
+    <div class="heatmap-week">
+      {% for day in week %}
+      {% if day is none %}
+      <div class="heat-cell heat-empty"></div>
+      {% else %}
+      <div class="heat-cell heat-level-{{ day.level }}"
+           title="{{ day.date }}{{ ': €%.2f'|format(day.value) if day.value else ': geen trades' }}"></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  <div class="heatmap-legend">
+    <span>verlies</span>
+    <span class="heat-cell heat-level--3"></span>
+    <span class="heat-cell heat-level--2"></span>
+    <span class="heat-cell heat-level--1"></span>
+    <span class="heat-cell heat-level-0"></span>
+    <span class="heat-cell heat-level-1"></span>
+    <span class="heat-cell heat-level-2"></span>
+    <span class="heat-cell heat-level-3"></span>
+    <span>winst</span>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
 </details>
 <script>
   // Standaard open (ook zonder JS, of traag JS), maar op een klein scherm
@@ -535,6 +583,37 @@
 
     const cumulativeCtx = document.getElementById("cumulative-chart");
     if (cumulativeCtx) {
+      // Zelftekenende lijn: elk punt krijgt zijn eigen animatievertraging,
+      // zodat de grafiek van links naar rechts lijkt te worden getekend in
+      // plaats van in zijn geheel te faden. Uit bij prefers-reduced-motion.
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const totalDuration = reduceMotion ? 0 : 2200;
+      const pointCount = Math.max(cumulativeData.length, 1);
+      const delayBetweenPoints = totalDuration / pointCount;
+      const previousY = (ctx) => {
+        if (ctx.index === 0) return ctx.chart.scales.y.getPixelForValue(0);
+        const meta = ctx.chart.getDatasetMeta(ctx.datasetIndex);
+        return meta.data[ctx.index - 1].getProps(["y"], true).y;
+      };
+      const drawAnimation = totalDuration === 0 ? false : {
+        x: {
+          type: "number", easing: "linear", duration: delayBetweenPoints, from: NaN,
+          delay(ctx) {
+            if (ctx.type !== "data" || ctx.xStarted) return 0;
+            ctx.xStarted = true;
+            return ctx.index * delayBetweenPoints;
+          },
+        },
+        y: {
+          type: "number", easing: "linear", duration: delayBetweenPoints,
+          from: (ctx) => previousY(ctx),
+          delay(ctx) {
+            if (ctx.type !== "data" || ctx.yStarted) return 0;
+            ctx.yStarted = true;
+            return ctx.index * delayBetweenPoints;
+          },
+        },
+      };
       new Chart(cumulativeCtx, {
         type: "line",
         data: {
@@ -549,6 +628,7 @@
           }],
         },
         options: {
+          animation: drawAnimation,
           scales: {
             x: { ticks: { color: "#7d8c8a" }, grid: { color: "#1c2526" } },
             y: { ticks: { color: "#7d8c8a" }, grid: { color: "#1c2526" } },
