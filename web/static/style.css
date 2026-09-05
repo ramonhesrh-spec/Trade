@@ -176,6 +176,13 @@ a { color: var(--accent); }
   #page-progress { transition: opacity .15s ease; }
 }
 
+/* Zachte overgang tussen pagina's: fade + kleine schuif, zodat navigeren
+   meer als één samenhangende app aanvoelt dan als losse serverpagina's.
+   Klasse wordt gezet/verwijderd door base.html, hier alleen het effect. */
+body { transition: opacity .18s ease, transform .18s ease; }
+html.page-transition-in body { opacity: 0; transform: translateY(6px); }
+html.page-transition-out body { opacity: 0; transform: translateY(-4px); }
+
 .page-ambient { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
 .ambient-glow {
   position: absolute; width: 46vw; height: 46vw; max-width: 620px; max-height: 620px;
@@ -261,10 +268,21 @@ a { color: var(--accent); }
   min-width: 140px; max-height: 60vh; overflow-y: auto;
 }
 .coin-menu-list a {
-  padding: 7px 10px; border-radius: 4px; font-size: 13px; color: var(--text-dim);
+  position: relative; padding: 7px 10px 7px 20px; border-radius: 4px; font-size: 13px; color: var(--text-dim);
   text-decoration: none; white-space: nowrap;
 }
 .coin-menu-list a:hover { background: var(--panel-hover); color: var(--accent); }
+/* Activiteits-stipje: pulseert alleen voor een coin die de laatste 24 uur
+   nog echt een signaal had (zie /api/coin_menu_activity), een stille coin
+   krijgt gewoon een vast, dof stipje. */
+.coin-menu-list a::before {
+  content: ""; position: absolute; left: 8px; top: 50%; transform: translateY(-50%);
+  width: 5px; height: 5px; border-radius: 50%; background: var(--border-strong);
+}
+.coin-menu-list a.is-active::before {
+  background: var(--green); animation: heartbeat 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) { .coin-menu-list a.is-active::before { animation: none; } }
 .shortcuts-hint {
   width: 22px; height: 22px; padding: 0; border-radius: 50%; flex-shrink: 0;
   background: transparent; border: 1px solid var(--border-interactive); color: var(--muted);
@@ -488,10 +506,34 @@ main h3 { font-size: 15px; gap: 8px; }
 .risk-gauge-fill {
   height: 100%; background: var(--accent); transition: width .3s ease;
   transform-origin: left; animation: gauge-grow .5s ease both;
+  position: relative; overflow: hidden;
 }
 @keyframes gauge-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
 .risk-gauge-fill.risk-mid { background: #f2b03e; }
 .risk-gauge-fill.risk-high { background: var(--red); }
+/* Vloeistof-gevoel: een lichtstreep die continu door de gevulde balk
+   trekt, alsof het risicopercentage een peilglas is in plaats van een
+   vlakke staaf. Zelfde cijfer, geen nieuwe informatie, tactieler. */
+.risk-gauge-fill::after {
+  content: ""; position: absolute; inset: 0; width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+  animation: gauge-shimmer 2.8s ease-in-out infinite;
+}
+@keyframes gauge-shimmer {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(280%); }
+}
+@media (prefers-reduced-motion: reduce) { .risk-gauge-fill::after { display: none; } }
+
+/* Spanningsgloed op een open-trade kaart: hoe dichter de koers bij de
+   stop loss of take profit komt, hoe sterker de kaart oplicht, rood
+   richting stop loss, groen richting take profit. --tension (0-1) en
+   --tension-color worden per kaart gezet, server-side bij het laden en
+   live bijgewerkt door dashboard.js bij elke poll. */
+.tension-glow {
+  box-shadow: 0 0 calc(var(--tension, 0) * 24px) rgba(var(--tension-color, 23, 229, 214), calc(var(--tension, 0) * 0.55));
+  transition: box-shadow 1.2s ease;
+}
 
 /* Samenvatting-strip bovenaan het dashboard: in een oogopslag wat er
    nu toe doet, voordat je door de rest van de pagina scrolt. */
@@ -877,6 +919,26 @@ main + .footer { border-top: 1px solid var(--border); }
 }
 .landing-header nav a.button:hover { background: var(--accent-dark); }
 
+/* Tickerstrook: enige bewegende element op de publieke pagina dat echte,
+   live data toont (zie /api/public_prices), verder puur decoratief
+   geplaatst als "markt leeft"-signaal direct onder de header. Zelfde
+   naadloze-loop truc als het ECG-watermerk (dubbele inhoud, -50%). */
+.ticker-strip {
+  overflow: hidden; border-top: 1px solid var(--border); border-bottom: 1px solid var(--border);
+  background: var(--bg-elevated);
+}
+.ticker-track {
+  display: flex; width: max-content; gap: 48px; padding: 9px 24px;
+  animation: ticker-scroll 26s linear infinite;
+}
+.ticker-item {
+  font-family: var(--mono); font-size: 12.5px; color: var(--text-dim); white-space: nowrap;
+  display: flex; align-items: center; gap: 6px;
+}
+.ticker-price { color: var(--accent); font-weight: 600; }
+@keyframes ticker-scroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .ticker-track { animation: none; } }
+
 .hero {
   max-width: 720px; margin: 0 auto; padding: 88px 32px 64px; text-align: center;
 }
@@ -917,6 +979,73 @@ main + .footer { border-top: 1px solid var(--border); }
 }
 .step p { margin: 0; color: var(--text); line-height: 1.6; }
 .step strong { display: block; margin-bottom: 3px; }
+
+.how-it-works-layout { display: flex; gap: 32px; align-items: flex-start; }
+.how-it-works-layout .steps { flex: 1; min-width: 0; }
+
+/* Illustratief voorbeeld van een Telegram-melding, geen echte data: mag
+   hier meer laten zien dan de rest van de site (die altijd aan live
+   cijfers hangt), zolang het duidelijk als voorbeeld gelabeld blijft. */
+.phone-mockup { flex-shrink: 0; width: 168px; text-align: center; }
+.phone-frame {
+  width: 168px; height: 220px; border-radius: 22px; padding: 8px;
+  background: #050807; border: 1px solid var(--border-strong); box-shadow: var(--shadow-md);
+}
+.phone-screen {
+  width: 100%; height: 100%; border-radius: 15px; background: var(--bg);
+  display: flex; align-items: center; padding: 10px; overflow: hidden;
+}
+.phone-message {
+  width: 100%; background: var(--panel); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); padding: 9px 10px; opacity: 0;
+  animation: message-arrive 5s ease-in-out infinite;
+}
+.phone-message-head { font-size: 11px; font-weight: 700; margin-bottom: 5px; }
+.phone-message-body { font-size: 9.5px; line-height: 1.6; color: var(--text-dim); font-family: var(--mono); }
+@keyframes message-arrive {
+  0% { opacity: 0; transform: translateY(14px) scale(0.97); }
+  12% { opacity: 1; transform: translateY(0) scale(1); }
+  82% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-8px) scale(0.98); }
+}
+.phone-caption { font-size: 11px; margin: 10px 0 0; }
+@media (prefers-reduced-motion: reduce) { .phone-message { animation: none; opacity: 1; } }
+@media (max-width: 600px) {
+  .how-it-works-layout { flex-direction: column; align-items: center; }
+  .phone-mockup { margin-top: 8px; }
+}
+
+/* Illustratief voorbeeld op de uitleg-pagina: hoe de 3/4-ratio ontstaat.
+   Vinkjes verschijnen pas na elkaar zodra dit blok in beeld scrolt (zie
+   IntersectionObserver in base.html), duidelijk als voorbeeld gelabeld
+   eronder, nooit te verwarren met een echt signaal. */
+.ratio-demo {
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+  padding: 14px 16px; background: var(--panel); border: 1px solid var(--border);
+  border-radius: var(--radius); margin: 4px 0 6px;
+}
+.ratio-demo-item {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600;
+  opacity: 0; transform: translateY(6px) scale(0.9);
+}
+.ratio-demo.in-view .ratio-demo-item, .ratio-demo.in-view .ratio-demo-result {
+  animation: ratio-demo-in .3s ease both;
+  animation-delay: calc(var(--i, 0) * 220ms);
+}
+@keyframes ratio-demo-in { to { opacity: 1; transform: none; } }
+.ratio-demo-icon {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; border-radius: 50%; font-size: 11px;
+}
+.ratio-demo-item.ok { color: var(--green); }
+.ratio-demo-item.ok .ratio-demo-icon { background: var(--green-bg); }
+.ratio-demo-item.bad { color: var(--red); }
+.ratio-demo-item.bad .ratio-demo-icon { background: var(--red-bg); }
+.ratio-demo-result { margin-left: auto; font-size: 13px; opacity: 0; }
+@media (prefers-reduced-motion: reduce) {
+  .ratio-demo-item, .ratio-demo-result { opacity: 1; transform: none; animation: none; }
+}
+@media (max-width: 560px) { .ratio-demo-result { margin-left: 0; } }
 
 .factor-grid {
   display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 22px 0;

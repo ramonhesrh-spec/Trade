@@ -90,6 +90,15 @@
           if (pnlPctEl) {
             pnlPctEl.textContent = p.pnl_pct !== null ? `(${p.pnl_pct.toFixed(1)}%)` : "";
           }
+          // Spanningsgloed: hoe dichter de koers nu bij de stop loss of
+          // take profit zit, hoe sterker de kaart oplicht. Server zet de
+          // beginwaarde bij het laden, dit houdt 'm live tijdens het
+          // pollen, zonder de pagina te hoeven herladen.
+          var card = document.querySelector(`.tension-glow[data-entry-id="${p.id}"]`);
+          if (card && p.tension !== undefined) {
+            card.style.setProperty("--tension", p.tension);
+            card.style.setProperty("--tension-color", p.tension_color);
+          }
           checkVibration(p);
         });
         updateTitleAndFavicon(positions);

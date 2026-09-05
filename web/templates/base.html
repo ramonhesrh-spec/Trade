@@ -74,6 +74,10 @@
     var width = 0;
 
     function start() {
+      // Zelfde moment als de voortgangsbalk zelf: content vervaagt terwijl
+      // de nieuwe pagina laadt, geen tweede losse click-listener nodig
+      // met dezelfde origin/target-checks als hieronder.
+      document.documentElement.classList.add("page-transition-out");
       if (bar.classList.contains("is-active")) return;
       width = 0;
       bar.style.width = "0%";
@@ -154,7 +158,7 @@
       </summary>
       <div class="coin-menu-list">
         {% for c in coins %}
-          <a href="/coins/{{ c.symbol }}">{{ c.symbol }}</a>
+          <a href="/coins/{{ c.symbol }}" data-symbol="{{ c.symbol }}">{{ c.symbol }}</a>
         {% endfor %}
       </div>
     </details>
@@ -269,6 +273,52 @@
     });
 
     window.hpAccordion = { open: openAccordion, close: closeAccordion };
+  })();
+
+  // Illustratieve ratio-demo op de uitleg-pagina: vinkjes verschijnen pas
+  // na elkaar zodra het blok echt in beeld komt, niet meteen bij laden
+  // ergens onderaan een lange pagina waar niemand het ziet gebeuren.
+  (function () {
+    var demo = document.getElementById("ratio-demo");
+    if (!demo || !("IntersectionObserver" in window)) return;
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        if (entry.isIntersecting) {
+          demo.classList.add("in-view");
+          observer.unobserve(demo);
+        }
+      });
+    }, { threshold: 0.4 });
+    observer.observe(demo);
+  })();
+
+  // Activiteits-stipje per coin in het coin-menu: welke coins de laatste
+  // 24 uur nog een echt signaal hadden. Eén keer per paginalaad opgehaald,
+  // niet per open-klik: de lijst is klein en dit hoeft geen seconde-precisie.
+  (function () {
+    var links = document.querySelectorAll(".coin-menu-list a[data-symbol]");
+    if (!links.length) return;
+    fetch("/api/coin_menu_activity")
+      .then(function (r) { return r.json(); })
+      .then(function (active) {
+        links.forEach(function (a) {
+          if (active.indexOf(a.getAttribute("data-symbol")) !== -1) a.classList.add("is-active");
+        });
+      })
+      .catch(function () {});
+  })();
+
+  // Zachte overgang bij het binnenkomen van een nieuwe pagina: de content
+  // komt in met een fractie fade+schuif in plaats van in één keer te
+  // verschijnen. Het "verlaten"-deel zit in HP.progressStart hierboven
+  // (dezelfde click/submit-detectie als de voortgangsbalk, geen tweede
+  // losse listener met dezelfde origin-checks).
+  (function () {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    document.documentElement.classList.add("page-transition-in");
+    requestAnimationFrame(function () {
+      document.documentElement.classList.remove("page-transition-in");
+    });
   })();
 
   // Sneltoetsen, alleen voor navigatie. Bewust geen sneltoets voor iets

@@ -73,7 +73,8 @@
 
   <aside class="coin-sidebar">
     {% if primary %}
-    <div class="card primary-card">
+    <div class="card primary-card{{ ' tension-glow' if open_trades else '' }}"
+         {% if open_trades %}data-entry-id="{{ primary.id }}" style="--tension: {{ primary.tension }}; --tension-color: {{ primary.tension_color }};"{% endif %}>
       <div class="primary-card-head">
         <span class="badge badge-{{ primary.direction }}">{{ primary.direction }}</span>
         {% if primary.reason %}<span class="confidence-ratio mono muted">{{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}</span>{% endif %}

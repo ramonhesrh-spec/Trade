@@ -67,7 +67,7 @@
   <h3 class="open-subheading">Jouw open trades</h3>
   <div class="open-grid">
     {% for e in taken_entries %}
-    <div class="card open-card" data-entry-id="{{ e.id }}">
+    <div class="card open-card tension-glow" data-entry-id="{{ e.id }}" style="--tension: {{ e.tension }}; --tension-color: {{ e.tension_color }};">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
           <a href="/coins/{{ e.coin }}" style="font-weight: 700; color: var(--text); text-decoration: none; font-size: 15px;">{{ e.coin }}</a>

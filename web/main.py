@@ -74,6 +74,26 @@ async def landing(request: Request):
     })
 
 
+# Vaste, kleine lijst voor de tickerstrook op de landingspagina: geen login
+# nodig (dit is de openbare pagina), dus bewust geen koppeling met een
+# account of met welke coins een gebruiker daadwerkelijk volgt.
+PUBLIC_TICKER_COINS = ["BTC", "ETH", "SOL"]
+
+
+@app.get("/api/public_prices")
+async def api_public_prices():
+    """Publieke, ongeauthenticeerde live koersen voor de tickerstrook op de
+    landingspagina. Puur decoratief geplaatst, maar wel echte data, geen
+    voorbeeldcijfers: zie CLAUDE.md, nooit verzonnen getallen tonen."""
+    prices = {}
+    for coin in PUBLIC_TICKER_COINS:
+        try:
+            prices[coin] = await asyncio.to_thread(exchange.fetch_last_price, coin)
+        except Exception:
+            prices[coin] = None
+    return prices
+
+
 @app.get("/uitleg")
 async def uitleg(request: Request, user: dict = Depends(require_login)):
     """Dezelfde uitleg als de openbare landingspagina (hoe het werkt,
@@ -210,6 +230,23 @@ def _position_size(entry: dict) -> Optional[float]:
     return None
 
 
+def _compute_tension(current_price: Optional[float], stop_loss: Optional[float], take_profit: Optional[float]) -> tuple[float, str]:
+    """Hoe dicht de koers nu bij de stop loss of take profit zit, als 0
+    (ver van allebei) tot 1 (er middenin/overheen). Basis voor de
+    spanningsgloed op een open-trade kaart: rood als de stop loss het
+    dichtst is, groen als de take profit het dichtst is. Puur visueel,
+    geen nieuw getal dat nergens anders al stond."""
+    if current_price is None or not stop_loss or not take_profit:
+        return 0.0, "23, 229, 214"
+    dist_to_sl = abs(current_price - stop_loss)
+    dist_to_tp = abs(current_price - take_profit)
+    total_range = abs(take_profit - stop_loss) or 1.0
+    nearest = min(dist_to_sl, dist_to_tp)
+    tension = max(0.0, 1.0 - min(nearest / (total_range * 0.5), 1.0))
+    color = "242, 104, 92" if dist_to_sl < dist_to_tp else "51, 214, 159"
+    return tension, color
+
+
 async def _enrich_open_positions(entries: list[dict]) -> list[dict]:
     """Vult elke open positie (entry_price al ingevuld) aan met de actuele
     prijs en het nog niet gerealiseerde resultaat. Eén prijs-opvraag per
@@ -222,6 +259,7 @@ async def _enrich_open_positions(entries: list[dict]) -> list[dict]:
         entry["current_price"] = None
         entry["pnl_eur"] = None
         entry["pnl_pct"] = None
+        entry["tension"], entry["tension_color"] = _compute_tension(None, entry["stop_loss"], entry["take_profit"])
         if entry["entry_price"] is None:
             continue
         if entry["coin"] not in price_cache:
@@ -237,6 +275,7 @@ async def _enrich_open_positions(entries: list[dict]) -> list[dict]:
             entry["direction"], entry["entry_price"], current_price,
             entry["stop_loss"], entry["risk_eur"],
         )
+        entry["tension"], entry["tension_color"] = _compute_tension(current_price, entry["stop_loss"], entry["take_profit"])
     return entries
 
 
@@ -415,6 +454,7 @@ async def api_open_positions(user: dict = Depends(require_login)):
             "pnl_eur": e["pnl_eur"], "pnl_pct": e["pnl_pct"],
             "is_practice": bool(e["is_practice"]),
             "direction": e["direction"], "stop_loss": e["stop_loss"], "take_profit": e["take_profit"],
+            "tension": e["tension"], "tension_color": e["tension_color"],
         }
         for e in entries if e["entry_price"] is not None
     ]
@@ -809,6 +849,13 @@ async def media(filename: str, user: dict = Depends(require_login)):
 @app.get("/api/coins")
 async def api_coins(user: dict = Depends(require_login)):
     return repo.list_coins()
+
+
+@app.get("/api/coin_menu_activity")
+async def api_coin_menu_activity(user: dict = Depends(require_login)):
+    """Welke coins de laatste 24 uur nog een echt signaal hadden, voor het
+    activiteits-stipje in het coin-menu (base.html)."""
+    return sorted(repo.coins_with_recent_signal())
 
 
 @app.get("/api/candles/{symbol}")

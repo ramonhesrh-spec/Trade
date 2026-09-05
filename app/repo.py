@@ -245,6 +245,19 @@ def list_coins() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def coins_with_recent_signal(hours: int = 24) -> set[str]:
+    """Coins met minstens één echt signaal in de laatste `hours` uur. Basis
+    voor het activiteits-stipje in het coin-menu: welke coins net nog iets
+    deden, in plaats van dat de lijst er overal even stil uitziet."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT DISTINCT coin FROM signals WHERE created_at >= ? AND is_practice = 0",
+            (cutoff,),
+        ).fetchall()
+        return {r["coin"] for r in rows}
+
+
 def get_coin(symbol: str) -> Optional[dict]:
     with db.session() as conn:
         row = conn.execute("SELECT * FROM coins WHERE symbol = ?", (symbol.upper(),)).fetchone()

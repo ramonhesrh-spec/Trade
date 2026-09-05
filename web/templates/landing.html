@@ -38,6 +38,17 @@
   </nav>
 </header>
 
+<div class="ticker-strip" aria-hidden="true">
+  <div class="ticker-track" id="ticker-track">
+    <span class="ticker-item" data-coin="BTC">₿ BTC <span class="ticker-price">···</span></span>
+    <span class="ticker-item" data-coin="ETH">Ξ ETH <span class="ticker-price">···</span></span>
+    <span class="ticker-item" data-coin="SOL">◎ SOL <span class="ticker-price">···</span></span>
+    <span class="ticker-item" data-coin="BTC">₿ BTC <span class="ticker-price">···</span></span>
+    <span class="ticker-item" data-coin="ETH">Ξ ETH <span class="ticker-price">···</span></span>
+    <span class="ticker-item" data-coin="SOL">◎ SOL <span class="ticker-price">···</span></span>
+  </div>
+</div>
+
 <main>
 <section class="hero" style="--i: 0">
   <h1>Regels in plaats van giswerk</h1>
@@ -87,18 +98,36 @@
 
 <section class="landing-section" id="hoe-het-werkt" style="--i: 2">
   <h2>Hoe het werkt</h2>
-  <div class="steps">
-    <div class="step">
-      <div class="num">1</div>
-      <p><strong>Signaal binnenkomt</strong> Een tekst met een coin en een richting, eventueel met een afbeelding, komt binnen bij het systeem.</p>
+  <div class="how-it-works-layout">
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <p><strong>Signaal binnenkomt</strong> Een tekst met een coin en een richting, eventueel met een afbeelding, komt binnen bij het systeem.</p>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <p><strong>Interpretatie en toetsing</strong> De tekst wordt gelezen, de coin en richting gehaald eruit, en getoetst tegen live indicatoren op de 4 uur candle.</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <p><strong>Melding via Telegram</strong> Coin, richting, prijs, stop loss, take profit en risicobedrag, met een label hoog of laag vertrouwen. De trade blijft een eigen beslissing.</p>
+      </div>
     </div>
-    <div class="step">
-      <div class="num">2</div>
-      <p><strong>Interpretatie en toetsing</strong> De tekst wordt gelezen, de coin en richting gehaald eruit, en getoetst tegen live indicatoren op de 4 uur candle.</p>
-    </div>
-    <div class="step">
-      <div class="num">3</div>
-      <p><strong>Melding via Telegram</strong> Coin, richting, prijs, stop loss, take profit en risicobedrag, met een label hoog of laag vertrouwen. De trade blijft een eigen beslissing.</p>
+    <div class="phone-mockup" aria-hidden="true">
+      <div class="phone-frame">
+        <div class="phone-screen">
+          <div class="phone-message">
+            <div class="phone-message-head">📈 ₿ BTC — LONG</div>
+            <div class="phone-message-body">
+              Vertrouwen: hoog<br>
+              Prijs: 61.240<br>
+              Stop loss: 59.800<br>
+              Take profit: 64.500
+            </div>
+          </div>
+        </div>
+      </div>
+      <p class="phone-caption muted">Voorbeeld van een melding, geen echt signaal</p>
     </div>
   </div>
 </section>
@@ -126,10 +155,9 @@
 
 <section class="landing-section" id="hoog-vertrouwen" style="--i: 4">
   <h2>Wanneer is een signaal hoog vertrouwen?</h2>
-  <p>Elke melding wordt op het moment zelf getoetst op de 4 uur candle, tegen
-  vier vaste factoren. Ze moeten allemaal dezelfde kant op wijzen als de
-  gevraagde richting, anders wordt het label laag vertrouwen, met de reden
-  erbij in de melding.</p>
+  <p>Elke melding wordt getoetst tegen vier vaste factoren. Kloppen er
+  minstens drie, dan is het hoog vertrouwen. Mist er meer, dan is het
+  laag vertrouwen, met de reden erbij in de melding.</p>
   <div class="factor-grid">
     <div class="factor">
       <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,17 9,11 13,15 21,5"/><polyline points="15,5 21,5 21,11"/></svg>Trend</h3>
@@ -156,10 +184,9 @@
       overtuigend.</p>
     </div>
   </div>
-  <p>Voldoet een signaal aan alle vier, dan is het hoog vertrouwen.
-  Voldoet het aan één of meer niet, dan is het laag vertrouwen. Beide
-  worden gemeld, met stop loss en take profit erbij. Ook hoog vertrouwen
-  is geen garantie, het is een optelsom van regels, geen voorspelling.</p>
+  <p>Beide niveaus worden gemeld, met stop loss en take profit erbij.
+  Ook hoog vertrouwen is geen garantie, het is een optelsom van regels,
+  geen voorspelling.</p>
 </section>
 
 <section class="landing-section" style="--i: 5">
@@ -176,5 +203,36 @@
 </main>
 
 <footer class="footer">{{ disclaimer }}</footer>
+<script>
+  // Echte, live koersen in de tickerstrook, geen voorbeeldcijfers: dit is
+  // de enige plek op de openbare pagina die iets "doet" i.p.v. statische
+  // marketingtekst te zijn. Eén keer ophalen bij laden plus elke minuut
+  // ververst, de scroll-animatie zelf is puur CSS.
+  (function () {
+    var priceEls = document.querySelectorAll(".ticker-price");
+    if (!priceEls.length) return;
+
+    function formatPrice(value) {
+      if (value === null || value === undefined) return "-";
+      if (value >= 100) return value.toLocaleString("nl-NL", { maximumFractionDigits: 0 });
+      return value.toLocaleString("nl-NL", { maximumFractionDigits: 2 });
+    }
+
+    function refresh() {
+      fetch("/api/public_prices")
+        .then(function (r) { return r.json(); })
+        .then(function (prices) {
+          document.querySelectorAll(".ticker-item").forEach(function (item) {
+            var coin = item.getAttribute("data-coin");
+            var priceEl = item.querySelector(".ticker-price");
+            if (priceEl && coin in prices) priceEl.textContent = "$" + formatPrice(prices[coin]);
+          });
+        })
+        .catch(function () {});
+    }
+    refresh();
+    setInterval(refresh, 60000);
+  })();
+</script>
 </body>
 </html>
