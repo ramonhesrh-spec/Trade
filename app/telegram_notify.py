@@ -21,11 +21,19 @@ COIN_SYMBOLS = {"BTC": "₿", "ETH": "Ξ"}
 
 
 def _direction_label(direction: str) -> str:
-    return "LONG" if direction == "long" else "SHORT"
+    if direction == "long":
+        return "LONG"
+    if direction == "short":
+        return "SHORT"
+    return "NEUTRAAL"
 
 
 def _direction_emoji(direction: str) -> str:
-    return "📈" if direction == "long" else "📉"
+    if direction == "long":
+        return "📈"
+    if direction == "short":
+        return "📉"
+    return "➖"
 
 
 def _coin_label(coin: str) -> str:
@@ -268,6 +276,70 @@ async def send_new_coin_message(coin: str, chat_id: str) -> None:
     logger.info("Nieuwe-coin melding verstuurd voor %s naar chat %s", coin, chat_id)
 
 
+async def send_untracked_coin_message(coin: str, chat_id: str) -> None:
+    """Stil bericht zodra een doorgestuurd bericht een coin noemt die niet
+    als handelspaar op de exchange bestaat: zonder dit verdwijnt zo'n
+    bericht na een geslaagde AI-interpretatie alsnog volledig stil, geen
+    spoor voor wie het doorstuurde."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = (
+        f"❌ {_coin_label(coin)}\n"
+        f"{DIVIDER}\n"
+        f"Kon niet getoetst worden: {coin.upper()} staat niet (meer) als paar op de exchange."
+    )
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
+    logger.info("Niet-ondersteunde-coin melding verstuurd voor %s naar chat %s", coin, chat_id)
+
+
+async def send_long_term_message(coin: str, direction: str, summary: str, chat_id: str) -> None:
+    """Stil bericht zodra een lange-termijn analyse binnenkomt. Deze
+    berichten worden nooit direct getoetst of gealarmeerd als trade-kans
+    (zie signal_processor._build_context_note), maar bleven tot nu toe
+    volledig onzichtbaar totdat een latere day-trading melding voor
+    dezelfde coin ernaar verwees. Met de klare-taal samenvatting is een
+    korte melding hierover goedkoop."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = (
+        f"📰 {_coin_label(coin)} lange termijn\n"
+        f"{DIVIDER}\n"
+        f"{_direction_emoji(direction)} {_direction_label(direction)}\n\n"
+        f"{summary}"
+    )
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
+    logger.info("Lange-termijn melding verstuurd voor %s naar chat %s", coin, chat_id)
+
+
+def _mute_suggestion_keyboard(coin: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([[
+        InlineKeyboardButton("🔕 Ja, zet uit", callback_data=f"mute:{coin}"),
+        InlineKeyboardButton("Nee, laat aan", callback_data=f"keepalerts:{coin}"),
+    ]])
+
+
+async def send_mute_suggestion(coin: str, chat_id: str) -> None:
+    """Vraagt of meldingen voor deze coin uitgezet mogen worden, nadat de
+    gebruiker een reeks meldingen op rij genegeerd heeft (zie
+    signal_processor.REPEATED_IGNORE_MUTE_THRESHOLD en
+    repo.consecutive_ignored_count). Stil: dit is geen trade-kans, alleen
+    een vraag."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = (
+        f"Je hebt de laatste meldingen voor {_coin_label(coin)} steeds genegeerd. "
+        f"Meldingen voor deze coin uitzetten?"
+    )
+    await bot.send_message(
+        chat_id=chat_id, text=text, disable_notification=True,
+        reply_markup=_mute_suggestion_keyboard(coin),
+    )
+    logger.info("Mute-suggestie verstuurd voor %s naar chat %s", coin, chat_id)
+
+
 async def send_expired_pending_message(coin: str, new_direction: str, chat_id: str) -> None:
     """Bericht zodra een nog niet genomen kans automatisch is genegeerd
     omdat er een nieuwe melding voor de tegenovergestelde richting van
@@ -396,16 +468,36 @@ async def _handle_journal_callback(update: Update, context: ContextTypes.DEFAULT
     query = update.callback_query
     await query.answer()
     try:
-        action, entry_id_str = query.data.split(":", 1)
-        entry_id = int(entry_id_str)
+        action, payload = query.data.split(":", 1)
     except (ValueError, AttributeError):
         return
-    if action not in ("take", "ignore"):
+    if action not in ("take", "ignore", "mute", "keepalerts"):
         return
 
     user = repo.get_user_by_telegram_chat_id(query.message.chat_id)
     if not user:
         return
+
+    if action == "mute":
+        repo.mute_coin(user["id"], payload)
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text(
+            f"🔕 Meldingen voor {_coin_label(payload)} staan nu uit voor jou. "
+            f"Weer aanzetten kan op de coin-pagina."
+        )
+        logger.info("Coin %s gemute voor gebruiker %s", payload, user["username"])
+        return
+
+    if action == "keepalerts":
+        await query.edit_message_reply_markup(reply_markup=None)
+        await query.message.reply_text(f"Oké, meldingen voor {_coin_label(payload)} blijven aan.")
+        return
+
+    try:
+        entry_id = int(payload)
+    except ValueError:
+        return
+
     entry = repo.get_journal_entry(entry_id, user["id"])
     if not entry:
         # Niet (meer) van deze gebruiker, of al verwijderd: knoppen weghalen,

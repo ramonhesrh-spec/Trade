@@ -51,3 +51,34 @@ def explain_signal(
     except Exception:
         logger.exception("Uitleg voor signaal %s %s kon niet gegenereerd worden", coin, direction)
         return ""
+
+
+SUMMARY_SYSTEM_PROMPT = """Je herschrijft een bericht uit een crypto trading-community in klare \
+taal voor iemand zonder voorkennis. Gebruik uitsluitend wat er letterlijk in het bericht staat, \
+verzin nooit een nieuw niveau, cijfer of conclusie die er niet in staat. Vat het kernpunt samen \
+in maximaal 3 korte zinnen Nederlands: waar gaat het over, wat is de boodschap. Geen jargon \
+zonder uitleg, geen beleggingsadvies toevoegen, geen mening die er niet al in het bericht stond."""
+
+
+def summarize_message(coin: str, raw_text: str) -> str:
+    """Herschrijft het ORIGINELE doorgestuurde bericht in klare taal, los van
+    explain_signal hierboven dat de berekende technische factoren uitlegt.
+    Een lange of jargon-rijke analyse van een betaalde community is voor
+    een beginner vaak niet te volgen, dit maakt de inhoud ervan wel
+    toegankelijk. Lege string bij een leeg bericht of een API-fout: de
+    melding zelf blijft dan gewoon zichtbaar zonder samenvatting."""
+    if not raw_text or not raw_text.strip():
+        return ""
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    prompt = f"Coin: {coin}\nBericht:\n{raw_text}"
+    try:
+        response = client.messages.create(
+            model=config.ANTHROPIC_MODEL,
+            max_tokens=200,
+            system=SUMMARY_SYSTEM_PROMPT,
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return "".join(block.text for block in response.content if block.type == "text").strip()
+    except Exception:
+        logger.exception("Samenvatting voor bericht over %s kon niet gegenereerd worden", coin)
+        return ""

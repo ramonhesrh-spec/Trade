@@ -3,126 +3,147 @@
 {% block title %}{{ symbol }} — HesPulse{% endblock %}
 {% block content %}
 
-<h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>{{ symbol }}</h2>
-
-{% if recent_activity %}
-<p class="muted" style="margin: -6px 0 12px; font-size: 13px;">
-  {% if recent_activity.count > 0 %}
-    {{ recent_activity.count }} {{ "signaal" if recent_activity.count == 1 else "signalen" }} deze week
-    {%- if recent_activity.hoog > 0 %}, {{ recent_activity.hoog }} hoog vertrouwen{% endif -%}
-    , laatste op {{ recent_activity.last_at[:10] }}.
-  {% else %}
-    Geen signalen deze week. Laatste op {{ recent_activity.last_at[:10] }}.
+<div class="coin-head">
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>{{ symbol }}</h2>
+  <div class="coin-head-meta">
+    {% if recent_activity %}
+    <span class="muted">
+      {% if recent_activity.count > 0 %}
+        {{ recent_activity.count }} {{ "signaal" if recent_activity.count == 1 else "signalen" }} deze week{% if recent_activity.hoog > 0 %}, {{ recent_activity.hoog }} hoog vertrouwen{% endif %}
+      {% else %}
+        Geen signalen deze week, laatste op {{ recent_activity.last_at[:10] }}
+      {% endif %}
+    </span>
+    {% endif %}
+    {% if is_muted %}
+    <span class="muted-pill">
+      🔕 Meldingen uit
+      <form action="/coins/{{ symbol }}/unmute" method="post" class="inline-form">
+        <button type="submit" class="link-button">weer aanzetten</button>
+      </form>
+    </span>
+    {% endif %}
+  </div>
+  {% if coin_note %}
+  <p class="coin-note-banner">📌 {{ coin_note }}</p>
   {% endif %}
-</p>
-{% endif %}
+</div>
 
-{% if coin_stat %}
+{% if coin_stat or sparkline %}
 <div class="coin-stat-strip">
+  {% if coin_stat %}
   <div><span class="k">Winrate {{ symbol }}</span><span class="v">{{ coin_stat.winrate }}%</span></div>
   <div><span class="k">Trades</span><span class="v">{{ coin_stat.wins }}/{{ coin_stat.total }}</span></div>
   <div><span class="k">Gemiddeld</span><span class="v {{ 'pos' if coin_stat.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(coin_stat.avg_result_eur) }}</span></div>
-</div>
-{% endif %}
-
-{% if sparkline %}
-<div class="sparkline">
-  <div class="spark-bars" aria-hidden="true">
-    {% for s in sparkline %}
-      <span class="spark-bar {{ 'spark-hoog' if s.technical_confirmed else 'spark-laag' }} {{ 'spark-long' if s.direction == 'long' else 'spark-short' }}"
-            style="--i: {{ loop.index0 }}"
-            title="{{ s.direction }}, {{ 'hoog' if s.technical_confirmed else 'laag' }} vertrouwen, {{ s.created_at[:10] }}"></span>
-    {% endfor %}
+  {% endif %}
+  {% if sparkline %}
+  <div class="stat-sparkline">
+    <div class="spark-bars" aria-hidden="true">
+      {% for s in sparkline %}
+        <span class="spark-bar {{ 'spark-hoog' if s.technical_confirmed else 'spark-laag' }} {{ 'spark-long' if s.direction == 'long' else 'spark-short' }}"
+              style="--i: {{ loop.index0 }}"
+              title="{{ s.direction }}, {{ 'hoog' if s.technical_confirmed else 'laag' }} vertrouwen, {{ s.created_at[:10] }}"></span>
+      {% endfor %}
+    </div>
+    <span class="muted sparkline-label">laatste {{ sparkline|length }}</span>
   </div>
-  <span class="muted sparkline-label">laatste {{ sparkline|length }} {{ "signaal" if sparkline|length == 1 else "signalen" }} voor {{ symbol }}</span>
+  {% endif %}
 </div>
 {% endif %}
 
 {% set primary = open_trades[0] if open_trades else (recent_signals[0] if recent_signals else none) %}
-{% if primary %}
-<section class="cards" style="margin-bottom: 16px;">
-  <div class="card">
-    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/></svg>{{ "Jouw open trade" if open_trades else "Laatste signaal" }}</h3>
-    <div style="display: flex; gap: 6px; align-items: center; margin-bottom: 10px; flex-wrap: wrap;">
-      <span class="badge badge-{{ primary.direction }}">{{ primary.direction }}</span>
-      {% if open_trades %}<span class="badge badge-status">{{ primary.status }}</span>{% endif %}
-      <span class="badge {{ 'badge-hoog' if primary.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ primary.confidence.split(" ")[0] }}</span>
-      {% if primary.reason %}<span class="confidence-ratio mono muted">{{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}</span>{% endif %}
-      <span class="muted" style="font-size: 12px;">slagingskans {{ primary.success_rate }}%{% if primary.success_sample < 5 %} (nog weinig data){% else %} (n={{ primary.success_sample }}){% endif %}</span>
-      {% if community_stat %}<span class="muted" style="font-size: 12px;">{{ community_stat.taken }} van {{ community_stat.total }} gebruikers namen deze kans</span>{% endif %}
-    </div>
-    {% if open_trades %}
-      {{ macros.open_trade_body(primary, redirect_to="/coins/" ~ symbol) }}
-    {% else %}
-    <div class="data-grid">
-      <div class="cell"><div class="k">Signaalprijs</div><div class="v">{{ "%.4f"|format(primary.price) if primary.price else "-" }}</div></div>
-      <div class="cell"><div class="k">Stop loss</div><div class="v neg">{{ "%.4f"|format(primary.stop_loss) if primary.stop_loss else "-" }}</div></div>
-      <div class="cell"><div class="k">Take profit</div><div class="v pos">{{ "%.4f"|format(primary.take_profit) if primary.take_profit else "-" }}</div></div>
-    </div>
-    {% endif %}
-  </div>
-  <div class="card">
-    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>Waarom {{ primary.confidence.split(" ")[0] }} ({{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }})</h3>
-    {% if primary.plain_explanation %}<p class="plain-explanation">{{ primary.plain_explanation }}</p>{% endif %}
-    <p class="muted reason-legend" style="margin: 0 0 6px;">De vinkjes hieronder zijn nu gemeten (RSI, volume, trend, momentum). De slagingskans hierboven is een inschatting op basis van eerdere trades, geen garantie voor deze trade.</p>
-    {% for factor in primary.reason.split(" | ") %}
-      <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}" style="margin: 0 0 5px; font-size: 12.5px;">{{ factor }}</p>
-    {% endfor %}
-    <p class="muted advice-text" style="margin-top: 8px;">{{ primary.advice }}</p>
-  </div>
-</section>
-{% endif %}
 
-<section class="practice-box">
-  <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>Oefenen met deze coin</h3>
-  <p class="muted" style="margin: 0 0 10px;">Kies zelf een richting en krijg direct de volledige toetsing:
-  trend, momentum, RSI, volume, stop loss en take profit, precies zoals bij een echt signaal.
-  Telt niet mee in je echte winrate en stuurt geen Telegram melding.</p>
-  <form action="/coins/{{ symbol }}/oefen" method="post" class="inline-form">
-    <label>Richting
-      <select name="direction">
-        <option value="long">Long</option>
-        <option value="short">Short</option>
-      </select>
-    </label>
-    <button type="submit">Oefen deze trade</button>
-  </form>
-</section>
-
-<div class="trendline-toolbar">
-  <button type="button" id="draw-trendline-btn" class="trendline-draw-btn">+ Lijn tekenen</button>
-  <div class="trendline-list" id="trendline-list"></div>
-</div>
-<p class="muted" style="font-size: 12px; margin: 0 0 8px;">Voor een wig of driehoek: teken de bovenkant en de onderkant apart, elk als losse lijn van twee punten.</p>
-
-<div class="coin-layout">
-  <div id="chart" class="coin-chart">
-    <div class="chart-loading" id="chart-loading">
-      <div class="chart-loading-bars" aria-hidden="true">
-        <span></span><span></span><span></span><span></span><span></span>
+<div class="coin-hero">
+  <div class="coin-chart-col">
+    <div id="chart" class="coin-chart">
+      <div class="chart-loading" id="chart-loading">
+        <div class="chart-loading-bars" aria-hidden="true">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <p class="muted">Koersdata laden...</p>
       </div>
-      <p class="muted">Koersdata laden...</p>
+      <div class="chart-draw-hint" id="draw-trendline-hint" hidden></div>
+      <button type="button" id="draw-trendline-btn" class="chart-tool-btn" title="Zelf een schuine lijn tekenen (wig, driehoek, kanaal)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20 20 4"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="4" r="2"/></svg>
+        <span id="draw-trendline-label">Lijn</span>
+      </button>
     </div>
-    <div class="chart-draw-hint" id="draw-trendline-hint" hidden></div>
+    <div class="trendline-list" id="trendline-list"></div>
   </div>
 
-  <aside class="screenshot-rail">
-    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>Bron screenshots</h3>
-    {% if images %}
-      {% for img in images %}
-      <a href="/media/{{ img.path.split('/')[-1] }}" target="_blank" rel="noopener" class="screenshot-thumb">
-        <img src="/media/{{ img.path.split('/')[-1] }}" alt="Screenshot {{ img.received_at[:10] }}" loading="lazy">
-        <span class="muted">{{ img.received_at[:10] }}</span>
-      </a>
+  <aside class="coin-sidebar">
+    {% if primary %}
+    <div class="card primary-card">
+      <div class="primary-card-head">
+        <span class="badge badge-{{ primary.direction }}">{{ primary.direction }}</span>
+        {% if primary.reason %}<span class="confidence-ratio mono muted">{{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}</span>{% endif %}
+        {% if open_trades %}<span class="badge badge-status">{{ primary.status }}</span>{% endif %}
+      </div>
+      <p class="primary-card-meta muted">
+        {{ "Jouw open trade" if open_trades else "Laatste signaal" }}
+        · {{ "hoog" if primary.confidence == "hoog vertrouwen" else "laag" }} vertrouwen
+        · slagingskans {{ primary.success_rate }}%{% if primary.success_sample < 5 %} (weinig data){% endif %}
+        {%- if community_stat %} · {{ community_stat.taken }}/{{ community_stat.total }} gebruikers namen dit{% endif %}
+      </p>
+      {% if primary.message_summary %}
+      <p class="original-message-summary">“{{ primary.message_summary }}”</p>
+      {% endif %}
+      {% if open_trades %}
+        {{ macros.open_trade_body(primary, redirect_to="/coins/" ~ symbol) }}
+      {% else %}
+      <div class="data-grid">
+        <div class="cell"><div class="k">Signaalprijs</div><div class="v">{{ "%.4f"|format(primary.price) if primary.price else "-" }}</div></div>
+        <div class="cell"><div class="k">Stop loss</div><div class="v neg">{{ "%.4f"|format(primary.stop_loss) if primary.stop_loss else "-" }}</div></div>
+        <div class="cell"><div class="k">Take profit</div><div class="v pos">{{ "%.4f"|format(primary.take_profit) if primary.take_profit else "-" }}</div></div>
+      </div>
+      {% endif %}
+    </div>
+
+    <div class="card">
+      <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>Waarom {{ primary.confidence.split(" ")[0] }} ({{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }})</h3>
+      {% if primary.plain_explanation %}<p class="plain-explanation">{{ primary.plain_explanation }}</p>{% endif %}
+      {% for factor in primary.reason.split(" | ") %}
+        <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}" style="margin: 0 0 5px; font-size: 12.5px;">{{ factor }}</p>
       {% endfor %}
+      <p class="muted advice-text" style="margin-top: 8px;">{{ primary.advice }}</p>
+    </div>
     {% else %}
-      <p class="muted">Nog geen screenshots voor deze coin.</p>
+    <div class="card">
+      <p class="muted">Nog geen signaal voor {{ symbol }}.</p>
+    </div>
     {% endif %}
   </aside>
 </div>
 
-<section>
-  <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="9" x2="20" y2="9" stroke-dasharray="3,3"/><line x1="4" y1="16" x2="20" y2="16" stroke-dasharray="3,3"/></svg>Bron niveaus</h3>
+{% if long_term_messages %}
+<details class="stats-collapse js-accordion" style="--i: 2">
+  <summary class="stats-summary">
+    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+    <span>Lange termijn analyses
+      {%- if long_term_track_record %} · {{ long_term_track_record.correct }}/{{ long_term_track_record.total }} klopte achteraf{% endif %}</span>
+    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </summary>
+  {% if long_term_track_record %}
+  <p class="muted" style="margin: 0 0 10px; font-size: 12px;">Hoe vaak de richting van deze analyses achteraf klopte, vergeleken met de huidige koers. Analyses van de laatste dagen tellen nog niet mee.</p>
+  {% endif %}
+  <div class="long-term-list">
+    {% for m in long_term_messages %}
+    <div class="long-term-item">
+      <span class="badge badge-{{ m.direction if m.direction in ('long', 'short') else 'status' }}">{{ m.direction }}</span>
+      <span class="muted mono" style="font-size: 11px;">{{ m.received_at[:10] }}</span>
+      <p>{{ m.message_summary or (m.raw_text[:200] if m.raw_text else "") }}</p>
+    </div>
+    {% endfor %}
+  </div>
+</details>
+{% endif %}
+
+<details class="stats-collapse js-accordion" style="--i: 3">
+  <summary class="stats-summary">
+    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-5-5L5 21"/></svg>
+    <span>Bron niveaus en screenshots</span>
+    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </summary>
   {% if source_levels %}
   <div class="table-scroll">
   <table class="signals">
@@ -149,7 +170,50 @@
   {% else %}
   <p class="muted">Geen bron niveaus voor deze coin.</p>
   {% endif %}
-</section>
+  {% if images %}
+  <div class="screenshot-rail screenshot-rail-full">
+    {% for img in images %}
+    <a href="/media/{{ img.path.split('/')[-1] }}" target="_blank" rel="noopener" class="screenshot-thumb">
+      <img src="/media/{{ img.path.split('/')[-1] }}" alt="Screenshot {{ img.received_at[:10] }}" loading="lazy">
+      <span class="muted">{{ img.received_at[:10] }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</details>
+
+<details class="stats-collapse js-accordion" style="--i: 4">
+  <summary class="stats-summary">
+    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    <span>Notitie bij {{ symbol }}</span>
+    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </summary>
+  <p class="muted" style="margin: 0 0 10px; font-size: 12.5px;">Bijvoorbeeld een unlock-datum of een aankomend nieuwsmoment. Gedeeld met alle gebruikers, los van een specifieke trade.</p>
+  <form action="/coins/{{ symbol }}/note" method="post" class="inline-form" style="flex-direction: column; align-items: stretch;">
+    <textarea name="note" rows="2" placeholder="Nog geen notitie...">{{ coin_note or "" }}</textarea>
+    <button type="submit">Opslaan</button>
+  </form>
+</details>
+
+<details class="stats-collapse js-accordion" style="--i: 5">
+  <summary class="stats-summary">
+    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    <span>Oefenen met deze coin</span>
+    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </summary>
+  <p class="muted" style="margin: 0 0 10px;">Kies zelf een richting en krijg direct de volledige toetsing:
+  trend, momentum, RSI, volume, stop loss en take profit, precies zoals bij een echt signaal.
+  Telt niet mee in je echte winrate en stuurt geen Telegram melding.</p>
+  <form action="/coins/{{ symbol }}/oefen" method="post" class="inline-form">
+    <label>Richting
+      <select name="direction">
+        <option value="long">Long</option>
+        <option value="short">Short</option>
+      </select>
+    </label>
+    <button type="submit">Oefen deze trade</button>
+  </form>
+</details>
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
 <script>

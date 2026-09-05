@@ -6,6 +6,7 @@ uvicorn web.main:app --host 0.0.0.0 --port 8000
 import asyncio
 import csv
 import io
+import logging
 import re
 import sys
 from datetime import datetime, timedelta, timezone
@@ -23,6 +24,8 @@ from fastapi.templating import Jinja2Templates
 from app import advice as advice_module
 from app import config, db, exchange, explain, indicators, repo, risk, security, telegram_notify
 from app.signal_processor import compute_advanced_extra_factors
+
+logger = logging.getLogger("web")
 
 BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
@@ -316,6 +319,22 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     # is zonder dat de gebruiker er zelf iets voor deed.
     taken_entries = [e for e in open_entries if e["entry_price"] is not None]
     pending_entries = [e for e in open_entries if e["entry_price"] is None]
+
+    # Correlatie-waarschuwing: het totale open-risicopercentage hieronder
+    # telt euro's bij elkaar op, maar zegt niks over of die posities
+    # onafhankelijk van elkaar bewegen. Meerdere gelijktijdige open longs
+    # (of shorts) bewegen in de praktijk vaak met elkaar mee (bijvoorbeeld
+    # altcoins die BTC volgen), dat voelt als spreiding maar is het niet.
+    direction_counts: dict[str, int] = {}
+    for e in taken_entries:
+        direction_counts[e["direction"]] = direction_counts.get(e["direction"], 0) + 1
+    correlation_warning = next(
+        (
+            {"direction": d, "count": n}
+            for d, n in direction_counts.items() if n > 1
+        ),
+        None,
+    )
     practice_open = _add_signal_context(
         await _enrich_open_positions([e for e in practice_entries if e["exit_price"] is None]), winrate,
     )
@@ -369,6 +388,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "pending_entries": pending_entries,
         "open_risk_eur": open_risk_eur,
         "open_risk_pct": open_risk_pct,
+        "correlation_warning": correlation_warning,
         "practice_open": practice_open,
         "practice_closed": practice_closed,
         "winrate": winrate,
@@ -697,6 +717,21 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
                 "total": len(fanned_out),
             }
 
+    long_term_messages = repo.list_recent_long_term_messages(symbol)
+
+    # Trackrecord van de community zelf: klopte de lange-termijn richting
+    # achteraf. Vereist een live koers, mislukt die (exchange down, coin
+    # niet (meer) verhandelbaar) dan blijft dit gewoon leeg in plaats van de
+    # hele pagina te breken.
+    long_term_track_record = None
+    try:
+        current_price = await asyncio.to_thread(exchange.fetch_last_price, symbol)
+        long_term_track_record = repo.coin_long_term_track_record(symbol, current_price)
+    except Exception:
+        logger.exception("Live prijs voor trackrecord van %s kon niet opgehaald worden", symbol)
+
+    coin = repo.get_coin(symbol)
+
     return templates.TemplateResponse(request, "coin.html", {
         "user": user,
         "symbol": symbol,
@@ -710,7 +745,31 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "community_stat": community_stat,
         "coins": repo.list_coins(),
         "trendlines": repo.list_trendlines(symbol),
+        "long_term_messages": long_term_messages,
+        "long_term_track_record": long_term_track_record,
+        "coin_note": coin["note"] if coin else None,
+        "is_muted": repo.is_coin_muted(user["id"], symbol),
     })
+
+
+@app.post("/coins/{symbol}/note")
+async def save_coin_note(
+    symbol: str, note: str = Form(""), user: dict = Depends(require_login),
+):
+    """Eigen aantekening bij een coin, los van een specifieke trade
+    (bijvoorbeeld een unlock-datum of een aankomend nieuwsmoment). Gedeeld
+    tussen gebruikers, net als de rest van de coin-gegevens."""
+    repo.set_coin_note(symbol.upper(), note.strip())
+    return RedirectResponse(url=f"/coins/{symbol.upper()}", status_code=303)
+
+
+@app.post("/coins/{symbol}/unmute")
+async def unmute_coin(symbol: str, user: dict = Depends(require_login)):
+    """Zet Telegram-meldingen voor deze coin weer aan voor de ingelogde
+    gebruiker, na een eerdere mute-suggestie (zie
+    signal_processor.REPEATED_IGNORE_MUTE_THRESHOLD)."""
+    repo.unmute_coin(user["id"], symbol.upper())
+    return RedirectResponse(url=f"/coins/{symbol.upper()}", status_code=303)
 
 
 @app.post("/coins/{symbol}/trendlines")

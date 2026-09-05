@@ -67,6 +67,27 @@ def mark_message_processed(
         )
 
 
+def set_message_summary(message_id: int, summary: str) -> None:
+    """Slaat de klare-taal herschrijving van het originele bericht op (zie
+    explain.summarize_message), los van signals.plain_explanation dat de
+    berekende technische factoren uitlegt."""
+    with db.session() as conn:
+        conn.execute("UPDATE messages SET message_summary = ? WHERE id = ?", (summary, message_id))
+
+
+def mark_message_untracked(message_id: int, coin: str) -> None:
+    """Coin bestaat niet (meer) als handelspaar op de exchange: geen
+    technische toetsing mogelijk. Zonder dit verdwijnt zo'n bericht na een
+    geslaagde AI-interpretatie alsnog volledig stil, geen Telegram, geen
+    spoor voor de operator, alsof het bericht nooit aangekomen is."""
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE messages SET unclear = 1, note = ? WHERE id = ?",
+            (f"{coin.upper()} staat niet (meer) als paar op de exchange, kon niet getoetst worden",
+             message_id),
+        )
+
+
 def recent_unclear_messages(limit: int = 15) -> list[dict]:
     """Berichten die Anthropic niet als duidelijk signaal kon interpreteren,
     laatste [limit] stuks. Zonder dit verdwijnt zo'n bericht stil: geen
@@ -211,6 +232,23 @@ def list_coins() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_coin(symbol: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM coins WHERE symbol = ?", (symbol.upper(),)).fetchone()
+        return dict(row) if row else None
+
+
+def set_coin_note(symbol: str, note: str) -> None:
+    """Eigen aantekening bij een coin, los van een specifieke trade
+    (bijvoorbeeld een unlock-datum of een aankomend nieuwsmoment). Gedeeld
+    tussen gebruikers, net als de rest van de coin-gegevens. Lege string
+    wist de aantekening weer."""
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE coins SET note = ? WHERE symbol = ?", (note or None, symbol.upper()),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Gebruikers
 # ---------------------------------------------------------------------------
@@ -350,10 +388,62 @@ def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
     een handmatige oefening net een echt signaal voor alle gebruikers."""
     with db.session() as conn:
         rows = conn.execute(
-            "SELECT * FROM signals WHERE coin = ? AND is_practice = 0 ORDER BY created_at DESC LIMIT ?",
+            """SELECT s.*, m.message_summary AS message_summary FROM signals s
+               JOIN messages m ON m.id = s.message_id
+               WHERE s.coin = ? AND s.is_practice = 0 ORDER BY s.created_at DESC LIMIT ?""",
             (coin.upper(), limit),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def list_recent_long_term_messages(coin: str, limit: int = 3) -> list[dict]:
+    """Lange-termijn analyses voor deze coin, nieuwste eerst. Deze berichten
+    worden nooit direct gealarmeerd (zie signal_processor._build_context_note),
+    maar de inhoud is relevant genoeg om op de coin-pagina te tonen, in
+    klare taal via message_summary."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, received_at, direction, raw_text, message_summary FROM messages
+               WHERE coin = ? AND category = 'lange_termijn' AND processed_at IS NOT NULL
+               ORDER BY received_at DESC LIMIT ?""",
+            (coin.upper(), limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_message_price_at_receipt(message_id: int, price: float) -> None:
+    """Live koers op het moment van verwerken, alleen zinvol voor lange
+    termijn analyses: basis voor coin_long_term_track_record hieronder."""
+    with db.session() as conn:
+        conn.execute("UPDATE messages SET price_at_receipt = ? WHERE id = ?", (price, message_id))
+
+
+def coin_long_term_track_record(coin: str, current_price: float, min_age_days: int = 3) -> Optional[dict]:
+    """Hoe vaak wees de richting van een lange-termijn analyse voor deze
+    coin achteraf de juiste kant op, vergeleken met de huidige koers. Dit
+    is de kern van waarom iemand voor een betaalde community betaalt: is de
+    bron het geld waard, dat werd tot nu toe nergens gemeten.
+
+    Alleen analyses van minstens min_age_days oud tellen mee: een analyse
+    van een paar uur oud "gelijk geven" is toeval, geen trackrecord.
+    Neutrale analyses tellen niet mee, die voorspellen geen kant.
+    None als er nog geen enkele analyse oud genoeg is."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=min_age_days)).isoformat()
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT direction, price_at_receipt FROM messages
+               WHERE coin = ? AND category = 'lange_termijn' AND direction IN ('long', 'short')
+                     AND price_at_receipt IS NOT NULL AND received_at <= ?""",
+            (coin.upper(), cutoff),
+        ).fetchall()
+    if not rows:
+        return None
+    correct = sum(
+        1 for r in rows
+        if (r["direction"] == "long" and current_price > r["price_at_receipt"])
+        or (r["direction"] == "short" and current_price < r["price_at_receipt"])
+    )
+    return {"correct": correct, "total": len(rows)}
 
 
 def recent_rejected_reasons(coin: str, limit: int = 3) -> list[str]:
@@ -373,9 +463,17 @@ def recent_rejected_reasons(coin: str, limit: int = 3) -> list[str]:
 
 def find_open_signal(coin: str, direction: str) -> Optional[dict]:
     """Het meest recente signaal voor deze coin en richting, alleen als
-    minstens één gebruiker die nog niet gesloten heeft. Een nieuw bericht
-    over dezelfde coin en richting werkt dit signaal bij in plaats van er
-    een los signaal naast te zetten."""
+    minstens één gebruiker die nog niet gesloten HEEFT EN niet genegeerd
+    heeft. Een nieuw bericht over dezelfde coin en richting werkt dit
+    signaal bij in plaats van er een los signaal naast te zetten.
+
+    "Genegeerd" is zelf ook een definitieve beslissing, net als een
+    gesloten trade, alleen zonder exit_price (die wordt bij negeren nooit
+    gezet). Zonder de status-uitsluiting hieronder blijft een genegeerd
+    signaal voor altijd "nog open" tellen, en werkt elk volgend bericht
+    over dezelfde coin en richting tot in lengte van dagen datzelfde oude
+    signaal bij in plaats van een vers signaal aan te maken, ook voor
+    gebruikers die pas later worden toegevoegd."""
     with db.session() as conn:
         row = conn.execute(
             """SELECT * FROM signals WHERE coin = ? AND direction = ?
@@ -386,7 +484,8 @@ def find_open_signal(coin: str, direction: str) -> Optional[dict]:
             return None
         signal = dict(row)
         still_open = conn.execute(
-            "SELECT COUNT(*) FROM journal_entries WHERE signal_id = ? AND exit_price IS NULL",
+            """SELECT COUNT(*) FROM journal_entries
+               WHERE signal_id = ? AND exit_price IS NULL AND status != 'genegeerd'""",
             (signal["id"],),
         ).fetchone()[0]
         return signal if still_open > 0 else None
@@ -431,9 +530,11 @@ _JOURNAL_SELECT = """
         s.macd AS macd, s.macd_signal AS macd_signal, s.volume_ratio AS volume_ratio,
         s.atr_avg20 AS atr_avg20, s.adx AS adx,
         s.reason AS reason, s.context_note AS context_note, s.created_at AS created_at,
-        s.is_practice AS is_practice, s.plain_explanation AS plain_explanation
+        s.is_practice AS is_practice, s.plain_explanation AS plain_explanation,
+        m.message_summary AS message_summary
     FROM journal_entries je
     JOIN signals s ON s.id = je.signal_id
+    JOIN messages m ON m.id = s.message_id
 """
 
 
@@ -611,6 +712,49 @@ def auto_ignore_stale_pending_for_coin(coin: str, exclude_signal_id: int) -> lis
                 (note, *[row["id"] for row in affected]),
             )
         return [dict(r) for r in affected]
+
+
+def consecutive_ignored_count(user_id: int, coin: str) -> int:
+    """Hoeveel meldingen voor deze coin de gebruiker op rij genegeerd heeft
+    (handmatig of automatisch), meest recent eerst, tot de eerste die dat
+    niet is. Basis voor de vermoeidheids-vraag ("wil je dit uitzetten?"),
+    zie signal_processor.REPEATED_IGNORE_MUTE_THRESHOLD. Een genomen of
+    aangepaste trade breekt de reeks altijd."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT je.status AS status FROM journal_entries je
+               JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND s.coin = ? AND s.is_practice = 0
+               ORDER BY je.id DESC""",
+            (user_id, coin.upper()),
+        ).fetchall()
+    count = 0
+    for row in rows:
+        if row["status"] != "genegeerd":
+            break
+        count += 1
+    return count
+
+
+def is_coin_muted(user_id: int, coin: str) -> bool:
+    with db.session() as conn:
+        row = conn.execute(
+            "SELECT 1 FROM muted_coins WHERE user_id = ? AND coin = ?", (user_id, coin.upper()),
+        ).fetchone()
+        return row is not None
+
+
+def mute_coin(user_id: int, coin: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO muted_coins (user_id, coin, created_at) VALUES (?, ?, ?)",
+            (user_id, coin.upper(), db.now_iso()),
+        )
+
+
+def unmute_coin(user_id: int, coin: str) -> None:
+    with db.session() as conn:
+        conn.execute("DELETE FROM muted_coins WHERE user_id = ? AND coin = ?", (user_id, coin.upper()))
 
 
 def reset_journal_entry(entry_id: int, user_id: int) -> None:

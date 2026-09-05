@@ -220,6 +220,7 @@
   // deze coin bekijkt, net als de bron niveaus.
   (function () {
     const drawBtn = document.getElementById("draw-trendline-btn");
+    const drawBtnLabel = document.getElementById("draw-trendline-label");
     const hintEl = document.getElementById("draw-trendline-hint");
     const listEl = document.getElementById("trendline-list");
     if (!drawBtn || !hintEl || !listEl) return;
@@ -237,7 +238,7 @@
       drawMode = false;
       pendingPoint = null;
       drawBtn.classList.remove("is-active");
-      drawBtn.textContent = "+ Lijn tekenen";
+      if (drawBtnLabel) drawBtnLabel.textContent = "Lijn";
       container.classList.remove("is-drawing");
       setHint(null);
       candleSeries.setMarkers([]);
@@ -294,7 +295,7 @@
       drawMode = true;
       pendingPoint = null;
       drawBtn.classList.add("is-active");
-      drawBtn.textContent = "Annuleren";
+      if (drawBtnLabel) drawBtnLabel.textContent = "Annuleren";
       container.classList.add("is-drawing");
       // Zonder dit wordt een tik op mobiel (en soms ook een muisklik met een
       // paar pixels beweging) door de grafiek zelf als slepen/zoomen gezien,

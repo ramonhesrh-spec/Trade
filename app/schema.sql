@@ -30,7 +30,17 @@ CREATE TABLE IF NOT EXISTS messages (
     unclear INTEGER NOT NULL DEFAULT 0,
     note TEXT,
     processed_at TEXT,
-    discord_user_id TEXT
+    discord_user_id TEXT,
+    -- Het origineel doorgestuurde bericht herschreven in klare taal (zie
+    -- explain.summarize_message), los van plain_explanation op signals dat
+    -- de berekende technische factoren uitlegt, niet de inhoud van het
+    -- bericht zelf. NULL zolang de samenvatting nog niet gegenereerd is of
+    -- mislukt is, de rauwe tekst blijft dan het enige alternatief.
+    message_summary TEXT,
+    -- Live koers op het moment van verwerken, alleen ingevuld voor lange
+    -- termijn analyses (zie signal_processor). Basis voor het trackrecord:
+    -- kwam de koers achteraf de kant op die de analyse voorspelde.
+    price_at_receipt REAL
 );
 
 -- Bron niveaus, overgenomen uit Discord afbeeldingen. Altijd bewaard,
@@ -75,7 +85,24 @@ CREATE TABLE IF NOT EXISTS coins (
     symbol TEXT PRIMARY KEY,
     market TEXT NOT NULL,
     added_at TEXT NOT NULL,
-    active INTEGER NOT NULL DEFAULT 1
+    active INTEGER NOT NULL DEFAULT 1,
+    -- Eigen aantekening bij een coin, los van een specifieke trade
+    -- (bijvoorbeeld een unlock-datum of een aankomend nieuwsmoment).
+    -- Gedeeld tussen gebruikers, net als de rest van de coin-gegevens.
+    note TEXT
+);
+
+-- Coins waarvoor een gebruiker zelf geen Telegram-meldingen meer wil,
+-- meestal nadat hij dezelfde coin herhaaldelijk genegeerd heeft (zie
+-- signal_processor.REPEATED_IGNORE_MUTE_THRESHOLD). De logboekregel en
+-- dashboard-cijfers blijven gewoon bestaan, alleen de Telegram-melding
+-- wordt overgeslagen.
+CREATE TABLE IF NOT EXISTS muted_coins (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    coin TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(user_id, coin)
 );
 
 -- Verwerkte day trading signalen: gedeelde technische toetsing. Objectief,

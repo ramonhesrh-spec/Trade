@@ -56,6 +56,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     existing_messages = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
     if "discord_user_id" not in existing_messages:
         conn.execute("ALTER TABLE messages ADD COLUMN discord_user_id TEXT")
+    if "message_summary" not in existing_messages:
+        conn.execute("ALTER TABLE messages ADD COLUMN message_summary TEXT")
+    if "price_at_receipt" not in existing_messages:
+        conn.execute("ALTER TABLE messages ADD COLUMN price_at_receipt REAL")
     # Index hier aanmaken, nooit in schema.sql: dat script draait via
     # executescript() vóór deze migratie, dus op een bestaande database
     # zonder de kolom hierboven zou die CREATE INDEX meteen crashen omdat

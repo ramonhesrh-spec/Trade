@@ -379,7 +379,7 @@ main h3 { font-size: 15px; gap: 8px; }
 .data-grid .cell .v.neg { color: var(--red); }
 
 .coin-stat-strip {
-  display: flex; gap: 20px; flex-wrap: wrap; margin: 0 0 16px; padding: 10px 14px;
+  display: flex; gap: 20px; flex-wrap: wrap; align-items: center; margin: 0 0 16px; padding: 10px 14px;
   background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius-sm);
 }
 .coin-stat-strip > div { display: flex; flex-direction: column; gap: 2px; }
@@ -387,6 +387,39 @@ main h3 { font-size: 15px; gap: 8px; }
 .coin-stat-strip .v { font-family: var(--mono); font-size: 15px; font-weight: 700; color: var(--text); }
 .coin-stat-strip .v.pos { color: var(--green); }
 .coin-stat-strip .v.neg { color: var(--red); }
+.stat-sparkline { display: flex; align-items: center; gap: 8px; margin-left: auto; }
+
+.coin-head { margin-bottom: 10px; }
+.coin-head h2 { margin-bottom: 4px; }
+.coin-head-meta { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.muted-pill {
+  display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted);
+  background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: 999px; padding: 3px 10px;
+}
+.link-button {
+  background: none; border: none; padding: 0; color: var(--accent); text-decoration: underline;
+  text-underline-offset: 2px; font-size: inherit; cursor: pointer;
+}
+.coin-note-banner {
+  margin: 8px 0 0; padding: 8px 12px; font-size: 13px; line-height: 1.5;
+  background: var(--accent-bg); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+}
+
+.primary-card-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.primary-card-meta { font-size: 12px; margin: 0 0 8px; }
+.original-message-summary {
+  font-size: 12.5px; line-height: 1.5; font-style: italic; color: var(--text-dim);
+  margin: 0 0 10px; padding: 8px 10px; background: var(--bg-elevated); border-radius: var(--radius-sm);
+  border-left: 2px solid var(--border-strong);
+}
+
+.long-term-list { display: flex; flex-direction: column; gap: 10px; }
+.long-term-item {
+  display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
+  padding: 8px 0; border-bottom: 1px solid var(--border);
+}
+.long-term-item:last-child { border-bottom: none; padding-bottom: 0; }
+.long-term-item p { flex-basis: 100%; margin: 4px 0 0; font-size: 12.5px; line-height: 1.5; color: var(--text-dim); }
 /* Bij een oneven aantal cellen (bijv. Entry/SL/TP, of Entry/Nu/SL/TP/
    Grootte) wrapt de laatste cel alleen naar een nieuwe rij: die laat dan
    de rest van de rij leeg staan, zichtbaar als een lege cel-vormige plek.
@@ -475,6 +508,14 @@ main h3 { font-size: 15px; gap: 8px; }
 }
 .summary-value.warn { color: #f2b03e; }
 .summary-value.danger { color: var(--red); }
+
+.correlation-warning {
+  display: flex; align-items: flex-start; gap: 8px; margin: 10px 0 0;
+  padding: 8px 12px; font-size: 12.5px; line-height: 1.5; color: #f2b03e;
+  background: rgba(242, 176, 62, 0.1); border: 1px solid rgba(242, 176, 62, 0.3);
+  border-radius: var(--radius-sm);
+}
+.correlation-warning .factor-icon { color: #f2b03e; margin-top: 1px; }
 .summary-label { display: block; font-size: 12px; color: var(--muted); margin-top: 2px; }
 @media (max-width: 560px) {
   .summary-value { font-size: 19px; }
@@ -936,30 +977,26 @@ main + .footer { border-top: 1px solid var(--border); }
 .kraken-card .button-primary { margin-top: 12px; }
 .kraken-card .fine-print { font-size: 12px; margin-top: 12px; margin-bottom: 0; }
 
-.practice-box {
-  background: var(--panel); border: 1px dashed var(--border-strong); border-radius: var(--radius);
-  padding: 16px 18px; margin-bottom: 16px;
+/* Trendlijn tekenen zit niet meer in een eigen brede werkbalk boven de
+   grafiek: dat is een secundair hulpmiddel, geen kernfunctie, en verdrong
+   eerder de grafiek zelf naar beneden. Nu een klein knopje in de hoek van
+   de grafiek zelf (.chart-tool-btn), dicht bij waar het hoort. */
+.chart-tool-btn {
+  position: absolute; top: 10px; right: 10px; z-index: 3;
+  display: flex; align-items: center; gap: 5px;
+  background: rgba(10, 14, 15, 0.75); color: var(--text-dim); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm); padding: 6px 10px; font-size: 12px; font-weight: 600;
 }
-.practice-box .inline-form { margin: 0; }
-
-.trendline-toolbar {
-  display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 8px;
-}
-.trendline-draw-btn {
-  background: var(--panel-hover); color: var(--text); border: 1px solid var(--border-interactive);
-  border-radius: var(--radius-sm); padding: 8px 14px; font-weight: 600; font-size: 13px;
-}
-.trendline-draw-btn:hover { background: var(--accent-bg); border-color: var(--accent); }
-.trendline-draw-btn.is-active {
-  background: var(--accent); border-color: var(--accent); color: #052624;
-}
+.chart-tool-btn svg { width: 14px; height: 14px; }
+.chart-tool-btn:hover { background: var(--accent-bg); border-color: var(--accent); color: var(--accent); }
+.chart-tool-btn.is-active { background: var(--accent); border-color: var(--accent); color: #052624; }
 .chart-draw-hint {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 3;
   background: rgba(10, 14, 15, 0.92); color: var(--accent); border: 1px solid var(--accent);
   border-radius: 999px; padding: 6px 14px; font-size: 12.5px; font-weight: 600;
   white-space: nowrap; pointer-events: none;
 }
-.trendline-list { display: flex; gap: 6px; flex-wrap: wrap; }
+.trendline-list { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
 .trendline-chip {
   display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text-dim);
   background: var(--panel); border: 1px solid var(--border); border-radius: 999px; padding: 3px 4px 3px 10px;
@@ -971,11 +1008,26 @@ main + .footer { border-top: 1px solid var(--border); }
 .trendline-remove:hover { background: var(--red-bg); color: var(--red); }
 #chart.is-drawing { cursor: crosshair; }
 
-.coin-layout { display: flex; gap: 16px; align-items: flex-start; }
-.coin-chart {
-  height: 560px; position: relative; border: 1px solid var(--border);
-  border-radius: var(--radius); overflow: hidden; flex: 1; min-width: 0;
+/* Kern van het herontwerp: de grafiek staat als eerste in de bron, en
+   krijgt de meeste ruimte, in plaats van pas halverwege de pagina te
+   verschijnen achter twee kaarten, een oefenblok en een trendlijn-balk.
+   Eén kolom (gestapeld, grafiek eerst) tot 960px, daarna grafiek + een
+   vaste sidebar ernaast: geen van beide vormen is de uitzondering, allebei
+   evenveel de basis. */
+.coin-hero { display: grid; grid-template-columns: 1fr; gap: 16px; align-items: start; margin-bottom: 20px; }
+@media (min-width: 960px) {
+  .coin-hero { grid-template-columns: minmax(0, 1fr) 340px; }
 }
+.coin-chart-col { min-width: 0; }
+.coin-chart {
+  height: 420px; position: relative; border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden;
+}
+@media (min-width: 960px) {
+  .coin-chart { height: 560px; }
+}
+.coin-sidebar { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.coin-sidebar .card { flex: none; min-width: 0; }
 
 /* Laadstatus zolang de koersdata (soms een paar honderd ms, soms trager op
    een trage verbinding) nog niet terug is: rustige pulserende staafjes in
@@ -1003,32 +1055,19 @@ main + .footer { border-top: 1px solid var(--border); }
 @media (prefers-reduced-motion: reduce) {
   .chart-loading-bars span { animation: none; opacity: 0.6; }
 }
-.screenshot-rail {
-  width: 220px; flex-shrink: 0; max-height: 560px; overflow-y: auto;
-  border: 1px solid var(--border); border-radius: var(--radius); padding: 14px;
-  background: var(--panel);
+/* Screenshots stonden eerder als smalle zijbalk naast de grafiek, en
+   drukten die in de verdrukking. Nu onder de vouw, in een horizontale
+   rail: bewijsmateriaal, geen concurrent van de grafiek zelf. */
+.screenshot-rail-full {
+  display: flex; gap: 12px; overflow-x: auto; margin-top: 14px; padding-top: 14px;
+  border-top: 1px solid var(--border);
 }
-.screenshot-rail h3 { margin: 0 0 12px; }
 .screenshot-thumb {
-  display: block; margin-bottom: 12px; text-decoration: none; border-radius: var(--radius-sm);
-  overflow: hidden; border: 1px solid var(--border-strong);
+  display: block; flex-shrink: 0; width: 160px; text-decoration: none;
+  border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border-strong);
 }
 .screenshot-thumb img { display: block; width: 100%; height: auto; }
 .screenshot-thumb span { display: block; padding: 4px 8px; font-size: 11px; }
-@media (max-width: 900px) {
-  .coin-layout { flex-direction: column; }
-  /* .coin-chart had flex:1 voor de rij-layout op desktop (breedte delen met
-     de screenshot-rail). Zodra flex-direction naar column omschakelt, is
-     dat opeens de verticale as: flex-basis:0 wint dan van de expliciete
-     height, en de grafiek klapt in tot een paar pixels. Terug naar een
-     vaste hoogte zodra het geen rij meer is. */
-  .coin-chart { flex: none; width: 100%; }
-  .screenshot-rail { width: 100%; max-height: none; display: flex; gap: 12px; overflow-x: auto; overflow-y: visible; }
-  .screenshot-thumb { flex-shrink: 0; width: 160px; margin-bottom: 0; }
-}
-@media (max-width: 560px) {
-  .coin-chart { height: 320px; }
-}
 
 /* iOS Safari zoomt automatisch in op een veld met een lettergrootte
    onder 16px. Op klein scherm dus altijd minstens 16px in formulieren. */

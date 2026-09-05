@@ -37,6 +37,13 @@ REPEATED_REJECTION_COUNT = 3
 INTERPRET_FAILURE_ALERT_THRESHOLD = 3
 _consecutive_interpret_failures = 0
 
+# Hoeveel meldingen voor dezelfde coin een gebruiker op rij genegeerd moet
+# hebben (zie repo.consecutive_ignored_count) voor de vraag "wil je dit
+# uitzetten?". Precies op deze grens gevraagd, niet elke keer erna: anders
+# blijft de vraag terugkomen bij elke volgende melding zolang niemand hem
+# beantwoordt.
+REPEATED_IGNORE_MUTE_THRESHOLD = 5
+
 
 def _extract_failing_factors(reason: str) -> set[str]:
     """Haalt de factornamen met een ✗ uit een reason-breakdown zoals
@@ -120,6 +127,14 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
                     message_id, interp.reason)
         return
 
+    # Het origineel doorgestuurde bericht herschreven in klare taal, los van
+    # de technische plain_explanation die pas later (bij een day trading
+    # signaal) berekend wordt. Geldt voor beide categorieën: een lange
+    # termijn analyse is vaak juist de langste, meest jargon-rijke tekst.
+    message_summary = await asyncio.to_thread(explain.summarize_message, interp.coin, raw_text)
+    if message_summary:
+        repo.set_message_summary(message_id, message_summary)
+
     # Bron niveaus uit afbeeldingen worden altijd bewaard, ongeacht categorie.
     if interp.source_levels:
         tracked, is_new_coin = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
@@ -147,6 +162,36 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
     if interp.category != "day_trading":
         logger.info("Bericht %s valt in categorie %s, alleen gelogd, geen melding",
                     message_id, interp.category)
+        # Live koers vastleggen op het moment van deze analyse: zonder dit
+        # referentiepunt kan achteraf nooit gemeten worden of de richting
+        # klopte (zie repo.coin_long_term_track_record). Mislukt de
+        # koersophaal, dan telt deze analyse straks gewoon niet mee in het
+        # trackrecord, geen reden om de rest van de verwerking te blokkeren.
+        if interp.direction in ("long", "short"):
+            try:
+                live_price = await asyncio.to_thread(exchange.fetch_last_price, interp.coin)
+                repo.set_message_price_at_receipt(message_id, live_price)
+            except Exception:
+                logger.exception("Live prijs voor lange-termijn analyse %s kon niet vastgelegd worden",
+                                  interp.coin)
+
+        # Tot nu toe volledig stil: je zag een lange termijn analyse pas
+        # terug zodra een latere day trading melding voor dezelfde coin
+        # ernaar verwees (_build_context_note). Met de samenvatting hierboven
+        # is een korte, stille melding hierover goedkoop, en voorkomt dat de
+        # inhoud van een net doorgestuurde analyse in de tussentijd onzichtbaar is.
+        if message_summary:
+            for user in repo.list_users():
+                if not user["telegram_chat_id"]:
+                    continue
+                try:
+                    await telegram_notify.send_long_term_message(
+                        interp.coin, interp.direction, message_summary,
+                        chat_id=user["telegram_chat_id"],
+                    )
+                except Exception:
+                    logger.exception("Lange-termijn melding voor %s naar gebruiker %s is mislukt",
+                                      interp.coin, user["username"])
         return
 
     await process_day_trading_signal(message_id, interp)
@@ -233,6 +278,18 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     if not tracked:
         logger.info("Coin %s bestaat niet als paar op de exchange, geen technische toetsing mogelijk",
                     interp.coin)
+        # Zonder dit verdwijnt een bericht dat de AI wel prima kon lezen
+        # (coin en richting zijn al bekend) hierna alsnog volledig stil: geen
+        # Telegram, geen spoor voor de operator, alsof het nooit aankwam.
+        repo.mark_message_untracked(message_id, interp.coin)
+        for user in repo.list_users():
+            if not user["telegram_chat_id"]:
+                continue
+            try:
+                await telegram_notify.send_untracked_coin_message(interp.coin, chat_id=user["telegram_chat_id"])
+            except Exception:
+                logger.exception("Niet-ondersteunde-coin melding voor %s naar gebruiker %s is mislukt",
+                                  interp.coin, user["username"])
         return
 
     df = await asyncio.to_thread(exchange.fetch_ohlcv, interp.coin)
@@ -362,12 +419,26 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     # dat is geen uitvoerbare trade opzet), anders voelt stilte aan als "er
     # is niks gebeurd" in plaats van "getoetst, met deze reden afgekeurd".
     for user in repo.list_users():
+        # Vóór het aanmaken van de nieuwe regel gemeten: die staat zelf nog
+        # op 'nieuw', niet 'genegeerd', en zou de telling anders altijd naar
+        # 0 laten terugvallen.
+        ignored_streak = repo.consecutive_ignored_count(user["id"], interp.coin)
+        muted = repo.is_coin_muted(user["id"], interp.coin)
+
         risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
         entry_id = repo.create_journal_entry(signal_id, user["id"], risk_eur)
 
         if not user["telegram_chat_id"]:
             logger.info("Gebruiker %s heeft geen telegram_chat_id, geen melding verstuurd",
                         user["username"])
+            continue
+
+        if muted:
+            # De logboekregel bestaat al (hierboven aangemaakt): trackrecord
+            # en dashboard-cijfers blijven kloppen, alleen de Telegram-melding
+            # zelf wordt overgeslagen, dat is precies wat "uitzetten" betekent.
+            logger.info("Coin %s is gemute voor gebruiker %s, geen Telegram-melding verstuurd",
+                        interp.coin, user["username"])
             continue
 
         position_size = risk.compute_position_size(risk_eur, ind.price, stop_take.stop_loss) if confirmed else None
@@ -409,6 +480,15 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
                 logger.exception("Chart versturen voor gebruiker %s, signaal %s is mislukt",
                                   user["username"], signal_id)
 
+        # Precies op de grens gevraagd (== in plaats van >=), zie
+        # REPEATED_IGNORE_MUTE_THRESHOLD hierboven.
+        if ignored_streak == REPEATED_IGNORE_MUTE_THRESHOLD:
+            try:
+                await telegram_notify.send_mute_suggestion(interp.coin, chat_id=user["telegram_chat_id"])
+            except Exception:
+                logger.exception("Mute-suggestie voor gebruiker %s, coin %s is mislukt",
+                                  user["username"], interp.coin)
+
 
 async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
     """Stuurt een update-melding naar gebruikers die dit signaal nog open
@@ -419,6 +499,8 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
     for user in repo.list_users():
         entry = entries.get(user["id"])
         if not entry or entry["exit_price"] is not None or not user["telegram_chat_id"]:
+            continue
+        if repo.is_coin_muted(user["id"], signal_data["coin"]):
             continue
         force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
