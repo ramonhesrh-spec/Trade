@@ -49,6 +49,7 @@
       <span class="badge {{ 'badge-hoog' if primary.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ primary.confidence.split(" ")[0] }}</span>
       {% if primary.reason %}<span class="confidence-ratio mono muted">{{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}</span>{% endif %}
       <span class="muted" style="font-size: 12px;">slagingskans {{ primary.success_rate }}%{% if primary.success_sample < 5 %} (nog weinig data){% else %} (n={{ primary.success_sample }}){% endif %}</span>
+      {% if community_stat %}<span class="muted" style="font-size: 12px;">{{ community_stat.taken }} van {{ community_stat.total }} gebruikers namen deze kans</span>{% endif %}
     </div>
     {% if open_trades %}
       {{ macros.open_trade_body(primary, redirect_to="/coins/" ~ symbol) }}

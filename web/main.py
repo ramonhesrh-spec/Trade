@@ -636,6 +636,23 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
 
     coin_stat = next((s for s in repo.coin_stats(user["id"]) if s["coin"] == symbol), None)
 
+    # Community-vergelijking: hoeveel andere gebruikers namen dezelfde
+    # kans. Iedereen ziet hetzelfde signaal, dat gegeven werd tot nu toe
+    # nergens gebruikt. Alleen tonen als er meer dan 1 gebruiker is, anders
+    # zegt "1 van de 1" niks.
+    primary_signal_id = (
+        open_trades[0]["signal_id"] if open_trades
+        else (recent_signals[0]["signal_id"] if recent_signals else None)
+    )
+    community_stat = None
+    if primary_signal_id:
+        fanned_out = repo.list_journal_entries_for_signal(primary_signal_id)
+        if len(fanned_out) > 1:
+            community_stat = {
+                "taken": sum(1 for e in fanned_out if e["status"] == "genomen"),
+                "total": len(fanned_out),
+            }
+
     return templates.TemplateResponse(request, "coin.html", {
         "user": user,
         "symbol": symbol,
@@ -646,6 +663,7 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "sparkline": sparkline,
         "recent_activity": recent_activity,
         "coin_stat": coin_stat,
+        "community_stat": community_stat,
         "coins": repo.list_coins(),
         "trendlines": repo.list_trendlines(symbol),
     })

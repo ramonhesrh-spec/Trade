@@ -23,6 +23,35 @@ INTERPRET_BACKOFF_SECONDS = 3
 # een echt support/weerstand niveau ligt daar in de praktijk altijd binnen.
 SOURCE_LEVEL_MAX_DISTANCE_RATIO = 0.5
 
+# Hoeveel opeenvolgende afwijzingen op dezelfde coin nodig zijn voor de
+# "dit valt steeds op dezelfde factor" leeruitleg. 3 is geen toeval meer,
+# 2 kan nog puur toeval zijn.
+REPEATED_REJECTION_COUNT = 3
+
+
+def _extract_failing_factors(reason: str) -> set[str]:
+    """Haalt de factornamen met een ✗ uit een reason-breakdown zoals
+    indicators.confirms_direction die opbouwt ("✓ Trend: ... | ✗ Volume: ...")."""
+    factors = set()
+    for part in reason.split(" | "):
+        part = part.strip()
+        if part.startswith("✗"):
+            factors.add(part[1:].split(":", 1)[0].strip())
+    return factors
+
+
+def _repeated_failing_factor(coin: str) -> str | None:
+    """Als de laatste REPEATED_REJECTION_COUNT afwijzingen voor deze coin
+    allemaal op dezelfde factor vallen, geeft die factornaam terug, anders
+    None. Minder dan dat aantal afwijzingen in de geschiedenis is nog geen
+    patroon, gewoon te weinig data."""
+    reasons = repo.recent_rejected_reasons(coin, limit=REPEATED_REJECTION_COUNT)
+    if len(reasons) < REPEATED_REJECTION_COUNT:
+        return None
+    failing_sets = [_extract_failing_factors(r) for r in reasons]
+    common = set.intersection(*failing_sets)
+    return next(iter(common)) if common else None
+
 
 def _interpret_with_retry(raw_text: str, image_paths: list[str]) -> Interpretation:
     """Probeert de Anthropic interpretatie een paar keer bij een tijdelijke
@@ -209,6 +238,11 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         ind.price, stop_take.stop_loss, stop_take.take_profit,
     )
 
+    # Alleen zinvol bij een afwijzing: hetzelfde patroon melden bij een
+    # bevestigde kans zou de indruk wekken dat er iets mis is terwijl het
+    # juist goed uitpakte.
+    repeated_factor = None if confirmed else await asyncio.to_thread(_repeated_failing_factor, interp.coin)
+
     signal_data = {
         "message_id": message_id,
         "coin": interp.coin,
@@ -231,6 +265,7 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         "take_profit": stop_take.take_profit,
         "context_note": context_note or None,
         "plain_explanation": plain_explanation or None,
+        "repeated_factor": repeated_factor,
     }
     # Een nog niet genomen melding voor de tegenovergestelde richting van
     # dezelfde coin is achterhaald zodra hier een nieuwe melding binnenkomt:

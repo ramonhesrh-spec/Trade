@@ -347,6 +347,21 @@ def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def recent_rejected_reasons(coin: str, limit: int = 3) -> list[str]:
+    """Reason-teksten (de ✓/✗ per factor breakdown) van de laatste `limit`
+    afgekeurde signalen voor deze coin, nieuwste eerst. Gebruikt om te
+    zien of dezelfde factor er herhaaldelijk uitspringt, zie
+    signal_processor._repeated_failing_factor."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT reason FROM signals
+               WHERE coin = ? AND technical_confirmed = 0 AND is_practice = 0
+               ORDER BY id DESC LIMIT ?""",
+            (coin.upper(), limit),
+        ).fetchall()
+        return [r["reason"] for r in rows]
+
+
 def find_open_signal(coin: str, direction: str) -> Optional[dict]:
     """Het meest recente signaal voor deze coin en richting, alleen als
     minstens één gebruiker die nog niet gesloten heeft. Een nieuw bericht

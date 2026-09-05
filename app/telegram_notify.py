@@ -145,6 +145,12 @@ def format_rejected_message(signal: dict) -> str:
     lines.append(signal["reason"])
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
+    if signal.get("repeated_factor"):
+        lines += ["", (
+            f"📚 {signal['coin']} valt nu al meerdere keren op rij op dezelfde factor "
+            f"({signal['repeated_factor']}). Geen toeval meer, mogelijk zit deze coin nu "
+            f"gewoon niet in de juiste fase voor deze trade."
+        )]
     lines += ["", f"👀 Ik blijf {signal['coin']} volgen en stuur een seintje als het beter wordt."]
     lines += ["", _factor_link(signal["coin"])]
     lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
