@@ -186,10 +186,14 @@ BASIC_CONFIRM_MIN_PASSED = 3
 # In de uitgebreide versie telt geen enkele factor apart als harde eis: met
 # 10 losse factoren blokkeert anders één marginale miss (bijvoorbeeld volume
 # op 0.89x in plaats van 1.0x) een verder overtuigend signaal volledig,
-# terwijl 9 van de 10 factoren wel klopten. Meer dan 6 van de 10 (60%) is
+# terwijl 9 van de 10 factoren wel klopten. Minstens 6 van de 10 (60%) is
 # hier de grens: is dat gehaald, dan is het een melding waard, en blijft het
 # aan de gebruiker zelf om op basis van de zichtbare ✓/✗ per factor te
-# beslissen of hij hem neemt.
+# beslissen of hij hem neemt. Vier van deze 10 factoren (BTC-trend, 1u
+# bevestiging, divergentie, liquiditeit) tellen "fail-closed" mee: lukt het
+# ophalen van de data ervoor niet, dan telt de factor als niet gehaald in
+# plaats van dat de melding daarop crasht of de factor overslaat, dus een
+# tijdelijke ophaalfout kan in het slechtste geval één factor kosten.
 CONFIRM_THRESHOLD = 0.6
 
 
@@ -277,5 +281,5 @@ def confirms_direction(
     breakdown = " | ".join(f"{'✓' if ok else '✗'} {name}: {detail}" for name, ok, detail in factors)
 
     passed = sum(1 for _, ok, _ in factors if ok)
-    confirmed = (passed / len(factors)) > CONFIRM_THRESHOLD
+    confirmed = (passed / len(factors)) >= CONFIRM_THRESHOLD
     return confirmed, breakdown
