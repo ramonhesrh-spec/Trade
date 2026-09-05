@@ -129,7 +129,7 @@ a { color: var(--accent); }
 .brand-logo-wrap::before {
   content: ""; position: absolute; inset: -6px; border-radius: 50%;
   background: radial-gradient(circle, var(--accent-bg) 0%, transparent 70%);
-  animation: brand-breathe 2.6s ease-in-out infinite;
+  animation: brand-breathe var(--brand-breathe-duration, 2.6s) ease-in-out infinite;
 }
 .brand-logo { height: 26px; width: 26px; display: block; position: relative; }
 @keyframes brand-breathe {

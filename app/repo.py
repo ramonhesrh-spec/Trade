@@ -954,6 +954,24 @@ def count_pending_signals(user_id: int) -> int:
         return row["n"]
 
 
+def largest_open_position_volatility(user_id: int) -> Optional[float]:
+    """Hoogste atr/atr_avg20-ratio onder de open (niet-oefen) posities van
+    deze gebruiker: hoeveel heftiger de markt nu beweegt dan zijn eigen
+    20-daags gemiddelde. Basis voor het logo dat sneller "ademt" bij hogere
+    volatiliteit. None zonder open posities, of als ENABLE_ADVANCED_FACTORS
+    uit staat en atr_avg20 dus nooit gevuld is."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT s.atr AS atr, s.atr_avg20 AS atr_avg20
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.entry_price IS NOT NULL AND je.exit_price IS NULL
+                     AND s.is_practice = 0""",
+            (user_id,),
+        ).fetchall()
+    ratios = [r["atr"] / r["atr_avg20"] for r in rows if r["atr"] and r["atr_avg20"]]
+    return max(ratios) if ratios else None
+
+
 def winrate_stats(user_id: int) -> dict:
     """Winrate en gemiddeld resultaat apart voor hoog en laag vertrouwen,
     op basis van gesloten trades van deze gebruiker. Winrate alleen zegt

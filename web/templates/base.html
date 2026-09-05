@@ -546,6 +546,16 @@
       return 0;
     }
 
+    // Het logo ademt sneller naarmate de markt onder je open posities
+    // heftiger beweegt dan zijn eigen 20-daags gemiddelde (atr/atr_avg20).
+    // Zonder open posities of zonder die data: de neutrale basissnelheid.
+    function brandBreatheDuration(ratio) {
+      if (!ratio || !isFinite(ratio)) return "2.6s";
+      var duration = 2.6 / Math.max(ratio, 0.4);
+      duration = Math.min(4.5, Math.max(1.1, duration));
+      return duration.toFixed(2) + "s";
+    }
+
     // Een nieuw signaal terwijl het dashboard al open staat, verdient een
     // eenmalig visueel seintje, niet alleen een stiller wordend cijfer op
     // het app-icoon. lastPendingCount begint op null: de allereerste keer
@@ -576,6 +586,7 @@
           document.documentElement.style.setProperty("--heartbeat-duration", heartbeatDuration(s.last_message_at));
           document.documentElement.style.setProperty("--ambient-scroll-duration", ambientScrollDuration(s.last_message_at));
           document.documentElement.style.setProperty("--portfolio-glow", portfolioGlow(s.week_result_eur));
+          document.documentElement.style.setProperty("--brand-breathe-duration", brandBreatheDuration(s.volatility_ratio));
 
           if (lastPendingCount !== null && s.pending_count > lastPendingCount) {
             triggerSignalWave();
