@@ -257,6 +257,19 @@ async def send_expired_pending_message(coin: str, new_direction: str, chat_id: s
     logger.info("Vervallen-kans melding verstuurd voor %s naar chat %s", coin, chat_id)
 
 
+async def send_admin_alert(text: str) -> None:
+    """Stuurt een systeemwaarschuwing naar de beheerder (ADMIN_TELEGRAM_CHAT_ID
+    in .env), voor problemen die niets met een specifiek handelssignaal te
+    maken hebben: de zelfcheck (app/health_check.py) en herhaalde
+    API-fouten (signal_processor.py). Zonder ADMIN_TELEGRAM_CHAT_ID komt
+    hier niks aan, dat blijft dan alleen in de serverlog staan."""
+    if not config.TELEGRAM_BOT_TOKEN or not config.ADMIN_TELEGRAM_CHAT_ID:
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    await bot.send_message(chat_id=config.ADMIN_TELEGRAM_CHAT_ID, text=text)
+    logger.info("Admin-alert verstuurd")
+
+
 async def send_demo_signal_message(chat_id: str) -> None:
     """Stuurt een voorbeeldmelding, in exact dezelfde opmaak als een echte
     bevestigde kans, zodat een nieuwe gebruiker meteen ziet hoe dat eruit

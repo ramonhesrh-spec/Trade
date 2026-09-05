@@ -28,6 +28,15 @@ SOURCE_LEVEL_MAX_DISTANCE_RATIO = 0.5
 # 2 kan nog puur toeval zijn.
 REPEATED_REJECTION_COUNT = 3
 
+# Hoeveel opeenvolgende, definitief mislukte Anthropic-interpretaties (elk
+# al 3x geprobeerd, zie INTERPRET_ATTEMPTS) nodig zijn voor een alert naar
+# de beheerder. Eén hapering kan de API zelf zijn, meerdere berichten op
+# rij wijst op iets structureels (API-sleutel, quotum, een storing).
+# In-memory, dus reset bij een herstart van het proces, dat is prima: een
+# herstart is zelf al een schone start.
+INTERPRET_FAILURE_ALERT_THRESHOLD = 3
+_consecutive_interpret_failures = 0
+
 
 def _extract_failing_factors(reason: str) -> set[str]:
     """Haalt de factornamen met een ✗ uit een reason-breakdown zoals
@@ -81,6 +90,7 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
         )
         return
 
+    global _consecutive_interpret_failures
     try:
         interp = await asyncio.to_thread(_interpret_with_retry, raw_text, image_paths)
     except Exception as exc:
@@ -90,8 +100,18 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
             message_id, None, None, None, True,
             note=f"API fout, kon niet verwerkt worden: {exc}",
         )
+        _consecutive_interpret_failures += 1
+        if _consecutive_interpret_failures >= INTERPRET_FAILURE_ALERT_THRESHOLD:
+            try:
+                await telegram_notify.send_admin_alert(
+                    f"🚨 Anthropic interpretatie is nu {_consecutive_interpret_failures} berichten op rij "
+                    f"mislukt. Check de serverlog en de API-status.\n\nLaatste fout: {exc}"
+                )
+            except Exception:
+                logger.exception("Kon admin-alert voor herhaalde API-fouten niet versturen")
         return
 
+    _consecutive_interpret_failures = 0
     repo.mark_message_processed(message_id, interp.coin, interp.direction, interp.category,
                                  interp.unclear, note=interp.reason)
 

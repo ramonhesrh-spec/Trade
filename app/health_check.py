@@ -14,9 +14,7 @@ import asyncio
 import logging
 import subprocess
 
-from telegram import Bot
-
-from app import config
+from app import config, telegram_notify
 
 logger = logging.getLogger("health_check")
 
@@ -65,9 +63,8 @@ async def run() -> None:
         + "━" * 14 + "\n"
         + "\n".join(f"⚠️ {p}" for p in problems)
     )
-    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
     try:
-        await bot.send_message(chat_id=config.ADMIN_TELEGRAM_CHAT_ID, text=text)
+        await telegram_notify.send_admin_alert(text)
     except Exception:
         logger.exception("Kon zelfcheck-alert niet versturen naar de beheerder")
 
