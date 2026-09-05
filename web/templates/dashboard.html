@@ -3,6 +3,29 @@
 {% block title %}Dashboard — HesPulse{% endblock %}
 {% block content %}
 
+{% if not onboarding_complete %}
+<section class="card onboarding-checklist" style="--i: 0">
+  <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9,11 12,14 20,6"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Nog even instellen</h3>
+  <ul class="checklist">
+    <li class="{{ 'checklist-done' if onboarding.telegram_linked else '' }}">
+      {{ "✓" if onboarding.telegram_linked else "○" }}
+      Telegram gekoppeld
+      {% if not onboarding.telegram_linked %}<a href="#portfolio-card">vul je chat ID in</a>{% endif %}
+    </li>
+    <li class="{{ 'checklist-done' if onboarding.portfolio_set else '' }}">
+      {{ "✓" if onboarding.portfolio_set else "○" }}
+      Portfolio ingevuld
+      {% if not onboarding.portfolio_set %}<a href="#portfolio-card">vul je omvang in</a>{% endif %}
+    </li>
+    <li class="{{ 'checklist-done' if onboarding.first_alert_received else '' }}">
+      {{ "✓" if onboarding.first_alert_received else "○" }}
+      Eerste melding ontvangen
+      {% if not onboarding.first_alert_received and onboarding.telegram_linked %}<a href="#portfolio-card">stuur een voorbeeld</a>{% endif %}
+    </li>
+  </ul>
+</section>
+{% endif %}
+
 <section class="summary-strip" style="--i: 0">
   <div class="summary-stat">
     <span class="summary-value">{{ pending_entries|length }}</span>
@@ -299,8 +322,20 @@
       <label>Telegram chat ID
         <input type="text" name="telegram_chat_id" value="{{ user.telegram_chat_id or '' }}" placeholder="optioneel">
       </label>
+      <label>Stille uren van
+        <input type="time" name="quiet_hours_start" value="{{ user.quiet_hours_start or '' }}">
+      </label>
+      <label>tot
+        <input type="time" name="quiet_hours_end" value="{{ user.quiet_hours_end or '' }}">
+      </label>
       <button type="submit">Opslaan</button>
     </form>
+    <p class="muted levels-hint">Binnen dit venster komt ook een bevestigde kans stil binnen, zonder geluid. Beide velden leeg laten zet stille uren weer uit.</p>
+    {% if user.telegram_chat_id %}
+    <form action="/telegram/voorbeeld" method="post" class="inline-form">
+      <button type="submit" class="button-link">Stuur mezelf een voorbeeldmelding</button>
+    </form>
+    {% endif %}
   </div>
 </section>
 </details>

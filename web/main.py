@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import advice as advice_module
-from app import config, db, exchange, explain, indicators, repo, risk, security
+from app import config, db, exchange, explain, indicators, repo, risk, security, telegram_notify
 from app.signal_processor import compute_advanced_extra_factors
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -288,6 +288,17 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     coins = repo.list_coins()
     unclear_messages = repo.recent_unclear_messages()
 
+    # Setup-checklist: alleen zichtbaar zolang niet alle stappen gezet zijn,
+    # verdwijnt vanzelf zodra dat wel zo is. "Eerste melding ontvangen" kijkt
+    # naar telegram_sent op een echt signaal, een voorbeeldmelding
+    # (/telegram/voorbeeld) telt hier bewust niet in mee.
+    onboarding = {
+        "telegram_linked": bool(user["telegram_chat_id"]),
+        "portfolio_set": user["portfolio_eur"] > 0,
+        "first_alert_received": any(e["telegram_sent"] for e in all_entries),
+    }
+    onboarding_complete = all(onboarding.values())
+
     # Risico dat nu echt in de markt staat: alleen trades die al genomen
     # zijn (eigen entry ingevuld), niet nog niet bevestigde signalen, die
     # hebben nog geen kapitaal gekost.
@@ -307,6 +318,8 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
 
     return templates.TemplateResponse(request, "dashboard.html", {
         "user": user,
+        "onboarding": onboarding,
+        "onboarding_complete": onboarding_complete,
         "entries": entries,
         "open_entries": open_entries,
         "taken_entries": taken_entries,
@@ -398,9 +411,29 @@ async def update_settings(
     portfolio_eur: float = Form(...),
     risk_percent: float = Form(...),
     telegram_chat_id: str = Form(""),
+    quiet_hours_start: str = Form(""),
+    quiet_hours_end: str = Form(""),
     user: dict = Depends(require_login),
 ):
-    repo.update_user_settings(user["id"], portfolio_eur, risk_percent, telegram_chat_id.strip() or None)
+    # Allebei leeg = geen stille uren, blijft altijd geluid geven. Slechts
+    # één van de twee ingevuld heeft geen betekenis, dan ook geen venster.
+    start = quiet_hours_start.strip() or None
+    end = quiet_hours_end.strip() or None
+    if not (start and end):
+        start, end = None, None
+    repo.update_user_settings(
+        user["id"], portfolio_eur, risk_percent, telegram_chat_id.strip() or None, start, end,
+    )
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@app.post("/telegram/voorbeeld")
+async def send_demo_telegram_message(user: dict = Depends(require_login)):
+    """Stuurt een voorbeeldmelding naar de gekoppelde Telegram chat van de
+    ingelogde gebruiker, zodat die meteen ziet hoe een echte kans eruitziet
+    zonder op een echt signaal te hoeven wachten."""
+    if user["telegram_chat_id"]:
+        await telegram_notify.send_demo_signal_message(user["telegram_chat_id"])
     return RedirectResponse(url="/dashboard", status_code=303)
 
 

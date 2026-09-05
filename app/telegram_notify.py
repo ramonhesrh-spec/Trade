@@ -2,6 +2,8 @@
 melding, de beslissing blijft aan de gebruiker."""
 import asyncio
 import logging
+from datetime import datetime
+from typing import Optional
 
 from telegram import Bot, Update
 from telegram.ext import Application, CommandHandler, ContextTypes
@@ -65,6 +67,25 @@ OPEN_RISK_WARNING_PCT = 10.0
 def _open_risk_line(open_risk_pct: float) -> str:
     marker = "⚠️" if open_risk_pct >= OPEN_RISK_WARNING_PCT else "📊"
     return f"{marker} Dit zou je totale open risico op {open_risk_pct:.1f}% van je portfolio brengen."
+
+
+def is_quiet_now(quiet_hours_start: Optional[str], quiet_hours_end: Optional[str]) -> bool:
+    """Bepaalt of het nu binnen de stille uren van de gebruiker valt
+    (bijvoorbeeld "23:00" tot "07:00", ook een venster dat over middernacht
+    heen loopt). Gebruikt de servertijd, er wordt geen tijdzone per
+    gebruiker bijgehouden. Beide velden leeg (None) betekent geen stille
+    uren ingesteld, dan altijd False."""
+    if not quiet_hours_start or not quiet_hours_end:
+        return False
+    try:
+        start = datetime.strptime(quiet_hours_start, "%H:%M").time()
+        end = datetime.strptime(quiet_hours_end, "%H:%M").time()
+    except ValueError:
+        return False
+    now = datetime.now().time()
+    if start <= end:
+        return start <= now < end
+    return now >= start or now < end
 
 
 def _factor_link(coin: str) -> str:
@@ -157,26 +178,31 @@ def format_update_message(signal: dict) -> str:
     return "\n".join(lines)
 
 
-async def send_signal_update(signal: dict, chat_id: str) -> None:
+async def send_signal_update(signal: dict, chat_id: str, force_silent: bool = False) -> None:
     """Kort bericht als een bestaand, nog openstaand signaal is bijgewerkt
-    door een nieuw bericht over dezelfde coin en richting."""
+    door een nieuw bericht over dezelfde coin en richting. force_silent
+    (stille uren van de gebruiker) onderdrukt geluid ook bij een
+    bevestigde kans."""
     if not config.TELEGRAM_BOT_TOKEN or not chat_id:
         logger.warning("Telegram token of chat ID ontbreekt, update niet verstuurd")
         return
 
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
     text = format_update_message(signal)
-    await bot.send_message(chat_id=chat_id, text=text, disable_notification=not signal["technical_confirmed"])
+    silent = force_silent or not signal["technical_confirmed"]
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=silent)
     logger.info("Telegram update verstuurd voor %s %s naar chat %s",
                 signal["coin"], signal["direction"], chat_id)
 
 
-async def send_signal(signal: dict, chat_id: str) -> None:
+async def send_signal(signal: dict, chat_id: str, force_silent: bool = False) -> None:
     """Verstuurt de melding naar één specifieke chat ID. Elke gebruiker heeft
     zijn eigen chat ID en dus zijn eigen risicobedrag in het bericht. Ook een
     afgewezen tip krijgt een bericht (format_rejected_message), stilte voelt
     voor de gebruiker aan als "er is niks gebeurd" in plaats van "getoetst en
-    afgekeurd, met reden"."""
+    afgekeurd, met reden". force_silent komt van de stille-uren instelling
+    van de gebruiker (zie is_quiet_now): onderdrukt geluid ook bij een
+    bevestigde kans, die blijft normaal wel geluid geven."""
     if not config.TELEGRAM_BOT_TOKEN or not chat_id:
         logger.warning("Telegram token of chat ID ontbreekt, melding niet verstuurd")
         return
@@ -187,8 +213,10 @@ async def send_signal(signal: dict, chat_id: str) -> None:
     # Een bevestigde kans mag geluid maken, een afwijzing niet: sinds elke
     # tip een bericht krijgt (ook een "geen kans"), zou anders elke deling
     # in de bron-community de telefoon laten afgaan, ook als er niks te
-    # doen valt.
-    await bot.send_message(chat_id=chat_id, text=text, disable_notification=not confirmed)
+    # doen valt. Tenzij de gebruiker nu in zijn eigen stille uren zit, dan
+    # blijft ook een bevestigde kans stil, hij ziet hem 's ochtends wel.
+    silent = force_silent or not confirmed
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=silent)
     logger.info("Telegram melding verstuurd voor %s %s naar chat %s",
                 signal["coin"], signal["direction"], chat_id)
 
@@ -221,6 +249,33 @@ async def send_expired_pending_message(coin: str, new_direction: str, chat_id: s
     )
     await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
     logger.info("Vervallen-kans melding verstuurd voor %s naar chat %s", coin, chat_id)
+
+
+async def send_demo_signal_message(chat_id: str) -> None:
+    """Stuurt een voorbeeldmelding, in exact dezelfde opmaak als een echte
+    bevestigde kans, zodat een nieuwe gebruiker meteen ziet hoe dat eruit
+    ziet zonder op een echt signaal te hoeven wachten. Duidelijk gelabeld
+    als voorbeeld, en maakt geen signaal of logboekregel aan: telt nergens
+    mee in de echte statistieken (ook niet in de onboarding-checklist, die
+    kijkt naar journal_entries.telegram_sent van een echt signaal)."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    demo_signal = {
+        "coin": "BTC", "direction": "long", "confidence": "hoog vertrouwen",
+        "price": 61250.0, "take_profit": 63400.0, "stop_loss": 60100.0,
+        "technical_confirmed": 1,
+        "reason": "✓ Trend: EMA9 boven EMA21 | ✓ Momentum: MACD boven signaallijn | ✓ RSI 58 | ✓ Volume 1.34x gemiddeld",
+        "context_note": None,
+        "plain_explanation": (
+            "De trend wijst omhoog en het momentum bevestigt dit: de prijs "
+            "beweegt sterker dan de laatste 20 candles gebruikelijk was."
+        ),
+        "open_risk_pct": 3.2,
+    }
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = f"📋 VOORBEELDMELDING, zo ziet een echte kans eruit\n{DIVIDER}\n\n{format_signal_message(demo_signal)}"
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
+    logger.info("Voorbeeldmelding verstuurd naar chat %s", chat_id)
 
 
 # ---------------------------------------------------------------------------

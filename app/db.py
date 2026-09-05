@@ -75,6 +75,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "position_size_override" not in existing_journal:
         conn.execute("ALTER TABLE journal_entries ADD COLUMN position_size_override REAL")
 
+    existing_users = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
+    if "quiet_hours_start" not in existing_users:
+        conn.execute("ALTER TABLE users ADD COLUMN quiet_hours_start TEXT")
+    if "quiet_hours_end" not in existing_users:
+        conn.execute("ALTER TABLE users ADD COLUMN quiet_hours_end TEXT")
+
 
 def get_setting(key: str, default: str = "") -> str:
     with session() as conn:

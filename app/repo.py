@@ -282,12 +282,14 @@ def list_users() -> list[dict]:
 def update_user_settings(
     user_id: int, portfolio_eur: float, risk_percent: float,
     telegram_chat_id: Optional[str],
+    quiet_hours_start: Optional[str] = None, quiet_hours_end: Optional[str] = None,
 ) -> None:
     with db.session() as conn:
         conn.execute(
-            """UPDATE users SET portfolio_eur = ?, risk_percent = ?, telegram_chat_id = ?
+            """UPDATE users SET portfolio_eur = ?, risk_percent = ?, telegram_chat_id = ?,
+                      quiet_hours_start = ?, quiet_hours_end = ?
                WHERE id = ?""",
-            (portfolio_eur, risk_percent, telegram_chat_id, user_id),
+            (portfolio_eur, risk_percent, telegram_chat_id, quiet_hours_start, quiet_hours_end, user_id),
         )
 
 

@@ -291,13 +291,14 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
             current_open_risk = repo.total_open_risk_eur(user["id"])
             open_risk_pct = (current_open_risk + risk_eur) / user["portfolio_eur"] * 100
 
+        force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             await telegram_notify.send_signal(
                 {
                     **signal_data, "risk_eur": risk_eur, "position_size": position_size,
                     "open_risk_pct": open_risk_pct,
                 },
-                chat_id=user["telegram_chat_id"],
+                chat_id=user["telegram_chat_id"], force_silent=force_silent,
             )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
@@ -315,8 +316,11 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
         entry = entries.get(user["id"])
         if not entry or entry["exit_price"] is not None or not user["telegram_chat_id"]:
             continue
+        force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            await telegram_notify.send_signal_update(signal_data, chat_id=user["telegram_chat_id"])
+            await telegram_notify.send_signal_update(
+                signal_data, chat_id=user["telegram_chat_id"], force_silent=force_silent,
+            )
         except Exception:
             logger.exception("Telegram update voor gebruiker %s, signaal %s is mislukt",
                               user["username"], signal_id)

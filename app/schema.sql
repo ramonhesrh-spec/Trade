@@ -10,7 +10,12 @@ CREATE TABLE IF NOT EXISTS users (
     portfolio_eur REAL NOT NULL DEFAULT 0,
     risk_percent REAL NOT NULL DEFAULT 1.0,
     telegram_chat_id TEXT,
-    created_at TEXT NOT NULL
+    created_at TEXT NOT NULL,
+    -- Stille uren, bijvoorbeeld "23:00" / "07:00": in dat venster komt ook
+    -- een bevestigde kans stil binnen. Beide leeg (NULL) = geen stille
+    -- uren, altijd geluid bij een bevestigde kans (het bestaande gedrag).
+    quiet_hours_start TEXT,
+    quiet_hours_end TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (
