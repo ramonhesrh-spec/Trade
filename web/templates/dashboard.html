@@ -487,10 +487,10 @@
           {% else %}
             <span class="muted">-</span>
           {% endif %}
-          <details class="confidence-detail js-accordion note-toggle">
+          <details class="confidence-detail js-accordion note-toggle" {{ "open" if not e.note else "" }}>
             <summary class="confidence-why">{% if e.note %}{{ e.note[:30] }}{{ "…" if e.note|length > 30 else "" }}{% else %}+ notitie{% endif %}</summary>
             <form action="/journal/{{ e.id }}/note" method="post" class="note-form">
-              <input type="text" name="note" value="{{ e.note or '' }}" placeholder="toelichting">
+              <input type="text" name="note" value="{{ e.note or '' }}" placeholder="Wat ging hier goed of niet?">
               <button type="submit">Opslaan</button>
             </form>
           </details>

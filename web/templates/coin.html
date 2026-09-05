@@ -127,7 +127,7 @@
   <div class="table-scroll">
   <table class="signals">
     <thead>
-      <tr><th class="num">Prijs</th><th>Patroon</th><th>Datum</th></tr>
+      <tr><th class="num">Prijs</th><th>Patroon</th><th>Datum</th><th>Uitkomst sindsdien</th></tr>
     </thead>
     <tbody>
       {% for lvl in source_levels %}
@@ -135,6 +135,12 @@
         <td class="num">{{ lvl.price_level }}</td>
         <td>{{ lvl.pattern_name or "-" }}</td>
         <td class="muted">{{ lvl.created_at[:10] }}</td>
+        <td class="muted">
+          {% if lvl.outcome_pct is none %}-
+          {% elif lvl.outcome_reached %}<span class="pos">✓ geraakt</span>
+          {% else %}kwam tot {{ "%.1f"|format(lvl.outcome_pct) }}% afstand
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>

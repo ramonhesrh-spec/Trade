@@ -14,6 +14,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import pandas as pd
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
@@ -234,6 +235,43 @@ async def _enrich_open_positions(entries: list[dict]) -> list[dict]:
             entry["stop_loss"], entry["risk_eur"],
         )
     return entries
+
+
+async def _annotate_level_outcomes(symbol: str, levels: list[dict]) -> None:
+    """Vult elk bron niveau aan met hoe dicht de prijs er sindsdien bij
+    kwam: 0 als een candle het niveau daadwerkelijk raakte of kruiste,
+    anders de kleinste afstand als percentage van het niveau zelf. Eén
+    OHLCV-aanroep voor de hele coinpagina (vanaf het oudste niveau), per
+    niveau alleen candles ná zijn eigen created_at meegenomen. Faalt de
+    aanroep (exchange down, geen historie zo ver terug), dan blijft
+    `outcome_pct` gewoon None, dat is geen kritieke informatie."""
+    for level in levels:
+        level["outcome_pct"] = None
+        level["outcome_reached"] = False
+    if not levels:
+        return
+    oldest = min(levels, key=lambda lvl: lvl["created_at"])
+    since_ms = int(pd.Timestamp(oldest["created_at"]).timestamp() * 1000)
+    try:
+        df = await asyncio.to_thread(exchange.fetch_ohlcv, symbol, config.TIMEFRAME, 500, since_ms)
+    except Exception:
+        return
+    if df.empty:
+        return
+    for level in levels:
+        candles = df[df["timestamp"] >= pd.Timestamp(level["created_at"])]
+        if candles.empty:
+            continue
+        price_level = level["price_level"]
+        touched = ((candles["low"] <= price_level) & (candles["high"] >= price_level)).any()
+        if touched:
+            level["outcome_reached"] = True
+            level["outcome_pct"] = 0.0
+        else:
+            closest = min(
+                (abs(price_level - candles["low"].min()), abs(price_level - candles["high"].max())),
+            )
+            level["outcome_pct"] = (closest / price_level * 100) if price_level else None
 
 
 def _filter_journal(all_entries: list[dict], status: str) -> list[dict]:
@@ -602,6 +640,7 @@ async def create_practice_trade(
 async def coin_page(request: Request, symbol: str, user: dict = Depends(require_login)):
     symbol = symbol.upper()
     source_levels = repo.list_source_levels(symbol)
+    await _annotate_level_outcomes(symbol, source_levels)
     entries = [e for e in repo.list_journal_for_coin(user["id"], symbol) if not e["is_practice"]]
     open_trades = await _enrich_open_positions(
         [e for e in entries if e["entry_price"] is not None and e["exit_price"] is None]

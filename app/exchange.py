@@ -54,11 +54,18 @@ def _with_retry(label: str, func, *args, **kwargs):
     raise last_exc
 
 
-def fetch_ohlcv(coin: str, timeframe: str = config.TIMEFRAME, limit: int = 200) -> pd.DataFrame:
-    """Haalt candles op en geeft een DataFrame met open, high, low, close, volume."""
+def fetch_ohlcv(
+    coin: str, timeframe: str = config.TIMEFRAME, limit: int = 200, since: int | None = None,
+) -> pd.DataFrame:
+    """Haalt candles op en geeft een DataFrame met open, high, low, close, volume.
+    `since` (milliseconden sinds epoch) haalt candles vanaf een specifiek
+    moment op in plaats van de laatste `limit` candles tot nu, gebruikt om
+    terug te kijken vanaf het moment dat een bron niveau werd gedeeld."""
     exchange = get_exchange()
     symbol = to_symbol(coin)
-    raw = _with_retry(f"fetch_ohlcv {symbol}", exchange.fetch_ohlcv, symbol, timeframe=timeframe, limit=limit)
+    raw = _with_retry(
+        f"fetch_ohlcv {symbol}", exchange.fetch_ohlcv, symbol, timeframe=timeframe, limit=limit, since=since,
+    )
     df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
     df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
     return df
