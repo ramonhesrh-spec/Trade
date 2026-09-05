@@ -16,6 +16,13 @@ logger = logging.getLogger("signal_processor")
 INTERPRET_ATTEMPTS = 3
 INTERPRET_BACKOFF_SECONDS = 3
 
+# Hoeveel een afgelezen niveau uit een screenshot maximaal van de live prijs
+# mag afwijken (als fractie van de live prijs) om nog als aannemelijk te
+# gelden. Een decimale leesfout of een niveau van een heel ander tijdvak
+# levert al snel een niveau tientallen procenten van de huidige prijs af,
+# een echt support/weerstand niveau ligt daar in de praktijk altijd binnen.
+SOURCE_LEVEL_MAX_DISTANCE_RATIO = 0.5
+
 
 def _interpret_with_retry(raw_text: str, image_paths: list[str]) -> Interpretation:
     """Probeert de Anthropic interpretatie een paar keer bij een tijdelijke
@@ -67,12 +74,24 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
     # Bron niveaus uit afbeeldingen worden altijd bewaard, ongeacht categorie.
     if interp.source_levels:
         tracked = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
-        if tracked:
-            for level in interp.source_levels:
-                repo.insert_source_level(message_id, interp.coin, level.price_level, level.pattern_name)
-        else:
+        if not tracked:
             logger.info("Coin %s uit bron niveaus bestaat niet op de exchange, niveaus niet bewaard",
                         interp.coin)
+        else:
+            live_price = None
+            try:
+                live_price = await asyncio.to_thread(exchange.fetch_last_price, interp.coin)
+            except Exception:
+                logger.exception("Live prijs voor %s kon niet opgehaald worden, niveaus zonder aannemelijkheidscheck bewaard",
+                                  interp.coin)
+            for level in interp.source_levels:
+                if live_price and abs(level.price_level - live_price) / live_price > SOURCE_LEVEL_MAX_DISTANCE_RATIO:
+                    logger.warning(
+                        "Niveau %.4f voor %s ligt te ver van de live prijs %.4f, waarschijnlijk verkeerd afgelezen, niet bewaard",
+                        level.price_level, interp.coin, live_price,
+                    )
+                    continue
+                repo.insert_source_level(message_id, interp.coin, level.price_level, level.pattern_name)
 
     if interp.category != "day_trading":
         logger.info("Bericht %s valt in categorie %s, alleen gelogd, geen melding",
@@ -212,10 +231,7 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         repo.update_signal(signal_id, signal_data)
         logger.info("Signaal %s bijgewerkt (was al open voor %s %s), bevestigd=%s",
                     signal_id, interp.coin, interp.direction, confirmed)
-        if confirmed:
-            await _notify_signal_update(signal_id, signal_data, ind.price, stop_take.stop_loss)
-        else:
-            logger.info("Signaal %s is laag vertrouwen, geen Telegram update verstuurd", signal_id)
+        await _notify_signal_update(signal_id, signal_data)
         return
 
     signal_id = repo.insert_signal(signal_data)
@@ -223,20 +239,20 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
                 interp.direction, confirmed)
 
     # Elke gebruiker krijgt zijn eigen logboekregel, ongeacht vertrouwen, zo
-    # blijft de trackrecord per vertrouwen-niveau compleet. Telegram is
-    # alleen voor hoog vertrouwen, dat zijn de enige "perfecte setups".
+    # blijft de trackrecord per vertrouwen-niveau compleet. Ook een afgewezen
+    # tip krijgt een Telegram bericht (zonder stop loss/take profit/grootte,
+    # dat is geen uitvoerbare trade opzet), anders voelt stilte aan als "er
+    # is niks gebeurd" in plaats van "getoetst, met deze reden afgekeurd".
     for user in repo.list_users():
         risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
         entry_id = repo.create_journal_entry(signal_id, user["id"], risk_eur)
 
-        if not confirmed:
-            continue
         if not user["telegram_chat_id"]:
             logger.info("Gebruiker %s heeft geen telegram_chat_id, geen melding verstuurd",
                         user["username"])
             continue
 
-        position_size = risk.compute_position_size(risk_eur, ind.price, stop_take.stop_loss)
+        position_size = risk.compute_position_size(risk_eur, ind.price, stop_take.stop_loss) if confirmed else None
         try:
             await telegram_notify.send_signal(
                 {**signal_data, "risk_eur": risk_eur, "position_size": position_size},
@@ -246,13 +262,13 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         except Exception:
             logger.exception("Telegram melding voor gebruiker %s, signaal %s is mislukt",
                               user["username"], signal_id)
-    if not confirmed:
-        logger.info("Signaal %s is laag vertrouwen, geen Telegram melding verstuurd", signal_id)
 
 
-async def _notify_signal_update(signal_id: int, signal_data: dict, price: float, stop_loss: float) -> None:
-    """Stuurt een korte update-melding naar gebruikers die dit signaal nog
-    open hebben staan. Maakt geen nieuwe logboekregel aan, die bestaat al."""
+async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
+    """Stuurt een update-melding naar gebruikers die dit signaal nog open
+    hebben staan, bevestigd of niet: een gewijzigde toetsing op een nieuw
+    bericht over dezelfde coin is altijd het melden waard. Maakt geen nieuwe
+    logboekregel aan, die bestaat al."""
     entries = {e["user_id"]: e for e in repo.list_journal_entries_for_signal(signal_id)}
     for user in repo.list_users():
         entry = entries.get(user["id"])

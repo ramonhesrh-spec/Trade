@@ -176,6 +176,13 @@ def check_liquidity(quote_volume_24h: float, minimum: float = MIN_QUOTE_VOLUME_2
     return ("Liquiditeit", ok, detail)
 
 
+# Basisversie: 3 van de 4 factoren is genoeg. Alle 4 verplicht bleek te
+# streng, één factor die nét mist (bijvoorbeeld volume op 0.97x in plaats
+# van 1.0x) blokkeerde dan een verder overtuigend signaal volledig. Bij 3
+# van de 4 blijft welke factor(en) niet klopten zichtbaar in de meegestuurde
+# uitleg, zodat de gebruiker zelf ziet waar de kans zwakker staat.
+BASIC_CONFIRM_MIN_PASSED = 3
+
 # In de uitgebreide versie telt geen enkele factor apart als harde eis: met
 # 10 losse factoren blokkeert anders één marginale miss (bijvoorbeeld volume
 # op 0.89x in plaats van 1.0x) een verder overtuigend signaal volledig,
@@ -250,7 +257,7 @@ def confirms_direction(
 
     if not include_advanced:
         breakdown = " | ".join(f"{'✓' if ok else '✗'} {name}: {detail}" for name, ok, detail in factors)
-        confirmed = all(ok for _, ok, _ in factors)
+        confirmed = sum(1 for _, ok, _ in factors if ok) >= BASIC_CONFIRM_MIN_PASSED
         return confirmed, breakdown
 
     adx_ok = ind.adx >= ADX_MIN

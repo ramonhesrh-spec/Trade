@@ -12,6 +12,8 @@ logger = logging.getLogger("telegram_notify")
 
 
 def format_signal_message(signal: dict) -> str:
+    """Volledige melding voor een bevestigde kans, met stop loss, take
+    profit en positiegrootte: dit is een echte, uitvoerbare trade opzet."""
     direction_label = "LONG" if signal["direction"] == "long" else "SHORT"
     confidence_label = signal["confidence"].upper()
 
@@ -25,11 +27,9 @@ def format_signal_message(signal: dict) -> str:
     ]
     if signal.get("position_size"):
         lines.append(f"Voorgestelde grootte: {signal['position_size']:.6f} {signal['coin']}")
-    lines += [
-        "",
-        f"Technisch bevestigd: {'ja' if signal['technical_confirmed'] else 'nee'}",
-        signal["reason"],
-    ]
+    if signal.get("plain_explanation"):
+        lines += ["", signal["plain_explanation"]]
+    lines += ["", signal["reason"]]
 
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
@@ -39,19 +39,49 @@ def format_signal_message(signal: dict) -> str:
     return "\n".join(lines)
 
 
+def format_rejected_message(signal: dict) -> str:
+    """Melding voor een gedeelde tip die de technische toetsing niet
+    haalt: geen stop loss/take profit/positiegrootte, want dit is geen
+    uitvoerbare trade opzet. Wel altijd een bericht, met de reden in
+    gewone taal, zodat stilte nooit als "geen reactie" aanvoelt. Het
+    systeem blijft deze coin volgen via de periodieke niveau-check, dat
+    wordt hier expliciet benoemd."""
+    direction_label = "LONG" if signal["direction"] == "long" else "SHORT"
+    lines = [
+        f"GEEN STERKE KANS — {signal['coin']} {direction_label}",
+        "",
+        f"Prijs: {signal['price']:.4f}",
+    ]
+    if signal.get("plain_explanation"):
+        lines += ["", signal["plain_explanation"]]
+    lines += ["", signal["reason"]]
+
+    if signal.get("context_note"):
+        lines += ["", signal["context_note"]]
+
+    lines += ["", f"Ik blijf {signal['coin']} volgen en stuur een seintje als het beter wordt."]
+    lines += ["", config.DISCLAIMER]
+
+    return "\n".join(lines)
+
+
 def format_update_message(signal: dict) -> str:
     confidence_label = signal["confidence"].upper()
+    status = "BEVESTIGD" if signal["technical_confirmed"] else "NOG GEEN STERKE KANS"
     lines = [
-        f"UPDATE, {confidence_label} — {signal['coin']} "
+        f"UPDATE, {status} ({confidence_label}) — {signal['coin']} "
         f"{'LONG' if signal['direction'] == 'long' else 'SHORT'}",
         "",
         f"Nieuwe prijs: {signal['price']:.4f}",
-        f"Nieuwe stop loss: {signal['stop_loss']:.4f}",
-        f"Nieuw take profit: {signal['take_profit']:.4f}",
-        "",
-        f"Technisch bevestigd: {'ja' if signal['technical_confirmed'] else 'nee'}",
-        signal["reason"],
     ]
+    if signal["technical_confirmed"]:
+        lines += [
+            f"Nieuwe stop loss: {signal['stop_loss']:.4f}",
+            f"Nieuw take profit: {signal['take_profit']:.4f}",
+        ]
+    if signal.get("plain_explanation"):
+        lines += ["", signal["plain_explanation"]]
+    lines += ["", signal["reason"]]
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
     lines += ["", config.DISCLAIMER]
@@ -74,13 +104,16 @@ async def send_signal_update(signal: dict, chat_id: str) -> None:
 
 async def send_signal(signal: dict, chat_id: str) -> None:
     """Verstuurt de melding naar één specifieke chat ID. Elke gebruiker heeft
-    zijn eigen chat ID en dus zijn eigen risicobedrag in het bericht."""
+    zijn eigen chat ID en dus zijn eigen risicobedrag in het bericht. Ook een
+    afgewezen tip krijgt een bericht (format_rejected_message), stilte voelt
+    voor de gebruiker aan als "er is niks gebeurd" in plaats van "getoetst en
+    afgekeurd, met reden"."""
     if not config.TELEGRAM_BOT_TOKEN or not chat_id:
         logger.warning("Telegram token of chat ID ontbreekt, melding niet verstuurd")
         return
 
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
-    text = format_signal_message(signal)
+    text = format_signal_message(signal) if signal["technical_confirmed"] else format_rejected_message(signal)
     await bot.send_message(chat_id=chat_id, text=text)
     logger.info("Telegram melding verstuurd voor %s %s naar chat %s",
                 signal["coin"], signal["direction"], chat_id)
