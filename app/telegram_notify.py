@@ -284,6 +284,7 @@ async def send_expired_pending_message(coin: str, new_direction: str, chat_id: s
         f"({_direction_label(new_direction)}) binnen, die maakt dit signaal achterhaald."
     )
     await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
+    logger.info("Vervallen-kans melding verstuurd voor %s naar chat %s", coin, chat_id)
 
 
 async def send_stale_pending_message(coin: str, chat_id: str) -> None:
