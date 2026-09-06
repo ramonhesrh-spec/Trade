@@ -82,6 +82,11 @@ def compute_stop_take_from_levels(
     if direction not in ("long", "short"):
         raise ValueError(f"onbekende richting: {direction}")
 
+    # Een niveau van 0 of negatief levert onzin op (een stop onder nul); de
+    # plausibiliteitscheck bij het opslaan vangt dit alleen af als de live
+    # prijs toen opgehaald kon worden.
+    levels = [lvl for lvl in levels if lvl > 0]
+
     if direction == "long":
         stop_candidates = [lvl for lvl in levels if lvl < entry_price]
         target_candidates = [lvl for lvl in levels if lvl > entry_price]
@@ -105,7 +110,12 @@ def compute_stop_take_from_levels(
         ).stop_loss
 
     risk_distance = abs(entry_price - stop_loss)
-    if target_level is not None:
+    # Een target-niveau vlak naast de entry (bv. het niveau dat de
+    # swing-watch net deed bevestigen) is geen bruikbaar doel: minimaal
+    # 1:1 risk/reward, anders dezelfde ATR-gebaseerde fallback als
+    # wanneer er helemaal geen target-niveau was.
+    use_level_target = target_level is not None and abs(target_level - entry_price) >= risk_distance
+    if use_level_target:
         take_profit = target_level
     elif direction == "long":
         take_profit = entry_price + RISK_REWARD_RATIO * risk_distance
