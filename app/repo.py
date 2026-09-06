@@ -202,6 +202,20 @@ def update_swing_watch_status(watch_id: int, status: str) -> None:
         )
 
 
+def claim_swing_watch(watch_id: int) -> bool:
+    """Atomisch: zet een watch van 'wachtend' naar 'bevestigd', maar
+    alleen als hij op dit moment nog echt 'wachtend' is. Voorkomt dat de
+    directe check (bij binnenkomst van een bericht) en de periodieke
+    15-minuten-check dezelfde watch allebei afhandelen als ze elkaar
+    net overlappen: wie hier als eerste bij is wint, de ander stopt."""
+    with db.session() as conn:
+        cur = conn.execute(
+            "UPDATE swing_watches SET status = 'bevestigd', checked_at = ? WHERE id = ? AND status = 'wachtend'",
+            (db.now_iso(), watch_id),
+        )
+        return cur.rowcount > 0
+
+
 def active_swing_watches_for_coin(coin: str) -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(

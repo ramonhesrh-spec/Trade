@@ -271,6 +271,13 @@ async def evaluate_level_watch(
     if (direction or "").lower() not in ("long", "short"):
         return  # "neutraal" (of None, bv. een lange-termijn niveau zonder
         # duidelijke richting) heeft geen kant om een niveau tegen te toetsen
+    existing = [w for w in repo.active_swing_watches_for_coin(coin) if w["direction"] == direction]
+    if existing:
+        logger.info(
+            "Al een wachtende swing-watch voor %s %s (watch %s), geen nieuwe aangemaakt voor bericht %s",
+            coin, direction, existing[0]["id"], message_id,
+        )
+        return
     watch_id = repo.create_swing_watch(message_id, source_level_id, coin, direction)
     try:
         daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
@@ -308,6 +315,9 @@ async def run_swing_check(watch_id: int) -> None:
         logger.exception("Kon candles voor swing-toets van %s niet ophalen, watch %s blijft wachtend",
                           coin, watch_id)
         return
+
+    if not repo.claim_swing_watch(watch_id):
+        return  # een andere check (direct of periodiek) was net eerder
 
     daily_ind = indicators.compute_indicators(daily_df)
     ind_4h = indicators.compute_indicators(df_4h)
@@ -366,8 +376,6 @@ async def run_swing_check(watch_id: int) -> None:
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
             logger.exception("Swing-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
-
-    repo.update_swing_watch_status(watch_id, "bevestigd")
 
 
 def _build_context_note(coin: str, direction: str) -> str:
