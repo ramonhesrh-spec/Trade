@@ -224,7 +224,12 @@ def list_recent_source_levels_without_watch(since_iso: str) -> list[dict]:
     hebben, met de richting van hun eigen bericht erbij. Voor het eenmalige
     backfill-script (scripts/backfill_swing_watches.py). Alleen bruikbaar
     als het bericht zelf een duidelijke long/short richting had: 'neutraal'
-    of leeg heeft geen kant om een niveau tegen te toetsen."""
+    of leeg heeft geen kant om een niveau tegen te toetsen.
+
+    day_trading-berichten blijven buiten beschouwing: die krijgen hun
+    niveau-gebaseerde SL/TP al via hun eigen pijplijn (zie Task 6), een
+    aparte swing-watch zou een dubbel signaal voor hetzelfde bericht
+    opleveren."""
     with db.session() as conn:
         rows = conn.execute(
             """SELECT sl.id AS source_level_id, sl.message_id AS message_id,
@@ -233,7 +238,8 @@ def list_recent_source_levels_without_watch(since_iso: str) -> list[dict]:
                FROM source_levels sl
                JOIN messages m ON m.id = sl.message_id
                LEFT JOIN swing_watches sw ON sw.source_level_id = sl.id
-               WHERE sw.id IS NULL AND sl.created_at >= ? AND m.direction IN ('long', 'short')""",
+               WHERE sw.id IS NULL AND sl.created_at >= ? AND m.direction IN ('long', 'short')
+                     AND m.category != 'day_trading'""",
             (since_iso,),
         ).fetchall()
         return [dict(r) for r in rows]
