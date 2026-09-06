@@ -777,7 +777,15 @@ def auto_ignore_opposite_pending(coin: str, direction: str) -> list[dict]:
     Geeft een lijst met username/telegram_chat_id van elke geraakte
     logboekregel terug, zodat de aanroeper die gebruikers kan laten weten
     dat hun kans niet meer actueel is in plaats van dit stil te laten
-    gebeuren."""
+    gebeuren.
+
+    Alleen day_trading signalen: deze functie wordt alleen aangeroepen
+    vanuit process_day_trading_signal, om zijn EIGEN nog niet genomen
+    tegenovergestelde day-trading kans op te ruimen. Zonder deze filter
+    zou een day-trading bericht ook een nog "wachtende" swing-melding voor
+    dezelfde coin (tegenovergestelde richting) automatisch negeren, terwijl
+    swing een eigen, veel langere tijdshorizon heeft en daar nooit door een
+    losstaand day-trading signaal achterhaald van mag raken."""
     opposite = "short" if direction.lower() == "long" else "long"
     note = f"automatisch genegeerd: nieuwe {direction} melding voor {coin.upper()} maakt dit tegenovergestelde signaal achterhaald"
     with db.session() as conn:
@@ -787,7 +795,8 @@ def auto_ignore_opposite_pending(coin: str, direction: str) -> list[dict]:
                JOIN signals s ON s.id = je.signal_id
                JOIN users u ON u.id = je.user_id
                WHERE je.entry_price IS NULL AND je.status != 'genegeerd'
-                     AND s.coin = ? AND s.direction = ? AND s.is_practice = 0""",
+                     AND s.coin = ? AND s.direction = ? AND s.is_practice = 0
+                     AND s.trade_type = 'day_trading'""",
             (coin.upper(), opposite),
         ).fetchall()
         if affected:
@@ -812,7 +821,11 @@ def auto_ignore_stale_pending_for_coin(coin: str, exclude_signal_id: int) -> lis
     zo'n oude, nog niet opgevolgde kans met verouderde koers/stop-loss/
     take-profit niveaus gewoon naast de nieuwe op het dashboard staan.
 
-    Zelfde vorm als auto_ignore_opposite_pending."""
+    Zelfde vorm als auto_ignore_opposite_pending, en om dezelfde reden
+    beperkt tot day_trading signalen: dit wordt alleen aangeroepen vanuit
+    process_day_trading_signal voor zijn eigen day-trading kansen, een nog
+    "wachtende" swing-melding voor dezelfde coin heeft een eigen, veel
+    langere tijdshorizon en mag daar nooit door achterhaald raken."""
     note = "automatisch genegeerd: nieuwere melding voor dezelfde coin maakt dit signaal achterhaald"
     with db.session() as conn:
         affected = conn.execute(
@@ -821,7 +834,8 @@ def auto_ignore_stale_pending_for_coin(coin: str, exclude_signal_id: int) -> lis
                JOIN signals s ON s.id = je.signal_id
                JOIN users u ON u.id = je.user_id
                WHERE je.entry_price IS NULL AND je.status != 'genegeerd'
-                     AND s.coin = ? AND s.id != ? AND s.is_practice = 0""",
+                     AND s.coin = ? AND s.id != ? AND s.is_practice = 0
+                     AND s.trade_type = 'day_trading'""",
             (coin.upper(), exclude_signal_id),
         ).fetchall()
         if affected:
