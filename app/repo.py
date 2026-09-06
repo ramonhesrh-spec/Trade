@@ -160,6 +160,83 @@ def list_source_levels(coin: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+_SWING_WATCH_SELECT = """
+    SELECT sw.id AS id, sw.message_id AS message_id, sw.source_level_id AS source_level_id,
+           sw.coin AS coin, sw.direction AS direction, sw.status AS status,
+           sw.created_at AS created_at, sw.checked_at AS checked_at,
+           sl.price_level AS price_level, sl.pattern_name AS pattern_name
+    FROM swing_watches sw
+    JOIN source_levels sl ON sl.id = sw.source_level_id
+"""
+
+
+def create_swing_watch(message_id: int, source_level_id: int, coin: str, direction: str) -> int:
+    with db.session() as conn:
+        cur = conn.execute(
+            """INSERT INTO swing_watches (message_id, source_level_id, coin, direction, status, created_at)
+               VALUES (?, ?, ?, ?, 'wachtend', ?)""",
+            (message_id, source_level_id, coin.upper(), direction.lower(), db.now_iso()),
+        )
+        return cur.lastrowid
+
+
+def get_swing_watch(watch_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute(_SWING_WATCH_SELECT + "WHERE sw.id = ?", (watch_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def list_watches_by_status(status: str) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(_SWING_WATCH_SELECT + "WHERE sw.status = ?", (status,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_swing_watch_status(watch_id: int, status: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE swing_watches SET status = ?, checked_at = ? WHERE id = ?",
+            (status, db.now_iso(), watch_id),
+        )
+
+
+def active_swing_watches_for_coin(coin: str) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            _SWING_WATCH_SELECT + "WHERE sw.coin = ? AND sw.status = 'wachtend' ORDER BY sw.created_at DESC",
+            (coin.upper(),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_source_levels_for_message(message_id: int) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM source_levels WHERE message_id = ?", (message_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_recent_source_levels_without_watch(since_iso: str) -> list[dict]:
+    """Bron-niveaus van na `since_iso` die nog geen swing_watches-regel
+    hebben, met de richting van hun eigen bericht erbij. Voor het eenmalige
+    backfill-script (scripts/backfill_swing_watches.py). Alleen bruikbaar
+    als het bericht zelf een duidelijke long/short richting had: 'neutraal'
+    of leeg heeft geen kant om een niveau tegen te toetsen."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT sl.id AS source_level_id, sl.message_id AS message_id,
+                      sl.coin AS coin, sl.price_level AS price_level, sl.pattern_name AS pattern_name,
+                      m.direction AS direction
+               FROM source_levels sl
+               JOIN messages m ON m.id = sl.message_id
+               LEFT JOIN swing_watches sw ON sw.source_level_id = sl.id
+               WHERE sw.id IS NULL AND sl.created_at >= ? AND m.direction IN ('long', 'short')""",
+            (since_iso,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def create_trendline(
     coin: str, user_id: int, label: str, x1: int, y1: float, x2: int, y2: float,
 ) -> int:
@@ -375,9 +452,14 @@ def insert_signal(data: dict) -> int:
         "message_id", "coin", "direction", "category", "price", "rsi", "macd",
         "macd_signal", "volume_ratio", "ema9", "ema21", "atr", "atr_avg20", "adx",
         "technical_confirmed", "confidence", "reason", "stop_loss", "take_profit",
-        "context_note", "is_practice", "plain_explanation",
+        "context_note", "is_practice", "plain_explanation", "trade_type",
     ]
-    values = [data.get("is_practice", 0) if f == "is_practice" else data.get(f) for f in fields]
+    values = [
+        data.get("is_practice", 0) if f == "is_practice"
+        else data.get("trade_type", "day_trading") if f == "trade_type"
+        else data.get(f)
+        for f in fields
+    ]
     placeholders = ", ".join("?" for _ in fields)
     with db.session() as conn:
         cur = conn.execute(
@@ -547,6 +629,7 @@ _JOURNAL_SELECT = """
         je.note AS note,
         je.position_size_override AS position_size_override,
         s.coin AS coin, s.direction AS direction, s.category AS category,
+        s.trade_type AS trade_type,
         s.price AS price,
         COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss,
         COALESCE(je.take_profit_override, s.take_profit) AS take_profit,
@@ -995,7 +1078,8 @@ def winrate_stats(user_id: int) -> dict:
             """SELECT s.confidence AS confidence, je.result_eur AS result_eur,
                       je.risk_eur AS risk_eur
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
-               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0""",
+               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
+                     AND s.trade_type = 'day_trading'""",
             (user_id,),
         ).fetchall()
 
@@ -1019,6 +1103,35 @@ def winrate_stats(user_id: int) -> dict:
     return {
         "hoog_vertrouwen": stats_for("hoog vertrouwen"),
         "laag_vertrouwen": stats_for("laag vertrouwen"),
+    }
+
+
+def swing_winrate_stats(user_id: int) -> dict:
+    """Winrate en gemiddeld resultaat van gesloten swing-trades, apart van
+    winrate_stats (day trading): andere tijdshorizon, ander risicoprofiel,
+    en swing heeft geen hoog/laag vertrouwen-label om op te splitsen (geen
+    vertrouwenscijfer zonder backtest op deze tijdshorizon, zie de spec)."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT je.result_eur AS result_eur, je.risk_eur AS risk_eur
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.exit_price IS NOT NULL
+                     AND s.is_practice = 0 AND s.trade_type = 'swing'""",
+            (user_id,),
+        ).fetchall()
+    total = len(rows)
+    wins = len([r for r in rows if r["result_eur"] is not None and r["result_eur"] > 0])
+    winrate = (wins / total * 100) if total else 0.0
+    eur_values = [r["result_eur"] for r in rows if r["result_eur"] is not None]
+    pct_values = [
+        r["result_eur"] / r["risk_eur"] * 100
+        for r in rows if r["result_eur"] is not None and r["risk_eur"]
+    ]
+    avg_eur = sum(eur_values) / len(eur_values) if eur_values else 0.0
+    avg_pct = sum(pct_values) / len(pct_values) if pct_values else 0.0
+    return {
+        "total": total, "wins": wins, "winrate": round(winrate, 1),
+        "avg_result_eur": round(avg_eur, 2), "avg_result_pct": round(avg_pct, 1),
     }
 
 
