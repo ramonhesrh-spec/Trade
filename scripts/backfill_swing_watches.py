@@ -29,12 +29,24 @@ def main(days: int) -> None:
     print(f"{len(levels)} bron-niveaus van de laatste {days} dagen zonder watch gevonden.")
     created = 0
     for lvl in levels:
-        repo.create_swing_watch(lvl["message_id"], lvl["source_level_id"], lvl["coin"], lvl["direction"])
-        created += 1
-        print(f"  watch aangemaakt: {lvl['coin']} {lvl['direction']} @ {lvl['price_level']} "
-              f"({lvl['pattern_name'] or 'geen patroonnaam'})")
+        # create_swing_watch is idempotent op coin+richting: bij twee niveaus
+        # voor dezelfde coin+richting (bv. twee berichten over dezelfde zone)
+        # verwijst de tweede aanroep terug naar de eerst aangemaakte watch in
+        # plaats van een dubbele te maken. source_level_id vergelijken laat
+        # zien of DIT niveau de watch heeft aangemaakt, of alleen doorverwezen is.
+        watch_id = repo.create_swing_watch(lvl["message_id"], lvl["source_level_id"], lvl["coin"], lvl["direction"])
+        watch = repo.get_swing_watch(watch_id)
+        if watch["source_level_id"] == lvl["source_level_id"]:
+            created += 1
+            print(f"  watch aangemaakt: {lvl['coin']} {lvl['direction']} @ {lvl['price_level']} "
+                  f"({lvl['pattern_name'] or 'geen patroonnaam'})")
+        else:
+            print(f"  overgeslagen, al een wachtende watch voor {lvl['coin']} {lvl['direction']}: "
+                  f"{lvl['coin']} {lvl['direction']} @ {lvl['price_level']} "
+                  f"({lvl['pattern_name'] or 'geen patroonnaam'})")
 
-    print(f"\nKlaar: {created} nieuwe watches aangemaakt, allemaal status 'wachtend'.")
+    print(f"\nKlaar: {created} nieuwe watches aangemaakt van de {len(levels)} gevonden niveaus, "
+          f"allemaal status 'wachtend' ({len(levels) - created} verwezen naar een al bestaande watch).")
 
 
 if __name__ == "__main__":
