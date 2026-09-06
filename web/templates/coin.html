@@ -116,6 +116,26 @@
   </aside>
 </div>
 
+{% if active_swing_watches %}
+<details class="stats-collapse js-accordion" style="--i: 2">
+  <summary class="stats-summary">
+    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3"/></svg>
+    <span>Bewaakt niveau</span>
+    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </summary>
+  <p class="muted" style="margin: 0 0 10px; font-size: 12px;">Wacht tot de prijs weer dichtbij dit niveau komt, dan volgt een volledige toets op daily en 4-uur candles.</p>
+  <div class="long-term-list">
+    {% for watch in active_swing_watches %}
+    <div class="long-term-item">
+      <span class="badge badge-{{ watch.direction if watch.direction in ('long', 'short') else 'status' }}">{{ watch.direction }}</span>
+      <span class="muted mono" style="font-size: 11px;">sinds {{ watch.created_at[:10] }}</span>
+      <p>Niveau: {{ watch.price_level }}{% if watch.pattern_name %} ({{ watch.pattern_name }}){% endif %}</p>
+    </div>
+    {% endfor %}
+  </div>
+</details>
+{% endif %}
+
 {% if long_term_messages %}
 <details class="stats-collapse js-accordion" style="--i: 2">
   <summary class="stats-summary">

@@ -810,6 +810,7 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         logger.exception("Live prijs voor trackrecord van %s kon niet opgehaald worden", symbol)
 
     coin = repo.get_coin(symbol)
+    active_swing_watches = repo.active_swing_watches_for_coin(symbol)
 
     return templates.TemplateResponse(request, "coin.html", {
         "user": user,
@@ -828,6 +829,7 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "long_term_track_record": long_term_track_record,
         "coin_note": coin["note"] if coin else None,
         "is_muted": repo.is_coin_muted(user["id"], symbol),
+        "active_swing_watches": active_swing_watches,
     })
 
 
