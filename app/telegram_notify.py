@@ -253,6 +253,65 @@ async def send_signal(
                 signal["coin"], signal["direction"], chat_id)
 
 
+def format_swing_message(
+    coin: str, direction: str, price: float, stop_loss: float, take_profit: float,
+    daily_factors: list[tuple[str, bool, str]], factors_4h: list[tuple[str, bool, str]],
+    level_price: float, pattern_name: Optional[str],
+) -> str:
+    """Melding voor een bevestigde swing-kans: de prijs is weer dichtbij
+    een bewaakt bron-niveau gekomen. Factoren op twee tijdshorizons los
+    getoond, geen gecombineerd vertrouwenscijfer: dat is nog niet
+    gevalideerd voor deze tijdshorizon (zie de spec)."""
+    niveau_label = f"{level_price:.4f}" + (f" ({pattern_name})" if pattern_name else "")
+    lines = [
+        f"{_direction_emoji(direction)} {_coin_label(coin)} · {_direction_label(direction)}",
+        DIVIDER,
+        "📐 BEWAAKT NIVEAU BEREIKT",
+        "",
+        f"💰 Prijs nu: {price:.4f}",
+        f"📍 Niveau: {niveau_label}",
+        f"🎯 Take profit: {take_profit:.4f}",
+        f"🛑 Stop loss: {stop_loss:.4f}",
+        _progress_bar(price, stop_loss, take_profit, direction),
+        DIVIDER,
+        "Daily:",
+    ]
+    for name, ok, detail in daily_factors:
+        lines.append(f"{'✓' if ok else '✗'} {name}: {detail}")
+    lines += ["", "4 uur:"]
+    for name, ok, detail in factors_4h:
+        lines.append(f"{'✓' if ok else '✗'} {name}: {detail}")
+    lines += [
+        "",
+        "Geen vertrouwenspercentage: deze toets is nog niet gevalideerd op deze "
+        "tijdshorizon, beoordeel de factoren hierboven zelf.",
+        DIVIDER, f"⚠️ {config.DISCLAIMER}",
+    ]
+    return "\n".join(lines)
+
+
+async def send_swing_signal(
+    coin: str, direction: str, price: float, stop_loss: float, take_profit: float,
+    daily_factors: list[tuple[str, bool, str]], factors_4h: list[tuple[str, bool, str]],
+    level_price: float, pattern_name: Optional[str],
+    chat_id: str, entry_id: int, force_silent: bool = False,
+) -> None:
+    """Niet-stille melding (tenzij de gebruiker in zijn eigen stille uren
+    zit): een bevestigde swing-kans is zeldzaam en juist bedoeld om niet
+    gemist te worden. Hergebruikt dezelfde Genomen/Negeren-knoppen als een
+    day-trading melding, de callback-afhandeling maakt geen onderscheid."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        logger.warning("Telegram token of chat ID ontbreekt, swing-melding niet verstuurd")
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = format_swing_message(
+        coin, direction, price, stop_loss, take_profit, daily_factors, factors_4h, level_price, pattern_name,
+    )
+    keyboard = _journal_action_keyboard(entry_id)
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=force_silent, reply_markup=keyboard)
+    logger.info("Swing-melding verstuurd voor %s %s naar chat %s", coin, direction, chat_id)
+
+
 async def send_signal_chart(image_bytes: bytes, coin: str, direction: str, chat_id: str) -> None:
     """Stuurt het prijs-chartje (zie app/chart_image.py) als losse foto na
     het tekstbericht. Altijd stil: de tekstmelding gaf het geluid al, dit
@@ -574,12 +633,3 @@ async def run_telegram_listener() -> None:
         finally:
             await application.updater.stop()
             await application.stop()
-
-
-async def send_swing_signal(
-    coin, direction, price, stop_loss, take_profit, daily_factors, factors_4h,
-    level_price, pattern_name, chat_id, entry_id, force_silent=False,
-):
-    """TIJDELIJKE STUB, wordt in Task 8 vervangen door de echte
-    implementatie (opgemaakt bericht + Genomen/Negeren-knoppen)."""
-    logger.info("STUB send_swing_signal: %s %s naar chat %s", coin, direction, chat_id)
