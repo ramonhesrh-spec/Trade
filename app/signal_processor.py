@@ -62,13 +62,27 @@ def _price_near_level(current_price: float, level_price: float, atr: float) -> b
     return abs(current_price - level_price) <= SWING_WATCH_ATR_MULTIPLIER * atr
 
 
-def _price_broke_through(direction: str, current_price: float, level_price: float, atr: float) -> bool:
+def _price_broke_through(
+    direction: str, current_price: float, level_price: float, atr: float,
+    reference_price: float | None,
+) -> bool:
     """Prijs is met een duidelijke marge (dezelfde ATR-marge) door het
-    niveau heen gegaan in de verkeerde richting: bij long betekent dit
-    onder het niveau, bij short erboven. Zo'n setup is ongeldig geworden."""
+    niveau heen gegaan in de verkeerde richting, MAAR alleen als het niveau
+    oorspronkelijk aan de kant van de referentieprijs lag waar het als
+    steun/weerstand kon "falen": bij long moet het niveau ONDER de
+    referentieprijs hebben gelegen (dus functioneerde als support). Lag het
+    niveau er juist BOVEN (een resistance die nog benaderd moest worden,
+    bijvoorbeeld precies het Ray-scenario), dan is er geen "doorbraak"
+    mogelijk in deze zin, dat is gewoon de normale wachtende toestand.
+    Geen referentieprijs bekend: nooit invalideren via deze weg, alleen via
+    het tijdgebonden verval."""
     margin = SWING_WATCH_ATR_MULTIPLIER * atr
     if direction.lower() == "long":
+        if reference_price is None or level_price >= reference_price:
+            return False
         return current_price < level_price - margin
+    if reference_price is None or level_price <= reference_price:
+        return False
     return current_price > level_price + margin
 
 

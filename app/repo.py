@@ -164,9 +164,11 @@ _SWING_WATCH_SELECT = """
     SELECT sw.id AS id, sw.message_id AS message_id, sw.source_level_id AS source_level_id,
            sw.coin AS coin, sw.direction AS direction, sw.status AS status,
            sw.created_at AS created_at, sw.checked_at AS checked_at,
-           sl.price_level AS price_level, sl.pattern_name AS pattern_name
+           sl.price_level AS price_level, sl.pattern_name AS pattern_name,
+           m.price_at_receipt AS reference_price
     FROM swing_watches sw
     JOIN source_levels sl ON sl.id = sw.source_level_id
+    JOIN messages m ON m.id = sw.message_id
 """
 
 
