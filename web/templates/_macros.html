@@ -2,12 +2,34 @@
    meerdere plekken los van elkaar bijgehouden moet worden (bijvoorbeeld bij
    een tekstwijziging die overal moet doorwerken). #}
 
+{# Een swing-reason heeft een andere vorm dan een day-trading-reason: twee
+   groepen ("Daily: ..." en "4 uur: ...") gescheiden door een newline, elk met
+   eigen " | "-gescheiden factoren. Blind op " | " splitsen toonde de eerste
+   daily-factor altijd als mislukt (die regel begint met "Daily: ", niet met
+   "✓") en negeerde de scheiding tussen de twee tijdshorizons. #}
+{% macro reason_factors(entry, p_style='') %}
+{% if entry.trade_type != 'swing' %}
+{% for factor in entry.reason.split(" | ") %}
+<p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}"{% if p_style %} style="{{ p_style }}"{% endif %}>{{ factor }}</p>
+{% endfor %}
+{% else %}
+{% for group in entry.reason.split("\n") %}
+<p class="muted" style="font-weight: 600; margin: 8px 0 2px;">{{ group.split(": ", 1)[0] }}</p>
+{% for factor in group.split(": ", 1)[1].split(" | ") %}
+<p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}"{% if p_style %} style="{{ p_style }}"{% endif %}>{{ factor }}</p>
+{% endfor %}
+{% endfor %}
+{% endif %}
+{% endmacro %}
+
 {% macro reason_popup(entry) %}
 {% if entry.plain_explanation %}<p class="plain-explanation">{{ entry.plain_explanation }}</p>{% endif %}
+{% if entry.trade_type != 'swing' %}
 <p class="muted reason-legend">De vinkjes hieronder zijn nu gemeten (RSI, volume, trend, momentum). De slagingskans hierboven is een inschatting op basis van eerdere trades, geen garantie voor deze trade.</p>
-{% for factor in entry.reason.split(" | ") %}
-<p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}">{{ factor }}</p>
-{% endfor %}
+{% else %}
+<p class="muted reason-legend">Twee losse toetsen, geen gecombineerd cijfer: dit is nog niet gevalideerd op deze tijdshorizon zoals de day-trading-toets dat wel is.</p>
+{% endif %}
+{{ reason_factors(entry) }}
 {% endmacro %}
 
 {# Volledige body van een genomen, nog open trade: cijferraster met live
@@ -18,7 +40,7 @@
 {% macro open_trade_body(e, redirect_to=none) %}
 {% if e.reason %}
 <details class="confidence-detail js-accordion">
-  <summary class="confidence-why">waarom {{ e.confidence.split(" ")[0] }}?</summary>
+  <summary class="confidence-why">{% if e.trade_type == 'swing' %}waarom dit bewaakte niveau?{% else %}waarom {{ e.confidence.split(" ")[0] }}?{% endif %}</summary>
   <div class="reason-popup">
     {{ reason_popup(e) }}
   </div>

@@ -237,9 +237,16 @@ def _build_heatmap_weeks(daily: dict[str, float], weeks: int = 18) -> list[list[
 def _add_signal_context(entries: list[dict], winrate: dict) -> list[dict]:
     """Voegt aan elk signaal het concrete advies toe (wat kan je beter
     doen dan nu instappen) en een slagingskans op basis van de eigen
-    trackrecord van dit vertrouwen-niveau tot nu toe."""
+    trackrecord van dit vertrouwen-niveau tot nu toe. Een swing-signaal
+    heeft geen vertrouwen-label (zie de spec), dus geen geleende
+    day-trading-slagingskans: dat zou een gemeten day-trading-statistiek
+    als voorspelling voor een andere soort trade laten doorgaan."""
     for entry in entries:
         entry["advice"] = advice_module.build_advice(entry)
+        if entry.get("trade_type") == "swing":
+            entry["success_rate"] = None
+            entry["success_sample"] = None
+            continue
         bucket = "hoog_vertrouwen" if entry.get("confidence") == "hoog vertrouwen" else "laag_vertrouwen"
         stats = winrate[bucket]
         entry["success_rate"] = stats["winrate"]

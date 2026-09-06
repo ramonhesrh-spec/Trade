@@ -77,14 +77,18 @@
          {% if open_trades %}data-entry-id="{{ primary.id }}" style="--tension: {{ primary.tension }}; --tension-color: {{ primary.tension_color }};"{% endif %}>
       <div class="primary-card-head">
         <span class="badge badge-{{ primary.direction }}">{{ primary.direction }}</span>
-        {% if primary.reason %}<span class="confidence-ratio mono muted">{{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}</span>{% endif %}
+        {% if primary.reason and primary.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}</span>{% endif %}
         {% if open_trades %}<span class="badge badge-status">{{ primary.status }}</span>{% endif %}
       </div>
       <p class="primary-card-meta muted">
         {{ "Jouw open trade" if open_trades else "Laatste signaal" }}
+        {% if primary.trade_type == 'swing' %}
+        · bewaakt niveau bevestigd
+        {%- else %}
         · {{ "hoog" if primary.confidence == "hoog vertrouwen" else "laag" }} vertrouwen
         · slagingskans {{ primary.success_rate }}%{% if primary.success_sample < 5 %} (weinig data){% endif %}
-        {%- if community_stat %} · {{ community_stat.taken }}/{{ community_stat.total }} gebruikers namen dit{% endif %}
+        {%- endif %}
+        {%- if community_stat and primary.trade_type != 'swing' %} · {{ community_stat.taken }}/{{ community_stat.total }} gebruikers namen dit{% endif %}
       </p>
       {% if primary.message_summary %}
       <p class="original-message-summary">“{{ primary.message_summary }}”</p>
@@ -101,11 +105,9 @@
     </div>
 
     <div class="card">
-      <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>Waarom {{ primary.confidence.split(" ")[0] }} ({{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }})</h3>
+      <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>{% if primary.trade_type == 'swing' %}Waarom dit bewaakte niveau{% else %}Waarom {{ primary.confidence.split(" ")[0] }} ({{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}){% endif %}</h3>
       {% if primary.plain_explanation %}<p class="plain-explanation">{{ primary.plain_explanation }}</p>{% endif %}
-      {% for factor in primary.reason.split(" | ") %}
-        <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}" style="margin: 0 0 5px; font-size: 12.5px;">{{ factor }}</p>
-      {% endfor %}
+      {{ macros.reason_factors(primary, p_style="margin: 0 0 5px; font-size: 12.5px;") }}
       <p class="muted advice-text" style="margin-top: 8px;">{{ primary.advice }}</p>
     </div>
     {% else %}
