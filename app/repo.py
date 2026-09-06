@@ -173,7 +173,20 @@ _SWING_WATCH_SELECT = """
 
 
 def create_swing_watch(message_id: int, source_level_id: int, coin: str, direction: str) -> int:
+    """Idempotent op coin+richting: als er al een 'wachtende' watch is voor
+    dezelfde coin+richting, wordt die teruggegeven in plaats van een tweede
+    aangemaakt. Dit is de enige plek waar swing_watches-rijen ontstaan (ook
+    vanuit het backfill-script), dus dit is waar dubbele watches voor
+    dezelfde kans structureel voorkomen worden, ongeacht welke aanroeper
+    het was — een losse check in slechts één aanroeper laat de andere
+    aanroepers alsnog een dubbel signaal/dubbele melding opleveren."""
     with db.session() as conn:
+        existing = conn.execute(
+            "SELECT id FROM swing_watches WHERE coin = ? AND direction = ? AND status = 'wachtend'",
+            (coin.upper(), direction.lower()),
+        ).fetchone()
+        if existing:
+            return existing["id"]
         cur = conn.execute(
             """INSERT INTO swing_watches (message_id, source_level_id, coin, direction, status, created_at)
                VALUES (?, ?, ?, ?, 'wachtend', ?)""",

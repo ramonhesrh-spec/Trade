@@ -271,7 +271,7 @@ async def evaluate_level_watch(
     if (direction or "").lower() not in ("long", "short"):
         return  # "neutraal" (of None, bv. een lange-termijn niveau zonder
         # duidelijke richting) heeft geen kant om een niveau tegen te toetsen
-    existing = [w for w in repo.active_swing_watches_for_coin(coin) if w["direction"] == direction]
+    existing = [w for w in repo.active_swing_watches_for_coin(coin) if w["direction"] == direction.lower()]
     if existing:
         logger.info(
             "Al een wachtende swing-watch voor %s %s (watch %s), geen nieuwe aangemaakt voor bericht %s",
