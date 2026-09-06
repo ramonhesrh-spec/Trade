@@ -44,6 +44,33 @@ _consecutive_interpret_failures = 0
 # beantwoordt.
 REPEATED_IGNORE_MUTE_THRESHOLD = 5
 
+# Hoe dicht de prijs bij een bewaakt bron-niveau moet komen voordat de
+# swing-toets draait, in ATR van de DAILY candle (de structurele
+# tijdshorizon van zo'n niveau, zie de spec). Zelfde soort marge als
+# level_check.PENDING_LEVEL_ATR_MULTIPLIER gebruikt voor day-trading
+# pending-signalen.
+SWING_WATCH_ATR_MULTIPLIER = 0.5
+
+# Hoe lang een "wachtende" swing watch actief blijft zonder dat de prijs
+# ooit dichtbij kwam, voor hij automatisch vervalt (12 weken).
+SWING_WATCH_MAX_AGE_DAYS = 84
+
+
+def _price_near_level(current_price: float, level_price: float, atr: float) -> bool:
+    """Zuivere functie: is de prijs dichtbij genoeg om de volledige
+    swing-toets te draaien."""
+    return abs(current_price - level_price) <= SWING_WATCH_ATR_MULTIPLIER * atr
+
+
+def _price_broke_through(direction: str, current_price: float, level_price: float, atr: float) -> bool:
+    """Prijs is met een duidelijke marge (dezelfde ATR-marge) door het
+    niveau heen gegaan in de verkeerde richting: bij long betekent dit
+    onder het niveau, bij short erboven. Zo'n setup is ongeldig geworden."""
+    margin = SWING_WATCH_ATR_MULTIPLIER * atr
+    if direction.lower() == "long":
+        return current_price < level_price - margin
+    return current_price > level_price + margin
+
 
 def _extract_failing_factors(reason: str) -> set[str]:
     """Haalt de factornamen met een ✗ uit een reason-breakdown zoals
@@ -157,7 +184,12 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
                         level.price_level, interp.coin, live_price,
                     )
                     continue
-                repo.insert_source_level(message_id, interp.coin, level.price_level, level.pattern_name)
+                source_level_id = repo.insert_source_level(
+                    message_id, interp.coin, level.price_level, level.pattern_name,
+                )
+                await evaluate_level_watch(
+                    message_id, interp.coin, interp.direction, source_level_id, level.price_level,
+                )
 
     if interp.category != "day_trading":
         logger.info("Bericht %s valt in categorie %s, alleen gelogd, geen melding",
@@ -197,6 +229,115 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
     await process_day_trading_signal(message_id, interp)
 
 
+async def evaluate_level_watch(
+    message_id: int, coin: str, direction: str, source_level_id: int, level_price: float,
+) -> None:
+    """Aangeroepen voor elk opgeslagen bron-niveau van een bericht, ongeacht
+    categorie (day_trading of lange_termijn): maakt een swing_watches-regel
+    aan en checkt meteen of de prijs nu al dichtbij genoeg is om door te
+    gaan naar de volledige toets. Zo niet, blijft de watch "wachtend" en
+    pakt level_check.check_swing_watches() hem later periodiek op."""
+    if direction.lower() not in ("long", "short"):
+        return  # "neutraal" heeft geen kant om een niveau tegen te toetsen
+    watch_id = repo.create_swing_watch(message_id, source_level_id, coin, direction)
+    try:
+        daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
+    except Exception:
+        logger.exception("Kon daily data voor %s niet ophalen, watch %s blijft wachtend", coin, watch_id)
+        return
+    daily_ind = indicators.compute_indicators(daily_df)
+    if _price_near_level(daily_ind.price, level_price, daily_ind.atr):
+        await run_swing_check(watch_id)
+
+
+async def run_swing_check(watch_id: int) -> None:
+    """Draait de volledige swing-toets voor een bewaakte watch: daily en
+    4-uur factoren apart (geen gecombineerd vertrouwenscijfer), stop loss/
+    take profit op basis van het bron-niveau, journaalregel en niet-stille
+    Telegram-melding per gebruiker. Zet de watch op "bevestigd": hij wordt
+    daarna nooit opnieuw getoetst, ook niet als de prijs er later nogmaals
+    overheen gaat."""
+    watch = repo.get_swing_watch(watch_id)
+    if not watch or watch["status"] != "wachtend":
+        return  # al bevestigd/vervallen/ongeldig, of een dubbele aanroep
+
+    coin, direction = watch["coin"], watch["direction"]
+    tracked, is_new_coin = await asyncio.to_thread(coinlist.ensure_coin_tracked, coin)
+    if is_new_coin:
+        await _notify_new_coin(coin)
+    if not tracked:
+        repo.update_swing_watch_status(watch_id, "ongeldig")
+        return
+
+    try:
+        daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
+        df_4h = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "4h")
+    except Exception:
+        logger.exception("Kon candles voor swing-toets van %s niet ophalen, watch %s blijft wachtend",
+                          coin, watch_id)
+        return
+
+    daily_ind = indicators.compute_indicators(daily_df)
+    ind_4h = indicators.compute_indicators(df_4h)
+    swing_low, swing_high = indicators.swing_levels(df_4h)
+
+    daily_factors = indicators.basic_factors(direction, daily_ind)
+    factors_4h = indicators.basic_factors(direction, ind_4h)
+
+    stop_take = risk.compute_stop_take_from_levels(
+        direction, ind_4h.price, ind_4h.atr, [watch["price_level"]],
+        swing_low=swing_low, swing_high=swing_high,
+    )
+
+    reason = (
+        "Daily: " + " | ".join(f"{'✓' if ok else '✗'} {name}: {detail}" for name, ok, detail in daily_factors)
+        + "\n4 uur: " + " | ".join(f"{'✓' if ok else '✗'} {name}: {detail}" for name, ok, detail in factors_4h)
+    )
+    context_note = f"Bewaakt niveau: {watch['price_level']}"
+    if watch["pattern_name"]:
+        context_note += f" ({watch['pattern_name']})"
+
+    signal_data = {
+        "message_id": watch["message_id"], "coin": coin, "direction": direction,
+        "category": "swing", "trade_type": "swing",
+        "price": ind_4h.price, "rsi": ind_4h.rsi, "macd": ind_4h.macd,
+        "macd_signal": ind_4h.macd_signal, "volume_ratio": ind_4h.volume_ratio,
+        "ema9": ind_4h.ema9, "ema21": ind_4h.ema21, "atr": ind_4h.atr,
+        "atr_avg20": ind_4h.atr_avg20, "adx": ind_4h.adx,
+        "technical_confirmed": 1,
+        "confidence": "niveau bevestigd",
+        "reason": reason,
+        "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,
+        "context_note": context_note,
+        "is_practice": 0,
+        "plain_explanation": None,
+    }
+    signal_id = repo.insert_signal(signal_data)
+
+    for user in repo.list_users():
+        risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
+        entry_id = repo.create_journal_entry(signal_id, user["id"], risk_eur)
+        if not user["telegram_chat_id"]:
+            continue
+        # Geen is_coin_muted-check hier: mute geldt bewust alleen voor
+        # day-trading meldingen (zie de spec), een swing-melding is
+        # zeldzaam en juist bedoeld om een grote kans nooit te missen.
+        quiet = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        try:
+            await telegram_notify.send_swing_signal(
+                coin=coin, direction=direction, price=ind_4h.price,
+                stop_loss=stop_take.stop_loss, take_profit=stop_take.take_profit,
+                daily_factors=daily_factors, factors_4h=factors_4h,
+                level_price=watch["price_level"], pattern_name=watch["pattern_name"],
+                chat_id=user["telegram_chat_id"], entry_id=entry_id, force_silent=quiet,
+            )
+            repo.mark_journal_telegram_sent(entry_id)
+        except Exception:
+            logger.exception("Swing-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
+    repo.update_swing_watch_status(watch_id, "bevestigd")
+
+
 def _build_context_note(coin: str, direction: str) -> str:
     """Zet dit signaal af tegen het meest recente lange termijn bericht over
     dezelfde coin. Verandert niets aan het hoog/laag vertrouwen label, dat
@@ -232,6 +373,14 @@ async def compute_advanced_extra_factors(coin: str, direction: str, df) -> list[
         except Exception:
             logger.exception("BTC-trend kon niet berekend worden")
             factors.append(("BTC-trend", False, "kon niet opgehaald worden, telt als niet bevestigd"))
+
+    try:
+        daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
+        daily_ind = indicators.compute_indicators(daily_df)
+        factors.append(indicators.check_daily_trend(direction, daily_ind))
+    except Exception:
+        logger.exception("Daily-trend voor %s kon niet berekend worden", coin)
+        factors.append(("Daily-trend", False, "kon niet opgehaald worden, telt als niet bevestigd"))
 
     try:
         df_1h = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1h")
@@ -303,9 +452,15 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     confirmed, reason = indicators.confirms_direction(
         ind, interp.direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
     )
-    stop_take = risk.compute_stop_take(
-        interp.direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high,
-    )
+    message_levels = [lvl["price_level"] for lvl in repo.list_source_levels_for_message(message_id)]
+    if message_levels:
+        stop_take = risk.compute_stop_take_from_levels(
+            interp.direction, ind.price, ind.atr, message_levels, swing_low=swing_low, swing_high=swing_high,
+        )
+    else:
+        stop_take = risk.compute_stop_take(
+            interp.direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high,
+        )
     context_note = _build_context_note(interp.coin, interp.direction)
 
     confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"

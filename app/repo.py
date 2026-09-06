@@ -570,10 +570,10 @@ def recent_rejected_reasons(coin: str, limit: int = 3) -> list[str]:
 
 
 def find_open_signal(coin: str, direction: str) -> Optional[dict]:
-    """Het meest recente signaal voor deze coin en richting, alleen als
-    minstens één gebruiker die nog niet gesloten HEEFT EN niet genegeerd
-    heeft. Een nieuw bericht over dezelfde coin en richting werkt dit
-    signaal bij in plaats van er een los signaal naast te zetten.
+    """Het meest recente DAY-TRADING signaal voor deze coin en richting,
+    alleen als minstens één gebruiker die nog niet gesloten HEEFT EN niet
+    genegeerd heeft. Een nieuw bericht over dezelfde coin en richting werkt
+    dit signaal bij in plaats van er een los signaal naast te zetten.
 
     "Genegeerd" is zelf ook een definitieve beslissing, net als een
     gesloten trade, alleen zonder exit_price (die wordt bij negeren nooit
@@ -581,10 +581,20 @@ def find_open_signal(coin: str, direction: str) -> Optional[dict]:
     signaal voor altijd "nog open" tellen, en werkt elk volgend bericht
     over dezelfde coin en richting tot in lengte van dagen datzelfde oude
     signaal bij in plaats van een vers signaal aan te maken, ook voor
-    gebruikers die pas later worden toegevoegd."""
+    gebruikers die pas later worden toegevoegd.
+
+    Deze functie heeft precies één aanroeper: process_day_trading_signal()
+    in signal_processor.py, puur voor day-trading's eigen update-in-plaats
+    gedrag. De trade_type-filter hieronder is nodig sinds swing-signalen
+    (run_swing_check(), via insert_signal()) ook een signals-rij voor
+    dezelfde coin+richting kunnen aanmaken: zonder filter pikte deze query
+    per ongeluk zo'n swing-rij op en liet een day-trading bericht hem
+    (fout) bijwerken in plaats van zijn eigen signaal aan te maken. Swing
+    hoeft hier zelf nooit doorheen: die maakt zijn eigen signaal altijd
+    rechtstreeks aan via insert_signal(), nooit via deze functie."""
     with db.session() as conn:
         row = conn.execute(
-            """SELECT * FROM signals WHERE coin = ? AND direction = ?
+            """SELECT * FROM signals WHERE coin = ? AND direction = ? AND trade_type = 'day_trading'
                ORDER BY created_at DESC LIMIT 1""",
             (coin.upper(), direction.lower()),
         ).fetchone()

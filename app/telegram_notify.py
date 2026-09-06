@@ -574,3 +574,12 @@ async def run_telegram_listener() -> None:
         finally:
             await application.updater.stop()
             await application.stop()
+
+
+async def send_swing_signal(
+    coin, direction, price, stop_loss, take_profit, daily_factors, factors_4h,
+    level_price, pattern_name, chat_id, entry_id, force_silent=False,
+):
+    """TIJDELIJKE STUB, wordt in Task 8 vervangen door de echte
+    implementatie (opgemaakt bericht + Genomen/Negeren-knoppen)."""
+    logger.info("STUB send_swing_signal: %s %s naar chat %s", coin, direction, chat_id)
