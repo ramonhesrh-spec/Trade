@@ -21,7 +21,12 @@ from typing import Optional
 
 from telegram import Bot
 
-from app import config, exchange, repo
+from datetime import datetime, timezone
+
+from app import config, exchange, indicators, repo
+from app.signal_processor import (
+    SWING_WATCH_MAX_AGE_DAYS, _price_broke_through, _price_near_level, run_swing_check,
+)
 from app.telegram_notify import DIVIDER, _coin_label, _factor_link
 
 logger = logging.getLogger("level_check")
@@ -191,9 +196,46 @@ async def check_pending_signals() -> None:
         repo.mark_level_alert_sent(entry["id"])
 
 
+async def check_swing_watches() -> None:
+    """Elke "wachtende" bewaakte niveau-watch: is de prijs nu dichtbij
+    genoeg om de volledige swing-toets te draaien (run_swing_check), is de
+    prijs juist met een duidelijke marge in de verkeerde richting door het
+    niveau heen gegaan (ongeldig), of is de watch te lang zonder resultaat
+    blijven wachten (vervallen)."""
+    watches = repo.list_watches_by_status("wachtend")
+    logger.info("%d wachtende swing-watches om te checken", len(watches))
+
+    for watch in watches:
+        coin = watch["coin"]
+        try:
+            daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
+            daily_ind = indicators.compute_indicators(daily_df)
+        except Exception:
+            logger.exception("Kon daily data voor %s niet ophalen, watch %s blijft wachtend", coin, watch["id"])
+            continue
+
+        if _price_near_level(daily_ind.price, watch["price_level"], daily_ind.atr):
+            await run_swing_check(watch["id"])
+            continue
+
+        if _price_broke_through(
+            watch["direction"], daily_ind.price, watch["price_level"], daily_ind.atr, watch["reference_price"],
+        ):
+            repo.update_swing_watch_status(watch["id"], "ongeldig")
+            logger.info("Swing-watch %s (%s) ongeldig: prijs krachtig door het niveau heen", watch["id"], coin)
+            continue
+
+        created_at = datetime.fromisoformat(watch["created_at"])
+        age_days = (datetime.now(timezone.utc) - created_at).days
+        if age_days > SWING_WATCH_MAX_AGE_DAYS:
+            repo.update_swing_watch_status(watch["id"], "vervallen")
+            logger.info("Swing-watch %s (%s) vervallen na %s dagen zonder resultaat", watch["id"], coin, age_days)
+
+
 async def run_all_checks() -> None:
     await check_open_trades()
     await check_pending_signals()
+    await check_swing_watches()
 
 
 if __name__ == "__main__":
