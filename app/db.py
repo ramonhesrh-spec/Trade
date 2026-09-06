@@ -52,6 +52,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE signals ADD COLUMN atr_avg20 REAL")
     if "plain_explanation" not in existing:
         conn.execute("ALTER TABLE signals ADD COLUMN plain_explanation TEXT")
+    if "trade_type" not in existing:
+        conn.execute("ALTER TABLE signals ADD COLUMN trade_type TEXT NOT NULL DEFAULT 'day_trading'")
 
     existing_messages = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
     if "discord_user_id" not in existing_messages:

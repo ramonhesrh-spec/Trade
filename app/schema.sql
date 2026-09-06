@@ -130,6 +130,11 @@ CREATE TABLE IF NOT EXISTS signals (
     take_profit REAL,
     context_note TEXT,
     is_practice INTEGER NOT NULL DEFAULT 0,
+    -- 'day_trading' of 'swing': welk mechanisme dit signaal produceerde.
+    -- Swing-signalen komen uit een bewaakt bron-niveau (zie swing_watches),
+    -- hebben geen hoog/laag vertrouwen-label (nog niet gevalideerd op deze
+    -- tijdshorizon) en worden apart geteld in winrate/journaal.
+    trade_type TEXT NOT NULL DEFAULT 'day_trading',
     plain_explanation TEXT,
     created_at TEXT NOT NULL
 );
@@ -157,6 +162,24 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     position_size_override REAL,
     UNIQUE (signal_id, user_id)
 );
+
+-- Bewaakt een bron-niveau (support/resistance uit een screenshot) totdat
+-- de prijs er weer dichtbij komt. Ongeacht of het onderliggende bericht
+-- day_trading of lange_termijn was: elk bericht met een niveau krijgt een
+-- watch. Geen migratie nodig, dit is een gloednieuwe tabel.
+CREATE TABLE IF NOT EXISTS swing_watches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL REFERENCES messages(id),
+    source_level_id INTEGER NOT NULL REFERENCES source_levels(id),
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    -- wachtend/bevestigd/vervallen/ongeldig, zie de spec.
+    status TEXT NOT NULL DEFAULT 'wachtend',
+    created_at TEXT NOT NULL,
+    checked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_swing_watches_status ON swing_watches(status);
+CREATE INDEX IF NOT EXISTS idx_swing_watches_coin ON swing_watches(coin);
 
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
