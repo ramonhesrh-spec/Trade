@@ -1186,12 +1186,18 @@ def winrate_by_ratio(user_id: int) -> list[dict]:
     klopten (bv. "3/4"), en hoe vaak leidde dat tot winst. Losstaand van
     het hoog/laag vertrouwen label zelf, dit toetst of de score binnen
     een label ook echt iets voorspelt. Werkt met elk aantal factoren, dus
-    ook ongewijzigd zodra de uitgebreide factoren ooit meetellen."""
+    ook ongewijzigd zodra de uitgebreide factoren ooit meetellen.
+
+    Alleen day trading: een swing-reason heeft een heel andere vorm (twee
+    tijdshorizons, geen gecombineerde toets), die zou deze
+    kalibratietabel vervuilen met een ratio die niets met de 3-van-4-toets
+    te maken heeft."""
     with db.session() as conn:
         rows = conn.execute(
             """SELECT s.reason AS reason, je.result_eur AS result_eur
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
-               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0""",
+               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
+                     AND s.trade_type = 'day_trading'""",
             (user_id,),
         ).fetchall()
 
@@ -1281,10 +1287,16 @@ def period_stats(user_id: int, since_iso: str) -> dict:
     alleen de rijen die ook echt gesloten zijn in de periode. exit_time
     komt uit een browser datetime-local veld (geen tijdzone), een simpele
     string-vergelijking is hier goed genoeg voor een week/maand-venster,
-    dezelfde aanpak als recent_activity op de coinpagina gebruikt."""
+    dezelfde aanpak als recent_activity op de coinpagina gebruikt.
+
+    hoog_count telt alleen day trading: technical_confirmed betekent voor
+    een swing-signaal "het bewaakte niveau is bevestigd", niet "hoog
+    vertrouwen". De andere tellingen (signalen, gesloten, resultaat)
+    blijven bewust over beide trade_types gaan."""
     with db.session() as conn:
         signals_row = conn.execute(
-            """SELECT COUNT(*) AS n, SUM(CASE WHEN s.technical_confirmed THEN 1 ELSE 0 END) AS hoog
+            """SELECT COUNT(*) AS n,
+                      SUM(CASE WHEN s.technical_confirmed AND s.trade_type = 'day_trading' THEN 1 ELSE 0 END) AS hoog
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.created_at >= ? AND s.is_practice = 0""",
             (user_id, since_iso),
