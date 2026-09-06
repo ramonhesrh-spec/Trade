@@ -124,6 +124,20 @@ def check_1h_trend(direction: str, ind_1h: Indicators) -> tuple[str, bool, str]:
     return ("1u bevestiging", ok, detail)
 
 
+def check_daily_trend(direction: str, daily_ind: Indicators) -> tuple[str, bool, str]:
+    """Structurele trend op de daily candle: bevestigt de langere-termijn
+    richting waar een swing-opzet (bijvoorbeeld een weekly patroon) op
+    steunt, onafhankelijk van wat de snellere 4-uur candle op dit moment
+    laat zien. Zelfde soort check als check_1h_trend, andere
+    tijdshorizon."""
+    up_daily = daily_ind.ema9 > daily_ind.ema21
+    wants_up = direction.lower() == "long"
+    ok = up_daily if wants_up else not up_daily
+    kant = "boven" if up_daily else "onder"
+    detail = f"EMA9 {kant} EMA21 op daily" + ("" if ok else ", geen bevestiging op de dagcandle")
+    return ("Daily-trend", ok, detail)
+
+
 def check_divergence(df: pd.DataFrame, direction: str, lookback: int = 20) -> tuple[str, bool, str]:
     """Waarschuwt voor RSI/prijs-divergentie: bij een long is een hogere
     prijstop met een lagere RSI-top een klassiek teken dat het momentum al
@@ -197,6 +211,46 @@ BASIC_CONFIRM_MIN_PASSED = 3
 CONFIRM_THRESHOLD = 0.6
 
 
+def basic_factors(direction: str, ind: Indicators) -> list[tuple[str, bool, str]]:
+    """De vier basisfactoren (trend, momentum, RSI, volume) als losse
+    (naam, ok, detail) tuples, onafhankelijk van enige drempel-beslissing.
+    Gebruikt door confirms_direction voor de day-trading toets, en door de
+    swing-toets in signal_processor.py om dezelfde factoren te tonen op
+    een andere tijdshorizon zonder een gecombineerd vertrouwensoordeel."""
+    direction = direction.lower()
+    trend_up = ind.ema9 > ind.ema21
+    momentum_up = ind.macd > ind.macd_signal
+
+    if direction == "long":
+        trend_ok = trend_up
+        trend_detail = "EMA9 boven EMA21" if trend_up else "EMA9 onder EMA21, geen opwaartse trend"
+        momentum_ok = momentum_up
+        momentum_detail = ("MACD boven signaallijn" if momentum_up
+                            else "MACD onder signaallijn, geen opwaarts momentum")
+        rsi_ok = ind.rsi < 75
+        rsi_detail = f"RSI {ind.rsi:.0f}" if rsi_ok else f"RSI {ind.rsi:.0f}, overbought"
+    elif direction == "short":
+        trend_ok = not trend_up
+        trend_detail = "EMA9 onder EMA21" if trend_ok else "EMA9 boven EMA21, geen neerwaartse trend"
+        momentum_ok = not momentum_up
+        momentum_detail = ("MACD onder signaallijn" if momentum_ok
+                            else "MACD boven signaallijn, geen neerwaarts momentum")
+        rsi_ok = ind.rsi > 25
+        rsi_detail = f"RSI {ind.rsi:.0f}" if rsi_ok else f"RSI {ind.rsi:.0f}, oversold"
+    else:
+        raise ValueError(f"onbekende richting: {direction}")
+
+    volume_ok = ind.volume_ratio >= 1.0
+    volume_detail = f"volume {ind.volume_ratio:.2f}x gemiddeld" + ("" if volume_ok else ", onder gemiddeld")
+
+    return [
+        ("Trend", trend_ok, trend_detail),
+        ("Momentum", momentum_ok, momentum_detail),
+        ("RSI", rsi_ok, rsi_detail),
+        ("Volume", volume_ok, volume_detail),
+    ]
+
+
 def confirms_direction(
     ind: Indicators, direction: str, extra_factors: list[tuple[str, bool, str]] | None = None,
     include_advanced: bool = False,
@@ -227,37 +281,9 @@ def confirms_direction(
     zelf), dan wordt hij simpelweg niet meegegeven en telt hij niet mee.
     """
     direction = direction.lower()
-    trend_up = ind.ema9 > ind.ema21
-    momentum_up = ind.macd > ind.macd_signal
-
-    if direction == "long":
-        trend_ok = trend_up
-        trend_detail = "EMA9 boven EMA21" if trend_up else "EMA9 onder EMA21, geen opwaartse trend"
-        momentum_ok = momentum_up
-        momentum_detail = ("MACD boven signaallijn" if momentum_up
-                            else "MACD onder signaallijn, geen opwaarts momentum")
-        rsi_ok = ind.rsi < 75
-        rsi_detail = f"RSI {ind.rsi:.0f}" if rsi_ok else f"RSI {ind.rsi:.0f}, overbought"
-    elif direction == "short":
-        trend_ok = not trend_up
-        trend_detail = "EMA9 onder EMA21" if trend_ok else "EMA9 boven EMA21, geen neerwaartse trend"
-        momentum_ok = not momentum_up
-        momentum_detail = ("MACD onder signaallijn" if momentum_ok
-                            else "MACD boven signaallijn, geen neerwaarts momentum")
-        rsi_ok = ind.rsi > 25
-        rsi_detail = f"RSI {ind.rsi:.0f}" if rsi_ok else f"RSI {ind.rsi:.0f}, oversold"
-    else:
+    if direction not in ("long", "short"):
         return False, f"onbekende richting: {direction}"
-
-    volume_ok = ind.volume_ratio >= 1.0
-    volume_detail = f"volume {ind.volume_ratio:.2f}x gemiddeld" + ("" if volume_ok else ", onder gemiddeld")
-
-    factors = [
-        ("Trend", trend_ok, trend_detail),
-        ("Momentum", momentum_ok, momentum_detail),
-        ("RSI", rsi_ok, rsi_detail),
-        ("Volume", volume_ok, volume_detail),
-    ]
+    factors = basic_factors(direction, ind)
 
     if not include_advanced:
         breakdown = " | ".join(f"{'✓' if ok else '✗'} {name}: {detail}" for name, ok, detail in factors)
