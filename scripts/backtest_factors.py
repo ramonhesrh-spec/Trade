@@ -33,7 +33,7 @@ def _historical_df(coin: str, timeframe: str, before: datetime, candles_needed: 
     achteraf alles na `before` wegknippen."""
     exch = exchange.get_exchange()
     symbol = exchange.to_symbol(coin)
-    tf_hours = {"1h": 1, "4h": 4}[timeframe]
+    tf_hours = {"1h": 1, "4h": 4, "1d": 24}[timeframe]
     since = before - timedelta(hours=tf_hours * (candles_needed + 5))
     since_ms = int(since.timestamp() * 1000)
     raw = exch.fetch_ohlcv(symbol, timeframe=timeframe, since=since_ms, limit=candles_needed + 10)
@@ -88,6 +88,15 @@ def evaluate_signal(row: dict) -> dict:
         except Exception as exc:
             results["BTC-trend"] = None
             print(f"    (BTC data mislukt: {exc})")
+
+    try:
+        daily_df = _historical_df(coin, "1d", created_at, candles_needed=60)
+        daily_ind = indicators.compute_indicators(daily_df)
+        _, daily_ok, _ = indicators.check_daily_trend(direction, daily_ind)
+        results["Daily-trend"] = daily_ok
+    except Exception as exc:
+        results["Daily-trend"] = None
+        print(f"    (daily data mislukt: {exc})")
 
     # Liquiditeit: benadering. De exchange-ticker geeft alleen het HUIDIGE
     # 24u volume terug, geen historisch volume op een willekeurig moment
