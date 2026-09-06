@@ -215,7 +215,16 @@ async def check_swing_watches() -> None:
             continue
 
         if _price_near_level(daily_ind.price, watch["price_level"], daily_ind.atr):
-            await run_swing_check(watch["id"])
+            # Eén watch waarvan de volledige toets faalt mag de rest van de
+            # ronde niet meenemen in zijn val: die zouden dan elke 15 minuten
+            # opnieuw overgeslagen worden.
+            try:
+                await run_swing_check(watch["id"])
+            except Exception:
+                logger.exception(
+                    "Swing-toets voor watch %s (%s) is mislukt, watch blijft wachtend voor de volgende ronde",
+                    watch["id"], coin,
+                )
             continue
 
         if _price_broke_through(
