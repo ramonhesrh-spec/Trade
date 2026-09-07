@@ -518,22 +518,67 @@ async def send_period_summary(stats: dict, period_label: str, chat_id: str) -> N
     logger.info("Periodieke samenvatting (%s) verstuurd naar chat %s", period_label, chat_id)
 
 
+def format_narrative_message(
+    coin: str, direction: str, timeline: list[dict], is_contradiction: bool,
+    contradicted_since: Optional[str],
+) -> str:
+    """Eén doorlopend verhaal per coin+richting, niet losse berichten per
+    update: laat altijd de volledige, actuele stand zien (sinds wanneer,
+    hoeveel updates, wat er tot nu toe gezegd is), niet alleen het
+    nieuwste fragment."""
+    lines = [
+        f"{_direction_emoji(direction)} {_coin_label(coin)} · lange termijn verhaal",
+        DIVIDER,
+    ]
+    if is_contradiction:
+        opposite = "short" if direction == "long" else "long"
+        when = f" van {contradicted_since}" if contradicted_since else ""
+        lines.append(f"⚠️ Let op: dit spreekt je lopende {opposite}-analyse{when} tegen.")
+        lines.append(DIVIDER)
+
+    since = timeline[0]["received_at"][:10] if timeline else "-"
+    count = len(timeline)
+    lines.append(f"{_direction_label(direction)} · sinds {since} · {count} update{'s' if count != 1 else ''}")
+    lines.append("")
+    for entry in timeline:
+        when = entry["received_at"][:10]
+        text = entry["message_summary"] or entry["raw_text"]
+        lines.append(f"• {when}: {text}")
+    lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
+    return "\n".join(lines)
+
+
 async def send_narrative_update(
     coin: str, direction: str, timeline: list[dict], chat_id: str,
     existing_message_id: Optional[int], is_contradiction: bool,
     contradicted_since: Optional[str] = None, force_silent: bool = False,
 ) -> int:
-    """TIJDELIJKE STUB, vervangen in Task 4 door de echte implementatie
-    (format_narrative_message + bot.send_message/edit_message_text). Dit
-    is opzettelijk zo, geen fout: Task 3 test evaluate_narrative's
-    matching-logica los van de Telegram-opmaak, en Task 4 heeft
-    evaluate_narrative's afgeronde aanroep-conventie nodig om tegen te
-    implementeren."""
-    logger.info(
-        "STUB send_narrative_update: %s %s naar chat %s (tegenspraak=%s, bestaand bericht-id=%s)",
-        coin, direction, chat_id, is_contradiction, existing_message_id,
-    )
-    return (existing_message_id or 0) + 1
+    """Bewerkt de bestaande melding voor dit narrative als dat nog kan
+    (binnen Telegrams eigen 48-uursgrens voor bewerken), anders (of bij een
+    tegenspraak, die altijd apart moet opvallen) een verse melding. Geeft
+    het bericht-ID terug dat de aanroeper moet onthouden voor de volgende
+    update van dit narrative."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        logger.warning("Telegram token of chat ID ontbreekt, narrative-melding niet verstuurd")
+        return existing_message_id or 0
+
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = format_narrative_message(coin, direction, timeline, is_contradiction, contradicted_since)
+
+    if is_contradiction or existing_message_id is None:
+        message = await bot.send_message(chat_id=chat_id, text=text, disable_notification=force_silent)
+        return message.message_id
+
+    try:
+        await bot.edit_message_text(chat_id=chat_id, message_id=existing_message_id, text=text)
+        return existing_message_id
+    except Exception:
+        logger.info(
+            "Kon narrative-melding %s niet meer bewerken (waarschijnlijk >48u oud), verse melding gestuurd",
+            existing_message_id,
+        )
+        message = await bot.send_message(chat_id=chat_id, text=text, disable_notification=force_silent)
+        return message.message_id
 
 
 # ---------------------------------------------------------------------------
