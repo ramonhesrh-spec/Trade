@@ -173,6 +173,10 @@ mee op de al afgesloten run. Een gesloten run is bevroren.
 - `update_evaluation_state(evaluation_id, current_balance,
   day_start_balance, day_start_date) -> None`
 - `close_evaluation(evaluation_id, status, closed_reason) -> None`
+- `list_evaluation_daily_results(evaluation_id) -> list[dict]`: per
+  handelsdag (zelfde 00:30 UTC-grens) het netto resultaat van alle
+  gesloten, aan deze run gekoppelde trades die dag, oudste eerst. Voedt
+  de dag-stippen-heatmap hieronder; puur leeswerk, geen eigen opslag.
 
 De bestaande oefentrade-aanmaakfunctie krijgt `evaluation_id` als extra,
 optioneel veld (net als de andere kolommen in dat generieke insert-pad),
@@ -203,6 +207,78 @@ geen nieuwe aparte functie nodig.
   korte notitie: "Deze oefentrade telt mee op je lopende evaluatie
   (tier)."
 
+## Visueel ontwerp en animatie
+
+De gebruiker wil hier een uitgesproken, gedurfd design voor, geen kale
+formulier-kaart. HesPulse heeft al een eigen, herkenbare animatie-taal
+(ambient gloed, hartslag, risico-ademhaling, flash bij waardeverandering,
+heatmap-cellen, vloeistof-shimmer op een gauge) die overal aan een echte,
+live waarde hangt en overal `prefers-reduced-motion` respecteert. Dit
+ontwerp hergebruikt die exacte taal in plaats van een eigen, afwijkende
+stijl te introduceren — dat is wat het "ziek" laat aanvoelen zonder de
+CLAUDE.md-regel te breken dat decoratieve motion altijd aan een echte
+waarde vastzit.
+
+**Drie gauge-balken, één hergebruikte component.** De bestaande
+`.risk-gauge` / `.risk-gauge-bar` / `.risk-gauge-fill` uit `style.css`
+(gauge-grow scaleX-intro, `.risk-mid`/`.risk-high` kleurstappen, de
+continue lichtstreep-shimmer) wordt drie keer ingezet:
+
+- **Dagverlies opgebruikt.** Percentage van de dagverlieslimiet dat al is
+  opgesoupeerd. `risk-mid` vanaf 60%, `risk-high` vanaf 85%.
+- **Drawdown opgebruikt.** Zelfde opbouw, tegen `max_drawdown_pct`.
+- **Winstdoel voortgang.** Zelfde component, maar in de omgekeerde
+  betekenis (hoger is beter, geen risico): een nieuwe modifier-klasse
+  `.risk-gauge-fill.goal-fill { background: var(--green); }` vervangt de
+  rood/amber-opbouw, dezelfde shimmer en groei-animatie blijven staan.
+
+**Spanning bij een naderende limiet.** Zodra de dagverlies- of
+drawdown-balk de 85%-drempel passeert, krijgt de kaart zelf de bestaande
+`.risk-pulse`-klasse (`risk-breathe`, de 2.4s ademhalende rode
+box-shadow-puls die nu al op de risicogauge-strip staat). Exact dezelfde
+"toenemende spanning naarmate een limiet nadert" die de gebruiker vroeg,
+zonder een nieuwe animatie te verzinnen — hij bestaat al en betekent hier
+precies hetzelfde.
+
+**Saldo dat leeft.** Het virtuele saldo-cijfer krijgt bij elke wijziging
+(na het sluiten van een gekoppelde oefentrade) de bestaande
+`.flash-up`/`.flash-down`-klasse, exact zoals `dashboard.js` dat nu al
+doet voor de live koers en de lopende PnL.
+
+**Dag-voortgang als mini-heatmap.** Een rij stippen, één per handelsdag
+sinds `started_at`, gevuld met `list_evaluation_daily_results`. Hergebruikt
+de bestaande `.heat-cell.heat-level-{1,2,3}` (groen, oplopende intensiteit
+naar netto winst die dag) en `.heat-level-{-1,-2,-3}` (rood, naar netto
+verlies) klassen 1-op-1 — dezelfde schaal die al ergens anders in de app
+voor intensiteit gebruikt wordt, hier toegepast op dagresultaat in plaats
+van op wat hij daar al deed.
+
+**Geslaagd/mislukt: een eenmalig reveal-moment.** Het enige nieuwe stukje
+CSS in dit ontwerp, omdat er geen bestaand "run is zojuist beëindigd"-
+moment in de app bestaat om te hergebruiken. Vuurt precies één keer, op
+het eerste page-render ná de statuswijziging (de web-route geeft een
+`just_ended: true`-vlag mee in de context, alleen op die ene render —
+zelfde eenmalig-vuur-patroon als de sessionStorage-gated boot-pulse in
+`base.html`, hier via een server-side vlag in plaats van client-side
+storage omdat het via een echte pagina-render binnenkomt, niet via een
+losstaande AJAX-call).
+
+- Geslaagd: de winstdoel-balk maakt zijn gauge-grow-intro af tot 100% en
+  krijgt daarbovenop 2 tot 3 korte pulsen van een felgroene gloed (zelfde
+  `box-shadow`-techniek als `risk-breathe`, maar `animation-iteration-count:
+  3` in plaats van `infinite`, dus geen doorlopende animatie die blijft
+  hangen). Een statuslabel "Geslaagd" faded en schuift licht omhoog in,
+  dezelfde 300-400ms fade+translate die de app al voor kaart-reveals
+  gebruikt.
+- Mislukt: de kaart krijgt een korte, drievoudige horizontale schud-
+  beweging (`translateX`, ±6px, samen onder de 500ms, ook hier een eindig
+  aantal iteraties, geen loop), in `--red`. Zelfde statuslabel-fade
+  hierboven, met "Mislukt" en de `closed_reason`.
+- Beide respecteren `prefers-reduced-motion: reduce` door meteen de
+  eindstaat te tonen (volle balk, definitief statuslabel) zonder de
+  tussenliggende puls of schudbeweging — zelfde patroon als elke
+  bestaande animatie in dit bestand.
+
 ## Zelf-review
 
 **Niet-doelen nageleefd**: geen enkele wijziging raakt `risk.py`'s echte
@@ -227,3 +303,12 @@ euro omrekening.
 **Race-achtig scenario behandeld**: een trade die sluit nadat zijn run al
 is afgesloten door een andere trade wordt genoemd en opgelost (geen
 update meer op een bevroren run).
+
+**Visueel ontwerp**: elk hergebruikt of nieuw animatie-element hangt aan
+een echte waarde (percentage van een echte limiet, een echt saldo-delta,
+een echt dagresultaat, een echte statuswijziging) — geen enkel element is
+puur decoratief. Het geslaagd/mislukt-reveal is de enige nieuwe CSS in dit
+ontwerp; alle andere elementen zijn 1-op-1 hergebruik van bestaande,
+al-geaccepteerde componenten (`risk-gauge`, `risk-pulse`, `flash-up`/
+`flash-down`, `heat-cell`). Beide nieuwe animaties zijn eindig (geen
+`infinite`) en hebben een `prefers-reduced-motion`-eindstaat.
