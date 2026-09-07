@@ -91,6 +91,14 @@
     function done() {
       clearInterval(timer);
       bar.style.width = "100%";
+      // Een AJAX-formulier (dashboard.js/coin.js) roept dit aan in plaats van
+      // een echte paginanavigatie te laten gebeuren. start() had bij de
+      // submit al page-transition-out gezet (dezelfde listener die op ELKE
+      // submit afgaat, ook een die zelf preventDefault() doet) in de
+      // aanname dat een navigatie hem vanzelf weer opruimt. Zonder die
+      // navigatie blijft <body> permanent op opacity 0 staan: het scherm
+      // wordt zwart en er "laadt" nooit meer iets.
+      document.documentElement.classList.remove("page-transition-out");
       setTimeout(function () {
         bar.classList.remove("is-active");
         bar.style.width = "0%";
