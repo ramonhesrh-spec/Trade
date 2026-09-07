@@ -117,22 +117,6 @@ def recent_unclear_messages(limit: int = 15) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def latest_long_term_direction(coin: str) -> Optional[dict]:
-    """Meest recente lange termijn bericht over deze coin met een bekende
-    richting, inclusief "neutraal" voor een verdeelde conclusie. Gebruikt om
-    een nieuw day trading signaal tegen recente community visie af te
-    zetten, zonder daar een eigen pagina van te maken."""
-    with db.session() as conn:
-        row = conn.execute(
-            """SELECT direction, received_at FROM messages
-               WHERE coin = ? AND category = 'lange_termijn' AND direction IS NOT NULL
-               ORDER BY id DESC LIMIT 1""",
-            (coin.upper(),),
-        ).fetchone()
-        return dict(row) if row else None
-
-
-
 # ---------------------------------------------------------------------------
 # Bron niveaus (uit Discord afbeeldingen)
 # ---------------------------------------------------------------------------

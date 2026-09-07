@@ -70,6 +70,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # de kolom er op dat moment nog niet is. IF NOT EXISTS maakt dit
     # onvoorwaardelijk hier zetten goedkoop en veilig, ook bij elke herstart.
     conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_discord_user_id ON messages(discord_user_id)")
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_messages_narrative_id ON messages(narrative_id)")
 
     existing_source_levels = {row["name"] for row in conn.execute("PRAGMA table_info(source_levels)")}
     if "dismissed" not in existing_source_levels:

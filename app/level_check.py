@@ -249,7 +249,7 @@ async def check_narratives() -> None:
     narratives = repo.list_active_narratives()
     expired = [n for n in narratives if n["last_update_at"] < cutoff]
     for n in expired:
-        repo.close_narrative(n["id"], "verlopen", "geen nieuwe update binnen 84 dagen")
+        repo.close_narrative(n["id"], "verlopen", f"geen nieuwe update binnen {SWING_WATCH_MAX_AGE_DAYS} dagen")
     if expired:
         logger.info("%d narrative(s) verlopen wegens inactiviteit", len(expired))
 

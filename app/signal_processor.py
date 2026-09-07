@@ -241,7 +241,7 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
         # inhoud van een net doorgestuurde analyse in de tussentijd onzichtbaar is.
         if interp.category == "lange_termijn" and interp.direction in ("long", "short"):
             try:
-                await evaluate_narrative(message_id, interp.coin, interp.direction, message_summary or "")
+                await evaluate_narrative(message_id, interp.coin, interp.direction)
             except Exception:
                 logger.exception("Narrative-evaluatie voor %s (bericht %s) is mislukt",
                                   interp.coin, message_id)
@@ -296,7 +296,7 @@ async def evaluate_level_watch(
         await run_swing_check(watch_id)
 
 
-async def evaluate_narrative(message_id: int, coin: str, direction: str, message_summary: str) -> None:
+async def evaluate_narrative(message_id: int, coin: str, direction: str) -> None:
     """Aangeroepen voor elk lange_termijn-bericht met een duidelijke
     richting (long/short — 'neutraal' en een ontbrekende richting doen
     hier niet aan mee, net als bij _build_context_note). Bepaalt of dit

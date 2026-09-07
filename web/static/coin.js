@@ -157,13 +157,19 @@
       });
 
       if (narrativeUpdates.length && data.candles.length) {
-        narrativeMarkers = narrativeUpdates.map((u) => ({
-          time: nearestCandleTime(data.candles, Math.floor(new Date(u.received_at).getTime() / 1000)),
-          position: "aboveBar",
-          color: u.direction === "long" ? "#33d69f" : "#f2685c",
-          shape: "circle",
-          text: u.direction === "long" ? "L" : "S",
-        }));
+        // LightweightCharts vereist markers oplopend gesorteerd op tijd;
+        // narrativeUpdates komt binnen in narrative-volgorde (nieuwste
+        // narrative eerst), niet chronologisch, dus zonder deze sort
+        // vallen markers afhankelijk van zoom/scroll stilzwijgend weg.
+        narrativeMarkers = narrativeUpdates
+          .map((u) => ({
+            time: nearestCandleTime(data.candles, Math.floor(new Date(u.received_at).getTime() / 1000)),
+            position: "aboveBar",
+            color: u.direction === "long" ? "#33d69f" : "#f2685c",
+            shape: "circle",
+            text: u.direction === "long" ? "L" : "S",
+          }))
+          .sort((a, b) => a.time - b.time);
         candleSeries.setMarkers(narrativeMarkers);
       }
 

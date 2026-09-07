@@ -540,9 +540,30 @@ def format_narrative_message(
     count = len(timeline)
     lines.append(f"{_direction_label(direction)} · sinds {since} · {count} update{'s' if count != 1 else ''}")
     lines.append("")
-    for entry in timeline:
+
+    # Telegram's berichtlimiet is 4096 tekens. Een langlopend verhaal
+    # groeit daar bij de volledige tijdlijn overheen (rond 18 updates bij
+    # realistische samenvattingen), waarna zowel de edit als de
+    # fallback-verse-melding blijven mislukken en de gebruiker
+    # stilzwijgend nooit meer een update krijgt. Toon daarom bij veel
+    # updates alleen de eerste en de laatste paar, en kap elke regel af.
+    MAX_TIMELINE_ENTRIES = 8
+    MAX_ENTRY_CHARS = 300
+    shown = timeline
+    omitted = 0
+    if len(timeline) > MAX_TIMELINE_ENTRIES:
+        head = timeline[:1]
+        tail = timeline[-(MAX_TIMELINE_ENTRIES - 1):]
+        omitted = len(timeline) - len(head) - len(tail)
+        shown = head + tail
+
+    for i, entry in enumerate(shown):
+        if omitted and i == 1:
+            lines.append(f"• … {omitted} eerdere update{'s' if omitted != 1 else ''} niet getoond …")
         when = entry["received_at"][:10]
         text = entry["message_summary"] or entry["raw_text"]
+        if len(text) > MAX_ENTRY_CHARS:
+            text = text[:MAX_ENTRY_CHARS - 3] + "..."
         lines.append(f"• {when}: {text}")
     lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
