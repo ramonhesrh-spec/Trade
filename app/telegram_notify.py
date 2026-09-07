@@ -518,6 +518,24 @@ async def send_period_summary(stats: dict, period_label: str, chat_id: str) -> N
     logger.info("Periodieke samenvatting (%s) verstuurd naar chat %s", period_label, chat_id)
 
 
+async def send_narrative_update(
+    coin: str, direction: str, timeline: list[dict], chat_id: str,
+    existing_message_id: Optional[int], is_contradiction: bool,
+    contradicted_since: Optional[str] = None, force_silent: bool = False,
+) -> int:
+    """TIJDELIJKE STUB, vervangen in Task 4 door de echte implementatie
+    (format_narrative_message + bot.send_message/edit_message_text). Dit
+    is opzettelijk zo, geen fout: Task 3 test evaluate_narrative's
+    matching-logica los van de Telegram-opmaak, en Task 4 heeft
+    evaluate_narrative's afgeronde aanroep-conventie nodig om tegen te
+    implementeren."""
+    logger.info(
+        "STUB send_narrative_update: %s %s naar chat %s (tegenspraak=%s, bestaand bericht-id=%s)",
+        coin, direction, chat_id, is_contradiction, existing_message_id,
+    )
+    return (existing_message_id or 0) + 1
+
+
 # ---------------------------------------------------------------------------
 # Inline knoppen Genomen/Negeren onder een bevestigde kans: direct het
 # logboek bijwerken vanuit Telegram, zonder het dashboard te hoeven openen.

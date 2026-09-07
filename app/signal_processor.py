@@ -7,6 +7,7 @@ regels. Elke trade blijft een handmatige beslissing.
 import asyncio
 import logging
 import time
+from typing import Optional
 
 from app import chart_image, coinlist, config, exchange, explain, indicators, repo, risk, telegram_notify
 from app.anthropic_interpret import Interpretation, interpret_message
@@ -238,7 +239,13 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
         # ernaar verwees (_build_context_note). Met de samenvatting hierboven
         # is een korte, stille melding hierover goedkoop, en voorkomt dat de
         # inhoud van een net doorgestuurde analyse in de tussentijd onzichtbaar is.
-        if message_summary:
+        if interp.category == "lange_termijn" and interp.direction in ("long", "short"):
+            try:
+                await evaluate_narrative(message_id, interp.coin, interp.direction, message_summary or "")
+            except Exception:
+                logger.exception("Narrative-evaluatie voor %s (bericht %s) is mislukt",
+                                  interp.coin, message_id)
+        elif message_summary:
             for user in repo.list_users():
                 if not user["telegram_chat_id"]:
                     continue
@@ -287,6 +294,71 @@ async def evaluate_level_watch(
     daily_ind = indicators.compute_indicators(daily_df)
     if _price_near_level(daily_ind.price, level_price, daily_ind.atr):
         await run_swing_check(watch_id)
+
+
+async def evaluate_narrative(message_id: int, coin: str, direction: str, message_summary: str) -> None:
+    """Aangeroepen voor elk lange_termijn-bericht met een duidelijke
+    richting (long/short — 'neutraal' en een ontbrekende richting doen
+    hier niet aan mee, net als bij _build_context_note). Bepaalt of dit
+    bericht een update is van het lopende verhaal over deze coin, een
+    tegenspraak daarvan, of het begin van een nieuw verhaal.
+
+    Tegenspraak sluit het oude narrative expliciet af (status
+    'tegengesproken') vóór er een nieuwe wordt aangemaakt: er hoort op elk
+    moment hoogstens één actief narrative per coin te zijn, ongeacht welke
+    richting."""
+    if direction not in ("long", "short"):
+        return
+
+    active = repo.get_active_narrative(coin)
+    if active is None:
+        narrative_id = repo.create_narrative(coin, direction, message_id)
+        await _send_narrative_notifications(narrative_id, is_new=True, is_contradiction=False)
+        return
+
+    if active["direction"] == direction:
+        repo.update_narrative_progress(active["id"], message_id)
+        await _send_narrative_notifications(active["id"], is_new=False, is_contradiction=False)
+        return
+
+    repo.close_narrative(
+        active["id"], "tegengesproken",
+        f"tegengesproken door een nieuw {direction}-narrative voor {coin}",
+    )
+    new_narrative_id = repo.create_narrative(coin, direction, message_id)
+    await _send_narrative_notifications(
+        new_narrative_id, is_new=True, is_contradiction=True, contradicted=active,
+    )
+
+
+async def _send_narrative_notifications(
+    narrative_id: int, is_new: bool, is_contradiction: bool, contradicted: Optional[dict] = None,
+) -> None:
+    """Stuurt of bewerkt de narrative-melding voor elke gebruiker met een
+    gekoppelde Telegram-chat. Een tegenspraak of het allereerste bericht
+    van een narrative heeft nooit een bestaand bericht om te bewerken; een
+    update probeert altijd eerst het vorige bericht te bewerken (zie
+    telegram_notify.send_narrative_update voor de edit/verse-melding-
+    afweging zelf)."""
+    narrative = repo.get_narrative(narrative_id)
+    timeline = repo.list_narrative_messages(narrative_id)
+    contradicted_since = contradicted["opened_at"][:10] if contradicted else None
+
+    for user in repo.list_users():
+        if not user["telegram_chat_id"]:
+            continue
+        existing = None if is_new else repo.get_narrative_notification(narrative_id, user["id"])
+        existing_message_id = existing["telegram_message_id"] if existing else None
+        quiet = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        try:
+            telegram_message_id = await telegram_notify.send_narrative_update(
+                narrative["coin"], narrative["direction"], timeline, user["telegram_chat_id"],
+                existing_message_id, is_contradiction, contradicted_since, force_silent=quiet,
+            )
+            repo.upsert_narrative_notification(narrative_id, user["id"], telegram_message_id)
+        except Exception:
+            logger.exception("Narrative-melding voor %s naar gebruiker %s is mislukt",
+                              narrative["coin"], user["username"])
 
 
 async def run_swing_check(watch_id: int) -> None:
