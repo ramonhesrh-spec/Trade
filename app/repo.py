@@ -272,6 +272,116 @@ def list_recent_source_levels_without_watch(since_iso: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def get_active_narrative(coin: str) -> Optional[dict]:
+    """Het narrative met status 'actief' voor deze coin, ongeacht richting.
+    Op elk moment hoort er hoogstens één te bestaan: een tegenspraak sluit
+    het vorige altijd af vóór er een nieuwe wordt aangemaakt (zie
+    signal_processor.evaluate_narrative)."""
+    with db.session() as conn:
+        row = conn.execute(
+            "SELECT * FROM coin_narratives WHERE coin = ? AND status = 'actief' ORDER BY id DESC LIMIT 1",
+            (coin.upper(),),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_narrative(narrative_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM coin_narratives WHERE id = ?", (narrative_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def create_narrative(coin: str, direction: str, message_id: int) -> int:
+    """Nieuw narrative, status 'actief', met dit bericht als eerste update."""
+    now = db.now_iso()
+    with db.session() as conn:
+        cur = conn.execute(
+            """INSERT INTO coin_narratives (coin, direction, status, message_count, opened_at, last_update_at)
+               VALUES (?, ?, 'actief', 1, ?, ?)""",
+            (coin.upper(), direction.lower(), now, now),
+        )
+        narrative_id = cur.lastrowid
+        conn.execute("UPDATE messages SET narrative_id = ? WHERE id = ?", (narrative_id, message_id))
+        return narrative_id
+
+
+def update_narrative_progress(narrative_id: int, message_id: int) -> None:
+    """Koppelt een bericht als vervolg-update aan een bestaand narrative:
+    telt message_count op, zet last_update_at bij op nu."""
+    now = db.now_iso()
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE coin_narratives SET message_count = message_count + 1, last_update_at = ? WHERE id = ?",
+            (now, narrative_id),
+        )
+        conn.execute("UPDATE messages SET narrative_id = ? WHERE id = ?", (narrative_id, message_id))
+
+
+def close_narrative(narrative_id: int, status: str, closed_reason: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE coin_narratives SET status = ?, closed_reason = ? WHERE id = ?",
+            (status, closed_reason, narrative_id),
+        )
+
+
+def list_active_narratives() -> list[dict]:
+    """Voor de periodieke verval-check (check_narratives): alle actieve
+    narratives, over alle coins heen."""
+    with db.session() as conn:
+        rows = conn.execute("SELECT * FROM coin_narratives WHERE status = 'actief'").fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_narratives_for_coin(coin: str) -> list[dict]:
+    """Voor de coin-pagina: het actieve narrative (indien aanwezig)
+    bovenaan, recente tegengesproken/verlopen narratives erna."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT * FROM coin_narratives WHERE coin = ?
+               ORDER BY (status = 'actief') DESC, last_update_at DESC""",
+            (coin.upper(),),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_narrative_messages(narrative_id: int) -> list[dict]:
+    """De berichten van dit narrative, oudste eerst: de tijdlijn voor zowel
+    de Telegram-melding als de coin-pagina-kaart."""
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT id, received_at, raw_text, message_summary FROM messages "
+            "WHERE narrative_id = ? ORDER BY received_at ASC",
+            (narrative_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_narrative_notification(narrative_id: int, user_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute(
+            "SELECT * FROM narrative_notifications WHERE narrative_id = ? AND user_id = ?",
+            (narrative_id, user_id),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def upsert_narrative_notification(narrative_id: int, user_id: int, telegram_message_id: int) -> None:
+    """Onthoudt welk Telegram-bericht-ID de laatste melding van dit
+    narrative was voor deze gebruiker, zodat een volgende update kan
+    proberen dat bericht te bewerken. Overschrijft de vorige waarde in
+    plaats van een tweede rij aan te maken."""
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO narrative_notifications (narrative_id, user_id, telegram_message_id, sent_at)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(narrative_id, user_id) DO UPDATE SET
+                   telegram_message_id = excluded.telegram_message_id,
+                   sent_at = excluded.sent_at""",
+            (narrative_id, user_id, telegram_message_id, db.now_iso()),
+        )
+
+
 def create_trendline(
     coin: str, user_id: int, label: str, x1: int, y1: float, x2: int, y2: float,
 ) -> int:
