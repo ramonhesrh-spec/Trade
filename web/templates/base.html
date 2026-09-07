@@ -169,6 +169,19 @@
       evalUrl.searchParams.delete("eval_flash");
       history.replaceState(null, "", evalUrl.pathname + evalUrl.search + evalUrl.hash);
     }
+
+    // Idem voor het geslaagd/mislukt-seintje zelf: de server zet de reveal-
+    // klasse (eval-reveal-pass/eval-reveal-fail) al bij het renderen op basis
+    // van eval_display.status, deze query-parameter is puur wat de route naar
+    // eval_history[0] laat terugvallen (zie web/main.py). Zonder opruiming
+    // speelt een refresh of een teruggekeerde/gedeelde URL de animatie
+    // telkens opnieuw af in plaats van precies één keer.
+    if (location.search.indexOf("evaluatie_geslaagd=1") !== -1 || location.search.indexOf("evaluatie_mislukt=1") !== -1) {
+      var evalStatusUrl = new URL(location.href);
+      evalStatusUrl.searchParams.delete("evaluatie_geslaagd");
+      evalStatusUrl.searchParams.delete("evaluatie_mislukt");
+      history.replaceState(null, "", evalStatusUrl.pathname + evalStatusUrl.search + evalStatusUrl.hash);
+    }
   })();
 </script>
 <script>
