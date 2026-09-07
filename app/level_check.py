@@ -21,7 +21,7 @@ from typing import Optional
 
 from telegram import Bot
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from app import config, exchange, indicators, repo
 from app.signal_processor import (
@@ -241,10 +241,24 @@ async def check_swing_watches() -> None:
             logger.info("Swing-watch %s (%s) vervallen na %s dagen zonder resultaat", watch["id"], coin, age_days)
 
 
+async def check_narratives() -> None:
+    """Een narrative zonder nieuwe update in SWING_WATCH_MAX_AGE_DAYS dagen
+    verloopt vanzelf. Geen prijs-afhankelijkheid zoals bij swing-watches,
+    dus geen candle-fetch nodig: puur een leeftijdscheck."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=SWING_WATCH_MAX_AGE_DAYS)).isoformat()
+    narratives = repo.list_active_narratives()
+    expired = [n for n in narratives if n["last_update_at"] < cutoff]
+    for n in expired:
+        repo.close_narrative(n["id"], "verlopen", "geen nieuwe update binnen 84 dagen")
+    if expired:
+        logger.info("%d narrative(s) verlopen wegens inactiviteit", len(expired))
+
+
 async def run_all_checks() -> None:
     await check_open_trades()
     await check_pending_signals()
     await check_swing_watches()
+    await check_narratives()
 
 
 if __name__ == "__main__":
