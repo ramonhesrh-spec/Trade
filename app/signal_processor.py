@@ -451,22 +451,25 @@ async def run_swing_check(watch_id: int) -> None:
 
 
 def _build_context_note(coin: str, direction: str) -> str:
-    """Zet dit signaal af tegen het meest recente lange termijn bericht over
-    dezelfde coin. Verandert niets aan het hoog/laag vertrouwen label, dat
-    blijft puur op de vier technische factoren gebaseerd, dit is extra
-    achtergrond die meegaat in de melding."""
-    latest = repo.latest_long_term_direction(coin)
-    if not latest:
+    """Zet dit signaal af tegen het lopende lange-termijn narrative voor
+    deze coin (zie evaluate_narrative). Verandert niets aan het hoog/laag
+    vertrouwen label, dat blijft puur op de vier technische factoren
+    gebaseerd, dit is extra achtergrond die meegaat in de melding.
+
+    Alleen een narrative met status 'actief' telt mee: een tegengesproken
+    of verlopen narrative is per definitie niet meer de actuele stand van
+    zaken. Dit is bewust strenger dan de vorige versie (die simpelweg het
+    allerlaatste lange-termijn bericht pakte, ongeacht of dat bericht zelf
+    betrouwbaar was) — zie het TAO-incident in de spec."""
+    active = repo.get_active_narrative(coin)
+    if not active:
         return ""
 
-    when = latest["received_at"][:10]
-    if latest["direction"] == "neutraal":
-        return (f"Let op: recente lange termijn analyse is verdeeld over deze coin, "
-                f"geen duidelijke richting ({when}). Dit signaal staat op zichzelf.")
-    if latest["direction"] == direction.lower():
-        return f"Sluit aan bij recente lange termijn analyse ({direction}, {when})."
-    return (f"Let op: recente lange termijn analyse wijst op "
-            f"{latest['direction']}, dit signaal wijkt daarvan af ({when}).")
+    when = active["opened_at"][:10]
+    if active["direction"] == direction.lower():
+        return f"Sluit aan bij lopend lange termijn verhaal ({direction}, sinds {when})."
+    return (f"Let op: lopend lange termijn verhaal wijst op "
+            f"{active['direction']}, dit signaal wijkt daarvan af (sinds {when}).")
 
 
 async def compute_advanced_extra_factors(coin: str, direction: str, df) -> list[tuple[str, bool, str]]:
