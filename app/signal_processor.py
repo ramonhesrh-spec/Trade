@@ -349,11 +349,14 @@ async def _send_narrative_notifications(
             continue
         existing = None if is_new else repo.get_narrative_notification(narrative_id, user["id"])
         existing_message_id = existing["telegram_message_id"] if existing else None
-        quiet = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
+            # Altijd stil, zoals de oude send_long_term_message ook altijd
+            # deed: dit is community-analyse, geen actiegerichte melding
+            # (SL/TP-hit, nieuw day-trading-signaal) die een geluidje
+            # rechtvaardigt, ongeacht of het net stille uren zijn.
             telegram_message_id = await telegram_notify.send_narrative_update(
                 narrative["coin"], narrative["direction"], timeline, user["telegram_chat_id"],
-                existing_message_id, is_contradiction, contradicted_since, force_silent=quiet,
+                existing_message_id, is_contradiction, contradicted_since, force_silent=True,
             )
             repo.upsert_narrative_notification(narrative_id, user["id"], telegram_message_id)
         except Exception:
@@ -460,16 +463,37 @@ def _build_context_note(coin: str, direction: str) -> str:
     of verlopen narrative is per definitie niet meer de actuele stand van
     zaken. Dit is bewust strenger dan de vorige versie (die simpelweg het
     allerlaatste lange-termijn bericht pakte, ongeacht of dat bericht zelf
-    betrouwbaar was) — zie het TAO-incident in de spec."""
+    betrouwbaar was) — zie het TAO-incident in de spec.
+
+    Eén enkel, mogelijk fout bericht kan een net begonnen narrative direct
+    gezaghebbend maken over een steviger opgebouwd narrative dat het net
+    tegensprak (zelfde soort situatie als het TAO-incident, maar dan op het
+    day-trading-kruispunt in plaats van de Telegram-melding zelf). Weegt
+    daarom mee hoeveel updates het actieve narrative zelf al heeft tegenover
+    het narrative dat het als laatste tegensprak."""
     active = repo.get_active_narrative(coin)
     if not active:
         return ""
 
     when = active["opened_at"][:10]
+
+    weight_note = ""
+    predecessor = next(
+        (n for n in repo.list_narratives_for_coin(coin)
+         if n["id"] != active["id"] and n["status"] == "tegengesproken"),
+        None,
+    )
+    if predecessor and active["message_count"] < predecessor["message_count"]:
+        weight_note = (
+            f" Dit narrative heeft pas {active['message_count']} "
+            f"update{'s' if active['message_count'] != 1 else ''}, tegenover "
+            f"{predecessor['message_count']} in het narrative dat het tegensprak."
+        )
+
     if active["direction"] == direction.lower():
-        return f"Sluit aan bij lopend lange termijn verhaal ({direction}, sinds {when})."
+        return f"Sluit aan bij lopend lange termijn verhaal ({direction}, sinds {when})." + weight_note
     return (f"Let op: lopend lange termijn verhaal wijst op "
-            f"{active['direction']}, dit signaal wijkt daarvan af (sinds {when}).")
+            f"{active['direction']}, dit signaal wijkt daarvan af (sinds {when})." + weight_note)
 
 
 async def compute_advanced_extra_factors(coin: str, direction: str, df) -> list[tuple[str, bool, str]]:

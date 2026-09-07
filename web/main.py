@@ -803,8 +803,6 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
                 "total": len(fanned_out),
             }
 
-    long_term_messages = repo.list_recent_long_term_messages(symbol)
-
     # Trackrecord van de community zelf: klopte de lange-termijn richting
     # achteraf. Vereist een live koers, mislukt die (exchange down, coin
     # niet (meer) verhandelbaar) dan blijft dit gewoon leeg in plaats van de
@@ -841,7 +839,6 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "community_stat": community_stat,
         "coins": repo.list_coins(),
         "trendlines": repo.list_trendlines(symbol),
-        "long_term_messages": long_term_messages,
         "long_term_track_record": long_term_track_record,
         "coin_note": coin["note"] if coin else None,
         "is_muted": repo.is_coin_muted(user["id"], symbol),

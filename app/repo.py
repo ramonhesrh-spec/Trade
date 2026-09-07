@@ -633,19 +633,6 @@ def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def list_recent_long_term_messages(coin: str, limit: int = 3) -> list[dict]:
-    """Lange-termijn analyses voor deze coin, nieuwste eerst. Deze berichten
-    worden nooit direct gealarmeerd (zie signal_processor._build_context_note),
-    maar de inhoud is relevant genoeg om op de coin-pagina te tonen, in
-    klare taal via message_summary."""
-    with db.session() as conn:
-        rows = conn.execute(
-            """SELECT id, received_at, direction, raw_text, message_summary FROM messages
-               WHERE coin = ? AND category = 'lange_termijn' AND processed_at IS NOT NULL
-               ORDER BY received_at DESC LIMIT ?""",
-            (coin.upper(), limit),
-        ).fetchall()
-        return [dict(r) for r in rows]
 
 
 def set_message_price_at_receipt(message_id: int, price: float) -> None:

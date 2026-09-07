@@ -139,15 +139,19 @@
 {% endif %}
 
 {% if coin_narratives %}
-<details class="stats-collapse js-accordion" style="--i: 3">
+<details class="stats-collapse js-accordion" style="--i: 2">
   <summary class="stats-summary">
     <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-    <span>Lopend verhaal</span>
+    <span>Lopend verhaal
+      {%- if long_term_track_record %} · {{ long_term_track_record.correct }}/{{ long_term_track_record.total }} klopte achteraf{% endif %}</span>
     <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
   </summary>
+  {% if long_term_track_record %}
+  <p class="muted" style="margin: 0 0 10px; font-size: 12px;">Hoe vaak de richting van deze analyses achteraf klopte, vergeleken met de huidige koers. Analyses van de laatste dagen tellen nog niet mee.</p>
+  {% endif %}
   {% for narrative in coin_narratives %}
   <div class="long-term-item" style="{{ 'opacity: 0.6;' if narrative.status != 'actief' else '' }}">
-    <span class="badge badge-{{ narrative.direction }}">{{ narrative.direction }}</span>
+    <span class="badge badge-{{ narrative.direction if narrative.direction in ('long', 'short') else 'status' }}">{{ narrative.direction }}</span>
     <span class="badge badge-status">{{ narrative.status }}</span>
     <span class="muted mono" style="font-size: 11px;">sinds {{ narrative.opened_at[:10] }} · {{ narrative.message_count }} update{{ 's' if narrative.message_count != 1 else '' }}</span>
     {% if narrative.closed_reason %}<p class="muted" style="font-size: 11px; margin: 4px 0 0;">{{ narrative.closed_reason }}</p>{% endif %}
@@ -159,33 +163,6 @@
     {% endfor %}
   </div>
   {% endfor %}
-</details>
-{% endif %}
-
-{% if long_term_messages %}
-<details class="stats-collapse js-accordion" style="--i: 2">
-  <summary class="stats-summary">
-    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
-    <span>Lange termijn analyses
-      {%- if long_term_track_record %} · {{ long_term_track_record.correct }}/{{ long_term_track_record.total }} klopte achteraf{% endif %}</span>
-    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
-  </summary>
-  {% if long_term_track_record %}
-  <p class="muted" style="margin: 0 0 10px; font-size: 12px;">Hoe vaak de richting van deze analyses achteraf klopte, vergeleken met de huidige koers. Analyses van de laatste dagen tellen nog niet mee.</p>
-  {% endif %}
-  <div class="long-term-list">
-    {% for m in long_term_messages %}
-    <div class="long-term-item">
-      <span class="badge badge-{{ m.direction if m.direction in ('long', 'short') else 'status' }}">{{ m.direction }}</span>
-      <span class="muted mono" style="font-size: 11px;">{{ m.received_at[:10] }}</span>
-      {% if m.message_summary %}
-      <p>{{ m.message_summary }}</p>
-      {% elif m.raw_text %}
-      <p>{{ m.raw_text | truncate(220) }} <span class="muted" style="font-size: 11px;">(nog geen samenvatting)</span></p>
-      {% endif %}
-    </div>
-    {% endfor %}
-  </div>
 </details>
 {% endif %}
 
