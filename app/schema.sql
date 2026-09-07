@@ -40,7 +40,11 @@ CREATE TABLE IF NOT EXISTS messages (
     -- Live koers op het moment van verwerken, alleen ingevuld voor lange
     -- termijn analyses (zie signal_processor). Basis voor het trackrecord:
     -- kwam de koers achteraf de kant op die de analyse voorspelde.
-    price_at_receipt REAL
+    price_at_receipt REAL,
+    -- Welk lopend verhaal (coin_narratives) dit bericht opvolgt of start.
+    -- NULL voor berichten zonder duidelijke lange-termijn richting, en
+    -- voor alle berichten van vóór deze feature (geen backfill).
+    narrative_id INTEGER REFERENCES coin_narratives(id)
 );
 
 -- Bron niveaus, overgenomen uit Discord afbeeldingen. Altijd bewaard,
@@ -180,6 +184,35 @@ CREATE TABLE IF NOT EXISTS swing_watches (
 );
 CREATE INDEX IF NOT EXISTS idx_swing_watches_status ON swing_watches(status);
 CREATE INDEX IF NOT EXISTS idx_swing_watches_coin ON swing_watches(coin);
+
+-- Eén rij per doorlopend "verhaal" over een coin: een reeks lange-termijn
+-- berichten met dezelfde richting die bij elkaar horen. Zie
+-- docs/superpowers/specs/2026-09-07-coin-narratives-design.md.
+CREATE TABLE IF NOT EXISTS coin_narratives (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    -- actief/tegengesproken/verlopen, zie de spec.
+    status TEXT NOT NULL DEFAULT 'actief',
+    message_count INTEGER NOT NULL DEFAULT 1,
+    opened_at TEXT NOT NULL,
+    last_update_at TEXT NOT NULL,
+    closed_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_coin_narratives_coin_status ON coin_narratives(coin, status);
+
+-- Welk Telegram-bericht-ID bij welk narrative hoort voor welke gebruiker:
+-- nodig om een update te kunnen bewerken (bot.edit_message_text) in
+-- plaats van een nieuwe melding te sturen. Eén regel per narrative+
+-- gebruiker, bijgewerkt bij elke nieuwe melding voor dat narrative.
+CREATE TABLE IF NOT EXISTS narrative_notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    narrative_id INTEGER NOT NULL REFERENCES coin_narratives(id),
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    telegram_message_id INTEGER NOT NULL,
+    sent_at TEXT NOT NULL,
+    UNIQUE(narrative_id, user_id)
+);
 
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
