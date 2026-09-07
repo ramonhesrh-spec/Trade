@@ -45,7 +45,7 @@
 <section class="card {{ 'risk-pulse' if eval_display.status == 'actief' and (eval_daily_loss_used_pct >= 85 or eval_drawdown_used_pct >= 85) else '' }} {{ 'eval-reveal-pass' if eval_display.status == 'geslaagd' else ('eval-reveal-fail' if eval_display.status == 'mislukt' else '') }}" style="--i: 1" id="prop-eval-card">
   <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>Evaluatie simulatie</h2>
   <div class="prop-eval-head">
-    <span class="muted">€{{ "%.0f"|format(eval_display.tier_amount) }} tier · dag {{ eval_day_number }}{% if eval_display.status != 'actief' %} · {{ eval_display.status }}{% endif %}</span>
+    <span class="muted">€{{ "{:,.0f}".format(eval_display.tier_amount).replace(",", ".") }} tier · dag {{ eval_day_number }}{% if eval_display.status != 'actief' %} · {{ eval_display.status }}{% endif %}</span>
     <span class="mono">€{{ "%.2f"|format(eval_display.current_balance) }}</span>
   </div>
 
@@ -120,7 +120,7 @@
   {% for run in eval_history %}
   <div class="long-term-item">
     <span class="badge badge-{{ 'long' if run.status == 'geslaagd' else ('short' if run.status == 'mislukt' else 'status') }}">{{ run.status }}</span>
-    <span class="muted mono" style="font-size: 11px;">€{{ "%.0f"|format(run.tier_amount) }} · {{ run.started_at[:10] }}{% if run.ended_at %} tot {{ run.ended_at[:10] }}{% endif %}</span>
+    <span class="muted mono" style="font-size: 11px;">€{{ "{:,.0f}".format(run.tier_amount).replace(",", ".") }} · {{ run.started_at[:10] }}{% if run.ended_at %} tot {{ run.ended_at[:10] }}{% endif %}</span>
     {% if run.closed_reason %}<p class="muted" style="font-size: 11px; margin: 4px 0 0;">{{ run.closed_reason }}</p>{% endif %}
   </div>
   {% endfor %}

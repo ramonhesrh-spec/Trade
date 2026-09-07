@@ -1529,9 +1529,8 @@ def close_evaluation(evaluation_id: int, status: str, closed_reason: str) -> Non
 def list_evaluation_daily_results(evaluation_id: int) -> list[dict]:
     """Netto resultaat per handelsdag voor deze run, oudste eerst. Voedt de
     dag-stippen op het dashboard. Groepeert met risk.trading_day_label,
-    dezelfde functie als evaluate_prop_progress gebruikt, zodat een trade
-    nooit op een andere dag in de heatmap staat dan in de saldo-
-    berekening zelf."""
+    gebaseerd op hetzelfde ingevulde exit_time-veld als de saldo-berekening
+    gebruikte op het moment van sluiten."""
     with db.session() as conn:
         rows = conn.execute(
             """SELECT exit_time, result_eur FROM journal_entries
@@ -1541,6 +1540,13 @@ def list_evaluation_daily_results(evaluation_id: int) -> list[dict]:
         ).fetchall()
     daily: dict[str, float] = {}
     for row in rows:
-        label = risk.trading_day_label(datetime.fromisoformat(row["exit_time"]))
+        try:
+            label = risk.trading_day_label(datetime.fromisoformat(row["exit_time"]))
+        except (ValueError, TypeError):
+            # Een niet-ISO exit_time (bv. handmatig ingevoerd op een browser
+            # zonder datetime-local-ondersteuning) mag de hele heatmap en
+            # daarmee het dashboard niet laten crashen — die ene dag
+            # ontbreekt dan gewoon in de stippen.
+            continue
         daily[label] = daily.get(label, 0.0) + (row["result_eur"] or 0.0)
     return [{"date": date, "value": value} for date, value in sorted(daily.items())]

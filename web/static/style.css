@@ -1305,7 +1305,7 @@ main + .footer { border-top: 1px solid var(--border); }
    URL-vlag die client-side wordt gelezen en meteen weer verwijderd
    (zelfde patroon als closed_win/fireConfetti hierboven in dit bestand),
    nooit als doorlopende animatie — animation-iteration-count is eindig. */
-.eval-reveal-pass .risk-gauge-fill.goal-fill { animation: eval-pass-glow 700ms ease 3; }
+.eval-reveal-pass { animation: eval-pass-glow 700ms ease 3; }
 @keyframes eval-pass-glow {
   0%, 100% { box-shadow: 0 0 0 rgba(51, 214, 159, 0); }
   50% { box-shadow: 0 0 20px rgba(51, 214, 159, 0.6); }
@@ -1319,6 +1319,6 @@ main + .footer { border-top: 1px solid var(--border); }
   80% { transform: translateX(6px); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .eval-reveal-pass .risk-gauge-fill.goal-fill,
+  .eval-reveal-pass,
   .eval-reveal-fail { animation: none; }
 }

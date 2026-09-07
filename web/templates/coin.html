@@ -229,6 +229,9 @@
     <span>Oefenen met deze coin</span>
     <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
   </summary>
+  {% if active_evaluation %}
+  <p class="muted" style="margin: 0 0 8px; font-size: 12.5px;">⚠️ Deze oefentrade telt mee op je lopende evaluatie (€{{ "%.0f"|format(active_evaluation.tier_amount) }}).</p>
+  {% endif %}
   <p class="muted" style="margin: 0 0 10px;">Kies zelf een richting en krijg direct de volledige toetsing:
   trend, momentum, RSI, volume, stop loss en take profit, precies zoals bij een echt signaal.
   Telt niet mee in je echte winrate en stuurt geen Telegram melding.</p>

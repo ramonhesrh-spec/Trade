@@ -463,8 +463,18 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         )
         eval_day_number = (end_reference.date() - datetime.fromisoformat(eval_display["started_at"]).date()).days + 1
 
-        daily_loss_amount = eval_display["day_start_balance"] * eval_display["max_daily_loss_pct"] / 100
-        loss_so_far = max(0.0, eval_display["day_start_balance"] - eval_display["current_balance"])
+        display_day_start_balance = eval_display["day_start_balance"]
+        if risk.trading_day_label(datetime.now(timezone.utc)) != eval_display["day_start_date"]:
+            # De handelsdag is inmiddels doorgeschoven maar er is nog geen
+            # trade gesloten om dat in de opgeslagen staat te verwerken
+            # (dat gebeurt pas bij de eerstvolgende sluiting via
+            # evaluate_prop_progress) — voor de weergave alvast rekenen
+            # met een verse dag, anders toont de balk en de risk-pulse
+            # ademhaling het verlies van een dag die al voorbij is.
+            display_day_start_balance = eval_display["current_balance"]
+
+        daily_loss_amount = display_day_start_balance * eval_display["max_daily_loss_pct"] / 100
+        loss_so_far = max(0.0, display_day_start_balance - eval_display["current_balance"])
         eval_daily_loss_used_pct = min(100.0, (loss_so_far / daily_loss_amount * 100) if daily_loss_amount else 0.0)
 
         drawdown_amount = eval_display["tier_amount"] * eval_display["max_drawdown_pct"] / 100
@@ -953,8 +963,11 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         for entry in narrative["timeline"]
     ]
 
+    active_evaluation = repo.get_active_evaluation(user["id"])
+
     return templates.TemplateResponse(request, "coin.html", {
         "user": user,
+        "active_evaluation": active_evaluation,
         "symbol": symbol,
         "source_levels": source_levels,
         "images": repo.list_recent_images_for_coin(symbol),
