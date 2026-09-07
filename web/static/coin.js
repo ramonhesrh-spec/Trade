@@ -26,6 +26,26 @@
     upColor: "#33d69f", downColor: "#f2685c",
     borderVisible: false, wickUpColor: "#33d69f", wickDownColor: "#f2685c",
   });
+
+  // Kleine gekleurde puntjes op het moment van elke lange-termijn
+  // narrative-update, zodat een langere geschiedenis van berichten over
+  // deze coin ook op de prijsgrafiek zelf te volgen is. Apart bijgehouden
+  // (niet steeds opnieuw uit candleSeries gelezen) omdat stopDrawing()
+  // verderop candleSeries.setMarkers([]) aanroept om zijn eigen tijdelijke
+  // teken-marker weg te halen — die moet deze markers herstellen, niet
+  // leegmaken.
+  let narrativeMarkers = [];
+
+  function nearestCandleTime(candles, unixSeconds) {
+    let best = candles[0].time;
+    let bestDiff = Math.abs(candles[0].time - unixSeconds);
+    for (const c of candles) {
+      const diff = Math.abs(c.time - unixSeconds);
+      if (diff < bestDiff) { best = c.time; bestDiff = diff; }
+    }
+    return best;
+  }
+
   const ema9Series = chart.addLineSeries({
     color: "#17e5d6", lineWidth: 1, title: "EMA9", lastValueVisible: false, priceLineVisible: false,
   });
@@ -136,6 +156,17 @@
         });
       });
 
+      if (narrativeUpdates.length && data.candles.length) {
+        narrativeMarkers = narrativeUpdates.map((u) => ({
+          time: nearestCandleTime(data.candles, Math.floor(new Date(u.received_at).getTime() / 1000)),
+          position: "aboveBar",
+          color: u.direction === "long" ? "#33d69f" : "#f2685c",
+          shape: "circle",
+          text: u.direction === "long" ? "L" : "S",
+        }));
+        candleSeries.setMarkers(narrativeMarkers);
+      }
+
       chart.timeScale().fitContent();
       positionZones();
 
@@ -241,7 +272,7 @@
       if (drawBtnLabel) drawBtnLabel.textContent = "Lijn";
       container.classList.remove("is-drawing");
       setHint(null);
-      candleSeries.setMarkers([]);
+      candleSeries.setMarkers(narrativeMarkers);
       chart.applyOptions({
         handleScroll: true,
         handleScale: true,
