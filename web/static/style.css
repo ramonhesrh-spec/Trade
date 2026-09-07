@@ -631,14 +631,17 @@ main h3 { font-size: 15px; gap: 8px; }
 
 /* Stille waarschuwing: bij te veel open risico ademt de kaart zelf
    merkbaar sneller, dezelfde soort ademhaling als de logo-gloed in de
-   topbar, zodat je het voelt voor je het cijfer leest. */
-.summary-stat.risk-pulse { animation: risk-breathe 2.4s ease-in-out infinite; }
+   topbar, zodat je het voelt voor je het cijfer leest. Ook hergebruikt
+   door de evaluatie-simulatie-kaart (.card.risk-pulse) zodra de
+   dagverlies- of drawdown-balk de 85%-drempel passeert — zelfde
+   betekenis, zelfde animatie, ander element. */
+.summary-stat.risk-pulse, .card.risk-pulse { animation: risk-breathe 2.4s ease-in-out infinite; }
 @keyframes risk-breathe {
   0%, 100% { box-shadow: 0 0 0 rgba(242, 104, 92, 0); }
   50% { box-shadow: 0 0 18px rgba(242, 104, 92, 0.35); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .summary-stat.risk-pulse { animation: none; }
+  .summary-stat.risk-pulse, .card.risk-pulse { animation: none; }
 }
 
 /* Onduidelijke berichten: kort en zonder poespas, alleen om te laten

@@ -42,7 +42,7 @@
 </section>
 
 {% if eval_display %}
-<section class="card {{ 'eval-reveal-pass' if eval_display.status == 'geslaagd' else ('eval-reveal-fail' if eval_display.status == 'mislukt' else '') }}" style="--i: 1" id="prop-eval-card">
+<section class="card {{ 'risk-pulse' if eval_display.status == 'actief' and (eval_daily_loss_used_pct >= 85 or eval_drawdown_used_pct >= 85) else '' }} {{ 'eval-reveal-pass' if eval_display.status == 'geslaagd' else ('eval-reveal-fail' if eval_display.status == 'mislukt' else '') }}" style="--i: 1" id="prop-eval-card">
   <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>Evaluatie simulatie</h2>
   <div class="prop-eval-head">
     <span class="muted">€{{ "%.0f"|format(eval_display.tier_amount) }} tier · dag {{ eval_day_number }}{% if eval_display.status != 'actief' %} · {{ eval_display.status }}{% endif %}</span>
