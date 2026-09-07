@@ -3,6 +3,7 @@ low/high, gedeeld, hetzelfde voor iedereen), take profit op basis van de
 zo ontstane risicoafstand, en risicobedrag in euro's op basis van een eigen
 portfoliobedrag per gebruiker."""
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Optional
 
 ATR_BUFFER_MULTIPLIER = 0.25  # ruimte onder/boven de swing, tegen een korte wick-stop
@@ -10,10 +11,62 @@ ATR_STOP_MULTIPLIER_FALLBACK = 1.5  # als er geen swing-data is
 RISK_REWARD_RATIO = 2.0  # take profit op 2x de werkelijke stop-afstand
 
 
+def trading_day_label(dt: datetime) -> str:
+    """Het handelsdag-label (YYYY-MM-DD) voor een UTC-tijdstip, met dezelfde
+    00:30 UTC-grens als Kraken's eigen dagverlies-reset: vóór 00:30 UTC
+    hoort een tijdstip nog bij de vorige kalenderdag. Op precies deze ene
+    plek geïmplementeerd, alle evaluatie-code hergebruikt hem in plaats van
+    de grens ergens anders opnieuw te berekenen."""
+    if dt.hour == 0 and dt.minute < 30:
+        dt = dt - timedelta(days=1)
+    return dt.date().isoformat()
+
+
 @dataclass
 class StopTake:
     stop_loss: float
     take_profit: float
+
+
+@dataclass
+class PropProgress:
+    current_balance: float
+    day_start_balance: float
+    day_start_date: str
+    status: str
+    closed_reason: Optional[str]
+
+
+def evaluate_prop_progress(evaluation: dict, result_eur: float, closed_at: datetime) -> PropProgress:
+    """Verwerkt het resultaat van één aan een evaluatie-run gekoppelde
+    trade: past het virtuele saldo aan, reset de dagverlies-referentie bij
+    een nieuwe handelsdag, en bepaalt of de run daarmee geslaagd of
+    mislukt is. Drawdown wordt vóór dagverlies gecheckt: een verlies dat
+    allebei zou raken telt als de ernstigere, nooit-resettende drawdown-
+    overtreding, niet als een dagverlies dat morgen weer op nul begint."""
+    today_label = trading_day_label(closed_at)
+    day_start_balance = evaluation["day_start_balance"]
+    day_start_date = evaluation["day_start_date"]
+    if today_label != day_start_date:
+        day_start_balance = evaluation["current_balance"]
+        day_start_date = today_label
+
+    current_balance = evaluation["current_balance"] + result_eur
+    tier_amount = evaluation["tier_amount"]
+
+    status = "actief"
+    closed_reason = None
+    if current_balance <= tier_amount * (1 - evaluation["max_drawdown_pct"] / 100):
+        status, closed_reason = "mislukt", "maximale drawdown geraakt"
+    elif current_balance <= day_start_balance * (1 - evaluation["max_daily_loss_pct"] / 100):
+        status, closed_reason = "mislukt", "maximaal dagverlies geraakt"
+    elif current_balance >= tier_amount * (1 + evaluation["profit_target_pct"] / 100):
+        status, closed_reason = "geslaagd", "winstdoel gehaald"
+
+    return PropProgress(
+        current_balance=current_balance, day_start_balance=day_start_balance,
+        day_start_date=day_start_date, status=status, closed_reason=closed_reason,
+    )
 
 
 def compute_stop_take(
