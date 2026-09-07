@@ -754,6 +754,7 @@ _JOURNAL_SELECT = """
         je.result_eur AS result_eur, je.result_pct AS result_pct,
         je.note AS note,
         je.position_size_override AS position_size_override,
+        je.evaluation_id AS evaluation_id,
         s.coin AS coin, s.direction AS direction, s.category AS category,
         s.trade_type AS trade_type,
         s.price AS price,
@@ -773,12 +774,14 @@ _JOURNAL_SELECT = """
 """
 
 
-def create_journal_entry(signal_id: int, user_id: int, risk_eur: float) -> int:
+def create_journal_entry(
+    signal_id: int, user_id: int, risk_eur: float, evaluation_id: Optional[int] = None,
+) -> int:
     with db.session() as conn:
         cur = conn.execute(
-            """INSERT INTO journal_entries (signal_id, user_id, risk_eur, created_at)
-               VALUES (?, ?, ?, ?)""",
-            (signal_id, user_id, risk_eur, db.now_iso()),
+            """INSERT INTO journal_entries (signal_id, user_id, risk_eur, created_at, evaluation_id)
+               VALUES (?, ?, ?, ?, ?)""",
+            (signal_id, user_id, risk_eur, db.now_iso(), evaluation_id),
         )
         return cur.lastrowid
 
@@ -1043,10 +1046,11 @@ def delete_practice_entry(entry_id: int, user_id: int) -> None:
         )
 
 
-def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_time: str) -> tuple[float, bool]:
-    """Sluit de trade af en geeft (result_eur, is_practice) terug, zodat de
-    caller kan bepalen of dit een echte, winstgevende sluiting was (voor de
-    winst-confetti op het dashboard)."""
+def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_time: str) -> tuple[float, bool, Optional[int]]:
+    """Sluit de trade af en geeft (result_eur, is_practice, evaluation_id)
+    terug: is_practice bepaalt of dit voor de winst-confetti telt,
+    evaluation_id (kan None zijn) vertelt de caller of dit resultaat nog op
+    een lopende evaluatie-simulatie moet worden bijgeschreven."""
     entry = get_journal_entry(entry_id, user_id)
     if not entry or entry["entry_price"] is None or entry["status"] == "genegeerd":
         raise ValueError("kan alleen sluiten als er een entry prijs is ingevuld en de trade niet genegeerd is")
@@ -1087,7 +1091,7 @@ def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_tim
                 "UPDATE users SET portfolio_eur = portfolio_eur + ? WHERE id = ?",
                 (result_eur, user_id),
             )
-    return result_eur, bool(entry["is_practice"])
+    return result_eur, bool(entry["is_practice"]), entry["evaluation_id"]
 
 
 def update_journal_note(entry_id: int, user_id: int, note: str) -> None:
@@ -1520,3 +1524,23 @@ def close_evaluation(evaluation_id: int, status: str, closed_reason: str) -> Non
             "UPDATE prop_evaluations SET status = ?, closed_reason = ?, ended_at = ? WHERE id = ?",
             (status, closed_reason, db.now_iso(), evaluation_id),
         )
+
+
+def list_evaluation_daily_results(evaluation_id: int) -> list[dict]:
+    """Netto resultaat per handelsdag voor deze run, oudste eerst. Voedt de
+    dag-stippen op het dashboard. Groepeert met risk.trading_day_label,
+    dezelfde functie als evaluate_prop_progress gebruikt, zodat een trade
+    nooit op een andere dag in de heatmap staat dan in de saldo-
+    berekening zelf."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT exit_time, result_eur FROM journal_entries
+               WHERE evaluation_id = ? AND exit_price IS NOT NULL
+               ORDER BY exit_time""",
+            (evaluation_id,),
+        ).fetchall()
+    daily: dict[str, float] = {}
+    for row in rows:
+        label = risk.trading_day_label(datetime.fromisoformat(row["exit_time"]))
+        daily[label] = daily.get(label, 0.0) + (row["result_eur"] or 0.0)
+    return [{"date": date, "value": value} for date, value in sorted(daily.items())]
