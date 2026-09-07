@@ -234,6 +234,23 @@ def _build_heatmap_weeks(daily: dict[str, float], weeks: int = 18) -> list[list[
         columns.append(week)
     return columns
 
+
+def _build_eval_day_dots(daily_results: list[dict]) -> list[dict]:
+    """Zelfde kleurintensiteit-formule als _build_heatmap_weeks, maar als
+    platte rij in plaats van een week-rooster: één stip per handelsdag van
+    de evaluatie-run, relatief aan de grootste dagwaarde in de reeks
+    zelf."""
+    max_abs = max((abs(d["value"]) for d in daily_results), default=0.0) or 1.0
+    dots = []
+    for d in daily_results:
+        level = 0
+        if d["value"]:
+            level = min(3, max(1, round(abs(d["value"]) / max_abs * 3)))
+            level = level if d["value"] > 0 else -level
+        dots.append({"date": d["date"], "value": d["value"], "level": level})
+    return dots
+
+
 def _add_signal_context(entries: list[dict], winrate: dict) -> list[dict]:
     """Voegt aan elk signaal het concrete advies toe (wat kan je beter
     doen dan nu instappen) en een slagingskans op basis van de eigen
@@ -424,6 +441,42 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     is_admin = bool(config.ADMIN_TELEGRAM_CHAT_ID) and user["telegram_chat_id"] == config.ADMIN_TELEGRAM_CHAT_ID
     unclear_messages = repo.recent_unclear_messages() if is_admin else None
 
+    # Evaluatie simulatie: bij een net beëindigde run (geslaagd/mislukt)
+    # is er geen actieve run meer om te tonen, maar de reveal-melding in de
+    # URL vraagt om die laatste run toch één keer te laten zien in zijn
+    # eindtoestand.
+    active_evaluation = repo.get_active_evaluation(user["id"])
+    eval_history = repo.list_evaluations_for_user(user["id"])
+    eval_display = active_evaluation
+    if not eval_display and (request.query_params.get("evaluatie_geslaagd") or request.query_params.get("evaluatie_mislukt")):
+        eval_display = eval_history[0] if eval_history else None
+
+    eval_day_number = None
+    eval_daily_loss_used_pct = 0.0
+    eval_drawdown_used_pct = 0.0
+    eval_profit_progress_pct = 0.0
+    eval_daily_results = []
+    if eval_display:
+        end_reference = (
+            datetime.fromisoformat(eval_display["ended_at"]) if eval_display["ended_at"]
+            else datetime.now(timezone.utc)
+        )
+        eval_day_number = (end_reference.date() - datetime.fromisoformat(eval_display["started_at"]).date()).days + 1
+
+        daily_loss_amount = eval_display["day_start_balance"] * eval_display["max_daily_loss_pct"] / 100
+        loss_so_far = max(0.0, eval_display["day_start_balance"] - eval_display["current_balance"])
+        eval_daily_loss_used_pct = min(100.0, (loss_so_far / daily_loss_amount * 100) if daily_loss_amount else 0.0)
+
+        drawdown_amount = eval_display["tier_amount"] * eval_display["max_drawdown_pct"] / 100
+        drawdown_so_far = max(0.0, eval_display["tier_amount"] - eval_display["current_balance"])
+        eval_drawdown_used_pct = min(100.0, (drawdown_so_far / drawdown_amount * 100) if drawdown_amount else 0.0)
+
+        profit_amount = eval_display["tier_amount"] * eval_display["profit_target_pct"] / 100
+        profit_so_far = max(0.0, eval_display["current_balance"] - eval_display["tier_amount"])
+        eval_profit_progress_pct = min(100.0, (profit_so_far / profit_amount * 100) if profit_amount else 0.0)
+
+        eval_daily_results = _build_eval_day_dots(repo.list_evaluation_daily_results(eval_display["id"]))
+
     # Setup-checklist: alleen zichtbaar zolang niet alle stappen gezet zijn,
     # verdwijnt vanzelf zodra dat wel zo is. "Eerste melding ontvangen" kijkt
     # naar telegram_sent op een echt signaal, een voorbeeldmelding
@@ -476,6 +529,13 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "total_realized_eur": total_realized_eur,
         "portfolio_change_pct": portfolio_change_pct,
         "unclear_messages": unclear_messages,
+        "eval_display": eval_display,
+        "eval_history": eval_history,
+        "eval_day_number": eval_day_number,
+        "eval_daily_loss_used_pct": eval_daily_loss_used_pct,
+        "eval_drawdown_used_pct": eval_drawdown_used_pct,
+        "eval_profit_progress_pct": eval_profit_progress_pct,
+        "eval_daily_results": eval_daily_results,
     })
 
 
@@ -609,19 +669,44 @@ async def close_journal(
     user: dict = Depends(require_login),
 ):
     won = False
+    eval_flag = None
+    eval_flash = None
     try:
-        result_eur, is_practice = repo.close_journal_trade(entry_id, user["id"], exit_price, exit_time)
+        result_eur, is_practice, evaluation_id = repo.close_journal_trade(entry_id, user["id"], exit_price, exit_time)
         won = (not is_practice) and result_eur > 0
+        if evaluation_id:
+            active_eval = repo.get_evaluation(evaluation_id)
+            # Een run die al eerder is afgesloten (door een andere trade,
+            # of handmatig gestopt) is bevroren: dit resultaat telt niet
+            # meer mee, zie de spec.
+            if active_eval and active_eval["status"] == "actief":
+                progress = risk.evaluate_prop_progress(active_eval, result_eur, datetime.now(timezone.utc))
+                repo.update_evaluation_state(
+                    evaluation_id, progress.current_balance, progress.day_start_balance, progress.day_start_date,
+                )
+                if progress.status != "actief":
+                    repo.close_evaluation(evaluation_id, progress.status, progress.closed_reason)
+                    eval_flag = "evaluatie_geslaagd" if progress.status == "geslaagd" else "evaluatie_mislukt"
+                else:
+                    eval_flash = "up" if result_eur > 0 else ("down" if result_eur < 0 else None)
     except ValueError:
         # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
         # entry prijs ingevuld). Stil negeren, niets om te sluiten.
         pass
     target = _safe_next(next)
+    extra_query = []
     if won:
-        # Seintje voor de winst-confetti (base.html leest dit uit de URL na
-        # een gewone navigatie, dashboard.js uit resp.url na een AJAX-swap).
+        extra_query.append(("closed_win", "1"))
+    if eval_flag:
+        extra_query.append((eval_flag, "1"))
+    if eval_flash:
+        extra_query.append(("eval_flash", eval_flash))
+    if extra_query:
+        # Seintje voor client-side reveals (base.html leest dit uit de URL
+        # na een gewone navigatie, dashboard.js uit resp.url na een
+        # AJAX-swap) — zelfde patroon als de bestaande winst-confetti.
         parts = urlsplit(target)
-        query = urlencode(parse_qsl(parts.query) + [("closed_win", "1")])
+        query = urlencode(parse_qsl(parts.query) + extra_query)
         target = urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
     return RedirectResponse(url=target, status_code=303)
 
@@ -688,6 +773,45 @@ async def update_journal_note(
 
 
 # ---------------------------------------------------------------------------
+# Evaluatie simulatie: virtueel een Kraken Prop-achtige evaluatie naspelen
+# met dezelfde dagverlies-, drawdown- en winstdoel-regels, gevoed door
+# oefentrades die tijdens een actieve run genomen worden. Zie de spec voor
+# het volledige ontwerp.
+# ---------------------------------------------------------------------------
+
+PROP_EVAL_TIERS = (5000.0, 10000.0, 25000.0, 50000.0, 100000.0, 200000.0)
+
+
+@app.post("/evaluatie/start")
+async def start_evaluation(
+    tier_amount: float = Form(...),
+    profit_target_pct: float = Form(...),
+    max_drawdown_pct: float = Form(...),
+    user: dict = Depends(require_login),
+):
+    if (
+        tier_amount not in PROP_EVAL_TIERS
+        or not (0 < profit_target_pct <= 50)
+        or not (0 < max_drawdown_pct <= 50)
+        or repo.get_active_evaluation(user["id"]) is not None
+    ):
+        # Ongeldige input of dubbele start (bv. twee tabbladen tegelijk):
+        # stil negeren, het dashboard toont sowieso alleen het
+        # startformulier als er nog geen actieve run is.
+        return RedirectResponse(url="/dashboard", status_code=303)
+    repo.create_evaluation(user["id"], tier_amount, profit_target_pct, max_drawdown_pct)
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+@app.post("/evaluatie/stop")
+async def stop_evaluation(user: dict = Depends(require_login)):
+    active = repo.get_active_evaluation(user["id"])
+    if active:
+        repo.close_evaluation(active["id"], "gestopt", "handmatig gestopt")
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
+# ---------------------------------------------------------------------------
 # Oefentrades: handmatig een richting kiezen om te oefenen met de volledige
 # technische toetsing en risicoberekening, zonder dat er een echt signaal
 # via Discord voor nodig is. Telt niet mee in de echte winrate/resultaten.
@@ -736,8 +860,11 @@ async def create_practice_trade(
         "reason": reason, "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,
         "context_note": None, "is_practice": 1, "plain_explanation": plain_explanation or None,
     })
+    active_eval = repo.get_active_evaluation(user["id"])
     risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
-    entry_id = repo.create_journal_entry(signal_id, user["id"], risk_eur)
+    entry_id = repo.create_journal_entry(
+        signal_id, user["id"], risk_eur, evaluation_id=active_eval["id"] if active_eval else None,
+    )
     repo.update_journal_status(entry_id, user["id"], "genomen", entry_price=ind.price)
 
     return RedirectResponse(url="/dashboard", status_code=303)
