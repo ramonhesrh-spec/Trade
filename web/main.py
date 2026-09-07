@@ -818,6 +818,9 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
 
     coin = repo.get_coin(symbol)
     active_swing_watches = repo.active_swing_watches_for_coin(symbol)
+    coin_narratives = repo.list_narratives_for_coin(symbol)
+    for narrative in coin_narratives:
+        narrative["timeline"] = repo.list_narrative_messages(narrative["id"])
 
     return templates.TemplateResponse(request, "coin.html", {
         "user": user,
@@ -837,6 +840,7 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "coin_note": coin["note"] if coin else None,
         "is_muted": repo.is_coin_muted(user["id"], symbol),
         "active_swing_watches": active_swing_watches,
+        "coin_narratives": coin_narratives,
     })
 
 
