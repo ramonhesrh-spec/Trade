@@ -1282,3 +1282,40 @@ main + .footer { border-top: 1px solid var(--border); }
   color: var(--accent); background: rgba(10, 14, 15, 0.85); padding: 1px 6px;
   border-radius: 3px; white-space: nowrap; border: 1px solid var(--border-strong);
 }
+
+/* Evaluatie-simulatie: hergebruikt .risk-gauge/.risk-gauge-fill volledig
+   (zelfde gauge-grow-intro, zelfde vloeistof-shimmer). Alleen de
+   winstdoel-balk krijgt een eigen variant, want hoger is hier beter, niet
+   gevaarlijker: geen rood/amber-opbouw, altijd groen. */
+.risk-gauge-fill.goal-fill { background: var(--green); }
+
+.prop-eval-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 12px; font-size: 13px;
+}
+.prop-eval-days { display: flex; flex-wrap: wrap; gap: 3px; margin: 14px 0 4px; }
+.prop-eval-stop { margin-top: 12px; }
+.prop-eval-start { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; }
+.prop-eval-start label { display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; color: var(--muted); }
+
+/* Eenmalig geslaagd/mislukt-moment: vuurt precies één keer via een
+   URL-vlag die client-side wordt gelezen en meteen weer verwijderd
+   (zelfde patroon als closed_win/fireConfetti hierboven in dit bestand),
+   nooit als doorlopende animatie — animation-iteration-count is eindig. */
+.eval-reveal-pass .risk-gauge-fill.goal-fill { animation: eval-pass-glow 700ms ease 3; }
+@keyframes eval-pass-glow {
+  0%, 100% { box-shadow: 0 0 0 rgba(51, 214, 159, 0); }
+  50% { box-shadow: 0 0 20px rgba(51, 214, 159, 0.6); }
+}
+.eval-reveal-fail { animation: eval-fail-shake 480ms ease 1; }
+@keyframes eval-fail-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eval-reveal-pass .risk-gauge-fill.goal-fill,
+  .eval-reveal-fail { animation: none; }
+}

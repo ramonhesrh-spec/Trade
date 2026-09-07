@@ -155,6 +155,20 @@
       url.searchParams.delete("closed_win");
       history.replaceState(null, "", url.pathname + url.search + url.hash);
     }
+
+    // Evaluatie-simulatie: eenmalig saldo-flits (winst/verlies) of een
+    // geslaagd/mislukt-moment, zelfde eenmalig-vuur-patroon als de
+    // confetti hierboven. De kaart zelf draagt de klasse die de CSS-
+    // animatie triggert; de URL-vlag is puur het seintje, geen state.
+    var evalCard = document.getElementById("prop-eval-card");
+    if (evalCard && location.search.indexOf("eval_flash=") !== -1) {
+      var flashUp = location.search.indexOf("eval_flash=up") !== -1;
+      var balanceEl = evalCard.querySelector(".prop-eval-head .mono");
+      if (balanceEl) balanceEl.classList.add(flashUp ? "flash-up" : "flash-down");
+      var evalUrl = new URL(location.href);
+      evalUrl.searchParams.delete("eval_flash");
+      history.replaceState(null, "", evalUrl.pathname + evalUrl.search + evalUrl.hash);
+    }
   })();
 </script>
 <script>
