@@ -214,6 +214,30 @@ CREATE TABLE IF NOT EXISTS narrative_notifications (
     UNIQUE(narrative_id, user_id)
 );
 
+-- Eén virtuele Kraken Prop-achtige evaluatie: een gebruiker test zijn
+-- eigen discipline en HesPulse's signalen tegen dezelfde dagverlies-,
+-- drawdown- en winstdoel-regels als een echte evaluatie, zonder geld uit
+-- te geven. Zie de spec voor de volledige regels. Hoogstens één rij per
+-- gebruiker met status 'actief' (bewaakt door de webroute, niet door een
+-- database-constraint, zelfde patroon als coin_narratives).
+CREATE TABLE IF NOT EXISTS prop_evaluations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    tier_amount REAL NOT NULL,
+    profit_target_pct REAL NOT NULL,
+    max_daily_loss_pct REAL NOT NULL DEFAULT 3.0,
+    max_drawdown_pct REAL NOT NULL,
+    current_balance REAL NOT NULL,
+    day_start_balance REAL NOT NULL,
+    day_start_date TEXT NOT NULL,
+    -- actief/geslaagd/mislukt/gestopt, zie de spec.
+    status TEXT NOT NULL DEFAULT 'actief',
+    closed_reason TEXT,
+    started_at TEXT NOT NULL,
+    ended_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_prop_evaluations_user_status ON prop_evaluations(user_id, status);
+
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL

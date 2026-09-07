@@ -83,6 +83,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE journal_entries ADD COLUMN take_profit_override REAL")
     if "position_size_override" not in existing_journal:
         conn.execute("ALTER TABLE journal_entries ADD COLUMN position_size_override REAL")
+    if "evaluation_id" not in existing_journal:
+        conn.execute("ALTER TABLE journal_entries ADD COLUMN evaluation_id INTEGER REFERENCES prop_evaluations(id)")
+    # Index hier, nooit in schema.sql: op een bestaande database zonder de
+    # kolom hierboven zou die CREATE INDEX meteen crashen, zie het
+    # narrative_id-precedent verderop in dit bestand.
+    conn.execute("CREATE INDEX IF NOT EXISTS idx_journal_evaluation_id ON journal_entries(evaluation_id)")
 
     existing_users = {row["name"] for row in conn.execute("PRAGMA table_info(users)")}
     if "quiet_hours_start" not in existing_users:

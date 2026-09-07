@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import config, db
+from app import config, db, risk
 
 
 # ---------------------------------------------------------------------------
@@ -1450,3 +1450,73 @@ def coin_stats(user_id: int) -> list[dict]:
 
     stats.sort(key=lambda s: s["total"], reverse=True)
     return stats
+
+
+# ---------------------------------------------------------------------------
+# Kraken Prop-achtige evaluatie simulatie
+# ---------------------------------------------------------------------------
+
+def create_evaluation(
+    user_id: int, tier_amount: float, profit_target_pct: float, max_drawdown_pct: float,
+) -> int:
+    """Nieuwe evaluatie-run, status 'actief', saldo begint op tier_amount.
+    De aanroeper (web/main.py) controleert dat de gebruiker nog geen
+    actieve run heeft — dezelfde verantwoordelijkheidsverdeling als
+    evaluate_narrative's 'hoogstens één actief narrative per coin'."""
+    now = db.now_iso()
+    today_label = risk.trading_day_label(datetime.now(timezone.utc))
+    with db.session() as conn:
+        cur = conn.execute(
+            """INSERT INTO prop_evaluations
+               (user_id, tier_amount, profit_target_pct, max_drawdown_pct,
+                current_balance, day_start_balance, day_start_date, started_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (user_id, tier_amount, profit_target_pct, max_drawdown_pct,
+             tier_amount, tier_amount, today_label, now),
+        )
+        return cur.lastrowid
+
+
+def get_active_evaluation(user_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute(
+            "SELECT * FROM prop_evaluations WHERE user_id = ? AND status = 'actief' ORDER BY id DESC LIMIT 1",
+            (user_id,),
+        ).fetchone()
+        return dict(row) if row else None
+
+
+def get_evaluation(evaluation_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM prop_evaluations WHERE id = ?", (evaluation_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def list_evaluations_for_user(user_id: int) -> list[dict]:
+    """Geschiedenis voor het dashboard, nieuwste eerst."""
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM prop_evaluations WHERE user_id = ? ORDER BY started_at DESC",
+            (user_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_evaluation_state(
+    evaluation_id: int, current_balance: float, day_start_balance: float, day_start_date: str,
+) -> None:
+    with db.session() as conn:
+        conn.execute(
+            """UPDATE prop_evaluations
+               SET current_balance = ?, day_start_balance = ?, day_start_date = ?
+               WHERE id = ?""",
+            (current_balance, day_start_balance, day_start_date, evaluation_id),
+        )
+
+
+def close_evaluation(evaluation_id: int, status: str, closed_reason: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE prop_evaluations SET status = ?, closed_reason = ?, ended_at = ? WHERE id = ?",
+            (status, closed_reason, db.now_iso(), evaluation_id),
+        )
