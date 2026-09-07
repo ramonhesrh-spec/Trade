@@ -21,14 +21,20 @@ MessageHandler = Callable[[int, str, list[str]], Awaitable[None]]
 
 
 def _effective_content(message: discord.Message) -> str:
-    """Discord's 'doorsturen' knop levert een leeg message.content op, de
-    echte tekst zit dan in message_snapshots. Val daarop terug als het
-    bericht zelf geen tekst bevat."""
+    """Discord's 'doorsturen' knop zet de eigen tekst van de doorstuurder
+    (ook als dat maar één woord is, bv. de coin-naam als bijschrift) in
+    message.content, en de echte doorgestuurde tekst apart in
+    message_snapshots. Die twee zijn geen alternatieven van elkaar: allebei
+    meenemen, anders verdwijnt de eigenlijke analyse zodra iemand er een
+    kort bijschrift bij typt (ontdekt bij een TAO-bericht waar het bijschrift
+    "TAO" de complete forward-tekst wegdrukte en de AI alleen de kale
+    grafiekafbeelding overhield, zonder de zin die de juiste richting gaf)."""
+    parts = []
     if message.content:
-        return message.content
+        parts.append(message.content)
     snapshots = getattr(message, "message_snapshots", [])
-    texts = [snap.content for snap in snapshots if snap.content]
-    return "\n\n".join(texts)
+    parts.extend(snap.content for snap in snapshots if snap.content)
+    return "\n\n".join(parts)
 
 
 def _build_intents() -> discord.Intents:
