@@ -156,31 +156,31 @@
       history.replaceState(null, "", url.pathname + url.search + url.hash);
     }
 
-    // Evaluatie-simulatie: eenmalig saldo-flits (winst/verlies) of een
-    // geslaagd/mislukt-moment, zelfde eenmalig-vuur-patroon als de
-    // confetti hierboven. De kaart zelf draagt de klasse die de CSS-
-    // animatie triggert; de URL-vlag is puur het seintje, geen state.
-    var evalCard = document.getElementById("prop-eval-card");
-    if (evalCard && location.search.indexOf("eval_flash=") !== -1) {
-      var flashUp = location.search.indexOf("eval_flash=up") !== -1;
-      var balanceEl = evalCard.querySelector(".prop-eval-head .mono");
-      if (balanceEl) balanceEl.classList.add(flashUp ? "flash-up" : "flash-down");
-      var evalUrl = new URL(location.href);
-      evalUrl.searchParams.delete("eval_flash");
-      history.replaceState(null, "", evalUrl.pathname + evalUrl.search + evalUrl.hash);
-    }
-
-    // Idem voor het geslaagd/mislukt-seintje zelf: de server zet de reveal-
-    // klasse (eval-reveal-pass/eval-reveal-fail) al bij het renderen op basis
-    // van eval_display.status, deze query-parameter is puur wat de route naar
-    // eval_history[0] laat terugvallen (zie web/main.py). Zonder opruiming
-    // speelt een refresh of een teruggekeerde/gedeelde URL de animatie
-    // telkens opnieuw af in plaats van precies één keer.
+    // Geslaagd/mislukt-seintje: de server zet de reveal-klasse
+    // (eval-reveal-pass/eval-reveal-fail) al bij het renderen op basis van
+    // eval_display.status, deze query-parameter is puur wat de /evaluatie-
+    // route naar eval_history[0] laat terugvallen als er geen actieve run
+    // meer is (zie web/main.py). De sluitroute redirect na een geslaagde/
+    // mislukte run altijd naar dashboard of coin-pagina (waar de knop stond),
+    // nooit naar /evaluatie zelf -- dus zonder ingrijpen zou de vlag hier
+    // stilletjes gestript worden zonder dat de gebruiker het reveal ooit te
+    // zien krijgt. Op elke andere pagina dan /evaluatie sturen we daarom
+    // meteen door (location.replace, niet href, zodat de tussenpagina niet
+    // in de terug-historie komt); pas op /evaluatie zelf, waar de kaart met
+    // de reveal-klasse daadwerkelijk bestaat, ruimen we de vlag na het tonen
+    // op -- zonder die opruiming zou een refresh of een teruggekeerde/
+    // gedeelde URL de animatie telkens opnieuw afspelen in plaats van
+    // precies één keer.
     if (location.search.indexOf("evaluatie_geslaagd=1") !== -1 || location.search.indexOf("evaluatie_mislukt=1") !== -1) {
-      var evalStatusUrl = new URL(location.href);
-      evalStatusUrl.searchParams.delete("evaluatie_geslaagd");
-      evalStatusUrl.searchParams.delete("evaluatie_mislukt");
-      history.replaceState(null, "", evalStatusUrl.pathname + evalStatusUrl.search + evalStatusUrl.hash);
+      if (location.pathname !== "/evaluatie") {
+        var evalFlag = location.search.indexOf("evaluatie_geslaagd=1") !== -1 ? "evaluatie_geslaagd" : "evaluatie_mislukt";
+        location.replace("/evaluatie?" + evalFlag + "=1");
+      } else {
+        var evalStatusUrl = new URL(location.href);
+        evalStatusUrl.searchParams.delete("evaluatie_geslaagd");
+        evalStatusUrl.searchParams.delete("evaluatie_mislukt");
+        history.replaceState(null, "", evalStatusUrl.pathname + evalStatusUrl.search + evalStatusUrl.hash);
+      }
     }
   })();
 </script>

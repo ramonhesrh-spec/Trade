@@ -745,7 +745,6 @@ async def close_journal(
 ):
     won = False
     eval_flag = None
-    eval_flash = None
     try:
         result_eur, is_practice, evaluation_id = repo.close_journal_trade(entry_id, user["id"], exit_price, exit_time)
         won = (not is_practice) and result_eur > 0
@@ -762,8 +761,6 @@ async def close_journal(
                 if progress.status != "actief":
                     repo.close_evaluation(evaluation_id, progress.status, progress.closed_reason)
                     eval_flag = "evaluatie_geslaagd" if progress.status == "geslaagd" else "evaluatie_mislukt"
-                else:
-                    eval_flash = "up" if result_eur > 0 else ("down" if result_eur < 0 else None)
     except ValueError:
         # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
         # entry prijs ingevuld). Stil negeren, niets om te sluiten.
@@ -774,8 +771,6 @@ async def close_journal(
         extra_query.append(("closed_win", "1"))
     if eval_flag:
         extra_query.append((eval_flag, "1"))
-    if eval_flash:
-        extra_query.append(("eval_flash", eval_flash))
     if extra_query:
         # Seintje voor client-side reveals (base.html leest dit uit de URL
         # na een gewone navigatie, dashboard.js uit resp.url na een

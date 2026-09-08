@@ -228,14 +228,6 @@
       if (resp.url.indexOf("closed_win=1") !== -1 && window.HP && window.HP.confetti) {
         window.HP.confetti();
       }
-      if (resp.url.indexOf("eval_flash=") !== -1) {
-        var evalCardAjax = document.getElementById("prop-eval-card");
-        if (evalCardAjax) {
-          var flashUpAjax = resp.url.indexOf("eval_flash=up") !== -1;
-          var balanceElAjax = evalCardAjax.querySelector(".prop-eval-head .mono");
-          if (balanceElAjax) balanceElAjax.classList.add(flashUpAjax ? "flash-up" : "flash-down");
-        }
-      }
     } catch (err) {
       if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
       // Geen verbinding: een gewone form.submit() zou hier gegarandeerd
