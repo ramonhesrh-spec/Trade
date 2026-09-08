@@ -42,71 +42,16 @@
 </section>
 
 {% if eval_display %}
-<section class="card {{ 'risk-pulse' if eval_display.status == 'actief' and (eval_daily_loss_used_pct >= 85 or eval_drawdown_used_pct >= 85) else '' }} {{ 'eval-reveal-pass' if eval_display.status == 'geslaagd' else ('eval-reveal-fail' if eval_display.status == 'mislukt' else '') }}" style="--i: 1" id="prop-eval-card">
+<section class="card" style="--i: 1">
   <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>Evaluatie simulatie</h2>
-  <div class="prop-eval-head">
-    <span class="muted">€{{ "{:,.0f}".format(eval_display.tier_amount).replace(",", ".") }} tier · dag {{ eval_day_number }}{% if eval_display.status != 'actief' %} · {{ eval_display.status }}{% endif %}</span>
-    <span class="mono">€{{ "%.2f"|format(eval_display.current_balance) }}</span>
-  </div>
-
-  <div class="risk-gauge">
-    <div class="risk-gauge-head"><span class="muted">Dagverlies opgebruikt</span><span class="mono">{{ "%.0f"|format(eval_daily_loss_used_pct) }}%</span></div>
-    <div class="risk-gauge-bar">
-      <div class="risk-gauge-fill {{ 'risk-high' if eval_daily_loss_used_pct >= 85 else ('risk-mid' if eval_daily_loss_used_pct >= 60 else '') }}"
-           style="width: {{ [eval_daily_loss_used_pct, 100] | min }}%"></div>
-    </div>
-  </div>
-
-  <div class="risk-gauge">
-    <div class="risk-gauge-head"><span class="muted">Drawdown opgebruikt</span><span class="mono">{{ "%.0f"|format(eval_drawdown_used_pct) }}%</span></div>
-    <div class="risk-gauge-bar">
-      <div class="risk-gauge-fill {{ 'risk-high' if eval_drawdown_used_pct >= 85 else ('risk-mid' if eval_drawdown_used_pct >= 60 else '') }}"
-           style="width: {{ [eval_drawdown_used_pct, 100] | min }}%"></div>
-    </div>
-  </div>
-
-  <div class="risk-gauge">
-    <div class="risk-gauge-head"><span class="muted">Winstdoel</span><span class="mono">{{ "%.0f"|format(eval_profit_progress_pct) }}%</span></div>
-    <div class="risk-gauge-bar">
-      <div class="risk-gauge-fill goal-fill" style="width: {{ [eval_profit_progress_pct, 100] | min }}%"></div>
-    </div>
-  </div>
-
-  {% if eval_daily_results %}
-  <div class="prop-eval-days">
-    {% for day in eval_daily_results %}
-    <span class="heat-cell heat-level-{{ day.level }}" title="{{ day.date }}: €{{ '%.2f'|format(day.value) }}"></span>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  {% if eval_display.status == 'actief' %}
-  <form method="post" action="/evaluatie/stop" class="prop-eval-stop">
-    <button type="submit" class="button-reset">Stoppen</button>
-  </form>
-  {% elif eval_display.closed_reason %}
-  <p class="muted" style="font-size: 12px; margin-top: 10px;">{{ eval_display.closed_reason }}</p>
-  {% endif %}
+  <p class="muted" style="margin: 0 0 6px;">€{{ "{:,.0f}".format(eval_display.tier_amount).replace(",", ".") }} tier · €{{ "%.2f"|format(eval_display.current_balance) }}{% if eval_display.status != 'actief' %} · {{ eval_display.status }}{% endif %}</p>
+  <a href="/evaluatie">Bekijk evaluatie →</a>
 </section>
 {% else %}
 <section class="card" style="--i: 1">
   <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>Evaluatie simulatie</h2>
-  <p class="muted">Test of je discipline en signalen een Kraken Prop-achtige evaluatie zouden overleven, zonder er geld aan uit te geven.</p>
-  <form method="post" action="/evaluatie/start" class="prop-eval-start">
-    <label>Bedrag
-      <select name="tier_amount">
-        <option value="5000">€5.000</option>
-        <option value="10000" selected>€10.000</option>
-        <option value="25000">€25.000</option>
-        <option value="50000">€50.000</option>
-        <option value="100000">€100.000</option>
-        <option value="200000">€200.000</option>
-      </select>
-    </label>
-    <label>Winstdoel % <input type="number" name="profit_target_pct" value="8" min="1" max="50" step="0.5" required></label>
-    <label>Max drawdown % <input type="number" name="max_drawdown_pct" value="6" min="1" max="50" step="0.5" required></label>
-    <button type="submit">Start evaluatie</button>
-  </form>
+  <p class="muted">Nog geen evaluatie actief.</p>
+  <a href="/evaluatie">Start een evaluatie →</a>
 </section>
 {% endif %}
 
