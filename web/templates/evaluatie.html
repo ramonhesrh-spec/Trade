@@ -72,6 +72,16 @@
   {% endif %}
 
   {% if eval_display.status == 'actief' %}
+  <details class="confidence-detail js-accordion" id="eval-what-if">
+    <summary class="confidence-why">Wat als ik dit risico neem?</summary>
+    <label>Hypothetisch risico in €
+      <input type="number" step="0.01" min="0" id="eval-what-if-input" placeholder="bijv. 100">
+    </label>
+    <p class="muted" id="eval-what-if-result" style="margin: 8px 0 0; font-size: 12.5px;"></p>
+  </details>
+  {% endif %}
+
+  {% if eval_display.status == 'actief' %}
   <form method="post" action="/evaluatie/stop" class="prop-eval-stop">
     <button type="submit" class="button-reset">Stoppen</button>
   </form>
@@ -169,6 +179,39 @@
   const evalIsActive = {{ (eval_display.status == 'actief') | tojson if eval_display else "false" }};
   const evalDailyLossUsedPct = {{ eval_daily_loss_used_pct | tojson }};
   const evalDrawdownUsedPct = {{ eval_drawdown_used_pct | tojson }};
+  const evalCurrentBalance = {{ eval_display.current_balance | tojson if eval_display else "null" }};
+  const evalDailyLossRemainingEur = {{ eval_daily_loss_remaining_eur | tojson if eval_daily_loss_remaining_eur is not none else "null" }};
+
+  // "Wat als"-rekenhulp: puur illustratief, geen serveraanroep nodig want
+  // alles wat hij nodig heeft staat al op de pagina. De winst-kant gaat uit
+  // van de vaste 2:1 risk:reward-verhouding die risk.compute_stop_take voor
+  // elke trade toepast (zie app/risk.py, RISK_REWARD_RATIO) -- geen garantie
+  // voor een specifieke trade, maar wel de verhouding die het systeem altijd
+  // aanhoudt, dus een eerlijke illustratie.
+  (function () {
+    const input = document.getElementById("eval-what-if-input");
+    const result = document.getElementById("eval-what-if-result");
+    if (!input || !result || evalCurrentBalance === null) return;
+
+    function formatEur(value) {
+      return "€" + value.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function update() {
+      const risk = parseFloat(input.value);
+      if (!risk || risk <= 0) { result.textContent = ""; return; }
+
+      const balanceAfterLoss = evalCurrentBalance - risk;
+      const balanceAfterWin = evalCurrentBalance + risk * 2;
+      let text = `Bij verlies: saldo naar ${formatEur(balanceAfterLoss)}. Bij winst (2:1): saldo naar ${formatEur(balanceAfterWin)}.`;
+      if (evalDailyLossRemainingEur !== null && risk > evalDailyLossRemainingEur) {
+        text += ` Dit verlies overschrijdt je resterende dagverliesruimte (${formatEur(evalDailyLossRemainingEur)}) -- de run zou vandaag eindigen.`;
+      }
+      result.textContent = text;
+    }
+
+    input.addEventListener("input", update);
+  })();
 </script>
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
 <script src="/static/evaluatie.js"></script>
