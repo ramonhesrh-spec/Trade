@@ -100,6 +100,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "note" not in existing_coins:
         conn.execute("ALTER TABLE coins ADD COLUMN note TEXT")
 
+    existing_prop_evaluations = {row["name"] for row in conn.execute("PRAGMA table_info(prop_evaluations)")}
+    if "danger_alert_sent" not in existing_prop_evaluations:
+        conn.execute("ALTER TABLE prop_evaluations ADD COLUMN danger_alert_sent INTEGER NOT NULL DEFAULT 0")
+
 
 def get_setting(key: str, default: str = "") -> str:
     with session() as conn:

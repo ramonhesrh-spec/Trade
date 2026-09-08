@@ -1535,6 +1535,18 @@ def update_evaluation_state(
         )
 
 
+def set_evaluation_danger_alert_sent(evaluation_id: int, sent: bool) -> None:
+    """Eenmalig-vuur-vlag voor de Telegram-waarschuwing bij de 85%-drempel
+    (zie web/main.py's close-route). Ook gebruikt om terug te zetten naar
+    False zodra het percentage weer onder de drempel zakt, zodat een
+    latere nieuwe overschrijding in dezelfde run opnieuw gemeld wordt."""
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE prop_evaluations SET danger_alert_sent = ? WHERE id = ?",
+            (int(sent), evaluation_id),
+        )
+
+
 def close_evaluation(evaluation_id: int, status: str, closed_reason: str) -> None:
     with db.session() as conn:
         conn.execute(

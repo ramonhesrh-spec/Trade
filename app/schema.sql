@@ -234,7 +234,14 @@ CREATE TABLE IF NOT EXISTS prop_evaluations (
     status TEXT NOT NULL DEFAULT 'actief',
     closed_reason TEXT,
     started_at TEXT NOT NULL,
-    ended_at TEXT
+    ended_at TEXT,
+    -- Eenmalig-vuur-vlag voor de Telegram-waarschuwing zodra dagverlies of
+    -- drawdown de 85%-drempel passeert: zonder dit zou elke volgende
+    -- trade-close op een run die al boven de drempel zit opnieuw een
+    -- melding sturen. Reset naar 0 zodra het weer onder de drempel zakt,
+    -- zodat een nieuwe overschrijding later in dezelfde run wel weer
+    -- gemeld wordt.
+    danger_alert_sent INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_prop_evaluations_user_status ON prop_evaluations(user_id, status);
 

@@ -752,6 +752,49 @@ def _safe_next(next_path: str) -> str:
     return "/dashboard"
 
 
+EVAL_DANGER_THRESHOLD_PCT = 85.0  # zelfde drempel als de risk-pulse-animatie elders in de app
+
+
+async def _check_eval_danger_alert(
+    active_eval: dict, progress: risk.PropProgress, evaluation_id: int, chat_id: Optional[str],
+) -> None:
+    """Stuurt een Telegram-waarschuwing zodra dagverlies of drawdown de
+    85%-drempel passeert op een run die nog actief is (zelfde percentages
+    als _build_eval_context laat zien op de evaluatiepagina). Vuurt maar
+    één keer per overschrijding: danger_alert_sent voorkomt herhaling op
+    elke volgende trade-close, en wordt teruggezet zodra het percentage
+    weer onder de drempel zakt, zodat een latere nieuwe overschrijding in
+    dezelfde run wél weer gemeld wordt."""
+    daily_loss_amount = progress.day_start_balance * active_eval["max_daily_loss_pct"] / 100
+    loss_so_far = max(0.0, progress.day_start_balance - progress.current_balance)
+    daily_loss_used_pct = min(100.0, (loss_so_far / daily_loss_amount * 100) if daily_loss_amount else 0.0)
+    daily_remaining_eur = max(0.0, daily_loss_amount - loss_so_far)
+
+    drawdown_amount = active_eval["tier_amount"] * active_eval["max_drawdown_pct"] / 100
+    drawdown_so_far = max(0.0, active_eval["tier_amount"] - progress.current_balance)
+    drawdown_used_pct = min(100.0, (drawdown_so_far / drawdown_amount * 100) if drawdown_amount else 0.0)
+    drawdown_remaining_eur = max(0.0, drawdown_amount - drawdown_so_far)
+
+    in_danger_zone = daily_loss_used_pct >= EVAL_DANGER_THRESHOLD_PCT or drawdown_used_pct >= EVAL_DANGER_THRESHOLD_PCT
+    if not in_danger_zone:
+        if active_eval["danger_alert_sent"]:
+            repo.set_evaluation_danger_alert_sent(evaluation_id, False)
+        return
+
+    if active_eval["danger_alert_sent"]:
+        return
+
+    if drawdown_used_pct >= daily_loss_used_pct:
+        pct_type, pct_value, remaining_eur = "drawdown", drawdown_used_pct, drawdown_remaining_eur
+    else:
+        pct_type, pct_value, remaining_eur = "dagverlies", daily_loss_used_pct, daily_remaining_eur
+
+    await telegram_notify.send_eval_danger_alert(
+        pct_type, pct_value, active_eval["tier_amount"], remaining_eur, chat_id,
+    )
+    repo.set_evaluation_danger_alert_sent(evaluation_id, True)
+
+
 @app.post("/journal/{entry_id}/close")
 async def close_journal(
     entry_id: int,
@@ -778,6 +821,8 @@ async def close_journal(
                 if progress.status != "actief":
                     repo.close_evaluation(evaluation_id, progress.status, progress.closed_reason)
                     eval_flag = "evaluatie_geslaagd" if progress.status == "geslaagd" else "evaluatie_mislukt"
+                else:
+                    await _check_eval_danger_alert(active_eval, progress, evaluation_id, user["telegram_chat_id"])
     except ValueError:
         # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
         # entry prijs ingevuld). Stil negeren, niets om te sluiten.

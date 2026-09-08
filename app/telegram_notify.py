@@ -436,6 +436,29 @@ async def send_stale_pending_message(coin: str, chat_id: str) -> None:
     logger.info("Vervallen-kans melding verstuurd voor %s naar chat %s", coin, chat_id)
 
 
+async def send_eval_danger_alert(
+    pct_type: str, pct_value: float, tier_amount: float, remaining_eur: float, chat_id: str,
+) -> None:
+    """Waarschuwing zodra dagverlies of drawdown op een actieve
+    evaluatie-run de 85%-drempel passeert (zie web/main.py's close-route,
+    die dit één keer per overschrijding stuurt via
+    prop_evaluations.danger_alert_sent). pct_type is 'dagverlies' of
+    'drawdown'. Niet stil: dit vraagt om een beslissing (stoppen voor
+    vandaag, of voor de hele run), geen achtergrondinfo."""
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = (
+        f"⚠️ Evaluatie €{'{:,.0f}'.format(tier_amount).replace(',', '.')}\n"
+        f"{DIVIDER}\n"
+        f"{pct_type.capitalize()} zit op {pct_value:.0f}% van de limiet. "
+        f"Nog €{remaining_eur:.2f} ruimte voordat de run eindigt.\n\n"
+        f"Overweeg te stoppen voor vandaag."
+    )
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=False)
+    logger.info("Evaluatie-gevarenzone melding (%s, %.0f%%) verstuurd naar chat %s", pct_type, pct_value, chat_id)
+
+
 async def send_admin_alert(text: str) -> None:
     """Stuurt een systeemwaarschuwing naar de beheerder (ADMIN_TELEGRAM_CHAT_ID
     in .env), voor problemen die niets met een specifiek handelssignaal te
