@@ -173,7 +173,7 @@ EOF
 
 **Interfaces:**
 - Consumes: `repo.list_evaluation_balance_curve` (Task 1).
-- Produces: `_build_eval_context(user: dict, request: Request) -> dict` (gedeeld door `dashboard` en de nieuwe route), `_eval_history_stats(eval_history: list[dict]) -> Optional[dict]`, `GET /evaluatie`.
+- Produces: `_build_eval_context(user: dict, request: Request) -> dict` (gedeeld door `dashboard` en de nieuwe route), `_eval_history_stats(eval_history: list[dict]) -> Optional[dict]`, `_eval_coaching_tip(eval_display: Optional[dict], daily_loss_used_pct: float, drawdown_used_pct: float, profit_progress_pct: float) -> Optional[str]`, `GET /evaluatie`.
 
 Dit is een refactor van bestaande, al gereviewde code (de dashboard-route) plus een nieuwe route. Het gedrag van het dashboard mag niet veranderen door de refactor zelf — alleen de daarna volgende template-wijziging (Task 4) verandert wat zichtbaar is.
 
@@ -339,6 +339,24 @@ def _eval_history_stats(eval_history: list[dict]) -> Optional[dict]:
         "avg_days_to_fail": avg_days_to_fail,
         "common_fail_reason": common_fail_reason,
     }
+
+
+def _eval_coaching_tip(
+    eval_display: Optional[dict], daily_loss_used_pct: float, drawdown_used_pct: float, profit_progress_pct: float,
+) -> Optional[str]:
+    """Eén korte, op de actuele status toegesneden tip in plaats van
+    altijd dezelfde statische tekst. Alleen relevant voor een actief
+    lopende run — een afgeronde run heeft niks meer te sturen. Twee
+    situaties zijn de moeite waard om expliciet te benoemen: dicht bij
+    een limiet (stoppen is een optie, geen verplichting) en dicht bij het
+    winstdoel (het moment waarop discipline het vaakst verslapt)."""
+    if not eval_display or eval_display["status"] != "actief":
+        return None
+    if daily_loss_used_pct >= 70 or drawdown_used_pct >= 70:
+        return "Je zit dicht bij een limiet. Overweeg te stoppen voor vandaag, niet omdat het moet, maar omdat het kan."
+    if profit_progress_pct >= 70:
+        return "Je bent dicht bij je winstdoel. Dit is precies het moment waarop mensen hun regels laten verslappen. Blijf bij je proces."
+    return None
 ```
 
 Voeg `Counter` toe aan de imports bovenaan `web/main.py` (zoek de bestaande `from datetime import datetime, timedelta, timezone`-regel en voeg er een regel boven toe: `from collections import Counter`).
@@ -354,12 +372,17 @@ async def evaluatie_page(request: Request, user: dict = Depends(require_login)):
     eval_display = eval_ctx["eval_display"]
     balance_curve = repo.list_evaluation_balance_curve(eval_display["id"]) if eval_display else []
     eval_stats = _eval_history_stats(eval_ctx["eval_history"])
+    eval_coaching_tip = _eval_coaching_tip(
+        eval_display, eval_ctx["eval_daily_loss_used_pct"], eval_ctx["eval_drawdown_used_pct"],
+        eval_ctx["eval_profit_progress_pct"],
+    )
 
     return templates.TemplateResponse(request, "evaluatie.html", {
         "user": user,
         "coins": repo.list_coins(),
         "balance_curve": balance_curve,
         "eval_stats": eval_stats,
+        "eval_coaching_tip": eval_coaching_tip,
         **eval_ctx,
     })
 ```
@@ -451,6 +474,18 @@ stats_two_failed = web_main._eval_history_stats([
 assert stats_two_failed["avg_days_to_fail"] == 3.0
 print("OK: _eval_history_stats berekent het gemiddelde correct vanaf 2 runs")
 
+# --- _eval_coaching_tip: alleen bij een actieve run, gekozen op de meest
+# urgente situatie ---
+active_run = {"status": "actief"}
+assert web_main._eval_coaching_tip(None, 0.0, 0.0, 0.0) is None
+assert web_main._eval_coaching_tip({"status": "geslaagd"}, 90.0, 0.0, 0.0) is None
+assert web_main._eval_coaching_tip(active_run, 0.0, 0.0, 0.0) is None
+tip_limit = web_main._eval_coaching_tip(active_run, 75.0, 0.0, 0.0)
+assert tip_limit and "limiet" in tip_limit
+tip_goal = web_main._eval_coaching_tip(active_run, 0.0, 0.0, 80.0)
+assert tip_goal and "winstdoel" in tip_goal
+print("OK: _eval_coaching_tip geeft alleen bij een actieve run en een urgente situatie een tip")
+
 print("ALLE EVAL-PAGINA ROUTE TESTS GESLAAGD")
 ```
 
@@ -462,7 +497,7 @@ Expected: `404` op `/evaluatie` of een `AttributeError`, opgelost door Step 1-4.
 - [ ] **Step 7: Run opnieuw, verwacht dat alles slaagt**
 
 Run: `source /home/user/Trade/.venv/bin/activate && python3 <scratchpad>/test_eval_pagina_routes.py`
-Expected: alle 8 "OK:"-regels, eindigend met "ALLE EVAL-PAGINA ROUTE TESTS GESLAAGD".
+Expected: alle 9 "OK:"-regels, eindigend met "ALLE EVAL-PAGINA ROUTE TESTS GESLAAGD".
 
 - [ ] **Step 8: Commit**
 
@@ -491,7 +526,7 @@ EOF
 - Modify: `web/templates/base.html`
 
 **Interfaces:**
-- Consumes: `eval_display`, `eval_history`, `eval_day_number`, `eval_daily_loss_used_pct`, `eval_drawdown_used_pct`, `eval_profit_progress_pct`, `eval_daily_results`, `eval_daily_loss_remaining_eur`, `eval_stats`, `balance_curve`, `coins` (Task 2).
+- Consumes: `eval_display`, `eval_history`, `eval_day_number`, `eval_daily_loss_used_pct`, `eval_drawdown_used_pct`, `eval_profit_progress_pct`, `eval_daily_results`, `eval_daily_loss_remaining_eur`, `eval_stats`, `eval_coaching_tip`, `balance_curve`, `coins` (Task 2).
 
 Puur UI + client-side grafiek; de structurele aanwezigheid van tekst/HTML is met een scratch-test te toetsen (Step 4), de daadwerkelijke grafiek-rendering hoort bij Task 5's handmatige verificatie.
 
@@ -533,6 +568,12 @@ Voeg er direct vóór toe:
   <p class="summary-value" style="font-size: 32px; margin: 4px 0 16px;">€{{ "%.2f"|format(eval_daily_loss_remaining_eur) }}
     <span class="summary-label" style="display: inline; font-size: 13px;">ruimte tot dagverlieslimiet</span>
   </p>
+  {% if eval_coaching_tip %}
+  <p class="correlation-warning">
+    <svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    {{ eval_coaching_tip }}
+  </p>
+  {% endif %}
   {% endif %}
 
   <div class="risk-gauge">
@@ -620,8 +661,18 @@ Voeg er direct vóór toe:
   </ul>
 </section>
 
-{% if eval_stats %}
 <section style="--i: 5">
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>Wat een ervaren trader nooit doet</h2>
+  <ul class="checklist">
+    <li>Nooit een verloren trade "terugpakken" met een grotere volgende trade. Dat is geen strategie, dat is wraak op de markt.</li>
+    <li>Nooit doorhandelen zonder pauze na een limiet die bijna geraakt is. Bijna is het signaal, niet het excuus om door te gaan.</li>
+    <li>Nooit de regels aanpassen halverwege een run omdat de huidige regels net in de weg zitten. De regels zijn er juist voor het moment dat ze in de weg zitten.</li>
+    <li>Nooit een evaluatie beoordelen op één goede of slechte dag. Consistentie over de hele looptijd is het enige dat telt.</li>
+  </ul>
+</section>
+
+{% if eval_stats %}
+<section style="--i: 6">
   <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>Patronen uit je geschiedenis</h2>
   {% if eval_stats.avg_days_to_pass %}<p>Gemiddeld <strong>{{ "%.1f"|format(eval_stats.avg_days_to_pass) }} dagen</strong> tot een geslaagde run.</p>{% endif %}
   {% if eval_stats.avg_days_to_fail %}<p>Gemiddeld <strong>{{ "%.1f"|format(eval_stats.avg_days_to_fail) }} dagen</strong> tot een mislukte run.</p>{% endif %}
@@ -630,7 +681,7 @@ Voeg er direct vóór toe:
 {% endif %}
 
 {% if eval_history %}
-<details class="stats-collapse js-accordion" style="--i: 6">
+<details class="stats-collapse js-accordion" style="--i: 7">
   <summary class="stats-summary">
     <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     <span>Evaluatie geschiedenis</span>
@@ -651,6 +702,9 @@ Voeg er direct vóór toe:
   const evalTierAmount = {{ eval_display.tier_amount | tojson if eval_display else "null" }};
   const evalMaxDrawdownPct = {{ eval_display.max_drawdown_pct | tojson if eval_display else "null" }};
   const evalProfitTargetPct = {{ eval_display.profit_target_pct | tojson if eval_display else "null" }};
+  const evalIsActive = {{ (eval_display.status == 'actief') | tojson if eval_display else "false" }};
+  const evalDailyLossUsedPct = {{ eval_daily_loss_used_pct | tojson }};
+  const evalDrawdownUsedPct = {{ eval_drawdown_used_pct | tojson }};
 </script>
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
 <script src="/static/evaluatie.js"></script>
@@ -674,7 +728,20 @@ Voeg er direct vóór toe:
     rightPriceScale: { borderColor: "#232d2f" },
   });
 
-  const series = chart.addLineSeries({ color: "#33d69f", lineWidth: 2 });
+  // Drawdown-bodem als basiswaarde: een baseline-serie kleurt zichzelf
+  // groen boven en rood onder die ene prijs, dus de lijn toont zelf of
+  // het saldo aan de veilige of gevaarlijke kant zit, zonder een losse,
+  // door de library niet ondersteunde kleurverloop-hack.
+  const drawdownFloor = (evalTierAmount && evalMaxDrawdownPct)
+    ? evalTierAmount * (1 - evalMaxDrawdownPct / 100)
+    : 0;
+
+  const series = chart.addBaselineSeries({
+    baseValue: { type: "price", price: drawdownFloor },
+    topLineColor: "#33d69f", topFillColor1: "rgba(51, 214, 159, 0.28)", topFillColor2: "rgba(51, 214, 159, 0.05)",
+    bottomLineColor: "#f2685c", bottomFillColor1: "rgba(242, 104, 92, 0.05)", bottomFillColor2: "rgba(242, 104, 92, 0.28)",
+    lineWidth: 2,
+  });
 
   // LightweightCharts eist strikt oplopende, unieke tijdstippen. Twee
   // trades die toevallig in dezelfde seconde sluiten zouden een reeks
@@ -695,7 +762,7 @@ Voeg er direct vóór toe:
 
   if (evalTierAmount && evalMaxDrawdownPct) {
     series.createPriceLine({
-      price: evalTierAmount * (1 - evalMaxDrawdownPct / 100),
+      price: drawdownFloor,
       color: "#f2685c", lineWidth: 1, lineStyle: LightweightCharts.LineStyle.Dashed,
       axisLabelVisible: true, title: "max drawdown",
     });
@@ -714,6 +781,39 @@ Voeg er direct vóór toe:
     const { width, height } = entries[0].contentRect;
     chart.applyOptions({ width: Math.round(width), height: Math.round(height) || 260 });
   }).observe(container);
+
+  // Ademende vulling in de gevarenzone: canvas-rendering kan niet met
+  // CSS-animaties bewogen worden, dus dit gebeurt via een interval dat de
+  // opaciteit van de rode vulling laat pulseren — zelfde 85%-drempel als
+  // .risk-pulse elders in de app, alleen actief op een lopende run, nooit
+  // als het tabblad niet zichtbaar is, en helemaal niet bij
+  // prefers-reduced-motion.
+  const inDangerZone = evalIsActive && (evalDailyLossUsedPct >= 85 || evalDrawdownUsedPct >= 85);
+  const reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let pulseTimer = null;
+
+  function startPulse() {
+    if (pulseTimer) return;
+    let dim = false;
+    pulseTimer = setInterval(() => {
+      dim = !dim;
+      series.applyOptions({
+        bottomFillColor1: dim ? "rgba(242, 104, 92, 0.02)" : "rgba(242, 104, 92, 0.10)",
+        bottomFillColor2: dim ? "rgba(242, 104, 92, 0.10)" : "rgba(242, 104, 92, 0.32)",
+      });
+    }, 1200);
+  }
+  function stopPulse() {
+    if (pulseTimer) { clearInterval(pulseTimer); pulseTimer = null; }
+  }
+
+  if (inDangerZone && !reduceMotion) {
+    startPulse();
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) stopPulse();
+      else if (inDangerZone && !reduceMotion) startPulse();
+    });
+  }
 })();
 ```
 
@@ -762,6 +862,7 @@ assert "Start evaluatie" in resp0.text
 assert 'id="eval-chart"' not in resp0.text
 assert "Waarom deze regels bestaan" in resp0.text
 assert "Disciplineregels" in resp0.text
+assert "Wat een ervaren trader nooit doet" in resp0.text
 print("OK: /evaluatie zonder actieve run toont het startformulier en de uitleg/tips, geen grafiek")
 
 # --- met een actieve run en minstens 2 gesloten trades: grafiek-sectie aanwezig ---
@@ -791,6 +892,12 @@ assert "ruimte tot dagverlieslimiet" in resp1.text
 assert "/static/evaluatie.js" in resp1.text
 print("OK: /evaluatie met een actieve run en gesloten trades toont de grafiek-sectie")
 
+# --- coaching-tip verschijnt zodra het winstdoel dichtbij komt ---
+repo.update_evaluation_state(eval_id, current_balance=10750.0, day_start_balance=10750.0, day_start_date=repo.get_evaluation(eval_id)["day_start_date"])
+resp2 = client.get("/evaluatie")
+assert "Dit is precies het moment waarop mensen hun regels laten verslappen" in resp2.text
+print("OK: coaching-tip verschijnt zodra het winstdoel dichtbij is")
+
 print("ALLE EVAL-PAGINA HTML TESTS GESLAAGD")
 ```
 
@@ -802,7 +909,7 @@ Expected: faalt (template ontbreekt of geeft een 500), opgelost door Step 1-3.
 - [ ] **Step 6: Run opnieuw, verwacht dat alles slaagt**
 
 Run: `source /home/user/Trade/.venv/bin/activate && python3 <scratchpad>/test_eval_pagina_html.py`
-Expected: alle 3 "OK:"-regels, eindigend met "ALLE EVAL-PAGINA HTML TESTS GESLAAGD".
+Expected: alle 4 "OK:"-regels, eindigend met "ALLE EVAL-PAGINA HTML TESTS GESLAAGD".
 
 - [ ] **Step 7: Commit**
 
@@ -949,7 +1056,15 @@ Klik op "Evaluatie" in de navigatiebalk vanaf het dashboard. Controleer dat de U
 
 - [ ] **Step 4: Verifieer de saldografiek**
 
-Controleer dat `#eval-chart` een canvas bevat (LightweightCharts rendert op canvas), dat de lijn zichtbaar oploopt/daalt met de ingevoerde resultaten, en dat er twee gestippelde horizontale lijnen zichtbaar zijn (rood onder, groen boven). Maak een screenshot: `eval_pagina_chart.png`.
+Controleer dat `#eval-chart` een canvas bevat (LightweightCharts rendert op canvas), dat de lijn zichtbaar oploopt/daalt met de ingevoerde resultaten, en dat er twee gestippelde horizontale lijnen zichtbaar zijn (rood onder, groen boven — de drawdown-bodem en het winstdoel). Controleer dat het gedeelte van de lijn boven de drawdown-bodem groen gevuld is en het gedeelte eronder (indien aanwezig in je testdata) rood. Maak een screenshot: `eval_pagina_chart.png`.
+
+- [ ] **Step 4b: Verifieer de ademende vulling in de gevarenzone**
+
+Maak een run waarbij dagverlies of drawdown boven de 85%-drempel zit (zelfde aanpak als de bestaande tension-verificatie voor de dashboard-kaart). Herlaad `/evaluatie` en controleer met herhaalde `getComputedStyle`/canvas-sampling of series-opties-inspectie dat de rode vulling onder de basislijn zichtbaar van opaciteit wisselt over een paar seconden (niet statisch). Verifieer ook dat dit stopt zodra je het tabblad verbergt (`page.evaluate` om `document.hidden` te simuleren, of het tabblad daadwerkelijk wisselen) en dat het met `page.emulate_media(reduced_motion="reduce")` helemaal niet start.
+
+- [ ] **Step 4c: Verifieer de coaching-tip en de nieuwe sectie**
+
+Controleer dat de coaching-tip verschijnt wanneer je testdata dicht bij een limiet of het winstdoel zit (zoek de tekst "Overweeg te stoppen" of "regels laten verslappen"), en afwezig is bij een run zonder bijzondere status. Controleer dat de sectie "Wat een ervaren trader nooit doet" op de pagina staat, met de vier regels leesbaar.
 
 - [ ] **Step 5: Verifieer de dashboard-samenvatting**
 
@@ -979,6 +1094,7 @@ Vat kort samen wat bevestigd is, met de screenshots als bewijs. Geen commit nodi
 - Disciplineregels → Task 3. ✓
 - Geschiedenis met patronen (gemiddelde dagen, meest voorkomende faalreden) → Task 2 (`_eval_history_stats`), Task 3 (template). ✓
 - Niet-doelen (geen wijziging aan risk.py, aan de regel-logica, aan de koppeling van oefentrades) → geen enkele taak raakt `app/risk.py` of de bestaande koppel-logica in `create_practice_trade`/`close_journal`. ✓
+- Vier gekozen creatieve uitbreidingen (kleurindicatie via baseline-serie, ademende vulling in de gevarenzone, statusafhankelijke coaching-tip, sectie "wat een ervaren trader nooit doet") → allemaal in Task 2 (`_eval_coaching_tip`) en Task 3 (template + `evaluatie.js`), elk met een technisch haalbare, aan echte waarden gekoppelde en `prefers-reduced-motion`-respecterende invulling, zoals vastgelegd in de spec-aanvulling. ✓
 
 **Placeholder scan:** geen "TBD"/"implement later"/ongeschreven testcode gevonden bij het doorlopen van elke taak.
 

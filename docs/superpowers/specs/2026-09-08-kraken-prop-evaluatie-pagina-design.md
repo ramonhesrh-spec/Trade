@@ -156,6 +156,39 @@ Daaronder de bestaande geschiedenis-lijst (tier, resultaat,
 gestart/geëindigd, reden), ongewijzigd overgenomen van de huidige
 dashboard-implementatie.
 
+## Aanvulling: gekozen creatieve uitbreidingen
+
+Na goedkeuring van bovenstaand ontwerp zijn vier extra elementen gekozen,
+elk met een concrete, haalbare technische invulling (niet elk oorspronkelijk
+idee vertaalt zich 1-op-1 naar wat LightweightCharts native ondersteunt —
+onderstaande is de eerlijke, gebouwde versie).
+
+**Kleurindicatie op de saldolijn.** Geen losse 3-kleuren-verloop (niet
+native ondersteund door de gebruikte chart-library zonder fragiele
+custom-rendering), maar een baseline-series: groen boven de
+drawdown-bodem, rood eronder. Dezelfde betekenis — de lijn toont zelf of
+je aan de veilige of gevaarlijke kant zit — met een robuuste, native
+bibliotheek-functie in plaats van een handgerolde gradient.
+
+**Ademende vulling in de gevarenzone.** Zodra dagverlies- of
+drawdown-opgebruik ≥85% is (dezelfde drempel als `.risk-pulse` elders in
+de app) én de run nog `actief` is, pulseert de rode vulling onder de
+basislijn zachtjes tussen twee opaciteitswaarden, elke 1,2 seconde
+(canvas-rendering kan niet met CSS-animaties bewogen worden, dus dit
+gebeurt via een JS-interval). Stopt zodra het tabblad niet zichtbaar is
+(`visibilitychange`) en start niet als `prefers-reduced-motion: reduce`
+staat — zelfde discipline als elke bestaande animatie in de app.
+
+**Statusafhankelijke coaching-tip.** Vervangt geen vaste tekst, maar een
+functie die op basis van de actuele percentages van een actieve run een
+van twee scherpe tips teruggeeft (dicht bij een limiet: overweeg te
+stoppen; dicht bij het winstdoel: waarschuwing voor verslappende
+discipline), of niets als er niks bijzonders aan de hand is.
+
+**Sectie "wat een ervaren trader nooit doet".** Statische, contrasterende
+aanvulling naast de disciplineregels — dezelfde soort content, ander
+format.
+
 ## Zelf-review
 
 **Niet-doelen nageleefd**: geen wijziging aan `risk.py`, aan de
