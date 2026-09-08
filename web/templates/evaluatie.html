@@ -12,11 +12,13 @@
 <section class="card {{ 'risk-pulse' if eval_display.status == 'actief' and (eval_daily_loss_used_pct >= 85 or eval_drawdown_used_pct >= 85) else '' }} {{ 'eval-reveal-pass' if eval_display.status == 'geslaagd' else ('eval-reveal-fail' if eval_display.status == 'mislukt' else '') }}" style="--i: 1" id="prop-eval-card">
   <div class="prop-eval-head">
     <span class="muted">€{{ "{:,.0f}".format(eval_display.tier_amount).replace(",", ".") }} tier · dag {{ eval_day_number }}{% if eval_display.status != 'actief' %} · {{ eval_display.status }}{% endif %}</span>
-    <span class="mono">€{{ "%.2f"|format(eval_display.current_balance) }}</span>
+    <span class="mono" data-countup="{{ eval_display.current_balance }}" data-countup-format="eur">€{{ "%.2f"|format(eval_display.current_balance) }}</span>
   </div>
 
+  <p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">Bij Kraken Prop krijg je na het slagen een gefinancierde rekening van dit tier. Winst die je daar maakt wordt verdeeld, standaard 80% voor jou (een upgrade naar 90% is mogelijk). Haal je op die rekening hetzelfde winstpercentage als je winstdoel hier ({{ "%.0f"|format(eval_display.profit_target_pct) }}%), dan is dat voor jou ongeveer €{{ "{:,.0f}".format(eval_display.tier_amount * eval_display.profit_target_pct / 100 * 0.8).replace(",", ".") }}.</p>
+
   {% if eval_display.status == 'actief' %}
-  <p class="summary-value" style="font-size: 32px; margin: 4px 0 16px;">€{{ "%.2f"|format(eval_daily_loss_remaining_eur) }}
+  <p class="summary-value" style="font-size: 32px; margin: 4px 0 16px;"><span data-countup="{{ eval_daily_loss_remaining_eur }}" data-countup-format="eur">€{{ "%.2f"|format(eval_daily_loss_remaining_eur) }}</span>
     <span class="summary-label" style="display: inline; font-size: 13px;">ruimte tot dagverlieslimiet</span>
   </p>
   {% if eval_coaching_tip %}
@@ -28,7 +30,7 @@
   {% endif %}
 
   <div class="risk-gauge">
-    <div class="risk-gauge-head"><span class="muted">Dagverlies opgebruikt</span><span class="mono">{{ "%.0f"|format(eval_daily_loss_used_pct) }}%</span></div>
+    <div class="risk-gauge-head"><span class="muted">Dagverlies opgebruikt</span><span class="mono" data-countup="{{ eval_daily_loss_used_pct }}" data-countup-format="pct0">{{ "%.0f"|format(eval_daily_loss_used_pct) }}%</span></div>
     <div class="risk-gauge-bar">
       <div class="risk-gauge-fill {{ 'risk-high' if eval_daily_loss_used_pct >= 85 else ('risk-mid' if eval_daily_loss_used_pct >= 60 else '') }}"
            style="width: {{ [eval_daily_loss_used_pct, 100] | min }}%"></div>
@@ -36,7 +38,7 @@
   </div>
 
   <div class="risk-gauge">
-    <div class="risk-gauge-head"><span class="muted">Drawdown opgebruikt</span><span class="mono">{{ "%.0f"|format(eval_drawdown_used_pct) }}%</span></div>
+    <div class="risk-gauge-head"><span class="muted">Drawdown opgebruikt</span><span class="mono" data-countup="{{ eval_drawdown_used_pct }}" data-countup-format="pct0">{{ "%.0f"|format(eval_drawdown_used_pct) }}%</span></div>
     <div class="risk-gauge-bar">
       <div class="risk-gauge-fill {{ 'risk-high' if eval_drawdown_used_pct >= 85 else ('risk-mid' if eval_drawdown_used_pct >= 60 else '') }}"
            style="width: {{ [eval_drawdown_used_pct, 100] | min }}%"></div>
@@ -44,7 +46,7 @@
   </div>
 
   <div class="risk-gauge">
-    <div class="risk-gauge-head"><span class="muted">Winstdoel</span><span class="mono">{{ "%.0f"|format(eval_profit_progress_pct) }}%</span></div>
+    <div class="risk-gauge-head"><span class="muted">Winstdoel</span><span class="mono" data-countup="{{ eval_profit_progress_pct }}" data-countup-format="pct0">{{ "%.0f"|format(eval_profit_progress_pct) }}%</span></div>
     <div class="risk-gauge-bar">
       <div class="risk-gauge-fill goal-fill" style="width: {{ [eval_profit_progress_pct, 100] | min }}%"></div>
     </div>
@@ -206,6 +208,41 @@
   const evalDrawdownUsedPct = {{ eval_drawdown_used_pct | tojson }};
   const evalCurrentBalance = {{ eval_display.current_balance | tojson if eval_display else "null" }};
   const evalDailyLossRemainingEur = {{ eval_daily_loss_remaining_eur | tojson if eval_daily_loss_remaining_eur is not none else "null" }};
+
+  // Tel-animatie op de kerncijfers (saldo, dagverliesruimte, de drie
+  // gaugepercentages): telt bij het laden op van 0 naar de echte,
+  // server-gerenderde waarde die al in het element staat -- zelfde
+  // "opbouw naar de echte staat"-patroon als de sparkline grow-in en de
+  // sectie-stagger reveal elders in de app, nooit een decoratie los van
+  // een echte waarde. Uitgeschakeld onder prefers-reduced-motion: de
+  // server-gerenderde eindwaarde staat er dan gewoon meteen, geen JS
+  // nodig om hem te tonen.
+  (function () {
+    if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const targets = document.querySelectorAll("[data-countup]");
+    if (!targets.length) return;
+
+    function formatValue(value, format) {
+      if (format === "eur") return "€" + value.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      if (format === "pct0") return Math.round(value) + "%";
+      return String(value);
+    }
+
+    targets.forEach(function (el) {
+      const target = parseFloat(el.getAttribute("data-countup"));
+      const format = el.getAttribute("data-countup-format");
+      if (!isFinite(target)) return;
+      const duration = 800;
+      const start = performance.now();
+      function step(now) {
+        const progress = Math.min(1, (now - start) / duration);
+        const eased = 1 - Math.pow(1 - progress, 3); // ease-out, geen lineaire tik
+        el.textContent = formatValue(target * eased, format);
+        if (progress < 1) requestAnimationFrame(step);
+      }
+      requestAnimationFrame(step);
+    });
+  })();
 
   // "Wat als"-rekenhulp: puur illustratief, geen serveraanroep nodig want
   // alles wat hij nodig heeft staat al op de pagina. De winst-kant gaat uit
