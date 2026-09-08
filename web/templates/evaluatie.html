@@ -1,12 +1,162 @@
 {% extends "base.html" %}
-
+{% import "_macros.html" as macros %}
 {% block title %}Evaluatie — HesPulse{% endblock %}
-
 {% block content %}
-<h1>Evaluatie</h1>
+
+<section style="--i: 0">
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2 2 7l10 5 10-5-10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>Evaluatie simulatie</h2>
+  <p class="muted">Test of je discipline en signalen een Kraken Prop-achtige evaluatie zouden overleven, zonder er geld aan uit te geven. Elke oefentrade die je op een coin-pagina neemt terwijl een run actief is, telt automatisch mee.</p>
+</section>
+
 {% if eval_display %}
-<p>Actieve evaluatie-run, dag {{ eval_day_number }}.</p>
-{% else %}
-<p>Geen actieve evaluatie-run.</p>
+<section class="card {{ 'risk-pulse' if eval_display.status == 'actief' and (eval_daily_loss_used_pct >= 85 or eval_drawdown_used_pct >= 85) else '' }} {{ 'eval-reveal-pass' if eval_display.status == 'geslaagd' else ('eval-reveal-fail' if eval_display.status == 'mislukt' else '') }}" style="--i: 1" id="prop-eval-card">
+  <div class="prop-eval-head">
+    <span class="muted">€{{ "{:,.0f}".format(eval_display.tier_amount).replace(",", ".") }} tier · dag {{ eval_day_number }}{% if eval_display.status != 'actief' %} · {{ eval_display.status }}{% endif %}</span>
+    <span class="mono">€{{ "%.2f"|format(eval_display.current_balance) }}</span>
+  </div>
+
+  {% if eval_display.status == 'actief' %}
+  <p class="summary-value" style="font-size: 32px; margin: 4px 0 16px;">€{{ "%.2f"|format(eval_daily_loss_remaining_eur) }}
+    <span class="summary-label" style="display: inline; font-size: 13px;">ruimte tot dagverlieslimiet</span>
+  </p>
+  {% if eval_coaching_tip %}
+  <p class="correlation-warning">
+    <svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+    {{ eval_coaching_tip }}
+  </p>
+  {% endif %}
+  {% endif %}
+
+  <div class="risk-gauge">
+    <div class="risk-gauge-head"><span class="muted">Dagverlies opgebruikt</span><span class="mono">{{ "%.0f"|format(eval_daily_loss_used_pct) }}%</span></div>
+    <div class="risk-gauge-bar">
+      <div class="risk-gauge-fill {{ 'risk-high' if eval_daily_loss_used_pct >= 85 else ('risk-mid' if eval_daily_loss_used_pct >= 60 else '') }}"
+           style="width: {{ [eval_daily_loss_used_pct, 100] | min }}%"></div>
+    </div>
+  </div>
+
+  <div class="risk-gauge">
+    <div class="risk-gauge-head"><span class="muted">Drawdown opgebruikt</span><span class="mono">{{ "%.0f"|format(eval_drawdown_used_pct) }}%</span></div>
+    <div class="risk-gauge-bar">
+      <div class="risk-gauge-fill {{ 'risk-high' if eval_drawdown_used_pct >= 85 else ('risk-mid' if eval_drawdown_used_pct >= 60 else '') }}"
+           style="width: {{ [eval_drawdown_used_pct, 100] | min }}%"></div>
+    </div>
+  </div>
+
+  <div class="risk-gauge">
+    <div class="risk-gauge-head"><span class="muted">Winstdoel</span><span class="mono">{{ "%.0f"|format(eval_profit_progress_pct) }}%</span></div>
+    <div class="risk-gauge-bar">
+      <div class="risk-gauge-fill goal-fill" style="width: {{ [eval_profit_progress_pct, 100] | min }}%"></div>
+    </div>
+  </div>
+
+  {% if eval_daily_results %}
+  <div class="prop-eval-days">
+    {% for day in eval_daily_results %}
+    <span class="heat-cell heat-level-{{ day.level }}" title="{{ day.date }}: €{{ '%.2f'|format(day.value) }}"></span>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if eval_display.status == 'actief' %}
+  <form method="post" action="/evaluatie/stop" class="prop-eval-stop">
+    <button type="submit" class="button-reset">Stoppen</button>
+  </form>
+  {% elif eval_display.closed_reason %}
+  <p class="muted" style="font-size: 12px; margin-top: 10px;">{{ eval_display.closed_reason }}</p>
+  {% endif %}
+</section>
+
+{% if balance_curve|length > 1 %}
+<section class="card" style="--i: 2">
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,17 9,11 13,15 21,5"/></svg>Saldoverloop</h2>
+  <div id="eval-chart" style="height: 260px;"></div>
+</section>
 {% endif %}
+
+{% else %}
+<section class="card" style="--i: 1">
+  <p class="muted">Nog geen evaluatie actief.</p>
+  <form method="post" action="/evaluatie/start" class="prop-eval-start">
+    <label>Bedrag
+      <select name="tier_amount">
+        <option value="5000">€5.000</option>
+        <option value="10000" selected>€10.000</option>
+        <option value="25000">€25.000</option>
+        <option value="50000">€50.000</option>
+        <option value="100000">€100.000</option>
+        <option value="200000">€200.000</option>
+      </select>
+    </label>
+    <label>Winstdoel % <input type="number" name="profit_target_pct" value="8" min="1" max="50" step="0.5" required></label>
+    <label>Max drawdown % <input type="number" name="max_drawdown_pct" value="6" min="1" max="50" step="0.5" required></label>
+    <button type="submit">Start evaluatie</button>
+  </form>
+</section>
+{% endif %}
+
+<section style="--i: 3">
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>Waarom deze regels bestaan</h2>
+  <p><strong>Dagverlieslimiet.</strong> Voorkomt dat één slechte dag escaleert tot een grote. De limiet dwingt je te stoppen voordat frustratie de beslissingen gaat sturen, niet nadat het al te laat is.</p>
+  <p><strong>Drawdown die nooit reset.</strong> Een goede week mag een slechte maand niet verbergen. Dit dwingt consistentie af over de hele looptijd, niet één geluksdag.</p>
+  <p><strong>Geen tijdslimiet.</strong> Druk om op tijd te slagen leidt tot overhaaste trades. Zonder deadline is de enige weg naar slagen daadwerkelijk goed handelen.</p>
+</section>
+
+<section style="--i: 4">
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Disciplineregels</h2>
+  <ul class="checklist">
+    <li>Stop voor de dag na twee verliezen op rij, ook als de limiet nog niet geraakt is. De limiet is een noodrem, geen doel om tegenaan te handelen.</li>
+    <li>Bepaal je risico per trade vóór je instapt. Achteraf uitrekenen is rationalisatie, geen risicobeheer.</li>
+    <li>Een winstdoel halen in de eerste dagen is geen prestatie om te vieren. Het is een signaal om extra voorzichtig te zijn: het verklaart vaak meer geluk dan proces.</li>
+    <li>Een virtuele evaluatie die faalt kost niets. Gebruik dat: test hier het gedrag dat een echte evaluatie zou breken, niet je makkelijkste trades.</li>
+  </ul>
+</section>
+
+<section style="--i: 5">
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>Wat een ervaren trader nooit doet</h2>
+  <ul class="checklist">
+    <li>Nooit een verloren trade "terugpakken" met een grotere volgende trade. Dat is geen strategie, dat is wraak op de markt.</li>
+    <li>Nooit doorhandelen zonder pauze na een limiet die bijna geraakt is. Bijna is het signaal, niet het excuus om door te gaan.</li>
+    <li>Nooit de regels aanpassen halverwege een run omdat de huidige regels net in de weg zitten. De regels zijn er juist voor het moment dat ze in de weg zitten.</li>
+    <li>Nooit een evaluatie beoordelen op één goede of slechte dag. Consistentie over de hele looptijd is het enige dat telt.</li>
+  </ul>
+</section>
+
+{% if eval_stats %}
+<section style="--i: 6">
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>Patronen uit je geschiedenis</h2>
+  {% if eval_stats.avg_days_to_pass %}<p>Gemiddeld <strong>{{ "%.1f"|format(eval_stats.avg_days_to_pass) }} dagen</strong> tot een geslaagde run.</p>{% endif %}
+  {% if eval_stats.avg_days_to_fail %}<p>Gemiddeld <strong>{{ "%.1f"|format(eval_stats.avg_days_to_fail) }} dagen</strong> tot een mislukte run.</p>{% endif %}
+  {% if eval_stats.common_fail_reason %}<p>Meest voorkomende faalreden: <strong>{{ eval_stats.common_fail_reason }}</strong>.</p>{% endif %}
+</section>
+{% endif %}
+
+{% if eval_history %}
+<details class="stats-collapse js-accordion" style="--i: 7">
+  <summary class="stats-summary">
+    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+    <span>Evaluatie geschiedenis</span>
+    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </summary>
+  {% for run in eval_history %}
+  <div class="long-term-item">
+    <span class="badge badge-{{ 'long' if run.status == 'geslaagd' else ('short' if run.status == 'mislukt' else 'status') }}">{{ run.status }}</span>
+    <span class="muted mono" style="font-size: 11px;">€{{ "{:,.0f}".format(run.tier_amount).replace(",", ".") }} · {{ run.started_at[:10] }}{% if run.ended_at %} tot {{ run.ended_at[:10] }}{% endif %}</span>
+    {% if run.closed_reason %}<p class="muted" style="font-size: 11px; margin: 4px 0 0;">{{ run.closed_reason }}</p>{% endif %}
+  </div>
+  {% endfor %}
+</details>
+{% endif %}
+
+<script>
+  const evalBalanceCurve = {{ balance_curve | tojson }};
+  const evalTierAmount = {{ eval_display.tier_amount | tojson if eval_display else "null" }};
+  const evalMaxDrawdownPct = {{ eval_display.max_drawdown_pct | tojson if eval_display else "null" }};
+  const evalProfitTargetPct = {{ eval_display.profit_target_pct | tojson if eval_display else "null" }};
+  const evalIsActive = {{ (eval_display.status == 'actief') | tojson if eval_display else "false" }};
+  const evalDailyLossUsedPct = {{ eval_daily_loss_used_pct | tojson }};
+  const evalDrawdownUsedPct = {{ eval_drawdown_used_pct | tojson }};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4/dist/lightweight-charts.standalone.production.js"></script>
+<script src="/static/evaluatie.js"></script>
 {% endblock %}
