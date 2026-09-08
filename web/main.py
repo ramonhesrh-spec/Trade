@@ -912,6 +912,7 @@ async def evaluatie_page(request: Request, user: dict = Depends(require_login)):
 async def create_practice_trade(
     symbol: str,
     direction: str = Form(...),
+    risk_eur: str = Form(""),
     user: dict = Depends(require_login),
 ):
     symbol = symbol.upper()
@@ -952,9 +953,18 @@ async def create_practice_trade(
         "context_note": None, "is_practice": 1, "plain_explanation": plain_explanation or None,
     })
     active_eval = repo.get_active_evaluation(user["id"])
-    risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
+    # Handmatig risico gaat voor de automatische berekening op basis van je
+    # echte portefeuille: die berekening heeft geen enkele relatie met het
+    # saldo van een lopende evaluatie-run (bewuste keuze bij het bouwen van
+    # de evaluatiefunctie), dus zonder handmatige invoer kan één oefentrade
+    # een veelvoud van het evaluatiesaldo aan risico dragen.
+    manual_risk_eur = _parse_optional_float(risk_eur)
+    computed_risk_eur = (
+        manual_risk_eur if manual_risk_eur is not None
+        else risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
+    )
     entry_id = repo.create_journal_entry(
-        signal_id, user["id"], risk_eur, evaluation_id=active_eval["id"] if active_eval else None,
+        signal_id, user["id"], computed_risk_eur, evaluation_id=active_eval["id"] if active_eval else None,
     )
     repo.update_journal_status(entry_id, user["id"], "genomen", entry_price=ind.price)
 
