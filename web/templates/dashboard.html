@@ -55,23 +55,6 @@
 </section>
 {% endif %}
 
-{% if eval_history %}
-<details class="stats-collapse js-accordion" style="--i: 1">
-  <summary class="stats-summary">
-    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-    <span>Evaluatie geschiedenis</span>
-    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
-  </summary>
-  {% for run in eval_history %}
-  <div class="long-term-item">
-    <span class="badge badge-{{ 'long' if run.status == 'geslaagd' else ('short' if run.status == 'mislukt' else 'status') }}">{{ run.status }}</span>
-    <span class="muted mono" style="font-size: 11px;">€{{ "{:,.0f}".format(run.tier_amount).replace(",", ".") }} · {{ run.started_at[:10] }}{% if run.ended_at %} tot {{ run.ended_at[:10] }}{% endif %}</span>
-    {% if run.closed_reason %}<p class="muted" style="font-size: 11px; margin: 4px 0 0;">{{ run.closed_reason }}</p>{% endif %}
-  </div>
-  {% endfor %}
-</details>
-{% endif %}
-
 <section style="--i: 1">
   <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 10v6M4.2 4.2l4.2 4.2m7.2 7.2 4.2 4.2M1 12h6m10 0h6M4.2 19.8l4.2-4.2m7.2-7.2 4.2-4.2"/></svg>Open nu</h2>
   <div id="open-nu-body">
