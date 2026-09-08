@@ -334,7 +334,7 @@ def _eval_history_stats(eval_history: list[dict]) -> Optional[dict]:
     avg_days_to_fail = _avg_days(failed) if len(failed) >= 2 else None
 
     common_fail_reason = None
-    if failed:
+    if len(failed) >= 2:
         reasons = Counter(r["closed_reason"] for r in failed if r["closed_reason"])
         if reasons:
             common_fail_reason = reasons.most_common(1)[0][0]

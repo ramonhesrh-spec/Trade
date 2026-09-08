@@ -37,18 +37,17 @@ balken, dag-stippen, start/stop-formulieren) en krijgt in plaats daarvan
   aanwezigheidssignaal.
 - Geen actieve run: "Nog geen evaluatie actief" met een link "Start een
   evaluatie →" naar `/evaluatie` (waar het startformulier nu staat).
-- Zojuist beëindigd (geslaagd/mislukt): dezelfde reveal-mechaniek als nu
-  (URL-vlag, eenmalig, client-side gestript) blijft bestaan, maar toont
-  zich voortaan op de nieuwe `/evaluatie`-pagina in plaats van het
-  dashboard — de webroutes die de vlag op de redirect zetten
-  (`/journal/{id}/close`) hoeven niet te wijzigen, alleen waar de
-  gebruiker na het sluiten naartoe gaat als hij een gekoppelde trade sloot
-  vanaf de coin-pagina blijft hetzelfde (terug naar de coin-pagina of het
-  dashboard, afhankelijk van `next`); het reveal-moment wordt pas
-  zichtbaar zodra hij daarna naar `/evaluatie` navigeert. Dit is een
-  bewuste vereenvoudiging: geen extra redirect-logica nodig, de
-  eenmalig-vuur-garantie (query-vlag + client-side strip) blijft
-  ongewijzigd functioneren, alleen op een andere pagina.
+- Zojuist beëindigd (geslaagd/mislukt): dezelfde reveal-mechaniek (URL-vlag, eenmalig,
+  client-side opgeruimd) blijft bestaan, maar toont zich op `/evaluatie`.
+  `/journal/{id}/close` blijft ongewijzigd en zet de vlag op de `next`-bestemming.
+  Omdat het strip-script in `base.html` de vlag anders al op die tussenpagina zou
+  weghalen — waardoor het reveal nooit afspeelt — stuurt `base.html` bij een
+  aanwezige vlag op elke andere pagina dan `/evaluatie` direct door
+  (`location.replace`, zodat de tussenpagina niet in de terug-historie komt);
+  `dashboard.js` doet hetzelfde voor het AJAX-sluitpad op basis van `resp.url`.
+  Pas op `/evaluatie` zelf wordt de vlag opgeruimd, zodat de animatie precies één
+  keer speelt. De winst-confetti wordt overgeslagen als deze paginalading zichzelf
+  meteen weer verlaat voor dat reveal.
 
 ## Nieuwe pagina: `/evaluatie`
 
