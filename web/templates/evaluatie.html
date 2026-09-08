@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+
+{% block title %}Evaluatie — HesPulse{% endblock %}
+
+{% block content %}
+<h1>Evaluatie</h1>
+{% if eval_display %}
+<p>Actieve evaluatie-run, dag {{ eval_day_number }}.</p>
+{% else %}
+<p>Geen actieve evaluatie-run.</p>
+{% endif %}
+{% endblock %}

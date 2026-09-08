@@ -9,6 +9,7 @@ import io
 import logging
 import re
 import sys
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
@@ -251,6 +252,120 @@ def _build_eval_day_dots(daily_results: list[dict]) -> list[dict]:
     return dots
 
 
+def _build_eval_context(user: dict, request: Request) -> dict:
+    """Evaluatie-simulatie context, gedeeld door het dashboard (compacte
+    samenvatting) en de eigen /evaluatie-pagina (volledige weergave). Bij
+    een net beëindigde run (geslaagd/mislukt) is er geen actieve run meer
+    om te tonen, maar de reveal-melding in de URL vraagt om die laatste
+    run toch één keer te laten zien in zijn eindtoestand."""
+    active_evaluation = repo.get_active_evaluation(user["id"])
+    eval_history = repo.list_evaluations_for_user(user["id"])
+    eval_display = active_evaluation
+    if not eval_display and (request.query_params.get("evaluatie_geslaagd") or request.query_params.get("evaluatie_mislukt")):
+        eval_display = eval_history[0] if eval_history else None
+
+    eval_day_number = None
+    eval_daily_loss_used_pct = 0.0
+    eval_drawdown_used_pct = 0.0
+    eval_profit_progress_pct = 0.0
+    eval_daily_results = []
+    eval_daily_loss_remaining_eur = None
+    if eval_display:
+        end_reference = (
+            datetime.fromisoformat(eval_display["ended_at"]) if eval_display["ended_at"]
+            else datetime.now(timezone.utc)
+        )
+        eval_day_number = (end_reference.date() - datetime.fromisoformat(eval_display["started_at"]).date()).days + 1
+
+        display_day_start_balance = eval_display["day_start_balance"]
+        if risk.trading_day_label(datetime.now(timezone.utc)) != eval_display["day_start_date"]:
+            # De handelsdag is inmiddels doorgeschoven maar er is nog geen
+            # trade gesloten om dat in de opgeslagen staat te verwerken
+            # (dat gebeurt pas bij de eerstvolgende sluiting via
+            # evaluate_prop_progress) — voor de weergave alvast rekenen
+            # met een verse dag, anders toont de balk en de risk-pulse
+            # ademhaling het verlies van een dag die al voorbij is.
+            display_day_start_balance = eval_display["current_balance"]
+
+        daily_loss_amount = display_day_start_balance * eval_display["max_daily_loss_pct"] / 100
+        loss_so_far = max(0.0, display_day_start_balance - eval_display["current_balance"])
+        eval_daily_loss_used_pct = min(100.0, (loss_so_far / daily_loss_amount * 100) if daily_loss_amount else 0.0)
+        eval_daily_loss_remaining_eur = max(0.0, daily_loss_amount - loss_so_far)
+
+        drawdown_amount = eval_display["tier_amount"] * eval_display["max_drawdown_pct"] / 100
+        drawdown_so_far = max(0.0, eval_display["tier_amount"] - eval_display["current_balance"])
+        eval_drawdown_used_pct = min(100.0, (drawdown_so_far / drawdown_amount * 100) if drawdown_amount else 0.0)
+
+        profit_amount = eval_display["tier_amount"] * eval_display["profit_target_pct"] / 100
+        profit_so_far = max(0.0, eval_display["current_balance"] - eval_display["tier_amount"])
+        eval_profit_progress_pct = min(100.0, (profit_so_far / profit_amount * 100) if profit_amount else 0.0)
+
+        eval_daily_results = _build_eval_day_dots(repo.list_evaluation_daily_results(eval_display["id"]))
+
+    return {
+        "eval_display": eval_display,
+        "eval_history": eval_history,
+        "eval_day_number": eval_day_number,
+        "eval_daily_loss_used_pct": eval_daily_loss_used_pct,
+        "eval_drawdown_used_pct": eval_drawdown_used_pct,
+        "eval_profit_progress_pct": eval_profit_progress_pct,
+        "eval_daily_results": eval_daily_results,
+        "eval_daily_loss_remaining_eur": eval_daily_loss_remaining_eur,
+    }
+
+
+def _eval_history_stats(eval_history: list[dict]) -> Optional[dict]:
+    """Patronen uit afgeronde evaluatie-runs voor de geschiedenis-sectie:
+    gemiddeld aantal dagen tot slagen/falen (elk apart pas getoond vanaf 2
+    afgeronde runs van dat type, anders is 'gemiddeld' misleidend voor een
+    losse uitschieter) en de meest voorkomende faalreden. Geeft None
+    terug als er nergens genoeg data voor is."""
+    passed = [e for e in eval_history if e["status"] == "geslaagd" and e["ended_at"]]
+    failed = [e for e in eval_history if e["status"] == "mislukt" and e["ended_at"]]
+
+    def _avg_days(runs: list[dict]) -> float:
+        days = [
+            (datetime.fromisoformat(r["ended_at"]).date() - datetime.fromisoformat(r["started_at"]).date()).days + 1
+            for r in runs
+        ]
+        return sum(days) / len(days)
+
+    avg_days_to_pass = _avg_days(passed) if len(passed) >= 2 else None
+    avg_days_to_fail = _avg_days(failed) if len(failed) >= 2 else None
+
+    common_fail_reason = None
+    if failed:
+        reasons = Counter(r["closed_reason"] for r in failed if r["closed_reason"])
+        if reasons:
+            common_fail_reason = reasons.most_common(1)[0][0]
+
+    if avg_days_to_pass is None and avg_days_to_fail is None and common_fail_reason is None:
+        return None
+    return {
+        "avg_days_to_pass": avg_days_to_pass,
+        "avg_days_to_fail": avg_days_to_fail,
+        "common_fail_reason": common_fail_reason,
+    }
+
+
+def _eval_coaching_tip(
+    eval_display: Optional[dict], daily_loss_used_pct: float, drawdown_used_pct: float, profit_progress_pct: float,
+) -> Optional[str]:
+    """Eén korte, op de actuele status toegesneden tip in plaats van
+    altijd dezelfde statische tekst. Alleen relevant voor een actief
+    lopende run — een afgeronde run heeft niks meer te sturen. Twee
+    situaties zijn de moeite waard om expliciet te benoemen: dicht bij
+    een limiet (stoppen is een optie, geen verplichting) en dicht bij het
+    winstdoel (het moment waarop discipline het vaakst verslapt)."""
+    if not eval_display or eval_display["status"] != "actief":
+        return None
+    if daily_loss_used_pct >= 70 or drawdown_used_pct >= 70:
+        return "Je zit dicht bij een limiet. Overweeg te stoppen voor vandaag, niet omdat het moet, maar omdat het kan."
+    if profit_progress_pct >= 70:
+        return "Je bent dicht bij je winstdoel. Dit is precies het moment waarop mensen hun regels laten verslappen. Blijf bij je proces."
+    return None
+
+
 def _add_signal_context(entries: list[dict], winrate: dict) -> list[dict]:
     """Voegt aan elk signaal het concrete advies toe (wat kan je beter
     doen dan nu instappen) en een slagingskans op basis van de eigen
@@ -441,51 +556,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     is_admin = bool(config.ADMIN_TELEGRAM_CHAT_ID) and user["telegram_chat_id"] == config.ADMIN_TELEGRAM_CHAT_ID
     unclear_messages = repo.recent_unclear_messages() if is_admin else None
 
-    # Evaluatie simulatie: bij een net beëindigde run (geslaagd/mislukt)
-    # is er geen actieve run meer om te tonen, maar de reveal-melding in de
-    # URL vraagt om die laatste run toch één keer te laten zien in zijn
-    # eindtoestand.
-    active_evaluation = repo.get_active_evaluation(user["id"])
-    eval_history = repo.list_evaluations_for_user(user["id"])
-    eval_display = active_evaluation
-    if not eval_display and (request.query_params.get("evaluatie_geslaagd") or request.query_params.get("evaluatie_mislukt")):
-        eval_display = eval_history[0] if eval_history else None
-
-    eval_day_number = None
-    eval_daily_loss_used_pct = 0.0
-    eval_drawdown_used_pct = 0.0
-    eval_profit_progress_pct = 0.0
-    eval_daily_results = []
-    if eval_display:
-        end_reference = (
-            datetime.fromisoformat(eval_display["ended_at"]) if eval_display["ended_at"]
-            else datetime.now(timezone.utc)
-        )
-        eval_day_number = (end_reference.date() - datetime.fromisoformat(eval_display["started_at"]).date()).days + 1
-
-        display_day_start_balance = eval_display["day_start_balance"]
-        if risk.trading_day_label(datetime.now(timezone.utc)) != eval_display["day_start_date"]:
-            # De handelsdag is inmiddels doorgeschoven maar er is nog geen
-            # trade gesloten om dat in de opgeslagen staat te verwerken
-            # (dat gebeurt pas bij de eerstvolgende sluiting via
-            # evaluate_prop_progress) — voor de weergave alvast rekenen
-            # met een verse dag, anders toont de balk en de risk-pulse
-            # ademhaling het verlies van een dag die al voorbij is.
-            display_day_start_balance = eval_display["current_balance"]
-
-        daily_loss_amount = display_day_start_balance * eval_display["max_daily_loss_pct"] / 100
-        loss_so_far = max(0.0, display_day_start_balance - eval_display["current_balance"])
-        eval_daily_loss_used_pct = min(100.0, (loss_so_far / daily_loss_amount * 100) if daily_loss_amount else 0.0)
-
-        drawdown_amount = eval_display["tier_amount"] * eval_display["max_drawdown_pct"] / 100
-        drawdown_so_far = max(0.0, eval_display["tier_amount"] - eval_display["current_balance"])
-        eval_drawdown_used_pct = min(100.0, (drawdown_so_far / drawdown_amount * 100) if drawdown_amount else 0.0)
-
-        profit_amount = eval_display["tier_amount"] * eval_display["profit_target_pct"] / 100
-        profit_so_far = max(0.0, eval_display["current_balance"] - eval_display["tier_amount"])
-        eval_profit_progress_pct = min(100.0, (profit_so_far / profit_amount * 100) if profit_amount else 0.0)
-
-        eval_daily_results = _build_eval_day_dots(repo.list_evaluation_daily_results(eval_display["id"]))
+    eval_ctx = _build_eval_context(user, request)
 
     # Setup-checklist: alleen zichtbaar zolang niet alle stappen gezet zijn,
     # verdwijnt vanzelf zodra dat wel zo is. "Eerste melding ontvangen" kijkt
@@ -539,13 +610,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "total_realized_eur": total_realized_eur,
         "portfolio_change_pct": portfolio_change_pct,
         "unclear_messages": unclear_messages,
-        "eval_display": eval_display,
-        "eval_history": eval_history,
-        "eval_day_number": eval_day_number,
-        "eval_daily_loss_used_pct": eval_daily_loss_used_pct,
-        "eval_drawdown_used_pct": eval_drawdown_used_pct,
-        "eval_profit_progress_pct": eval_profit_progress_pct,
-        "eval_daily_results": eval_daily_results,
+        **eval_ctx,
     })
 
 
@@ -808,9 +873,9 @@ async def start_evaluation(
         # Ongeldige input of dubbele start (bv. twee tabbladen tegelijk):
         # stil negeren, het dashboard toont sowieso alleen het
         # startformulier als er nog geen actieve run is.
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="/evaluatie", status_code=303)
     repo.create_evaluation(user["id"], tier_amount, profit_target_pct, max_drawdown_pct)
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url="/evaluatie", status_code=303)
 
 
 @app.post("/evaluatie/stop")
@@ -818,7 +883,28 @@ async def stop_evaluation(user: dict = Depends(require_login)):
     active = repo.get_active_evaluation(user["id"])
     if active:
         repo.close_evaluation(active["id"], "gestopt", "handmatig gestopt")
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url="/evaluatie", status_code=303)
+
+
+@app.get("/evaluatie")
+async def evaluatie_page(request: Request, user: dict = Depends(require_login)):
+    eval_ctx = _build_eval_context(user, request)
+    eval_display = eval_ctx["eval_display"]
+    balance_curve = repo.list_evaluation_balance_curve(eval_display["id"]) if eval_display else []
+    eval_stats = _eval_history_stats(eval_ctx["eval_history"])
+    eval_coaching_tip = _eval_coaching_tip(
+        eval_display, eval_ctx["eval_daily_loss_used_pct"], eval_ctx["eval_drawdown_used_pct"],
+        eval_ctx["eval_profit_progress_pct"],
+    )
+
+    return templates.TemplateResponse(request, "evaluatie.html", {
+        "user": user,
+        "coins": repo.list_coins(),
+        "balance_curve": balance_curve,
+        "eval_stats": eval_stats,
+        "eval_coaching_tip": eval_coaching_tip,
+        **eval_ctx,
+    })
 
 
 # ---------------------------------------------------------------------------
