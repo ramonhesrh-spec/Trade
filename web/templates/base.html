@@ -146,11 +146,24 @@
     }
     window.HP.confetti = fireConfetti;
 
+    // Vooraf bepalen of deze paginalading zichzelf meteen weer verlaat voor
+    // het geslaagd/mislukt-reveal (zie het blok hieronder): een winnende
+    // trade die toevallig ook het winstdoel van de evaluatie haalt, levert
+    // zowel closed_win=1 als evaluatie_geslaagd=1 tegelijk op. Zonder deze
+    // guard zou fireConfetti() vlak vóór de synchrone location.replace()
+    // hieronder afgaan en nooit de kans krijgen om te renderen voordat de
+    // pagina wordt weggegooid -- de gebruiker ziet vrijwel meteen de groene
+    // puls op /evaluatie, dat is dan de vervangende bevestiging.
+    var willRedirectForEval = (
+      (location.search.indexOf("evaluatie_geslaagd=1") !== -1 || location.search.indexOf("evaluatie_mislukt=1") !== -1)
+      && location.pathname !== "/evaluatie"
+    );
+
     // Bij een gewone paginanavigatie (geen AJAX-swap, bv. vanaf de
     // coin-pagina) staat het seintje in de URL. Meteen weer verwijderen,
     // zodat verversen de confetti niet herhaalt.
     if (location.search.indexOf("closed_win=1") !== -1) {
-      fireConfetti();
+      if (!willRedirectForEval) fireConfetti();
       var url = new URL(location.href);
       url.searchParams.delete("closed_win");
       history.replaceState(null, "", url.pathname + url.search + url.hash);

@@ -204,6 +204,19 @@
     try {
       const resp = await fetch(form.action, { method: "POST", body: new FormData(form), cache: "no-store" });
       if (!resp.ok) throw new Error("verzoek mislukt");
+      // Sluiten van een aan een evaluatie-run gekoppelde trade kan die run
+      // laten slagen/mislukken; resp.url (de eindbestemming na de 303-
+      // redirect van /journal/{id}/close) draagt dan evaluatie_geslaagd=1/
+      // evaluatie_mislukt=1, net als closed_win=1 hieronder. Dat reveal
+      // bestaat alleen op /evaluatie zelf (zie base.html) en de gebruiker
+      // blijft bij deze AJAX-flow gewoon op /dashboard staan -- dus hier
+      // niet de net-gestarte DOM-swap afmaken, meteen doornavigeren,
+      // consistent met de fix in base.html voor de gewone-navigatie-flow.
+      if (resp.url.indexOf("evaluatie_geslaagd=1") !== -1 || resp.url.indexOf("evaluatie_mislukt=1") !== -1) {
+        const evalFlagAjax = resp.url.indexOf("evaluatie_geslaagd=1") !== -1 ? "evaluatie_geslaagd" : "evaluatie_mislukt";
+        location.replace("/evaluatie?" + evalFlagAjax + "=1");
+        return;
+      }
       const html = await resp.text();
       const doc = new DOMParser().parseFromString(html, "text/html");
       const fresh = doc.getElementById("open-nu-body");
