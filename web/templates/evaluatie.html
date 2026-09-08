@@ -154,8 +154,33 @@
 </section>
 {% endif %}
 
+{% if discipline_profile %}
+<section style="--i: 7">
+  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>Disciplineprofiel</h2>
+  <p class="muted" style="margin: 0 0 10px;">Gebaseerd op je {{ discipline_profile.sample_size }} gesloten trades op deze run. Puur wat er gebeurde, geen advies.</p>
+  {% if discipline_profile.by_confidence %}
+  <p class="muted" style="margin: 10px 0 4px; font-weight: 600;">Winratio per vertrouwen-niveau</p>
+  {% for row in discipline_profile.by_confidence %}
+  <p>{{ row.label }}: <strong>{{ "%.0f"|format(row.win_rate) }}%</strong> <span class="muted">(n={{ row.n }})</span></p>
+  {% endfor %}
+  {% endif %}
+  {% if discipline_profile.by_trade_number %}
+  <p class="muted" style="margin: 10px 0 4px; font-weight: 600;">Winratio per volgnummer op de handelsdag</p>
+  {% for row in discipline_profile.by_trade_number %}
+  <p>{{ row.label }}: <strong>{{ "%.0f"|format(row.win_rate) }}%</strong> <span class="muted">(n={{ row.n }})</span></p>
+  {% endfor %}
+  {% endif %}
+  {% if discipline_profile.by_risk_size %}
+  <p class="muted" style="margin: 10px 0 4px; font-weight: 600;">Winratio per risicogrootte</p>
+  {% for row in discipline_profile.by_risk_size %}
+  <p>{{ row.label }}: <strong>{{ "%.0f"|format(row.win_rate) }}%</strong> <span class="muted">(n={{ row.n }})</span></p>
+  {% endfor %}
+  {% endif %}
+</section>
+{% endif %}
+
 {% if eval_history %}
-<details class="stats-collapse js-accordion" style="--i: 7">
+<details class="stats-collapse js-accordion" style="--i: 8">
   <summary class="stats-summary">
     <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
     <span>Evaluatie geschiedenis</span>

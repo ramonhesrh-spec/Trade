@@ -1612,3 +1612,66 @@ def list_evaluation_balance_curve(evaluation_id: int) -> list[dict]:
         running += (row["result_eur"] or 0.0)
         curve.append({"time": row["exit_time"], "balance": running})
     return curve
+
+
+def list_evaluation_trade_context(evaluation_id: int) -> list[dict]:
+    """Elke aan deze run gekoppelde trade (open of gesloten) met de context
+    die het disciplineprofiel op de evaluatiepagina nodig heeft: welk
+    volgnummer die trade was op zijn handelsdag (op basis van created_at,
+    het moment waarop een oefentrade altijd meteen genomen wordt — zie
+    web/main.py:create_practice_trade), hoeveel procent van het toenmalige
+    saldo het risico was, en het vertrouwen-niveau van het signaal. Puur
+    feiten, geen oordeel: het disciplineprofiel trekt daar zelf patronen
+    uit in plaats van dat hier al een vaste regel ingebakken zit.
+
+    Saldo-op-dat-moment is tier_amount plus het resultaat van elke trade
+    die vóór dit created_at al gesloten was (exit_time < created_at,
+    beide ISO-strings, dus lexicografisch vergelijkbaar) — dezelfde
+    chronologie als list_evaluation_balance_curve, maar hier per
+    open-moment in plaats van per sluit-moment, omdat risico bepaald
+    wordt bij het openen, niet bij het sluiten."""
+    evaluation = get_evaluation(evaluation_id)
+    if not evaluation:
+        return []
+    with db.session() as conn:
+        rows = [dict(row) for row in conn.execute(
+            """SELECT je.id AS id, je.created_at AS created_at, je.exit_time AS exit_time,
+                      je.risk_eur AS risk_eur, je.result_eur AS result_eur,
+                      s.coin AS coin, s.direction AS direction, s.confidence AS confidence
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.evaluation_id = ?
+               ORDER BY je.created_at""",
+            (evaluation_id,),
+        )]
+
+    day_counts: dict[str, int] = {}
+    trades = []
+    for row in rows:
+        created_at = row["created_at"]
+        if row["risk_eur"] is None:
+            continue
+        balance_at_entry = evaluation["tier_amount"] + sum(
+            (r["result_eur"] or 0.0) for r in rows
+            if r["exit_time"] and r["exit_time"] < created_at
+        )
+        try:
+            day_label = risk.trading_day_label(datetime.fromisoformat(created_at))
+        except (ValueError, TypeError):
+            # Zelfde beschermende patroon als list_evaluation_daily_results:
+            # een niet-ISO created_at mag deze trade niet laten crashen,
+            # hij telt dan gewoon niet mee voor het dag-volgnummer.
+            day_label = None
+        trade_number_in_day = None
+        if day_label is not None:
+            day_counts[day_label] = day_counts.get(day_label, 0) + 1
+            trade_number_in_day = day_counts[day_label]
+        trades.append({
+            "id": row["id"],
+            "coin": row["coin"],
+            "direction": row["direction"],
+            "confidence": row["confidence"],
+            "result_eur": row["result_eur"],
+            "trade_number_in_day": trade_number_in_day,
+            "risk_percent_used": (row["risk_eur"] / balance_at_entry * 100) if balance_at_entry else None,
+        })
+    return trades

@@ -227,6 +227,11 @@
       </p>
       <p class="muted advice-text">{{ e.advice }}</p>
       {% if e.note %}<p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">{{ e.note }}</p>{% endif %}
+      {% if e.evaluation_id and e.trade_number_in_day %}
+      <p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">
+        {{ e.trade_number_in_day }}e trade vandaag op deze evaluatie{% if e.risk_percent_used is not none %} · {{ "%.2f"|format(e.risk_percent_used) }}% van het saldo op dat moment{% endif %}
+      </p>
+      {% endif %}
       {% if e.entry_price is none %}
       <form action="/journal/{{ e.id }}/delete-practice" method="post" class="reset-form"
             onsubmit="return confirm('Deze kapotte oefentrade weggooien?');">

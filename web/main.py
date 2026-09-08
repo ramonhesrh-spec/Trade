@@ -365,6 +365,87 @@ def _eval_history_stats(eval_history: list[dict]) -> Optional[dict]:
     }
 
 
+def _attach_discipline_facts(entries: list[dict]) -> None:
+    """Zet trade_number_in_day en risk_percent_used op elke entry die aan
+    een evaluatie gekoppeld is (mutatie in place, zelfde patroon als
+    entry['position_size'] = _position_size(entry) elders). Puur feiten op
+    de kaart zelf, geen oordeel -- de patroonanalyse zit apart in
+    _build_discipline_profile. Eén lookup per unieke evaluation_id, niet
+    per entry, want list_evaluation_trade_context haalt toch de hele run op."""
+    eval_ids = {e["evaluation_id"] for e in entries if e.get("evaluation_id")}
+    for eval_id in eval_ids:
+        context_by_id = {t["id"]: t for t in repo.list_evaluation_trade_context(eval_id)}
+        for entry in entries:
+            if entry.get("evaluation_id") == eval_id and entry["id"] in context_by_id:
+                ctx = context_by_id[entry["id"]]
+                entry["trade_number_in_day"] = ctx["trade_number_in_day"]
+                entry["risk_percent_used"] = ctx["risk_percent_used"]
+
+
+MIN_DISCIPLINE_SAMPLE = 5  # gesloten trades nodig voor de sectie überhaupt te tonen
+MIN_BUCKET_SAMPLE = 2  # per uitsplitsing, zelfde drempel als elders (avg_days_to_pass/fail)
+
+
+def _build_discipline_profile(evaluation_id: int) -> Optional[dict]:
+    """Winratio-uitsplitsingen over de gesloten, aan deze run gekoppelde
+    trades: per vertrouwen-niveau, per volgnummer die handelsdag (eerste
+    trade tegenover latere), en per risicogrootte (eigen mediaan-split,
+    geen vast percentage, want dit moet het patroon van déze gebruiker
+    laten zien, niet een aanname erover). Puur beschrijvend, geen advies
+    -- de evaluatiepagina trekt er zelf geen conclusie uit, dat is aan de
+    gebruiker. Geeft None terug als er te weinig gesloten trades zijn om
+    iets zinnigs te zeggen, zelfde principe als _eval_history_stats."""
+    trades = repo.list_evaluation_trade_context(evaluation_id)
+    closed = [t for t in trades if t["result_eur"] is not None]
+    if len(closed) < MIN_DISCIPLINE_SAMPLE:
+        return None
+
+    def _win_rate_by(group_fn) -> Optional[list[dict]]:
+        groups: dict[str, list[dict]] = {}
+        for t in closed:
+            key = group_fn(t)
+            if key is None:
+                continue
+            groups.setdefault(key, []).append(t)
+        rows = [
+            {
+                "label": label,
+                "win_rate": sum(1 for t in group if t["result_eur"] > 0) / len(group) * 100,
+                "n": len(group),
+            }
+            for label, group in groups.items() if len(group) >= MIN_BUCKET_SAMPLE
+        ]
+        return rows or None
+
+    by_confidence = _win_rate_by(lambda t: t["confidence"])
+
+    by_trade_number = _win_rate_by(
+        lambda t: "eerste trade van de dag" if t["trade_number_in_day"] == 1
+        else ("latere trade die dag" if t["trade_number_in_day"] and t["trade_number_in_day"] > 1 else None)
+    )
+
+    by_risk_size = None
+    risk_values = sorted(t["risk_percent_used"] for t in closed if t["risk_percent_used"] is not None)
+    if len(risk_values) >= MIN_DISCIPLINE_SAMPLE:
+        median_risk = risk_values[len(risk_values) // 2]
+        by_risk_size = _win_rate_by(
+            lambda t: (
+                None if t["risk_percent_used"] is None
+                else ("kleiner risico (≤ jouw mediaan)" if t["risk_percent_used"] <= median_risk
+                      else "groter risico (> jouw mediaan)")
+            )
+        )
+
+    if by_confidence is None and by_trade_number is None and by_risk_size is None:
+        return None
+    return {
+        "by_confidence": by_confidence,
+        "by_trade_number": by_trade_number,
+        "by_risk_size": by_risk_size,
+        "sample_size": len(closed),
+    }
+
+
 def _eval_coaching_tip(
     eval_display: Optional[dict], daily_loss_used_pct: float, drawdown_used_pct: float, profit_progress_pct: float,
 ) -> Optional[str]:
@@ -560,6 +641,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     practice_open = _add_signal_context(
         await _enrich_open_positions([e for e in practice_entries if e["exit_price"] is None]), winrate,
     )
+    _attach_discipline_facts(practice_open)
     practice_closed = [e for e in practice_entries if e["exit_price"] is not None]
     cumulative = repo.cumulative_result_series(user["id"])
     heatmap_weeks = _build_heatmap_weeks(repo.daily_results(user["id"]))
@@ -960,6 +1042,7 @@ async def evaluatie_page(request: Request, user: dict = Depends(require_login)):
         eval_display, eval_ctx["eval_daily_loss_used_pct"], eval_ctx["eval_drawdown_used_pct"],
         eval_ctx["eval_profit_progress_pct"],
     )
+    discipline_profile = _build_discipline_profile(eval_display["id"]) if eval_display else None
 
     return templates.TemplateResponse(request, "evaluatie.html", {
         "user": user,
@@ -967,6 +1050,7 @@ async def evaluatie_page(request: Request, user: dict = Depends(require_login)):
         "balance_curve": balance_curve,
         "eval_stats": eval_stats,
         "eval_coaching_tip": eval_coaching_tip,
+        "discipline_profile": discipline_profile,
         **eval_ctx,
     })
 
