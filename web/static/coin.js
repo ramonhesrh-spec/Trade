@@ -388,3 +388,55 @@
     renderList();
   })();
 })();
+
+(function () {
+  // Live rekenhulp op het oefentrade-formulier: laat vooraf zien welke
+  // positie een risicobedrag oplevert en of die door de evaluatie-
+  // hefboomlimiet wordt afgekapt, in plaats van dat pas na het aanmaken
+  // op de trade-kaart te ontdekken. Zelfde berekening als de server bij
+  // het echte aanmaken (_fetch_practice_trade_calc/_resolve_practice_risk_eur
+  // in web/main.py), dus de preview kan nooit afwijken van het resultaat.
+  const form = document.getElementById("oefen-form");
+  const directionSelect = document.getElementById("oefen-direction");
+  const riskInput = document.getElementById("oefen-risk-eur");
+  const previewEl = document.getElementById("oefen-preview");
+  if (!form || !directionSelect || !riskInput || !previewEl) return;
+
+  let debounceTimer = null;
+  let requestSeq = 0;
+
+  function formatEur(value) {
+    return "€" + Number(value).toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function runPreview() {
+    const seq = ++requestSeq;
+    previewEl.textContent = "Berekenen…";
+    fetch(`/coins/${SYMBOL}/oefen-preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ direction: directionSelect.value, risk_eur: riskInput.value }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (seq !== requestSeq) return; // een nieuwere aanvraag is al onderweg, deze respons is verouderd
+        if (data.error) { previewEl.textContent = ""; return; }
+        const notional = data.notional_eur !== null ? formatEur(data.notional_eur) : "-";
+        const coinLabel = SYMBOL.replace("USDT", "");
+        let text = `Positie ≈ ${data.position_size !== null ? data.position_size.toFixed(6) : "-"} ${coinLabel} (${notional} notioneel), risico ${formatEur(data.used_risk_eur)}.`;
+        if (data.capped) {
+          text += ` Automatisch beperkt tot de hefboomlimiet van de evaluatie (max ${formatEur(data.max_risk_eur)} risico).`;
+        }
+        previewEl.textContent = text;
+      })
+      .catch(() => { if (seq === requestSeq) previewEl.textContent = ""; });
+  }
+
+  function scheduleRunPreview() {
+    if (debounceTimer) clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(runPreview, 500);
+  }
+
+  directionSelect.addEventListener("change", scheduleRunPreview);
+  riskInput.addEventListener("input", scheduleRunPreview);
+})();

@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -932,6 +932,90 @@ async def evaluatie_page(request: Request, user: dict = Depends(require_login)):
 # via Discord voor nodig is. Telt niet mee in de echte winrate/resultaten.
 # ---------------------------------------------------------------------------
 
+async def _fetch_practice_trade_calc(symbol: str, direction: str):
+    """Live technische berekening voor een oefentrade: candles ophalen,
+    indicatoren en stop loss/take profit. Gedeeld door het daadwerkelijk
+    aanmaken van een oefentrade en de live-voorbeeldroute ervoor, zodat de
+    preview nooit kan afwijken van wat er bij versturen echt gebeurt."""
+    df = await asyncio.to_thread(exchange.fetch_ohlcv, symbol)
+    ind = indicators.compute_indicators(df)
+    swing_low, swing_high = indicators.swing_levels(df)
+    stop_take = risk.compute_stop_take(direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high)
+    return df, ind, stop_take
+
+
+def _resolve_practice_risk_eur(
+    user: dict, active_eval: Optional[dict], manual_risk_eur: Optional[float],
+    entry_price: float, stop_loss: float,
+) -> tuple[float, Optional[str], bool, Optional[float]]:
+    """Risicobedrag voor een oefentrade: handmatige invoer gaat voor de
+    automatische berekening op basis van je echte portefeuille (die heeft
+    geen relatie met het saldo van een lopende evaluatie-run). Bij een
+    actieve evaluatie wordt het resultaat bovendien gecapt op
+    MAX_EVAL_LEVERAGE x het evaluatiesaldo, exact de regel van de echte
+    Kraken Prop. Geeft (risk_eur, notitie-of-None, is-gecapt, max-toegestaan-of-None)."""
+    computed_risk_eur = (
+        manual_risk_eur if manual_risk_eur is not None
+        else risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
+    )
+    leverage_note = None
+    capped = False
+    max_risk_eur = None
+    if active_eval:
+        stop_distance = abs(entry_price - stop_loss)
+        if stop_distance > 0 and entry_price > 0:
+            max_risk_eur = MAX_EVAL_LEVERAGE * active_eval["current_balance"] * stop_distance / entry_price
+            if computed_risk_eur > max_risk_eur > 0:
+                capped = True
+                leverage_note = (
+                    f"Systeem: risico verlaagd van €{computed_risk_eur:.2f} naar €{max_risk_eur:.2f} "
+                    f"om binnen de {MAX_EVAL_LEVERAGE:.0f}x hefboomlimiet van de evaluatie te blijven."
+                )
+                computed_risk_eur = max_risk_eur
+    return computed_risk_eur, leverage_note, capped, max_risk_eur
+
+
+@app.post("/coins/{symbol}/oefen-preview")
+async def preview_practice_trade(
+    symbol: str,
+    direction: str = Form(...),
+    risk_eur: str = Form(""),
+    user: dict = Depends(require_login),
+):
+    """Live rekenhulp voor het oefentrade-formulier: dezelfde technische
+    berekening en hefboom-cap als het echte aanmaken, maar slaat niets op.
+    Laat je vooraf zien welke positie en of die gecapt wordt, in plaats
+    van dat achteraf op de trade-kaart te ontdekken."""
+    symbol = symbol.upper()
+    if direction not in ("long", "short") or not repo.coin_is_tracked(symbol):
+        return JSONResponse({"error": "ongeldige coin of richting"}, status_code=400)
+
+    manual_risk_eur = _parse_optional_float(risk_eur)
+    if manual_risk_eur is None:
+        manual_risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
+
+    _df, ind, stop_take = await _fetch_practice_trade_calc(symbol, direction)
+    active_eval = repo.get_active_evaluation(user["id"])
+    used_risk_eur, leverage_note, capped, max_risk_eur = _resolve_practice_risk_eur(
+        user, active_eval, manual_risk_eur, ind.price, stop_take.stop_loss,
+    )
+    position_size = risk.compute_position_size(used_risk_eur, ind.price, stop_take.stop_loss)
+    notional_eur = (position_size * ind.price) if position_size else None
+
+    return JSONResponse({
+        "entry_price": ind.price,
+        "stop_loss": stop_take.stop_loss,
+        "take_profit": stop_take.take_profit,
+        "requested_risk_eur": manual_risk_eur,
+        "used_risk_eur": used_risk_eur,
+        "position_size": position_size,
+        "notional_eur": notional_eur,
+        "capped": capped,
+        "max_risk_eur": max_risk_eur,
+        "note": leverage_note,
+    })
+
+
 @app.post("/coins/{symbol}/oefen")
 async def create_practice_trade(
     symbol: str,
@@ -943,9 +1027,7 @@ async def create_practice_trade(
     if direction not in ("long", "short") or not repo.coin_is_tracked(symbol):
         return RedirectResponse(url=f"/coins/{symbol}", status_code=303)
 
-    df = await asyncio.to_thread(exchange.fetch_ohlcv, symbol)
-    ind = indicators.compute_indicators(df)
-    swing_low, swing_high = indicators.swing_levels(df)
+    df, ind, stop_take = await _fetch_practice_trade_calc(symbol, direction)
 
     extra_factors = None
     if config.ENABLE_ADVANCED_FACTORS:
@@ -953,7 +1035,6 @@ async def create_practice_trade(
     confirmed, reason = indicators.confirms_direction(
         ind, direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
     )
-    stop_take = risk.compute_stop_take(direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high)
 
     confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"
     plain_explanation = await asyncio.to_thread(
@@ -977,33 +1058,10 @@ async def create_practice_trade(
         "context_note": None, "is_practice": 1, "plain_explanation": plain_explanation or None,
     })
     active_eval = repo.get_active_evaluation(user["id"])
-    # Handmatig risico gaat voor de automatische berekening op basis van je
-    # echte portefeuille: die berekening heeft geen enkele relatie met het
-    # saldo van een lopende evaluatie-run (bewuste keuze bij het bouwen van
-    # de evaluatiefunctie), dus zonder handmatige invoer kan één oefentrade
-    # een veelvoud van het evaluatiesaldo aan risico dragen.
     manual_risk_eur = _parse_optional_float(risk_eur)
-    computed_risk_eur = (
-        manual_risk_eur if manual_risk_eur is not None
-        else risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
+    computed_risk_eur, leverage_note, _capped, _max_risk_eur = _resolve_practice_risk_eur(
+        user, active_eval, manual_risk_eur, ind.price, stop_take.stop_loss,
     )
-
-    # Positiegrootte = risico / stop-afstand kent verder nergens een
-    # hefboom-plafond (geldt voor elke trade in de app), maar bij een
-    # evaluatie staat dat expliciet naast een klein, hard saldo, dus daar
-    # kappen we het notioneel af op MAX_EVAL_LEVERAGE x het evaluatiesaldo
-    # -- exact de regel van de echte Kraken Prop.
-    leverage_note = None
-    if active_eval:
-        stop_distance = abs(ind.price - stop_take.stop_loss)
-        if stop_distance > 0 and ind.price > 0:
-            max_risk_eur = MAX_EVAL_LEVERAGE * active_eval["current_balance"] * stop_distance / ind.price
-            if computed_risk_eur > max_risk_eur > 0:
-                leverage_note = (
-                    f"Systeem: risico verlaagd van €{computed_risk_eur:.2f} naar €{max_risk_eur:.2f} "
-                    f"om binnen de {MAX_EVAL_LEVERAGE:.0f}x hefboomlimiet van de evaluatie te blijven."
-                )
-                computed_risk_eur = max_risk_eur
 
     entry_id = repo.create_journal_entry(
         signal_id, user["id"], computed_risk_eur, evaluation_id=active_eval["id"] if active_eval else None,
