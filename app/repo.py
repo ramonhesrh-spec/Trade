@@ -808,6 +808,23 @@ def total_open_risk_eur(user_id: int) -> float:
         return row["total"]
 
 
+def total_open_risk_eur_for_evaluation(evaluation_id: int) -> float:
+    """Som van het risicobedrag van alle nog open oefentrades die aan deze
+    evaluatie-run gekoppeld zijn. Zelfde 'echt open'-definitie als
+    total_open_risk_eur, maar dan tegen evaluation_id in plaats van
+    user_id: dit is precies het gecombineerde risico dat nog niet in
+    current_balance verwerkt is (dat gebeurt pas op close, zie
+    close_journal_trade)."""
+    with db.session() as conn:
+        row = conn.execute(
+            """SELECT COALESCE(SUM(je.risk_eur), 0) AS total
+               FROM journal_entries je
+               WHERE je.evaluation_id = ? AND je.entry_price IS NOT NULL AND je.exit_price IS NULL""",
+            (evaluation_id,),
+        ).fetchone()
+        return row["total"]
+
+
 def list_journal(user_id: int, status: Optional[str] = None, limit: int = 500) -> list[dict]:
     with db.session() as conn:
         if status == "open":

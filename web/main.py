@@ -302,6 +302,21 @@ def _build_eval_context(user: dict, request: Request) -> dict:
 
         eval_daily_results = _build_eval_day_dots(repo.list_evaluation_daily_results(eval_display["id"]))
 
+    # Risico van oefentrades die al genomen maar nog niet gesloten zijn:
+    # zit nog niet in current_balance verwerkt (dat gebeurt pas op close),
+    # dus zonder dit is er geen zicht op wat er gecombineerd op het spel
+    # staat als je meerdere oefentrades tegelijk open hebt. Alleen zinvol
+    # voor een echt actieve run: een net beëindigde run (eval_display bij
+    # de reveal-fallback) kan geen nieuwe open oefentrades meer krijgen.
+    eval_open_risk_eur = 0.0
+    eval_open_risk_pct = 0.0
+    if active_evaluation:
+        eval_open_risk_eur = repo.total_open_risk_eur_for_evaluation(active_evaluation["id"])
+        eval_open_risk_pct = (
+            eval_open_risk_eur / active_evaluation["current_balance"] * 100
+            if active_evaluation["current_balance"] else 0.0
+        )
+
     return {
         "eval_display": eval_display,
         "eval_history": eval_history,
@@ -311,6 +326,8 @@ def _build_eval_context(user: dict, request: Request) -> dict:
         "eval_profit_progress_pct": eval_profit_progress_pct,
         "eval_daily_results": eval_daily_results,
         "eval_daily_loss_remaining_eur": eval_daily_loss_remaining_eur,
+        "eval_open_risk_eur": eval_open_risk_eur,
+        "eval_open_risk_pct": eval_open_risk_pct,
     }
 
 

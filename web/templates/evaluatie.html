@@ -50,6 +50,19 @@
     </div>
   </div>
 
+  {% if eval_display.status == 'actief' and eval_open_risk_eur > 0 %}
+  <div class="risk-gauge">
+    <div class="risk-gauge-head">
+      <span class="muted">Risico open oefentrades</span>
+      <span class="mono">€{{ "%.2f"|format(eval_open_risk_eur) }} <span class="muted">({{ "%.0f"|format(eval_open_risk_pct) }}% van saldo)</span></span>
+    </div>
+    <div class="risk-gauge-bar">
+      <div class="risk-gauge-fill {{ 'risk-high' if eval_open_risk_pct >= 25 else ('risk-mid' if eval_open_risk_pct >= 10 else '') }}"
+           style="width: {{ [eval_open_risk_pct, 100] | min }}%"></div>
+    </div>
+  </div>
+  {% endif %}
+
   {% if eval_daily_results %}
   <div class="prop-eval-days">
     {% for day in eval_daily_results %}
