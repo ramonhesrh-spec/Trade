@@ -851,6 +851,13 @@ async def update_journal_note(
 
 PROP_EVAL_TIERS = (5000.0, 10000.0, 25000.0, 50000.0, 100000.0, 200000.0)
 
+# De echte Kraken Prop staat maximaal 5x hefboom toe. Positiegrootte wordt
+# elders in de app puur uit risicobedrag / stop-afstand berekend, zonder
+# enige controle of dat notioneel haalbaar is met het beschikbare kapitaal
+# (dat gold altijd al, voor elke trade) — bij een evaluatie is dat expliciet
+# zichtbaar naast een klein, harde saldo, dus daar wordt het wel afgekapt.
+MAX_EVAL_LEVERAGE = 5.0
+
 
 @app.post("/evaluatie/start")
 async def start_evaluation(
@@ -963,10 +970,30 @@ async def create_practice_trade(
         manual_risk_eur if manual_risk_eur is not None
         else risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
     )
+
+    # Positiegrootte = risico / stop-afstand kent verder nergens een
+    # hefboom-plafond (geldt voor elke trade in de app), maar bij een
+    # evaluatie staat dat expliciet naast een klein, hard saldo, dus daar
+    # kappen we het notioneel af op MAX_EVAL_LEVERAGE x het evaluatiesaldo
+    # -- exact de regel van de echte Kraken Prop.
+    leverage_note = None
+    if active_eval:
+        stop_distance = abs(ind.price - stop_take.stop_loss)
+        if stop_distance > 0 and ind.price > 0:
+            max_risk_eur = MAX_EVAL_LEVERAGE * active_eval["current_balance"] * stop_distance / ind.price
+            if computed_risk_eur > max_risk_eur > 0:
+                leverage_note = (
+                    f"Systeem: risico verlaagd van €{computed_risk_eur:.2f} naar €{max_risk_eur:.2f} "
+                    f"om binnen de {MAX_EVAL_LEVERAGE:.0f}x hefboomlimiet van de evaluatie te blijven."
+                )
+                computed_risk_eur = max_risk_eur
+
     entry_id = repo.create_journal_entry(
         signal_id, user["id"], computed_risk_eur, evaluation_id=active_eval["id"] if active_eval else None,
     )
     repo.update_journal_status(entry_id, user["id"], "genomen", entry_price=ind.price)
+    if leverage_note:
+        repo.update_journal_note(entry_id, user["id"], leverage_note)
 
     return RedirectResponse(url="/dashboard", status_code=303)
 

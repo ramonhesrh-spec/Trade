@@ -58,6 +58,7 @@
   <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
 </p>
 <p class="muted advice-text">{{ e.advice }}</p>
+{% if e.note %}<p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">{{ e.note }}</p>{% endif %}
 <details class="confidence-detail levels-detail js-accordion">
   <summary class="confidence-why">SL, TP of grootte aanpassen</summary>
   <form action="/journal/{{ e.id }}/levels" method="post" class="levels-form">
