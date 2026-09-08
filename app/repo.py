@@ -1550,3 +1550,36 @@ def list_evaluation_daily_results(evaluation_id: int) -> list[dict]:
             continue
         daily[label] = daily.get(label, 0.0) + (row["result_eur"] or 0.0)
     return [{"date": date, "value": value} for date, value in sorted(daily.items())]
+
+
+def list_evaluation_balance_curve(evaluation_id: int) -> list[dict]:
+    """Cumulatieve saldo-lijn voor de grafiek op de evaluatie-pagina: één
+    punt bij de start (tier_amount, started_at) en daarna één punt per
+    gesloten, aan deze run gekoppelde trade, oplopend saldo. Anders dan
+    list_evaluation_daily_results (dat per handelsdag optelt voor de
+    dag-stippen) geeft dit de exacte volgorde van individuele trades
+    terug, voor een vloeiende lijn in plaats van een dagoverzicht."""
+    evaluation = get_evaluation(evaluation_id)
+    if not evaluation:
+        return []
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT exit_time, result_eur FROM journal_entries
+               WHERE evaluation_id = ? AND exit_price IS NOT NULL
+               ORDER BY exit_time""",
+            (evaluation_id,),
+        ).fetchall()
+    curve = [{"time": evaluation["started_at"], "balance": evaluation["tier_amount"]}]
+    running = evaluation["tier_amount"]
+    for row in rows:
+        try:
+            datetime.fromisoformat(row["exit_time"])
+        except (ValueError, TypeError):
+            # Zelfde beschermende patroon als list_evaluation_daily_results:
+            # een niet-ISO exit_time mag de grafiek niet laten crashen of
+            # een onbruikbaar punt opleveren, die ene sluiting ontbreekt
+            # dan gewoon in de lijn.
+            continue
+        running += (row["result_eur"] or 0.0)
+        curve.append({"time": row["exit_time"], "balance": running})
+    return curve
