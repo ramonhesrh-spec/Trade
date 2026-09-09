@@ -1,4 +1,5 @@
 """Technische indicatoren op de 4 uur candle, vaste standaard timeframe."""
+import math
 from dataclasses import dataclass
 from typing import Optional
 
@@ -287,6 +288,42 @@ HAMMER_OPPOSITE_SHADOW_MAX_RATIO = 0.5
 # (high - low) om als doji te tellen.
 DOJI_BODY_MAX_RATIO = 0.1
 
+# Relatieve tolerantie voor float-vergelijkingen in patroon-detectie. Bij
+# berekende waarden (b.v. 90.65 - 90.6 = 0.05) kan floating-point
+# afrondingsfouten ervoor zorgen dat een waarde net onder of boven het
+# verwachte drempelpunt uit komt (0.05000000000001137 vs
+# 0.04999999999999716). Een vaste absolute tolerantie (b.v. 1e-9) is
+# onbruikbaar voor de vele tokens die dit systeem verwerkt: sub-cent coins
+# en meme-tokens hebben OHLC-deltas van 1e-7 tot 1e-9, waar een absolute 1e-9
+# tolerantie betekenisloos of zelfs schadelijk kan zijn. Een relatieve
+# tolerantie schalen naar de grootte-orde van de getallen zelf en blijft dus
+# nuttig over het hele bereik van mogelijke tokenprijs.
+PATTERN_COMPARISON_TOLERANCE = 1e-9
+
+
+def _geq_with_tolerance(a: float, b: float) -> bool:
+    """Controleer of a >= b, met floating-point tolerantie. Gebruikt door
+    patroon-detectie voor drempel-vergelijkingen."""
+    return a >= b or math.isclose(a, b, rel_tol=PATTERN_COMPARISON_TOLERANCE, abs_tol=0)
+
+
+def _leq_with_tolerance(a: float, b: float) -> bool:
+    """Controleer of a <= b, met floating-point tolerantie. Gebruikt door
+    patroon-detectie voor drempel-vergelijkingen."""
+    return a <= b or math.isclose(a, b, rel_tol=PATTERN_COMPARISON_TOLERANCE, abs_tol=0)
+
+
+def _gt_with_tolerance(a: float, b: float) -> bool:
+    """Controleer of a > b, met floating-point tolerantie. Gebruikt door
+    patroon-detectie voor drempel-vergelijkingen."""
+    return a > b or math.isclose(a, b, rel_tol=PATTERN_COMPARISON_TOLERANCE, abs_tol=0)
+
+
+def _lt_with_tolerance(a: float, b: float) -> bool:
+    """Controleer of a < b, met floating-point tolerantie. Gebruikt door
+    patroon-detectie voor drempel-vergelijkingen."""
+    return a < b or math.isclose(a, b, rel_tol=PATTERN_COMPARISON_TOLERANCE, abs_tol=0)
+
 
 def detect_single_candle_patterns(
     df: pd.DataFrame, index: int, ema9_series: list[float], ema21_series: list[float],
@@ -320,22 +357,19 @@ def detect_single_candle_patterns(
 
     patterns: list[tuple[str, str]] = []
 
-    # Kleine floating-point tolerantie voor schaduw-vergelijkingen
-    eps = 1e-9
-
-    if lower_shadow >= body * HAMMER_SHADOW_RATIO and upper_shadow <= body * HAMMER_OPPOSITE_SHADOW_MAX_RATIO + eps:
+    if _geq_with_tolerance(lower_shadow, body * HAMMER_SHADOW_RATIO) and _leq_with_tolerance(upper_shadow, body * HAMMER_OPPOSITE_SHADOW_MAX_RATIO):
         if trend_down:
             patterns.append(("Hammer", "bullish"))
         elif trend_up:
             patterns.append(("Hanging Man", "bearish"))
 
-    if upper_shadow >= body * HAMMER_SHADOW_RATIO and lower_shadow <= body * HAMMER_OPPOSITE_SHADOW_MAX_RATIO + eps:
+    if _geq_with_tolerance(upper_shadow, body * HAMMER_SHADOW_RATIO) and _leq_with_tolerance(lower_shadow, body * HAMMER_OPPOSITE_SHADOW_MAX_RATIO):
         if trend_up:
             patterns.append(("Shooting Star", "bearish"))
         elif trend_down:
             patterns.append(("Inverted Hammer", "bullish"))
 
-    if body <= candle_range * DOJI_BODY_MAX_RATIO:
+    if _leq_with_tolerance(body, candle_range * DOJI_BODY_MAX_RATIO):
         if trend_up:
             patterns.append(("Doji", "bearish"))
         elif trend_down:
@@ -369,9 +403,9 @@ def detect_star_pattern(df: pd.DataFrame, index: int) -> Optional[tuple[str, str
     middle_range = middle["high"] - middle["low"]
     last_body = abs(last["close"] - last["open"])
 
-    if first_body < body_avg20 or last_body < body_avg20:
+    if _lt_with_tolerance(first_body, body_avg20) or _lt_with_tolerance(last_body, body_avg20):
         return None
-    if first_range > 0 and middle_range > first_range * (DOJI_BODY_MAX_RATIO * 3):
+    if first_range > 0 and _gt_with_tolerance(middle_range, first_range * (DOJI_BODY_MAX_RATIO * 3)):
         return None
 
     first_bearish = first["close"] < first["open"]
@@ -380,9 +414,9 @@ def detect_star_pattern(df: pd.DataFrame, index: int) -> Optional[tuple[str, str
     last_bearish = last["close"] < last["open"]
     first_midpoint = (first["open"] + first["close"]) / 2
 
-    if first_bearish and last_bullish and last["close"] > first_midpoint:
+    if first_bearish and last_bullish and _gt_with_tolerance(last["close"], first_midpoint):
         return ("Morning Star", "bullish")
-    if first_bullish and last_bearish and last["close"] < first_midpoint:
+    if first_bullish and last_bearish and _lt_with_tolerance(last["close"], first_midpoint):
         return ("Evening Star", "bearish")
     return None
 
