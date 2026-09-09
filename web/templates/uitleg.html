@@ -136,11 +136,11 @@ vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
     {{ '● Actief' if advanced_factors_enabled else '○ Nog niet actief' }}
   </span>
   {% if advanced_factors_enabled %}
-  <h2>Zes extra factoren</h2>
-  <p>Naast de vier factoren hierboven toetst HesPulse ook op zes extra
+  <h2>Tien extra factoren</h2>
+  <p>Naast de vier factoren hierboven toetst HesPulse ook op tien extra
   factoren. Die tellen nu mee in elke melding.</p>
   {% else %}
-  <h2>In de maak: zes extra factoren</h2>
+  <h2>In de maak: tien extra factoren</h2>
   <p>Naast de vier factoren hierboven staat er een uitgebreidere toetsing
   klaar, maar die staat nog uit. Eerst wordt getoetst hoe streng de nieuwe
   regels in de praktijk uitpakken op eerdere signalen, voor ze meetellen in
@@ -148,9 +148,10 @@ vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
   {% endif %}
   <div class="factor-grid">
     <div class="factor factor-preview">
-      <h3>Trendsterkte (ADX)</h3>
-      <p>ADX van minimaal 20: is er überhaupt een trend om op te varen, of
-      beweegt de coin zijwaarts?</p>
+      <h3>Trendsterkte (ADX + richting)</h3>
+      <p>ADX van minimaal 15: is er überhaupt een trend om op te varen, of
+      beweegt de coin zijwaarts? Telt alleen mee als die trend ook de kant
+      op wijst van het signaal, niet alleen sterk is.</p>
     </div>
     <div class="factor factor-preview">
       <h3>Volatiliteit (ATR)</h3>
@@ -158,9 +159,21 @@ vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
       neemt de beweeglijkheid toe, in plaats van uitdovend?</p>
     </div>
     <div class="factor factor-preview">
+      <h3>Volume-percentiel</h3>
+      <p>Volume tegen zijn eigen spreiding van de laatste 20 candles
+      afgezet, in plaats van tegen één simpel gemiddelde. Moet minstens
+      mediaan staan.</p>
+    </div>
+    <div class="factor factor-preview">
       <h3>BTC-trend</h3>
       <p>Voor altcoins: staat Bitcoin zelf niet lijnrecht tegenover de
       trade in? De hele markt volgt vaak BTC.</p>
+    </div>
+    <div class="factor factor-preview">
+      <h3>Daily-trend</h3>
+      <p>Dezelfde trendcheck als de basisfactor Trend, maar dan op de
+      dagcandle: bevestigt de langere-termijn richting, los van wat de
+      snellere 4 uur candle nu laat zien.</p>
     </div>
     <div class="factor factor-preview">
       <h3>1 uur bevestiging</h3>
@@ -168,10 +181,22 @@ vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
       tijdsbestek, als extra bevestiging naast de 4 uur candle.</p>
     </div>
     <div class="factor factor-preview">
+      <h3>RSI 1 uur</h3>
+      <p>Dezelfde RSI-check als de basisfactor RSI, maar dan op 1 uur: staat
+      de snellere timeframe al overbought of oversold, ook als de 4 uur
+      RSI dat nog niet laat zien?</p>
+    </div>
+    <div class="factor factor-preview">
       <h3>Divergentie</h3>
       <p>Zet de prijs een nieuwe top of bodem neer terwijl de RSI juist
       verzwakt? Dat is vaak een teken dat het momentum al aan het
       afzwakken is.</p>
+    </div>
+    <div class="factor factor-preview">
+      <h3>Candlepatroon</h3>
+      <p>Staat er op de signaal-candle zelf een bullish of bearish
+      engulfing: slokt die candle de vorige volledig op in de richting van
+      het signaal?</p>
     </div>
     <div class="factor factor-preview">
       <h3>Liquiditeit</h3>
@@ -181,11 +206,11 @@ vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
     </div>
   </div>
   <div class="group-note">
-    Trend, Momentum, BTC-trend en 1 uur bevestiging meten in de kern
-    allemaal hetzelfde: is er een trend. Daarom telt die groep niet als
-    vier losse stemmen, één afwijking daarbinnen mag (3 van 4). De overige
-    factoren (RSI, Volume, Trendsterkte, Volatiliteit, Divergentie,
-    Liquiditeit) blijven stuk voor stuk hard vereist, geen uitzondering.
+    Bij de uitgebreide toetsing telt geen enkele factor apart als harde
+    eis. Alle veertien factoren (de vier basisfactoren plus deze tien)
+    tellen gezamenlijk mee, en minstens 60% moet kloppen. Zo blokkeert één
+    marginale miss niet meteen een verder overtuigend signaal, en blijft
+    precies zichtbaar welke factor(en) niet klopten.
   </div>
 </section>
 

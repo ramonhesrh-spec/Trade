@@ -24,6 +24,12 @@ ATR_TOLERANCE = 0.9
 # zonder forse slippage.
 MIN_QUOTE_VOLUME_24H = 2_000_000.0
 
+# Ondergrens voor het volume-percentiel (t.o.v. de laatste 20 candles) om als
+# bevestigend te tellen. 50 is het mediaan: het huidige volume moet minstens
+# gemiddeld hoog staan binnen zijn eigen recente spreiding, niet alleen boven
+# een simpel gemiddelde dat door een paar uitschieters vertekend kan zijn.
+VOLUME_PERCENTILE_MIN = 50.0
+
 
 @dataclass
 class Indicators:
@@ -32,11 +38,14 @@ class Indicators:
     macd: float
     macd_signal: float
     volume_ratio: float
+    volume_percentile: float
     ema9: float
     ema21: float
     atr: float
     atr_avg20: float
     adx: float
+    adx_pos: float
+    adx_neg: float
 
 
 def compute_indicators(df: pd.DataFrame) -> Indicators:
@@ -60,10 +69,14 @@ def compute_indicators(df: pd.DataFrame) -> Indicators:
     atr_series = ta.volatility.AverageTrueRange(high, low, close, window=14).average_true_range()
     atr_avg20 = atr_series.rolling(window=20).mean()
 
-    adx = ta.trend.ADXIndicator(high, low, close, window=14).adx()
+    adx_indicator = ta.trend.ADXIndicator(high, low, close, window=14)
+    adx = adx_indicator.adx()
+    adx_pos = adx_indicator.adx_pos()
+    adx_neg = adx_indicator.adx_neg()
 
     volume_avg20 = volume.rolling(window=20).mean()
     volume_ratio = volume / volume_avg20
+    volume_percentile = volume.tail(20).rank(pct=True) * 100
 
     last = -1
     return Indicators(
@@ -72,11 +85,14 @@ def compute_indicators(df: pd.DataFrame) -> Indicators:
         macd=float(macd_line.iloc[last]),
         macd_signal=float(macd_signal_line.iloc[last]),
         volume_ratio=float(volume_ratio.iloc[last]),
+        volume_percentile=float(volume_percentile.iloc[last]),
         ema9=float(ema9.iloc[last]),
         ema21=float(ema21.iloc[last]),
         atr=float(atr_series.iloc[last]),
         atr_avg20=float(atr_avg20.iloc[last]),
         adx=float(adx.iloc[last]),
+        adx_pos=float(adx_pos.iloc[last]),
+        adx_neg=float(adx_neg.iloc[last]),
     )
 
 
@@ -122,6 +138,22 @@ def check_1h_trend(direction: str, ind_1h: Indicators) -> tuple[str, bool, str]:
     kant = "boven" if up_1h else "onder"
     detail = f"EMA9 {kant} EMA21 op 1u" + ("" if ok else ", nog geen bevestiging op de snellere timeframe")
     return ("1u bevestiging", ok, detail)
+
+
+def check_1h_rsi(direction: str, ind_1h: Indicators) -> tuple[str, bool, str]:
+    """RSI-bevestiging op 1 uur naast de RSI-check op de hoofd-timeframe van
+    4 uur: dezelfde soort check als check_1h_trend, maar voor momentum-
+    uitputting in plaats van trendrichting. Een 4-uur candle kan nog
+    ruimte tonen terwijl de snellere timeframe al overbought/oversold
+    staat."""
+    direction = direction.lower()
+    if direction == "long":
+        ok = ind_1h.rsi < 75
+        detail = f"RSI {ind_1h.rsi:.0f} op 1u" + ("" if ok else ", overbought op de snellere timeframe")
+    else:
+        ok = ind_1h.rsi > 25
+        detail = f"RSI {ind_1h.rsi:.0f} op 1u" + ("" if ok else ", oversold op de snellere timeframe")
+    return ("RSI 1u", ok, detail)
 
 
 def check_daily_trend(direction: str, daily_ind: Indicators) -> tuple[str, bool, str]:
@@ -177,6 +209,41 @@ def check_divergence(df: pd.DataFrame, direction: str, lookback: int = 20) -> tu
     return ("Divergentie", not warning, detail)
 
 
+def check_candle_pattern(df: pd.DataFrame, direction: str) -> tuple[str, bool, str]:
+    """Bullish/bearish engulfing op de signaal-candle (de laatste, meest
+    recente candle): die candle slokt de vorige volledig op in tegengestelde
+    richting, een klassiek omslagpatroon. Extra bevestiging op de candle
+    zelf, naast de indicatoren die alleen naar prijs en gemiddelden kijken."""
+    direction = direction.lower()
+    if len(df) < 2:
+        return ("Candlepatroon", True, "te weinig candles om een patroon te beoordelen")
+
+    prev = df.iloc[-2]
+    last = df.iloc[-1]
+    prev_bullish = prev["close"] > prev["open"]
+    prev_bearish = prev["close"] < prev["open"]
+    last_bullish = last["close"] > last["open"]
+    last_bearish = last["close"] < last["open"]
+
+    bullish_engulfing = (
+        prev_bearish and last_bullish
+        and last["open"] <= prev["close"] and last["close"] >= prev["open"]
+    )
+    bearish_engulfing = (
+        prev_bullish and last_bearish
+        and last["open"] >= prev["close"] and last["close"] <= prev["open"]
+    )
+
+    if direction == "long":
+        ok = bullish_engulfing
+        detail = "bullish engulfing op de signaal-candle" if ok else "geen bullish engulfing patroon"
+    else:
+        ok = bearish_engulfing
+        detail = "bearish engulfing op de signaal-candle" if ok else "geen bearish engulfing patroon"
+
+    return ("Candlepatroon", ok, detail)
+
+
 def check_liquidity(quote_volume_24h: float, minimum: float = MIN_QUOTE_VOLUME_24H) -> tuple[str, bool, str]:
     """Handelsvolume van de laatste 24 uur, tegen een ondergrens. Een
     technisch perfecte setup op een dun verhandelde coin levert in de
@@ -188,6 +255,20 @@ def check_liquidity(quote_volume_24h: float, minimum: float = MIN_QUOTE_VOLUME_2
         minimum_str = f"€{minimum:,.0f}".replace(",", ".")
         detail += f", onder de grens van {minimum_str}"
     return ("Liquiditeit", ok, detail)
+
+
+def check_volume_percentile(ind: Indicators, minimum: float = VOLUME_PERCENTILE_MIN) -> tuple[str, bool, str]:
+    """Volume als percentiel binnen de laatste 20 candles, naast de simpele
+    Volume-factor die alleen tegen het gemiddelde toetst. Een volume dat nét
+    boven het gemiddelde ligt (1.01x) kan alsnog laag zijn t.o.v. de recente
+    spreiding als er een paar extreme uitschieters tussen zitten; het
+    percentiel zet dezelfde meting relatief tegen zijn eigen recente
+    verdeling af in plaats van tegen één gemiddelde."""
+    ok = ind.volume_percentile >= minimum
+    detail = f"volume in {ind.volume_percentile:.0f}e percentiel van de laatste 20 candles"
+    if not ok:
+        detail += f", onder de {minimum:.0f}e percentiel grens"
+    return ("Volume-percentiel", ok, detail)
 
 
 # Basisversie: 3 van de 4 factoren is genoeg. Alle 4 verplicht bleek te
@@ -290,8 +371,14 @@ def confirms_direction(
         confirmed = sum(1 for _, ok, _ in factors if ok) >= BASIC_CONFIRM_MIN_PASSED
         return confirmed, breakdown
 
-    adx_ok = ind.adx >= ADX_MIN
-    adx_detail = f"ADX {ind.adx:.0f}" + ("" if adx_ok else ", trend te zwak/zijwaarts")
+    strong_enough = ind.adx >= ADX_MIN
+    direction_aligned = ind.adx_pos > ind.adx_neg if direction == "long" else ind.adx_neg > ind.adx_pos
+    adx_ok = strong_enough and direction_aligned
+    adx_detail = f"ADX {ind.adx:.0f}"
+    if not strong_enough:
+        adx_detail += ", trend te zwak/zijwaarts"
+    elif not direction_aligned:
+        adx_detail += ", trend sterk maar in de verkeerde richting"
 
     volatility_ok = ind.atr >= ind.atr_avg20 * ATR_TOLERANCE
     volatility_detail = f"ATR {ind.atr:.4f}" + (
@@ -300,6 +387,7 @@ def confirms_direction(
     factors += [
         ("Trendsterkte", adx_ok, adx_detail),
         ("Volatiliteit", volatility_ok, volatility_detail),
+        check_volume_percentile(ind),
     ]
     if extra_factors:
         factors.extend(extra_factors)

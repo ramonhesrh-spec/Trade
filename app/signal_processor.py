@@ -525,15 +525,23 @@ async def compute_advanced_extra_factors(coin: str, direction: str, df) -> list[
         df_1h = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1h")
         ind_1h = indicators.compute_indicators(df_1h)
         factors.append(indicators.check_1h_trend(direction, ind_1h))
+        factors.append(indicators.check_1h_rsi(direction, ind_1h))
     except Exception:
         logger.exception("1u bevestiging voor %s kon niet berekend worden", coin)
         factors.append(("1u bevestiging", False, "kon niet opgehaald worden, telt als niet bevestigd"))
+        factors.append(("RSI 1u", False, "kon niet opgehaald worden, telt als niet bevestigd"))
 
     try:
         factors.append(indicators.check_divergence(df, direction))
     except Exception:
         logger.exception("Divergentiecheck voor %s kon niet berekend worden", coin)
         factors.append(("Divergentie", False, "kon niet berekend worden, telt als niet bevestigd"))
+
+    try:
+        factors.append(indicators.check_candle_pattern(df, direction))
+    except Exception:
+        logger.exception("Candlepatroon voor %s kon niet berekend worden", coin)
+        factors.append(("Candlepatroon", False, "kon niet berekend worden, telt als niet bevestigd"))
 
     try:
         quote_volume = await asyncio.to_thread(exchange.fetch_24h_quote_volume, coin)

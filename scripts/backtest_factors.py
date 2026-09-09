@@ -1,7 +1,7 @@
 """Backtest: hoeveel van je eigen historische day trading signalen zouden
-elke nieuwe factor (ADX, volatiliteit, BTC-trend, 1u bevestiging,
-divergentie, liquiditeit) gehaald hebben, als die toen al hadden
-meegeteld.
+elke nieuwe factor (ADX+richting, volatiliteit, BTC-trend, 1u bevestiging,
+RSI 1u, divergentie, candlepatroon, volume-percentiel, liquiditeit) gehaald
+hebben, als die toen al hadden meegeteld.
 
 Draai dit VOOR je ENABLE_ADVANCED_FACTORS=true zet in .env. De drempels
 (ADX 20, ATR moet stijgen, 2 miljoen volume) zijn leerboek-standaarden,
@@ -61,10 +61,16 @@ def evaluate_signal(row: dict) -> dict:
             results["4u data"] = None
             return results
         ind = indicators.compute_indicators(df)
-        results["ADX >= 20"] = ind.adx >= indicators.ADX_MIN
+        strong_enough = ind.adx >= indicators.ADX_MIN
+        direction_aligned = ind.adx_pos > ind.adx_neg if direction.lower() == "long" else ind.adx_neg > ind.adx_pos
+        results["Trendsterkte (ADX+richting)"] = strong_enough and direction_aligned
         results["ATR stijgend"] = ind.atr >= ind.atr_avg20
         _, div_ok, _ = indicators.check_divergence(df, direction)
         results["Geen divergentie"] = div_ok
+        _, candle_ok, _ = indicators.check_candle_pattern(df, direction)
+        results["Candlepatroon"] = candle_ok
+        _, vol_pct_ok, _ = indicators.check_volume_percentile(ind)
+        results["Volume-percentiel"] = vol_pct_ok
     except Exception as exc:
         results["4u data"] = None
         print(f"    (4u data mislukt: {exc})")
@@ -75,8 +81,11 @@ def evaluate_signal(row: dict) -> dict:
         ind_1h = indicators.compute_indicators(df_1h)
         _, ok_1h, _ = indicators.check_1h_trend(direction, ind_1h)
         results["1u bevestiging"] = ok_1h
+        _, rsi_1h_ok, _ = indicators.check_1h_rsi(direction, ind_1h)
+        results["RSI 1u"] = rsi_1h_ok
     except Exception as exc:
         results["1u bevestiging"] = None
+        results["RSI 1u"] = None
         print(f"    (1u data mislukt: {exc})")
 
     if coin.upper() != "BTC":
