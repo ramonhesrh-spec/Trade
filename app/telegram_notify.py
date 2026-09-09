@@ -96,6 +96,18 @@ def is_quiet_now(quiet_hours_start: Optional[str], quiet_hours_end: Optional[str
     return now >= start or now < end
 
 
+def _factor_overview(reason: str) -> str:
+    """Zet de pipe-gescheiden factor-breakdown (zoals indicators.confirms_direction
+    opbouwt: "✓ Trend: ... | ✗ Momentum: ...") om in een duidelijk overzicht
+    voor Telegram: een tellerregel bovenaan (hoeveel van de factoren gehaald
+    zijn), en elke factor op zijn eigen regel in plaats van aan elkaar
+    geplakt met pipes, wat op een telefoonscherm moeilijk te scannen is."""
+    parts = reason.split(" | ")
+    passed = sum(1 for p in parts if p.strip().startswith("✓"))
+    total = len(parts)
+    return "\n".join([f"✅ {passed}/{total} factoren gehaald"] + parts)
+
+
 def _factor_link(coin: str) -> str:
     """Link naar de coin-pagina, waar alle factoren van de toetsing
     (4 of 10, afhankelijk van ENABLE_ADVANCED_FACTORS) te zien zijn, niet
@@ -123,7 +135,7 @@ def format_signal_message(signal: dict) -> str:
     ]
     if signal.get("plain_explanation"):
         lines += [signal["plain_explanation"], ""]
-    lines.append(signal["reason"])
+    lines.append(_factor_overview(signal["reason"]))
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
     if signal.get("open_risk_pct") is not None:
@@ -152,7 +164,7 @@ def format_rejected_message(signal: dict) -> str:
     ]
     if signal.get("plain_explanation"):
         lines += [signal["plain_explanation"], ""]
-    lines.append(signal["reason"])
+    lines.append(_factor_overview(signal["reason"]))
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
     if signal.get("repeated_factor"):
@@ -186,7 +198,7 @@ def format_update_message(signal: dict) -> str:
     lines.append(DIVIDER)
     if signal.get("plain_explanation"):
         lines += [signal["plain_explanation"], ""]
-    lines.append(signal["reason"])
+    lines.append(_factor_overview(signal["reason"]))
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
     lines += ["", _factor_link(signal["coin"])]
