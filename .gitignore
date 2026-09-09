@@ -8,3 +8,5 @@ data/images/
 .venv/
 venv/
 *.log
+
+.superpowers/
