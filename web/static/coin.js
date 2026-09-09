@@ -27,13 +27,15 @@
     borderVisible: false, wickUpColor: "#33d69f", wickDownColor: "#f2685c",
   });
 
-  // Kleine gekleurde puntjes op het moment van elke lange-termijn
-  // narrative-update, zodat een langere geschiedenis van berichten over
-  // deze coin ook op de prijsgrafiek zelf te volgen is. Apart bijgehouden
-  // (niet steeds opnieuw uit candleSeries gelezen) omdat stopDrawing()
-  // verderop candleSeries.setMarkers([]) aanroept om zijn eigen tijdelijke
-  // teken-marker weg te halen — die moet deze markers herstellen, niet
-  // leegmaken.
+  // Alle markers die permanent op de grafiek horen te staan: narrative-
+  // updates ÉN herkende candlestick-patronen samen in één array. Apart
+  // bijgehouden (niet steeds opnieuw uit candleSeries gelezen) omdat
+  // stopDrawing() verderop candleSeries.setMarkers([]) aanroept om zijn
+  // eigen tijdelijke teken-marker weg te halen — die moet deze markers
+  // herstellen, niet leegmaken. setMarkers() VERVANGT de volledige
+  // markerlijst bij elke aanroep, dus narrative- en patroon-markers
+  // moeten altijd samen in deze ene array staan, nooit in aparte
+  // setMarkers()-aanroepen.
   let narrativeMarkers = [];
 
   function nearestCandleTime(candles, unixSeconds) {
@@ -170,7 +172,35 @@
             text: u.direction === "long" ? "L" : "S",
           }))
           .sort((a, b) => a.time - b.time);
+      }
+
+      // Patroon-markers uit dezelfde /api/candles respons, samengevoegd
+      // met narrativeMarkers vóór de ENE setMarkers()-aanroep hieronder
+      // (zie de comment bij de declaratie van narrativeMarkers hierboven).
+      const patternMarkers = (data.patterns || []).map((p) => ({
+        time: p.time,
+        position: p.direction === "bullish" ? "belowBar" : "aboveBar",
+        color: p.direction === "bullish" ? "#33d69f" : "#f2685c",
+        shape: "circle",
+        text: "",
+      }));
+      narrativeMarkers = [...narrativeMarkers, ...patternMarkers].sort((a, b) => a.time - b.time);
+      if (narrativeMarkers.length) {
         candleSeries.setMarkers(narrativeMarkers);
+      }
+
+      const patternListEl = document.getElementById("pattern-list");
+      if (patternListEl) {
+        if (data.patterns && data.patterns.length) {
+          const sorted = [...data.patterns].sort((a, b) => b.time - a.time).slice(0, 10);
+          patternListEl.innerHTML = sorted.map((p) => {
+            const date = new Date(p.time * 1000).toLocaleDateString("nl-NL", { day: "2-digit", month: "2-digit", year: "numeric" });
+            const cls = p.direction === "bullish" ? "pos" : "neg";
+            return `<p class="muted" style="margin: 4px 0; font-size: 12.5px;"><span class="${cls}">${p.pattern}</span> · ${date}</p>`;
+          }).join("");
+        } else {
+          patternListEl.innerHTML = '<p class="muted">Geen patronen herkend in de laatste 100 candles.</p>';
+        }
       }
 
       chart.timeScale().fitContent();
