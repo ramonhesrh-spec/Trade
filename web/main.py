@@ -1394,5 +1394,10 @@ async def api_candles(symbol: str, user: dict = Depends(require_login)):
     ema21_series = [
         {"time": c["time"], "value": v} for c, v in zip(candles, ema21) if v == v
     ]
+    pattern_matches = indicators.scan_candle_patterns(df, ema9, ema21)
+    patterns = [
+        {"time": candles[p["index"]]["time"], "pattern": p["pattern"], "direction": p["direction"]}
+        for p in pattern_matches
+    ]
 
-    return {"candles": candles, "ema9": ema9_series, "ema21": ema21_series}
+    return {"candles": candles, "ema9": ema9_series, "ema21": ema21_series, "patterns": patterns}
