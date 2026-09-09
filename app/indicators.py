@@ -421,6 +421,60 @@ def detect_star_pattern(df: pd.DataFrame, index: int) -> Optional[tuple[str, str
     return None
 
 
+DEFAULT_PATTERN_SCAN_LOOKBACK = 100
+
+
+def check_candle_pattern_extended(
+    df: pd.DataFrame, direction: str, ema9_series: list[float], ema21_series: list[float],
+) -> tuple[str, bool, str]:
+    """Combineert de bestaande engulfing-check met de vijf nieuwe
+    candlestick-patronen tot dezelfde factor 'Candlepatroon': matcht er
+    minstens één patroon in de kant van `direction` op de laatste candle,
+    dan is de factor gehaald. Vervangt de aanroep van check_candle_pattern
+    in signal_processor.compute_advanced_extra_factors (check_candle_pattern
+    zelf blijft ongewijzigd bestaan)."""
+    direction = direction.lower()
+    last_index = len(df) - 1
+
+    _, engulfing_ok, engulfing_detail = check_candle_pattern(df, direction)
+    if engulfing_ok:
+        return ("Candlepatroon", True, engulfing_detail)
+
+    matches = detect_single_candle_patterns(df, last_index, ema9_series, ema21_series)
+    star = detect_star_pattern(df, last_index)
+    if star:
+        matches.append(star)
+
+    wants_bullish = direction == "long"
+    for name, pattern_direction in matches:
+        if (pattern_direction == "bullish") == wants_bullish:
+            return ("Candlepatroon", True, f"{name} op de signaal-candle")
+
+    return (
+        "Candlepatroon", False,
+        "geen candlestick-patroon (engulfing, hamer, ster, doji) in de juiste richting op de signaal-candle",
+    )
+
+
+def scan_candle_patterns(
+    df: pd.DataFrame, ema9_series: list[float], ema21_series: list[float],
+    lookback: int = DEFAULT_PATTERN_SCAN_LOOKBACK,
+) -> list[dict]:
+    """Alle single-candle- en sterpatronen over de laatste `lookback`
+    candles, ELK gevonden patroon (niet gefilterd op een verwachte
+    richting — dit is voor weergave op de grafiek, niet voor de score).
+    Elk element: {"index": int, "pattern": str, "direction": "bullish"|"bearish"}."""
+    start = max(0, len(df) - lookback)
+    found: list[dict] = []
+    for i in range(start, len(df)):
+        for name, pattern_direction in detect_single_candle_patterns(df, i, ema9_series, ema21_series):
+            found.append({"index": i, "pattern": name, "direction": pattern_direction})
+        star = detect_star_pattern(df, i)
+        if star:
+            found.append({"index": i, "pattern": star[0], "direction": star[1]})
+    return found
+
+
 # Basisversie: 3 van de 4 factoren is genoeg. Alle 4 verplicht bleek te
 # streng, één factor die nét mist (bijvoorbeeld volume op 0.97x in plaats
 # van 1.0x) blokkeerde dan een verder overtuigend signaal volledig. Bij 3
