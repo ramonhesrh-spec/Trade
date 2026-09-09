@@ -38,6 +38,15 @@
   // setMarkers()-aanroepen.
   let narrativeMarkers = [];
 
+  // Zelf-gedetecteerde steun/weerstand-zones (indicators.detect_sr_zones,
+  // via het sr_zones-veld van /api/candles). Anders dan de community-
+  // zoneGroups hieronder (al bekend uit sourceLevels vóór de fetch) bestaan
+  // deze pas ná de fetch, dus srZoneEls wordt pas in de .then()-callback
+  // gevuld — maar moet hier al gedeclareerd staan zodat positionZones()
+  // (aangeroepen vanaf de eerste render) hem veilig kan itereren, ook
+  // vóórdat de fetch klaar is (dan gewoon een lege lijst).
+  let srZoneEls = [];
+
   function nearestCandleTime(candles, unixSeconds) {
     let best = candles[0].time;
     let bestDiff = Math.abs(candles[0].time - unixSeconds);
@@ -88,6 +97,17 @@
     zoneEls.forEach(({ group, el }) => {
       const yHigh = candleSeries.priceToCoordinate(group.high);
       const yLow = candleSeries.priceToCoordinate(group.low);
+      if (yHigh === null || yLow === null) {
+        el.style.display = "none";
+        return;
+      }
+      el.style.display = "block";
+      el.style.top = `${yHigh}px`;
+      el.style.height = `${Math.max(yLow - yHigh, 2)}px`;
+    });
+    srZoneEls.forEach(({ zone, el }) => {
+      const yHigh = candleSeries.priceToCoordinate(zone.price_high);
+      const yLow = candleSeries.priceToCoordinate(zone.price_low);
       if (yHigh === null || yLow === null) {
         el.style.display = "none";
         return;
@@ -207,6 +227,19 @@
           patternListEl.innerHTML = '<p class="muted">Geen patronen herkend in de laatste 100 candles.</p>';
         }
       }
+
+      // Eén blok per zelf-gedetecteerde zone, in een eigen kleur
+      // (chart-zone-sr) om ze te onderscheiden van de teal community-
+      // niveau-zones hierboven. Sterkte (touches) als klein label op de
+      // zone zelf, geen aparte lijst nodig zoals bij de candlestick-
+      // patronen: een zone is als vlak al zichtbaar genoeg.
+      srZoneEls = (data.sr_zones || []).map((zone) => {
+        const el = document.createElement("div");
+        el.className = "chart-zone-sr";
+        el.innerHTML = `<span>${zone.touches}x getest</span>`;
+        container.appendChild(el);
+        return { zone, el };
+      });
 
       chart.timeScale().fitContent();
       positionZones();
