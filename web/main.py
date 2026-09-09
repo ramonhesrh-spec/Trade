@@ -1160,7 +1160,8 @@ async def create_practice_trade(
 
     extra_factors = None
     if config.ENABLE_ADVANCED_FACTORS:
-        extra_factors = await compute_advanced_extra_factors(symbol, direction, df)
+        zones = indicators.detect_sr_zones(df)
+        extra_factors = await compute_advanced_extra_factors(symbol, direction, df, ind.price, ind.atr, zones)
     confirmed, reason = indicators.confirms_direction(
         ind, direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
     )

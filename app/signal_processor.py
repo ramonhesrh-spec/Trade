@@ -496,7 +496,9 @@ def _build_context_note(coin: str, direction: str) -> str:
             f"{active['direction']}, dit signaal wijkt daarvan af (sinds {when})." + weight_note)
 
 
-async def compute_advanced_extra_factors(coin: str, direction: str, df) -> list[tuple[str, bool, str]]:
+async def compute_advanced_extra_factors(
+    coin: str, direction: str, df, entry_price: float, atr: float, zones: list[indicators.SRZone],
+) -> list[tuple[str, bool, str]]:
     """Berekent de losse checks voor de uitgebreide factorenset (BTC-trend,
     1u bevestiging, divergentie, liquiditeit). Elke check faalt individueel
     en "fail-closed" als de data ervoor niet op te halen is: beter een
@@ -551,6 +553,12 @@ async def compute_advanced_extra_factors(coin: str, direction: str, df) -> list[
         logger.exception("Liquiditeitscheck voor %s kon niet berekend worden", coin)
         factors.append(("Liquiditeit", False, "kon niet opgehaald worden, telt als niet bevestigd"))
 
+    try:
+        factors.append(indicators.check_sr_zone(direction, entry_price, atr, zones))
+    except Exception:
+        logger.exception("Steun/weerstand voor %s kon niet berekend worden", coin)
+        factors.append(("Steun/weerstand", False, "kon niet berekend worden, telt als niet bevestigd"))
+
     return factors
 
 
@@ -592,18 +600,26 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     df = await asyncio.to_thread(exchange.fetch_ohlcv, interp.coin)
     ind = indicators.compute_indicators(df)
     swing_low, swing_high = indicators.swing_levels(df)
+    zones = indicators.detect_sr_zones(df)
 
     extra_factors = None
     if config.ENABLE_ADVANCED_FACTORS:
-        extra_factors = await compute_advanced_extra_factors(interp.coin, interp.direction, df)
+        extra_factors = await compute_advanced_extra_factors(
+            interp.coin, interp.direction, df, ind.price, ind.atr, zones,
+        )
 
     confirmed, reason = indicators.confirms_direction(
         ind, interp.direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
     )
     message_levels = [lvl["price_level"] for lvl in repo.list_source_levels_for_message(message_id)]
-    if message_levels:
+    zone_levels = [
+        edge for zone in zones for edge in (zone.price_low, zone.price_high)
+        if abs(edge - ind.price) <= indicators.SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * ind.atr
+    ]
+    combined_levels = message_levels + zone_levels
+    if combined_levels:
         stop_take = risk.compute_stop_take_from_levels(
-            interp.direction, ind.price, ind.atr, message_levels, swing_low=swing_low, swing_high=swing_high,
+            interp.direction, ind.price, ind.atr, combined_levels, swing_low=swing_low, swing_high=swing_high,
         )
     else:
         stop_take = risk.compute_stop_take(
