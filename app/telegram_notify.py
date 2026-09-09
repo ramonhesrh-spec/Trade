@@ -492,12 +492,12 @@ async def send_demo_signal_message(chat_id: str) -> None:
     mee in de echte statistieken (ook niet in de onboarding-checklist, die
     kijkt naar journal_entries.telegram_sent van een echt signaal).
 
-    Toont de tien extra factoren erbij zodra ENABLE_ADVANCED_FACTORS aan
+    Toont de elf extra factoren erbij zodra ENABLE_ADVANCED_FACTORS aan
     staat, anders blijft dit voorbeeld achter bij wat een echte melding nu
     laat zien. Coin is bewust SUI in plaats van BTC: de BTC-trend factor
     telt zichzelf niet mee bij een BTC-signaal (zie
     compute_advanced_extra_factors), dus alleen bij een andere coin toont
-    het voorbeeld echt alle 14 factoren."""
+    het voorbeeld echt alle 15 factoren."""
     if not config.TELEGRAM_BOT_TOKEN or not chat_id:
         return
     reason = "✓ Trend: EMA9 boven EMA21 | ✓ Momentum: MACD boven signaallijn | ✓ RSI 58 | ✓ Volume 1.34x gemiddeld"
@@ -510,7 +510,8 @@ async def send_demo_signal_message(chat_id: str) -> None:
             "✗ RSI 1u: RSI 78 op 1u, overbought op de snellere timeframe | "
             "✓ Divergentie: geen waarschuwende divergentie | "
             "✓ Candlepatroon: Hammer op de signaal-candle | "
-            "✓ Liquiditeit: 24u volume €18.400.000"
+            "✓ Liquiditeit: 24u volume €18.400.000 | "
+            "✓ Steun/weerstand: zone op 2.4x ATR afstand"
         )
     demo_signal = {
         "coin": "SUI", "direction": "long", "confidence": "hoog vertrouwen",
