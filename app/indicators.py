@@ -1,5 +1,6 @@
 """Technische indicatoren op de 4 uur candle, vaste standaard timeframe."""
 from dataclasses import dataclass
+from typing import Optional
 
 import pandas as pd
 import ta
@@ -269,6 +270,121 @@ def check_volume_percentile(ind: Indicators, minimum: float = VOLUME_PERCENTILE_
     if not ok:
         detail += f", onder de {minimum:.0f}e percentiel grens"
     return ("Volume-percentiel", ok, detail)
+
+
+# Hoe lang de "staart" van een hamer/hangende man/vallende ster/omgekeerde
+# hamer minimaal moet zijn t.o.v. het candle-lichaam, om als duidelijk
+# patroon te tellen in plaats van een gewone candle met iets meer schaduw
+# dan gemiddeld.
+HAMMER_SHADOW_RATIO = 2.0
+
+# Hoe klein de schaduw aan de ANDERE kant van het lichaam moet blijven
+# (t.o.v. het lichaam zelf), zodat een candle met twee lange schaduwen
+# (spinning top) niet per ongeluk als hamer of ster telt.
+HAMMER_OPPOSITE_SHADOW_MAX_RATIO = 0.5
+
+# Hoe klein het lichaam moet zijn t.o.v. de volledige candle-range
+# (high - low) om als doji te tellen.
+DOJI_BODY_MAX_RATIO = 0.1
+
+
+def detect_single_candle_patterns(
+    df: pd.DataFrame, index: int, ema9_series: list[float], ema21_series: list[float],
+) -> list[tuple[str, str]]:
+    """Hammer/Hanging Man/Shooting Star/Inverted Hammer/Doji op de candle
+    op `index`, elk als (naam, richting) met richting 'bullish' of
+    'bearish'. Hamer/ster-patronen zijn alleen zinvol als omkeersignaal ná
+    een duidelijke trend, dus de trend vlak vóór de candle (ema9[index-1]
+    t.o.v. ema21[index-1], dezelfde vergelijking als de basisfactor Trend)
+    bepaalt welke kant elk patroon op wijst. Levert een lege lijst op bij
+    te weinig voorafgaande candles, of als geen enkel patroon matcht. Een
+    candle kan meerdere patronen tegelijk matchen bij grensgevallen (een
+    lichaam van 0 met een lange onderstaart is zowel Hammer als Doji) —
+    de aanroeper beslist wat daarmee gebeurt."""
+    if index < 1 or index >= len(df):
+        return []
+    ema9_prev = ema9_series[index - 1]
+    ema21_prev = ema21_series[index - 1]
+    if ema9_prev != ema9_prev or ema21_prev != ema21_prev:  # NaN tijdens EMA-opwarmperiode
+        return []
+
+    row = df.iloc[index]
+    open_, high, low, close = row["open"], row["high"], row["low"], row["close"]
+    body = abs(close - open_)
+    upper_shadow = high - max(open_, close)
+    lower_shadow = min(open_, close) - low
+    candle_range = high - low
+
+    trend_up = ema9_prev > ema21_prev
+    trend_down = ema9_prev < ema21_prev
+
+    patterns: list[tuple[str, str]] = []
+
+    # Kleine floating-point tolerantie voor schaduw-vergelijkingen
+    eps = 1e-9
+
+    if lower_shadow >= body * HAMMER_SHADOW_RATIO and upper_shadow <= body * HAMMER_OPPOSITE_SHADOW_MAX_RATIO + eps:
+        if trend_down:
+            patterns.append(("Hammer", "bullish"))
+        elif trend_up:
+            patterns.append(("Hanging Man", "bearish"))
+
+    if upper_shadow >= body * HAMMER_SHADOW_RATIO and lower_shadow <= body * HAMMER_OPPOSITE_SHADOW_MAX_RATIO + eps:
+        if trend_up:
+            patterns.append(("Shooting Star", "bearish"))
+        elif trend_down:
+            patterns.append(("Inverted Hammer", "bullish"))
+
+    if body <= candle_range * DOJI_BODY_MAX_RATIO:
+        if trend_up:
+            patterns.append(("Doji", "bearish"))
+        elif trend_down:
+            patterns.append(("Doji", "bullish"))
+
+    return patterns
+
+
+def detect_star_pattern(df: pd.DataFrame, index: int) -> Optional[tuple[str, str]]:
+    """Morning Star (bullish) of Evening Star (bearish) op de candles
+    index-2, index-1, index. De buitenste twee candles moeten allebei een
+    lichaam hebben dat minstens het 20-candle gemiddelde haalt (dezelfde
+    soort vergelijking als ATR_TOLERANCE elders in dit bestand) — anders
+    is dit geen sterpatroon maar drie gewone candles. None als er geen
+    match is, of als index < 2."""
+    if index < 2:
+        return None
+
+    bodies = (df["close"] - df["open"]).abs()
+    history = bodies.iloc[:index - 1]
+    if history.empty:
+        return None
+    body_avg20 = history.tail(20).mean()
+
+    first = df.iloc[index - 2]
+    middle = df.iloc[index - 1]
+    last = df.iloc[index]
+
+    first_body = abs(first["close"] - first["open"])
+    first_range = first["high"] - first["low"]
+    middle_range = middle["high"] - middle["low"]
+    last_body = abs(last["close"] - last["open"])
+
+    if first_body < body_avg20 or last_body < body_avg20:
+        return None
+    if first_range > 0 and middle_range > first_range * (DOJI_BODY_MAX_RATIO * 3):
+        return None
+
+    first_bearish = first["close"] < first["open"]
+    first_bullish = first["close"] > first["open"]
+    last_bullish = last["close"] > last["open"]
+    last_bearish = last["close"] < last["open"]
+    first_midpoint = (first["open"] + first["close"]) / 2
+
+    if first_bearish and last_bullish and last["close"] > first_midpoint:
+        return ("Morning Star", "bullish")
+    if first_bullish and last_bearish and last["close"] < first_midpoint:
+        return ("Evening Star", "bearish")
+    return None
 
 
 # Basisversie: 3 van de 4 factoren is genoeg. Alle 4 verplicht bleek te
