@@ -313,18 +313,6 @@ def _leq_with_tolerance(a: float, b: float) -> bool:
     return a <= b or math.isclose(a, b, rel_tol=PATTERN_COMPARISON_TOLERANCE, abs_tol=0)
 
 
-def _gt_with_tolerance(a: float, b: float) -> bool:
-    """Controleer of a > b, met floating-point tolerantie. Gebruikt door
-    patroon-detectie voor drempel-vergelijkingen."""
-    return a > b or math.isclose(a, b, rel_tol=PATTERN_COMPARISON_TOLERANCE, abs_tol=0)
-
-
-def _lt_with_tolerance(a: float, b: float) -> bool:
-    """Controleer of a < b, met floating-point tolerantie. Gebruikt door
-    patroon-detectie voor drempel-vergelijkingen."""
-    return a < b or math.isclose(a, b, rel_tol=PATTERN_COMPARISON_TOLERANCE, abs_tol=0)
-
-
 def detect_single_candle_patterns(
     df: pd.DataFrame, index: int, ema9_series: list[float], ema21_series: list[float],
 ) -> list[tuple[str, str]]:
@@ -351,6 +339,14 @@ def detect_single_candle_patterns(
     upper_shadow = high - max(open_, close)
     lower_shadow = min(open_, close) - low
     candle_range = high - low
+    if candle_range <= 0:
+        # open == high == low == close: een candle zonder enige range heeft
+        # geen vorm om te herkennen. Zonder deze guard wordt elke drempel-
+        # vergelijking hieronder triviaal waar (0 >= 0 / 0 <= 0) en matcht
+        # zo'n candle Hammer, Inverted Hammer én Doji tegelijk — drie
+        # tegenstrijdige patronen op één candle. Komt voor bij dun
+        # verhandelde coins en bij een net geopende, nog vormende candle.
+        return []
 
     trend_up = ema9_prev > ema21_prev
     trend_down = ema9_prev < ema21_prev
@@ -403,9 +399,15 @@ def detect_star_pattern(df: pd.DataFrame, index: int) -> Optional[tuple[str, str
     middle_range = middle["high"] - middle["low"]
     last_body = abs(last["close"] - last["open"])
 
-    if _lt_with_tolerance(first_body, body_avg20) or _lt_with_tolerance(last_body, body_avg20):
+    # Rejection guards: "te klein lichaam" / "te grote middencandle" moeten
+    # alleen afwijzen bij een DUIDELIJK tekort, niet bij exact-op-de-grens.
+    # Geschreven als "niet (>=/<=  met tolerantie)" zodat een waarde precies
+    # op de drempel (of er met een floating-point-afrondingsfout net onder/
+    # boven) wordt geaccepteerd in plaats van afgewezen — een tolerantie
+    # hoort een grensgeval juist toelaten, niet strenger maken.
+    if not _geq_with_tolerance(first_body, body_avg20) or not _geq_with_tolerance(last_body, body_avg20):
         return None
-    if first_range > 0 and _gt_with_tolerance(middle_range, first_range * (DOJI_BODY_MAX_RATIO * 3)):
+    if first_range > 0 and not _leq_with_tolerance(middle_range, first_range * (DOJI_BODY_MAX_RATIO * 3)):
         return None
 
     first_bearish = first["close"] < first["open"]
@@ -414,9 +416,13 @@ def detect_star_pattern(df: pd.DataFrame, index: int) -> Optional[tuple[str, str
     last_bearish = last["close"] < last["open"]
     first_midpoint = (first["open"] + first["close"]) / 2
 
-    if first_bearish and last_bullish and _gt_with_tolerance(last["close"], first_midpoint):
+    # Midpoint-vergelijking blijft bewust strikt (geen tolerantie): dit is
+    # de richtingsbevestiging zelf, niet een drempel met meetruis. Een close
+    # exact op het midden is genuinely ambigu en moet niet als bevestiging
+    # tellen, ook al is dat op een ronde prijs-grid best bereikbaar.
+    if first_bearish and last_bullish and last["close"] > first_midpoint:
         return ("Morning Star", "bullish")
-    if first_bullish and last_bearish and _lt_with_tolerance(last["close"], first_midpoint):
+    if first_bullish and last_bearish and last["close"] < first_midpoint:
         return ("Evening Star", "bearish")
     return None
 
@@ -427,8 +433,10 @@ DEFAULT_PATTERN_SCAN_LOOKBACK = 100
 def check_candle_pattern_extended(
     df: pd.DataFrame, direction: str, ema9_series: list[float], ema21_series: list[float],
 ) -> tuple[str, bool, str]:
-    """Combineert de bestaande engulfing-check met de vijf nieuwe
-    candlestick-patronen tot dezelfde factor 'Candlepatroon': matcht er
+    """Combineert de bestaande engulfing-check met de zeven nieuwe
+    candlestick-patronen (Hammer, Hanging Man, Shooting Star, Inverted
+    Hammer, Doji, Morning Star, Evening Star) tot dezelfde factor
+    'Candlepatroon': matcht er
     minstens één patroon in de kant van `direction` op de laatste candle,
     dan is de factor gehaald. Vervangt de aanroep van check_candle_pattern
     in signal_processor.compute_advanced_extra_factors (check_candle_pattern

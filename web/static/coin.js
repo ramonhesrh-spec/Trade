@@ -194,9 +194,14 @@
         if (data.patterns && data.patterns.length) {
           const sorted = [...data.patterns].sort((a, b) => b.time - a.time).slice(0, 10);
           patternListEl.innerHTML = sorted.map((p) => {
-            const date = new Date(p.time * 1000).toLocaleDateString("nl-NL", { day: "2-digit", month: "2-digit", year: "numeric" });
+            // Tijdstip inclusief uur: op een 4u-grafiek zijn er 6 candles per
+            // dag, dus alleen een datum laat niet zien welke candle bedoeld
+            // wordt. Richting ook als tekst (niet alleen kleur) zodat het
+            // ook zonder kleuronderscheid duidelijk is.
+            const date = new Date(p.time * 1000).toLocaleDateString("nl-NL", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
             const cls = p.direction === "bullish" ? "pos" : "neg";
-            return `<p class="muted" style="margin: 4px 0; font-size: 12.5px;"><span class="${cls}">${p.pattern}</span> · ${date}</p>`;
+            const richting = p.direction === "bullish" ? "↑ bullish" : "↓ bearish";
+            return `<p class="muted" style="margin: 4px 0; font-size: 12.5px;"><span class="${cls}">${p.pattern}</span> (${richting}) · ${date}</p>`;
           }).join("");
         } else {
           patternListEl.innerHTML = '<p class="muted">Geen patronen herkend in de laatste 100 candles.</p>';
@@ -211,9 +216,14 @@
     })
     .catch(() => {
       const loadingEl = document.getElementById("chart-loading");
-      if (!loadingEl) return;
-      loadingEl.classList.add("chart-error");
-      loadingEl.querySelector("p").textContent = "Koersdata kon niet geladen worden. Ververs de pagina om het opnieuw te proberen.";
+      if (loadingEl) {
+        loadingEl.classList.add("chart-error");
+        loadingEl.querySelector("p").textContent = "Koersdata kon niet geladen worden. Ververs de pagina om het opnieuw te proberen.";
+      }
+      const patternListEl = document.getElementById("pattern-list");
+      if (patternListEl) {
+        patternListEl.innerHTML = '<p class="muted">Kon niet geladen worden.</p>';
+      }
     });
 
   function addTradeLines(trade, label) {
