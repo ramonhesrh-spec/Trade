@@ -67,7 +67,8 @@ def evaluate_signal(row: dict) -> dict:
         results["ATR stijgend"] = ind.atr >= ind.atr_avg20
         _, div_ok, _ = indicators.check_divergence(df, direction)
         results["Geen divergentie"] = div_ok
-        _, candle_ok, _ = indicators.check_candle_pattern(df, direction)
+        ema9_hist, ema21_hist = indicators.ema_series(df)
+        _, candle_ok, _ = indicators.check_candle_pattern_extended(df, direction, ema9_hist, ema21_hist)
         results["Candlepatroon"] = candle_ok
         _, vol_pct_ok, _ = indicators.check_volume_percentile(ind)
         results["Volume-percentiel"] = vol_pct_ok
