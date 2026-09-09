@@ -2,6 +2,10 @@
 Telegram dat het systeem is bijgewerkt met automatische steun/weerstand-
 zone-detectie. Draai dit één keer handmatig op de VPS, niet vanuit main.py."""
 import asyncio
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from telegram import Bot
 
