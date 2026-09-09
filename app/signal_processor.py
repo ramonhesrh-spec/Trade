@@ -538,7 +538,8 @@ async def compute_advanced_extra_factors(coin: str, direction: str, df) -> list[
         factors.append(("Divergentie", False, "kon niet berekend worden, telt als niet bevestigd"))
 
     try:
-        factors.append(indicators.check_candle_pattern(df, direction))
+        ema9_series, ema21_series = indicators.ema_series(df)
+        factors.append(indicators.check_candle_pattern_extended(df, direction, ema9_series, ema21_series))
     except Exception:
         logger.exception("Candlepatroon voor %s kon niet berekend worden", coin)
         factors.append(("Candlepatroon", False, "kon niet berekend worden, telt als niet bevestigd"))
