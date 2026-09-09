@@ -490,14 +490,33 @@ async def send_demo_signal_message(chat_id: str) -> None:
     ziet zonder op een echt signaal te hoeven wachten. Duidelijk gelabeld
     als voorbeeld, en maakt geen signaal of logboekregel aan: telt nergens
     mee in de echte statistieken (ook niet in de onboarding-checklist, die
-    kijkt naar journal_entries.telegram_sent van een echt signaal)."""
+    kijkt naar journal_entries.telegram_sent van een echt signaal).
+
+    Toont de tien extra factoren erbij zodra ENABLE_ADVANCED_FACTORS aan
+    staat, anders blijft dit voorbeeld achter bij wat een echte melding nu
+    laat zien. Coin is bewust SUI in plaats van BTC: de BTC-trend factor
+    telt zichzelf niet mee bij een BTC-signaal (zie
+    compute_advanced_extra_factors), dus alleen bij een andere coin toont
+    het voorbeeld echt alle 14 factoren."""
     if not config.TELEGRAM_BOT_TOKEN or not chat_id:
         return
+    reason = "✓ Trend: EMA9 boven EMA21 | ✓ Momentum: MACD boven signaallijn | ✓ RSI 58 | ✓ Volume 1.34x gemiddeld"
+    if config.ENABLE_ADVANCED_FACTORS:
+        reason += (
+            " | ✓ Trendsterkte: ADX 27 | ✓ Volatiliteit: ATR 0.0182 (stijgend) | "
+            "✓ Volume-percentiel: volume in 85e percentiel van de laatste 20 candles | "
+            "✓ BTC-trend: BTC beweegt omhoog | ✓ Daily-trend: EMA9 boven EMA21 op daily | "
+            "✓ 1u bevestiging: EMA9 boven EMA21 op 1u | "
+            "✗ RSI 1u: RSI 78 op 1u, overbought op de snellere timeframe | "
+            "✓ Divergentie: geen waarschuwende divergentie | "
+            "✓ Candlepatroon: Hammer op de signaal-candle | "
+            "✓ Liquiditeit: 24u volume €18.400.000"
+        )
     demo_signal = {
-        "coin": "BTC", "direction": "long", "confidence": "hoog vertrouwen",
-        "price": 61250.0, "take_profit": 63400.0, "stop_loss": 60100.0,
+        "coin": "SUI", "direction": "long", "confidence": "hoog vertrouwen",
+        "price": 0.8520, "take_profit": 0.9100, "stop_loss": 0.8180,
         "technical_confirmed": 1,
-        "reason": "✓ Trend: EMA9 boven EMA21 | ✓ Momentum: MACD boven signaallijn | ✓ RSI 58 | ✓ Volume 1.34x gemiddeld",
+        "reason": reason,
         "context_note": None,
         "plain_explanation": (
             "De trend wijst omhoog en het momentum bevestigt dit: de prijs "
@@ -507,7 +526,10 @@ async def send_demo_signal_message(chat_id: str) -> None:
     }
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
     text = f"📋 VOORBEELDMELDING, zo ziet een echte kans eruit\n{DIVIDER}\n\n{format_signal_message(demo_signal)}"
-    await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
+    # Niet stil: een echte bevestigde kans is ook niet stil (zie send_signal),
+    # dit voorbeeld moet voelen zoals een echte melding aankomt, trilling
+    # incluis, niet als een onopvallend achtergrondbericht.
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=False)
     logger.info("Voorbeeldmelding verstuurd naar chat %s", chat_id)
 
 
