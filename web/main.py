@@ -1401,4 +1401,10 @@ async def api_candles(symbol: str, user: dict = Depends(require_login)):
         for p in pattern_matches
     ]
 
-    return {"candles": candles, "ema9": ema9_series, "ema21": ema21_series, "patterns": patterns}
+    zones = indicators.detect_sr_zones(df)
+    sr_zones = [
+        {"price_low": z.price_low, "price_high": z.price_high, "touches": z.touches}
+        for z in zones
+    ]
+
+    return {"candles": candles, "ema9": ema9_series, "ema21": ema21_series, "patterns": patterns, "sr_zones": sr_zones}
