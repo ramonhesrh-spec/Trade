@@ -483,6 +483,114 @@ def scan_candle_patterns(
     return found
 
 
+# Hoeveel candles aan elke kant moeten "lager" (voor een pivot-high) of
+# "hoger" (voor een pivot-low) zijn, wil een candle als lokaal keerpunt
+# tellen. 3 is streng genoeg om ruis (elke kleine schommeling) niet als
+# keerpunt te zien, maar laat genoeg pivots over op de laatste 100
+# candles om zinvol te kunnen clusteren.
+SR_PIVOT_WINDOW = 3
+
+# Hoeveel candles terug de zone-detectie meeneemt. Ruim genoeg voor
+# meerdere testen van dezelfde zone, niet zo ruim dat een allang niet meer
+# relevant niveau van maanden geleden nog meetelt.
+SR_ZONE_LOOKBACK = 100
+
+# Hoe dicht twee pivot-prijzen bij elkaar moeten liggen (als fractie van
+# de prijs) om tot dezelfde zone te horen. Te klein: elke pivot wordt zijn
+# eigen "zone" van 1 punt, nooit genoeg touches. Te groot: totaal
+# ongerelateerde niveaus versmelten tot één onbruikbaar brede band.
+SR_ZONE_CLUSTER_TOLERANCE_PCT = 0.005
+
+# Minimaal aantal pivots in een cluster om als echte zone te tellen. Eén
+# pivot is geen patroon, twee is het begin van "de prijs kwam hier al
+# eerder terug".
+SR_ZONE_MIN_TOUCHES = 2
+
+
+@dataclass
+class SRZone:
+    price_low: float
+    price_high: float
+    touches: int
+
+
+def detect_sr_zones(df: pd.DataFrame, lookback: int = SR_ZONE_LOOKBACK) -> list[SRZone]:
+    """Vindt structurele steun/weerstand-zones in de laatste `lookback`
+    candles: eerst lokale keerpunten (pivot-highs/-lows, een candle die
+    hoger/lager is dan SR_PIVOT_WINDOW candles aan beide kanten), daarna
+    geclusterd tot zones (pivots binnen SR_ZONE_CLUSTER_TOLERANCE_PCT van
+    elkaar horen bij dezelfde zone). Een zone telt pas mee vanaf
+    SR_ZONE_MIN_TOUCHES pivots. Geen aparte steun/weerstand-classificatie:
+    dezelfde zone kan beide rollen spelen afhankelijk van de kant waar de
+    prijs vandaan komt, dat wordt pas bij gebruik (risk.py, de score-
+    factor) bepaald aan de hand van de huidige prijs."""
+    window = df.tail(lookback).reset_index(drop=True)
+    n = len(window)
+    pivots: list[float] = []
+
+    for i in range(SR_PIVOT_WINDOW, n - SR_PIVOT_WINDOW):
+        high_i = window["high"].iloc[i]
+        low_i = window["low"].iloc[i]
+        left_highs = window["high"].iloc[i - SR_PIVOT_WINDOW:i]
+        right_highs = window["high"].iloc[i + 1:i + SR_PIVOT_WINDOW + 1]
+        if high_i > left_highs.max() and high_i > right_highs.max():
+            pivots.append(float(high_i))
+        left_lows = window["low"].iloc[i - SR_PIVOT_WINDOW:i]
+        right_lows = window["low"].iloc[i + 1:i + SR_PIVOT_WINDOW + 1]
+        if low_i < left_lows.min() and low_i < right_lows.min():
+            pivots.append(float(low_i))
+
+    if not pivots:
+        return []
+
+    pivots.sort()
+    clusters: list[list[float]] = [[pivots[0]]]
+    for price in pivots[1:]:
+        cluster_high = clusters[-1][-1]
+        if price <= cluster_high * (1 + SR_ZONE_CLUSTER_TOLERANCE_PCT):
+            clusters[-1].append(price)
+        else:
+            clusters.append([price])
+
+    return [
+        SRZone(price_low=min(c), price_high=max(c), touches=len(c))
+        for c in clusters
+        if len(c) >= SR_ZONE_MIN_TOUCHES
+    ]
+
+
+# Hoe ver een zone maximaal van de entry mag liggen (in ATR) om nog als
+# kandidaat te tellen voor de stop/take-verfijning en deze factor. Een
+# zone die zes keer de ATR verderop ligt is geen realistisch punt meer
+# voor déze trade, ook al is de zone zelf sterk.
+SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE = 6.0
+
+
+def check_sr_zone(direction: str, entry_price: float, atr: float, zones: list[SRZone]) -> tuple[str, bool, str]:
+    """Is er een bruikbare zone aan de stop-kant van de prijs (onder de
+    entry bij long, erboven bij short) binnen SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE
+    x ATR? Zelfde kant-bepaling als risk.compute_stop_take_from_levels
+    gebruikt voor community-niveaus, hier toegepast op zelf-gedetecteerde
+    zones. Geen aparte richting-afhankelijke detectie nodig: een zone is
+    een zone, welke kant hem "steun" maakt hangt puur af van waar de
+    entry-prijs zit."""
+    direction = direction.lower()
+    max_distance = SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * atr
+    edges = [edge for zone in zones for edge in (zone.price_low, zone.price_high)]
+
+    if direction == "long":
+        candidates = [e for e in edges if e < entry_price and entry_price - e <= max_distance]
+    else:
+        candidates = [e for e in edges if e > entry_price and e - entry_price <= max_distance]
+
+    if not candidates:
+        return ("Steun/weerstand", False, "geen zone dichtbij genoeg voor een bruikbaar niveau")
+
+    nearest = max(candidates) if direction == "long" else min(candidates)
+    distance_atr = abs(entry_price - nearest) / atr if atr else 0.0
+    return ("Steun/weerstand", True, f"zone op {distance_atr:.1f}x ATR afstand")
+
+
 # Basisversie: 3 van de 4 factoren is genoeg. Alle 4 verplicht bleek te
 # streng, één factor die nét mist (bijvoorbeeld volume op 0.97x in plaats
 # van 1.0x) blokkeerde dan een verder overtuigend signaal volledig. Bij 3
