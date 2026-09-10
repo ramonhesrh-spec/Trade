@@ -47,6 +47,29 @@ CREATE TABLE IF NOT EXISTS messages (
     narrative_id INTEGER REFERENCES coin_narratives(id)
 );
 
+-- Eén rij per (bericht, coin): wat de AI voor DEZE ene coin uit het
+-- bericht haalde. Eén Discord-bericht kan meerdere coins tegelijk
+-- behandelen (een watchlist-post, of een terloopse vergelijking), messages
+-- zelf is dan alleen nog de envelope (raw_text, afbeelding, dedupe) en
+-- deze tabel houdt de per-coin-uitkomst. Zie
+-- docs/superpowers/specs/2026-09-10-multi-coin-berichten-design.md.
+CREATE TABLE IF NOT EXISTS message_coin_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    message_id INTEGER NOT NULL REFERENCES messages(id),
+    coin TEXT,
+    direction TEXT,
+    category TEXT,
+    unclear INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
+    message_summary TEXT,
+    price_at_receipt REAL,
+    narrative_id INTEGER REFERENCES coin_narratives(id),
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_message_coin_results_message_id ON message_coin_results(message_id);
+CREATE INDEX IF NOT EXISTS idx_message_coin_results_coin ON message_coin_results(coin);
+CREATE INDEX IF NOT EXISTS idx_message_coin_results_unclear ON message_coin_results(unclear);
+
 -- Bron niveaus, overgenomen uit Discord afbeeldingen. Altijd bewaard,
 -- ongeacht categorie van het bericht.
 CREATE TABLE IF NOT EXISTS source_levels (

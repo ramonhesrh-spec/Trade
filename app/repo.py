@@ -68,16 +68,32 @@ def mark_message_processed(
 
 
 def list_messages_for_summary_backfill() -> list[dict]:
-    """Alle verwerkte, niet-onduidelijke berichten met tekst, oudste eerst.
-    Voor scripts/regenerate_message_summaries.py: eenmalig alsnog een
-    samenvatting genereren voor berichten van voor een prompt-verbetering."""
+    """Alle verwerkte, niet-onduidelijke berichten (of coin-resultaten) met
+    tekst, oudste eerst. Voor scripts/regenerate_message_summaries.py:
+    eenmalig alsnog een samenvatting genereren voor berichten van voor een
+    prompt-verbetering.
+
+    Elk item krijgt een "source"-key: "legacy" (rechtstreeks op messages,
+    van vóór de multi-coin-wijziging — regenereren via set_message_summary)
+    of "coin_result" (via message_coin_results — regenereren via
+    set_message_coin_result_summary)."""
     with db.session() as conn:
-        rows = conn.execute(
+        legacy_rows = conn.execute(
             """SELECT id, coin, raw_text, message_summary FROM messages
                WHERE processed_at IS NOT NULL AND unclear = 0 AND raw_text != ''
                ORDER BY id"""
         ).fetchall()
-        return [dict(r) for r in rows]
+        coin_result_rows = conn.execute(
+            """SELECT mcr.id AS id, mcr.coin AS coin, m.raw_text AS raw_text,
+                      mcr.message_summary AS message_summary
+               FROM message_coin_results mcr
+               JOIN messages m ON m.id = mcr.message_id
+               WHERE mcr.unclear = 0 AND m.raw_text != ''
+               ORDER BY mcr.id"""
+        ).fetchall()
+    result = [dict(r, source="legacy") for r in legacy_rows]
+    result += [dict(r, source="coin_result") for r in coin_result_rows]
+    return result
 
 
 def set_message_summary(message_id: int, summary: str) -> None:
@@ -101,20 +117,109 @@ def mark_message_untracked(message_id: int, coin: str) -> None:
         )
 
 
-def recent_unclear_messages(limit: int = 15) -> list[dict]:
-    """Berichten die Anthropic niet als duidelijk signaal kon interpreteren,
-    laatste [limit] stuks. Zonder dit verdwijnt zo'n bericht stil: geen
-    signaal, geen melding, geen spoor in het dashboard, terwijl de
-    afzender wel iets deelde. Globaal (niet per gebruiker), net als de
-    rest van de berichtenverwerking."""
+def insert_message_coin_result(
+    message_id: int, coin: Optional[str], direction: Optional[str],
+    category: Optional[str], unclear: bool, note: str = "",
+) -> int:
+    """Eén rij per coin die een (mogelijk multi-coin) bericht behandelt.
+    Wordt meteen bij het begin van de per-coin-verwerking aangemaakt (zie
+    signal_processor._process_one_coin), de latere velden
+    (message_summary/price_at_receipt/narrative_id) komen er via de
+    set_*-functies hieronder bij zodra ze bekend worden."""
+    with db.session() as conn:
+        cur = conn.execute(
+            """INSERT INTO message_coin_results
+               (message_id, coin, direction, category, unclear, note, created_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (message_id, coin, direction, category, int(unclear), note or None, db.now_iso()),
+        )
+        return cur.lastrowid
+
+
+def set_message_coin_result_summary(result_id: int, summary: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE message_coin_results SET message_summary = ? WHERE id = ?", (summary, result_id))
+
+
+def set_message_coin_result_price_at_receipt(result_id: int, price: float) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE message_coin_results SET price_at_receipt = ? WHERE id = ?", (price, result_id))
+
+
+def list_message_coin_results(message_id: int) -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(
+            "SELECT * FROM message_coin_results WHERE message_id = ? ORDER BY id", (message_id,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def copy_message_coin_results(source_message_id: int, target_message_id: int, extra_note_suffix: str) -> None:
+    """Voor het dedupe-pad (zie signal_processor.handle_message): kopieert
+    alle coin-resultaten van het originele bericht naar het nieuwe
+    (duplicaat) bericht, met de duidelijkmakende suffix aan de note
+    toegevoegd, zodat een duplicaat van een multi-coin bericht ALLE coins
+    overneemt, niet alleen de eerste."""
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM message_coin_results WHERE message_id = ?", (source_message_id,),
+        ).fetchall()
+        for row in rows:
+            existing_note = row["note"] or ""
+            new_note = f"{existing_note} ({extra_note_suffix})".strip() if existing_note else extra_note_suffix
+            conn.execute(
+                """INSERT INTO message_coin_results
+                   (message_id, coin, direction, category, unclear, note, message_summary,
+                    price_at_receipt, narrative_id, created_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (target_message_id, row["coin"], row["direction"], row["category"], row["unclear"],
+                 new_note, row["message_summary"], row["price_at_receipt"], row["narrative_id"], db.now_iso()),
+            )
+
+
+def mark_message_envelope_processed(message_id: int) -> None:
+    """Zet alleen processed_at: voor een bericht dat via
+    message_coin_results is afgehandeld (één of meer coins gevonden), in
+    tegenstelling tot mark_message_processed hieronder dat coin/direction/
+    category/unclear/note rechtstreeks op messages zet — dat blijft het
+    pad voor de twee gevallen die geen per-coin-resultaat hebben: een
+    totale Anthropic-mislukking, en (indirect, via copy_message_coin_results
+    hierboven) een dedupe-duplicaat."""
+    with db.session() as conn:
+        conn.execute("UPDATE messages SET processed_at = ? WHERE id = ?", (db.now_iso(), message_id))
+
+
+def recent_unclear_messages(limit: int = 15) -> list[dict]:
+    """Berichten (of, sinds multi-coin-ondersteuning, individuele coins
+    binnen een bericht) die Anthropic niet als duidelijk signaal kon
+    interpreteren, laatste [limit] stuks. Zonder dit verdwijnt zo'n
+    bericht/coin stil: geen signaal, geen melding, geen spoor in het
+    dashboard, terwijl de afzender wel iets deelde. Globaal (niet per
+    gebruiker), net als de rest van de berichtenverwerking.
+
+    Twee bronnen samengevoegd: message_coin_results (nieuwe per-coin-
+    onduidelijkheden) en messages zelf (de twee gevallen die nog
+    rechtstreeks op messages staan: een totale Anthropic-mislukking, en
+    historische pre-migratie rijen)."""
+    with db.session() as conn:
+        legacy_rows = conn.execute(
             """SELECT id, received_at, coin, raw_text, note FROM messages
                WHERE unclear = 1 AND processed_at IS NOT NULL
                ORDER BY id DESC LIMIT ?""",
             (limit,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        per_coin_rows = conn.execute(
+            """SELECT mcr.id AS id, m.received_at AS received_at, mcr.coin AS coin,
+                      m.raw_text AS raw_text, mcr.note AS note
+               FROM message_coin_results mcr
+               JOIN messages m ON m.id = mcr.message_id
+               WHERE mcr.unclear = 1
+               ORDER BY mcr.id DESC LIMIT ?""",
+            (limit,),
+        ).fetchall()
+    combined = [dict(r) for r in legacy_rows] + [dict(r) for r in per_coin_rows]
+    combined.sort(key=lambda r: r["received_at"], reverse=True)
+    return combined[:limit]
 
 
 # ---------------------------------------------------------------------------
@@ -222,10 +327,15 @@ def active_swing_watches_for_coin(coin: str) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def list_source_levels_for_message(message_id: int) -> list[dict]:
+def list_source_levels_for_message(message_id: int, coin: str) -> list[dict]:
+    """Verplicht coin-gescopet: met meerdere coins per bericht (zie
+    message_coin_results) delen ze hetzelfde message_id, dus zonder
+    coin-filter zou coin A hier coin B se niveaus meekrijgen in zijn
+    stop/take-berekening — exact de klasse bug die dit hele multi-coin-
+    plan repareert, nu een laag dieper."""
     with db.session() as conn:
         rows = conn.execute(
-            "SELECT * FROM source_levels WHERE message_id = ?", (message_id,),
+            "SELECT * FROM source_levels WHERE message_id = ? AND coin = ?", (message_id, coin.upper()),
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -275,8 +385,14 @@ def get_narrative(narrative_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
-def create_narrative(coin: str, direction: str, message_id: int) -> int:
-    """Nieuw narrative, status 'actief', met dit bericht als eerste update."""
+def create_narrative(coin: str, direction: str, result_id: int) -> int:
+    """Nieuw narrative, status 'actief', met dit coin-resultaat als eerste
+    update. `result_id` is het id van de message_coin_results-rij voor
+    DEZE coin (niet het message_id): met meerdere coins per bericht delen
+    ze hetzelfde message_id, dus narrative_id moet op het per-coin-
+    resultaat komen te staan, anders koppelt een narrative voor coin A het
+    hele bericht (dus ook coin B se niet-gerelateerde resultaat) eraan
+    vast."""
     now = db.now_iso()
     with db.session() as conn:
         cur = conn.execute(
@@ -285,20 +401,22 @@ def create_narrative(coin: str, direction: str, message_id: int) -> int:
             (coin.upper(), direction.lower(), now, now),
         )
         narrative_id = cur.lastrowid
-        conn.execute("UPDATE messages SET narrative_id = ? WHERE id = ?", (narrative_id, message_id))
+        conn.execute("UPDATE message_coin_results SET narrative_id = ? WHERE id = ?", (narrative_id, result_id))
         return narrative_id
 
 
-def update_narrative_progress(narrative_id: int, message_id: int) -> None:
-    """Koppelt een bericht als vervolg-update aan een bestaand narrative:
-    telt message_count op, zet last_update_at bij op nu."""
+def update_narrative_progress(narrative_id: int, result_id: int) -> None:
+    """Koppelt een coin-resultaat als vervolg-update aan een bestaand
+    narrative: telt message_count op, zet last_update_at bij op nu.
+    `result_id` is het id van de message_coin_results-rij, zelfde reden als
+    create_narrative hierboven."""
     now = db.now_iso()
     with db.session() as conn:
         conn.execute(
             "UPDATE coin_narratives SET message_count = message_count + 1, last_update_at = ? WHERE id = ?",
             (now, narrative_id),
         )
-        conn.execute("UPDATE messages SET narrative_id = ? WHERE id = ?", (narrative_id, message_id))
+        conn.execute("UPDATE message_coin_results SET narrative_id = ? WHERE id = ?", (narrative_id, result_id))
 
 
 def close_narrative(narrative_id: int, status: str, closed_reason: str) -> None:
@@ -331,14 +449,27 @@ def list_narratives_for_coin(coin: str) -> list[dict]:
 
 def list_narrative_messages(narrative_id: int) -> list[dict]:
     """De berichten van dit narrative, oudste eerst: de tijdlijn voor zowel
-    de Telegram-melding als de coin-pagina-kaart."""
+    de Telegram-melding als de coin-pagina-kaart. Twee bronnen samengevoegd:
+    message_coin_results (nieuwe, coin-gescopete koppeling) en messages
+    zelf (historische rijen van vóór de multi-coin-wijziging, die hun
+    narrative_id nog rechtstreeks op messages hebben staan)."""
     with db.session() as conn:
-        rows = conn.execute(
-            "SELECT id, received_at, raw_text, message_summary FROM messages "
-            "WHERE narrative_id = ? ORDER BY received_at ASC",
+        per_coin_rows = conn.execute(
+            """SELECT m.id AS id, m.received_at AS received_at, m.raw_text AS raw_text,
+                      mcr.message_summary AS message_summary
+               FROM message_coin_results mcr
+               JOIN messages m ON m.id = mcr.message_id
+               WHERE mcr.narrative_id = ?""",
             (narrative_id,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        legacy_rows = conn.execute(
+            "SELECT id, received_at, raw_text, message_summary FROM messages "
+            "WHERE narrative_id = ?",
+            (narrative_id,),
+        ).fetchall()
+    combined = [dict(r) for r in per_coin_rows] + [dict(r) for r in legacy_rows]
+    combined.sort(key=lambda r: r["received_at"])
+    return combined
 
 
 def get_narrative_notification(narrative_id: int, user_id: int) -> Optional[dict]:
