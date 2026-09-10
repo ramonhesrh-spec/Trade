@@ -147,14 +147,29 @@ def check_1h_rsi(direction: str, ind_1h: Indicators) -> tuple[str, bool, str]:
     4 uur: dezelfde soort check als check_1h_trend, maar voor momentum-
     uitputting in plaats van trendrichting. Een 4-uur candle kan nog
     ruimte tonen terwijl de snellere timeframe al overbought/oversold
-    staat."""
+    staat.
+
+    Symmetrisch sinds de RSI_OVERSOLD/RSI_OVERBOUGHT-wijziging in
+    basic_factors: oversold telt nu ook tegen een long (niet alleen
+    overbought), en overbought telt ook tegen een short (niet alleen
+    oversold) — zelfde reden als daar, zie die docstring."""
     direction = direction.lower()
     if direction == "long":
-        ok = ind_1h.rsi < 75
-        detail = f"RSI {ind_1h.rsi:.0f} op 1u" + ("" if ok else ", overbought op de snellere timeframe")
+        ok = RSI_OVERSOLD < ind_1h.rsi < RSI_OVERBOUGHT
+        if ok:
+            detail = f"RSI {ind_1h.rsi:.0f} op 1u"
+        elif ind_1h.rsi >= RSI_OVERBOUGHT:
+            detail = f"RSI {ind_1h.rsi:.0f} op 1u, overbought op de snellere timeframe"
+        else:
+            detail = f"RSI {ind_1h.rsi:.0f} op 1u, oversold op de snellere timeframe, geen bevestiging voor long"
     else:
-        ok = ind_1h.rsi > 25
-        detail = f"RSI {ind_1h.rsi:.0f} op 1u" + ("" if ok else ", oversold op de snellere timeframe")
+        ok = RSI_OVERSOLD < ind_1h.rsi < RSI_OVERBOUGHT
+        if ok:
+            detail = f"RSI {ind_1h.rsi:.0f} op 1u"
+        elif ind_1h.rsi <= RSI_OVERSOLD:
+            detail = f"RSI {ind_1h.rsi:.0f} op 1u, oversold op de snellere timeframe"
+        else:
+            detail = f"RSI {ind_1h.rsi:.0f} op 1u, overbought op de snellere timeframe, geen bevestiging voor short"
     return ("RSI 1u", ok, detail)
 
 
@@ -612,6 +627,19 @@ BASIC_CONFIRM_MIN_PASSED = 3
 CONFIRM_THRESHOLD = 0.6
 
 
+# Grenzen voor de RSI-check in basic_factors/check_1h_rsi. Symmetrisch:
+# oversold telt tegen een long, overbought telt tegen een short, niet
+# alleen andersom. Eerdere versie liet oversold ongemoeid bij een long
+# (de gedachte was: oversold + een net omslaande EMA/MACD is een klassieke
+# instapkans) — maar RSI diep oversold op zowel 4u als 1u kan net zo goed
+# betekenen dat de neergaande beweging nog niet echt gekeerd is en de
+# EMA-kruising gewoon achterloopt. Bewuste, strengere keuze van de
+# product owner: liever een gemiste kans dan hoog vertrouwen geven aan een
+# long die tegen een nog actieve downtrend in gaat.
+RSI_OVERBOUGHT = 75
+RSI_OVERSOLD = 25
+
+
 def basic_factors(direction: str, ind: Indicators) -> list[tuple[str, bool, str]]:
     """De vier basisfactoren (trend, momentum, RSI, volume) als losse
     (naam, ok, detail) tuples, onafhankelijk van enige drempel-beslissing.
@@ -628,16 +656,26 @@ def basic_factors(direction: str, ind: Indicators) -> list[tuple[str, bool, str]
         momentum_ok = momentum_up
         momentum_detail = ("MACD boven signaallijn" if momentum_up
                             else "MACD onder signaallijn, geen opwaarts momentum")
-        rsi_ok = ind.rsi < 75
-        rsi_detail = f"RSI {ind.rsi:.0f}" if rsi_ok else f"RSI {ind.rsi:.0f}, overbought"
+        rsi_ok = RSI_OVERSOLD < ind.rsi < RSI_OVERBOUGHT
+        if rsi_ok:
+            rsi_detail = f"RSI {ind.rsi:.0f}"
+        elif ind.rsi >= RSI_OVERBOUGHT:
+            rsi_detail = f"RSI {ind.rsi:.0f}, overbought"
+        else:
+            rsi_detail = f"RSI {ind.rsi:.0f}, oversold, geen bevestiging voor long"
     elif direction == "short":
         trend_ok = not trend_up
         trend_detail = "EMA9 onder EMA21" if trend_ok else "EMA9 boven EMA21, geen neerwaartse trend"
         momentum_ok = not momentum_up
         momentum_detail = ("MACD onder signaallijn" if momentum_ok
                             else "MACD boven signaallijn, geen neerwaarts momentum")
-        rsi_ok = ind.rsi > 25
-        rsi_detail = f"RSI {ind.rsi:.0f}" if rsi_ok else f"RSI {ind.rsi:.0f}, oversold"
+        rsi_ok = RSI_OVERSOLD < ind.rsi < RSI_OVERBOUGHT
+        if rsi_ok:
+            rsi_detail = f"RSI {ind.rsi:.0f}"
+        elif ind.rsi <= RSI_OVERSOLD:
+            rsi_detail = f"RSI {ind.rsi:.0f}, oversold"
+        else:
+            rsi_detail = f"RSI {ind.rsi:.0f}, overbought, geen bevestiging voor short"
     else:
         raise ValueError(f"onbekende richting: {direction}")
 
