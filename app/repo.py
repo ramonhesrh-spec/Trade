@@ -108,12 +108,17 @@ def mark_message_untracked(message_id: int, coin: str) -> None:
     """Coin bestaat niet (meer) als handelspaar op de exchange: geen
     technische toetsing mogelijk. Zonder dit verdwijnt zo'n bericht na een
     geslaagde AI-interpretatie alsnog volledig stil, geen Telegram, geen
-    spoor voor de operator, alsof het bericht nooit aangekomen is."""
+    spoor voor de operator, alsof het bericht nooit aangekomen is.
+
+    Coin-gescopet op message_coin_results, niet messages: met meerdere
+    coins per bericht (zie message_coin_results) delen ze hetzelfde
+    message_id, dus zonder coin-filter zou coin A's onvolgbaarheid ook
+    coin B's al wel geslaagde resultaat overschrijven."""
     with db.session() as conn:
         conn.execute(
-            "UPDATE messages SET unclear = 1, note = ? WHERE id = ?",
+            "UPDATE message_coin_results SET unclear = 1, note = ? WHERE message_id = ? AND coin = ?",
             (f"{coin.upper()} staat niet (meer) als paar op de exchange, kon niet getoetst worden",
-             message_id),
+             message_id, coin),
         )
 
 
@@ -159,7 +164,12 @@ def copy_message_coin_results(source_message_id: int, target_message_id: int, ex
     alle coin-resultaten van het originele bericht naar het nieuwe
     (duplicaat) bericht, met de duidelijkmakende suffix aan de note
     toegevoegd, zodat een duplicaat van een multi-coin bericht ALLE coins
-    overneemt, niet alleen de eerste."""
+    overneemt, niet alleen de eerste.
+
+    narrative_id en price_at_receipt worden bewust NIET meegekopieerd: een
+    duplicaat-bericht is geen nieuwe narrative-update (die telling zou dan
+    dubbel oplopen) en geen nieuwe live-prijs-meting (die prijs hoort bij
+    het moment van het origineel, niet bij dit duplicaat)."""
     with db.session() as conn:
         rows = conn.execute(
             "SELECT * FROM message_coin_results WHERE message_id = ?", (source_message_id,),
@@ -173,7 +183,7 @@ def copy_message_coin_results(source_message_id: int, target_message_id: int, ex
                     price_at_receipt, narrative_id, created_at)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (target_message_id, row["coin"], row["direction"], row["category"], row["unclear"],
-                 new_note, row["message_summary"], row["price_at_receipt"], row["narrative_id"], db.now_iso()),
+                 new_note, row["message_summary"], None, None, db.now_iso()),
             )
 
 
@@ -254,10 +264,11 @@ _SWING_WATCH_SELECT = """
            sw.coin AS coin, sw.direction AS direction, sw.status AS status,
            sw.created_at AS created_at, sw.checked_at AS checked_at,
            sl.price_level AS price_level, sl.pattern_name AS pattern_name,
-           m.price_at_receipt AS reference_price
+           COALESCE(mcr.price_at_receipt, m.price_at_receipt) AS reference_price
     FROM swing_watches sw
     JOIN source_levels sl ON sl.id = sw.source_level_id
     JOIN messages m ON m.id = sw.message_id
+    LEFT JOIN message_coin_results mcr ON mcr.message_id = sw.message_id AND mcr.coin = sw.coin
 """
 
 
@@ -535,11 +546,21 @@ def list_recent_images_for_coin(coin: str, limit: int = 8) -> list[dict]:
     meegestuurd, meest recente eerst. Toont het patroon exact zoals de bron
     het heeft ingetekend, in plaats van het na te bouwen."""
     with db.session() as conn:
-        rows = conn.execute(
+        legacy_rows = conn.execute(
             """SELECT id, received_at, image_paths FROM messages
-               WHERE coin = ? AND has_image = 1 ORDER BY id DESC LIMIT ?""",
-            (coin.upper(), limit),
+               WHERE coin = ? AND has_image = 1 ORDER BY id DESC""",
+            (coin.upper(),),
         ).fetchall()
+        per_coin_rows = conn.execute(
+            """SELECT m.id AS id, m.received_at AS received_at, m.image_paths AS image_paths
+               FROM message_coin_results mcr
+               JOIN messages m ON m.id = mcr.message_id
+               WHERE mcr.coin = ? AND m.has_image = 1""",
+            (coin.upper(),),
+        ).fetchall()
+    rows = list(legacy_rows) + list(per_coin_rows)
+    rows.sort(key=lambda r: r["id"], reverse=True)
+    rows = rows[:limit]
     images = []
     for row in rows:
         for path in json.loads(row["image_paths"] or "[]"):
@@ -756,21 +777,13 @@ def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
     een handmatige oefening net een echt signaal voor alle gebruikers."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT s.*, m.message_summary AS message_summary FROM signals s
+            """SELECT s.*, COALESCE(mcr.message_summary, m.message_summary) AS message_summary FROM signals s
                JOIN messages m ON m.id = s.message_id
+               LEFT JOIN message_coin_results mcr ON mcr.message_id = s.message_id AND mcr.coin = s.coin
                WHERE s.coin = ? AND s.is_practice = 0 ORDER BY s.created_at DESC LIMIT ?""",
             (coin.upper(), limit),
         ).fetchall()
         return [dict(r) for r in rows]
-
-
-
-
-def set_message_price_at_receipt(message_id: int, price: float) -> None:
-    """Live koers op het moment van verwerken, alleen zinvol voor lange
-    termijn analyses: basis voor coin_long_term_track_record hieronder."""
-    with db.session() as conn:
-        conn.execute("UPDATE messages SET price_at_receipt = ? WHERE id = ?", (price, message_id))
 
 
 def coin_long_term_track_record(coin: str, current_price: float, min_age_days: int = 3) -> Optional[dict]:
@@ -785,12 +798,21 @@ def coin_long_term_track_record(coin: str, current_price: float, min_age_days: i
     None als er nog geen enkele analyse oud genoeg is."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=min_age_days)).isoformat()
     with db.session() as conn:
-        rows = conn.execute(
+        legacy_rows = conn.execute(
             """SELECT direction, price_at_receipt FROM messages
                WHERE coin = ? AND category = 'lange_termijn' AND direction IN ('long', 'short')
                      AND price_at_receipt IS NOT NULL AND received_at <= ?""",
             (coin.upper(), cutoff),
         ).fetchall()
+        per_coin_rows = conn.execute(
+            """SELECT mcr.direction AS direction, mcr.price_at_receipt AS price_at_receipt
+               FROM message_coin_results mcr
+               JOIN messages m ON m.id = mcr.message_id
+               WHERE mcr.coin = ? AND mcr.category = 'lange_termijn' AND mcr.direction IN ('long', 'short')
+                     AND mcr.price_at_receipt IS NOT NULL AND m.received_at <= ?""",
+            (coin.upper(), cutoff),
+        ).fetchall()
+    rows = list(legacy_rows) + list(per_coin_rows)
     if not rows:
         return None
     correct = sum(
@@ -898,10 +920,11 @@ _JOURNAL_SELECT = """
         s.atr_avg20 AS atr_avg20, s.adx AS adx,
         s.reason AS reason, s.context_note AS context_note, s.created_at AS created_at,
         s.is_practice AS is_practice, s.plain_explanation AS plain_explanation,
-        m.message_summary AS message_summary
+        COALESCE(mcr.message_summary, m.message_summary) AS message_summary
     FROM journal_entries je
     JOIN signals s ON s.id = je.signal_id
     JOIN messages m ON m.id = s.message_id
+    LEFT JOIN message_coin_results mcr ON mcr.message_id = s.message_id AND mcr.coin = s.coin
 """
 
 

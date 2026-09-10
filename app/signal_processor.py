@@ -111,7 +111,7 @@ def _repeated_failing_factor(coin: str) -> str | None:
     return next(iter(common)) if common else None
 
 
-def _interpret_with_retry(raw_text: str, image_paths: list[str]) -> Interpretation:
+def _interpret_with_retry(raw_text: str, image_paths: list[str]) -> list[Interpretation]:
     """Probeert de Anthropic interpretatie een paar keer bij een tijdelijke
     fout (timeout, overbelasting), voordat het bericht als mislukt wordt
     gelogd in plaats van stil onverwerkt te blijven."""
