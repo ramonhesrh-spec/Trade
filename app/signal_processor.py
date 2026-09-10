@@ -133,15 +133,16 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
     if duplicate:
         logger.info("Bericht %s is een duplicaat van bericht %s, niet opnieuw verwerkt",
                     message_id, duplicate["id"])
-        repo.mark_message_processed(
-            message_id, duplicate["coin"], duplicate["direction"], duplicate["category"],
-            bool(duplicate["unclear"]), note=f"duplicaat van bericht #{duplicate['id']}, niet opnieuw verwerkt",
+        repo.copy_message_coin_results(
+            duplicate["id"], message_id,
+            f"duplicaat van bericht #{duplicate['id']}, niet opnieuw verwerkt",
         )
+        repo.mark_message_envelope_processed(message_id)
         return
 
     global _consecutive_interpret_failures
     try:
-        interp = await asyncio.to_thread(_interpret_with_retry, raw_text, image_paths)
+        interpretations = await asyncio.to_thread(_interpret_with_retry, raw_text, image_paths)
     except Exception as exc:
         logger.exception("Interpretatie van bericht %s definitief mislukt na %s pogingen",
                           message_id, INTERPRET_ATTEMPTS)
@@ -161,12 +162,28 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
         return
 
     _consecutive_interpret_failures = 0
-    repo.mark_message_processed(message_id, interp.coin, interp.direction, interp.category,
-                                 interp.unclear, note=interp.reason)
+    for interp in interpretations:
+        await _process_one_coin(message_id, raw_text, interp)
+    repo.mark_message_envelope_processed(message_id)
+
+
+async def _process_one_coin(message_id: int, raw_text: str, interp: Interpretation) -> None:
+    """Verwerkt de interpretatie voor precies één coin uit een (mogelijk
+    multi-coin) bericht: eigen samenvatting, eigen bron-niveaus, eigen
+    day-trading-toets of lange-termijn/narrative-pad. Dit is exact de
+    logica die vóór de multi-coin-wijziging rechtstreeks in handle_message
+    stond, nu geparametriseerd per coin en schrijvend naar
+    message_coin_results in plaats van naar messages (zie
+    repo.insert_message_coin_result: message_id + coin identificeren samen
+    deze rij, meerdere coins uit hetzelfde bericht krijgen elk hun eigen
+    rij)."""
+    result_id = repo.insert_message_coin_result(
+        message_id, interp.coin, interp.direction, interp.category, interp.unclear, note=interp.reason,
+    )
 
     if interp.unclear:
-        logger.info("Bericht %s is onduidelijk (%s), overgeslagen voor verdere verwerking",
-                    message_id, interp.reason)
+        logger.info("Bericht %s (coin %s) is onduidelijk (%s), overgeslagen voor verdere verwerking",
+                    message_id, interp.coin, interp.reason)
         return
 
     # Het origineel doorgestuurde bericht herschreven in klare taal, los van
@@ -175,7 +192,7 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
     # termijn analyse is vaak juist de langste, meest jargon-rijke tekst.
     message_summary = await asyncio.to_thread(explain.summarize_message, interp.coin, raw_text)
     if message_summary:
-        repo.set_message_summary(message_id, message_summary)
+        repo.set_message_coin_result_summary(result_id, message_summary)
 
     # Bron niveaus uit afbeeldingen worden altijd bewaard, ongeacht categorie.
     if interp.source_levels:
@@ -205,10 +222,10 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
                 # Alleen voor niet-day_trading categorieën (lange_termijn,
                 # aandelen): een day_trading bericht krijgt al volledige,
                 # directe, niveau-bewuste behandeling via zijn eigen
-                # pijplijn (process_day_trading_signal, zie Step 12). Een
-                # parallelle swing-watch voor exact hetzelfde bericht voegt
-                # niets toe behalve een dubbele melding en dubbel
-                # risicobedrag voor dezelfde kans.
+                # pijplijn (process_day_trading_signal). Een parallelle
+                # swing-watch voor exact hetzelfde bericht voegt niets toe
+                # behalve een dubbele melding en dubbel risicobedrag voor
+                # dezelfde kans.
                 if interp.category != "day_trading":
                     try:
                         await evaluate_level_watch(
@@ -219,8 +236,8 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
                                           interp.coin, message_id)
 
     if interp.category != "day_trading":
-        logger.info("Bericht %s valt in categorie %s, alleen gelogd, geen melding",
-                    message_id, interp.category)
+        logger.info("Bericht %s (coin %s) valt in categorie %s, alleen gelogd, geen melding",
+                    message_id, interp.coin, interp.category)
         # Live koers vastleggen op het moment van deze analyse: zonder dit
         # referentiepunt kan achteraf nooit gemeten worden of de richting
         # klopte (zie repo.coin_long_term_track_record). Mislukt de
@@ -229,7 +246,7 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
         if interp.direction in ("long", "short"):
             try:
                 live_price = await asyncio.to_thread(exchange.fetch_last_price, interp.coin)
-                repo.set_message_price_at_receipt(message_id, live_price)
+                repo.set_message_coin_result_price_at_receipt(result_id, live_price)
             except Exception:
                 logger.exception("Live prijs voor lange-termijn analyse %s kon niet vastgelegd worden",
                                   interp.coin)
@@ -241,7 +258,7 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
         # inhoud van een net doorgestuurde analyse in de tussentijd onzichtbaar is.
         if interp.category == "lange_termijn" and interp.direction in ("long", "short"):
             try:
-                await evaluate_narrative(message_id, interp.coin, interp.direction)
+                await evaluate_narrative(interp.coin, interp.direction, result_id)
             except Exception:
                 logger.exception("Narrative-evaluatie voor %s (bericht %s) is mislukt",
                                   interp.coin, message_id)
@@ -296,12 +313,16 @@ async def evaluate_level_watch(
         await run_swing_check(watch_id)
 
 
-async def evaluate_narrative(message_id: int, coin: str, direction: str) -> None:
+async def evaluate_narrative(coin: str, direction: str, result_id: int) -> None:
     """Aangeroepen voor elk lange_termijn-bericht met een duidelijke
     richting (long/short — 'neutraal' en een ontbrekende richting doen
     hier niet aan mee, net als bij _build_context_note). Bepaalt of dit
     bericht een update is van het lopende verhaal over deze coin, een
-    tegenspraak daarvan, of het begin van een nieuw verhaal.
+    tegenspraak daarvan, of het begin van een nieuw verhaal. `result_id` is
+    het id van de message_coin_results-rij voor DEZE coin (niet het
+    message_id): met meerdere coins per bericht delen ze hetzelfde
+    message_id, dus de narrative-koppeling moet coin-gescopet blijven (zie
+    repo.create_narrative/update_narrative_progress).
 
     Tegenspraak sluit het oude narrative expliciet af (status
     'tegengesproken') vóór er een nieuwe wordt aangemaakt: er hoort op elk
@@ -312,12 +333,12 @@ async def evaluate_narrative(message_id: int, coin: str, direction: str) -> None
 
     active = repo.get_active_narrative(coin)
     if active is None:
-        narrative_id = repo.create_narrative(coin, direction, message_id)
+        narrative_id = repo.create_narrative(coin, direction, result_id)
         await _send_narrative_notifications(narrative_id, is_new=True, is_contradiction=False)
         return
 
     if active["direction"] == direction:
-        repo.update_narrative_progress(active["id"], message_id)
+        repo.update_narrative_progress(active["id"], result_id)
         await _send_narrative_notifications(active["id"], is_new=False, is_contradiction=False)
         return
 
@@ -325,7 +346,7 @@ async def evaluate_narrative(message_id: int, coin: str, direction: str) -> None
         active["id"], "tegengesproken",
         f"tegengesproken door een nieuw {direction}-narrative voor {coin}",
     )
-    new_narrative_id = repo.create_narrative(coin, direction, message_id)
+    new_narrative_id = repo.create_narrative(coin, direction, result_id)
     await _send_narrative_notifications(
         new_narrative_id, is_new=True, is_contradiction=True, contradicted=active,
     )
@@ -613,7 +634,7 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     confirmed, reason = indicators.confirms_direction(
         ind, interp.direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
     )
-    message_levels = [lvl["price_level"] for lvl in repo.list_source_levels_for_message(message_id)]
+    message_levels = [lvl["price_level"] for lvl in repo.list_source_levels_for_message(message_id, interp.coin)]
     zone_levels = [
         edge for zone in zones for edge in (zone.price_low, zone.price_high)
         if abs(edge - ind.price) <= indicators.SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * ind.atr
