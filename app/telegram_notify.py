@@ -114,9 +114,9 @@ def _factor_overview(reason: str) -> str:
 
 def _factor_link(coin: str) -> str:
     """Link naar de coin-pagina, waar alle factoren van de toetsing
-    (4 of 15, afhankelijk van ENABLE_ADVANCED_FACTORS) te zien zijn, niet
+    (4 of 16, afhankelijk van ENABLE_ADVANCED_FACTORS) te zien zijn, niet
     alleen de samenvattende tekstregel die in het bericht zelf past."""
-    factor_count = 15 if config.ENABLE_ADVANCED_FACTORS else 4
+    factor_count = 16 if config.ENABLE_ADVANCED_FACTORS else 4
     url = f"{config.DASHBOARD_URL}/coins/{coin}"
     return f"🔎 Bekijk alle {factor_count} factoren: {url}"
 
@@ -496,12 +496,12 @@ async def send_demo_signal_message(chat_id: str) -> None:
     mee in de echte statistieken (ook niet in de onboarding-checklist, die
     kijkt naar journal_entries.telegram_sent van een echt signaal).
 
-    Toont de elf extra factoren erbij zodra ENABLE_ADVANCED_FACTORS aan
+    Toont de twaalf extra factoren erbij zodra ENABLE_ADVANCED_FACTORS aan
     staat, anders blijft dit voorbeeld achter bij wat een echte melding nu
     laat zien. Coin is bewust SUI in plaats van BTC: de BTC-trend factor
     telt zichzelf niet mee bij een BTC-signaal (zie
     compute_advanced_extra_factors), dus alleen bij een andere coin toont
-    het voorbeeld echt alle 15 factoren."""
+    het voorbeeld echt alle 16 factoren."""
     if not config.TELEGRAM_BOT_TOKEN or not chat_id:
         return
     reason = "✓ Trend: EMA9 boven EMA21 | ✓ Momentum: MACD boven signaallijn | ✓ RSI 58 | ✓ Volume 1.34x gemiddeld"
@@ -510,6 +510,7 @@ async def send_demo_signal_message(chat_id: str) -> None:
             " | ✓ Trendsterkte: ADX 27 | ✓ Volatiliteit: ATR 0.0182 (stijgend) | "
             "✓ Volume-percentiel: volume in 85e percentiel van de laatste 20 candles | "
             "✓ BTC-trend: BTC beweegt omhoog | ✓ Daily-trend: EMA9 boven EMA21 op daily | "
+            "✓ RSI daily: RSI 52 op daily | "
             "✓ 1u bevestiging: EMA9 boven EMA21 op 1u | "
             "✗ RSI 1u: RSI 78 op 1u, overbought op de snellere timeframe | "
             "✓ Divergentie: geen waarschuwende divergentie | "

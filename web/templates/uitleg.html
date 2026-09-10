@@ -136,11 +136,11 @@ vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
     {{ '● Actief' if advanced_factors_enabled else '○ Nog niet actief' }}
   </span>
   {% if advanced_factors_enabled %}
-  <h2>Elf extra factoren</h2>
-  <p>Naast de vier factoren hierboven toetst HesPulse ook op elf extra
+  <h2>Twaalf extra factoren</h2>
+  <p>Naast de vier factoren hierboven toetst HesPulse ook op twaalf extra
   factoren. Die tellen nu mee in elke melding.</p>
   {% else %}
-  <h2>In de maak: elf extra factoren</h2>
+  <h2>In de maak: twaalf extra factoren</h2>
   <p>Naast de vier factoren hierboven staat er een uitgebreidere toetsing
   klaar, maar die staat nog uit. Eerst wordt getoetst hoe streng de nieuwe
   regels in de praktijk uitpakken op eerdere signalen, voor ze meetellen in
@@ -174,6 +174,11 @@ vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
       <p>Dezelfde trendcheck als de basisfactor Trend, maar dan op de
       dagcandle: bevestigt de langere-termijn richting, los van wat de
       snellere 4 uur candle nu laat zien.</p>
+    </div>
+    <div class="factor factor-preview">
+      <h3>RSI daily</h3>
+      <p>Dezelfde RSI-check als de basisfactor RSI, maar dan op de
+      dagcandle: staat de langste tijdshorizon al overbought of oversold?</p>
     </div>
     <div class="factor factor-preview">
       <h3>1 uur bevestiging</h3>
@@ -214,7 +219,7 @@ vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
   </div>
   <div class="group-note">
     Bij de uitgebreide toetsing telt geen enkele factor apart als harde
-    eis. Alle vijftien factoren (de vier basisfactoren plus deze elf)
+    eis. Alle zestien factoren (de vier basisfactoren plus deze twaalf)
     tellen gezamenlijk mee, en minstens 60% moet kloppen. Zo blokkeert één
     marginale miss niet meteen een verder overtuigend signaal, en blijft
     precies zichtbaar welke factor(en) niet klopten.

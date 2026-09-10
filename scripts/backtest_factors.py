@@ -107,8 +107,11 @@ def evaluate_signal(row: dict) -> dict:
         daily_ind = indicators.compute_indicators(daily_df)
         _, daily_ok, _ = indicators.check_daily_trend(direction, daily_ind)
         results["Daily-trend"] = daily_ok
+        _, daily_rsi_ok, _ = indicators.check_daily_rsi(direction, daily_ind)
+        results["RSI daily"] = daily_rsi_ok
     except Exception as exc:
         results["Daily-trend"] = None
+        results["RSI daily"] = None
         print(f"    (daily data mislukt: {exc})")
 
     # Liquiditeit: benadering. De exchange-ticker geeft alleen het HUIDIGE

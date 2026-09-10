@@ -519,9 +519,11 @@ async def compute_advanced_extra_factors(
         daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
         daily_ind = indicators.compute_indicators(daily_df)
         factors.append(indicators.check_daily_trend(direction, daily_ind))
+        factors.append(indicators.check_daily_rsi(direction, daily_ind))
     except Exception:
-        logger.exception("Daily-trend voor %s kon niet berekend worden", coin)
+        logger.exception("Daily-trend/RSI voor %s kon niet berekend worden", coin)
         factors.append(("Daily-trend", False, "kon niet opgehaald worden, telt als niet bevestigd"))
+        factors.append(("RSI daily", False, "kon niet opgehaald worden, telt als niet bevestigd"))
 
     try:
         df_1h = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1h")

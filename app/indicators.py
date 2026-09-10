@@ -187,6 +187,32 @@ def check_daily_trend(direction: str, daily_ind: Indicators) -> tuple[str, bool,
     return ("Daily-trend", ok, detail)
 
 
+def check_daily_rsi(direction: str, daily_ind: Indicators) -> tuple[str, bool, str]:
+    """RSI-bevestiging op de dagcandle, naast RSI (4u) en RSI 1u: zelfde
+    symmetrische oversold/overbought-check (zie RSI_OVERSOLD/RSI_OVERBOUGHT
+    hierboven), nu op de langzaamste van de drie tijdshorizons. Hergebruikt
+    daily_ind, die check_daily_trend hiernaast ook al gebruikt — geen
+    extra candle-ophaal nodig."""
+    direction = direction.lower()
+    if direction == "long":
+        ok = RSI_OVERSOLD < daily_ind.rsi < RSI_OVERBOUGHT
+        if ok:
+            detail = f"RSI {daily_ind.rsi:.0f} op daily"
+        elif daily_ind.rsi >= RSI_OVERBOUGHT:
+            detail = f"RSI {daily_ind.rsi:.0f} op daily, overbought op de dagcandle"
+        else:
+            detail = f"RSI {daily_ind.rsi:.0f} op daily, oversold op de dagcandle, geen bevestiging voor long"
+    else:
+        ok = RSI_OVERSOLD < daily_ind.rsi < RSI_OVERBOUGHT
+        if ok:
+            detail = f"RSI {daily_ind.rsi:.0f} op daily"
+        elif daily_ind.rsi <= RSI_OVERSOLD:
+            detail = f"RSI {daily_ind.rsi:.0f} op daily, oversold op de dagcandle"
+        else:
+            detail = f"RSI {daily_ind.rsi:.0f} op daily, overbought op de dagcandle, geen bevestiging voor short"
+    return ("RSI daily", ok, detail)
+
+
 def check_divergence(df: pd.DataFrame, direction: str, lookback: int = 20) -> tuple[str, bool, str]:
     """Waarschuwt voor RSI/prijs-divergentie: bij een long is een hogere
     prijstop met een lagere RSI-top een klassiek teken dat het momentum al
