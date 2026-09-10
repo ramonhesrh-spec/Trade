@@ -202,6 +202,26 @@ profit-berekening van de verkeerde coin. Dit MOET meeveranderen:
 sub-taak maar een harde vereiste van dit ontwerp: zonder deze fix lost de
 wijziging het gerapporteerde probleem niet werkelijk op, hij verplaatst het.
 
+## Sectie 4b: dezelfde klasse bug, ook in de narrative-koppeling
+
+Tijdens het uitwerken van het implementatieplan bleek `app/repo.py`'s
+`create_narrative`/`update_narrative_progress` hetzelfde patroon te hebben
+als Sectie 4's `list_source_levels_for_message`: ze schrijven
+`UPDATE messages SET narrative_id = ? WHERE id = message_id`, zonder
+coin-filter. Met meerdere coins die hetzelfde `message_id` delen, zou een
+lange-termijn-narrative voor coin A het hele bericht (dus ook coin B se
+niet-gerelateerde resultaat) aan narrative A koppelen. `list_narrative_messages`
+leest bovendien rechtstreeks `messages.narrative_id`/`messages.message_summary`
+voor de narrative-tijdlijn.
+
+Zelfde verplichte fix als Sectie 4: `create_narrative`/`update_narrative_progress`
+schrijven voortaan naar `message_coin_results.narrative_id WHERE id = <coin-resultaat-id>`
+in plaats van naar `messages.narrative_id WHERE id = message_id`, en
+`list_narrative_messages` leest de tijdlijn via een join op
+`message_coin_results` (voor `narrative_id`/`message_summary`) met `messages`
+(voor `received_at`/`raw_text`), met dezelfde soort legacy-tak als Sectie
+5's dashboard-query voor historische pre-migratie rijen.
+
 ## Sectie 5: zichtbare impact
 
 **Dashboard, onduidelijke berichten** (`repo.recent_unclear_messages`,
