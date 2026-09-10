@@ -79,49 +79,73 @@ niveau" in plaats van "target"), of laat dit ene niveau weg als je niet \
 zeker weet wat het voorstelt. Verzin nooit een richting om het kloppend \
 te maken, de prijs die je afleest blijft altijd leidend.
 
+Eén bericht kan over meerdere coins tegelijk gaan (bijvoorbeeld een \
+watchlist-post met meerdere tickers, of een analyse die één coin \
+vergelijkt met een andere). Geef in dat geval een apart item per coin in \
+de coins-array, ook als een coin er maar terloops in genoemd wordt (bijvoorbeeld \
+puur ter vergelijking, zonder een eigen concrete opzet). Bij een afbeelding \
+met niveaus voor meerdere coins: elk niveau hoort bij precies één coin se \
+item, nooit bij meerdere tegelijk en nooit bij de verkeerde coin — lees \
+zorgvuldig bij welke grafiek/ticker een niveau hoort voor je het \
+doorgeeft.
+
 Roep altijd de tool record_interpretation aan met je bevindingen."""
 
 TOOL = {
     "name": "record_interpretation",
-    "description": "Registreer de interpretatie van een Discord trading bericht.",
+    "description": (
+        "Registreer de interpretatie van een Discord trading bericht. Een bericht kan over "
+        "meerdere coins tegelijk gaan (bijvoorbeeld een watchlist-post of een vergelijking) "
+        "— geef dan een apart item per coin, ook als een coin maar terloops genoemd wordt."
+    ),
     "input_schema": {
         "type": "object",
         "properties": {
-            "coin": {
-                "type": "string",
-                "description": "Ticker symbool, bijvoorbeeld BTC. Leeg laten indien onbekend.",
-            },
-            "direction": {
-                "type": "string",
-                "enum": ["long", "short", "neutraal", ""],
-                "description": "\"neutraal\" alleen bij lange_termijn met een verdeelde conclusie. Leeg laten indien onbekend.",
-            },
-            "category": {
-                "type": "string",
-                "enum": ["day_trading", "lange_termijn", "aandelen"],
-            },
-            "unclear": {
-                "type": "boolean",
-                "description": "True als coin of direction niet zeker zijn.",
-            },
-            "reason": {
-                "type": "string",
-                "description": "Reden waarom het bericht onduidelijk is, indien van toepassing.",
-            },
-            "source_levels": {
+            "coins": {
                 "type": "array",
-                "description": "Niveaus/patroon die de bron al zelf heeft ingetekend op een bijgevoegde afbeelding.",
+                "description": "Eén item per coin die het bericht noemt. Leeg als geen enkele coin met voldoende zekerheid te bepalen is.",
                 "items": {
                     "type": "object",
                     "properties": {
-                        "price_level": {"type": "number"},
-                        "pattern_name": {"type": "string"},
+                        "coin": {
+                            "type": "string",
+                            "description": "Ticker symbool, bijvoorbeeld BTC. Leeg laten indien onbekend.",
+                        },
+                        "direction": {
+                            "type": "string",
+                            "enum": ["long", "short", "neutraal", ""],
+                            "description": "\"neutraal\" alleen bij lange_termijn met een verdeelde conclusie. Leeg laten indien onbekend.",
+                        },
+                        "category": {
+                            "type": "string",
+                            "enum": ["day_trading", "lange_termijn", "aandelen"],
+                        },
+                        "unclear": {
+                            "type": "boolean",
+                            "description": "True als coin of direction voor DEZE coin niet zeker zijn.",
+                        },
+                        "reason": {
+                            "type": "string",
+                            "description": "Reden waarom dit item onduidelijk is, indien van toepassing.",
+                        },
+                        "source_levels": {
+                            "type": "array",
+                            "description": "Alleen niveaus die de bron zelf heeft ingetekend voor DEZE coin. Een niveau dat bij een andere coin in dezelfde afbeelding hoort, hoort bij dat andere coin se item, niet hier.",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "price_level": {"type": "number"},
+                                    "pattern_name": {"type": "string"},
+                                },
+                                "required": ["price_level"],
+                            },
+                        },
                     },
-                    "required": ["price_level"],
+                    "required": ["coin", "category", "unclear"],
                 },
             },
         },
-        "required": ["category", "unclear"],
+        "required": ["coins"],
     },
 }
 
@@ -151,35 +175,16 @@ def _image_block(path: str) -> dict:
     }
 
 
-def interpret_message(raw_text: str, image_paths: Optional[list[str]] = None) -> Interpretation:
-    image_paths = image_paths or []
-    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-
-    content: list[dict] = [{"type": "text", "text": raw_text or "(leeg bericht, alleen afbeelding)"}]
-    for path in image_paths:
-        content.append(_image_block(path))
-
-    response = client.messages.create(
-        model=config.ANTHROPIC_MODEL,
-        max_tokens=1024,
-        system=SYSTEM_PROMPT,
-        tools=[TOOL],
-        tool_choice={"type": "tool", "name": "record_interpretation"},
-        messages=[{"role": "user", "content": content}],
-    )
-
-    tool_use = next(b for b in response.content if b.type == "tool_use")
-    payload = tool_use.input
-
-    coin = (payload.get("coin") or "").strip().upper() or None
-    direction = (payload.get("direction") or "").strip().lower() or None
-    category = payload.get("category", "day_trading")
-    unclear = bool(payload.get("unclear", False))
-    reason = payload.get("reason", "")
+def _parse_coin_item(item: dict) -> Interpretation:
+    coin = (item.get("coin") or "").strip().upper() or None
+    direction = (item.get("direction") or "").strip().lower() or None
+    category = item.get("category", "day_trading")
+    unclear = bool(item.get("unclear", False))
+    reason = item.get("reason", "")
 
     source_levels = [
         SourceLevel(price_level=lvl["price_level"], pattern_name=lvl.get("pattern_name") or None)
-        for lvl in payload.get("source_levels", [])
+        for lvl in item.get("source_levels", [])
     ]
 
     if coin is None:
@@ -198,3 +203,39 @@ def interpret_message(raw_text: str, image_paths: Optional[list[str]] = None) ->
         coin=coin, direction=direction, category=category,
         unclear=unclear, reason=reason, source_levels=source_levels,
     )
+
+
+def interpret_message(raw_text: str, image_paths: Optional[list[str]] = None) -> list[Interpretation]:
+    """Geeft één Interpretation terug per coin die het bericht behandelt
+    (zie SYSTEM_PROMPT/TOOL: een bericht kan meerdere coins tegelijk
+    noemen, elk met zijn eigen richting/categorie/niveaus). Een leeg
+    coins-array (geen enkele coin te bepalen) geeft een lijst met precies
+    één onduidelijke Interpretation terug, zelfde effectieve gedrag als
+    vroeger bij een volledig onduidelijk bericht."""
+    image_paths = image_paths or []
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+
+    content: list[dict] = [{"type": "text", "text": raw_text or "(leeg bericht, alleen afbeelding)"}]
+    for path in image_paths:
+        content.append(_image_block(path))
+
+    response = client.messages.create(
+        model=config.ANTHROPIC_MODEL,
+        max_tokens=1536,
+        system=SYSTEM_PROMPT,
+        tools=[TOOL],
+        tool_choice={"type": "tool", "name": "record_interpretation"},
+        messages=[{"role": "user", "content": content}],
+    )
+
+    tool_use = next(b for b in response.content if b.type == "tool_use")
+    payload = tool_use.input
+    coins_payload = payload.get("coins") or []
+
+    if not coins_payload:
+        return [Interpretation(
+            coin=None, direction=None, category="day_trading", unclear=True,
+            reason="coin niet duidelijk uit het bericht te halen",
+        )]
+
+    return [_parse_coin_item(item) for item in coins_payload]
