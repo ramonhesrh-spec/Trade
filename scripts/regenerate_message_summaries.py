@@ -34,12 +34,15 @@ def main(limit: int | None) -> None:
     for i, msg in enumerate(messages, start=1):
         summary = explain.summarize_message(msg["coin"] or "", msg["raw_text"])
         if summary:
-            repo.set_message_summary(msg["id"], summary)
+            if msg["source"] == "legacy":
+                repo.set_message_summary(msg["id"], summary)
+            else:
+                repo.set_message_coin_result_summary(msg["id"], summary)
             updated += 1
-            print(f"[{i}/{len(messages)}] bericht {msg['id']} ({msg['coin']}): OK")
+            print(f"[{i}/{len(messages)}] bericht {msg['id']} ({msg['coin']}, {msg['source']}): OK")
         else:
             failed += 1
-            print(f"[{i}/{len(messages)}] bericht {msg['id']} ({msg['coin']}): mislukt, overgeslagen")
+            print(f"[{i}/{len(messages)}] bericht {msg['id']} ({msg['coin']}, {msg['source']}): mislukt, overgeslagen")
         time.sleep(SLEEP_BETWEEN_CALLS_SECONDS)
 
     print(f"\nKlaar: {updated} bijgewerkt, {failed} mislukt van de {len(messages)} berichten.")
