@@ -100,19 +100,23 @@ def _factor_overview(reason: str) -> str:
     """Zet de pipe-gescheiden factor-breakdown (zoals indicators.confirms_direction
     opbouwt: "✓ Trend: ... | ✗ Momentum: ...") om in een duidelijk overzicht
     voor Telegram: een tellerregel bovenaan (hoeveel van de factoren gehaald
-    zijn), en elke factor op zijn eigen regel in plaats van aan elkaar
-    geplakt met pipes, wat op een telefoonscherm moeilijk te scannen is."""
+    zijn), gevolgd door alleen de factoren die NIET gehaald zijn. Met 15
+    factoren maakte een regel per factor (ook de 12+ geslaagde) het bericht
+    zo lang dat Telegram het zelf inklapte achter "toon meer" - de volledige
+    lijst blijft gewoon te zien via de link naar de coin-pagina
+    (_factor_link)."""
     parts = reason.split(" | ")
     passed = sum(1 for p in parts if p.strip().startswith("✓"))
     total = len(parts)
-    return "\n".join([f"✅ {passed}/{total} factoren gehaald"] + parts)
+    failed = [p for p in parts if not p.strip().startswith("✓")]
+    return "\n".join([f"✅ {passed}/{total} factoren gehaald"] + failed)
 
 
 def _factor_link(coin: str) -> str:
     """Link naar de coin-pagina, waar alle factoren van de toetsing
-    (4 of 10, afhankelijk van ENABLE_ADVANCED_FACTORS) te zien zijn, niet
+    (4 of 15, afhankelijk van ENABLE_ADVANCED_FACTORS) te zien zijn, niet
     alleen de samenvattende tekstregel die in het bericht zelf past."""
-    factor_count = 10 if config.ENABLE_ADVANCED_FACTORS else 4
+    factor_count = 15 if config.ENABLE_ADVANCED_FACTORS else 4
     url = f"{config.DASHBOARD_URL}/coins/{coin}"
     return f"🔎 Bekijk alle {factor_count} factoren: {url}"
 

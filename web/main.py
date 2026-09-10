@@ -1401,10 +1401,17 @@ async def api_candles(symbol: str, user: dict = Depends(require_login)):
         for p in pattern_matches
     ]
 
+    ind = indicators.compute_indicators(df)
     zones = indicators.detect_sr_zones(df)
+    # Alleen zones tonen die ook echt meetellen voor de stop/take-verfijning
+    # (zelfde afstandsgrens als signal_processor.process_day_trading_signal
+    # gebruikt), anders toont de grafiek allerlei ver weg gelegen zones die
+    # geen enkele invloed op de trade hebben, puur ruis op het scherm.
+    max_distance = indicators.SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * ind.atr
     sr_zones = [
         {"price_low": z.price_low, "price_high": z.price_high, "touches": z.touches}
         for z in zones
+        if abs(z.price_low - ind.price) <= max_distance or abs(z.price_high - ind.price) <= max_distance
     ]
 
     return {"candles": candles, "ema9": ema9_series, "ema21": ema21_series, "patterns": patterns, "sr_zones": sr_zones}
