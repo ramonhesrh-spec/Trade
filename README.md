@@ -260,12 +260,18 @@ seintje.
 ### Uitgebreide technische factoren (optioneel)
 
 Naast de vier basisfactoren (trend, momentum, RSI, volume) kan het systeem
-zes extra factoren toetsen: trendsterkte (ADX), volatiliteit (ATR t.o.v.
-zijn eigen gemiddelde), BTC-trend als filter voor andere coins, bevestiging
-op het 1 uur tijdsbestek naast de 4 uur, RSI/prijs-divergentie, en een
-liquiditeitsgrens (24u handelsvolume). Trend, Momentum, 1u bevestiging en
-BTC-trend meten in de kern allemaal "is er een trend" en tellen daarom als
-groep: 3 van de 4 moet kloppen. De rest blijft allemaal apart hard vereist.
+twaalf extra factoren toetsen: trendsterkte (ADX), volatiliteit (ATR t.o.v.
+zijn eigen gemiddelde), volume-percentiel, BTC-trend als filter voor andere
+coins, daily-trend en daily-RSI, bevestiging op het 1 uur tijdsbestek
+(trend en RSI) naast de 4 uur, RSI/prijs-divergentie, een candlestick-
+patroonherkenning, een liquiditeitsgrens (24u handelsvolume), en zelf-
+gedetecteerde steun/weerstand-zones uit de prijsgeschiedenis. RSI wordt op
+alle drie tijdsbestekken (4u, 1u, daily) symmetrisch getoetst: zowel
+overbought als oversold telt tegen zowel een long als een short.
+
+Geen enkele van deze factoren is apart hard vereist: alle zestien factoren
+(4 basis + 12 uitgebreid) tellen gezamenlijk mee, en minstens 60% moet
+kloppen (zie `CONFIRM_THRESHOLD` in `app/indicators.py`).
 
 Staat standaard uit. De drempels (ADX 20, ATR moet stijgen, 2 miljoen
 volume) zijn leerboek-standaarden, nog niet getoetst aan je eigen

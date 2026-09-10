@@ -640,16 +640,18 @@ def check_sr_zone(direction: str, entry_price: float, atr: float, zones: list[SR
 BASIC_CONFIRM_MIN_PASSED = 3
 
 # In de uitgebreide versie telt geen enkele factor apart als harde eis: met
-# 10 losse factoren blokkeert anders één marginale miss (bijvoorbeeld volume
-# op 0.89x in plaats van 1.0x) een verder overtuigend signaal volledig,
-# terwijl 9 van de 10 factoren wel klopten. Minstens 6 van de 10 (60%) is
-# hier de grens: is dat gehaald, dan is het een melding waard, en blijft het
-# aan de gebruiker zelf om op basis van de zichtbare ✓/✗ per factor te
-# beslissen of hij hem neemt. Vier van deze 10 factoren (BTC-trend, 1u
-# bevestiging, divergentie, liquiditeit) tellen "fail-closed" mee: lukt het
-# ophalen van de data ervoor niet, dan telt de factor als niet gehaald in
-# plaats van dat de melding daarop crasht of de factor overslaat, dus een
-# tijdelijke ophaalfout kan in het slechtste geval één factor kosten.
+# 16 factoren in totaal (4 basis + 12 uitgebreid) blokkeert anders één
+# marginale miss (bijvoorbeeld volume op 0.89x in plaats van 1.0x) een
+# verder overtuigend signaal volledig, terwijl bijna alle andere factoren
+# wel klopten. Minstens 60% is hier de grens: is dat gehaald, dan is het
+# een melding waard, en blijft het aan de gebruiker zelf om op basis van de
+# zichtbare ✓/✗ per factor te beslissen of hij hem neemt. De factoren die
+# hun eigen candle-data ophalen (BTC-trend, Daily-trend, RSI daily, 1u
+# bevestiging, RSI 1u, Divergentie, Candlepatroon, Liquiditeit) tellen
+# "fail-closed" mee: lukt het ophalen niet, dan telt de factor als niet
+# gehaald in plaats van dat de melding daarop crasht of de factor
+# overslaat, dus een tijdelijke ophaalfout kan in het slechtste geval één
+# factor kosten.
 CONFIRM_THRESHOLD = 0.6
 
 
@@ -723,24 +725,28 @@ def confirms_direction(
     """Bepaalt of de technische data de richting uit het Discord bericht steunt.
 
     Basisversie (`include_advanced=False`, de standaard): vier factoren,
-    elk met een duidelijke ✓ of ✗, allemaal vereist:
+    elk met een duidelijke ✓ of ✗, minstens 3 van de 4 vereist (zie
+    BASIC_CONFIRM_MIN_PASSED):
     - trend: EMA9 t.o.v. EMA21 moet de richting volgen
     - momentum: MACD lijn t.o.v. signaallijn moet de richting volgen
-    - RSI mag niet al extreem tegen de richting in zitten (overbought bij
-      long, oversold bij short)
+    - RSI mag niet al extreem tegen de richting in zitten, in geen van
+      beide richtingen (overbought én oversold tellen tegen zowel long als
+      short, zie RSI_OVERSOLD/RSI_OVERBOUGHT hierboven)
     - volume moet minstens gemiddeld zijn, anders is de beweging niet
       overtuigend
 
     Uitgebreide versie (`include_advanced=True`, aan via
-    config.ENABLE_ADVANCED_FACTORS): daar komen twee vaste factoren bij,
-    trendsterkte (ADX) en volatiliteit (ATR t.o.v. zijn eigen 20-candle
-    gemiddelde), plus wat er in `extra_factors` meegegeven wordt
-    (BTC-trend, 1u bevestiging, divergentie, liquiditeit: elk een
-    (naam, ok, detail) tuple, berekend buiten deze functie omdat ze andere
-    data nodig hebben). Bevestigd is hier een kwestie van hoeveel van de
-    factoren in totaal kloppen (zie CONFIRM_THRESHOLD), niet van elke losse
-    factor apart hard vereisen: bij 10 factoren samen blokkeert anders één
-    marginale miss een verder overtuigend signaal.
+    config.ENABLE_ADVANCED_FACTORS): daar komen drie vaste factoren bij,
+    trendsterkte (ADX), volatiliteit (ATR t.o.v. zijn eigen 20-candle
+    gemiddelde) en volume-percentiel, plus wat er in `extra_factors`
+    meegegeven wordt (BTC-trend, Daily-trend, RSI daily, 1u bevestiging,
+    RSI 1u, Divergentie, Candlepatroon, Liquiditeit, Steun/weerstand: elk
+    een (naam, ok, detail) tuple, berekend buiten deze functie omdat ze
+    andere data nodig hebben — zie signal_processor.compute_advanced_extra_factors).
+    Bevestigd is hier een kwestie van hoeveel van de factoren in totaal
+    kloppen (zie CONFIRM_THRESHOLD), niet van elke losse factor apart hard
+    vereisen: bij 16 factoren samen (4 basis + 12 uitgebreid) blokkeert
+    anders één marginale miss een verder overtuigend signaal.
 
     Ontbreekt een extra check (bijvoorbeeld BTC-trend bij een BTC-signaal
     zelf), dan wordt hij simpelweg niet meegegeven en telt hij niet mee.
