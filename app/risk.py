@@ -110,6 +110,79 @@ def compute_stop_take(
 # ATR-berekening.
 MIN_LEVEL_STOP_DISTANCE_ATR_FRACTION = 0.5
 
+# Hoeveel keer het evaluatiesaldo een positie maximaal notional mag zijn,
+# exact de hefboomlimiet van de echte Kraken Prop. Was voorheen alleen in
+# web/main.py voor oefentrades, geldt nu voor elke evaluatie-gesizede trade.
+MAX_EVAL_LEVERAGE = 5.0
+
+# Reserveer bij het sizen van één trade ruimte voor nog dit aantal - 1
+# volgende trades dezelfde dag/run, in plaats van in één klap het hele
+# resterende budget op te souperen.
+EVAL_BUDGET_TRADE_RESERVE = 3
+
+# Onder dit percentage van het VOLLEDIGE dagbudget of de VOLLEDIGE
+# drawdown-ruimte is verder sizen op de evaluatie zinloos: elke nieuwe
+# trade zou toch nagenoeg nul risico mogen nemen.
+EVAL_BUDGET_BLOCK_THRESHOLD_PCT = 5.0
+
+
+def compute_eval_daily_budget_remaining(evaluation: dict, open_risk_eur: float) -> float:
+    """Wat er nog over is van het dagverlies-budget van de evaluatie: het
+    toegestane dagverlies min wat vandaag al verloren is, min het risico
+    dat al vaststaat in nog open evaluatie-trades (dat risico is nog niet
+    in current_balance verwerkt, zie repo.total_open_risk_eur_for_evaluation)."""
+    daily_loss_amount = evaluation["day_start_balance"] * evaluation["max_daily_loss_pct"] / 100
+    loss_so_far = max(0.0, evaluation["day_start_balance"] - evaluation["current_balance"])
+    return max(0.0, daily_loss_amount - loss_so_far - open_risk_eur)
+
+
+def compute_eval_drawdown_budget_remaining(evaluation: dict, open_risk_eur: float) -> float:
+    """Zelfde als compute_eval_daily_budget_remaining, maar tegen de
+    nooit-resettende drawdown-ruimte (tier_amount, niet day_start_balance)."""
+    drawdown_amount = evaluation["tier_amount"] * evaluation["max_drawdown_pct"] / 100
+    drawdown_so_far = max(0.0, evaluation["tier_amount"] - evaluation["current_balance"])
+    return max(0.0, drawdown_amount - drawdown_so_far - open_risk_eur)
+
+
+def eval_sizing_blocked(evaluation: dict, open_risk_eur: float) -> bool:
+    """True als het dagbudget of de drawdown-ruimte al zo goed als op is:
+    dan heeft verder evaluatie-sizen geen zin meer, de trade valt terug op
+    gewone portfolio-sizing en telt niet mee voor de evaluatie."""
+    daily_budget = evaluation["day_start_balance"] * evaluation["max_daily_loss_pct"] / 100
+    drawdown_budget = evaluation["tier_amount"] * evaluation["max_drawdown_pct"] / 100
+    daily_remaining_pct = (
+        compute_eval_daily_budget_remaining(evaluation, open_risk_eur) / daily_budget * 100
+        if daily_budget else 0.0
+    )
+    drawdown_remaining_pct = (
+        compute_eval_drawdown_budget_remaining(evaluation, open_risk_eur) / drawdown_budget * 100
+        if drawdown_budget else 0.0
+    )
+    return (
+        daily_remaining_pct < EVAL_BUDGET_BLOCK_THRESHOLD_PCT
+        or drawdown_remaining_pct < EVAL_BUDGET_BLOCK_THRESHOLD_PCT
+    )
+
+
+def compute_eval_risk_eur(
+    evaluation: dict, risk_percent: float, open_risk_eur: float,
+    entry_price: float, stop_loss: float,
+) -> float:
+    """Risicobedrag voor één evaluatie-gesizede trade: het kleinste van de
+    persoonlijke risk_percent-cap tegen het evaluatiesaldo, een derde van
+    het resterend dagbudget, een derde van de resterende drawdown-ruimte,
+    en de hefboomcap. Aanroeper checkt vooraf eval_sizing_blocked; deze
+    functie zelf gaat er niet vanuit dat er nog voldoende budget is."""
+    personal_cap = evaluation["current_balance"] * risk_percent / 100
+    daily_share = compute_eval_daily_budget_remaining(evaluation, open_risk_eur) / EVAL_BUDGET_TRADE_RESERVE
+    drawdown_share = compute_eval_drawdown_budget_remaining(evaluation, open_risk_eur) / EVAL_BUDGET_TRADE_RESERVE
+    stop_distance = abs(entry_price - stop_loss)
+    leverage_cap = (
+        MAX_EVAL_LEVERAGE * evaluation["current_balance"] * stop_distance / entry_price
+        if stop_distance > 0 and entry_price > 0 else float("inf")
+    )
+    return max(0.0, min(personal_cap, daily_share, drawdown_share, leverage_cap))
+
 
 def compute_stop_take_from_levels(
     direction: str, entry_price: float, atr: float, levels: list[float],
