@@ -255,14 +255,36 @@ def compute_risk_eur(portfolio_eur: float, risk_percent: float) -> float:
     return portfolio_eur * (risk_percent / 100.0)
 
 
-def compute_position_size(risk_eur: float, entry_price: float, stop_loss: float) -> Optional[float]:
+# Round-trip handelsfee (open + sluiten) van een evaluatie-account, als
+# fractie van de positiewaarde.
+EVAL_TRADE_FEE_RATE = 0.0008
+# Hefboom-/financieringskosten per dag dat een evaluatie-positie openstaat,
+# als fractie van de positiewaarde.
+EVAL_LEVERAGE_DAILY_RATE = 0.00033
+# Voorzichtige aanname voor hoeveel dagen een trade openstaat, gebruikt om
+# VOORAF (bij het bepalen van de positiegrootte) een hefboomkost in te
+# schatten voor iets waarvan de werkelijke duur nog niet bekend is. Dit is
+# een day-trading-systeem, de meeste trades zijn binnen een dag klaar; de
+# WERKELIJKE kost wordt bij het sluiten opnieuw en exact berekend (zie
+# repo.close_journal_trade), dus een te lage aanname hier wordt daar
+# gecorrigeerd, niet stilzwijgend gemist.
+EVAL_SIZING_DAYS_ASSUMPTION = 1.0
+
+
+def compute_position_size(
+    risk_eur: float, entry_price: float, stop_loss: float, cost_rate: float = 0.0,
+) -> Optional[float]:
     """Hoeveel coin je koopt bij dit risicobedrag: risicobedrag gedeeld door
-    de afstand tussen entry en stop loss. Geeft None als die afstand nul is,
-    wat niet zou moeten voorkomen maar voorkomt een deling door nul."""
+    de afstand tussen entry en stop loss, plus (voor evaluatie-trades) een
+    kostenfractie van de positiewaarde die net zo goed "verlies" is als de
+    pure prijsbeweging: fees en geschatte hefboomkosten. cost_rate is 0.0
+    voor elke niet-evaluatie-trade (ongewijzigd gedrag). Geeft None als de
+    stop-afstand nul is, wat niet zou moeten voorkomen maar voorkomt een
+    deling door nul."""
     distance = abs(entry_price - stop_loss)
     if distance <= 0:
         return None
-    return risk_eur / distance
+    return risk_eur / (distance + entry_price * cost_rate)
 
 
 def compute_unrealized_pnl(
