@@ -930,13 +930,20 @@ _JOURNAL_SELECT = """
 
 
 def create_journal_entry(
-    signal_id: int, user_id: int, risk_eur: float, evaluation_id: Optional[int] = None,
+    signal_id: int, user_id: int, risk_eur: float,
+    evaluation_id: Optional[int] = None, position_size: Optional[float] = None,
 ) -> int:
+    """position_size is de daadwerkelijk gebruikte positiegrootte (na alle
+    caps en, voor evaluatie-trades, de fee-aanpassing in
+    risk.compute_position_size). Opgeslagen zodat close_journal_trade bij
+    het sluiten precies dezelfde positiegrootte gebruikt voor de
+    fee-verrekening, in plaats van een losse herberekening die uit de pas
+    kan lopen met wat er werkelijk gesized is."""
     with db.session() as conn:
         cur = conn.execute(
-            """INSERT INTO journal_entries (signal_id, user_id, risk_eur, created_at, evaluation_id)
-               VALUES (?, ?, ?, ?, ?)""",
-            (signal_id, user_id, risk_eur, db.now_iso(), evaluation_id),
+            """INSERT INTO journal_entries (signal_id, user_id, risk_eur, created_at, evaluation_id, position_size)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (signal_id, user_id, risk_eur, db.now_iso(), evaluation_id, position_size),
         )
         return cur.lastrowid
 
@@ -1039,11 +1046,18 @@ def list_journal_for_coin(user_id: int, coin: str) -> list[dict]:
 def update_journal_status(
     entry_id: int, user_id: int, status: str, entry_price: Optional[float] = None,
 ) -> None:
+    """Zet entry_time altijd samen met entry_price: het moment waarop een
+    trade daadwerkelijk genomen wordt, nodig om bij het sluiten de
+    werkelijke hefboomkosten van een evaluatie-trade te berekenen (zie
+    close_journal_trade). Geen aparte parameter: elke bestaande aanroeper
+    die al entry_price meegeeft omdat de trade genomen wordt, krijgt dit
+    gratis mee."""
     with db.session() as conn:
         if entry_price is not None:
             conn.execute(
-                "UPDATE journal_entries SET status = ?, entry_price = ? WHERE id = ? AND user_id = ?",
-                (status, entry_price, entry_id, user_id),
+                """UPDATE journal_entries SET status = ?, entry_price = ?, entry_time = ?
+                   WHERE id = ? AND user_id = ?""",
+                (status, entry_price, db.now_iso(), entry_id, user_id),
             )
         else:
             conn.execute(
