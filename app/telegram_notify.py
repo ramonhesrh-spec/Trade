@@ -85,6 +85,10 @@ def _eval_blocked_line(note: str) -> str:
     return f"⛔ {note}"
 
 
+def _stop_capped_line(pct: float) -> str:
+    return f"📏 Stop verkrapt naar max {pct:.1f}% van de prijs vanwege de grootte van je evaluatie."
+
+
 def is_quiet_now(quiet_hours_start: Optional[str], quiet_hours_end: Optional[str]) -> bool:
     """Bepaalt of het nu binnen de stille uren van de gebruiker valt
     (bijvoorbeeld "23:00" tot "07:00", ook een venster dat over middernacht
@@ -156,6 +160,8 @@ def format_signal_message(signal: dict) -> str:
         lines += ["", _eval_budget_line(signal["risk_eur"], signal["eval_budget_pct"])]
     if signal.get("eval_blocked_note"):
         lines += ["", _eval_blocked_line(signal["eval_blocked_note"])]
+    if signal.get("stop_capped_pct") is not None:
+        lines += ["", _stop_capped_line(signal["stop_capped_pct"])]
     if signal.get("pending_count", 0) > 1:
         lines += ["", f"📋 Je hebt nu {signal['pending_count']} openstaande kansen die nog een keuze wachten."]
     lines += ["", _factor_link(signal["coin"])]
