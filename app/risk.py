@@ -267,6 +267,64 @@ def compute_stop_take_from_levels(
     return StopTake(stop_loss=stop_loss, take_profit=take_profit)
 
 
+# Bij dit evaluatiesaldo (of hoger) wordt de stop loss niet meer ingeperkt:
+# het maximum groeit dan naar STOP_CAP_MAX_PCT, wat in de praktijk geen
+# enkele normale marktstructuur-stop meer raakt (die liggen vrijwel altijd
+# onder de 5%).
+STOP_CAP_REFERENCE_TIER = 10_000.0
+# Bij een evaluatiesaldo van (bijna) nul mag de stop nog maar dit percentage
+# van de entry-prijs zijn.
+STOP_CAP_MIN_PCT = 0.01
+# Vanaf STOP_CAP_REFERENCE_TIER: dit percentage, functioneel "geen grens".
+STOP_CAP_MAX_PCT = 0.10
+
+
+def eval_max_stop_pct(tier_amount: float) -> float:
+    """Maximale stop-afstand als fractie van de entry-prijs, lineair
+    oplopend van STOP_CAP_MIN_PCT (bij tier_amount 0) tot STOP_CAP_MAX_PCT
+    (bij STOP_CAP_REFERENCE_TIER en hoger). Geen harde knip: een evaluatie
+    net onder de referentie-tier krijgt bijna dezelfde ruimte als er net
+    boven, in plaats van een plotselinge sprong."""
+    fraction = min(max(tier_amount, 0.0) / STOP_CAP_REFERENCE_TIER, 1.0)
+    return STOP_CAP_MIN_PCT + (STOP_CAP_MAX_PCT - STOP_CAP_MIN_PCT) * fraction
+
+
+def apply_eval_stop_cap(
+    direction: str, entry_price: float, stop_loss: float, take_profit: float, max_stop_pct: float,
+) -> StopTake:
+    """Trekt een te brede stop loss in tot max_stop_pct van de entry-prijs.
+    Take profit schaalt evenredig mee, zodat de risk:reward-verhouding van
+    de oorspronkelijke berekening exact behouden blijft (in plaats van een
+    aparte doelberekening te herhalen, die bij een niveau-gebaseerd target
+    andere aannames zou maken dan de oorspronkelijke keuze). Geen wijziging
+    als de bestaande stop al binnen de grens valt — dit is een bovengrens,
+    geen streefwaarde."""
+    direction = direction.lower()
+    max_distance = entry_price * max_stop_pct
+    if direction == "long":
+        current_distance = entry_price - stop_loss
+        if current_distance <= max_distance or current_distance <= 0:
+            return StopTake(stop_loss=stop_loss, take_profit=take_profit)
+        scale = max_distance / current_distance
+        reward_distance = take_profit - entry_price
+        return StopTake(
+            stop_loss=entry_price - max_distance,
+            take_profit=entry_price + reward_distance * scale,
+        )
+    elif direction == "short":
+        current_distance = stop_loss - entry_price
+        if current_distance <= max_distance or current_distance <= 0:
+            return StopTake(stop_loss=stop_loss, take_profit=take_profit)
+        scale = max_distance / current_distance
+        reward_distance = entry_price - take_profit
+        return StopTake(
+            stop_loss=entry_price + max_distance,
+            take_profit=entry_price - reward_distance * scale,
+        )
+    else:
+        raise ValueError(f"onbekende richting: {direction}")
+
+
 def compute_risk_eur(portfolio_eur: float, risk_percent: float) -> float:
     return portfolio_eur * (risk_percent / 100.0)
 
