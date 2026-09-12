@@ -77,6 +77,14 @@ def _open_risk_line(open_risk_pct: float) -> str:
     return f"{marker} Dit zou je totale open risico op {open_risk_pct:.1f}% van je portfolio brengen."
 
 
+def _eval_budget_line(risk_eur: float, eval_budget_pct: float) -> str:
+    return f"🎯 Evaluatie: risico €{risk_eur:.2f} — {eval_budget_pct:.0f}% van je resterende dagbudget."
+
+
+def _eval_blocked_line(note: str) -> str:
+    return f"⛔ {note}"
+
+
 def is_quiet_now(quiet_hours_start: Optional[str], quiet_hours_end: Optional[str]) -> bool:
     """Bepaalt of het nu binnen de stille uren van de gebruiker valt
     (bijvoorbeeld "23:00" tot "07:00", ook een venster dat over middernacht
@@ -144,6 +152,10 @@ def format_signal_message(signal: dict) -> str:
         lines += ["", signal["context_note"]]
     if signal.get("open_risk_pct") is not None:
         lines += ["", _open_risk_line(signal["open_risk_pct"])]
+    if signal.get("eval_budget_pct") is not None:
+        lines += ["", _eval_budget_line(signal["risk_eur"], signal["eval_budget_pct"])]
+    if signal.get("eval_blocked_note"):
+        lines += ["", _eval_blocked_line(signal["eval_blocked_note"])]
     if signal.get("pending_count", 0) > 1:
         lines += ["", f"📋 Je hebt nu {signal['pending_count']} openstaande kansen die nog een keuze wachten."]
     lines += ["", _factor_link(signal["coin"])]

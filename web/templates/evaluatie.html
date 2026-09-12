@@ -21,6 +21,9 @@
   <p class="summary-value" style="font-size: 32px; margin: 4px 0 16px;"><span data-countup="{{ eval_daily_loss_remaining_eur }}" data-countup-format="eur">€{{ "%.2f"|format(eval_daily_loss_remaining_eur) }}</span>
     <span class="summary-label" style="display: inline; font-size: 13px;">ruimte tot dagverlieslimiet</span>
   </p>
+  {% if eval_next_trade_budget_eur is not none %}
+  <p class="muted" style="margin: -12px 0 16px; font-size: 12.5px;">Volgende trade krijgt ongeveer €{{ "%.2f"|format(eval_next_trade_budget_eur) }} risicobudget.</p>
+  {% endif %}
   {% if eval_coaching_tip %}
   <p class="correlation-warning">
     <svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>

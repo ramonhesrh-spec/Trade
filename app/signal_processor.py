@@ -799,6 +799,23 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
             signal_id, user["id"], risk_eur, evaluation_id=evaluation_id, position_size=position_size,
         )
 
+        # Toont welk deel van het resterende dagbudget deze trade gebruikt,
+        # of dat sizing juist geblokkeerd was (dan telt de trade niet mee
+        # voor de evaluatie). _resolve_signal_risk geeft evaluation_id=None
+        # zowel als er geen actieve evaluatie is (a) als wanneer sizing
+        # geblokkeerd was (c) - door hier opnieuw de actieve evaluatie op te
+        # halen kunnen die twee gevallen wél uit elkaar gehouden worden.
+        eval_budget_pct = None
+        eval_blocked_note = None
+        active_eval_for_display = repo.get_active_evaluation(user["id"])
+        if active_eval_for_display and evaluation_id is not None:
+            open_risk_eur_display = repo.total_open_risk_eur_for_evaluation(evaluation_id)
+            daily_remaining = risk.compute_eval_daily_budget_remaining(active_eval_for_display, open_risk_eur_display)
+            trade_budget = daily_remaining / risk.EVAL_BUDGET_TRADE_RESERVE if daily_remaining else 0.0
+            eval_budget_pct = (risk_eur / trade_budget * 100) if trade_budget else 0.0
+        elif active_eval_for_display and evaluation_id is None:
+            eval_blocked_note = "Dagbudget of drawdown-ruimte van je evaluatie is (bijna) op, deze trade telt niet mee voor je evaluatie."
+
         if not user["telegram_chat_id"]:
             logger.info("Gebruiker %s heeft geen telegram_chat_id, geen melding verstuurd",
                         user["username"])
@@ -831,6 +848,7 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
                 {
                     **signal_data, "risk_eur": risk_eur, "position_size": position_size,
                     "open_risk_pct": open_risk_pct, "pending_count": pending_count,
+                    "eval_budget_pct": eval_budget_pct, "eval_blocked_note": eval_blocked_note,
                 },
                 chat_id=user["telegram_chat_id"], force_silent=force_silent, entry_id=entry_id,
             )

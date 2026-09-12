@@ -270,6 +270,7 @@ def _build_eval_context(user: dict, request: Request) -> dict:
     eval_profit_progress_pct = 0.0
     eval_daily_results = []
     eval_daily_loss_remaining_eur = None
+    eval_next_trade_budget_eur = None
     if eval_display:
         end_reference = (
             datetime.fromisoformat(eval_display["ended_at"]) if eval_display["ended_at"]
@@ -291,6 +292,7 @@ def _build_eval_context(user: dict, request: Request) -> dict:
         loss_so_far = max(0.0, display_day_start_balance - eval_display["current_balance"])
         eval_daily_loss_used_pct = min(100.0, (loss_so_far / daily_loss_amount * 100) if daily_loss_amount else 0.0)
         eval_daily_loss_remaining_eur = max(0.0, daily_loss_amount - loss_so_far)
+        eval_next_trade_budget_eur = eval_daily_loss_remaining_eur / risk.EVAL_BUDGET_TRADE_RESERVE
 
         drawdown_amount = eval_display["tier_amount"] * eval_display["max_drawdown_pct"] / 100
         drawdown_so_far = max(0.0, eval_display["tier_amount"] - eval_display["current_balance"])
@@ -326,6 +328,7 @@ def _build_eval_context(user: dict, request: Request) -> dict:
         "eval_profit_progress_pct": eval_profit_progress_pct,
         "eval_daily_results": eval_daily_results,
         "eval_daily_loss_remaining_eur": eval_daily_loss_remaining_eur,
+        "eval_next_trade_budget_eur": eval_next_trade_budget_eur,
         "eval_open_risk_eur": eval_open_risk_eur,
         "eval_open_risk_pct": eval_open_risk_pct,
     }
