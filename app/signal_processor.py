@@ -480,11 +480,15 @@ async def run_swing_check(watch_id: int) -> None:
     signal_id = repo.insert_signal(signal_data)
 
     for user in repo.list_users():
-        risk_eur, evaluation_id, cost_rate = _resolve_signal_risk(user, ind_4h.price, stop_take.stop_loss)
-        position_size = risk.compute_position_size(risk_eur, ind_4h.price, stop_take.stop_loss, cost_rate=cost_rate)
+        risk_eur, evaluation_id, cost_rate, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
+            user, direction, ind_4h.price, stop_take.stop_loss, stop_take.take_profit,
+        )
+        position_size = risk.compute_position_size(risk_eur, ind_4h.price, effective_stop_loss, cost_rate=cost_rate)
         entry_id = repo.create_journal_entry(
             signal_id, user["id"], risk_eur, evaluation_id=evaluation_id, position_size=position_size,
         )
+        if effective_stop_loss != stop_take.stop_loss:
+            repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, position_size)
         if not user["telegram_chat_id"]:
             continue
         # Geen is_coin_muted-check hier: mute geldt bewust alleen voor
@@ -494,7 +498,7 @@ async def run_swing_check(watch_id: int) -> None:
         try:
             await telegram_notify.send_swing_signal(
                 coin=coin, direction=direction, price=ind_4h.price,
-                stop_loss=stop_take.stop_loss, take_profit=stop_take.take_profit,
+                stop_loss=effective_stop_loss, take_profit=effective_take_profit,
                 daily_factors=daily_factors, factors_4h=factors_4h,
                 level_price=watch["price_level"], pattern_name=watch["pattern_name"],
                 chat_id=user["telegram_chat_id"], entry_id=entry_id, force_silent=quiet,
