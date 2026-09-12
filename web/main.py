@@ -1079,8 +1079,8 @@ async def _fetch_practice_trade_calc(symbol: str, direction: str):
 
 def _resolve_practice_risk_eur(
     user: dict, active_eval: Optional[dict], manual_risk_eur: Optional[float],
-    entry_price: float, stop_loss: float,
-) -> tuple[float, Optional[str], bool, Optional[float], float, bool]:
+    direction: str, entry_price: float, stop_loss: float, take_profit: float,
+) -> tuple[float, Optional[str], bool, Optional[float], float, bool, float, float]:
     """Risicobedrag voor een oefentrade, en cost_rate voor de fee-aanpassing
     van compute_position_size (Task 3). Zonder actieve evaluatie: exact
     zoals bij een echt signaal zonder evaluatie, handmatige invoer of
@@ -1095,15 +1095,17 @@ def _resolve_practice_risk_eur(
     evaluatie gekoppeld, anders blijft een ongecapt handmatig bedrag toch
     meetellen in repo.total_open_risk_eur_for_evaluation voor latere
     sizing op diezelfde run. Geeft (risk_eur, notitie-of-None, is-gecapt,
-    max-toegestaan-of-None, cost_rate, link_to_evaluation) — de aanroeper
-    gebruikt link_to_evaluation om evaluation_id wel/niet mee te geven aan
-    create_journal_entry."""
+    max-toegestaan-of-None, cost_rate, link_to_evaluation, effective_stop_loss,
+    effective_take_profit) — de aanroeper gebruikt link_to_evaluation om
+    evaluation_id wel/niet mee te geven aan create_journal_entry, en de
+    effectieve stop/take vervangen de ruwe waarden overal waar die verder
+    gebruikt worden (sizing, opslag, weergave)."""
     if not active_eval:
         computed_risk_eur = (
             manual_risk_eur if manual_risk_eur is not None
             else risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
         )
-        return computed_risk_eur, None, False, None, 0.0, False
+        return computed_risk_eur, None, False, None, 0.0, False, stop_loss, take_profit
 
     open_risk_eur = repo.total_open_risk_eur_for_evaluation(active_eval["id"])
     if risk.eval_sizing_blocked(active_eval, open_risk_eur):
@@ -1115,10 +1117,12 @@ def _resolve_practice_risk_eur(
             "Systeem: dagbudget of drawdown-ruimte van je evaluatie is (bijna) op, "
             "deze oefentrade telt niet mee voor je evaluatie."
         )
-        return computed_risk_eur, leverage_note, False, None, 0.0, False
+        return computed_risk_eur, leverage_note, False, None, 0.0, False, stop_loss, take_profit
 
+    max_pct = risk.eval_max_stop_pct(active_eval["tier_amount"])
+    capped_stop = risk.apply_eval_stop_cap(direction, entry_price, stop_loss, take_profit, max_pct)
     max_risk_eur = risk.compute_eval_risk_eur(
-        active_eval, user["risk_percent"], open_risk_eur, entry_price, stop_loss,
+        active_eval, user["risk_percent"], open_risk_eur, entry_price, capped_stop.stop_loss,
     )
     cost_rate = risk.EVAL_TRADE_FEE_RATE + risk.EVAL_LEVERAGE_DAILY_RATE * risk.EVAL_SIZING_DAYS_ASSUMPTION
     requested_risk_eur = manual_risk_eur if manual_risk_eur is not None else max_risk_eur
@@ -1128,7 +1132,10 @@ def _resolve_practice_risk_eur(
         f"Systeem: risico verlaagd van €{requested_risk_eur:.2f} naar €{computed_risk_eur:.2f} "
         f"om binnen de regels van je evaluatie te blijven."
     ) if capped else None
-    return computed_risk_eur, leverage_note, capped, max_risk_eur, cost_rate, True
+    return (
+        computed_risk_eur, leverage_note, capped, max_risk_eur, cost_rate, True,
+        capped_stop.stop_loss, capped_stop.take_profit,
+    )
 
 
 @app.post("/coins/{symbol}/oefen-preview")
@@ -1155,16 +1162,19 @@ async def preview_practice_trade(
 
     _df, ind, stop_take = await _fetch_practice_trade_calc(symbol, direction)
     active_eval = repo.get_active_evaluation(user["id"])
-    used_risk_eur, leverage_note, capped, max_risk_eur, cost_rate, _link_to_evaluation = _resolve_practice_risk_eur(
-        user, active_eval, manual_risk_eur, ind.price, stop_take.stop_loss,
+    (
+        used_risk_eur, leverage_note, capped, max_risk_eur, cost_rate, _link_to_evaluation,
+        effective_stop_loss, effective_take_profit,
+    ) = _resolve_practice_risk_eur(
+        user, active_eval, manual_risk_eur, direction, ind.price, stop_take.stop_loss, stop_take.take_profit,
     )
-    position_size = risk.compute_position_size(used_risk_eur, ind.price, stop_take.stop_loss, cost_rate=cost_rate)
+    position_size = risk.compute_position_size(used_risk_eur, ind.price, effective_stop_loss, cost_rate=cost_rate)
     notional_eur = (position_size * ind.price) if position_size else None
 
     return JSONResponse({
         "entry_price": ind.price,
-        "stop_loss": stop_take.stop_loss,
-        "take_profit": stop_take.take_profit,
+        "stop_loss": effective_stop_loss,
+        "take_profit": effective_take_profit,
         "requested_risk_eur": manual_risk_eur,
         "used_risk_eur": used_risk_eur,
         "position_size": position_size,
@@ -1219,16 +1229,21 @@ async def create_practice_trade(
     })
     active_eval = repo.get_active_evaluation(user["id"])
     manual_risk_eur = _parse_optional_float(risk_eur)
-    computed_risk_eur, leverage_note, _capped, _max_risk_eur, cost_rate, link_to_evaluation = _resolve_practice_risk_eur(
-        user, active_eval, manual_risk_eur, ind.price, stop_take.stop_loss,
+    (
+        computed_risk_eur, leverage_note, _capped, _max_risk_eur, cost_rate, link_to_evaluation,
+        effective_stop_loss, effective_take_profit,
+    ) = _resolve_practice_risk_eur(
+        user, active_eval, manual_risk_eur, direction, ind.price, stop_take.stop_loss, stop_take.take_profit,
     )
-    position_size = risk.compute_position_size(computed_risk_eur, ind.price, stop_take.stop_loss, cost_rate=cost_rate)
+    position_size = risk.compute_position_size(computed_risk_eur, ind.price, effective_stop_loss, cost_rate=cost_rate)
 
     entry_id = repo.create_journal_entry(
         signal_id, user["id"], computed_risk_eur,
         evaluation_id=active_eval["id"] if link_to_evaluation else None, position_size=position_size,
     )
     repo.update_journal_status(entry_id, user["id"], "genomen", entry_price=ind.price)
+    if effective_stop_loss != stop_take.stop_loss:
+        repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, position_size)
     if leverage_note:
         repo.update_journal_note(entry_id, user["id"], leverage_note)
 
