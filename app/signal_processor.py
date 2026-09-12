@@ -811,8 +811,11 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         if active_eval_for_display and evaluation_id is not None:
             open_risk_eur_display = repo.total_open_risk_eur_for_evaluation(evaluation_id)
             daily_remaining = risk.compute_eval_daily_budget_remaining(active_eval_for_display, open_risk_eur_display)
-            trade_budget = daily_remaining / risk.EVAL_BUDGET_TRADE_RESERVE if daily_remaining else 0.0
-            eval_budget_pct = (risk_eur / trade_budget * 100) if trade_budget else 0.0
+            # Percentage van het VOLLEDIGE resterende dagbudget, zoals het
+            # Telegram-label ook zegt — niet van het per-trade aandeel
+            # (dagbudget / EVAL_BUDGET_TRADE_RESERVE), want dan toont een
+            # trade die precies zijn aandeel gebruikt alarmerend "100%".
+            eval_budget_pct = (risk_eur / daily_remaining * 100) if daily_remaining else 0.0
         elif active_eval_for_display and evaluation_id is None:
             eval_blocked_note = "Dagbudget of drawdown-ruimte van je evaluatie is (bijna) op, deze trade telt niet mee voor je evaluatie."
 
@@ -832,9 +835,13 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         # Alleen bij een bevestigde kans zinvol: een afwijzing is toch geen
         # trade die risico toevoegt. Toont waar het TOTALE open risico
         # zou uitkomen als deze kans ook genomen wordt, niet alleen het
-        # risicobedrag van deze ene trade op zich.
+        # risicobedrag van deze ene trade op zich. Een evaluatie-gekoppelde
+        # trade blijft eruit: die is tegen het virtuele evaluatiesaldo
+        # gesized, dus zijn risk_eur optellen bij een percentage van het
+        # echte portfolio geeft een onzinnige, alarmerende uitslag
+        # (total_open_risk_eur laat zulke trades om dezelfde reden al weg).
         open_risk_pct = None
-        if confirmed and user["portfolio_eur"]:
+        if confirmed and user["portfolio_eur"] and evaluation_id is None:
             current_open_risk = repo.total_open_risk_eur(user["id"])
             open_risk_pct = (current_open_risk + risk_eur) / user["portfolio_eur"] * 100
 

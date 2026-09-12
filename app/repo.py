@@ -957,14 +957,19 @@ def total_open_risk_eur(user_id: int) -> float:
     """Som van het risicobedrag van alle echt open trades (eigen entry al
     ingevuld, nog niet gesloten) van deze gebruiker. Zelfde definitie van
     "echt open" als de risicogauge op het dashboard: een nog niet genomen
-    signaal heeft nog geen kapitaal gekost, een oefentrade telt nooit mee."""
+    signaal heeft nog geen kapitaal gekost, een oefentrade telt nooit mee.
+    Een aan een evaluatie gekoppelde trade telt hier evenmin mee, ook niet
+    als het een echt signaal is: die is gesized tegen het virtuele
+    evaluatiesaldo, niet tegen dit portfolio, en zou de portfolio-
+    risicogauge met een heel ander schaalbedrag laten uitslaan (het eigen
+    open risico van een run staat in total_open_risk_eur_for_evaluation)."""
     with db.session() as conn:
         row = conn.execute(
             """SELECT COALESCE(SUM(je.risk_eur), 0) AS total
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.entry_price IS NOT NULL AND je.exit_price IS NULL
-                     AND s.is_practice = 0""",
+                     AND s.is_practice = 0 AND je.evaluation_id IS NULL""",
             (user_id,),
         ).fetchone()
         return row["total"]
@@ -1296,7 +1301,14 @@ def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_tim
         # een reeks winsten of verliezen, precies zoals professionele
         # risicomanagement dat toepast. Alleen echte trades tellen mee, een
         # oefentrade raakt nooit het echte portfoliobedrag.
-        if not entry["is_practice"]:
+        # Een aan een evaluatie gekoppelde trade telt hier ook nooit mee, ook
+        # niet als het een echt signaal is (is_practice=0): zijn resultaat is
+        # op evaluatieschaal berekend (tier_amount, inclusief prop-fees
+        # hierboven) en wordt apart op het virtuele evaluatiesaldo
+        # bijgeschreven via risk.evaluate_prop_progress/
+        # update_evaluation_progress — ook op het echte portfolio optellen zou
+        # dat evaluatiebedrag een tweede keer, op echt geld, toepassen.
+        if not entry["is_practice"] and entry["evaluation_id"] is None:
             conn.execute(
                 "UPDATE users SET portfolio_eur = portfolio_eur + ? WHERE id = ?",
                 (result_eur, user_id),

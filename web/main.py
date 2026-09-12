@@ -278,15 +278,13 @@ def _build_eval_context(user: dict, request: Request) -> dict:
         )
         eval_day_number = (end_reference.date() - datetime.fromisoformat(eval_display["started_at"]).date()).days + 1
 
-        display_day_start_balance = eval_display["day_start_balance"]
-        if risk.trading_day_label(datetime.now(timezone.utc)) != eval_display["day_start_date"]:
-            # De handelsdag is inmiddels doorgeschoven maar er is nog geen
-            # trade gesloten om dat in de opgeslagen staat te verwerken
-            # (dat gebeurt pas bij de eerstvolgende sluiting via
-            # evaluate_prop_progress) — voor de weergave alvast rekenen
-            # met een verse dag, anders toont de balk en de risk-pulse
-            # ademhaling het verlies van een dag die al voorbij is.
-            display_day_start_balance = eval_display["current_balance"]
+        # Is de handelsdag inmiddels doorgeschoven zonder dat er een trade
+        # gesloten is (dan is de opgeslagen staat nog van gisteren), dan
+        # rekent deze helper al met een verse dag — anders toont de balk en
+        # de risk-pulse ademhaling het verlies van een dag die al voorbij
+        # is. Zelfde functie als de sizing gebruikt, zodat weergave en
+        # blokkade nooit uit elkaar kunnen lopen.
+        display_day_start_balance = risk.effective_day_start_balance(eval_display)
 
         daily_loss_amount = display_day_start_balance * eval_display["max_daily_loss_pct"] / 100
         loss_so_far = max(0.0, display_day_start_balance - eval_display["current_balance"])
@@ -488,10 +486,16 @@ def _add_signal_context(entries: list[dict], winrate: dict) -> list[dict]:
 
 
 def _position_size(entry: dict) -> Optional[float]:
-    """Eigen positiegrootte als die is ingevuld, anders de berekende waarde
-    op basis van risicobedrag en stop-afstand."""
+    """Eigen positiegrootte als die is ingevuld, anders de grootte waarmee de
+    trade daadwerkelijk gesized is (journal_entries.position_size, bij het
+    aanmaken opgeslagen inclusief de fee-/hefboomcorrectie van een
+    evaluatie-trade). Alleen voor oude regels van vóór die kolom bestond
+    valt dit terug op een herberekening — die trades kenden nog geen
+    kostencorrectie, dus daar ís de kale berekening de juiste waarde."""
     if entry.get("position_size_override") is not None:
         return entry["position_size_override"]
+    if entry.get("position_size") is not None:
+        return entry["position_size"]
     if entry["risk_eur"] and entry["price"] and entry["stop_loss"]:
         return risk.compute_position_size(entry["risk_eur"], entry["price"], entry["stop_loss"])
     return None
@@ -673,8 +677,12 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
 
     # Risico dat nu echt in de markt staat: alleen trades die al genomen
     # zijn (eigen entry ingevuld), niet nog niet bevestigde signalen, die
-    # hebben nog geen kapitaal gekost.
-    open_risk_eur = sum(e["risk_eur"] or 0 for e in taken_entries)
+    # hebben nog geen kapitaal gekost. Aan een evaluatie gekoppelde trades
+    # blijven eruit (zelfde regel als repo.total_open_risk_eur): die zijn
+    # tegen het virtuele evaluatiesaldo gesized en horen niet in een
+    # percentage van het echte portfolio — hun eigen gauge staat op
+    # /evaluatie (eval_open_risk_pct).
+    open_risk_eur = sum(e["risk_eur"] or 0 for e in taken_entries if e["evaluation_id"] is None)
     open_risk_pct = (open_risk_eur / user["portfolio_eur"] * 100) if user["portfolio_eur"] else 0
 
     # Portfolio-omvang schaalt mee met elke gesloten echte trade (zie
@@ -1138,9 +1146,12 @@ async def preview_practice_trade(
     if direction not in ("long", "short") or not repo.coin_is_tracked(symbol):
         return JSONResponse({"error": "ongeldige coin of richting"}, status_code=400)
 
+    # Geen voor-invulling bij een leeg risicoveld: _resolve_practice_risk_eur
+    # leest None zelf als "bepaal het bedrag", en dat valt met een actieve
+    # evaluatie op het evaluatie-bedrag uit, niet op portfolio x risk_percent.
+    # De aanmaakroute geeft None door, dus hier ook — anders toont de preview
+    # een ander bedrag dan er bij versturen echt gebruikt wordt.
     manual_risk_eur = _parse_optional_float(risk_eur)
-    if manual_risk_eur is None:
-        manual_risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
 
     _df, ind, stop_take = await _fetch_practice_trade_calc(symbol, direction)
     active_eval = repo.get_active_evaluation(user["id"])

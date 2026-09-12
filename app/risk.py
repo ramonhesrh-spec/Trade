@@ -3,7 +3,7 @@ low/high, gedeeld, hetzelfde voor iedereen), take profit op basis van de
 zo ontstane risicoafstand, en risicobedrag in euro's op basis van een eigen
 portfoliobedrag per gebruiker."""
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 ATR_BUFFER_MULTIPLIER = 0.25  # ruimte onder/boven de swing, tegen een korte wick-stop
@@ -126,13 +126,29 @@ EVAL_BUDGET_TRADE_RESERVE = 3
 EVAL_BUDGET_BLOCK_THRESHOLD_PCT = 5.0
 
 
+def effective_day_start_balance(evaluation: dict) -> float:
+    """Het saldo waar het dagverlies-budget vandaag tegen gemeten moet
+    worden. De opgeslagen day_start_balance/day_start_date rollen pas over
+    binnen evaluate_prop_progress, en die draait alleen bij het sluiten van
+    een trade: staat de opgeslagen dag al achter op de huidige handelsdag,
+    dan is er simpelweg nog niks gesloten sinds middernacht en begint de
+    nieuwe dag bij het huidige saldo. Zonder deze correctie zou de eerste
+    trade van een nieuwe dag nog tegen het uitgeputte budget van gisteren
+    gesized (en dan onterecht geblokkeerd) worden. Op één plek, gedeeld door
+    de sizing hieronder en de weergave in web/main.py:_build_eval_context."""
+    if trading_day_label(datetime.now(timezone.utc)) != evaluation["day_start_date"]:
+        return evaluation["current_balance"]
+    return evaluation["day_start_balance"]
+
+
 def compute_eval_daily_budget_remaining(evaluation: dict, open_risk_eur: float) -> float:
     """Wat er nog over is van het dagverlies-budget van de evaluatie: het
     toegestane dagverlies min wat vandaag al verloren is, min het risico
     dat al vaststaat in nog open evaluatie-trades (dat risico is nog niet
     in current_balance verwerkt, zie repo.total_open_risk_eur_for_evaluation)."""
-    daily_loss_amount = evaluation["day_start_balance"] * evaluation["max_daily_loss_pct"] / 100
-    loss_so_far = max(0.0, evaluation["day_start_balance"] - evaluation["current_balance"])
+    day_start_balance = effective_day_start_balance(evaluation)
+    daily_loss_amount = day_start_balance * evaluation["max_daily_loss_pct"] / 100
+    loss_so_far = max(0.0, day_start_balance - evaluation["current_balance"])
     return max(0.0, daily_loss_amount - loss_so_far - open_risk_eur)
 
 
@@ -148,7 +164,7 @@ def eval_sizing_blocked(evaluation: dict, open_risk_eur: float) -> bool:
     """True als het dagbudget of de drawdown-ruimte al zo goed als op is:
     dan heeft verder evaluatie-sizen geen zin meer, de trade valt terug op
     gewone portfolio-sizing en telt niet mee voor de evaluatie."""
-    daily_budget = evaluation["day_start_balance"] * evaluation["max_daily_loss_pct"] / 100
+    daily_budget = effective_day_start_balance(evaluation) * evaluation["max_daily_loss_pct"] / 100
     drawdown_budget = evaluation["tier_amount"] * evaluation["max_drawdown_pct"] / 100
     daily_remaining_pct = (
         compute_eval_daily_budget_remaining(evaluation, open_risk_eur) / daily_budget * 100
