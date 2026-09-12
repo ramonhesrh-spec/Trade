@@ -177,6 +177,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     telegram_sent INTEGER NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT 'nieuw',
     entry_price REAL,
+    entry_time TEXT,
     exit_price REAL,
     exit_time TEXT,
     result_eur REAL,
@@ -187,6 +188,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     stop_loss_override REAL,
     take_profit_override REAL,
     position_size_override REAL,
+    position_size REAL,
     UNIQUE (signal_id, user_id)
 );
 

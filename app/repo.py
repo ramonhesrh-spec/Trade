@@ -903,6 +903,7 @@ _JOURNAL_SELECT = """
         je.id AS id, je.signal_id AS signal_id, je.user_id AS user_id,
         je.risk_eur AS risk_eur, je.telegram_sent AS telegram_sent,
         je.status AS status, je.entry_price AS entry_price,
+        je.entry_time AS entry_time, je.position_size AS position_size,
         je.exit_price AS exit_price, je.exit_time AS exit_time,
         je.result_eur AS result_eur, je.result_pct AS result_pct,
         je.note AS note,
