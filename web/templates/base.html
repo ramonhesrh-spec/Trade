@@ -10,6 +10,12 @@
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <link rel="manifest" href="/static/manifest.json">
+<!-- iOS negeert manifest.json's display:standalone volledig; zonder deze
+     drie meta-tags blijft "Zet op beginscherm" gewoon Safari met adresbalk
+     openen, ononderscheidbaar van de site zelf. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HesPulse">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
