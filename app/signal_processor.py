@@ -385,6 +385,26 @@ async def _send_narrative_notifications(
                               narrative["coin"], user["username"])
 
 
+def _resolve_signal_risk(
+    user: dict, entry_price: float, stop_loss: float,
+) -> tuple[float, Optional[int], Optional[float]]:
+    """Risicobedrag, evaluation_id (of None) en cost_rate (voor
+    compute_position_size) voor één signaal aan één gebruiker. Gebruikt de
+    actieve evaluatie als sizing-basis zodra die er is en er nog voldoende
+    budget is; valt anders terug op het bestaande portfolio_eur x
+    risk_percent-gedrag, exact ongewijzigd."""
+    active_eval = repo.get_active_evaluation(user["id"])
+    if active_eval:
+        open_risk_eur = repo.total_open_risk_eur_for_evaluation(active_eval["id"])
+        if not risk.eval_sizing_blocked(active_eval, open_risk_eur):
+            risk_eur = risk.compute_eval_risk_eur(
+                active_eval, user["risk_percent"], open_risk_eur, entry_price, stop_loss,
+            )
+            cost_rate = risk.EVAL_TRADE_FEE_RATE + risk.EVAL_LEVERAGE_DAILY_RATE * risk.EVAL_SIZING_DAYS_ASSUMPTION
+            return risk_eur, active_eval["id"], cost_rate
+    return risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"]), None, 0.0
+
+
 async def run_swing_check(watch_id: int) -> None:
     """Draait de volledige swing-toets voor een bewaakte watch: daily en
     4-uur factoren apart (geen gecombineerd vertrouwenscijfer), stop loss/
@@ -453,8 +473,11 @@ async def run_swing_check(watch_id: int) -> None:
     signal_id = repo.insert_signal(signal_data)
 
     for user in repo.list_users():
-        risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
-        entry_id = repo.create_journal_entry(signal_id, user["id"], risk_eur)
+        risk_eur, evaluation_id, cost_rate = _resolve_signal_risk(user, ind_4h.price, stop_take.stop_loss)
+        position_size = risk.compute_position_size(risk_eur, ind_4h.price, stop_take.stop_loss, cost_rate=cost_rate)
+        entry_id = repo.create_journal_entry(
+            signal_id, user["id"], risk_eur, evaluation_id=evaluation_id, position_size=position_size,
+        )
         if not user["telegram_chat_id"]:
             continue
         # Geen is_coin_muted-check hier: mute geldt bewust alleen voor
@@ -767,8 +790,14 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         ignored_streak = repo.consecutive_ignored_count(user["id"], interp.coin)
         muted = repo.is_coin_muted(user["id"], interp.coin)
 
-        risk_eur = risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
-        entry_id = repo.create_journal_entry(signal_id, user["id"], risk_eur)
+        risk_eur, evaluation_id, cost_rate = _resolve_signal_risk(user, ind.price, stop_take.stop_loss)
+        position_size = (
+            risk.compute_position_size(risk_eur, ind.price, stop_take.stop_loss, cost_rate=cost_rate)
+            if confirmed else None
+        )
+        entry_id = repo.create_journal_entry(
+            signal_id, user["id"], risk_eur, evaluation_id=evaluation_id, position_size=position_size,
+        )
 
         if not user["telegram_chat_id"]:
             logger.info("Gebruiker %s heeft geen telegram_chat_id, geen melding verstuurd",
@@ -782,8 +811,6 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
             logger.info("Coin %s is gemute voor gebruiker %s, geen Telegram-melding verstuurd",
                         interp.coin, user["username"])
             continue
-
-        position_size = risk.compute_position_size(risk_eur, ind.price, stop_take.stop_loss) if confirmed else None
 
         # Alleen bij een bevestigde kans zinvol: een afwijzing is toch geen
         # trade die risico toevoegt. Toont waar het TOTALE open risico
