@@ -1259,6 +1259,22 @@ def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_tim
     else:
         result_eur = risk_eur * (result_pct / 100)
 
+    # Fees en hefboomkosten van een Kraken Prop-achtig evaluatie-account
+    # gelden alleen voor trades die aan een evaluatie hangen; een gewone
+    # portfolio-trade kent dit systeem niet en result_eur blijft daar
+    # ongewijzigd, exact het bestaande gedrag.
+    if entry["evaluation_id"] is not None:
+        notional_eur = (entry["position_size"] or 0.0) * entry_price
+        trade_fee_eur = notional_eur * risk.EVAL_TRADE_FEE_RATE
+        days_held = 0.0
+        if entry["entry_time"]:
+            days_held = max(
+                0.0,
+                (datetime.fromisoformat(exit_time) - datetime.fromisoformat(entry["entry_time"])).total_seconds() / 86400,
+            )
+        leverage_cost_eur = notional_eur * risk.EVAL_LEVERAGE_DAILY_RATE * days_held
+        result_eur -= (trade_fee_eur + leverage_cost_eur)
+
     with db.session() as conn:
         conn.execute(
             """UPDATE journal_entries
