@@ -488,7 +488,7 @@ async def run_swing_check(watch_id: int) -> None:
             signal_id, user["id"], risk_eur, evaluation_id=evaluation_id, position_size=position_size,
         )
         if effective_stop_loss != stop_take.stop_loss:
-            repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, position_size)
+            repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, None)
         if not user["telegram_chat_id"]:
             continue
         # Geen is_coin_muted-check hier: mute geldt bewust alleen voor
@@ -828,7 +828,7 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         # update_journal_levels's eigen COALESCE-gedrag (leeg = terugvallen
         # op het signaal) blijft voor hen intact.
         if effective_stop_loss != stop_take.stop_loss:
-            repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, position_size)
+            repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, None)
 
         # Toont welk deel van het resterende dagbudget deze trade gebruikt,
         # of dat sizing juist geblokkeerd was (dan telt de trade niet mee
@@ -888,7 +888,10 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
                     "open_risk_pct": open_risk_pct, "pending_count": pending_count,
                     "eval_budget_pct": eval_budget_pct, "eval_blocked_note": eval_blocked_note,
                     "stop_loss": effective_stop_loss, "take_profit": effective_take_profit,
-                    "stop_capped_pct": (max_pct_for_display * 100) if stop_was_capped else None,
+                    "stop_capped_pct": (
+                        (max_pct_for_display * 100)
+                        if stop_was_capped and max_pct_for_display is not None else None
+                    ),
                 },
                 chat_id=user["telegram_chat_id"], force_silent=force_silent, entry_id=entry_id,
             )
@@ -898,7 +901,10 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
                               user["username"], signal_id)
             continue
 
-        if chart_bytes:
+        # Bij een gecapte stop toont de gedeelde grafiek (ongecapte stop) een
+        # ander getal dan de tekst van hetzelfde bericht — dan liever geen
+        # plaatje sturen dan een misleidend plaatje.
+        if chart_bytes and not stop_was_capped:
             try:
                 await telegram_notify.send_signal_chart(
                     chart_bytes, interp.coin, interp.direction, chat_id=user["telegram_chat_id"],

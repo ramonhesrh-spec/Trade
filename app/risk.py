@@ -272,10 +272,13 @@ def compute_stop_take_from_levels(
 # enkele normale marktstructuur-stop meer raakt (die liggen vrijwel altijd
 # onder de 5%).
 STOP_CAP_REFERENCE_TIER = 10_000.0
-# Bij een evaluatiesaldo van (bijna) nul mag de stop nog maar dit percentage
-# van de entry-prijs zijn.
+# Bij een (bijna) nul zo groot gekozen evaluatie-tier (tier_amount, niet het
+# live current_balance — de cap verandert dus NIET mee met winst/verlies
+# binnen dezelfde evaluatie, alleen met de gekozen groottekeuze) mag de stop
+# nog maar dit percentage van de entry-prijs zijn.
 STOP_CAP_MIN_PCT = 0.01
-# Vanaf STOP_CAP_REFERENCE_TIER: dit percentage, functioneel "geen grens".
+# Vanaf STOP_CAP_REFERENCE_TIER (tier_amount): dit percentage, functioneel
+# "geen grens".
 STOP_CAP_MAX_PCT = 0.10
 
 

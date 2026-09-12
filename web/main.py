@@ -1243,7 +1243,7 @@ async def create_practice_trade(
     )
     repo.update_journal_status(entry_id, user["id"], "genomen", entry_price=ind.price)
     if effective_stop_loss != stop_take.stop_loss:
-        repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, position_size)
+        repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, None)
     if leverage_note:
         repo.update_journal_note(entry_id, user["id"], leverage_note)
 
@@ -1264,12 +1264,21 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         [e for e in entries if e["entry_price"] is not None and e["exit_price"] is None]
     )
     open_signal_ids = {e["signal_id"] for e in open_trades}
+    # Journal-rijen zonder eigen entry_price (nog niet genomen) kunnen al wel
+    # een per-gebruiker stop/take-override hebben (evaluatie-stop-cap) — die
+    # override moet hier getoond worden, anders wijkt de coin-pagina af van
+    # het Telegram-bericht en het dashboard voor dezelfde, nog open kans.
+    pending_by_signal_id = {e["signal_id"]: e for e in entries if e["entry_price"] is None}
     recent_signals = [
         s for s in repo.list_recent_signals(symbol)
         if s["id"] not in open_signal_ids and (s["stop_loss"] or s["take_profit"])
     ]
     for s in recent_signals:
         s.setdefault("entry_price", None)  # signalen zijn geen journal-rijen, dat veld bestaat niet
+        pending_entry = pending_by_signal_id.get(s["id"])
+        if pending_entry is not None:
+            s["stop_loss"] = pending_entry["stop_loss"]
+            s["take_profit"] = pending_entry["take_profit"]
     winrate = repo.winrate_stats(user["id"])
     open_trades = _add_signal_context(open_trades, winrate)
     recent_signals = _add_signal_context(recent_signals, winrate)
