@@ -386,23 +386,30 @@ async def _send_narrative_notifications(
 
 
 def _resolve_signal_risk(
-    user: dict, entry_price: float, stop_loss: float,
-) -> tuple[float, Optional[int], Optional[float]]:
-    """Risicobedrag, evaluation_id (of None) en cost_rate (voor
-    compute_position_size) voor één signaal aan één gebruiker. Gebruikt de
-    actieve evaluatie als sizing-basis zodra die er is en er nog voldoende
-    budget is; valt anders terug op het bestaande portfolio_eur x
-    risk_percent-gedrag, exact ongewijzigd."""
+    user: dict, direction: str, entry_price: float, stop_loss: float, take_profit: float,
+) -> tuple[float, Optional[int], float, float, float]:
+    """Risicobedrag, evaluation_id (of None), cost_rate, en de effectieve
+    (mogelijk ingeperkte) stop_loss/take_profit voor één signaal aan één
+    gebruiker. Gebruikt de actieve evaluatie als sizing-basis zodra die er
+    is en er nog voldoende budget is — inclusief het inperken van de stop
+    loss op basis van het evaluatiesaldo (zie risk.apply_eval_stop_cap),
+    zodat een klein evaluatiesaldo niet door één te brede
+    marktstructuur-stop meteen een groot deel van het dagbudget/de
+    drawdown-ruimte kan kosten. Valt anders terug op het bestaande
+    portfolio_eur x risk_percent-gedrag met de ONGEWIJZIGDE, gedeelde
+    stop_loss/take_profit — exact zoals vóór dit deelproject."""
     active_eval = repo.get_active_evaluation(user["id"])
     if active_eval:
         open_risk_eur = repo.total_open_risk_eur_for_evaluation(active_eval["id"])
         if not risk.eval_sizing_blocked(active_eval, open_risk_eur):
+            max_pct = risk.eval_max_stop_pct(active_eval["tier_amount"])
+            capped = risk.apply_eval_stop_cap(direction, entry_price, stop_loss, take_profit, max_pct)
             risk_eur = risk.compute_eval_risk_eur(
-                active_eval, user["risk_percent"], open_risk_eur, entry_price, stop_loss,
+                active_eval, user["risk_percent"], open_risk_eur, entry_price, capped.stop_loss,
             )
             cost_rate = risk.EVAL_TRADE_FEE_RATE + risk.EVAL_LEVERAGE_DAILY_RATE * risk.EVAL_SIZING_DAYS_ASSUMPTION
-            return risk_eur, active_eval["id"], cost_rate
-    return risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"]), None, 0.0
+            return risk_eur, active_eval["id"], cost_rate, capped.stop_loss, capped.take_profit
+    return risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"]), None, 0.0, stop_loss, take_profit
 
 
 async def run_swing_check(watch_id: int) -> None:
@@ -790,14 +797,34 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         ignored_streak = repo.consecutive_ignored_count(user["id"], interp.coin)
         muted = repo.is_coin_muted(user["id"], interp.coin)
 
-        risk_eur, evaluation_id, cost_rate = _resolve_signal_risk(user, ind.price, stop_take.stop_loss)
+        # Vóór _resolve_signal_risk opgehaald (in plaats van pas bij de
+        # eval_budget_pct/eval_blocked_note-berekening verderop), zodat
+        # max_pct_for_display hieronder dezelfde, al opgehaalde evaluatie
+        # kan hergebruiken zonder repo.get_active_evaluation een tweede
+        # keer aan te roepen.
+        active_eval_for_display = repo.get_active_evaluation(user["id"])
+
+        risk_eur, evaluation_id, cost_rate, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
+            user, interp.direction, ind.price, stop_take.stop_loss, stop_take.take_profit,
+        )
+        max_pct_for_display = (
+            risk.eval_max_stop_pct(active_eval_for_display["tier_amount"])
+            if active_eval_for_display and evaluation_id is not None else None
+        )
         position_size = (
-            risk.compute_position_size(risk_eur, ind.price, stop_take.stop_loss, cost_rate=cost_rate)
+            risk.compute_position_size(risk_eur, ind.price, effective_stop_loss, cost_rate=cost_rate)
             if confirmed else None
         )
         entry_id = repo.create_journal_entry(
             signal_id, user["id"], risk_eur, evaluation_id=evaluation_id, position_size=position_size,
         )
+        # Alleen zetten als de stop voor deze gebruiker daadwerkelijk is
+        # ingeperkt: het gedeelde signaal blijft zo de bron van waarheid
+        # voor elke gebruiker zonder (bruikbare) evaluatie, en
+        # update_journal_levels's eigen COALESCE-gedrag (leeg = terugvallen
+        # op het signaal) blijft voor hen intact.
+        if effective_stop_loss != stop_take.stop_loss:
+            repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, position_size)
 
         # Toont welk deel van het resterende dagbudget deze trade gebruikt,
         # of dat sizing juist geblokkeerd was (dan telt de trade niet mee
@@ -807,7 +834,6 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         # halen kunnen die twee gevallen wél uit elkaar gehouden worden.
         eval_budget_pct = None
         eval_blocked_note = None
-        active_eval_for_display = repo.get_active_evaluation(user["id"])
         if active_eval_for_display and evaluation_id is not None:
             open_risk_eur_display = repo.total_open_risk_eur_for_evaluation(evaluation_id)
             daily_remaining = risk.compute_eval_daily_budget_remaining(active_eval_for_display, open_risk_eur_display)
@@ -851,11 +877,14 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
 
         force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
+            stop_was_capped = effective_stop_loss != stop_take.stop_loss
             await telegram_notify.send_signal(
                 {
                     **signal_data, "risk_eur": risk_eur, "position_size": position_size,
                     "open_risk_pct": open_risk_pct, "pending_count": pending_count,
                     "eval_budget_pct": eval_budget_pct, "eval_blocked_note": eval_blocked_note,
+                    "stop_loss": effective_stop_loss, "take_profit": effective_take_profit,
+                    "stop_capped_pct": (max_pct_for_display * 100) if stop_was_capped else None,
                 },
                 chat_id=user["telegram_chat_id"], force_silent=force_silent, entry_id=entry_id,
             )
