@@ -629,6 +629,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     # is zonder dat de gebruiker er zelf iets voor deed.
     taken_entries = [e for e in open_entries if e["entry_price"] is not None]
     pending_entries = [e for e in open_entries if e["entry_price"] is None]
+    _attach_discipline_facts(taken_entries)
 
     # Correlatie-waarschuwing: het totale open-risicopercentage hieronder
     # telt euro's bij elkaar op, maar zegt niks over of die posities
@@ -773,6 +774,7 @@ async def export_journal_csv(user: dict = Depends(require_login)):
         "tijdstip", "coin", "richting", "vertrouwen", "technisch_bevestigd",
         "prijs", "stop_loss", "take_profit", "risicobedrag_eur", "status",
         "entry_price", "exit_price", "exit_time", "resultaat_eur", "resultaat_pct", "notitie",
+        "evaluatie_gekoppeld",
     ])
     for e in entries:
         writer.writerow([
@@ -781,6 +783,10 @@ async def export_journal_csv(user: dict = Depends(require_login)):
             e["price"], e["stop_loss"], e["take_profit"], e["risk_eur"], e["status"],
             e["entry_price"], e["exit_price"], e["exit_time"], e["result_eur"], e["result_pct"],
             e["note"] or "",
+            # Zonder deze kolom mengen euro's op evaluatie-schaal (tier_amount)
+            # zich onopvallend tussen euro's op echte portfolio-schaal in
+            # dezelfde risicobedrag_eur/resultaat_eur-kolommen.
+            "ja" if e.get("evaluation_id") else "nee",
         ])
 
     filename = f"hespulse-logboek-{user['username']}.csv"
@@ -907,7 +913,22 @@ async def close_journal(
             # of handmatig gestopt) is bevroren: dit resultaat telt niet
             # meer mee, zie de spec.
             if active_eval and active_eval["status"] == "actief":
-                progress = risk.evaluate_prop_progress(active_eval, result_eur, datetime.now(timezone.utc))
+                # De handelsdag-grens moet op DEZELFDE tijdstip-bron draaien
+                # als de rest van de evaluatie-boekhouding (close_journal_trade's
+                # fee-duur, list_evaluation_daily_results/list_evaluation_
+                # balance_curve's dag-groepering): allemaal op exit_time, niet
+                # op het moment dat dit request toevallig verwerkt wordt. Een
+                # trade die je later op de dag afsluit dan hij feitelijk
+                # sloot, resette anders het dagbudget op de verkeerde dag.
+                try:
+                    closed_at = datetime.fromisoformat(exit_time)
+                except (ValueError, TypeError):
+                    # Zelfde beschermende fallback als elders bij een
+                    # niet-ISO exit_time (bv. een browser zonder
+                    # datetime-local-ondersteuning): dan liever het moment
+                    # van verwerken dan de hele close laten mislukken.
+                    closed_at = datetime.now(timezone.utc)
+                progress = risk.evaluate_prop_progress(active_eval, result_eur, closed_at)
                 repo.update_evaluation_state(
                     evaluation_id, progress.current_balance, progress.day_start_balance, progress.day_start_date,
                 )

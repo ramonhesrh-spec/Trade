@@ -293,11 +293,20 @@ def format_swing_message(
     coin: str, direction: str, price: float, stop_loss: float, take_profit: float,
     daily_factors: list[tuple[str, bool, str]], factors_4h: list[tuple[str, bool, str]],
     level_price: float, pattern_name: Optional[str],
+    eval_budget_pct: Optional[float] = None, eval_blocked_note: Optional[str] = None,
+    stop_capped_pct: Optional[float] = None, risk_eur: Optional[float] = None,
 ) -> str:
     """Melding voor een bevestigde swing-kans: de prijs is weer dichtbij
     een bewaakt bron-niveau gekomen. Factoren op twee tijdshorizons los
     getoond, geen gecombineerd vertrouwenscijfer: dat is nog niet
-    gevalideerd voor deze tijdshorizon (zie de spec)."""
+    gevalideerd voor deze tijdshorizon (zie de spec).
+
+    De laatste vier parameters geven dezelfde evaluatie-context als een
+    day-trading melding (format_signal_message): zonder deze regels wist
+    een evaluatie-gebruiker bij een swing-kans niet dat zijn dagbudget
+    geraakt is, geblokkeerd is, of dat zijn stop verkrapt is — allemaal
+    None als er geen (bruikbare) evaluatie is, exact het bestaande
+    gedrag."""
     niveau_label = f"{level_price:.4f}" + (f" ({pattern_name})" if pattern_name else "")
     lines = [
         f"{_direction_emoji(direction)} {_coin_label(coin)} · {_direction_label(direction)}",
@@ -321,8 +330,14 @@ def format_swing_message(
         "",
         "Geen vertrouwenspercentage: deze toets is nog niet gevalideerd op deze "
         "tijdshorizon, beoordeel de factoren hierboven zelf.",
-        DIVIDER, f"⚠️ {config.DISCLAIMER}",
     ]
+    if eval_budget_pct is not None and risk_eur is not None:
+        lines += ["", _eval_budget_line(risk_eur, eval_budget_pct)]
+    if eval_blocked_note:
+        lines += ["", _eval_blocked_line(eval_blocked_note)]
+    if stop_capped_pct is not None:
+        lines += ["", _stop_capped_line(stop_capped_pct)]
+    lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
 
 
@@ -331,6 +346,8 @@ async def send_swing_signal(
     daily_factors: list[tuple[str, bool, str]], factors_4h: list[tuple[str, bool, str]],
     level_price: float, pattern_name: Optional[str],
     chat_id: str, entry_id: int, force_silent: bool = False,
+    eval_budget_pct: Optional[float] = None, eval_blocked_note: Optional[str] = None,
+    stop_capped_pct: Optional[float] = None, risk_eur: Optional[float] = None,
 ) -> None:
     """Niet-stille melding (tenzij de gebruiker in zijn eigen stille uren
     zit): een bevestigde swing-kans is zeldzaam en juist bedoeld om niet
@@ -342,6 +359,8 @@ async def send_swing_signal(
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
     text = format_swing_message(
         coin, direction, price, stop_loss, take_profit, daily_factors, factors_4h, level_price, pattern_name,
+        eval_budget_pct=eval_budget_pct, eval_blocked_note=eval_blocked_note,
+        stop_capped_pct=stop_capped_pct, risk_eur=risk_eur,
     )
     keyboard = _journal_action_keyboard(entry_id)
     await bot.send_message(chat_id=chat_id, text=text, disable_notification=force_silent, reply_markup=keyboard)

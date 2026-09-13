@@ -189,6 +189,7 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     take_profit_override REAL,
     position_size_override REAL,
     position_size REAL,
+    evaluation_id INTEGER REFERENCES prop_evaluations(id),
     UNIQUE (signal_id, user_id)
 );
 

@@ -1056,14 +1056,45 @@ def update_journal_status(
     werkelijke hefboomkosten van een evaluatie-trade te berekenen (zie
     close_journal_trade). Geen aparte parameter: elke bestaande aanroeper
     die al entry_price meegeeft omdat de trade genomen wordt, krijgt dit
-    gratis mee."""
+    gratis mee.
+
+    Als deze regel aan een evaluatie gekoppeld is en nog geen position_size
+    heeft (een signaal dat bij het versturen niet bevestigd was — dus geen
+    positiegrootte kreeg — maar later toch genomen wordt), wordt die hier
+    alsnog berekend tegen de WERKELIJKE entry_price. Zonder dit blijft
+    position_size None, waardoor close_journal_trade's fee/hefboomkosten-
+    berekening (notional_eur = position_size * entry_price) op nul uitkomt
+    en een evaluatie-trade zo geen fees betaalt."""
     with db.session() as conn:
         if entry_price is not None:
-            conn.execute(
-                """UPDATE journal_entries SET status = ?, entry_price = ?, entry_time = ?
-                   WHERE id = ? AND user_id = ?""",
-                (status, entry_price, db.now_iso(), entry_id, user_id),
-            )
+            row = conn.execute(
+                """SELECT je.evaluation_id AS evaluation_id, je.risk_eur AS risk_eur,
+                          je.position_size AS position_size,
+                          COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss
+                   FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+                   WHERE je.id = ? AND je.user_id = ?""",
+                (entry_id, user_id),
+            ).fetchone()
+            if (
+                row and row["position_size"] is None and row["evaluation_id"] is not None
+                and row["stop_loss"] is not None
+            ):
+                cost_rate = risk.EVAL_TRADE_FEE_RATE + risk.EVAL_LEVERAGE_DAILY_RATE * risk.EVAL_SIZING_DAYS_ASSUMPTION
+                position_size = risk.compute_position_size(
+                    row["risk_eur"] or 0.0, entry_price, row["stop_loss"], cost_rate=cost_rate,
+                )
+                conn.execute(
+                    """UPDATE journal_entries
+                       SET status = ?, entry_price = ?, entry_time = ?, position_size = ?
+                       WHERE id = ? AND user_id = ?""",
+                    (status, entry_price, db.now_iso(), position_size, entry_id, user_id),
+                )
+            else:
+                conn.execute(
+                    """UPDATE journal_entries SET status = ?, entry_price = ?, entry_time = ?
+                       WHERE id = ? AND user_id = ?""",
+                    (status, entry_price, db.now_iso(), entry_id, user_id),
+                )
         else:
             conn.execute(
                 "UPDATE journal_entries SET status = ? WHERE id = ? AND user_id = ?",
@@ -1836,14 +1867,19 @@ def list_evaluation_balance_curve(evaluation_id: int) -> list[dict]:
 
 
 def list_evaluation_trade_context(evaluation_id: int) -> list[dict]:
-    """Elke aan deze run gekoppelde trade (open of gesloten) met de context
-    die het disciplineprofiel op de evaluatiepagina nodig heeft: welk
-    volgnummer die trade was op zijn handelsdag (op basis van created_at,
-    het moment waarop een oefentrade altijd meteen genomen wordt — zie
-    web/main.py:create_practice_trade), hoeveel procent van het toenmalige
-    saldo het risico was, en het vertrouwen-niveau van het signaal. Puur
-    feiten, geen oordeel: het disciplineprofiel trekt daar zelf patronen
-    uit in plaats van dat hier al een vaste regel ingebakken zit.
+    """Elke aan deze run gekoppelde, DAADWERKELIJK GENOMEN trade (open of
+    gesloten) met de context die het disciplineprofiel op de
+    evaluatiepagina nodig heeft: welk volgnummer die trade was op zijn
+    handelsdag (op basis van created_at), hoeveel procent van het
+    toenmalige saldo het risico was, en het vertrouwen-niveau van het
+    signaal. Sluit een nog niet genomen (entry_price NULL) of genegeerde
+    kans uit: sinds echte, aan een evaluatie gekoppelde signalen ontstaat
+    een logboekregel al bij de MELDING, niet bij het nemen (anders dan een
+    oefentrade, die altijd meteen genomen wordt) — zonder dit filter telde
+    elke ontvangen melding mee als "trade vandaag", ook een die nooit
+    genomen is. Puur feiten, geen oordeel: het disciplineprofiel trekt daar
+    zelf patronen uit in plaats van dat hier al een vaste regel ingebakken
+    zit.
 
     Saldo-op-dat-moment is tier_amount plus het resultaat van elke trade
     die vóór dit created_at al gesloten was (exit_time < created_at,
@@ -1860,7 +1896,8 @@ def list_evaluation_trade_context(evaluation_id: int) -> list[dict]:
                       je.risk_eur AS risk_eur, je.result_eur AS result_eur,
                       s.coin AS coin, s.direction AS direction, s.confidence AS confidence
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
-               WHERE je.evaluation_id = ?
+               WHERE je.evaluation_id = ? AND je.entry_price IS NOT NULL
+                     AND je.status != 'genegeerd'
                ORDER BY je.created_at""",
             (evaluation_id,),
         )]

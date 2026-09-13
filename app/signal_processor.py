@@ -480,14 +480,33 @@ async def run_swing_check(watch_id: int) -> None:
     signal_id = repo.insert_signal(signal_data)
 
     for user in repo.list_users():
+        active_eval_for_display = repo.get_active_evaluation(user["id"])
         risk_eur, evaluation_id, cost_rate, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
             user, direction, ind_4h.price, stop_take.stop_loss, stop_take.take_profit,
         )
+        max_pct_for_display = (
+            risk.eval_max_stop_pct(active_eval_for_display["tier_amount"])
+            if active_eval_for_display and evaluation_id is not None else None
+        )
+        # Een swing-stop staat expres net voorbij het bewaakte niveau: de
+        # hele premisse van het signaal is dat het niveau standhoudt. Zou
+        # de cap de stop tot voorbij dat niveau optrekken (long) of
+        # terugtrekken (short), dan verdedigt de "gecapte" stop het niveau
+        # niet meer en is hij zinlozer dan de bredere, ongecapte stop. Dan
+        # liever geen cap voor deze ene trade dan een omgekeerde premisse.
+        level = watch["price_level"]
+        stop_was_capped = effective_stop_loss != stop_take.stop_loss
+        if stop_was_capped and (
+            (direction == "long" and effective_stop_loss >= level)
+            or (direction == "short" and effective_stop_loss <= level)
+        ):
+            effective_stop_loss, effective_take_profit = stop_take.stop_loss, stop_take.take_profit
+            stop_was_capped = False
         position_size = risk.compute_position_size(risk_eur, ind_4h.price, effective_stop_loss, cost_rate=cost_rate)
         entry_id = repo.create_journal_entry(
             signal_id, user["id"], risk_eur, evaluation_id=evaluation_id, position_size=position_size,
         )
-        if effective_stop_loss != stop_take.stop_loss:
+        if stop_was_capped:
             repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, None)
         if not user["telegram_chat_id"]:
             continue
@@ -495,6 +514,16 @@ async def run_swing_check(watch_id: int) -> None:
         # day-trading meldingen (zie de spec), een swing-melding is
         # zeldzaam en juist bedoeld om een grote kans nooit te missen.
         quiet = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+
+        eval_budget_pct = None
+        eval_blocked_note = None
+        if active_eval_for_display and evaluation_id is not None:
+            open_risk_eur_display = repo.total_open_risk_eur_for_evaluation(evaluation_id)
+            daily_remaining = risk.compute_eval_daily_budget_remaining(active_eval_for_display, open_risk_eur_display)
+            eval_budget_pct = (risk_eur / daily_remaining * 100) if daily_remaining else 0.0
+        elif active_eval_for_display and evaluation_id is None:
+            eval_blocked_note = "Dagbudget of drawdown-ruimte van je evaluatie is (bijna) op, deze trade telt niet mee voor je evaluatie."
+
         try:
             await telegram_notify.send_swing_signal(
                 coin=coin, direction=direction, price=ind_4h.price,
@@ -502,6 +531,9 @@ async def run_swing_check(watch_id: int) -> None:
                 daily_factors=daily_factors, factors_4h=factors_4h,
                 level_price=watch["price_level"], pattern_name=watch["pattern_name"],
                 chat_id=user["telegram_chat_id"], entry_id=entry_id, force_silent=quiet,
+                eval_budget_pct=eval_budget_pct, eval_blocked_note=eval_blocked_note,
+                stop_capped_pct=(max_pct_for_display * 100) if stop_was_capped and max_pct_for_display is not None else None,
+                risk_eur=risk_eur,
             )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
