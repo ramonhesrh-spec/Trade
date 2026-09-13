@@ -944,7 +944,10 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
     — anders blijft een eerdere cap voor altijd hangen zodra een latere
     update geen cap meer oplevert (te ruime nieuwe stop, evaluatie
     inmiddels geblokkeerd of bevroren). None valt terug op het gedeelde
-    signaal via de bestaande COALESCE in _JOURNAL_SELECT.
+    signaal via de bestaande COALESCE in _JOURNAL_SELECT. De opgeslagen
+    (auto-)positiegrootte wordt in hetzelfde geval meegeschaald naar de
+    nieuwe effectieve stop, anders blijft hij op de oude stop-afstand
+    gebaseerd en horen grootte en stop niet meer bij hetzelfde risicobedrag.
 
     Een AL GENOMEN trade (eigen entry_price staat al vast, een echte open
     positie) blijft bewust ongemoeid: het risico van een al lopende positie
@@ -985,6 +988,18 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
                 effective_take_profit if stop_was_capped else None,
                 None,
             )
+            # De opgeslagen (auto-)positiegrootte is gesized tegen de OUDE
+            # effectieve stop; zonder dit meeschalen blijft hij daarop
+            # hangen zodra effective_stop_loss hierboven verandert, en komt
+            # de getoonde grootte niet meer overeen met entry["risk_eur"]
+            # tegen de NIEUWE stop. Alleen zinvol voor een bevestigde kans,
+            # net als bij het aanmaken (position_size is anders None).
+            if signal_data.get("technical_confirmed"):
+                cost_rate = risk.EVAL_TRADE_FEE_RATE + risk.EVAL_LEVERAGE_DAILY_RATE * risk.EVAL_SIZING_DAYS_ASSUMPTION
+                new_position_size = risk.compute_position_size(
+                    entry["risk_eur"] or 0.0, signal_data["price"], effective_stop_loss, cost_rate=cost_rate,
+                )
+                repo.update_journal_position_size(entry["id"], user["id"], new_position_size)
             message_data = {
                 **signal_data, "stop_loss": effective_stop_loss, "take_profit": effective_take_profit,
                 "stop_capped_pct": (

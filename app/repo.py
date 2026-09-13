@@ -1343,6 +1343,20 @@ def update_journal_levels(
         )
 
 
+def update_journal_position_size(entry_id: int, user_id: int, position_size: Optional[float]) -> None:
+    """Herberekende AUTO-positiegrootte (de kolom zelf, niet
+    position_size_override) op een nog niet genomen regel, gebruikt als de
+    effectieve stop loss van een evaluatie-gekoppelde regel verandert door
+    een signaal-update: zonder dit blijft de opgeslagen grootte op de OUDE
+    stop-afstand gebaseerd, waardoor de getoonde grootte en de nieuwe stop
+    niet meer bij hetzelfde risicobedrag horen."""
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE journal_entries SET position_size = ? WHERE id = ? AND user_id = ?",
+            (position_size, entry_id, user_id),
+        )
+
+
 def list_open_entries_with_levels() -> list[dict]:
     """Alle open logboekregels (eigen entry ingevuld, nog niet gesloten, nog
     geen seintje verstuurd), van alle gebruikers, met de coin, richting,
