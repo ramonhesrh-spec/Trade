@@ -1268,7 +1268,10 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     # een per-gebruiker stop/take-override hebben (evaluatie-stop-cap) — die
     # override moet hier getoond worden, anders wijkt de coin-pagina af van
     # het Telegram-bericht en het dashboard voor dezelfde, nog open kans.
-    pending_by_signal_id = {e["signal_id"]: e for e in entries if e["entry_price"] is None}
+    pending_by_signal_id = {
+        e["signal_id"]: e for e in entries
+        if e["entry_price"] is None and e["status"] != "genegeerd"
+    }
     recent_signals = [
         s for s in repo.list_recent_signals(symbol)
         if s["id"] not in open_signal_ids and (s["stop_loss"] or s["take_profit"])

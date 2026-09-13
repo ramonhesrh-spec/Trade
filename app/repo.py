@@ -1619,8 +1619,7 @@ def period_stats(user_id: int, since_iso: str) -> dict:
             """SELECT COUNT(*) AS n,
                       SUM(CASE WHEN s.technical_confirmed AND s.trade_type = 'day_trading' THEN 1 ELSE 0 END) AS hoog
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
-               WHERE je.user_id = ? AND je.created_at >= ? AND s.is_practice = 0
-                     AND je.evaluation_id IS NULL""",
+               WHERE je.user_id = ? AND je.created_at >= ? AND s.is_practice = 0""",
             (user_id, since_iso),
         ).fetchone()
         closed = conn.execute(

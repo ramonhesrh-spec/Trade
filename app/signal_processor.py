@@ -929,35 +929,61 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
     bericht over dezelfde coin is altijd het melden waard. Maakt geen nieuwe
     logboekregel aan, die bestaat al.
 
-    Een nog niet genomen (pending) logboekregel van een evaluatie-gebruiker
-    krijgt hier dezelfde per-gebruiker stop-inperking als bij het aanmaken
-    van een nieuw signaal (_resolve_signal_risk), en de override wordt
-    bijgewerkt zodat hij niet bevroren blijft op de oude waarde. Een AL
-    GENOMEN trade (eigen entry_price staat al vast, een echte open positie)
-    blijft bewust ongemoeid: het risico van een al lopende positie
-    verandert niet met terugwerkende kracht door een nieuw bericht — dat
-    is een expliciete keuze van de product owner, geen omissie."""
+    Een nog niet genomen (pending) logboekregel die AL aan een evaluatie
+    gekoppeld is (evaluation_id gezet bij aanmaak) krijgt hier de vernieuwde
+    cap van PRECIES DIE evaluatie (niet "de huidige actieve evaluatie van de
+    gebruiker" — die kan intussen een andere, nieuwere run zijn). Een
+    gewone portfolio-trade (evaluation_id is None) wordt hier NOOIT gecapt,
+    ongeacht of de gebruiker inmiddels wel een evaluatie is gestart: anders
+    krijgt een trade die tegen het echte portfolio gesized is een cap die
+    bij een heel andere berekening hoort. Een evaluatie die niet meer
+    'actief' is, is bevroren (zelfde regel als close_journal_trade): geen
+    cap meer, de override valt terug op het gedeelde signaal.
+
+    De override wordt ALTIJD herschreven, ook als er nu geen cap meer geldt
+    — anders blijft een eerdere cap voor altijd hangen zodra een latere
+    update geen cap meer oplevert (te ruime nieuwe stop, evaluatie
+    inmiddels geblokkeerd of bevroren). None valt terug op het gedeelde
+    signaal via de bestaande COALESCE in _JOURNAL_SELECT.
+
+    Een AL GENOMEN trade (eigen entry_price staat al vast, een echte open
+    positie) blijft bewust ongemoeid: het risico van een al lopende positie
+    verandert niet met terugwerkende kracht door een nieuw bericht — dat is
+    een expliciete keuze van de product owner, geen omissie. Een genegeerde
+    kans (status 'genegeerd') krijgt hier ook geen update meer: die trade
+    is voor deze gebruiker al afgesloten."""
     entries = {e["user_id"]: e for e in repo.list_journal_entries_for_signal(signal_id)}
     for user in repo.list_users():
         entry = entries.get(user["id"])
-        if not entry or entry["exit_price"] is not None or not user["telegram_chat_id"]:
+        if (
+            not entry or entry["exit_price"] is not None or entry["status"] == "genegeerd"
+            or not user["telegram_chat_id"]
+        ):
             continue
         if repo.is_coin_muted(user["id"], signal_data["coin"]):
             continue
 
         message_data = signal_data
-        if entry["entry_price"] is None:
-            active_eval_for_display = repo.get_active_evaluation(user["id"])
-            _, evaluation_id, _, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
-                user, signal_data["direction"], signal_data["price"],
-                signal_data["stop_loss"], signal_data["take_profit"],
-            )
-            stop_was_capped = effective_stop_loss != signal_data["stop_loss"]
-            if stop_was_capped:
-                repo.update_journal_levels(entry["id"], user["id"], effective_stop_loss, effective_take_profit, None)
-            max_pct_for_display = (
-                risk.eval_max_stop_pct(active_eval_for_display["tier_amount"])
-                if active_eval_for_display and evaluation_id is not None else None
+        if entry["entry_price"] is None and entry["evaluation_id"] is not None:
+            linked_eval = repo.get_evaluation(entry["evaluation_id"])
+            stop_was_capped = False
+            effective_stop_loss, effective_take_profit = signal_data["stop_loss"], signal_data["take_profit"]
+            max_pct_for_display = None
+            if linked_eval and linked_eval["status"] == "actief":
+                open_risk_eur = repo.total_open_risk_eur_for_evaluation(entry["evaluation_id"])
+                if not risk.eval_sizing_blocked(linked_eval, open_risk_eur):
+                    max_pct_for_display = risk.eval_max_stop_pct(linked_eval["tier_amount"])
+                    capped = risk.apply_eval_stop_cap(
+                        signal_data["direction"], signal_data["price"],
+                        signal_data["stop_loss"], signal_data["take_profit"], max_pct_for_display,
+                    )
+                    effective_stop_loss, effective_take_profit = capped.stop_loss, capped.take_profit
+                    stop_was_capped = effective_stop_loss != signal_data["stop_loss"]
+            repo.update_journal_levels(
+                entry["id"], user["id"],
+                effective_stop_loss if stop_was_capped else None,
+                effective_take_profit if stop_was_capped else None,
+                None,
             )
             message_data = {
                 **signal_data, "stop_loss": effective_stop_loss, "take_profit": effective_take_profit,
