@@ -1897,7 +1897,7 @@ def list_evaluation_trade_context(evaluation_id: int) -> list[dict]:
                       s.coin AS coin, s.direction AS direction, s.confidence AS confidence
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.evaluation_id = ? AND je.entry_price IS NOT NULL
-                     AND je.status != 'genegeerd'
+                     AND (je.status != 'genegeerd' OR je.exit_price IS NOT NULL)
                ORDER BY je.created_at""",
             (evaluation_id,),
         )]

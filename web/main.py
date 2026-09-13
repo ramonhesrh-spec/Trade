@@ -913,22 +913,21 @@ async def close_journal(
             # of handmatig gestopt) is bevroren: dit resultaat telt niet
             # meer mee, zie de spec.
             if active_eval and active_eval["status"] == "actief":
-                # De handelsdag-grens moet op DEZELFDE tijdstip-bron draaien
-                # als de rest van de evaluatie-boekhouding (close_journal_trade's
-                # fee-duur, list_evaluation_daily_results/list_evaluation_
-                # balance_curve's dag-groepering): allemaal op exit_time, niet
-                # op het moment dat dit request toevallig verwerkt wordt. Een
-                # trade die je later op de dag afsluit dan hij feitelijk
-                # sloot, resette anders het dagbudget op de verkeerde dag.
-                try:
-                    closed_at = datetime.fromisoformat(exit_time)
-                except (ValueError, TypeError):
-                    # Zelfde beschermende fallback als elders bij een
-                    # niet-ISO exit_time (bv. een browser zonder
-                    # datetime-local-ondersteuning): dan liever het moment
-                    # van verwerken dan de hele close laten mislukken.
-                    closed_at = datetime.now(timezone.utc)
-                progress = risk.evaluate_prop_progress(active_eval, result_eur, closed_at)
+                # BEWUST datetime.now(timezone.utc), NIET exit_time: exit_time
+                # is een naive, browser-LOKALE tijd (<input type="datetime-local">,
+                # zie close_journal_trade's eigen comment daarover), terwijl
+                # trading_day_label een UTC-instant verwacht (Kraken's 00:30 UTC-
+                # grens). risk.effective_day_start_balance en repo.create_evaluation
+                # gebruiken ALLEBEI nog steeds now(timezone.utc) voor dezelfde
+                # grens — hier overschakelen naar exit_time zou die drie uit
+                # elkaar trekken en kan een echte dagverlies-overtreding stil
+                # laten slagen (met een offset-tijdzone gebruiker, geverifieerd
+                # in review). Eerder overwogen als fix voor "inconsistent met
+                # de exit_time-gebaseerde dag-groepering in
+                # list_evaluation_daily_results/list_evaluation_balance_curve",
+                # maar die twee zijn puur weergave; dit hier is de pass/fail-poort
+                # en moet op dezelfde basis blijven als de andere twee.
+                progress = risk.evaluate_prop_progress(active_eval, result_eur, datetime.now(timezone.utc))
                 repo.update_evaluation_state(
                     evaluation_id, progress.current_balance, progress.day_start_balance, progress.day_start_date,
                 )
