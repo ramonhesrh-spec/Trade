@@ -927,7 +927,16 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
     """Stuurt een update-melding naar gebruikers die dit signaal nog open
     hebben staan, bevestigd of niet: een gewijzigde toetsing op een nieuw
     bericht over dezelfde coin is altijd het melden waard. Maakt geen nieuwe
-    logboekregel aan, die bestaat al."""
+    logboekregel aan, die bestaat al.
+
+    Een nog niet genomen (pending) logboekregel van een evaluatie-gebruiker
+    krijgt hier dezelfde per-gebruiker stop-inperking als bij het aanmaken
+    van een nieuw signaal (_resolve_signal_risk), en de override wordt
+    bijgewerkt zodat hij niet bevroren blijft op de oude waarde. Een AL
+    GENOMEN trade (eigen entry_price staat al vast, een echte open positie)
+    blijft bewust ongemoeid: het risico van een al lopende positie
+    verandert niet met terugwerkende kracht door een nieuw bericht — dat
+    is een expliciete keuze van de product owner, geen omissie."""
     entries = {e["user_id"]: e for e in repo.list_journal_entries_for_signal(signal_id)}
     for user in repo.list_users():
         entry = entries.get(user["id"])
@@ -935,10 +944,33 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
             continue
         if repo.is_coin_muted(user["id"], signal_data["coin"]):
             continue
+
+        message_data = signal_data
+        if entry["entry_price"] is None:
+            active_eval_for_display = repo.get_active_evaluation(user["id"])
+            _, evaluation_id, _, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
+                user, signal_data["direction"], signal_data["price"],
+                signal_data["stop_loss"], signal_data["take_profit"],
+            )
+            stop_was_capped = effective_stop_loss != signal_data["stop_loss"]
+            if stop_was_capped:
+                repo.update_journal_levels(entry["id"], user["id"], effective_stop_loss, effective_take_profit, None)
+            max_pct_for_display = (
+                risk.eval_max_stop_pct(active_eval_for_display["tier_amount"])
+                if active_eval_for_display and evaluation_id is not None else None
+            )
+            message_data = {
+                **signal_data, "stop_loss": effective_stop_loss, "take_profit": effective_take_profit,
+                "stop_capped_pct": (
+                    (max_pct_for_display * 100)
+                    if stop_was_capped and max_pct_for_display is not None else None
+                ),
+            }
+
         force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             await telegram_notify.send_signal_update(
-                signal_data, chat_id=user["telegram_chat_id"], force_silent=force_silent,
+                message_data, chat_id=user["telegram_chat_id"], force_silent=force_silent,
             )
         except Exception:
             logger.exception("Telegram update voor gebruiker %s, signaal %s is mislukt",

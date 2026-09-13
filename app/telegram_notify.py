@@ -223,6 +223,8 @@ def format_update_message(signal: dict) -> str:
     lines.append(_factor_overview(signal["reason"]))
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
+    if signal.get("stop_capped_pct") is not None:
+        lines += ["", _stop_capped_line(signal["stop_capped_pct"])]
     lines += ["", _factor_link(signal["coin"])]
     lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
