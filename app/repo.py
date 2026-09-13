@@ -1445,7 +1445,7 @@ def winrate_stats(user_id: int) -> dict:
                       je.risk_eur AS risk_eur
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
-                     AND s.trade_type = 'day_trading'""",
+                     AND je.evaluation_id IS NULL AND s.trade_type = 'day_trading'""",
             (user_id,),
         ).fetchall()
 
@@ -1482,7 +1482,7 @@ def swing_winrate_stats(user_id: int) -> dict:
             """SELECT je.result_eur AS result_eur, je.risk_eur AS risk_eur
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL
-                     AND s.is_practice = 0 AND s.trade_type = 'swing'""",
+                     AND s.is_practice = 0 AND je.evaluation_id IS NULL AND s.trade_type = 'swing'""",
             (user_id,),
         ).fetchall()
     total = len(rows)
@@ -1517,7 +1517,7 @@ def winrate_by_ratio(user_id: int) -> list[dict]:
             """SELECT s.reason AS reason, je.result_eur AS result_eur
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
-                     AND s.trade_type = 'day_trading'""",
+                     AND je.evaluation_id IS NULL AND s.trade_type = 'day_trading'""",
             (user_id,),
         ).fetchall()
 
@@ -1554,7 +1554,7 @@ def week_result_eur(user_id: int) -> Optional[float]:
             """SELECT SUM(je.result_eur) AS total, COUNT(*) AS n
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
-                     AND je.exit_time >= ?""",
+                     AND je.evaluation_id IS NULL AND je.exit_time >= ?""",
             (user_id, week_ago),
         ).fetchone()
         return round(row["total"], 2) if row["n"] else None
@@ -1566,6 +1566,7 @@ def cumulative_result_series(user_id: int) -> list[dict]:
             """SELECT je.exit_time AS exit_time, je.result_eur AS result_eur
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
+                     AND je.evaluation_id IS NULL
                ORDER BY je.exit_time ASC""",
             (user_id,),
         ).fetchall()
@@ -1588,7 +1589,7 @@ def daily_results(user_id: int, days: int = 126) -> dict:
             """SELECT je.exit_time AS exit_time, je.result_eur AS result_eur
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
-                     AND je.exit_time >= ?""",
+                     AND je.evaluation_id IS NULL AND je.exit_time >= ?""",
             (user_id, cutoff),
         ).fetchall()
     by_day: dict[str, float] = {}
@@ -1618,14 +1619,15 @@ def period_stats(user_id: int, since_iso: str) -> dict:
             """SELECT COUNT(*) AS n,
                       SUM(CASE WHEN s.technical_confirmed AND s.trade_type = 'day_trading' THEN 1 ELSE 0 END) AS hoog
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
-               WHERE je.user_id = ? AND je.created_at >= ? AND s.is_practice = 0""",
+               WHERE je.user_id = ? AND je.created_at >= ? AND s.is_practice = 0
+                     AND je.evaluation_id IS NULL""",
             (user_id, since_iso),
         ).fetchone()
         closed = conn.execute(
             """SELECT je.result_eur AS result_eur, s.coin AS coin
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_time >= ? AND je.exit_price IS NOT NULL
-                     AND s.is_practice = 0""",
+                     AND s.is_practice = 0 AND je.evaluation_id IS NULL""",
             (user_id, since_iso),
         ).fetchall()
 
@@ -1653,7 +1655,8 @@ def coin_stats(user_id: int) -> list[dict]:
         rows = conn.execute(
             """SELECT s.coin AS coin, je.result_eur AS result_eur
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
-               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0""",
+               WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
+                     AND je.evaluation_id IS NULL""",
             (user_id,),
         ).fetchall()
 
