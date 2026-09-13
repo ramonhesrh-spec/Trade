@@ -1283,6 +1283,10 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     open_trades = await _enrich_open_positions(
         [e for e in entries if e["entry_price"] is not None and e["exit_price"] is None]
     )
+    # Zonder dit toont dezelfde open evaluatie-trade wel "2e trade vandaag"
+    # op het dashboard maar niets op de coin-pagina: allebei renderen via
+    # macros.open_trade_body, dus allebei hebben deze feiten nodig.
+    _attach_discipline_facts(open_trades)
     open_signal_ids = {e["signal_id"] for e in open_trades}
     # Journal-rijen zonder eigen entry_price (nog niet genomen) kunnen al wel
     # een per-gebruiker stop/take-override hebben (evaluatie-stop-cap) — die
