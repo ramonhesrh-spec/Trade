@@ -648,9 +648,11 @@ def format_narrative_message(
     # realistische samenvattingen), waarna zowel de edit als de
     # fallback-verse-melding blijven mislukken en de gebruiker
     # stilzwijgend nooit meer een update krijgt. Toon daarom bij veel
-    # updates alleen de eerste en de laatste paar, en kap elke regel af.
+    # updates alleen de eerste en de laatste paar.
     MAX_TIMELINE_ENTRIES = 8
-    MAX_ENTRY_CHARS = 300
+    TELEGRAM_MAX_CHARS = 4096
+    # Marge voor de vaste kopregels, dividers en de disclaimer eromheen.
+    FIXED_OVERHEAD_CHARS = 500
     shown = timeline
     omitted = 0
     if len(timeline) > MAX_TIMELINE_ENTRIES:
@@ -659,13 +661,20 @@ def format_narrative_message(
         omitted = len(timeline) - len(head) - len(tail)
         shown = head + tail
 
+    # De beschikbare Telegram-ruimte verdelen over het aantal GETOONDE
+    # updates, in plaats van elke update altijd naar een vaste 300 tekens
+    # te knippen: bij 1 of 2 updates (het gangbare geval) is er
+    # ruimschoots plek voor de volle samenvatting, alleen bij veel updates
+    # is een krappere cap nodig om onder de 4096 te blijven.
+    per_entry_chars = max(300, (TELEGRAM_MAX_CHARS - FIXED_OVERHEAD_CHARS) // max(len(shown), 1))
+
     for i, entry in enumerate(shown):
         if omitted and i == 1:
             lines.append(f"• … {omitted} eerdere update{'s' if omitted != 1 else ''} niet getoond …")
         when = entry["received_at"][:10]
         text = entry["message_summary"] or entry["raw_text"]
-        if len(text) > MAX_ENTRY_CHARS:
-            text = text[:MAX_ENTRY_CHARS - 3] + "..."
+        if len(text) > per_entry_chars:
+            text = text[:per_entry_chars - 3] + "..."
         lines.append(f"• {when}: {text}")
     lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
