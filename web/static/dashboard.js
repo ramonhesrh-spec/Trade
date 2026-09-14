@@ -2,6 +2,22 @@
 // de pagina opnieuw te laden. Een kort oplicht-moment (groen omhoog, rood
 // omlaag) alleen als de waarde echt anders is dan de vorige poll, niet bij
 // elke tick, en niet bij de allereerste keer laden.
+// Zelfde formule als risk.compute_sltp_progress_pct in app/risk.py: waar
+// zit de prijs nu tussen stop loss (0%) en take profit (100%). Hier als
+// JS-poort voor de live-update na de eerste, server-side render, geen
+// aparte serverroundtrip nodig voor elke poll-tick.
+function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
+  var pos;
+  if (direction === "long") {
+    var span = takeProfit - stopLoss;
+    pos = span ? (price - stopLoss) / span : 0;
+  } else {
+    var spanShort = stopLoss - takeProfit;
+    pos = spanShort ? (stopLoss - price) / spanShort : 0;
+  }
+  return Math.max(0, Math.min(1, pos)) * 100;
+}
+
 (function () {
   const priceEls = document.querySelectorAll("[data-price]");
   if (!priceEls.length) return;
@@ -60,6 +76,19 @@
     }
   }
 
+  function updateTicker(positions) {
+    const track = document.getElementById("dashboard-ticker-track");
+    if (!track) return; // geen ticker-element op deze pagina/zonder open trades
+    const seen = new Set();
+    positions.forEach((p) => {
+      if (p.is_practice || p.current_price === null || seen.has(p.coin)) return;
+      seen.add(p.coin);
+      document.querySelectorAll(`[data-ticker-coin="${p.coin}"] .ticker-price`).forEach((priceEl) => {
+        priceEl.textContent = p.current_price.toFixed(4);
+      });
+    });
+  }
+
   function refresh() {
     fetch("/api/open_positions")
       .then((r) => r.json())
@@ -73,6 +102,17 @@
             const key = `price-${p.id}`;
             if (previous[key] !== undefined && previous[key] !== p.current_price) {
               flash(priceEl, p.current_price > previous[key]);
+            }
+            // Prijsrichting-pijltje: hergebruikt dezelfde previous[key]-vergelijking
+            // als de flash-logica hierboven, geen aparte state nodig. Moet vóór de
+            // overschrijving van previous[key] hieronder staan, anders vergelijkt
+            // dit de nieuwe waarde met zichzelf.
+            const dirEl = document.querySelector(`[data-price-direction="${p.id}"]`);
+            if (dirEl && previous[key] !== undefined && previous[key] !== p.current_price) {
+              const up = p.current_price > previous[key];
+              dirEl.textContent = up ? "▲" : "▼";
+              dirEl.classList.toggle("pos", up);
+              dirEl.classList.toggle("neg", !up);
             }
             previous[key] = p.current_price;
             priceEl.textContent = p.current_price.toFixed(4);
@@ -90,6 +130,13 @@
           if (pnlPctEl) {
             pnlPctEl.textContent = p.pnl_pct !== null ? `(${p.pnl_pct.toFixed(1)}%)` : "";
           }
+          // SL/TP-voortgangsbalk: CSS transition op width doet de vloeiende
+          // beweging, hier alleen de nieuwe waarde zetten.
+          const sltpEl = document.querySelector(`[data-sltp="${p.id}"] .sltp-progress-fill`);
+          if (sltpEl && p.current_price !== null && p.stop_loss && p.take_profit) {
+            const pct = computeSltpProgressPct(p.direction, p.current_price, p.stop_loss, p.take_profit);
+            sltpEl.style.width = pct + "%";
+          }
           // Spanningsgloed: hoe dichter de koers nu bij de stop loss of
           // take profit zit, hoe sterker de kaart oplicht. Server zet de
           // beginwaarde bij het laden, dit houdt 'm live tijdens het
@@ -101,6 +148,7 @@
           }
           checkVibration(p);
         });
+        updateTicker(positions);
         updateTitleAndFavicon(positions);
       })
       .catch(() => {});
