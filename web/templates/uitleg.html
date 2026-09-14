@@ -30,16 +30,17 @@ vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
 <section class="landing-section" id="hoog-vertrouwen" style="padding-left:0; padding-right:0;">
   <span class="status-tag tag-live">● Nu live</span>
   <h2>Wanneer is een signaal hoog vertrouwen?</h2>
-  <p>Elke melding wordt getoetst tegen vier vaste factoren. Overal in het
+  <p>Elke melding wordt getoetst tegen vijf vaste factoren. Overal in het
   dashboard zie je de score als ratio naast de badge, bijvoorbeeld
-  <span class="mono">3/4</span>. Klik of tik op "waarom?" om te zien welke
+  <span class="mono">4/5</span>. Klik of tik op "waarom?" om te zien welke
   factor het is.</p>
   <div class="ratio-demo" id="ratio-demo">
     <div class="ratio-demo-item ok" style="--i: 0"><span class="ratio-demo-icon">✓</span>Trend</div>
     <div class="ratio-demo-item ok" style="--i: 1"><span class="ratio-demo-icon">✓</span>Momentum</div>
     <div class="ratio-demo-item ok" style="--i: 2"><span class="ratio-demo-icon">✓</span>RSI</div>
     <div class="ratio-demo-item bad" style="--i: 3"><span class="ratio-demo-icon">✗</span>Volume</div>
-    <div class="ratio-demo-result" style="--i: 4">3/4 <span class="muted">→</span> <strong>hoog vertrouwen</strong></div>
+    <div class="ratio-demo-item ok" style="--i: 4"><span class="ratio-demo-icon">✓</span>Uitgerektheid</div>
+    <div class="ratio-demo-result" style="--i: 5">4/5 <span class="muted">→</span> <strong>hoog vertrouwen</strong></div>
   </div>
   <p class="muted" style="font-size: 11.5px; margin: -8px 0 20px;">Voorbeeld, geen echt signaal.</p>
   <div class="factor-grid">
@@ -66,6 +67,13 @@ vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
       <p>Het volume moet minstens gelijk zijn aan het gemiddelde van de
       laatste 20 candles. Een beweging zonder volume erachter is minder
       overtuigend.</p>
+    </div>
+    <div class="factor">
+      <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V9m8 10V5m8 14v-7"/></svg>Uitgerektheid</h3>
+      <p>Hoe ver de prijs al van zijn EMA21 af staat, in ATR gemeten. Een
+      coin die al ver gelopen is, is een minder overtuigende instap dan een
+      coin die net begint te bewegen, ook als de andere factoren wel
+      kloppen.</p>
     </div>
   </div>
   <p>Kloppen minstens drie van de vier, dan is het <strong>hoog
@@ -137,11 +145,11 @@ vertrouwen betekent, en wat er gebeurt zodra je een trade neemt.</p>
   </span>
   {% if advanced_factors_enabled %}
   <h2>Twaalf extra factoren</h2>
-  <p>Naast de vier factoren hierboven toetst HesPulse ook op twaalf extra
+  <p>Naast de vijf factoren hierboven toetst HesPulse ook op twaalf extra
   factoren. Die tellen nu mee in elke melding.</p>
   {% else %}
   <h2>In de maak: twaalf extra factoren</h2>
-  <p>Naast de vier factoren hierboven staat er een uitgebreidere toetsing
+  <p>Naast de vijf factoren hierboven staat er een uitgebreidere toetsing
   klaar, maar die staat nog uit. Eerst wordt getoetst hoe streng de nieuwe
   regels in de praktijk uitpakken op eerdere signalen, voor ze meetellen in
   een echte melding.</p>

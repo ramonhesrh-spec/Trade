@@ -653,15 +653,26 @@ def check_sr_zone(direction: str, entry_price: float, atr: float, zones: list[SR
     return ("Steun/weerstand", True, f"zone op {distance_atr:.1f}x ATR afstand")
 
 
-# Basisversie: 3 van de 4 factoren is genoeg. Alle 4 verplicht bleek te
-# streng, één factor die nét mist (bijvoorbeeld volume op 0.97x in plaats
-# van 1.0x) blokkeerde dan een verder overtuigend signaal volledig. Bij 3
-# van de 4 blijft welke factor(en) niet klopten zichtbaar in de meegestuurde
-# uitleg, zodat de gebruiker zelf ziet waar de kans zwakker staat.
+# Hoeveel keer de ATR de prijs maximaal van zijn EMA21 af mag staan
+# (in de richting van de trade) voor de Uitgerektheid-factor in
+# basic_factors hierboven. Boven deze grens is de beweging al voor een
+# groot deel gelopen, chasen van een al uitgerekte coin is precies het
+# gedrag dat deze factor moet tegenhouden.
+EXTENSION_MAX_ATR_MULTIPLE = 3.0
+
+# Basisversie: 3 van de 4 "klassieke" factoren (trend, momentum, RSI,
+# volume) is genoeg, zoals eerder al bewust verzacht — alle 4 verplicht
+# bleek te streng, één factor die nét mist (bijvoorbeeld volume op 0.97x
+# in plaats van 1.0x) blokkeerde dan een verder overtuigend signaal
+# volledig. Uitgerektheid (de vijfde factor) telt hier NIET in mee: die is
+# een harde eis op zichzelf (zie confirms_direction), geen zachte 3-van-4
+# zou een coin die al ver van zijn EMA21 af zit alsnog laten confirmen
+# zolang de andere vier maar kloppen — precies het chasen dat deze factor
+# moet tegenhouden.
 BASIC_CONFIRM_MIN_PASSED = 3
 
 # In de uitgebreide versie telt geen enkele factor apart als harde eis: met
-# 16 factoren in totaal (4 basis + 12 uitgebreid) blokkeert anders één
+# 17 factoren in totaal (5 basis + 12 uitgebreid) blokkeert anders één
 # marginale miss (bijvoorbeeld volume op 0.89x in plaats van 1.0x) een
 # verder overtuigend signaal volledig, terwijl bijna alle andere factoren
 # wel klopten. Minstens 60% is hier de grens: is dat gehaald, dan is het
@@ -690,11 +701,12 @@ RSI_OVERSOLD = 25
 
 
 def basic_factors(direction: str, ind: Indicators) -> list[tuple[str, bool, str]]:
-    """De vier basisfactoren (trend, momentum, RSI, volume) als losse
-    (naam, ok, detail) tuples, onafhankelijk van enige drempel-beslissing.
-    Gebruikt door confirms_direction voor de day-trading toets, en door de
-    swing-toets in signal_processor.py om dezelfde factoren te tonen op
-    een andere tijdshorizon zonder een gecombineerd vertrouwensoordeel."""
+    """De vijf basisfactoren (trend, momentum, RSI, volume, uitgerektheid)
+    als losse (naam, ok, detail) tuples, onafhankelijk van enige
+    drempel-beslissing. Gebruikt door confirms_direction voor de
+    day-trading toets, en door de swing-toets in signal_processor.py om
+    dezelfde factoren te tonen op een andere tijdshorizon zonder een
+    gecombineerd vertrouwensoordeel."""
     direction = direction.lower()
     trend_up = ind.ema9 > ind.ema21
     momentum_up = ind.macd > ind.macd_signal
@@ -731,11 +743,24 @@ def basic_factors(direction: str, ind: Indicators) -> list[tuple[str, bool, str]
     volume_ok = ind.volume_ratio >= 1.0
     volume_detail = f"volume {ind.volume_ratio:.2f}x gemiddeld" + ("" if volume_ok else ", onder gemiddeld")
 
+    # Hoe ver de prijs al van zijn EMA21 af staat, in ATR gemeten: een coin
+    # die al ver boven (long) of onder (short) zijn EMA21 zit, is een
+    # beweging die al voor een groot deel gelopen is. RSI alleen vangt dit
+    # niet altijd op (een gestage stijging over veel candles kan makkelijk
+    # onder de 75 blijven terwijl de coin toch al 10%+ hoger staat), dus
+    # deze factor meet de uitgerektheid direct, los van RSI.
+    extension_atr = (ind.price - ind.ema21) / ind.atr if direction == "long" else (ind.ema21 - ind.price) / ind.atr
+    extension_ok = extension_atr <= EXTENSION_MAX_ATR_MULTIPLE
+    extension_detail = f"{extension_atr:.1f}x ATR van EMA21" + (
+        "" if extension_ok else ", beweging al te ver gelopen"
+    )
+
     return [
         ("Trend", trend_ok, trend_detail),
         ("Momentum", momentum_ok, momentum_detail),
         ("RSI", rsi_ok, rsi_detail),
         ("Volume", volume_ok, volume_detail),
+        ("Uitgerektheid", extension_ok, extension_detail),
     ]
 
 
@@ -745,9 +770,9 @@ def confirms_direction(
 ) -> tuple[bool, str]:
     """Bepaalt of de technische data de richting uit het Discord bericht steunt.
 
-    Basisversie (`include_advanced=False`, de standaard): vier factoren,
-    elk met een duidelijke ✓ of ✗, minstens 3 van de 4 vereist (zie
-    BASIC_CONFIRM_MIN_PASSED):
+    Basisversie (`include_advanced=False`, de standaard): vijf factoren,
+    elk met een duidelijke ✓ of ✗. De eerste vier tellen zacht mee,
+    minstens 3 van de 4 vereist (zie BASIC_CONFIRM_MIN_PASSED):
     - trend: EMA9 t.o.v. EMA21 moet de richting volgen
     - momentum: MACD lijn t.o.v. signaallijn moet de richting volgen
     - RSI mag niet al extreem tegen de richting in zitten, in geen van
@@ -755,6 +780,14 @@ def confirms_direction(
       short, zie RSI_OVERSOLD/RSI_OVERBOUGHT hierboven)
     - volume moet minstens gemiddeld zijn, anders is de beweging niet
       overtuigend
+
+    De vijfde factor, uitgerektheid (de prijs mag niet al te ver, in ATR,
+    van zijn EMA21 af staan — zie EXTENSION_MAX_ATR_MULTIPLE), telt NIET
+    mee in die 3-van-4: die moet ALTIJD kloppen, los van hoeveel van de
+    andere vier passen. Zonder die harde eis zou een coin die al fors
+    gelopen is (bijvoorbeeld 10%+ in een paar uur) alsnog bevestigen zodra
+    de andere vier toevallig kloppen — precies het chasen dat deze factor
+    moet voorkomen.
 
     Uitgebreide versie (`include_advanced=True`, aan via
     config.ENABLE_ADVANCED_FACTORS): daar komen drie vaste factoren bij,
@@ -766,7 +799,7 @@ def confirms_direction(
     andere data nodig hebben — zie signal_processor.compute_advanced_extra_factors).
     Bevestigd is hier een kwestie van hoeveel van de factoren in totaal
     kloppen (zie CONFIRM_THRESHOLD), niet van elke losse factor apart hard
-    vereisen: bij 16 factoren samen (4 basis + 12 uitgebreid) blokkeert
+    vereisen: bij 17 factoren samen (5 basis + 12 uitgebreid) blokkeert
     anders één marginale miss een verder overtuigend signaal.
 
     Ontbreekt een extra check (bijvoorbeeld BTC-trend bij een BTC-signaal
@@ -779,7 +812,13 @@ def confirms_direction(
 
     if not include_advanced:
         breakdown = " | ".join(f"{'✓' if ok else '✗'} {name}: {detail}" for name, ok, detail in factors)
-        confirmed = sum(1 for _, ok, _ in factors if ok) >= BASIC_CONFIRM_MIN_PASSED
+        # Uitgerektheid is een harde eis, geen onderdeel van de 3-van-4-
+        # telling op de andere vier (zie de docstring hierboven): zonder
+        # deze scheiding zou een coin die al te ver gelopen is alsnog
+        # bevestigen zolang trend/momentum/RSI/volume toevallig kloppen.
+        extension_ok = next(ok for name, ok, _ in factors if name == "Uitgerektheid")
+        core_passed = sum(1 for name, ok, _ in factors if ok and name != "Uitgerektheid")
+        confirmed = extension_ok and core_passed >= BASIC_CONFIRM_MIN_PASSED
         return confirmed, breakdown
 
     strong_enough = ind.adx >= ADX_MIN

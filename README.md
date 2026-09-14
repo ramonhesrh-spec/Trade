@@ -294,7 +294,8 @@ kan het dashboard tijdens de rebuild tegen een tijdelijk inconsistente
 
 ### Uitgebreide technische factoren (optioneel)
 
-Naast de vier basisfactoren (trend, momentum, RSI, volume) kan het systeem
+Naast de vijf basisfactoren (trend, momentum, RSI, volume, uitgerektheid)
+kan het systeem
 twaalf extra factoren toetsen: trendsterkte (ADX), volatiliteit (ATR t.o.v.
 zijn eigen gemiddelde), volume-percentiel, BTC-trend als filter voor andere
 coins, daily-trend en daily-RSI, bevestiging op het 1 uur tijdsbestek
