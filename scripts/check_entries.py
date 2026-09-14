@@ -17,52 +17,7 @@ from telegram import Bot
 
 from app import config, exchange, indicators, repo, risk
 
-# Hoe ver de prijs nog voorbij de zone mag zitten om "nu aan het
-# terugtesten" te tellen (in ATR): zelfde soort ATR-genormaliseerde marge
-# als BTC_FLAT_EMA_GAP_ATR_MULTIPLE in indicators.py.
-RETEST_TOLERANCE_ATR_MULTIPLE = 0.3
-
 DIVIDER = "━" * 14
-
-
-def find_breakout_retest_zones(df, zones, atr, direction):
-    """Voor elke zone: is er, op closing-prijs, een duidelijke uitbraak in
-    de richting van de trade geweest, staat die uitbraak nog overeind (geen
-    candle sindsdien weer terug over de andere kant van de zone gesloten),
-    en zit de prijs nu weer dichtbij die zone? Bij long: de zone was
-    weerstand, is doorbroken naar boven, en dient nu als steun voor de
-    terugval. Bij short: precies omgekeerd, de zone was steun, is naar
-    beneden doorbroken en dient nu als weerstand. Alleen de meest recente
-    uitbraak per zone telt."""
-    closes = df["close"].reset_index(drop=True)
-    current_price = closes.iloc[-1]
-    hits = []
-    for zone in zones:
-        if direction == "long":
-            broke = (closes.shift(1) <= zone.price_high) & (closes > zone.price_high)
-            invalidate_level = zone.price_low
-        else:
-            broke = (closes.shift(1) >= zone.price_low) & (closes < zone.price_low)
-            invalidate_level = zone.price_high
-
-        breakout_indices = closes.index[broke]
-        if len(breakout_indices) == 0:
-            continue
-        breakout_idx = breakout_indices[-1]
-        since_breakout = closes.iloc[breakout_idx + 1:]
-        if direction == "long":
-            if (since_breakout < invalidate_level).any():
-                continue
-            near_zone = zone.price_low <= current_price <= zone.price_high + RETEST_TOLERANCE_ATR_MULTIPLE * atr
-        else:
-            if (since_breakout > invalidate_level).any():
-                continue
-            near_zone = zone.price_low - RETEST_TOLERANCE_ATR_MULTIPLE * atr <= current_price <= zone.price_high
-
-        candles_since = len(closes) - 1 - breakout_idx
-        if near_zone and candles_since > 0:
-            hits.append((zone, candles_since))
-    return hits
 
 
 def check_coin(coin: str) -> dict:
@@ -102,7 +57,7 @@ def check_coin(coin: str) -> dict:
               f"entry {entry:.4f}  stop {beter.stop_loss:.4f}  take {beter.take_profit:.4f}")
 
     perfect_entry = None
-    breakout_retests = find_breakout_retest_zones(df, zones, ind.atr, direction)
+    breakout_retests = indicators.find_breakout_retest(df, zones, ind.atr, direction)
     if breakout_retests:
         zone, candles_since = max(breakout_retests, key=lambda h: h[0].touches)
         entry = ind.price

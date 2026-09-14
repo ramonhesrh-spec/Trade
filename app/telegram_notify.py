@@ -322,6 +322,46 @@ async def send_scan_cycle_summary(ranked: list[dict], chat_id: str, force_silent
     logger.info("Scan-cyclus-samenvatting verstuurd naar chat %s (%s kansen)", chat_id, len(ranked))
 
 
+def format_breakout_retest_message(alert: dict) -> str:
+    """Melding voor een uitbraak-dan-terugtest: een zone die eerder steun of
+    weerstand was, op closing-prijs doorbroken is, en waar de prijs nu weer
+    dichtbij zit. Los van een gewoon signaal (geen aparte logboekregel, geen
+    positiegrootte) — puur een heads-up dat dit klassieke, sterke
+    entry-patroon zich nu voordoet, de trader beslist zelf of en hoe hij
+    hem neemt."""
+    lines = [
+        f"{_direction_emoji(alert['direction'])} {_coin_label(alert['coin'])} · {_direction_label(alert['direction'])}",
+        DIVIDER,
+        "🎯 UITBRAAK-DAN-TERUGTEST",
+        "",
+        f"💰 Prijs nu: {alert['price']:.4f}",
+        f"📍 Zone: {alert['zone_low']:.4f} - {alert['zone_high']:.4f} ({alert['touches']}x eerder geraakt)",
+        f"🎯 Take profit: {alert['take_profit']:.4f}",
+        f"🛑 Stop loss: {alert['stop_loss']:.4f}",
+        _progress_bar(alert["price"], alert["stop_loss"], alert["take_profit"], alert["direction"]),
+        DIVIDER,
+        f"Deze zone was eerder {'weerstand' if alert['direction'] == 'long' else 'steun'}, is "
+        f"{alert['candles_since']} candle(s) geleden doorbroken en wordt nu opnieuw getest — "
+        "een van de betrouwbaarste klassieke instapmomenten.",
+    ]
+    if alert.get("message_id") is None:
+        lines += ["", "🔎 Zelf gedetecteerd door HesPulse"]
+    lines += ["", _factor_link(alert["coin"])]
+    lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
+    return "\n".join(lines)
+
+
+async def send_breakout_retest_alert(alert: dict, chat_id: str, force_silent: bool = False) -> None:
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        logger.warning("Telegram token of chat ID ontbreekt, uitbraak-terugtest-melding niet verstuurd")
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = format_breakout_retest_message(alert)
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=force_silent)
+    logger.info("Uitbraak-terugtest-melding verstuurd voor %s %s naar chat %s",
+                alert["coin"], alert["direction"], chat_id)
+
+
 def format_swing_message(
     coin: str, direction: str, price: float, stop_loss: float, take_profit: float,
     daily_factors: list[tuple[str, bool, str]], factors_4h: list[tuple[str, bool, str]],

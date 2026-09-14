@@ -15,7 +15,7 @@ docs/superpowers/specs/2026-09-14-autonome-marktscan-design.md.
 import asyncio
 import logging
 
-from app import exchange, indicators, repo
+from app import exchange, indicators, repo, risk, telegram_notify
 from app.anthropic_interpret import Interpretation
 from app.signal_processor import process_day_trading_signal
 
@@ -31,6 +31,51 @@ AUTO_SCAN_LOSS_COOLDOWN_HOURS = 12
 # kruising die binnen een uur alweer terugklapt eerst een long en dan een
 # short melding oplevert voor dezelfde coin.
 WHIPLASH_MIN_CONSECUTIVE_CYCLES = 2
+
+
+async def _check_breakout_retest(coin: str, direction: str, df, ind) -> None:
+    """Los van de trend-confirmatie hieronder: een uitbraak-dan-terugtest
+    is een eigen, sterk entry-patroon (een zone die eerder steun/weerstand
+    was, doorbroken is, en nu opnieuw getest wordt) en verdient een eigen
+    melding, ongeacht of confirms_direction deze cyclus ja of nee zegt.
+    Dedupliceert op coin+richting+zone via coins.last_breakout_retest_key:
+    dezelfde zone stuurt maar één keer een melding, een nieuwe uitbraak
+    (andere zone-grenzen, of de andere richting) stuurt opnieuw."""
+    zones = indicators.detect_sr_zones(df)
+    hits = indicators.find_breakout_retest(df, zones, ind.atr, direction)
+    if not hits:
+        return
+    zone, candles_since = max(hits, key=lambda h: h[0].touches)
+    key = f"{direction}:{zone.price_low:.8f}:{zone.price_high:.8f}"
+    if repo.get_breakout_retest_key(coin) == key:
+        return  # deze exacte zone is al gemeld, geen herhaling
+
+    stop_take = risk.compute_stop_take(
+        direction, ind.price, ind.atr,
+        swing_low=zone.price_low if direction == "long" else None,
+        swing_high=zone.price_high if direction == "short" else None,
+    )
+    alert = {
+        "coin": coin, "direction": direction, "price": ind.price,
+        "zone_low": zone.price_low, "zone_high": zone.price_high, "touches": zone.touches,
+        "candles_since": candles_since, "stop_loss": stop_take.stop_loss,
+        "take_profit": stop_take.take_profit, "message_id": None,
+    }
+    for user in repo.list_users():
+        if not user["telegram_chat_id"]:
+            continue
+        if repo.is_coin_muted(user["id"], coin):
+            continue
+        force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        try:
+            await telegram_notify.send_breakout_retest_alert(
+                alert, chat_id=user["telegram_chat_id"], force_silent=force_silent,
+            )
+        except Exception:
+            logger.exception(
+                "Uitbraak-terugtest-melding voor %s naar gebruiker %s is mislukt", coin, user["username"],
+            )
+    repo.set_breakout_retest_key(coin, key)
 
 
 async def scan_market() -> None:
@@ -64,6 +109,8 @@ async def scan_market() -> None:
             df = await asyncio.to_thread(exchange.fetch_ohlcv, coin)
             ind = indicators.compute_indicators(df)
             direction = "long" if ind.ema9 > ind.ema21 else "short"
+
+            await _check_breakout_retest(coin, direction, df, ind)
 
             # Vóór de cooldown-check bepaald (in plaats van erna): een coin
             # met een al bestaand open signaal moet elke cyclus ververst

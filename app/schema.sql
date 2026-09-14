@@ -123,7 +123,12 @@ CREATE TABLE IF NOT EXISTS coins (
     -- EMA9/EMA21-kruising binnen een paar cycli eerst een long en dan een
     -- short meldt voor dezelfde coin.
     last_scan_direction TEXT,
-    last_scan_direction_count INTEGER NOT NULL DEFAULT 0
+    last_scan_direction_count INTEGER NOT NULL DEFAULT 0,
+    -- Dedup voor de uitbraak-dan-terugtest-melding (app/market_scanner.py):
+    -- "richting:zone_low:zone_high" van de laatst gemelde zone voor deze
+    -- coin. Voorkomt dat dezelfde zone elk uur opnieuw een melding stuurt
+    -- zolang de terugtest geldig blijft.
+    last_breakout_retest_key TEXT
 );
 
 -- Coins waarvoor een gebruiker zelf geen Telegram-meldingen meer wil,

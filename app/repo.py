@@ -632,6 +632,21 @@ def record_scan_direction(coin: str, direction: str) -> int:
         return new_count
 
 
+def get_breakout_retest_key(coin: str) -> Optional[str]:
+    with db.session() as conn:
+        row = conn.execute(
+            "SELECT last_breakout_retest_key FROM coins WHERE symbol = ?", (coin.upper(),),
+        ).fetchone()
+        return row["last_breakout_retest_key"] if row else None
+
+
+def set_breakout_retest_key(coin: str, key: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE coins SET last_breakout_retest_key = ? WHERE symbol = ?", (key, coin.upper()),
+        )
+
+
 def list_coins() -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(

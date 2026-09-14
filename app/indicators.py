@@ -653,6 +653,63 @@ def check_sr_zone(direction: str, entry_price: float, atr: float, zones: list[SR
     return ("Steun/weerstand", True, f"zone op {distance_atr:.1f}x ATR afstand")
 
 
+# Hoe ver de prijs nog voorbij een doorbroken zone mag zitten om "nu aan
+# het terugtesten" te tellen (in ATR): zelfde soort ATR-genormaliseerde
+# marge als BTC_FLAT_EMA_GAP_ATR_MULTIPLE.
+BREAKOUT_RETEST_TOLERANCE_ATR_MULTIPLE = 0.3
+
+
+def find_breakout_retest(
+    df: pd.DataFrame, zones: list[SRZone], atr: float, direction: str,
+) -> list[tuple[SRZone, int]]:
+    """Voor elke zone: is er, op closing-prijs, een duidelijke uitbraak in
+    de richting van de trade geweest, staat die uitbraak nog overeind (geen
+    candle sindsdien weer terug over de andere kant van de zone gesloten),
+    en zit de prijs nu weer dichtbij die zone? Bij long: de zone was
+    weerstand, is doorbroken naar boven, en dient nu als steun voor de
+    terugval. Bij short: precies omgekeerd, de zone was steun, is naar
+    beneden doorbroken en dient nu als weerstand. Alleen de meest recente
+    uitbraak per zone telt. Geeft (zone, candles_since_breakout) terug voor
+    elke zone die nu een geldige terugtest is — het klassieke "uitbraak
+    dan terugtest"-patroon, de sterkste van de zelf-gedetecteerde
+    entry-opzetten."""
+    closes = df["close"].reset_index(drop=True)
+    current_price = closes.iloc[-1]
+    hits = []
+    for zone in zones:
+        if direction == "long":
+            broke = (closes.shift(1) <= zone.price_high) & (closes > zone.price_high)
+            invalidate_level = zone.price_low
+        else:
+            broke = (closes.shift(1) >= zone.price_low) & (closes < zone.price_low)
+            invalidate_level = zone.price_high
+
+        breakout_indices = closes.index[broke]
+        if len(breakout_indices) == 0:
+            continue
+        breakout_idx = breakout_indices[-1]
+        since_breakout = closes.iloc[breakout_idx + 1:]
+        if direction == "long":
+            if (since_breakout < invalidate_level).any():
+                continue
+            near_zone = (
+                zone.price_low <= current_price
+                <= zone.price_high + BREAKOUT_RETEST_TOLERANCE_ATR_MULTIPLE * atr
+            )
+        else:
+            if (since_breakout > invalidate_level).any():
+                continue
+            near_zone = (
+                zone.price_low - BREAKOUT_RETEST_TOLERANCE_ATR_MULTIPLE * atr
+                <= current_price <= zone.price_high
+            )
+
+        candles_since = len(closes) - 1 - breakout_idx
+        if near_zone and candles_since > 0:
+            hits.append((zone, candles_since))
+    return hits
+
+
 # Hoeveel keer de ATR de prijs maximaal van zijn EMA21 af mag staan
 # (in de richting van de trade) voor de Uitgerektheid-factor in
 # basic_factors hierboven. Boven deze grens is de beweging al voor een
