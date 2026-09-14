@@ -871,9 +871,12 @@ def find_open_signal(coin: str, direction: str) -> Optional[dict]:
     signaal bij in plaats van een vers signaal aan te maken, ook voor
     gebruikers die pas later worden toegevoegd.
 
-    Deze functie heeft precies één aanroeper: process_day_trading_signal()
-    in signal_processor.py, puur voor day-trading's eigen update-in-plaats
-    gedrag. De trade_type-filter hieronder is nodig sinds swing-signalen
+    Aanvankelijk had deze functie precies één aanroeper
+    (process_day_trading_signal() in signal_processor.py, voor day-trading's
+    eigen update-in-plaats gedrag); sinds app/market_scanner.py hergebruikt
+    de marktscanner hem ook, om was_open_before te bepalen (of een coin al
+    een open signaal heeft, vóór de cooldown-check en de confirmation-
+    precheck). De trade_type-filter hieronder is nodig sinds swing-signalen
     (run_swing_check(), via insert_signal()) ook een signals-rij voor
     dezelfde coin+richting kunnen aanmaken: zonder filter pikte deze query
     per ongeluk zo'n swing-rij op en liet een day-trading bericht hem
@@ -898,6 +901,8 @@ def find_open_signal(coin: str, direction: str) -> Optional[dict]:
 
 
 def update_signal(signal_id: int, data: dict) -> None:
+    # message_id staat bewust NIET in deze lijst: een signaal houdt zijn
+    # originele bron vast, ook bij een update.
     fields = [
         "price", "rsi", "macd", "macd_signal", "volume_ratio", "ema9", "ema21", "atr",
         "atr_avg20", "adx",
@@ -1688,7 +1693,14 @@ def recent_autonomous_loss(coin: str, direction: str, hours: int) -> bool:
     net als in period_stats, herkend aan exit_price IS NOT NULL (er is
     geen apart 'gesloten'-statusveld in dit schema). Gebruikt om de scan
     een afkoelperiode te geven na een verlies op dezelfde coin/richting,
-    in plaats van elk uur opnieuw dezelfde whipsaw te melden."""
+    in plaats van elk uur opnieuw dezelfde whipsaw te melden.
+
+    Bekende beperking: `cutoff` en `je.exit_time` worden hieronder als
+    strings lexicografisch vergeleken (>=), geen echte datumvergelijking.
+    Dat werkt correct zolang het ISO-timestampformaat consistent blijft
+    (zoals db.now_iso() het altijd aanlevert), maar is gevoelig voor
+    afwijkingen in tijdzone-suffix of precisie tussen de vergeleken
+    waarden."""
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     with db.session() as conn:
         row = conn.execute(
