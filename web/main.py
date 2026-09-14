@@ -1341,6 +1341,15 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     # op het dashboard maar niets op de coin-pagina: allebei renderen via
     # macros.open_trade_body, dus allebei hebben deze feiten nodig.
     _attach_discipline_facts(open_trades)
+    # Zelfde reden: macros.open_trade_body's SL/TP-voortgangsbalk leest
+    # sltp_progress_pct, dat de dashboard-route al zet maar deze route nog
+    # niet — zonder dit rendert de balk hier met een lege/ongeldige
+    # "width: %" in plaats van gewoon weggelaten te worden.
+    for e in open_trades:
+        e["sltp_progress_pct"] = (
+            risk.compute_sltp_progress_pct(e["direction"], e["current_price"], e["stop_loss"], e["take_profit"])
+            if e["current_price"] is not None and e["stop_loss"] and e["take_profit"] else None
+        )
     open_signal_ids = {e["signal_id"] for e in open_trades}
     # Journal-rijen zonder eigen entry_price (nog niet genomen) kunnen al wel
     # een per-gebruiker stop/take-override hebben (evaluatie-stop-cap) — die
