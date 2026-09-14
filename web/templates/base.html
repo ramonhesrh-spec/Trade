@@ -303,6 +303,21 @@
       </form>
     </div>
   </div>
+  {% if ticker_coins %}
+  <div class="ticker-strip topbar-ticker" aria-hidden="true">
+    <div class="ticker-track" id="dashboard-ticker-track">
+      {% for c in ticker_coins %}
+      <span class="ticker-item" data-ticker-coin="{{ c.coin }}">{{ c.coin }} <span class="ticker-price">{{ "%.4f"|format(c.current_price) if c.current_price else "···" }}</span></span>
+      {% endfor %}
+      {% for c in ticker_coins %}
+      <span class="ticker-item" data-ticker-coin="{{ c.coin }}" aria-hidden="true">{{ c.coin }} <span class="ticker-price">{{ "%.4f"|format(c.current_price) if c.current_price else "···" }}</span></span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  <div class="last-signal-banner" id="last-signal-banner" aria-live="polite" {% if not last_signal_text %}hidden{% endif %}>
+    <span id="last-signal-text">{{ last_signal_text or "" }}</span>
+  </div>
   <nav>
     <a href="/dashboard">Dashboard</a>
     <details class="coin-menu js-accordion">
@@ -717,16 +732,37 @@
     // dat we weten hoeveel er openstaan is geen "nieuw" signaal, dus geen
     // golf bij het laden van de pagina zelf.
     var lastPendingCount = null;
+    var lastSignalId = null;
+    var lastKnownMessageAt = null;
+
+    // Hoe dichter bij de evaluatie/portfolio-risicolimiet, hoe sneller de
+    // risicogauge se shimmer klopt: 2.4s bij 0%, 0.8s bij 100%. null/undefined
+    // (geen portfolio_eur ingesteld) valt terug op het neutrale basistempo.
+    function riskPulseDuration(pct) {
+      if (pct === null || pct === undefined) return "2.4s";
+      var duration = 2.4 - (Math.min(Math.max(pct, 0), 100) / 100) * 1.6;
+      return duration.toFixed(2) + "s";
+    }
 
     function triggerSignalWave() {
       var wave = document.getElementById("signal-wave");
-      if (!wave) return;
-      wave.classList.remove("is-active");
-      // Force reflow zodat de animatie ook afgaat als hij kort na elkaar
-      // twee keer wordt getriggerd (anders blijft de class gewoon staan
-      // en speelt de animatie niet opnieuw af).
-      void wave.offsetWidth;
-      wave.classList.add("is-active");
+      if (wave) {
+        wave.classList.remove("is-active");
+        // Force reflow zodat de animatie ook afgaat als hij kort na elkaar
+        // twee keer wordt getriggerd (anders blijft de class gewoon staan
+        // en speelt de animatie niet opnieuw af).
+        void wave.offsetWidth;
+        wave.classList.add("is-active");
+      }
+      // Kortstondige hartslag-boost op het exacte moment van een nieuw signaal,
+      // in plaats van te wachten tot de eerstvolgende minuten-drempel van
+      // heartbeatDuration. Na 3 seconden valt de eerstvolgende refresh()-cyclus
+      // vanzelf terug op het tempo dat bij de werkelijke tijd-sinds-laatste-
+      // bericht hoort, geen aparte "terug naar normaal"-logica nodig.
+      document.documentElement.style.setProperty("--heartbeat-duration", "0.6s");
+      setTimeout(function () {
+        document.documentElement.style.setProperty("--heartbeat-duration", heartbeatDuration(lastKnownMessageAt));
+      }, 3000);
     }
 
     function refresh() {
@@ -742,6 +778,26 @@
           document.documentElement.style.setProperty("--ambient-scroll-duration", ambientScrollDuration(s.last_message_at));
           document.documentElement.style.setProperty("--portfolio-glow", portfolioGlow(s.week_result_eur));
           document.documentElement.style.setProperty("--brand-breathe-duration", brandBreatheDuration(s.volatility_ratio));
+          document.documentElement.style.setProperty("--risk-pulse-duration", riskPulseDuration(s.risk_pct));
+          lastKnownMessageAt = s.last_message_at;
+
+          if (s.last_signal && s.last_signal.id !== lastSignalId) {
+            var isFirstLoad = lastSignalId === null;
+            lastSignalId = s.last_signal.id;
+            if (!isFirstLoad) {
+              var banner = document.getElementById("last-signal-text");
+              var wrapper = document.getElementById("last-signal-banner");
+              if (banner && wrapper) {
+                wrapper.hidden = false;
+                banner.style.opacity = 0;
+                setTimeout(function () {
+                  banner.textContent = s.last_signal.coin + " · " + s.last_signal.label + " · " + timeAgo(s.last_signal.received_at);
+                  banner.style.opacity = 1;
+                }, 300);
+              }
+              triggerSignalWave();
+            }
+          }
 
           if (lastPendingCount !== null && s.pending_count > lastPendingCount) {
             triggerSignalWave();
