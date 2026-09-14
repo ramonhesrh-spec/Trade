@@ -585,6 +585,11 @@ async def send_demo_signal_message(chat_id: str) -> None:
     demo_signal = {
         "coin": "SUI", "direction": "long", "confidence": "hoog vertrouwen",
         "price": 0.8520, "take_profit": 0.9100, "stop_loss": 0.8180,
+        # Zonder dit toont format_signal_message per ongeluk het "Zelf
+        # gedetecteerd door HesPulse"-label (dat label verschijnt zodra
+        # message_id ontbreekt of None is) — een voorbeeldmelding hoort dat
+        # niet te tonen, dit is geen autonoom marktscan-signaal.
+        "message_id": 1,
         "technical_confirmed": 1,
         "reason": reason,
         "context_note": None,
