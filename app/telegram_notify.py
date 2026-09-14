@@ -145,6 +145,8 @@ def format_signal_message(signal: dict) -> str:
     lines.append(_factor_overview(signal["reason"]))
     if signal.get("context_note"):
         lines += ["", signal["context_note"]]
+    if signal.get("repeated_loss_note"):
+        lines += ["", signal["repeated_loss_note"]]
     if signal.get("open_risk_pct") is not None:
         lines += ["", _open_risk_line(signal["open_risk_pct"])]
     if signal.get("eval_budget_pct") is not None:

@@ -737,6 +737,21 @@ async def process_day_trading_signal(
     # juist goed uitpakte.
     repeated_factor = None if confirmed else await asyncio.to_thread(_repeated_failing_factor, interp.coin)
 
+    # Alleen zinvol voor een AUTONOOM signaal (message_id is None): een
+    # community-bericht heeft geen "herhaald patroon" in deze zin, dat is
+    # een menselijke keuze elke keer opnieuw. Puur informatief, het signaal
+    # wordt gewoon aangemaakt en gemeld zoals altijd — zie de spec, sectie 5.
+    repeated_loss_note = None
+    if message_id is None and confirmed:
+        loss_streak = await asyncio.to_thread(
+            repo.consecutive_autonomous_losses, interp.coin, interp.direction,
+        )
+        if loss_streak >= 3:
+            repeated_loss_note = (
+                f"📉 Dit zelf-gedetecteerde patroon verloor de laatste {loss_streak} keer op rij "
+                f"bij {interp.coin}. Blijft een geldige kans, weeg dit wel mee."
+            )
+
     # Eén keer gegenereerd voor iedereen, niet per gebruiker: de grafiek
     # zelf verschilt niet per ontvanger. Alleen bij een bevestigde kans,
     # een afwijzing heeft geen stop loss/take profit om te tekenen. Een
@@ -773,6 +788,7 @@ async def process_day_trading_signal(
         "context_note": context_note or None,
         "plain_explanation": plain_explanation or None,
         "repeated_factor": repeated_factor,
+        "repeated_loss_note": repeated_loss_note,
     }
     # Een nog niet genomen melding voor de tegenovergestelde richting van
     # dezelfde coin is achterhaald zodra hier een nieuwe melding binnenkomt:

@@ -1704,6 +1704,32 @@ def recent_autonomous_loss(coin: str, direction: str, hours: int) -> bool:
     return bool(row and row["result_eur"] is not None and row["result_eur"] < 0)
 
 
+def consecutive_autonomous_losses(coin: str, direction: str, limit: int = 3) -> int:
+    """Hoeveel van de laatste `limit` GESLOTEN autonome journal-regels
+    (message_id IS NULL) voor deze coin+richting op rij een verlies waren,
+    nieuwste eerst geteld, stopt zodra een winst wordt tegengekomen (0 als
+    de nieuwste al een winst is). Puur informatief — zie
+    telegram_notify.format_signal_message's repeated_loss_note-regel — het
+    signaal wordt hierdoor nooit onderdrukt, alleen gewaarschuwd."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT je.result_eur AS result_eur
+               FROM journal_entries je
+               JOIN signals s ON s.id = je.signal_id
+               WHERE s.coin = ? AND s.direction = ? AND s.message_id IS NULL
+                     AND s.is_practice = 0 AND je.exit_price IS NOT NULL
+               ORDER BY je.exit_time DESC LIMIT ?""",
+            (coin.upper(), direction.lower(), limit),
+        ).fetchall()
+    count = 0
+    for row in rows:
+        if row["result_eur"] is not None and row["result_eur"] < 0:
+            count += 1
+        else:
+            break
+    return count
+
+
 def period_stats(user_id: int, since_iso: str) -> dict:
     """Samenvatting van deze gebruiker zijn activiteit sinds `since_iso`,
     voor de wekelijkse/maandelijkse Telegram samenvatting. Signalen = elke
