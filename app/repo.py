@@ -929,6 +929,20 @@ _JOURNAL_SELECT = """
 """
 
 
+def list_recent_signals_for_user(user_id: int, limit: int = 1) -> list[dict]:
+    """Meest recente ECHTE signalen (geen oefentrade-events) die deze
+    gebruiker een logboekregel opleverden, nieuwste eerst. Gebruikt voor
+    het laatste-seintje-bannertje op het dashboard (/api/system_status)."""
+    with db.session() as conn:
+        rows = conn.execute(
+            _JOURNAL_SELECT + """
+            WHERE je.user_id = ? AND s.is_practice = 0
+            ORDER BY s.created_at DESC LIMIT ?""",
+            (user_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def create_journal_entry(
     signal_id: int, user_id: int, risk_eur: float,
     evaluation_id: Optional[int] = None, position_size: Optional[float] = None,
