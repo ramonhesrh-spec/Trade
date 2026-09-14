@@ -60,11 +60,16 @@
 {% endif %}
 <div class="data-grid">
   <div class="cell"><div class="k">Entry</div><div class="v">{{ "%.4f"|format(e.entry_price) }}</div></div>
-  <div class="cell"><div class="k">Nu</div><div class="v" data-price="{{ e.id }}">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</div></div>
+  <div class="cell"><div class="k">Nu</div><div class="v" data-price="{{ e.id }}">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}<span class="price-direction" data-price-direction="{{ e.id }}" aria-hidden="true"></span></div></div>
   <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
   <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
   <div class="cell"><div class="k">Grootte</div><div class="v">{{ "%.6f"|format(e.position_size) ~ " " ~ e.coin if e.position_size else "-" }}</div></div>
 </div>
+{% if e.sltp_progress_pct is not none %}
+<div class="sltp-progress" data-sltp="{{ e.id }}" data-stop="{{ e.stop_loss }}" data-take="{{ e.take_profit }}" data-direction="{{ e.direction }}">
+  <div class="sltp-progress-fill" style="width: {{ e.sltp_progress_pct }}%"></div>
+</div>
+{% endif %}
 <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="mono {{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
   {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
   <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>

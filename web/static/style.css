@@ -593,6 +593,20 @@ main h3 { font-size: 15px; gap: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { .risk-gauge-fill::after { display: none; } }
 
+/* SL/TP-voortgangsbalk: waar de huidige koers zit tussen stop loss (rood)
+   en take profit (groen) op een open trade. Prijsrichting-pijltje ernaast
+   toont alleen of de laatste tick omhoog of omlaag ging. */
+.sltp-progress { height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; margin: 8px 0 4px; }
+.sltp-progress-fill {
+  height: 100%; border-radius: 3px;
+  background: linear-gradient(90deg, var(--red), #f2b03e, var(--green));
+  transition: width 0.6s ease;
+}
+.price-direction { font-size: 10px; margin-left: 3px; }
+.price-direction.pos { color: var(--green); }
+.price-direction.neg { color: var(--red); }
+@media (prefers-reduced-motion: reduce) { .sltp-progress-fill { transition: none; } }
+
 /* Spanningsgloed op een open-trade kaart: hoe dichter de koers bij de
    stop loss of take profit komt, hoe sterker de kaart oplicht, rood
    richting stop loss, groen richting take profit. --tension (0-1) en
