@@ -133,7 +133,11 @@ def format_signal_message(signal: dict) -> str:
         f"{_direction_emoji(signal['direction'])} {_coin_label(signal['coin'])} · {_direction_label(signal['direction'])}",
         DIVIDER,
         f"🟢 {signal['confidence'].upper()}",
-        "",
+    ]
+    if signal.get("message_id") is None:
+        lines.append("🔎 Zelf gedetecteerd door HesPulse")
+    lines.append("")
+    lines += [
         f"💰 Prijs nu: {signal['price']:.4f}",
         f"🎯 Take profit: {signal['take_profit']:.4f}",
         f"🛑 Stop loss: {signal['stop_loss']:.4f}",

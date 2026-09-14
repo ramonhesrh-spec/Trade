@@ -91,6 +91,9 @@
       </div>
       <div class="confidence-line">
         <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
+        {% if e.message_id is none %}
+        <span class="muted" style="font-size: 11px;" title="HesPulse ontdekte dit zelf, zonder doorgestuurd bericht">🔎 zelf gedetecteerd</span>
+        {% endif %}
         {% if e.reason and e.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
         {% if e.trade_type != 'swing' %}
         <span class="muted" style="font-size: 12px;">
@@ -120,6 +123,9 @@
       </div>
       <div class="confidence-line">
         <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
+        {% if e.message_id is none %}
+        <span class="muted" style="font-size: 11px;" title="HesPulse ontdekte dit zelf, zonder doorgestuurd bericht">🔎 zelf gedetecteerd</span>
+        {% endif %}
         {% if e.reason and e.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
         {% if e.trade_type != 'swing' %}
         <span class="muted" style="font-size: 12px;">
