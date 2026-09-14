@@ -282,6 +282,34 @@ async def send_signal(
                 signal["coin"], signal["direction"], chat_id)
 
 
+def format_scan_cycle_summary(ranked: list[dict]) -> str:
+    """`ranked` is een lijst dicts met coin/direction/reason, al gesorteerd
+    van sterkste naar zwakste kans (zie market_scanner.scan_market()). Eén
+    extra bericht per scan-cyclus, alleen als er 2 of meer nieuwe autonome
+    kansen tegelijk ontstonden — een AANVULLING op de bestaande
+    pending_count-regel in elk los signaalbericht (task #111), geen
+    vervanging."""
+    lines = ["🔎 MEERDERE ZELF-GEDETECTEERDE KANSEN DEZE RONDE", DIVIDER]
+    for i, item in enumerate(ranked, start=1):
+        strength = item["reason"].count("✓")
+        lines.append(
+            f"{i}. {_direction_emoji(item['direction'])} {_coin_label(item['coin'])} "
+            f"· {_direction_label(item['direction'])} · {strength}/4 factoren"
+        )
+    lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
+    return "\n".join(lines)
+
+
+async def send_scan_cycle_summary(ranked: list[dict], chat_id: str) -> None:
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        logger.warning("Telegram token of chat ID ontbreekt, scan-samenvatting niet verstuurd")
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = format_scan_cycle_summary(ranked)
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=False)
+    logger.info("Scan-cyclus-samenvatting verstuurd naar chat %s (%s kansen)", chat_id, len(ranked))
+
+
 def format_swing_message(
     coin: str, direction: str, price: float, stop_loss: float, take_profit: float,
     daily_factors: list[tuple[str, bool, str]], factors_4h: list[tuple[str, bool, str]],

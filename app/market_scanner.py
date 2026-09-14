@@ -15,7 +15,7 @@ docs/superpowers/specs/2026-09-14-autonome-marktscan-design.md.
 import asyncio
 import logging
 
-from app import exchange, indicators, repo
+from app import exchange, indicators, repo, telegram_notify
 from app.anthropic_interpret import Interpretation
 from app.signal_processor import process_day_trading_signal
 
@@ -50,6 +50,12 @@ async def scan_market() -> None:
     except Exception:
         logger.exception("Kon BTC's eigen trend niet ophalen, ga verder zonder de vlak-check")
 
+    # Elke NIEUWE (niet: bijgewerkte) bevestigde autonome kans uit deze
+    # cyclus, voor de sterkte-ranking hieronder. was_open_before, vlak vóór
+    # de confirms_direction-precheck bepaald, beslist of dit een nieuw of
+    # een bestaand signaal wordt.
+    new_confirmed_this_cycle: list[dict] = []
+
     for coin_row in coins:
         coin = coin_row["symbol"]
         if btc_flat and coin != "BTC":
@@ -82,6 +88,8 @@ async def scan_market() -> None:
             # signaal slaat deze check over en gaat altijd door: die moet
             # elke cyclus ververst blijven, ook als hij nu niet meer
             # bevestigt (zie find_open_signal-dedup, spec Testen §2).
+            was_open_before = repo.find_open_signal(coin, direction) is not None
+
             confirmed, _ = indicators.confirms_direction(ind, direction)
             if not confirmed and repo.find_open_signal(coin, direction) is None:
                 continue
@@ -90,10 +98,31 @@ async def scan_market() -> None:
                 coin=coin, direction=direction, category="day_trading", unclear=False, reason="",
             )
             await process_day_trading_signal(None, interp, notify_on_update=False)
+
+            if not was_open_before:
+                fresh = repo.list_recent_signals(coin, limit=1)
+                if fresh and fresh[0]["message_id"] is None and fresh[0]["technical_confirmed"]:
+                    new_confirmed_this_cycle.append(
+                        {"coin": coin, "direction": direction, "reason": fresh[0]["reason"] or ""}
+                    )
         except Exception:
             # Eén coin die faalt (bijvoorbeeld een tijdelijke Binance-storing)
             # mag de rest van de scan niet blokkeren.
             logger.exception("Marktscan voor coin %s is mislukt, ga door met de volgende", coin)
+
+    if len(new_confirmed_this_cycle) >= 2:
+        ranked = sorted(
+            new_confirmed_this_cycle, key=lambda item: item["reason"].count("✓"), reverse=True,
+        )
+        for user in repo.list_users():
+            if not user["telegram_chat_id"]:
+                continue
+            try:
+                await telegram_notify.send_scan_cycle_summary(ranked, chat_id=user["telegram_chat_id"])
+            except Exception:
+                logger.exception(
+                    "Scan-cyclus-samenvatting voor gebruiker %s is mislukt", user["username"],
+                )
 
     logger.info("Marktscan klaar")
 
