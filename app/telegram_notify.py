@@ -8,7 +8,7 @@ from typing import Optional
 from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
-from app import config, exchange, repo
+from app import config, exchange, repo, risk
 
 logger = logging.getLogger("telegram_notify")
 
@@ -46,22 +46,13 @@ PROGRESS_BAR_WIDTH = 10
 
 def _progress_bar(price: float, stop_loss: float, take_profit: float, direction: str) -> str:
     """Blokjesbalk die toont waar de huidige prijs zit tussen stop loss (0%)
-    en take profit (100%), puur op basis van velden die het bericht toch
-    al meestuurt, geen aparte 'oorspronkelijke entry' hoeft hiervoor
-    bijgehouden te worden. Bij het risk:reward-ontwerp van risk.py
-    (1:2) staat een gloednieuwe kans al op ongeveer 33%, dat is geen fout,
-    dat is de ingebouwde verhouding tussen de stop-afstand en de
-    doelafstand."""
-    if direction == "long":
-        span = take_profit - stop_loss
-        pos = (price - stop_loss) / span if span else 0.0
-    else:
-        span = stop_loss - take_profit
-        pos = (stop_loss - price) / span if span else 0.0
-    pos = max(0.0, min(1.0, pos))
-    filled = round(pos * PROGRESS_BAR_WIDTH)
+    en take profit (100%). Percentage komt uit risk.compute_sltp_progress_pct
+    (gedeeld met de live voortgangsbalk op het dashboard), hier alleen naar
+    blokjes vertaald."""
+    pct = risk.compute_sltp_progress_pct(direction, price, stop_loss, take_profit)
+    filled = round(pct / 100 * PROGRESS_BAR_WIDTH)
     bar = "▓" * filled + "░" * (PROGRESS_BAR_WIDTH - filled)
-    return f"{bar} {pos * 100:.0f}% naar TP"
+    return f"{bar} {pct:.0f}% naar TP"
 
 
 # Boven welk percentage van de portfolio het totale open risico (som van

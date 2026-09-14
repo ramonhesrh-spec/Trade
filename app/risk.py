@@ -392,3 +392,20 @@ def compute_unrealized_pnl(
 
     pnl_pct = (pnl_eur / risk_eur * 100) if pnl_eur is not None and risk_eur else None
     return pnl_eur, pnl_pct
+
+
+def compute_sltp_progress_pct(direction: str, price: float, stop_loss: float, take_profit: float) -> float:
+    """Percentage (0-100) van waar de prijs nu zit tussen stop loss (0%) en
+    take profit (100%). Gedeeld tussen de Telegram-tekstbalk
+    (telegram_notify._progress_bar) en de live voortgangsbalk op het
+    dashboard, zodat beide altijd exact hetzelfde percentage tonen. Bij
+    risk.py se standaard 1:2 risk:reward-ontwerp staat een gloednieuwe
+    kans al op ongeveer 33%, dat is geen fout, dat is de ingebouwde
+    verhouding tussen de stop-afstand en de doelafstand."""
+    if direction == "long":
+        span = take_profit - stop_loss
+        pos = (price - stop_loss) / span if span else 0.0
+    else:
+        span = stop_loss - take_profit
+        pos = (stop_loss - price) / span if span else 0.0
+    return max(0.0, min(1.0, pos)) * 100
