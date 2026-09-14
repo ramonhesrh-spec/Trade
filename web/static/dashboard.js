@@ -115,7 +115,13 @@ function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
               dirEl.classList.toggle("neg", !up);
             }
             previous[key] = p.current_price;
-            priceEl.textContent = p.current_price.toFixed(4);
+            // firstChild.textContent (niet priceEl.textContent) i.p.v. de hele
+            // cel overschrijven: priceEl bevat op een echte trade-kaart ook het
+            // geneste prijsrichting-pijltje-span (zie macros.open_trade_body),
+            // dat anders bij elke poll uit de DOM verdween. Zelfde patroon als
+            // pnlEl.firstChild.textContent hieronder. Werkt ook ongewijzigd op
+            // de oefentrade-kaart, waar priceEl alleen een tekstnode bevat.
+            priceEl.firstChild.textContent = p.current_price.toFixed(4);
           }
           if (pnlEl && p.pnl_eur !== null) {
             const key = `pnl-${p.id}`;
