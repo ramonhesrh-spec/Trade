@@ -3,19 +3,26 @@ elke coin de richting (trend-based, zelfde als market_scanner.py), of de
 kans nu al bevestigd is, en drie entry-opties (huidige marktprijs, terugval
 naar de dichtstbijzijnde zone, uitbraak-dan-terugtest). Gebruikt exact
 dezelfde indicators.py/risk.py-functies als de live pipeline, geen aparte
-logica. Draai dit handmatig op de VPS (waar Binance wel bereikbaar is),
-niet vanuit main.py."""
+logica. Print een volledig overzicht in de terminal en stuurt daarnaast een
+compacte samenvatting naar Telegram (naar de eerste gebruiker met een
+gekoppelde chat_id). Draai dit handmatig op de VPS (waar Binance wel
+bereikbaar is), niet vanuit main.py."""
+import asyncio
 import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import exchange, indicators, repo, risk
+from telegram import Bot
+
+from app import config, exchange, indicators, repo, risk
 
 # Hoe ver de prijs nog voorbij de zone mag zitten om "nu aan het
 # terugtesten" te tellen (in ATR): zelfde soort ATR-genormaliseerde marge
 # als BTC_FLAT_EMA_GAP_ATR_MULTIPLE in indicators.py.
 RETEST_TOLERANCE_ATR_MULTIPLE = 0.3
+
+DIVIDER = "━" * 14
 
 
 def find_breakout_retest_zones(df, zones, atr, direction):
@@ -58,12 +65,15 @@ def find_breakout_retest_zones(df, zones, atr, direction):
     return hits
 
 
-def check_coin(coin: str) -> None:
+def check_coin(coin: str) -> dict:
+    """Print het volledige overzicht voor deze coin en geeft een compact
+    resultaat terug voor de Telegram-samenvatting in main()."""
     df = exchange.fetch_ohlcv(coin)
     ind = indicators.compute_indicators(df)
     direction = "long" if ind.ema9 > ind.ema21 else "short"
     confirmed, detail = indicators.confirms_direction(ind, direction)
     zones = indicators.detect_sr_zones(df)
+    factors = indicators.basic_factors(direction, ind)
 
     print(f"\n{'=' * 60}")
     print(f"{coin} — richting: {direction}   prijs: {ind.price:.4f}   "
@@ -91,6 +101,7 @@ def check_coin(coin: str) -> None:
         print(f"  Optie B (terugval naar zone, {zone.touches}x geraakt): "
               f"entry {entry:.4f}  stop {beter.stop_loss:.4f}  take {beter.take_profit:.4f}")
 
+    perfect_entry = None
     breakout_retests = find_breakout_retest_zones(df, zones, ind.atr, direction)
     if breakout_retests:
         zone, candles_since = max(breakout_retests, key=lambda h: h[0].touches)
@@ -105,22 +116,92 @@ def check_coin(coin: str) -> None:
               f"({zone.touches}x geraakt), {candles_since} candle(s) geleden doorbroken, "
               f"nu terugtest.")
         print(f"      Entry {entry:.4f}  stop {perfect.stop_loss:.4f}  take {perfect.take_profit:.4f}")
+        perfect_entry = {
+            "coin": coin, "direction": direction, "confirmed": confirmed,
+            "entry": entry, "stop_loss": perfect.stop_loss, "take_profit": perfect.take_profit,
+        }
+
+    return {
+        "coin": coin, "direction": direction, "confirmed": confirmed,
+        "factors": factors, "perfect_entry": perfect_entry,
+    }
+
+
+def build_telegram_summary(results: list[dict]) -> str:
+    perfect_entries = [r["perfect_entry"] for r in results if r["perfect_entry"]]
+    confirmed_long = [r["coin"] for r in results if r["confirmed"] and r["direction"] == "long"]
+    confirmed_short = [r["coin"] for r in results if r["confirmed"] and r["direction"] == "short"]
+    not_confirmed = [r["coin"] for r in results if not r["confirmed"]]
+
+    lines = ["🔍 Coin-check — alle gevolgde coins", DIVIDER]
+
+    if perfect_entries:
+        lines.append("")
+        lines.append("🎯 Perfecte entry (uitbraak + terugtest):")
+        for pe in perfect_entries:
+            note = "" if pe["confirmed"] else " (niet bevestigd)"
+            lines.append(
+                f"• {pe['coin']} {pe['direction']} — entry {pe['entry']:.4f}, "
+                f"stop {pe['stop_loss']:.4f}, take {pe['take_profit']:.4f}{note}"
+            )
+    else:
+        lines.append("")
+        lines.append("🎯 Geen enkele coin heeft nu een actieve uitbraak-dan-terugtest.")
+
+    lines.append("")
+    lines.append(DIVIDER)
+    lines.append(f"✅ Bevestigd long: {', '.join(confirmed_long) if confirmed_long else '—'}")
+    lines.append(f"✅ Bevestigd short: {', '.join(confirmed_short) if confirmed_short else '—'}")
+    lines.append(f"⚠️ Niet bevestigd: {', '.join(not_confirmed) if not_confirmed else '—'}")
+
+    # Meest voorkomende falende factor bij de short-richting: vaak dezelfde
+    # oorzaak (bijvoorbeeld trend net gedraaid, momentum nog niet mee) voor
+    # meerdere coins tegelijk, dat is dan in één oogopslag te zien.
+    shorts = [r for r in results if r["direction"] == "short"]
+    if shorts:
+        fail_counts: dict[str, int] = {}
+        for r in shorts:
+            for name, ok, _ in r["factors"]:
+                if not ok:
+                    fail_counts[name] = fail_counts.get(name, 0) + 1
+        if fail_counts:
+            top_factor, count = max(fail_counts.items(), key=lambda kv: kv[1])
+            if count >= max(2, len(shorts) // 2):
+                lines.append("")
+                lines.append(DIVIDER)
+                lines.append(f"📌 Bij {count} van de {len(shorts)} shorts faalt steeds dezelfde factor: {top_factor}.")
+
+    return "\n".join(lines)
+
+
+async def send_summary(text: str) -> None:
+    users = repo.list_users()
+    target = next((u for u in users if u.get("telegram_chat_id")), None)
+    if not target:
+        print("\nGeen gebruiker met een gekoppelde Telegram gevonden, samenvatting niet verstuurd.")
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    await bot.send_message(chat_id=target["telegram_chat_id"], text=text)
+    print(f"\nSamenvatting verstuurd naar {target['username']} op Telegram.")
 
 
 def main() -> None:
     coins = repo.list_coins()
     print(f"Check over {len(coins)} gevolgde coins...")
-    perfect_entries = []
+    results = []
     for coin_row in coins:
         coin = coin_row["symbol"]
         try:
-            check_coin(coin)
+            results.append(check_coin(coin))
         except Exception as exc:
             print(f"\n{coin}: MISLUKT — {exc}")
 
     print(f"\n{'=' * 60}")
     print("Klaar. Zoek hierboven naar '*** Optie C ***' voor coins met een "
           "actieve uitbraak-dan-terugtest.")
+
+    summary = build_telegram_summary(results)
+    asyncio.run(send_summary(summary))
 
 
 if __name__ == "__main__":
