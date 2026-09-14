@@ -43,12 +43,31 @@ def _migrate(conn: sqlite3.Connection) -> None:
     """CREATE TABLE IF NOT EXISTS raakt geen bestaande tabel aan, dus een
     nieuwe kolom op een tabel die al bestaat moet hier expliciet bij. Elke
     migratie is idempotent: al aanwezig is geen probleem."""
-    # Moet als allereerste in deze functie staan: PRAGMA foreign_keys heeft
-    # geen effect zodra er al een transactie open staat, en zodra hieronder
-    # een INSERT/UPDATE/DELETE draait begint Python's sqlite3-module er
-    # automatisch een. signals_sql is None op een gloednieuwe database
-    # (schema.sql zelf heeft dan al de nullable variant, zie Step 1), dus
-    # dit hele blok is dan een no-op.
+    existing = {row["name"] for row in conn.execute("PRAGMA table_info(signals)")}
+    if "is_practice" not in existing:
+        conn.execute("ALTER TABLE signals ADD COLUMN is_practice INTEGER NOT NULL DEFAULT 0")
+    if "adx" not in existing:
+        conn.execute("ALTER TABLE signals ADD COLUMN adx REAL")
+    if "atr_avg20" not in existing:
+        conn.execute("ALTER TABLE signals ADD COLUMN atr_avg20 REAL")
+    if "plain_explanation" not in existing:
+        conn.execute("ALTER TABLE signals ADD COLUMN plain_explanation TEXT")
+    if "trade_type" not in existing:
+        conn.execute("ALTER TABLE signals ADD COLUMN trade_type TEXT NOT NULL DEFAULT 'day_trading'")
+
+    # Moet NA de vijf ALTER TABLE-guards hierboven staan (niet ervoor): het
+    # rebuild-blok hieronder selecteert is_practice/adx/atr_avg20/
+    # plain_explanation/trade_type rechtstreeks uit de oude signals-tabel
+    # (CREATE TABLE signals_new / INSERT ... SELECT), dus die kolommen
+    # moeten al bestaan op een oude database die ze nog mist — anders
+    # faalt de SELECT. De echte beperking is dat dit blok moet draaien
+    # vóór elke instructie die een impliciete transactie opent (de PRAGMA
+    # foreign_keys hieronder heeft daarna geen effect meer): ALTER TABLE
+    # ... ADD COLUMN doet dat niet (Python's sqlite3-module opent alleen
+    # impliciet een transactie vóór INSERT/UPDATE/DELETE/REPLACE), dus de
+    # ALTER TABLE-guards hierboven mogen prima eerst draaien. signals_sql
+    # is None op een gloednieuwe database (schema.sql zelf heeft dan al de
+    # nullable variant, zie Step 1), dus dit hele blok is dan een no-op.
     signals_sql = conn.execute(
         "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'signals'"
     ).fetchone()
@@ -110,27 +129,17 @@ def _migrate(conn: sqlite3.Connection) -> None:
         """)
         conn.execute("DROP TABLE signals")
         conn.execute("ALTER TABLE signals_new RENAME TO signals")
-        # Deze drie indexen bestonden op de oude tabel en verdwijnen mee met
-        # de DROP TABLE hierboven; ze horen niet in schema.sql (die draait
-        # via executescript() vóór dit migratieblok, dus IF NOT EXISTS zou
-        # daar nooit meer opnieuw uitgevoerd worden op een bestaande db).
+        # Deze drie indexen staan ook gewoon in schema.sql (met dezelfde
+        # IF NOT EXISTS), maar dat script draait via executescript() vóór
+        # dit migratieblok — de DROP TABLE hierboven vernietigt een index
+        # samen met zijn tabel, dus ze moeten hier, ná de rebuild, opnieuw
+        # aangemaakt worden. Zonder dit blok verdwijnen ze stilzwijgend van
+        # een bestaande database zodra deze migratie één keer draait.
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_coin ON signals(coin)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_coin_direction ON signals(coin, direction)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_message_id ON signals(message_id)")
         conn.execute("COMMIT")
         conn.execute("PRAGMA foreign_keys=ON")
-
-    existing = {row["name"] for row in conn.execute("PRAGMA table_info(signals)")}
-    if "is_practice" not in existing:
-        conn.execute("ALTER TABLE signals ADD COLUMN is_practice INTEGER NOT NULL DEFAULT 0")
-    if "adx" not in existing:
-        conn.execute("ALTER TABLE signals ADD COLUMN adx REAL")
-    if "atr_avg20" not in existing:
-        conn.execute("ALTER TABLE signals ADD COLUMN atr_avg20 REAL")
-    if "plain_explanation" not in existing:
-        conn.execute("ALTER TABLE signals ADD COLUMN plain_explanation TEXT")
-    if "trade_type" not in existing:
-        conn.execute("ALTER TABLE signals ADD COLUMN trade_type TEXT NOT NULL DEFAULT 'day_trading'")
 
     existing_messages = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
     if "discord_user_id" not in existing_messages:
