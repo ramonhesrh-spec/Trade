@@ -78,16 +78,31 @@ def compute_indicators(df: pd.DataFrame) -> Indicators:
 
     volume_avg20 = volume.rolling(window=20).mean()
     volume_ratio = volume / volume_avg20
-    volume_percentile = volume.tail(20).rank(pct=True) * 100
 
     last = -1
+    # De laatste candle is bij Binance meestal nog "in wording" (nog niet
+    # gesloten): zijn volume-tot-nu-toe vergelijken met het gemiddelde/de
+    # laatste 20 VOLLEDIGE candles geeft bijna altijd een belachelijk lage
+    # ratio/percentiel, los van de echte marktsituatie — vooral bij een
+    # uurlijkse scan op een 4u-candle zit je 3 van de 4 keer middenin de
+    # candle. Prijs/RSI/MACD/EMA gebruiken bewust wel de live, nog vormende
+    # candle (dat is precies de bedoeling, je wil de actuele prijs), alleen
+    # de twee volume-metingen kijken naar de laatst AFGESLOTEN candle om
+    # dit scheeftrekken te voorkomen.
+    has_closed_candle = len(volume) > 1
+    volume_last_closed = -2 if has_closed_candle else last
+    # Alles tot en met de laatst afgesloten candle (dus de nog vormende
+    # laatste candle eruit als die er is), dan de laatste 20 daarvan.
+    volume_percentile_window = (volume.iloc[:-1] if has_closed_candle else volume).tail(20)
+    volume_percentile = volume_percentile_window.rank(pct=True) * 100
+
     return Indicators(
         price=float(close.iloc[last]),
         rsi=float(rsi.iloc[last]),
         macd=float(macd_line.iloc[last]),
         macd_signal=float(macd_signal_line.iloc[last]),
-        volume_ratio=float(volume_ratio.iloc[last]),
-        volume_percentile=float(volume_percentile.iloc[last]),
+        volume_ratio=float(volume_ratio.iloc[volume_last_closed]),
+        volume_percentile=float(volume_percentile.iloc[-1]),
         ema9=float(ema9.iloc[last]),
         ema21=float(ema21.iloc[last]),
         atr=float(atr_series.iloc[last]),
