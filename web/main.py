@@ -1484,6 +1484,7 @@ async def toggle_market_scan(enabled: str = Form(...), user: dict = Depends(requ
     zie de spec). Elke ingelogde gebruiker mag dit omzetten, net als bij
     de portfolio-instellingen hierboven — er is geen apart adminaccount in
     dit systeem."""
+    logger.info("Marktscan-noodrem gewijzigd door %s: %s", user["username"], "aan" if enabled == "1" else "uit")
     repo.set_market_scan_enabled(enabled == "1")
     return RedirectResponse(url="/dashboard", status_code=303)
 
