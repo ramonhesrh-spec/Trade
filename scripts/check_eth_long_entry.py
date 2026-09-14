@@ -14,6 +14,41 @@ from app import exchange, indicators, risk
 COIN = "ETH"
 DIRECTION = "long"
 
+# Hoe ver de prijs nog boven de zone mag zitten om "nu aan het terugtesten"
+# te tellen (in ATR): zelfde soort ATR-genormaliseerde marge als
+# BTC_FLAT_EMA_GAP_ATR_MULTIPLE in indicators.py. Te klein en een terugtest
+# die nog net niet helemaal terug is bij de zone wordt gemist, te groot en
+# elke lichte dip na een uitbraak telt al mee.
+RETEST_TOLERANCE_ATR_MULTIPLE = 0.3
+
+
+def find_breakout_retest_zones(df, zones, atr):
+    """Voor elke zone: is er, op closing-prijs, een duidelijke uitbraak
+    erboven geweest, staat die uitbraak nog overeind (geen candle sindsdien
+    weer onder de onderkant van de zone gesloten), en zit de prijs nu weer
+    dichtbij die zone? Dat is de uitbraak-dan-terugtest entry: de zone was
+    weerstand, is doorbroken, en dient nu als steun voor de terugval. Alleen
+    de meest recente uitbraak per zone telt (de laatste candle die van onder
+    de zone naar erboven sloot), niet een oudere die inmiddels weer
+    overschreden is."""
+    closes = df["close"].reset_index(drop=True)
+    current_price = closes.iloc[-1]
+    hits = []
+    for zone in zones:
+        broke_above = (closes.shift(1) <= zone.price_high) & (closes > zone.price_high)
+        breakout_indices = closes.index[broke_above]
+        if len(breakout_indices) == 0:
+            continue
+        breakout_idx = breakout_indices[-1]
+        since_breakout = closes.iloc[breakout_idx + 1:]
+        if (since_breakout < zone.price_low).any():
+            continue  # uitbraak sindsdien weer volledig ongeldig gemaakt
+        candles_since = len(closes) - 1 - breakout_idx
+        near_zone = zone.price_low <= current_price <= zone.price_high + RETEST_TOLERANCE_ATR_MULTIPLE * atr
+        if near_zone and candles_since > 0:
+            hits.append((zone, candles_since))
+    return hits
+
 df = exchange.fetch_ohlcv(COIN)
 ind = indicators.compute_indicators(df)
 confirmed, detail = indicators.confirms_direction(ind, DIRECTION)
@@ -70,3 +105,20 @@ if supports_below:
 else:
     print("Geen steunzone onder de huidige prijs gevonden binnen de lookback-periode: "
           "geen duidelijk beter entry-niveau, optie A is dan het enige aanknopingspunt.")
+
+breakout_retests = find_breakout_retest_zones(df, zones, ind.atr)
+if breakout_retests:
+    zone, candles_since = max(breakout_retests, key=lambda h: h[0].touches)
+    entry = ind.price
+    perfect = risk.compute_stop_take(DIRECTION, entry, ind.atr, swing_low=zone.price_low)
+    print(f"\n=== Optie C: uitbraak-dan-terugtest (de 'perfecte entry') ===")
+    print(f"Zone {zone.price_low:.2f} - {zone.price_high:.2f} was weerstand ({zone.touches}x geraakt), "
+          f"is {candles_since} candle(s) geleden doorbroken en wordt nu opnieuw getest als steun.")
+    print(f"Entry:      {entry:.2f}  (nu, tijdens de terugtest)")
+    print(f"Stop loss:  {perfect.stop_loss:.2f}  (net onder de doorbroken zone)")
+    print(f"Take profit:{perfect.take_profit:.2f}")
+    print(f"Risico:     {entry - perfect.stop_loss:.2f}")
+else:
+    print("\n=== Optie C: uitbraak-dan-terugtest ===")
+    print("Geen zone gevonden die recent doorbroken is en nu opnieuw getest wordt: "
+          "deze opzet is er op dit moment niet voor ETH.")
