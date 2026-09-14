@@ -38,13 +38,6 @@ REPEATED_REJECTION_COUNT = 3
 INTERPRET_FAILURE_ALERT_THRESHOLD = 3
 _consecutive_interpret_failures = 0
 
-# Hoeveel meldingen voor dezelfde coin een gebruiker op rij genegeerd moet
-# hebben (zie repo.consecutive_ignored_count) voor de vraag "wil je dit
-# uitzetten?". Precies op deze grens gevraagd, niet elke keer erna: anders
-# blijft de vraag terugkomen bij elke volgende melding zolang niemand hem
-# beantwoordt.
-REPEATED_IGNORE_MUTE_THRESHOLD = 5
-
 # Hoe dicht de prijs bij een bewaakt bron-niveau moet komen voordat de
 # swing-toets draait, in ATR van de DAILY candle (de structurele
 # tijdshorizon van zo'n niveau, zie de spec). Zelfde soort marge als
@@ -262,18 +255,10 @@ async def _process_one_coin(message_id: int, raw_text: str, interp: Interpretati
             except Exception:
                 logger.exception("Narrative-evaluatie voor %s (bericht %s) is mislukt",
                                   interp.coin, message_id)
-        elif message_summary:
-            for user in repo.list_users():
-                if not user["telegram_chat_id"]:
-                    continue
-                try:
-                    await telegram_notify.send_long_term_message(
-                        interp.coin, interp.direction, message_summary,
-                        chat_id=user["telegram_chat_id"],
-                    )
-                except Exception:
-                    logger.exception("Lange-termijn melding voor %s naar gebruiker %s is mislukt",
-                                      interp.coin, user["username"])
+        # Geen aparte Telegram-push meer voor een lange-termijn bericht
+        # zonder long/short-richting (dashboard-only, zie de declutter-ronde
+        # van 2026-09-14): message_summary staat al op de messages-rij, dus
+        # zichtbaar via het bestaande Berichtenoverzicht.
         return
 
     await process_day_trading_signal(message_id, interp)
@@ -651,18 +636,12 @@ async def compute_advanced_extra_factors(
     return factors
 
 
-async def _notify_new_coin(coin: str) -> None:
-    """Kort bericht naar elke gebruiker met een gekoppelde Telegram chat
-    zodra een coin voor het eerst ooit gezien wordt. Groei van de
-    dynamische coinlijst was tot nu toe volledig stil, alleen in de log."""
-    for user in repo.list_users():
-        if not user["telegram_chat_id"]:
-            continue
-        try:
-            await telegram_notify.send_new_coin_message(coin, chat_id=user["telegram_chat_id"])
-        except Exception:
-            logger.exception("Nieuwe-coin melding voor %s naar gebruiker %s is mislukt",
-                              coin, user["username"])
+def _notify_new_coin(coin: str) -> None:
+    """Geen Telegram-melding meer (dashboard-only, zie de declutter-ronde
+    van 2026-09-14): de coin zelf wordt meteen zichtbaar in het coin-menu
+    zodra hij aan de dynamische lijst is toegevoegd, een aparte push
+    voegde daar weinig aan toe naast de andere berichttypes."""
+    logger.info("Nieuwe coin %s toegevoegd aan de dynamische lijst", coin)
 
 
 async def process_day_trading_signal(
@@ -671,22 +650,17 @@ async def process_day_trading_signal(
 ) -> None:
     tracked, is_new_coin = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
     if is_new_coin:
-        await _notify_new_coin(interp.coin)
+        _notify_new_coin(interp.coin)
     if not tracked:
         logger.info("Coin %s bestaat niet als paar op de exchange, geen technische toetsing mogelijk",
                     interp.coin)
         # Zonder dit verdwijnt een bericht dat de AI wel prima kon lezen
-        # (coin en richting zijn al bekend) hierna alsnog volledig stil: geen
-        # Telegram, geen spoor voor de operator, alsof het nooit aankwam.
+        # (coin en richting zijn al bekend) hierna alsnog volledig stil voor
+        # de operator: geen spoor, alsof het nooit aankwam. Sinds de
+        # declutter-ronde (2026-09-14) geen aparte Telegram-push meer naar
+        # de gebruiker (dashboard-only, zie Berichtenoverzicht), de
+        # logboekregel hier blijft wel bestaan als spoor.
         repo.mark_message_untracked(message_id, interp.coin)
-        for user in repo.list_users():
-            if not user["telegram_chat_id"]:
-                continue
-            try:
-                await telegram_notify.send_untracked_coin_message(interp.coin, chat_id=user["telegram_chat_id"])
-            except Exception:
-                logger.exception("Niet-ondersteunde-coin melding voor %s naar gebruiker %s is mislukt",
-                                  interp.coin, user["username"])
         return
 
     df = await asyncio.to_thread(exchange.fetch_ohlcv, interp.coin)
@@ -854,10 +828,6 @@ async def process_day_trading_signal(
     # dat is geen uitvoerbare trade opzet), anders voelt stilte aan als "er
     # is niks gebeurd" in plaats van "getoetst, met deze reden afgekeurd".
     for user in repo.list_users():
-        # Vóór het aanmaken van de nieuwe regel gemeten: die staat zelf nog
-        # op 'nieuw', niet 'genegeerd', en zou de telling anders altijd naar
-        # 0 laten terugvallen.
-        ignored_streak = repo.consecutive_ignored_count(user["id"], interp.coin)
         muted = repo.is_coin_muted(user["id"], interp.coin)
 
         # Vóór _resolve_signal_risk opgehaald (in plaats van pas bij de
@@ -985,14 +955,9 @@ async def process_day_trading_signal(
                 logger.exception("Chart versturen voor gebruiker %s, signaal %s is mislukt",
                                   user["username"], signal_id)
 
-        # Precies op de grens gevraagd (== in plaats van >=), zie
-        # REPEATED_IGNORE_MUTE_THRESHOLD hierboven.
-        if ignored_streak == REPEATED_IGNORE_MUTE_THRESHOLD:
-            try:
-                await telegram_notify.send_mute_suggestion(interp.coin, chat_id=user["telegram_chat_id"])
-            except Exception:
-                logger.exception("Mute-suggestie voor gebruiker %s, coin %s is mislukt",
-                                  user["username"], interp.coin)
+        # Geen proactieve mute-suggestie meer na herhaald negeren
+        # (dashboard-only, zie de declutter-ronde van 2026-09-14): muten kan
+        # nog gewoon via het dashboard, alleen de Telegram-push is vervallen.
 
 
 async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:

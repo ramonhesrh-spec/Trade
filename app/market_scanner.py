@@ -15,7 +15,7 @@ docs/superpowers/specs/2026-09-14-autonome-marktscan-design.md.
 import asyncio
 import logging
 
-from app import exchange, indicators, repo, telegram_notify
+from app import exchange, indicators, repo
 from app.anthropic_interpret import Interpretation
 from app.signal_processor import process_day_trading_signal
 
@@ -55,12 +55,6 @@ async def scan_market() -> None:
             logger.info("BTC is zijwaarts deze cyclus, altcoin-signalering overgeslagen")
     except Exception:
         logger.exception("Kon BTC's eigen trend niet ophalen, ga verder zonder de vlak-check")
-
-    # Elke NIEUWE (niet: bijgewerkte) bevestigde autonome kans uit deze
-    # cyclus, voor de sterkte-ranking hieronder. was_open_before, vóór de
-    # cooldown-check bepaald (zie hieronder), beslist of dit een nieuw of
-    # een bestaand signaal wordt.
-    new_confirmed_this_cycle: list[dict] = []
 
     for coin_row in coins:
         coin = coin_row["symbol"]
@@ -131,46 +125,10 @@ async def scan_market() -> None:
             # opleveren. De logboekregel en de trackrecord blijven gewoon
             # bestaan, alleen de melding zelf wordt overgeslagen.
             await process_day_trading_signal(None, interp, notify_on_update=False, notify_on_reject=False)
-
-            if not was_open_before:
-                fresh = repo.list_recent_signals(coin, limit=1)
-                if fresh and fresh[0]["message_id"] is None and fresh[0]["technical_confirmed"]:
-                    new_confirmed_this_cycle.append(
-                        {"coin": coin, "direction": direction, "reason": fresh[0]["reason"] or ""}
-                    )
         except Exception:
             # Eén coin die faalt (bijvoorbeeld een tijdelijke Binance-storing)
             # mag de rest van de scan niet blokkeren.
             logger.exception("Marktscan voor coin %s is mislukt, ga door met de volgende", coin)
-
-    if len(new_confirmed_this_cycle) >= 2:
-        ranked = sorted(
-            new_confirmed_this_cycle, key=lambda item: item["reason"].count("✓"), reverse=True,
-        )
-        for user in repo.list_users():
-            if not user["telegram_chat_id"]:
-                continue
-            # Mute geldt per coin per gebruiker (repo.is_coin_muted): een
-            # coin die deze gebruiker heeft uitgezet hoort niet in zijn
-            # eigen ranking-samenvatting, ook al staat hij wel in de (voor
-            # alle gebruikers gedeelde) ranked-lijst hierboven. Brengt
-            # muting het aantal zichtbare kansen voor deze gebruiker onder
-            # de 2, dan is er voor hem geen "meerdere kansen" meer om samen
-            # te vatten.
-            visible_ranked = [
-                item for item in ranked if not repo.is_coin_muted(user["id"], item["coin"])
-            ]
-            if len(visible_ranked) < 2:
-                continue
-            force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
-            try:
-                await telegram_notify.send_scan_cycle_summary(
-                    visible_ranked, chat_id=user["telegram_chat_id"], force_silent=force_silent,
-                )
-            except Exception:
-                logger.exception(
-                    "Scan-cyclus-samenvatting voor gebruiker %s is mislukt", user["username"],
-                )
 
     logger.info("Marktscan klaar")
 
