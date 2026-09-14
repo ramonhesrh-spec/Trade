@@ -57,11 +57,18 @@
     return best;
   }
 
+  // Geen `title` hier: lightweight-charts tekent die tekst permanent naast
+  // het laatste punt van de lijn, ongeacht lastValueVisible/priceLineVisible
+  // (die twee onderdrukken alleen de as-badge en de horizontale lijn). EMA9
+  // en EMA21 lopen per definitie vlak bij de actuele prijs, dus die twee
+  // labels vielen daar altijd samen met de as-prijs en de laatste-koers-
+  // lijn — precies de drukste plek van de grafiek, blijvend overlappend.
+  // Kleur onderscheidt de twee lijnen al voldoende, geen tekst nodig.
   const ema9Series = chart.addLineSeries({
-    color: "#17e5d6", lineWidth: 1, title: "EMA9", lastValueVisible: false, priceLineVisible: false,
+    color: "#17e5d6", lineWidth: 1, lastValueVisible: false, priceLineVisible: false,
   });
   const ema21Series = chart.addLineSeries({
-    color: "#7d8c8a", lineWidth: 1, title: "EMA21", lastValueVisible: false, priceLineVisible: false,
+    color: "#7d8c8a", lineWidth: 1, lastValueVisible: false, priceLineVisible: false,
   });
 
   // Een wig, driehoek, kanaal of trendlijn heeft schuine randen, geen platte
@@ -93,7 +100,16 @@
     return { group, el };
   });
 
+  // Minimale verticale ruimte tussen twee zone-labels (community of
+  // zelf-gedetecteerd door elkaar) om te voorkomen dat twee zones die op
+  // bijna dezelfde prijs liggen (heel gewoon: een SR-zone-rand is vaak
+  // letterlijk de stop of take, dus een tweede zone vlak ernaast komt
+  // regelmatig voor) hun labels over elkaar heen tekenen. Iets hoger dan
+  // de labelhoogte zelf (11px tekst + 1px padding boven/onder + rand).
+  const ZONE_LABEL_MIN_GAP = 20;
+
   function positionZones() {
+    const labels = [];
     zoneEls.forEach(({ group, el }) => {
       const yHigh = candleSeries.priceToCoordinate(group.high);
       const yLow = candleSeries.priceToCoordinate(group.low);
@@ -104,6 +120,10 @@
       el.style.display = "block";
       el.style.top = `${yHigh}px`;
       el.style.height = `${Math.max(yLow - yHigh, 2)}px`;
+      // Label staat absoluut binnen de zone-div: zijn natuurlijke positie
+      // op de pagina is de top van de zone-div (yHigh) plus zijn eigen
+      // top (2px, uit de CSS-regel .chart-zone span).
+      labels.push({ span: el.querySelector("span"), elTop: yHigh, naturalPageTop: yHigh + 2 });
     });
     srZoneEls.forEach(({ zone, el }) => {
       const yHigh = candleSeries.priceToCoordinate(zone.price_high);
@@ -115,6 +135,20 @@
       el.style.display = "block";
       el.style.top = `${yHigh}px`;
       el.style.height = `${Math.max(yLow - yHigh, 2)}px`;
+      labels.push({ span: el.querySelector("span"), elTop: yHigh, naturalPageTop: yHigh + 2 });
+    });
+
+    // Op paginahoogte sorteren en elk label dat te dicht op zijn voorganger
+    // staat naar beneden duwen, zodat de labels een leesbare trap vormen
+    // in plaats van op elkaar te liggen. Puur voor de labels, de zone-
+    // blokken zelf (het doorzichtige vlak) blijven op hun echte prijshoogte.
+    labels.sort((a, b) => a.naturalPageTop - b.naturalPageTop);
+    let lastPageTop = -Infinity;
+    labels.forEach(({ span, elTop, naturalPageTop }) => {
+      if (!span) return;
+      const pageTop = Math.max(naturalPageTop, lastPageTop + ZONE_LABEL_MIN_GAP);
+      span.style.top = `${pageTop - elTop}px`;
+      lastPageTop = pageTop;
     });
   }
 
