@@ -2,7 +2,10 @@
 Description=Draai de HesPulse autonome marktscan elk uur
 
 [Timer]
-OnCalendar=hourly
+# Niet OnCalendar=hourly (vuurt op :00): dat botst met
+# crypto-level-check.timer's *:0/15-grid (:00, :15, :30, :45). Minuut 7
+# vermijdt die botsing, elk uur.
+OnCalendar=*:07:00
 Persistent=true
 
 [Install]
