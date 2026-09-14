@@ -2,6 +2,16 @@
    meerdere plekken los van elkaar bijgehouden moet worden (bijvoorbeeld bij
    een tekstwijziging die overal moet doorwerken). #}
 
+{# Label voor een autonoom marktscan-signaal (geen doorgestuurd Discord-
+   bericht als bron, zie app/market_scanner.py): entry.message_id is dan
+   None. Stond eerder drie keer identiek uitgeschreven (dashboard.html 2x,
+   coin.html 1x), nu op één plek. #}
+{% macro self_detected(entry) %}
+{% if entry.message_id is none %}
+<span class="muted" style="font-size: 11px;" title="HesPulse ontdekte dit zelf, zonder doorgestuurd bericht">🔎 zelf gedetecteerd</span>
+{% endif %}
+{% endmacro %}
+
 {# Een swing-reason heeft een andere vorm dan een day-trading-reason: twee
    groepen ("Daily: ..." en "4 uur: ...") gescheiden door een newline, elk met
    eigen " | "-gescheiden factoren. Blind op " | " splitsen toonde de eerste
