@@ -54,6 +54,17 @@ def _migrate(conn: sqlite3.Connection) -> None:
     ).fetchone()
     if signals_sql and "message_id INTEGER NOT NULL" in signals_sql["sql"]:
         conn.execute("PRAGMA foreign_keys=OFF")
+        # De vijf statements tot en met de drie CREATE INDEX-calls hieronder
+        # zitten expliciet in één transactie: zonder dit commit sqlite3 elke
+        # DDL-statement apart (Python's sqlite3-module auto-commit't vóór
+        # elke DDL), dus een crash tussen DROP TABLE signals en de ALTER
+        # TABLE RENAME zou de database zonder signals-tabel achterlaten
+        # (data intact onder signals_new, maar handmatig herstel nodig) —
+        # niet acceptabel op een productiedatabase met echte gebruikers en
+        # echt geld. De PRAGMA's blijven bewust BUITEN dit blok: SQLite
+        # negeert een PRAGMA foreign_keys-wijziging stilzwijgend zodra een
+        # transactie al open staat.
+        conn.execute("BEGIN IMMEDIATE")
         conn.execute("""
             CREATE TABLE signals_new (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,6 +117,7 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_coin ON signals(coin)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_coin_direction ON signals(coin, direction)")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_message_id ON signals(message_id)")
+        conn.execute("COMMIT")
         conn.execute("PRAGMA foreign_keys=ON")
 
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(signals)")}
