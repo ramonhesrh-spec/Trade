@@ -130,6 +130,18 @@ def check_btc_trend(direction: str, btc_ind: Indicators) -> tuple[str, bool, str
     return ("BTC-trend", ok, detail)
 
 
+def btc_is_flat(btc_ind: Indicators) -> bool:
+    """True als BTC zelf geen duidelijke trend heeft (EMA9 en EMA21 liggen
+    te dicht bij elkaar, genormaliseerd op BTC's eigen ATR). Gebruikt door
+    de autonome marktscan om altcoin-signalen deze cyclus over te slaan:
+    bij een zijwaartse BTC-markt geven altcoin-signalen vaker valse
+    uitslagen. BTC zelf blijft altijd meedoen, die kan niet circulair van
+    zijn eigen trend afhangen."""
+    if not btc_ind.atr:
+        return False
+    return abs(btc_ind.ema9 - btc_ind.ema21) < BTC_FLAT_EMA_GAP_ATR_MULTIPLE * btc_ind.atr
+
+
 def check_1h_trend(direction: str, ind_1h: Indicators) -> tuple[str, bool, str]:
     """Bevestiging op een tweede, snellere timeframe (1 uur naast de
     hoofd-timeframe van 4 uur). Onafhankelijk bewijs dat de richting ook op
@@ -605,6 +617,15 @@ def detect_sr_zones(df: pd.DataFrame, lookback: int = SR_ZONE_LOOKBACK) -> list[
 # zone die zes keer de ATR verderop ligt is geen realistisch punt meer
 # voor déze trade, ook al is de zone zelf sterk.
 SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE = 6.0
+
+# Hoe klein het verschil tussen EMA9 en EMA21 van BTC zelf moet zijn
+# (genormaliseerd op zijn eigen ATR) om de markt als "zijwaarts, geen
+# duidelijke richting" te beschouwen. Zelfde soort ATR-genormaliseerde
+# marge als SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE hierboven, alleen dan voor
+# "te dicht bij elkaar" in plaats van "te ver uit elkaar". Gebruikt door
+# app/market_scanner.py om altcoin-signalering over te slaan zolang BTC
+# zelf geen duidelijke trend heeft — zie de spec, sectie 3.
+BTC_FLAT_EMA_GAP_ATR_MULTIPLE = 0.3
 
 
 def check_sr_zone(direction: str, entry_price: float, atr: float, zones: list[SRZone]) -> tuple[str, bool, str]:

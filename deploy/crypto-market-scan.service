@@ -1,0 +1,9 @@
+[Unit]
+Description=HesPulse - autonome marktscan, zelf kansen ontdekken zonder doorgestuurd bericht
+
+[Service]
+Type=oneshot
+User=crypto
+WorkingDirectory=/opt/crypto-alerts
+EnvironmentFile=/opt/crypto-alerts/.env
+ExecStart=/opt/crypto-alerts/.venv/bin/python3 -m app.market_scanner
