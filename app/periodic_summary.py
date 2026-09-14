@@ -42,8 +42,11 @@ async def run(period: str) -> None:
             # Niks gebeurd deze periode, geen bericht sturen om niet te
             # gaan spammen met een lege samenvatting.
             continue
+        auto_scan_stats = repo.period_stats_auto_scan(user["id"], since_iso) if period == "week" else None
         try:
-            await telegram_notify.send_period_summary(stats, label, chat_id=user["telegram_chat_id"])
+            await telegram_notify.send_period_summary(
+                stats, label, chat_id=user["telegram_chat_id"], auto_scan_stats=auto_scan_stats,
+            )
         except Exception:
             logger.exception("Periodieke samenvatting voor %s is mislukt", user["username"])
 

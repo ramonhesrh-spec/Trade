@@ -599,13 +599,19 @@ async def send_demo_signal_message(chat_id: str) -> None:
     logger.info("Voorbeeldmelding verstuurd naar chat %s", chat_id)
 
 
-def format_period_summary(stats: dict, period_label: str) -> str:
+def format_period_summary(
+    stats: dict, period_label: str, auto_scan_stats: Optional[dict] = None,
+) -> str:
     """Wekelijkse of maandelijkse samenvatting (zie app/periodic_summary.py),
     dezelfde stijl als de andere berichten. Geen afbeelding: er is geen
     bestaande beeld-generatie in dit systeem om op aan te sluiten (de
     "deel"-knop op een gesloten trade is platte tekst, geen plaatje), en
     tekst in dezelfde stijl als alle andere berichten is consistenter dan
-    er één losse afbeelding tussenuit te laten springen."""
+    er één losse afbeelding tussenuit te laten springen.
+
+    auto_scan_stats komt alleen van de wekelijkse samenvatting
+    (app/periodic_summary.py geeft None door voor de maandelijkse) — zie
+    repo.period_stats_auto_scan."""
     lines = [
         f"📅 Samenvatting {period_label}",
         DIVIDER,
@@ -628,15 +634,27 @@ def format_period_summary(stats: dict, period_label: str) -> str:
             lines.append(f"📉 Zwakste trade: {_coin_label(w['coin'])} {w_sign}€{w['result_eur']:.2f}")
     else:
         lines.append("Geen trades gesloten in deze periode.")
+    if auto_scan_stats and auto_scan_stats["signal_count"] > 0:
+        winrate_txt = (
+            f", winrate {auto_scan_stats['winrate_pct']:.0f}%"
+            if auto_scan_stats["winrate_pct"] is not None else ""
+        )
+        lines += [
+            "",
+            f"🔎 HesPulse vond deze week zelf {auto_scan_stats['signal_count']} kansen "
+            f"({auto_scan_stats['closed_count']} afgesloten{winrate_txt}).",
+        ]
     lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
 
 
-async def send_period_summary(stats: dict, period_label: str, chat_id: str) -> None:
+async def send_period_summary(
+    stats: dict, period_label: str, chat_id: str, auto_scan_stats: Optional[dict] = None,
+) -> None:
     if not config.TELEGRAM_BOT_TOKEN or not chat_id:
         return
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
-    text = format_period_summary(stats, period_label)
+    text = format_period_summary(stats, period_label, auto_scan_stats=auto_scan_stats)
     await bot.send_message(chat_id=chat_id, text=text, disable_notification=True)
     logger.info("Periodieke samenvatting (%s) verstuurd naar chat %s", period_label, chat_id)
 

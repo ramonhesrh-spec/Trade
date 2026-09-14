@@ -1775,6 +1775,35 @@ def period_stats(user_id: int, since_iso: str) -> dict:
     }
 
 
+def period_stats_auto_scan(user_id: int, since_iso: str) -> dict:
+    """Zelfde vorm als period_stats hierboven, maar alleen voor autonome,
+    door de marktscan ontdekte signalen (message_id IS NULL). Gebruikt
+    voor de extra regel in de wekelijkse samenvatting (niet de
+    maandelijkse) — zie de spec, sectie 2."""
+    with db.session() as conn:
+        signals_row = conn.execute(
+            """SELECT COUNT(*) AS n
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.created_at >= ? AND s.is_practice = 0
+                     AND s.message_id IS NULL""",
+            (user_id, since_iso),
+        ).fetchone()
+        closed = conn.execute(
+            """SELECT je.result_eur AS result_eur
+               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
+               WHERE je.user_id = ? AND je.exit_time >= ? AND je.exit_price IS NOT NULL
+                     AND s.is_practice = 0 AND je.evaluation_id IS NULL AND s.message_id IS NULL""",
+            (user_id, since_iso),
+        ).fetchall()
+    wins = sum(1 for r in closed if r["result_eur"] is not None and r["result_eur"] > 0)
+    return {
+        "signal_count": signals_row["n"] or 0,
+        "closed_count": len(closed),
+        "wins": wins,
+        "winrate_pct": (wins / len(closed) * 100) if closed else None,
+    }
+
+
 def coin_stats(user_id: int) -> list[dict]:
     """Winrate en gemiddeld resultaat per coin, op basis van gesloten trades
     van deze gebruiker. Laat zien welke coin het goed doet met dit systeem,
