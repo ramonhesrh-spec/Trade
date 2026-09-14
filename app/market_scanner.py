@@ -51,8 +51,8 @@ async def scan_market() -> None:
         logger.exception("Kon BTC's eigen trend niet ophalen, ga verder zonder de vlak-check")
 
     # Elke NIEUWE (niet: bijgewerkte) bevestigde autonome kans uit deze
-    # cyclus, voor de sterkte-ranking hieronder. was_open_before, vlak vóór
-    # de confirms_direction-precheck bepaald, beslist of dit een nieuw of
+    # cyclus, voor de sterkte-ranking hieronder. was_open_before, vóór de
+    # cooldown-check bepaald (zie hieronder), beslist of dit een nieuw of
     # een bestaand signaal wordt.
     new_confirmed_this_cycle: list[dict] = []
 
@@ -65,12 +65,22 @@ async def scan_market() -> None:
             ind = indicators.compute_indicators(df)
             direction = "long" if ind.ema9 > ind.ema21 else "short"
 
-            # Cooldown na een recent verlies op dezelfde coin+richting, zo
-            # vroeg mogelijk gecheckt (direction is er net, dus dit kan niet
-            # eerder): bespaart de confirms_direction/find_open_signal-check
-            # en de aanroep van process_day_trading_signal hieronder voor
-            # een coin die toch overgeslagen wordt.
-            if repo.recent_autonomous_loss(coin, direction, AUTO_SCAN_LOSS_COOLDOWN_HOURS):
+            # Vóór de cooldown-check bepaald (in plaats van erna): een coin
+            # met een al bestaand open signaal moet elke cyclus ververst
+            # blijven, ook binnen de cooldown-periode na een verlies (zie
+            # find_open_signal-dedup, spec Testen §2). Ook hergebruikt door
+            # de confirms_direction-precheck verderop, in plaats van een
+            # tweede find_open_signal-aanroep.
+            was_open_before = repo.find_open_signal(coin, direction) is not None
+
+            # Cooldown na een recent verlies op dezelfde coin+richting: mag
+            # alleen een NIEUW signaal blokkeren (not was_open_before), nooit
+            # het verversen van een signaal dat al open staat — dat zou een
+            # gebruiker met een lopende trade zonder verse toetsing achter-
+            # laten, alleen omdat er ooit eerder verlies op was.
+            if not was_open_before and repo.recent_autonomous_loss(
+                coin, direction, AUTO_SCAN_LOSS_COOLDOWN_HOURS,
+            ):
                 logger.info(
                     "%s %s overgeslagen: recent verlies binnen de cooldown", coin, direction,
                 )
@@ -87,11 +97,9 @@ async def scan_market() -> None:
             # technical_confirmed. Een coin met een al bestaand open
             # signaal slaat deze check over en gaat altijd door: die moet
             # elke cyclus ververst blijven, ook als hij nu niet meer
-            # bevestigt (zie find_open_signal-dedup, spec Testen §2).
-            was_open_before = repo.find_open_signal(coin, direction) is not None
-
+            # bevestigt.
             confirmed, _ = indicators.confirms_direction(ind, direction)
-            if not confirmed and repo.find_open_signal(coin, direction) is None:
+            if not confirmed and not was_open_before:
                 continue
 
             interp = Interpretation(
