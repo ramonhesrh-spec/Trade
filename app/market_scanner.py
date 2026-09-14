@@ -21,6 +21,11 @@ from app.signal_processor import process_day_trading_signal
 
 logger = logging.getLogger("market_scanner")
 
+# Twaalf van de vierentwintig scan-cycli per dag overslaan na een verlies
+# op dezelfde coin+richting is een reële afkoelperiode zonder een kans
+# dagenlang te blokkeren. Zie de spec, sectie 4.
+AUTO_SCAN_LOSS_COOLDOWN_HOURS = 12
+
 
 async def scan_market() -> None:
     if not repo.is_market_scan_enabled():
@@ -30,12 +35,40 @@ async def scan_market() -> None:
     coins = repo.list_coins()
     logger.info("Marktscan gestart, %s coins in de dynamische lijst", len(coins))
 
+    # BTC's eigen trend eenmalig per cyclus ophalen (niet per altcoin
+    # herhalen): als BTC zelf zijwaarts beweegt, is een altcoin-signaal
+    # vaker ruis dan een echte kans. Kan deze ophaling zelf mislukken, dan
+    # gaat de scan gewoon door zonder de vlak-check (fail-open), net als
+    # elke andere Binance-storing hieronder per coin.
+    btc_flat = False
+    try:
+        btc_df = await asyncio.to_thread(exchange.fetch_ohlcv, "BTC")
+        btc_ind = indicators.compute_indicators(btc_df)
+        btc_flat = indicators.btc_is_flat(btc_ind)
+        if btc_flat:
+            logger.info("BTC is zijwaarts deze cyclus, altcoin-signalering overgeslagen")
+    except Exception:
+        logger.exception("Kon BTC's eigen trend niet ophalen, ga verder zonder de vlak-check")
+
     for coin_row in coins:
         coin = coin_row["symbol"]
+        if btc_flat and coin != "BTC":
+            continue
         try:
             df = await asyncio.to_thread(exchange.fetch_ohlcv, coin)
             ind = indicators.compute_indicators(df)
             direction = "long" if ind.ema9 > ind.ema21 else "short"
+
+            # Cooldown na een recent verlies op dezelfde coin+richting, zo
+            # vroeg mogelijk gecheckt (direction is er net, dus dit kan niet
+            # eerder): bespaart de confirms_direction/find_open_signal-check
+            # en de aanroep van process_day_trading_signal hieronder voor
+            # een coin die toch overgeslagen wordt.
+            if repo.recent_autonomous_loss(coin, direction, AUTO_SCAN_LOSS_COOLDOWN_HOURS):
+                logger.info(
+                    "%s %s overgeslagen: recent verlies binnen de cooldown", coin, direction,
+                )
+                continue
 
             # Cheap pre-filter, niet een tweede toetsing: alleen de
             # basisfactoren, zodat een coin die deze cyclus duidelijk niet

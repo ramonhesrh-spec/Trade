@@ -1681,6 +1681,29 @@ def daily_results(user_id: int, days: int = 126) -> dict:
     return by_day
 
 
+def recent_autonomous_loss(coin: str, direction: str, hours: int) -> bool:
+    """True als de laatst GESLOTEN journal-regel op een autonoom signaal
+    (message_id IS NULL, zie app/market_scanner.py) voor deze coin+richting
+    binnen `hours` uur geleden een verlies was. 'Gesloten' wordt hier,
+    net als in period_stats, herkend aan exit_price IS NOT NULL (er is
+    geen apart 'gesloten'-statusveld in dit schema). Gebruikt om de scan
+    een afkoelperiode te geven na een verlies op dezelfde coin/richting,
+    in plaats van elk uur opnieuw dezelfde whipsaw te melden."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
+    with db.session() as conn:
+        row = conn.execute(
+            """SELECT je.result_eur AS result_eur
+               FROM journal_entries je
+               JOIN signals s ON s.id = je.signal_id
+               WHERE s.coin = ? AND s.direction = ? AND s.message_id IS NULL
+                     AND s.is_practice = 0 AND je.exit_price IS NOT NULL
+                     AND je.exit_time >= ?
+               ORDER BY je.exit_time DESC LIMIT 1""",
+            (coin.upper(), direction.lower(), cutoff),
+        ).fetchone()
+    return bool(row and row["result_eur"] is not None and row["result_eur"] < 0)
+
+
 def period_stats(user_id: int, since_iso: str) -> dict:
     """Samenvatting van deze gebruiker zijn activiteit sinds `since_iso`,
     voor de wekelijkse/maandelijkse Telegram samenvatting. Signalen = elke
