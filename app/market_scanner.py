@@ -26,6 +26,12 @@ logger = logging.getLogger("market_scanner")
 # dagenlang te blokkeren. Zie de spec, sectie 4.
 AUTO_SCAN_LOSS_COOLDOWN_HOURS = 12
 
+# Whiplash-rem: een NIEUWE richting moet dit aantal scan-cycli achter
+# elkaar aanhouden voor er gemeld wordt. Voorkomt dat een EMA9/EMA21-
+# kruising die binnen een uur alweer terugklapt eerst een long en dan een
+# short melding oplevert voor dezelfde coin.
+WHIPLASH_MIN_CONSECUTIVE_CYCLES = 2
+
 
 async def scan_market() -> None:
     if not repo.is_market_scan_enabled():
@@ -72,6 +78,19 @@ async def scan_market() -> None:
             # de confirms_direction-precheck verderop, in plaats van een
             # tweede find_open_signal-aanroep.
             was_open_before = repo.find_open_signal(coin, direction) is not None
+
+            # Whiplash-rem: alleen relevant voor een NIEUW signaal, een
+            # coin die al open staat moet net als bij de cooldown hierboven
+            # altijd ververst blijven, ongeacht hoe vers de richting zelf
+            # is. Elke cyclus geregistreerd (ook als dit een refresh is),
+            # zodat de teller altijd de echte, actuele reeks weerspiegelt.
+            consecutive = repo.record_scan_direction(coin, direction)
+            if not was_open_before and consecutive < WHIPLASH_MIN_CONSECUTIVE_CYCLES:
+                logger.info(
+                    "%s %s overgeslagen: richting pas %s cyclus/cycli op rij, nog geen %s",
+                    coin, direction, consecutive, WHIPLASH_MIN_CONSECUTIVE_CYCLES,
+                )
+                continue
 
             # Cooldown na een recent verlies op dezelfde coin+richting: mag
             # alleen een NIEUW signaal blokkeren (not was_open_before), nooit

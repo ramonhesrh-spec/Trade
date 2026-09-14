@@ -189,6 +189,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     existing_coins = {row["name"] for row in conn.execute("PRAGMA table_info(coins)")}
     if "note" not in existing_coins:
         conn.execute("ALTER TABLE coins ADD COLUMN note TEXT")
+    if "last_scan_direction" not in existing_coins:
+        conn.execute("ALTER TABLE coins ADD COLUMN last_scan_direction TEXT")
+    if "last_scan_direction_count" not in existing_coins:
+        conn.execute("ALTER TABLE coins ADD COLUMN last_scan_direction_count INTEGER NOT NULL DEFAULT 0")
 
     existing_prop_evaluations = {row["name"] for row in conn.execute("PRAGMA table_info(prop_evaluations)")}
     if "danger_alert_sent" not in existing_prop_evaluations:

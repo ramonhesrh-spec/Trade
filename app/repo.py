@@ -609,6 +609,29 @@ def set_market_scan_enabled(enabled: bool) -> None:
     db.set_setting(MARKET_SCAN_SETTING_KEY, "1" if enabled else "0")
 
 
+def record_scan_direction(coin: str, direction: str) -> int:
+    """Whiplash-rem voor de autonome marktscan: registreert de richting van
+    deze cyclus en geeft terug hoeveel cycli achter elkaar dezelfde
+    richting al aanhoudt (1 bij een wissel of de eerste keer). De
+    aanroeper (market_scanner.py) vereist minstens 2 op rij voor een
+    NIEUW signaal, zodat een EMA9/EMA21-kruising die na één cyclus alweer
+    terugklapt niet meteen een melding oplevert."""
+    with db.session() as conn:
+        row = conn.execute(
+            "SELECT last_scan_direction, last_scan_direction_count FROM coins WHERE symbol = ?",
+            (coin.upper(),),
+        ).fetchone()
+        if row and row["last_scan_direction"] == direction.lower():
+            new_count = row["last_scan_direction_count"] + 1
+        else:
+            new_count = 1
+        conn.execute(
+            "UPDATE coins SET last_scan_direction = ?, last_scan_direction_count = ? WHERE symbol = ?",
+            (direction.lower(), new_count, coin.upper()),
+        )
+        return new_count
+
+
 def list_coins() -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(

@@ -116,7 +116,14 @@ CREATE TABLE IF NOT EXISTS coins (
     -- Eigen aantekening bij een coin, los van een specifieke trade
     -- (bijvoorbeeld een unlock-datum of een aankomend nieuwsmoment).
     -- Gedeeld tussen gebruikers, net als de rest van de coin-gegevens.
-    note TEXT
+    note TEXT,
+    -- Whiplash-rem voor de autonome marktscan (app/market_scanner.py): de
+    -- richting van de laatst geziene scan-cyclus, en hoeveel cycli achter
+    -- elkaar dezelfde richting al aanhoudt. Voorkomt dat een wispelturige
+    -- EMA9/EMA21-kruising binnen een paar cycli eerst een long en dan een
+    -- short meldt voor dezelfde coin.
+    last_scan_direction TEXT,
+    last_scan_direction_count INTEGER NOT NULL DEFAULT 0
 );
 
 -- Coins waarvoor een gebruiker zelf geen Telegram-meldingen meer wil,
