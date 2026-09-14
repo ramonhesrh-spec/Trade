@@ -45,6 +45,11 @@ blijft voor elke gebruiker apart.
   loss of take profit al geraakt, en is de prijs weer terug bij het niveau
   van een nog niet genomen signaal (proactief, niet alleen bij een nieuw
   Discord bericht)
+- `app/market_scanner.py` — autonome marktscan: ontdekt zelf een
+  day-trading kans in de dynamische coinlijst, zonder dat een gebruiker
+  eerst een Discord bericht doorstuurt, elk uur via een eigen systemd timer
+  (hergebruikt dezelfde toetsings- en fan-out-logica als een normaal
+  signaal)
 - `web/` — FastAPI dashboard met login, inclusief een berichtenoverzicht op
   `/berichten` van alles wat wel en niet tot een melding leidde, een
   trackrecord per coin, en een csv export van je logboek
@@ -256,6 +261,36 @@ Zo ja, dan krijg je daar één keer een Telegram bericht over, met het
 verzoek om de trade zelf te sluiten in het dashboard. Er wordt niets
 automatisch gesloten, en je krijgt niet elke 15 minuten opnieuw hetzelfde
 seintje.
+
+### Autonome marktscan
+
+```bash
+sudo cp deploy/crypto-market-scan.service /etc/systemd/system/
+sudo cp deploy/crypto-market-scan.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-market-scan.timer
+```
+
+Draait elk uur (op minuut 7, niet op het hele uur: dat zou botsen met het
+`*:0/15`-grid van `crypto-level-check.timer` hierboven) en toetst zelf elke
+coin uit de dynamische coinlijst op een day-trading kans, zonder dat er
+eerst een Discord bericht doorgestuurd hoeft te worden. Richting komt uit
+de EMA9/EMA21 trend, de rest van de toetsing (technische factoren, stop
+loss, take profit, positiegrootte, Telegram melding per gebruiker) is
+exact dezelfde `process_day_trading_signal`-logica als een normaal, door
+een gebruiker doorgestuurd signaal.
+
+Een systeembrede noodrem staat op het dashboard (Instellingen): staat die
+uit, doet de scan niets die cyclus. Er is geen noodrem per gebruiker, dit
+is een systeembrede instelling.
+
+Een nieuwe database-migratie in deze release (de `signals`-tabel rebuild
+in `app/db.py`, nodig voor autonome signalen zonder brongbericht) draait
+bij het opstarten van `crypto-bot`. Herstart daarom bij deze release
+`crypto-bot` en `crypto-web` NA ELKAAR, niet gelijktijdig: `crypto-web`
+mag pas herstarten nadat `crypto-bot` de migratie heeft voltooid, anders
+kan het dashboard tijdens de rebuild tegen een tijdelijk inconsistente
+`signals`-tabel aanlopen.
 
 ### Uitgebreide technische factoren (optioneel)
 
