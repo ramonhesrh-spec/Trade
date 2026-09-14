@@ -595,6 +595,20 @@ def add_coin_if_new(symbol: str, market: str) -> bool:
         return True
 
 
+MARKET_SCAN_SETTING_KEY = "market_scan_enabled"
+
+
+def is_market_scan_enabled() -> bool:
+    """Noodrem voor de autonome marktscan (app/market_scanner.py): een
+    systeembrede vlag in de bestaande settings-tabel, standaard aan.
+    Geen per-gebruiker instelling, zie de spec."""
+    return db.get_setting(MARKET_SCAN_SETTING_KEY, default="1") == "1"
+
+
+def set_market_scan_enabled(enabled: bool) -> None:
+    db.set_setting(MARKET_SCAN_SETTING_KEY, "1" if enabled else "0")
+
+
 def list_coins() -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(

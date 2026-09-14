@@ -23,6 +23,10 @@ logger = logging.getLogger("market_scanner")
 
 
 async def scan_market() -> None:
+    if not repo.is_market_scan_enabled():
+        logger.info("Marktscan staat uit (noodrem), niets gedaan")
+        return
+
     coins = repo.list_coins()
     logger.info("Marktscan gestart, %s coins in de dynamische lijst", len(coins))
 

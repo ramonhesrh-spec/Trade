@@ -375,6 +375,17 @@
       <button type="submit" class="button-link">Stuur mezelf een voorbeeldmelding</button>
     </form>
     {% endif %}
+    <form action="/settings/market_scan" method="post" style="margin-top: 12px;">
+      {% if market_scan_enabled %}
+      <input type="hidden" name="enabled" value="0">
+      <button type="submit" class="button-reset">Autonome marktscan uitzetten</button>
+      <p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">Nu aan: elk uur zoekt HesPulse zelf naar kansen, ook zonder doorgestuurd bericht.</p>
+      {% else %}
+      <input type="hidden" name="enabled" value="1">
+      <button type="submit">Autonome marktscan aanzetten</button>
+      <p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">Nu uit: HesPulse reageert alleen nog op doorgestuurde berichten.</p>
+      {% endif %}
+    </form>
   </div>
 </section>
 {% if heatmap_weeks %}

@@ -725,6 +725,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "user": user,
         "onboarding": onboarding,
         "onboarding_complete": onboarding_complete,
+        "market_scan_enabled": repo.is_market_scan_enabled(),
         "entries": entries,
         "open_entries": open_entries,
         "taken_entries": taken_entries,
@@ -1475,6 +1476,16 @@ async def unmute_coin(symbol: str, user: dict = Depends(require_login)):
     signal_processor.REPEATED_IGNORE_MUTE_THRESHOLD)."""
     repo.unmute_coin(user["id"], symbol.upper())
     return RedirectResponse(url=f"/coins/{symbol.upper()}", status_code=303)
+
+
+@app.post("/settings/market_scan")
+async def toggle_market_scan(enabled: str = Form(...), user: dict = Depends(require_login)):
+    """Systeembrede noodrem voor de autonome marktscan (niet per gebruiker,
+    zie de spec). Elke ingelogde gebruiker mag dit omzetten, net als bij
+    de portfolio-instellingen hierboven — er is geen apart adminaccount in
+    dit systeem."""
+    repo.set_market_scan_enabled(enabled == "1")
+    return RedirectResponse(url="/dashboard", status_code=303)
 
 
 @app.post("/coins/{symbol}/trendlines")
