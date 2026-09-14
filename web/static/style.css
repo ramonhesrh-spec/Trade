@@ -244,7 +244,21 @@ html.page-transition-out body { opacity: 0; transform: translateY(-4px); }
   .ambient-glow, .ambient-pulse-line, .signal-wave.is-active { animation: none; }
 }
 .topbar-ticker { margin: 0; border-top: 1px solid var(--border); }
-.last-signal-banner { padding: 6px 16px; font-size: 12.5px; color: var(--muted); text-align: center; transition: opacity 0.3s ease; }
+/* Als een compact pilletje naast de live-klok in de topbar, niet als
+   losse volle-breedte regel: dat oogde als een verdwaalde ondertitel
+   onder het logo, en stapelde op smalle schermen als een extra regel in
+   een lijstje. Zelfde vormtaal als .live-pill. Op mobiel verborgen, zelfde
+   breedte-drempel als .live-pill: op dat formaat is dit de minst
+   essentiële snippet chrome, en juist de regel die het topbar-stapeltje
+   te lang maakte. */
+.last-signal-pill {
+  display: inline-flex; align-items: center; max-width: 200px;
+  padding: 4px 10px; border-radius: 999px; background: var(--border);
+  font-size: 11.5px; font-weight: 500; color: var(--muted);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  transition: opacity 0.3s ease;
+}
+@media (max-width: 560px) { .last-signal-pill { display: none; } }
 .topbar nav { display: flex; align-items: center; gap: 18px; margin-top: 10px; }
 .topbar nav a {
   color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 500;

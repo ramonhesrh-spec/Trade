@@ -284,6 +284,9 @@
       <span>HesPulse</span>
     </a>
     <div class="topbar-right">
+      <span class="last-signal-pill" id="last-signal-banner" title="Laatste signaal" aria-live="polite" {% if not last_signal_text %}hidden{% endif %}>
+        <span id="last-signal-text">{{ last_signal_text or "" }}</span>
+      </span>
       <span class="live-pill"><span class="ping"></span><span id="live-clock">--:--:--</span></span>
       <button type="button" id="system-status" class="system-status" title="Systeemstatus" aria-label="Systeemstatus tonen" aria-expanded="false" aria-controls="system-status-popover">
         <span class="status-dot"></span><span class="status-label">systeem</span>
@@ -315,9 +318,6 @@
     </div>
   </div>
   {% endif %}
-  <div class="last-signal-banner" id="last-signal-banner" aria-live="polite" {% if not last_signal_text %}hidden{% endif %}>
-    <span id="last-signal-text">{{ last_signal_text or "" }}</span>
-  </div>
   <nav>
     <a href="/dashboard">Dashboard</a>
     <details class="coin-menu js-accordion">
