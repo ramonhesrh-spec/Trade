@@ -1142,8 +1142,29 @@ def update_journal_status(
     alsnog berekend tegen de WERKELIJKE entry_price. Zonder dit blijft
     position_size None, waardoor close_journal_trade's fee/hefboomkosten-
     berekening (notional_eur = position_size * entry_price) op nul uitkomt
-    en een evaluatie-trade zo geen fees betaalt."""
+    en een evaluatie-trade zo geen fees betaalt.
+
+    Dashboard/repo bepalen "nog niet genomen" overal aan de hand van
+    entry_price IS NULL, niet aan de hand van status (zie bijvoorbeeld
+    list_pending_entries_with_price). Kiest een gebruiker "Genomen" of
+    "Aangepast" zonder zelf een prijs in te vullen, dan zou de kaart
+    zonder onderstaande fallback status='genomen' krijgen maar toch in de
+    "nog niet genomen"-lijst blijven staan — voor de gebruiker onzichtbaar
+    alsof de klik niks deed. Bij geen eigen prijs valt hij daarom terug op
+    de signaalprijs zelf: "genomen zonder aanpassing" betekent immers
+    "genomen tegen het gemelde niveau". Alleen 'genegeerd' mag entry_price
+    leeg laten, dat is precies "geen trade"."""
     with db.session() as conn:
+        if entry_price is None and status != "genegeerd":
+            signal_row = conn.execute(
+                """SELECT s.price AS price FROM journal_entries je
+                   JOIN signals s ON s.id = je.signal_id
+                   WHERE je.id = ? AND je.user_id = ?""",
+                (entry_id, user_id),
+            ).fetchone()
+            if signal_row and signal_row["price"] is not None:
+                entry_price = signal_row["price"]
+
         if entry_price is not None:
             row = conn.execute(
                 """SELECT je.evaluation_id AS evaluation_id, je.risk_eur AS risk_eur,
