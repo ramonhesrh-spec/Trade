@@ -665,7 +665,9 @@ async def _notify_new_coin(coin: str) -> None:
                               coin, user["username"])
 
 
-async def process_day_trading_signal(message_id: int, interp: Interpretation) -> None:
+async def process_day_trading_signal(
+    message_id: int | None, interp: Interpretation, notify_on_update: bool = True,
+) -> None:
     tracked, is_new_coin = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
     if is_new_coin:
         await _notify_new_coin(interp.coin)
@@ -700,7 +702,14 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
     confirmed, reason = indicators.confirms_direction(
         ind, interp.direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
     )
-    message_levels = [lvl["price_level"] for lvl in repo.list_source_levels_for_message(message_id, interp.coin)]
+    # Geen bericht (autonoom marktscan-signaal, zie app/market_scanner.py)
+    # betekent geen bron-niveaus om mee te wegen — die komen altijd uit een
+    # gedeeld screenshot. De SR-zone-niveaus (zone_levels, hieronder)
+    # blijven wel gewoon meetellen, die komen niet uit een bericht.
+    message_levels = (
+        [lvl["price_level"] for lvl in repo.list_source_levels_for_message(message_id, interp.coin)]
+        if message_id is not None else []
+    )
     zone_levels = [
         edge for zone in zones for edge in (zone.price_low, zone.price_high)
         if abs(edge - ind.price) <= indicators.SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * ind.atr
@@ -792,7 +801,8 @@ async def process_day_trading_signal(message_id: int, interp: Interpretation) ->
         repo.update_signal(signal_id, signal_data)
         logger.info("Signaal %s bijgewerkt (was al open voor %s %s), bevestigd=%s",
                     signal_id, interp.coin, interp.direction, confirmed)
-        await _notify_signal_update(signal_id, signal_data)
+        if notify_on_update:
+            await _notify_signal_update(signal_id, signal_data)
         return
 
     signal_id = repo.insert_signal(signal_data)
