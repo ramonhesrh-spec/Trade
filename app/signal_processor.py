@@ -666,7 +666,8 @@ async def _notify_new_coin(coin: str) -> None:
 
 
 async def process_day_trading_signal(
-    message_id: int | None, interp: Interpretation, notify_on_update: bool = True,
+    message_id: int | None, interp: Interpretation,
+    notify_on_update: bool = True, notify_on_reject: bool = True,
 ) -> None:
     tracked, is_new_coin = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
     if is_new_coin:
@@ -917,6 +918,19 @@ async def process_day_trading_signal(
             # en dashboard-cijfers blijven kloppen, alleen de Telegram-melding
             # zelf wordt overgeslagen, dat is precies wat "uitzetten" betekent.
             logger.info("Coin %s is gemute voor gebruiker %s, geen Telegram-melding verstuurd",
+                        interp.coin, user["username"])
+            continue
+
+        if not confirmed and not notify_on_reject:
+            # Autonome marktscan (app/market_scanner.py) geeft
+            # notify_on_reject=False mee: een afgewezen ("nog geen sterke
+            # kans") autonoom signaal hoeft geen Telegram-melding te
+            # sturen, in tegenstelling tot een door de gebruiker gedeeld
+            # bericht (die krijgt altijd een bericht, ook bij afwijzing).
+            # De logboekregel hierboven blijft wel gewoon bestaan, het
+            # trackrecord blijft compleet, alleen de melding zelf wordt
+            # overgeslagen — zelfde patroon als de muted-continue hierboven.
+            logger.info("Afwijzing voor %s niet gemeld aan gebruiker %s (notify_on_reject=False)",
                         interp.coin, user["username"])
             continue
 

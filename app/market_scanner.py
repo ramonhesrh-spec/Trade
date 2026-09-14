@@ -105,7 +105,13 @@ async def scan_market() -> None:
             interp = Interpretation(
                 coin=coin, direction=direction, category="day_trading", unclear=False, reason="",
             )
-            await process_day_trading_signal(None, interp, notify_on_update=False)
+            # notify_on_reject=False: een autonoom afgewezen kans ("nog geen
+            # sterke kans") hoeft geen Telegram-melding te sturen zoals een
+            # door de gebruiker gedeeld bericht dat wel altijd krijgt — dat
+            # zou elk uur voor tientallen coins een afwijzingsbericht
+            # opleveren. De logboekregel en de trackrecord blijven gewoon
+            # bestaan, alleen de melding zelf wordt overgeslagen.
+            await process_day_trading_signal(None, interp, notify_on_update=False, notify_on_reject=False)
 
             if not was_open_before:
                 fresh = repo.list_recent_signals(coin, limit=1)
@@ -125,8 +131,23 @@ async def scan_market() -> None:
         for user in repo.list_users():
             if not user["telegram_chat_id"]:
                 continue
+            # Mute geldt per coin per gebruiker (repo.is_coin_muted): een
+            # coin die deze gebruiker heeft uitgezet hoort niet in zijn
+            # eigen ranking-samenvatting, ook al staat hij wel in de (voor
+            # alle gebruikers gedeelde) ranked-lijst hierboven. Brengt
+            # muting het aantal zichtbare kansen voor deze gebruiker onder
+            # de 2, dan is er voor hem geen "meerdere kansen" meer om samen
+            # te vatten.
+            visible_ranked = [
+                item for item in ranked if not repo.is_coin_muted(user["id"], item["coin"])
+            ]
+            if len(visible_ranked) < 2:
+                continue
+            force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
             try:
-                await telegram_notify.send_scan_cycle_summary(ranked, chat_id=user["telegram_chat_id"])
+                await telegram_notify.send_scan_cycle_summary(
+                    visible_ranked, chat_id=user["telegram_chat_id"], force_silent=force_silent,
+                )
             except Exception:
                 logger.exception(
                     "Scan-cyclus-samenvatting voor gebruiker %s is mislukt", user["username"],

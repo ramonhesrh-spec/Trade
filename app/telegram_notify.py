@@ -296,21 +296,29 @@ def format_scan_cycle_summary(ranked: list[dict]) -> str:
     lines = ["🔎 MEERDERE ZELF-GEDETECTEERDE KANSEN DEZE RONDE", DIVIDER]
     for i, item in enumerate(ranked, start=1):
         strength = item["reason"].count("✓")
+        # Dynamische noemer (niet hardcoded 4): met ENABLE_ADVANCED_FACTORS
+        # aan telt reason 16 factoren in plaats van 4, zie
+        # indicators.confirms_direction.
+        total = len(item["reason"].split(" | "))
         lines.append(
             f"{i}. {_direction_emoji(item['direction'])} {_coin_label(item['coin'])} "
-            f"· {_direction_label(item['direction'])} · {strength}/4 factoren"
+            f"· {_direction_label(item['direction'])} · {strength}/{total} factoren"
         )
     lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
 
 
-async def send_scan_cycle_summary(ranked: list[dict], chat_id: str) -> None:
+async def send_scan_cycle_summary(ranked: list[dict], chat_id: str, force_silent: bool = False) -> None:
+    """force_silent komt van de stille-uren instelling van de gebruiker
+    (zie is_quiet_now), zelfde patroon als send_signal/send_signal_update
+    hierboven — deze samenvatting is niet uitzonderlijk genoeg om iemands
+    eigen stille uren te doorbreken."""
     if not config.TELEGRAM_BOT_TOKEN or not chat_id:
         logger.warning("Telegram token of chat ID ontbreekt, scan-samenvatting niet verstuurd")
         return
     bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
     text = format_scan_cycle_summary(ranked)
-    await bot.send_message(chat_id=chat_id, text=text, disable_notification=False)
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=force_silent)
     logger.info("Scan-cyclus-samenvatting verstuurd naar chat %s (%s kansen)", chat_id, len(ranked))
 
 
