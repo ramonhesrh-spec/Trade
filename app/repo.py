@@ -774,11 +774,16 @@ def list_day_trading_signals_for_backtest(limit: int = 50) -> list[dict]:
 def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
     """Gedeelde, echte signalen voor deze coin, hetzelfde voor iedereen.
     Oefentrades zijn persoonlijk en horen hier niet tussen, anders lijkt
-    een handmatige oefening net een echt signaal voor alle gebruikers."""
+    een handmatige oefening net een echt signaal voor alle gebruikers.
+    LEFT JOIN naar messages: een autonoom, door de marktscan ontdekt
+    signaal heeft geen message_id, zie app/market_scanner.py."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT s.*, COALESCE(mcr.message_summary, m.message_summary) AS message_summary FROM signals s
-               JOIN messages m ON m.id = s.message_id
+            """SELECT s.*,
+                      COALESCE(mcr.message_summary, m.message_summary, 'Zelf gedetecteerd door HesPulse')
+                          AS message_summary
+               FROM signals s
+               LEFT JOIN messages m ON m.id = s.message_id
                LEFT JOIN message_coin_results mcr ON mcr.message_id = s.message_id AND mcr.coin = s.coin
                WHERE s.coin = ? AND s.is_practice = 0 ORDER BY s.created_at DESC LIMIT ?""",
             (coin.upper(), limit),
@@ -912,6 +917,7 @@ _JOURNAL_SELECT = """
         s.coin AS coin, s.direction AS direction, s.category AS category,
         s.trade_type AS trade_type,
         s.price AS price,
+        s.message_id AS message_id,
         COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss,
         COALESCE(je.take_profit_override, s.take_profit) AS take_profit,
         s.stop_loss AS stop_loss_default, s.take_profit AS take_profit_default,
@@ -921,10 +927,11 @@ _JOURNAL_SELECT = """
         s.atr_avg20 AS atr_avg20, s.adx AS adx,
         s.reason AS reason, s.context_note AS context_note, s.created_at AS created_at,
         s.is_practice AS is_practice, s.plain_explanation AS plain_explanation,
-        COALESCE(mcr.message_summary, m.message_summary) AS message_summary
+        COALESCE(mcr.message_summary, m.message_summary, 'Zelf gedetecteerd door HesPulse')
+            AS message_summary
     FROM journal_entries je
     JOIN signals s ON s.id = je.signal_id
-    JOIN messages m ON m.id = s.message_id
+    LEFT JOIN messages m ON m.id = s.message_id
     LEFT JOIN message_coin_results mcr ON mcr.message_id = s.message_id AND mcr.coin = s.coin
 """
 

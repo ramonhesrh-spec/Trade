@@ -43,6 +43,71 @@ def _migrate(conn: sqlite3.Connection) -> None:
     """CREATE TABLE IF NOT EXISTS raakt geen bestaande tabel aan, dus een
     nieuwe kolom op een tabel die al bestaat moet hier expliciet bij. Elke
     migratie is idempotent: al aanwezig is geen probleem."""
+    # Moet als allereerste in deze functie staan: PRAGMA foreign_keys heeft
+    # geen effect zodra er al een transactie open staat, en zodra hieronder
+    # een INSERT/UPDATE/DELETE draait begint Python's sqlite3-module er
+    # automatisch een. signals_sql is None op een gloednieuwe database
+    # (schema.sql zelf heeft dan al de nullable variant, zie Step 1), dus
+    # dit hele blok is dan een no-op.
+    signals_sql = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'signals'"
+    ).fetchone()
+    if signals_sql and "message_id INTEGER NOT NULL" in signals_sql["sql"]:
+        conn.execute("PRAGMA foreign_keys=OFF")
+        conn.execute("""
+            CREATE TABLE signals_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id INTEGER REFERENCES messages(id),
+                coin TEXT NOT NULL,
+                direction TEXT NOT NULL,
+                category TEXT NOT NULL,
+                price REAL,
+                rsi REAL,
+                macd REAL,
+                macd_signal REAL,
+                volume_ratio REAL,
+                ema9 REAL,
+                ema21 REAL,
+                atr REAL,
+                atr_avg20 REAL,
+                adx REAL,
+                technical_confirmed INTEGER NOT NULL DEFAULT 0,
+                confidence TEXT NOT NULL,
+                reason TEXT,
+                stop_loss REAL,
+                take_profit REAL,
+                context_note TEXT,
+                is_practice INTEGER NOT NULL DEFAULT 0,
+                trade_type TEXT NOT NULL DEFAULT 'day_trading',
+                plain_explanation TEXT,
+                created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("""
+            INSERT INTO signals_new (
+                id, message_id, coin, direction, category, price, rsi, macd,
+                macd_signal, volume_ratio, ema9, ema21, atr, atr_avg20, adx,
+                technical_confirmed, confidence, reason, stop_loss, take_profit,
+                context_note, is_practice, trade_type, plain_explanation, created_at
+            )
+            SELECT
+                id, message_id, coin, direction, category, price, rsi, macd,
+                macd_signal, volume_ratio, ema9, ema21, atr, atr_avg20, adx,
+                technical_confirmed, confidence, reason, stop_loss, take_profit,
+                context_note, is_practice, trade_type, plain_explanation, created_at
+            FROM signals
+        """)
+        conn.execute("DROP TABLE signals")
+        conn.execute("ALTER TABLE signals_new RENAME TO signals")
+        # Deze drie indexen bestonden op de oude tabel en verdwijnen mee met
+        # de DROP TABLE hierboven; ze horen niet in schema.sql (die draait
+        # via executescript() vóór dit migratieblok, dus IF NOT EXISTS zou
+        # daar nooit meer opnieuw uitgevoerd worden op een bestaande db).
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_coin ON signals(coin)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_coin_direction ON signals(coin, direction)")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_signals_message_id ON signals(message_id)")
+        conn.execute("PRAGMA foreign_keys=ON")
+
     existing = {row["name"] for row in conn.execute("PRAGMA table_info(signals)")}
     if "is_practice" not in existing:
         conn.execute("ALTER TABLE signals ADD COLUMN is_practice INTEGER NOT NULL DEFAULT 0")

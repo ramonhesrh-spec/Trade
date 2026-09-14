@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS muted_coins (
 -- hetzelfde voor iedereen die het dashboard gebruikt.
 CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    message_id INTEGER NOT NULL REFERENCES messages(id),
+    message_id INTEGER REFERENCES messages(id),
     coin TEXT NOT NULL,
     direction TEXT NOT NULL,
     category TEXT NOT NULL,
