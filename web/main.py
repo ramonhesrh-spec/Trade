@@ -646,6 +646,15 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
             seen_ticker_coins.add(e["coin"])
             ticker_coins.append({"coin": e["coin"], "current_price": e["current_price"]})
 
+    # Server-side gevuld voor de EERSTE render van de laatste-seintje-banner
+    # (Sectie 2 van de spec): zonder dit blijft de banner leeg tot de eerste
+    # /api/system_status-poll na het laden, hetzelfde label-formaat als daar.
+    last_signal_row = repo.list_recent_signals_for_user(user["id"], limit=1)
+    last_signal_text = None
+    if last_signal_row:
+        s = last_signal_row[0]
+        last_signal_text = f"{s['coin']} · {s['direction']} · {s['confidence']}"
+
     # Correlatie-waarschuwing: het totale open-risicopercentage hieronder
     # telt euro's bij elkaar op, maar zegt niks over of die posities
     # onafhankelijk van elkaar bewegen. Meerdere gelijktijdige open longs
@@ -721,6 +730,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "taken_entries": taken_entries,
         "pending_entries": pending_entries,
         "ticker_coins": ticker_coins,
+        "last_signal_text": last_signal_text,
         "open_risk_eur": open_risk_eur,
         "open_risk_pct": open_risk_pct,
         "correlation_warning": correlation_warning,
