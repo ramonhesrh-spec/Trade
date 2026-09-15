@@ -576,6 +576,35 @@ SR_ZONE_MIN_TOUCHES = 2
 
 
 @dataclass
+class Pivot:
+    index: int
+    price: float
+    kind: str  # "high" of "low"
+
+
+def _find_pivots(window: pd.DataFrame) -> list[Pivot]:
+    """Lokale keerpunten in een candle-venster: een candle die hoger/lager
+    is dan SR_PIVOT_WINDOW candles aan beide kanten. Gedeeld tussen
+    detect_sr_zones (clustert op prijs, index niet nodig) en
+    detect_trendlines (past een lijn door index+prijs), zodat de
+    pivot-definitie één keer bestaat."""
+    n = len(window)
+    pivots: list[Pivot] = []
+    for i in range(SR_PIVOT_WINDOW, n - SR_PIVOT_WINDOW):
+        high_i = window["high"].iloc[i]
+        low_i = window["low"].iloc[i]
+        left_highs = window["high"].iloc[i - SR_PIVOT_WINDOW:i]
+        right_highs = window["high"].iloc[i + 1:i + SR_PIVOT_WINDOW + 1]
+        if high_i > left_highs.max() and high_i > right_highs.max():
+            pivots.append(Pivot(index=i, price=float(high_i), kind="high"))
+        left_lows = window["low"].iloc[i - SR_PIVOT_WINDOW:i]
+        right_lows = window["low"].iloc[i + 1:i + SR_PIVOT_WINDOW + 1]
+        if low_i < left_lows.min() and low_i < right_lows.min():
+            pivots.append(Pivot(index=i, price=float(low_i), kind="low"))
+    return pivots
+
+
+@dataclass
 class SRZone:
     price_low: float
     price_high: float
@@ -593,20 +622,7 @@ def detect_sr_zones(df: pd.DataFrame, lookback: int = SR_ZONE_LOOKBACK) -> list[
     prijs vandaan komt, dat wordt pas bij gebruik (risk.py, de score-
     factor) bepaald aan de hand van de huidige prijs."""
     window = df.tail(lookback).reset_index(drop=True)
-    n = len(window)
-    pivots: list[float] = []
-
-    for i in range(SR_PIVOT_WINDOW, n - SR_PIVOT_WINDOW):
-        high_i = window["high"].iloc[i]
-        low_i = window["low"].iloc[i]
-        left_highs = window["high"].iloc[i - SR_PIVOT_WINDOW:i]
-        right_highs = window["high"].iloc[i + 1:i + SR_PIVOT_WINDOW + 1]
-        if high_i > left_highs.max() and high_i > right_highs.max():
-            pivots.append(float(high_i))
-        left_lows = window["low"].iloc[i - SR_PIVOT_WINDOW:i]
-        right_lows = window["low"].iloc[i + 1:i + SR_PIVOT_WINDOW + 1]
-        if low_i < left_lows.min() and low_i < right_lows.min():
-            pivots.append(float(low_i))
+    pivots = [p.price for p in _find_pivots(window)]
 
     if not pivots:
         return []
