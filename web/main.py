@@ -1572,4 +1572,21 @@ async def api_candles(symbol: str, user: dict = Depends(require_login)):
         if abs(z.price_low - ind.price) <= max_distance or abs(z.price_high - ind.price) <= max_distance
     ]
 
-    return {"candles": candles, "ema9": ema9_series, "ema21": ema21_series, "patterns": patterns, "sr_zones": sr_zones}
+    trendlines = indicators.detect_trendlines(df, ind.atr)
+    window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
+    trendline_data = [
+        {
+            "kind": t.kind,
+            "touches": t.touches,
+            "points": [
+                {"time": candles[len(candles) - len(window) + t.last_index]["time"], "price": t.value_at(t.last_index)},
+                {"time": candles[-1]["time"], "price": t.value_at(len(window) - 1)},
+            ],
+        }
+        for t in trendlines
+    ]
+
+    return {
+        "candles": candles, "ema9": ema9_series, "ema21": ema21_series,
+        "patterns": patterns, "sr_zones": sr_zones, "trendlines": trendline_data,
+    }
