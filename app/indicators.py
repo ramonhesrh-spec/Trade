@@ -741,11 +741,9 @@ def find_breakout_retest(
     return hits
 
 
-# Minimaal aantal pivots dat op de lijn moet liggen (de twee punten die
-# hem vastleggen niet meegerekend, dat is nog "geen bewijs", zie
-# TRENDLINE_FIT_TOLERANCE_PCT hieronder) voor hij als echte trendlijn
-# telt, niet toeval. Strenger dan SR_ZONE_MIN_TOUCHES (2): een schuine
-# lijn door twee punten legt geen enkele relatie vast, een derde
+# Minimaal aantal pivots dat op de lijn moet liggen voor hij als echte
+# trendlijn telt, niet toeval. Strenger dan SR_ZONE_MIN_TOUCHES (2): een
+# schuine lijn door twee punten legt geen enkele relatie vast, een derde
 # bevestigende pivot wel.
 TRENDLINE_MIN_TOUCHES = 3
 
@@ -768,22 +766,23 @@ class Trendline:
     slope: float  # prijsverandering per candle-index binnen het venster
     intercept: float  # lijnwaarde bij index 0 van het venster
     touches: int
-    last_index: int  # index van de meest recente pivot op de lijn
+    last_index: int  # index van de meest recente (laatste) pivot op de lijn
+    first_index: int  # index van de vroegste pivot op de lijn, voor de grafiek (begin van de getekende lijn)
 
     def value_at(self, index: int) -> float:
         return self.slope * index + self.intercept
 
 
-def detect_trendlines(df: pd.DataFrame, atr: float, lookback: int = SR_ZONE_LOOKBACK) -> list[Trendline]:
+def detect_trendlines(df: pd.DataFrame, atr: float) -> list[Trendline]:
     """Vindt maximaal twee diagonale trendlijnen (één weerstand door
-    pivot-highs, één steun door pivot-lows) in de laatste `lookback`
+    pivot-highs, één steun door pivot-lows) in de laatste SR_ZONE_LOOKBACK
     candles. Voor elk soort: alle paren pivots van dat soort vormen een
     kandidaat-lijn, tel per kandidaat hoeveel ANDERE pivots van hetzelfde
     soort binnen TRENDLINE_FIT_TOLERANCE_PCT van die lijn liggen, houd de
     lijn met de meeste treffers. Een lijn met te weinig treffers of een te
     vlakke helling wordt niet teruggegeven — geen kandidaat is dan ook
     geen fout, gewoon geen bruikbare lijn deze cyclus."""
-    window = df.tail(lookback).reset_index(drop=True)
+    window = df.tail(SR_ZONE_LOOKBACK).reset_index(drop=True)
     pivots = _find_pivots(window)
     lines: list[Trendline] = []
 
@@ -812,7 +811,9 @@ def detect_trendlines(df: pd.DataFrame, atr: float, lookback: int = SR_ZONE_LOOK
                 if best is None or len(inliers) > best.touches:
                     best = Trendline(
                         kind=kind, slope=slope, intercept=intercept,
-                        touches=len(inliers), last_index=max(p.index for p in inliers),
+                        touches=len(inliers),
+                        last_index=max(p.index for p in inliers),
+                        first_index=min(p.index for p in inliers),
                     )
         if best is not None:
             lines.append(best)

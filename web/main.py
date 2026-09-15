@@ -1579,7 +1579,7 @@ async def api_candles(symbol: str, user: dict = Depends(require_login)):
             "kind": t.kind,
             "touches": t.touches,
             "points": [
-                {"time": candles[len(candles) - len(window) + t.last_index]["time"], "price": t.value_at(t.last_index)},
+                {"time": candles[len(candles) - len(window) + t.first_index]["time"], "price": t.value_at(t.first_index)},
                 {"time": candles[-1]["time"], "price": t.value_at(len(window) - 1)},
             ],
         }

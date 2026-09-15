@@ -88,11 +88,9 @@ loop.
 **Nieuwe constanten:**
 
 ```python
-# Minimaal aantal pivots dat op de lijn moet liggen (de twee punten die
-# hem vastleggen niet meegerekend zijn dat nog "geen bewijs", zie
-# TRENDLINE_FIT_TOLERANCE_PCT hieronder) voor hij als echte trendlijn
-# telt, niet toeval. Strenger dan SR_ZONE_MIN_TOUCHES (2): een schuine
-# lijn door twee punten legt geen enkele relatie vast, een derde
+# Minimaal aantal pivots dat op de lijn moet liggen voor hij als echte
+# trendlijn telt, niet toeval. Strenger dan SR_ZONE_MIN_TOUCHES (2): een
+# schuine lijn door twee punten legt geen enkele relatie vast, een derde
 # bevestigende pivot wel.
 TRENDLINE_MIN_TOUCHES = 3
 
