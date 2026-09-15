@@ -299,12 +299,16 @@
       // Trendlijnen (indicators.detect_trendlines, via het trendlines-veld
       // van /api/candles): een diagonale lijn past niet in het
       // .chart-zone-sr-blok (vaste top/hoogte), dus een eigen
-      // lightweight-charts lijnserie per lijn, amber (#f5a623) net als de
-      // "gemelde zone"-highlight van optie C — zelfde kanaal, zelfde
-      // kleurtaal.
+      // lightweight-charts lijnserie per lijn. Violet (#a78bfa), niet
+      // amber: amber (.chart-zone-sr-highlight) betekent specifiek "dit is
+      // DE zone uit de Telegram-melding die je hier bekeek", maar
+      // detect_trendlines kan tot twee lijnen tegelijk teruggeven zonder
+      // enige aanduiding welke (als een van beide) die melding was.
+      // Violet is dezelfde kleur als de zelf-gedetecteerde horizontale
+      // SR-zones (.chart-zone-sr): "auto-gedetecteerd", niet "dit is HET".
       (data.trendlines || []).forEach((line) => {
         const series = chart.addLineSeries({
-          color: "#f5a623", lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+          color: "#a78bfa", lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
         });
         // /api/candles noemt het veld "price" (zelfde naam als overal
         // elders in deze respons, bv. sr_zones), maar lightweight-charts'
