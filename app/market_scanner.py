@@ -108,7 +108,7 @@ async def _check_breakout_retest(coin: str, direction: str, df, ind) -> None:
 TRENDLINE_DEDUP_ATR_MULTIPLE = 1.0
 
 
-def _same_trendline(existing_key: Optional[str], direction: str, line, last_index: int, atr: float) -> bool:
+def _same_trendline(existing_key: Optional[str], direction: str, line, atr: float) -> bool:
     if not existing_key:
         return False
     try:
@@ -118,8 +118,11 @@ def _same_trendline(existing_key: Optional[str], direction: str, line, last_inde
         return False
     if prev_direction != direction or prev_kind != line.kind or not atr:
         return False
-    current_value = line.value_at(last_index)
-    return abs(prev_value - current_value) <= TRENDLINE_DEDUP_ATR_MULTIPLE * atr
+    # Altijd line.value_at(line.last_index) — de lijn's eigen laatste
+    # bevestigende pivot, een vast historisch punt — nooit "nu" (zie de
+    # why-comment in _check_trendline_retest hieronder voor de reden).
+    identity_value = line.value_at(line.last_index)
+    return abs(prev_value - identity_value) <= TRENDLINE_DEDUP_ATR_MULTIPLE * atr
 
 
 async def _check_trendline_retest(coin: str, direction: str, df, ind) -> None:
@@ -141,9 +144,21 @@ async def _check_trendline_retest(coin: str, direction: str, df, ind) -> None:
     # dan waar de terugtest zojuist tegen getoetst is.
     window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
     last_index = len(window) - 1
-    current_value = line.value_at(last_index)
-    key = f"{direction}:{line.kind}:{current_value:.8f}"
-    if _same_trendline(repo.get_trendline_retest_key(coin), direction, line, last_index, ind.atr):
+    current_value = line.value_at(last_index)  # voor de melding/stop-take: "nu", blijft zo
+
+    # why: dedup mag NIET op current_value vergelijken — line.value_at(last_index)
+    # verschuift vanzelf elke cyclus, puur omdat er tijd verstrijkt (een
+    # schuine lijn heeft per definitie een andere waarde op "nu" dan een
+    # cyclus geleden). Vergeleken op "nu" zou dezelfde, ongewijzigde lijn
+    # binnen ongeveer een dag opnieuw melden. identity_value gebruikt in
+    # plaats daarvan de lijn's eigen laatste bevestigende pivot
+    # (line.last_index): een vast historisch punt dat niet verschuift
+    # zolang de lijn zelf dezelfde blijft. De melding zelf (current_value
+    # hierboven, en de stop/take eronder) moet wél de live "nu"-waarde
+    # gebruiken, dat blijft ongewijzigd correct.
+    identity_value = line.value_at(line.last_index)
+    key = f"{direction}:{line.kind}:{identity_value:.8f}"
+    if _same_trendline(repo.get_trendline_retest_key(coin), direction, line, ind.atr):
         return
 
     stop_take = risk.compute_stop_take(
