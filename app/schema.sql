@@ -128,7 +128,12 @@ CREATE TABLE IF NOT EXISTS coins (
     -- "richting:zone_low:zone_high" van de laatst gemelde zone voor deze
     -- coin. Voorkomt dat dezelfde zone elk uur opnieuw een melding stuurt
     -- zolang de terugtest geldig blijft.
-    last_breakout_retest_key TEXT
+    last_breakout_retest_key TEXT,
+    -- Dedup voor de trendlijn-uitbraak-dan-terugtest-melding
+    -- (app/market_scanner.py): "richting:soort:lijnwaarde" van de laatst
+    -- gemelde trendlijn voor deze coin. Zelfde soort dedup als
+    -- last_breakout_retest_key hierboven, nu voor een diagonale lijn.
+    last_trendline_retest_key TEXT
 );
 
 -- Coins waarvoor een gebruiker zelf geen Telegram-meldingen meer wil,

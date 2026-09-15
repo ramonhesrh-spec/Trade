@@ -647,6 +647,21 @@ def set_breakout_retest_key(coin: str, key: str) -> None:
         )
 
 
+def get_trendline_retest_key(coin: str) -> Optional[str]:
+    with db.session() as conn:
+        row = conn.execute(
+            "SELECT last_trendline_retest_key FROM coins WHERE symbol = ?", (coin.upper(),),
+        ).fetchone()
+        return row["last_trendline_retest_key"] if row else None
+
+
+def set_trendline_retest_key(coin: str, key: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE coins SET last_trendline_retest_key = ? WHERE symbol = ?", (key, coin.upper()),
+        )
+
+
 def list_coins() -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(
