@@ -306,7 +306,12 @@
         const series = chart.addLineSeries({
           color: "#f5a623", lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
         });
-        series.setData(line.points);
+        // /api/candles noemt het veld "price" (zelfde naam als overal
+        // elders in deze respons, bv. sr_zones), maar lightweight-charts'
+        // LineData verwacht "value" — zonder deze mapping accepteert
+        // setData de punten stilzwijgend (geen foutmelding) en tekent
+        // niets, want elke waarde is dan undefined.
+        series.setData(line.points.map((p) => ({ time: p.time, value: p.price })));
       });
 
       chart.timeScale().fitContent();
