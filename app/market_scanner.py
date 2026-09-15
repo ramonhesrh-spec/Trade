@@ -82,12 +82,6 @@ async def _check_breakout_retest(coin: str, direction: str, df, ind) -> None:
         swing_low=zone.price_low if direction == "long" else None,
         swing_high=zone.price_high if direction == "short" else None,
     )
-    alert = {
-        "coin": coin, "direction": direction, "price": ind.price,
-        "zone_low": zone.price_low, "zone_high": zone.price_high, "touches": zone.touches,
-        "candles_since": candles_since, "stop_loss": stop_take.stop_loss,
-        "take_profit": stop_take.take_profit, "message_id": None,
-    }
     for user in repo.list_users():
         if not user["telegram_chat_id"]:
             continue
@@ -166,12 +160,6 @@ async def _check_trendline_retest(coin: str, direction: str, df, ind) -> None:
         swing_low=current_value if direction == "long" else None,
         swing_high=current_value if direction == "short" else None,
     )
-    alert = {
-        "coin": coin, "direction": direction, "price": ind.price,
-        "line_value": current_value, "touches": line.touches,
-        "candles_since": candles_since, "stop_loss": stop_take.stop_loss,
-        "take_profit": stop_take.take_profit, "message_id": None,
-    }
     for user in repo.list_users():
         if not user["telegram_chat_id"]:
             continue
