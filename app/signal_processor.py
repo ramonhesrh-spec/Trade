@@ -9,7 +9,7 @@ import logging
 import time
 from typing import Optional
 
-from app import chart_image, coinlist, config, exchange, explain, indicators, repo, risk, telegram_notify
+from app import coinlist, config, exchange, explain, indicators, push_notify, repo, risk, telegram_notify
 from app.anthropic_interpret import Interpretation, interpret_message
 
 logger = logging.getLogger("signal_processor")
@@ -510,15 +510,14 @@ async def run_swing_check(watch_id: int) -> None:
             eval_blocked_note = "Dagbudget of drawdown-ruimte van je evaluatie is (bijna) op, deze trade telt niet mee voor je evaluatie."
 
         try:
-            await telegram_notify.send_swing_signal(
-                coin=coin, direction=direction, price=ind_4h.price,
-                stop_loss=effective_stop_loss, take_profit=effective_take_profit,
-                daily_factors=daily_factors, factors_4h=factors_4h,
-                level_price=watch["price_level"], pattern_name=watch["pattern_name"],
-                chat_id=user["telegram_chat_id"], entry_id=entry_id, force_silent=quiet,
-                eval_budget_pct=eval_budget_pct, eval_blocked_note=eval_blocked_note,
-                stop_capped_pct=(max_pct_for_display * 100) if stop_was_capped and max_pct_for_display is not None else None,
-                risk_eur=risk_eur,
+            title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, swing-kans"
+            pattern_note = f" ({watch['pattern_name']})" if watch["pattern_name"] else ""
+            body = (
+                f"Vanuit bewaakt niveau {watch['price_level']:.4f}{pattern_note} · "
+                f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            )
+            await push_notify.send_push(
+                user["id"], title, body, f"/coin/{coin}", silent=quiet,
             )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
@@ -727,19 +726,6 @@ async def process_day_trading_signal(
                 f"bij {interp.coin}. Blijft een geldige kans, weeg dit wel mee."
             )
 
-    # Eén keer gegenereerd voor iedereen, niet per gebruiker: de grafiek
-    # zelf verschilt niet per ontvanger. Alleen bij een bevestigde kans,
-    # een afwijzing heeft geen stop loss/take profit om te tekenen. Een
-    # mislukte generatie mag de al verstuurde tekstmelding nooit blokkeren.
-    chart_bytes = None
-    if confirmed:
-        try:
-            chart_bytes = await asyncio.to_thread(
-                chart_image.render_signal_chart, df, interp.direction, stop_take.stop_loss, stop_take.take_profit,
-            )
-        except Exception:
-            logger.exception("Kon geen chart genereren voor %s", interp.coin)
-
     signal_data = {
         "message_id": message_id,
         "coin": interp.coin,
@@ -923,37 +909,17 @@ async def process_day_trading_signal(
 
         force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            stop_was_capped = effective_stop_loss != stop_take.stop_loss
-            await telegram_notify.send_signal(
-                {
-                    **signal_data, "risk_eur": risk_eur, "position_size": position_size,
-                    "open_risk_pct": open_risk_pct, "pending_count": pending_count,
-                    "eval_budget_pct": eval_budget_pct, "eval_blocked_note": eval_blocked_note,
-                    "stop_loss": effective_stop_loss, "take_profit": effective_take_profit,
-                    "stop_capped_pct": (
-                        (max_pct_for_display * 100)
-                        if stop_was_capped and max_pct_for_display is not None else None
-                    ),
-                },
-                chat_id=user["telegram_chat_id"], force_silent=force_silent, entry_id=entry_id,
+            confidence = signal_data["confidence"].upper()
+            title = f"{push_notify.coin_symbol(interp.coin)} {interp.coin} {interp.direction}, {confidence.lower()} vertrouwen"
+            body = f"Entry {signal_data['price']:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            await push_notify.send_push(
+                user["id"], title, body, f"/coin/{interp.coin}", silent=force_silent,
             )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
-            logger.exception("Telegram melding voor gebruiker %s, signaal %s is mislukt",
+            logger.exception("Pushmelding voor gebruiker %s, signaal %s is mislukt",
                               user["username"], signal_id)
             continue
-
-        # Bij een gecapte stop toont de gedeelde grafiek (ongecapte stop) een
-        # ander getal dan de tekst van hetzelfde bericht — dan liever geen
-        # plaatje sturen dan een misleidend plaatje.
-        if chart_bytes and not stop_was_capped:
-            try:
-                await telegram_notify.send_signal_chart(
-                    chart_bytes, interp.coin, interp.direction, chat_id=user["telegram_chat_id"],
-                )
-            except Exception:
-                logger.exception("Chart versturen voor gebruiker %s, signaal %s is mislukt",
-                                  user["username"], signal_id)
 
         # Geen proactieve mute-suggestie meer na herhaald negeren
         # (dashboard-only, zie de declutter-ronde van 2026-09-14): muten kan
@@ -1047,9 +1013,16 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
 
         force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            await telegram_notify.send_signal_update(
-                message_data, chat_id=user["telegram_chat_id"], force_silent=force_silent,
+            coin = message_data["coin"]
+            confirmed = message_data["technical_confirmed"]
+            title = f"{push_notify.coin_symbol(coin)} {coin} {message_data['direction']}, update"
+            body = (
+                f"Nieuwe prijs {message_data['price']:.4f} · Stop {message_data['stop_loss']:.4f} · "
+                f"Take profit {message_data['take_profit']:.4f}"
+                if confirmed else
+                f"Nieuwe prijs {message_data['price']:.4f} · nog geen sterke kans"
             )
+            await push_notify.send_push(user["id"], title, body, f"/coin/{coin}", silent=force_silent)
         except Exception:
-            logger.exception("Telegram update voor gebruiker %s, signaal %s is mislukt",
+            logger.exception("Pushmelding (update) voor gebruiker %s, signaal %s is mislukt",
                               user["username"], signal_id)

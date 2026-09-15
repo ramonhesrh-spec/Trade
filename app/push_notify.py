@@ -54,3 +54,10 @@ async def send_push(user_id: int, title: str, body: str, url: str, silent: bool 
                 logger.exception("Pushmelding naar abonnement %s mislukt (status %s)", sub["id"], status)
         except Exception:
             logger.exception("Pushmelding naar abonnement %s mislukt", sub["id"])
+
+
+_COIN_SYMBOLS = {"BTC": "₿", "ETH": "Ξ"}
+
+
+def coin_symbol(coin: str) -> str:
+    return _COIN_SYMBOLS.get(coin.upper(), "")
