@@ -372,6 +372,11 @@
       <button type="submit">Opslaan</button>
     </form>
     <p class="muted levels-hint">Binnen dit venster komt ook een bevestigde kans stil binnen, zonder geluid. Beide velden leeg laten zet stille uren weer uit.</p>
+    <div id="push-subscribe-block" style="margin-top: 12px;">
+      <button id="push-subscribe-btn" type="button">Meldingen aanzetten</button>
+      <p id="push-subscribe-status" class="muted" style="margin: 4px 0 0; font-size: 12.5px;" hidden></p>
+    </div>
+    <script src="/static/push-subscribe.js" defer></script>
     {% if user.telegram_chat_id %}
     <form action="/telegram/voorbeeld" method="post" class="inline-form">
       <button type="submit" class="button-link">Stuur mezelf een voorbeeldmelding</button>

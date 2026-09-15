@@ -819,6 +819,27 @@ async def api_system_status(user: dict = Depends(require_login)):
     }
 
 
+@app.get("/api/push/vapid-public-key")
+async def api_push_vapid_public_key(user: dict = Depends(require_login)):
+    return {"key": config.VAPID_PUBLIC_KEY}
+
+
+@app.post("/api/push/subscribe")
+async def api_push_subscribe(request: Request, user: dict = Depends(require_login)):
+    """Slaat een Web Push-abonnement op vanaf de browser. Het
+    subscription-object van de browser heeft altijd deze vorm:
+    {endpoint, keys: {p256dh, auth}}."""
+    data = await request.json()
+    endpoint = data.get("endpoint")
+    keys = data.get("keys", {})
+    if not endpoint or not keys.get("p256dh") or not keys.get("auth"):
+        return JSONResponse({"error": "ongeldig abonnement"}, status_code=400)
+    repo.upsert_push_subscription(
+        user["id"], endpoint, keys["p256dh"], keys["auth"], data.get("device_label"),
+    )
+    return {"ok": True}
+
+
 @app.get("/export/logboek.csv")
 async def export_journal_csv(user: dict = Depends(require_login)):
     entries = repo.list_journal(user["id"], status=None, limit=100000)
