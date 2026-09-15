@@ -16,7 +16,7 @@ import asyncio
 import logging
 from typing import Optional
 
-from app import exchange, indicators, repo, risk, telegram_notify
+from app import exchange, indicators, push_notify, repo, risk, telegram_notify
 from app.anthropic_interpret import Interpretation
 from app.signal_processor import process_day_trading_signal
 
@@ -95,12 +95,12 @@ async def _check_breakout_retest(coin: str, direction: str, df, ind) -> None:
             continue
         force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            await telegram_notify.send_breakout_retest_alert(
-                alert, chat_id=user["telegram_chat_id"], force_silent=force_silent,
-            )
+            title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, zelf gedetecteerd"
+            body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
+            await push_notify.send_push(user["id"], title, body, f"/coin/{coin}", silent=force_silent)
         except Exception:
             logger.exception(
-                "Uitbraak-terugtest-melding voor %s naar gebruiker %s is mislukt", coin, user["username"],
+                "Pushmelding (uitbraak-terugtest) voor %s naar gebruiker %s is mislukt", coin, user["username"],
             )
     repo.set_breakout_retest_key(coin, key)
 
@@ -179,12 +179,12 @@ async def _check_trendline_retest(coin: str, direction: str, df, ind) -> None:
             continue
         force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            await telegram_notify.send_trendline_retest_alert(
-                alert, chat_id=user["telegram_chat_id"], force_silent=force_silent,
-            )
+            title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, zelf gedetecteerd"
+            body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
+            await push_notify.send_push(user["id"], title, body, f"/coin/{coin}", silent=force_silent)
         except Exception:
             logger.exception(
-                "Trendlijn-terugtest-melding voor %s naar gebruiker %s is mislukt", coin, user["username"],
+                "Pushmelding (trendlijn-terugtest) voor %s naar gebruiker %s is mislukt", coin, user["username"],
             )
     repo.set_trendline_retest_key(coin, key)
 

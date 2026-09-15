@@ -24,7 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import advice as advice_module
-from app import config, db, exchange, explain, indicators, repo, risk, security, telegram_notify
+from app import config, db, exchange, explain, indicators, push_notify, repo, risk, security
 from app.signal_processor import compute_advanced_extra_factors
 
 logger = logging.getLogger("web")
@@ -894,13 +894,16 @@ async def update_settings(
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
-@app.post("/telegram/voorbeeld")
-async def send_demo_telegram_message(user: dict = Depends(require_login)):
-    """Stuurt een voorbeeldmelding naar de gekoppelde Telegram chat van de
-    ingelogde gebruiker, zodat die meteen ziet hoe een echte kans eruitziet
-    zonder op een echt signaal te hoeven wachten."""
-    if user["telegram_chat_id"]:
-        await telegram_notify.send_demo_signal_message(user["telegram_chat_id"])
+@app.post("/push/voorbeeld")
+async def send_demo_push_message(user: dict = Depends(require_login)):
+    """Stuurt een testpush naar elk apparaat van de ingelogde gebruiker:
+    laat zien hoe een echte melding eruitziet, én bevestigt meteen dat
+    het abonnement van dit apparaat werkt."""
+    await push_notify.send_push(
+        user["id"], "Ξ ETH long, hoog vertrouwen (voorbeeld)",
+        "Entry 2340.0000 · Stop 2290.0000 · Take profit 2430.0000",
+        "/dashboard", silent=False,
+    )
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
@@ -931,7 +934,7 @@ EVAL_DANGER_THRESHOLD_PCT = 85.0  # zelfde drempel als de risk-pulse-animatie el
 
 
 async def _check_eval_danger_alert(
-    active_eval: dict, progress: risk.PropProgress, evaluation_id: int, chat_id: Optional[str],
+    active_eval: dict, progress: risk.PropProgress, evaluation_id: int, user_id: int,
 ) -> None:
     """Stuurt een Telegram-waarschuwing zodra dagverlies of drawdown de
     85%-drempel passeert op een run die nog actief is (zelfde percentages
@@ -964,9 +967,9 @@ async def _check_eval_danger_alert(
     else:
         pct_type, pct_value, remaining_eur = "dagverlies", daily_loss_used_pct, daily_remaining_eur
 
-    await telegram_notify.send_eval_danger_alert(
-        pct_type, pct_value, active_eval["tier_amount"], remaining_eur, chat_id,
-    )
+    title = f"Evaluatie: {pct_type} op {pct_value:.0f}%"
+    body = f"Nog {remaining_eur:.0f} EUR ruimte over van {active_eval['tier_amount']:.0f} EUR tier."
+    await push_notify.send_push(user_id, title, body, "/evaluatie", silent=False)
     repo.set_evaluation_danger_alert_sent(evaluation_id, True)
 
 
@@ -1011,7 +1014,7 @@ async def close_journal(
                     repo.close_evaluation(evaluation_id, progress.status, progress.closed_reason)
                     eval_flag = "evaluatie_geslaagd" if progress.status == "geslaagd" else "evaluatie_mislukt"
                 else:
-                    await _check_eval_danger_alert(active_eval, progress, evaluation_id, user["telegram_chat_id"])
+                    await _check_eval_danger_alert(active_eval, progress, evaluation_id, user["id"])
     except ValueError:
         # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
         # entry prijs ingevuld). Stil negeren, niets om te sluiten.
