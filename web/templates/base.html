@@ -810,7 +810,8 @@
           // geïnstalleerde app), geen vervanging van de Telegram-melding
           // die ook bereikt als alles dicht is.
           if ("setAppBadge" in navigator) {
-            if (s.pending_count > 0) navigator.setAppBadge(s.pending_count).catch(function () {});
+            var badgeTotal = s.pending_count + s.unread_notifications;
+            if (badgeTotal > 0) navigator.setAppBadge(badgeTotal).catch(function () {});
             else navigator.clearAppBadge().catch(function () {});
           }
         })
