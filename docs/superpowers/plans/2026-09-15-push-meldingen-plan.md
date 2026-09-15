@@ -204,7 +204,7 @@ assert len(subs) == 1 and subs[0]['p256dh'] == 'nieuwe-key', 'upsert moet oversc
 repo.delete_push_subscription('https://fcm.googleapis.com/test1')
 assert repo.list_push_subscriptions(uid) == []
 
-nid = repo.create_notification(uid, 'test', 'Titel', 'Body', '/coin/BTC')
+nid = repo.create_notification(uid, 'test', 'Titel', 'Body', '/coins/BTC')
 assert repo.count_unread_notifications(uid) == 1
 repo.mark_notification_read(nid, uid)
 assert repo.count_unread_notifications(uid) == 0
@@ -546,10 +546,10 @@ def fake_webpush(subscription_info, data, vapid_private_key, vapid_claims):
         raise WebPushException('gone', response=type('R', (), {'status_code': 410})())
 
 with patch('app.push_notify.webpush', fake_webpush):
-    asyncio.run(push_notify.send_push(uid, 'Titel', 'Body', '/coin/ETH'))
+    asyncio.run(push_notify.send_push(uid, 'Titel', 'Body', '/coins/ETH'))
 
 assert len(captured) == 2, captured
-assert captured[0]['title'] == 'Titel' and captured[0]['url'] == '/coin/ETH'
+assert captured[0]['title'] == 'Titel' and captured[0]['url'] == '/coins/ETH'
 remaining = repo.list_push_subscriptions(uid)
 assert len(remaining) == 1 and remaining[0]['endpoint'].endswith('ep1'), remaining
 print('OK: send_push verstuurt naar alle apparaten en ruimt 410 op')
@@ -598,7 +598,7 @@ Huidige code (context, niet letterlijk kopiëren — de exacte variabelenamen in
             title = f"{_coin_symbol(interp.coin)} {interp.coin} {interp.direction}, {confidence.lower()} vertrouwen"
             body = f"Entry {effective_stop_loss and signal_data['price']:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
             await push_notify.send_push(
-                user["id"], title, body, f"/coin/{interp.coin}", silent=force_silent,
+                user["id"], title, body, f"/coins/{interp.coin}", silent=force_silent,
             )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
@@ -634,7 +634,7 @@ Fix de f-string hierboven: `effective_stop_loss and signal_data['price']:.4f` is
         try:
             title = f"{'Take profit' if update_kind == 'tp_hit' else 'Stop loss'} geraakt op {interp.coin}"
             body = f"Resultaat: {result_eur:+.2f} EUR" if result_eur is not None else "Bekijk de trade in de app."
-            await push_notify.send_push(user["id"], title, body, f"/coin/{interp.coin}", silent=force_silent)
+            await push_notify.send_push(user["id"], title, body, f"/coins/{interp.coin}", silent=force_silent)
         except Exception:
             logger.exception("Pushmelding (update) voor gebruiker %s mislukt", user["username"])
 ```
@@ -643,7 +643,7 @@ Zoek de exacte variabelenamen op rond regel 1030-1052 (`grep -n "update_kind\|re
 
 - [ ] **Step 4: `send_swing_signal`-aanroep (rond regel 501-518) vervangen**
 
-Zelfde patroon: `force_silent` blijft, `push_notify.send_push(user["id"], title, body, f"/coin/{coin}", silent=force_silent)` in plaats van de Telegram-aanroep. Titel/body naar dezelfde stijl als Step 2 (coin, richting, "vanuit bewaakt niveau" in de body i.p.v. entry/stop/take, want een swing-signaal heeft die structuur niet 1-op-1 — check de exacte velden die `send_swing_signal` nu meekrijgt met `grep -n "def send_swing_signal" -A 20 app/telegram_notify.py` en gebruik dezelfde brongegevens).
+Zelfde patroon: `force_silent` blijft, `push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)` in plaats van de Telegram-aanroep. Titel/body naar dezelfde stijl als Step 2 (coin, richting, "vanuit bewaakt niveau" in de body i.p.v. entry/stop/take, want een swing-signaal heeft die structuur niet 1-op-1 — check de exacte velden die `send_swing_signal` nu meekrijgt met `grep -n "def send_swing_signal" -A 20 app/telegram_notify.py` en gebruik dezelfde brongegevens).
 
 - [ ] **Step 5: Scratch-verificatie**
 
@@ -694,7 +694,7 @@ Beide zelfgedetecteerde signalen, zelfde `force_silent`/`is_quiet_now`-logica bl
         try:
             title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, zelf gedetecteerd"
             body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
-            await push_notify.send_push(user["id"], title, body, f"/coin/{coin}", silent=force_silent)
+            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
         except Exception:
             logger.exception(
                 "Pushmelding (uitbraak-terugtest) voor %s naar gebruiker %s is mislukt", coin, user["username"],
@@ -773,7 +773,7 @@ Zes call sites worden een `notifications`-rij in plaats van een verzendaanroep: 
                     user["id"], "expired_signal",
                     f"Kans op {interp.coin} vervallen",
                     f"Een nieuwe {interp.direction}-melding op {interp.coin} maakte de vorige kans achterhaald.",
-                    f"/coin/{interp.coin}",
+                    f"/coins/{interp.coin}",
                 )
             except Exception:
                 logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt",
@@ -793,7 +793,7 @@ Dit gebeurt in `_send_narrative_notifications`, dat nu een `telegram_message_id`
                 user["id"], "narrative_update",
                 f"Verhaal-update: {narrative['coin']}",
                 _narrative_summary_text(narrative, timeline, is_contradiction, contradicted_since),
-                f"/coin/{narrative['coin']}",
+                f"/coins/{narrative['coin']}",
             )
         except Exception:
             logger.exception("Verhaal-melding voor %s naar gebruiker %s is mislukt",

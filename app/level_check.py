@@ -89,8 +89,9 @@ async def check_open_trades() -> None:
         hit_emoji = "🎯" if hit == "take profit" else "🛑"
         title = f"{hit_emoji} {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
         body = f"{hit.capitalize()} geraakt · Entry {entry['entry_price']:.4f} · Nu {current_price:.4f}"
+        silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
         try:
-            await push_notify.send_push(entry["user_id"], title, body, f"/coin/{coin}")
+            await push_notify.send_push(entry["user_id"], title, body, f"/coins/{coin}", silent=silent)
             logger.info("Seintje verstuurd naar %s voor %s (%s)", entry["username"], coin, hit)
         except Exception:
             logger.exception("Seintje naar %s voor %s is mislukt", entry["username"], coin)
@@ -166,8 +167,9 @@ async def check_pending_signals() -> None:
 
         title = f"🔔 {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
         body = f"Terug bij een interessant niveau ({entry['confidence']}) · {level_line} · Nu {current_price:.4f}"
+        silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
         try:
-            await push_notify.send_push(entry["user_id"], title, body, f"/coin/{coin}")
+            await push_notify.send_push(entry["user_id"], title, body, f"/coins/{coin}", silent=silent)
             logger.info("Niveau-seintje verstuurd naar %s voor %s", entry["username"], coin)
         except Exception:
             logger.exception("Niveau-seintje naar %s voor %s is mislukt", entry["username"], coin)

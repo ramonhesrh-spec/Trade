@@ -93,7 +93,7 @@ async def _check_breakout_retest(coin: str, direction: str, df, ind) -> None:
         try:
             title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, zelf gedetecteerd"
             body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
-            await push_notify.send_push(user["id"], title, body, f"/coin/{coin}", silent=force_silent)
+            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
         except Exception:
             logger.exception(
                 "Pushmelding (uitbraak-terugtest) voor %s naar gebruiker %s is mislukt", coin, user["username"],
@@ -173,7 +173,7 @@ async def _check_trendline_retest(coin: str, direction: str, df, ind) -> None:
         try:
             title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, zelf gedetecteerd"
             body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
-            await push_notify.send_push(user["id"], title, body, f"/coin/{coin}", silent=force_silent)
+            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
         except Exception:
             logger.exception(
                 "Pushmelding (trendlijn-terugtest) voor %s naar gebruiker %s is mislukt", coin, user["username"],

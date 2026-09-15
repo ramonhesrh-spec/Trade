@@ -381,7 +381,7 @@ async def _send_narrative_notifications(
                 user["id"], "narrative_update",
                 f"Verhaal-update: {narrative['coin']}",
                 _narrative_summary_text(narrative, is_new, is_contradiction, contradicted_since),
-                f"/coin/{narrative['coin']}",
+                f"/coins/{narrative['coin']}",
             )
         except Exception:
             logger.exception("Narrative-melding voor %s naar gebruiker %s is mislukt",
@@ -537,7 +537,7 @@ async def run_swing_check(watch_id: int) -> None:
                 f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
             )
             await push_notify.send_push(
-                user["id"], title, body, f"/coin/{coin}", silent=quiet,
+                user["id"], title, body, f"/coins/{coin}", silent=quiet,
             )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
@@ -786,7 +786,7 @@ async def process_day_trading_signal(
                     user["id"], "expired_signal",
                     f"Kans op {interp.coin} vervallen",
                     f"Een nieuwe {interp.direction}-melding op {interp.coin} maakte de vorige kans achterhaald.",
-                    f"/coin/{interp.coin}",
+                    f"/coins/{interp.coin}",
                 )
             except Exception:
                 logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt",
@@ -824,7 +824,7 @@ async def process_day_trading_signal(
                     user["id"], "expired_signal",
                     f"Kans op {interp.coin} vervallen",
                     f"Een oude melding op {interp.coin} is vervangen door een nieuw signaal.",
-                    f"/coin/{interp.coin}",
+                    f"/coins/{interp.coin}",
                 )
             except Exception:
                 logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt",
@@ -933,8 +933,12 @@ async def process_day_trading_signal(
         try:
             title = f"{push_notify.coin_symbol(interp.coin)} {interp.coin} {interp.direction}, {signal_data['confidence']}"
             body = f"Entry {signal_data['price']:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            if signal_data.get("repeated_loss_note"):
+                body += f"\n{signal_data['repeated_loss_note']}"
+            if eval_blocked_note:
+                body += f"\n{eval_blocked_note}"
             await push_notify.send_push(
-                user["id"], title, body, f"/coin/{interp.coin}", silent=force_silent,
+                user["id"], title, body, f"/coins/{interp.coin}", silent=force_silent,
             )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
@@ -1044,7 +1048,9 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
                 if confirmed else
                 f"Nieuwe prijs {message_data['price']:.4f} · nog geen sterke kans"
             )
-            await push_notify.send_push(user["id"], title, body, f"/coin/{coin}", silent=force_silent)
+            if message_data.get("repeated_loss_note"):
+                body += f"\n{message_data['repeated_loss_note']}"
+            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
         except Exception:
             logger.exception("Pushmelding (update) voor gebruiker %s, signaal %s is mislukt",
                               user["username"], signal_id)

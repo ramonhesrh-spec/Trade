@@ -1608,7 +1608,8 @@ def list_open_entries_with_levels() -> list[dict]:
                       s.coin AS coin, s.direction AS direction,
                       COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss,
                       COALESCE(je.take_profit_override, s.take_profit) AS take_profit,
-                      u.username AS username, u.telegram_chat_id AS telegram_chat_id
+                      u.username AS username, u.telegram_chat_id AS telegram_chat_id,
+                      u.quiet_hours_start AS quiet_hours_start, u.quiet_hours_end AS quiet_hours_end
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id
                JOIN users u ON u.id = je.user_id
@@ -1631,7 +1632,8 @@ def list_pending_entries_with_price() -> list[dict]:
             """SELECT je.id AS id, je.user_id AS user_id,
                       s.coin AS coin, s.direction AS direction, s.price AS signal_price,
                       s.atr AS atr, s.confidence AS confidence, s.created_at AS signal_created_at,
-                      u.username AS username, u.telegram_chat_id AS telegram_chat_id
+                      u.username AS username, u.telegram_chat_id AS telegram_chat_id,
+                      u.quiet_hours_start AS quiet_hours_start, u.quiet_hours_end AS quiet_hours_end
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id
                JOIN users u ON u.id = je.user_id
