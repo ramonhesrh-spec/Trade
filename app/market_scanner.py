@@ -14,6 +14,7 @@ docs/superpowers/specs/2026-09-14-autonome-marktscan-design.md.
 """
 import asyncio
 import logging
+from typing import Optional
 
 from app import exchange, indicators, repo, risk, telegram_notify
 from app.anthropic_interpret import Interpretation
@@ -33,22 +34,48 @@ AUTO_SCAN_LOSS_COOLDOWN_HOURS = 12
 WHIPLASH_MIN_CONSECUTIVE_CYCLES = 2
 
 
+# Hoe dicht het middelpunt van een nieuw gevonden zone bij het middelpunt
+# van de vorig gemelde zone moet liggen (in ATR) om als "dezelfde zone" te
+# tellen. detect_sr_zones herberekent elke cyclus opnieuw over een
+# schuivend venster van 100 candles, dus de exacte grenzen schuiven een
+# fractie mee zonder dat het om een echt andere zone gaat — zonder deze
+# marge stuurde een exacte-string-vergelijking dezelfde zone soms binnen
+# een paar cycli opnieuw (AAVE en BTC allebei twee keer in één nacht).
+BREAKOUT_RETEST_DEDUP_ATR_MULTIPLE = 1.0
+
+
+def _same_breakout_retest_zone(existing_key: Optional[str], direction: str, zone, atr: float) -> bool:
+    if not existing_key:
+        return False
+    try:
+        prev_direction, prev_low_s, prev_high_s = existing_key.split(":")
+        prev_low, prev_high = float(prev_low_s), float(prev_high_s)
+    except (ValueError, AttributeError):
+        return False
+    if prev_direction != direction or not atr:
+        return False
+    prev_mid = (prev_low + prev_high) / 2
+    new_mid = (zone.price_low + zone.price_high) / 2
+    return abs(prev_mid - new_mid) <= BREAKOUT_RETEST_DEDUP_ATR_MULTIPLE * atr
+
+
 async def _check_breakout_retest(coin: str, direction: str, df, ind) -> None:
     """Los van de trend-confirmatie hieronder: een uitbraak-dan-terugtest
     is een eigen, sterk entry-patroon (een zone die eerder steun/weerstand
     was, doorbroken is, en nu opnieuw getest wordt) en verdient een eigen
     melding, ongeacht of confirms_direction deze cyclus ja of nee zegt.
-    Dedupliceert op coin+richting+zone via coins.last_breakout_retest_key:
-    dezelfde zone stuurt maar één keer een melding, een nieuwe uitbraak
-    (andere zone-grenzen, of de andere richting) stuurt opnieuw."""
+    Dedupliceert op coin+richting+zone via coins.last_breakout_retest_key,
+    met een ATR-marge (_same_breakout_retest_zone): een zone die dicht
+    genoeg bij de vorig gemelde zone ligt telt als dezelfde, een echt
+    nieuwe uitbraak (andere zone, of de andere richting) stuurt opnieuw."""
     zones = indicators.detect_sr_zones(df)
     hits = indicators.find_breakout_retest(df, zones, ind.atr, direction)
     if not hits:
         return
     zone, candles_since = max(hits, key=lambda h: h[0].touches)
     key = f"{direction}:{zone.price_low:.8f}:{zone.price_high:.8f}"
-    if repo.get_breakout_retest_key(coin) == key:
-        return  # deze exacte zone is al gemeld, geen herhaling
+    if _same_breakout_retest_zone(repo.get_breakout_retest_key(coin), direction, zone, ind.atr):
+        return  # binnen de dedup-marge van de vorige melding, geen herhaling
 
     stop_take = risk.compute_stop_take(
         direction, ind.price, ind.atr,
