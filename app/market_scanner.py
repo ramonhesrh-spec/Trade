@@ -105,6 +105,75 @@ async def _check_breakout_retest(coin: str, direction: str, df, ind) -> None:
     repo.set_breakout_retest_key(coin, key)
 
 
+TRENDLINE_DEDUP_ATR_MULTIPLE = 1.0
+
+
+def _same_trendline(existing_key: Optional[str], direction: str, line, last_index: int, atr: float) -> bool:
+    if not existing_key:
+        return False
+    try:
+        prev_direction, prev_kind, prev_value_s = existing_key.split(":")
+        prev_value = float(prev_value_s)
+    except (ValueError, AttributeError):
+        return False
+    if prev_direction != direction or prev_kind != line.kind or not atr:
+        return False
+    current_value = line.value_at(last_index)
+    return abs(prev_value - current_value) <= TRENDLINE_DEDUP_ATR_MULTIPLE * atr
+
+
+async def _check_trendline_retest(coin: str, direction: str, df, ind) -> None:
+    """Los van _check_breakout_retest: een diagonale trendlijn (steun of
+    weerstand) is een ander patroon dan een horizontale zone, met een
+    eigen melding. Zelfde striktheid (crossing op closing-prijs, moet
+    standhouden) en zelfde ATR-dedup-marge als de optie-C-fix van
+    vandaag, zie docs/superpowers/specs/2026-09-15-trendlijn-uitbraak-design.md."""
+    trendlines = indicators.detect_trendlines(df, ind.atr)
+    hits = indicators.find_trendline_breakout_retest(df, trendlines, ind.atr, direction)
+    if not hits:
+        return
+    line, candles_since = max(hits, key=lambda h: h[0].touches)
+
+    # last_index is HIER de laatste candle van het venster (de huidige
+    # lijnwaarde), niet line.last_index (dat is de laatste PIVOT op de
+    # lijn) — zelfde venster als find_trendline_breakout_retest intern
+    # gebruikt, anders wijst value_at(last_index) een andere candle aan
+    # dan waar de terugtest zojuist tegen getoetst is.
+    window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
+    last_index = len(window) - 1
+    current_value = line.value_at(last_index)
+    key = f"{direction}:{line.kind}:{current_value:.8f}"
+    if _same_trendline(repo.get_trendline_retest_key(coin), direction, line, last_index, ind.atr):
+        return
+
+    stop_take = risk.compute_stop_take(
+        direction, ind.price, ind.atr,
+        swing_low=current_value if direction == "long" else None,
+        swing_high=current_value if direction == "short" else None,
+    )
+    alert = {
+        "coin": coin, "direction": direction, "price": ind.price,
+        "line_value": current_value, "touches": line.touches,
+        "candles_since": candles_since, "stop_loss": stop_take.stop_loss,
+        "take_profit": stop_take.take_profit, "message_id": None,
+    }
+    for user in repo.list_users():
+        if not user["telegram_chat_id"]:
+            continue
+        if repo.is_coin_muted(user["id"], coin):
+            continue
+        force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        try:
+            await telegram_notify.send_trendline_retest_alert(
+                alert, chat_id=user["telegram_chat_id"], force_silent=force_silent,
+            )
+        except Exception:
+            logger.exception(
+                "Trendlijn-terugtest-melding voor %s naar gebruiker %s is mislukt", coin, user["username"],
+            )
+    repo.set_trendline_retest_key(coin, key)
+
+
 async def scan_market() -> None:
     if not repo.is_market_scan_enabled():
         logger.info("Marktscan staat uit (noodrem), niets gedaan")
@@ -138,6 +207,7 @@ async def scan_market() -> None:
             direction = "long" if ind.ema9 > ind.ema21 else "short"
 
             await _check_breakout_retest(coin, direction, df, ind)
+            await _check_trendline_retest(coin, direction, df, ind)
 
             # Vóór de cooldown-check bepaald (in plaats van erna): een coin
             # met een al bestaand open signaal moet elke cyclus ververst
