@@ -37,6 +37,16 @@ logger = logging.getLogger("level_check")
 # volatiel de coin is in plaats van een vast percentage voor elke coin.
 PENDING_LEVEL_ATR_MULTIPLIER = 0.5
 
+# Een vers signaal staat per definitie op de prijs waarop het net ontstond,
+# dus zonder ondergrens vuurt "terug bij signaalniveau" bijna meteen na de
+# eerste melding zelf, elke 15 minuten opnieuw zolang de prijs niet wegloopt
+# — geen "terug", gewoon nog niet weg geweest. Pas na deze minimumleeftijd
+# telt dichtbij-zijn als een echte terugkeer. Ruim boven de 15 minuten
+# cyclus van deze check en de 60 minuten van de marktscan, zodat een signaal
+# altijd minstens één volle marktscan-cyclus de kans heeft gehad om weg te
+# bewegen voor dit seintje kan afgaan.
+PENDING_LEVEL_MIN_AGE_MINUTES = 90
+
 
 def _level_hit(direction: str, current_price: float, stop_loss: float, take_profit: float) -> str:
     """Geeft "stop loss", "take profit" of "" terug."""
@@ -150,8 +160,10 @@ async def check_pending_signals() -> None:
         if current_price is None:
             continue
 
+        signal_age = datetime.now(timezone.utc) - datetime.fromisoformat(entry["signal_created_at"])
         at_signal_level = (
-            entry["signal_price"] is not None
+            signal_age >= timedelta(minutes=PENDING_LEVEL_MIN_AGE_MINUTES)
+            and entry["signal_price"] is not None
             and abs(current_price - entry["signal_price"]) <= entry["atr"] * PENDING_LEVEL_ATR_MULTIPLIER
         )
 

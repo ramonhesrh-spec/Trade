@@ -1521,7 +1521,7 @@ def list_pending_entries_with_price() -> list[dict]:
         rows = conn.execute(
             """SELECT je.id AS id, je.user_id AS user_id,
                       s.coin AS coin, s.direction AS direction, s.price AS signal_price,
-                      s.atr AS atr, s.confidence AS confidence,
+                      s.atr AS atr, s.confidence AS confidence, s.created_at AS signal_created_at,
                       u.username AS username, u.telegram_chat_id AS telegram_chat_id
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id
