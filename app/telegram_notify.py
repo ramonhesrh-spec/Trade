@@ -371,6 +371,50 @@ async def send_breakout_retest_alert(alert: dict, chat_id: str, force_silent: bo
                 alert["coin"], alert["direction"], chat_id)
 
 
+def _trendline_link(coin: str) -> str:
+    """Link naar de coin-pagina zonder query-parameters: een trendlijn
+    heeft geen vaste zone-band om te markeren zoals optie C, de lijn zelf
+    toont zich al als losse lijnserie op de grafiek."""
+    url = f"{config.DASHBOARD_URL}/coins/{coin}"
+    return f"🔎 Bekijk de trendlijn op de grafiek: {url}"
+
+
+def format_trendline_retest_message(alert: dict) -> str:
+    """Melding voor een diagonale-trendlijn-uitbraak-dan-terugtest: zelfde
+    striktheid als optie C (format_breakout_retest_message), eigen icoon
+    (📐) om de twee typen in Telegram meteen te onderscheiden."""
+    kind_label = "weerstand" if alert["direction"] == "long" else "steun"
+    lines = [
+        f"{_direction_emoji(alert['direction'])} {_coin_label(alert['coin'])} · {_direction_label(alert['direction'])}",
+        DIVIDER,
+        "📐 TRENDLIJN-UITBRAAK-DAN-TERUGTEST",
+        "",
+        f"💰 Prijs nu: {alert['price']:.4f}",
+        f"📍 Trendlijn ({alert['touches']}x eerder geraakt): {alert['line_value']:.4f}",
+        f"🎯 Take profit: {alert['take_profit']:.4f}",
+        f"🛑 Stop loss: {alert['stop_loss']:.4f}",
+        _progress_bar(alert["price"], alert["stop_loss"], alert["take_profit"], alert["direction"]),
+        DIVIDER,
+        f"Deze lijn was eerder {kind_label}, is {alert['candles_since']} candle(s) geleden "
+        "doorbroken en wordt nu opnieuw getest.",
+        "",
+        _trendline_link(alert["coin"]),
+    ]
+    lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
+    return "\n".join(lines)
+
+
+async def send_trendline_retest_alert(alert: dict, chat_id: str, force_silent: bool = False) -> None:
+    if not config.TELEGRAM_BOT_TOKEN or not chat_id:
+        logger.warning("Telegram token of chat ID ontbreekt, trendlijn-terugtest-melding niet verstuurd")
+        return
+    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
+    text = format_trendline_retest_message(alert)
+    await bot.send_message(chat_id=chat_id, text=text, disable_notification=force_silent)
+    logger.info("Trendlijn-terugtest-melding verstuurd voor %s %s naar chat %s",
+                alert["coin"], alert["direction"], chat_id)
+
+
 def format_swing_message(
     coin: str, direction: str, price: float, stop_loss: float, take_profit: float,
     daily_factors: list[tuple[str, bool, str]], factors_4h: list[tuple[str, bool, str]],
