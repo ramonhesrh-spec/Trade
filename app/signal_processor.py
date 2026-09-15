@@ -146,12 +146,15 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
         _consecutive_interpret_failures += 1
         if _consecutive_interpret_failures >= INTERPRET_FAILURE_ALERT_THRESHOLD:
             try:
-                await telegram_notify.send_admin_alert(
-                    f"🚨 Anthropic interpretatie is nu {_consecutive_interpret_failures} berichten op rij "
-                    f"mislukt. Check de serverlog en de API-status.\n\nLaatste fout: {exc}"
+                repo.create_notification(
+                    None, "admin_error",
+                    "Herhaalde API-fouten",
+                    f"Anthropic interpretatie is nu {_consecutive_interpret_failures} berichten op rij mislukt. "
+                    f"Laatste fout: {exc}",
+                    None,
                 )
             except Exception:
-                logger.exception("Kon admin-alert voor herhaalde API-fouten niet versturen")
+                logger.exception("Kon admin-melding voor herhaalde API-fouten niet opslaan")
         return
 
     _consecutive_interpret_failures = 0
@@ -337,34 +340,49 @@ async def evaluate_narrative(coin: str, direction: str, result_id: int) -> None:
     )
 
 
+def _narrative_summary_text(narrative: dict, is_new: bool, is_contradiction: bool,
+                             contradicted_since: Optional[str]) -> str:
+    """Kale-tekst samenvatting van een narrative-update voor de
+    notifications-tabel: coin, richting en of dit een nieuw verhaal, een
+    tegenspraak van het vorige, of een update op het lopende verhaal is.
+    Geen Telegram-opmaak/emoji en geen volledige tijdlijn zoals
+    telegram_notify.format_narrative_message die opbouwt — dat bericht
+    bewerkt één doorlopend Telegram-bericht en moet daarom de hele
+    geschiedenis tonen; hier krijgt elke update sowieso zijn eigen rij, dus
+    de tijdlijn zelf hoeft niet herhaald te worden."""
+    direction_word = "long" if narrative["direction"] == "long" else "short"
+    if is_contradiction:
+        opposite = "short" if narrative["direction"] == "long" else "long"
+        when = f" van {contradicted_since}" if contradicted_since else ""
+        return (
+            f"Nieuw {direction_word}-verhaal voor {narrative['coin']} spreekt de eerdere "
+            f"{opposite}-analyse{when} tegen."
+        )
+    if is_new:
+        return f"Nieuw {direction_word}-verhaal gestart voor {narrative['coin']}."
+    return f"Update op het lopende {direction_word}-verhaal voor {narrative['coin']}."
+
+
 async def _send_narrative_notifications(
     narrative_id: int, is_new: bool, is_contradiction: bool, contradicted: Optional[dict] = None,
 ) -> None:
-    """Stuurt of bewerkt de narrative-melding voor elke gebruiker met een
-    gekoppelde Telegram-chat. Een tegenspraak of het allereerste bericht
-    van een narrative heeft nooit een bestaand bericht om te bewerken; een
-    update probeert altijd eerst het vorige bericht te bewerken (zie
-    telegram_notify.send_narrative_update voor de edit/verse-melding-
-    afweging zelf)."""
+    """Slaat de narrative-melding op als een notifications-rij voor elke
+    gebruiker. Anders dan de oude Telegram-versie (die één bestaand bericht
+    probeerde te bewerken zodat een doorlopend verhaal niet als losse
+    berichten aanvoelde) wordt hier elke update gewoon een nieuwe rij: een
+    notifications-rij heeft geen "bewerk het vorige bericht"-concept, en de
+    /meldingen-lijst toont sowieso losse regels met tijdstip."""
     narrative = repo.get_narrative(narrative_id)
-    timeline = repo.list_narrative_messages(narrative_id)
     contradicted_since = contradicted["opened_at"][:10] if contradicted else None
 
     for user in repo.list_users():
-        if not user["telegram_chat_id"]:
-            continue
-        existing = None if is_new else repo.get_narrative_notification(narrative_id, user["id"])
-        existing_message_id = existing["telegram_message_id"] if existing else None
         try:
-            # Altijd stil, zoals de oude send_long_term_message ook altijd
-            # deed: dit is community-analyse, geen actiegerichte melding
-            # (SL/TP-hit, nieuw day-trading-signaal) die een geluidje
-            # rechtvaardigt, ongeacht of het net stille uren zijn.
-            telegram_message_id = await telegram_notify.send_narrative_update(
-                narrative["coin"], narrative["direction"], timeline, user["telegram_chat_id"],
-                existing_message_id, is_contradiction, contradicted_since, force_silent=True,
+            repo.create_notification(
+                user["id"], "narrative_update",
+                f"Verhaal-update: {narrative['coin']}",
+                _narrative_summary_text(narrative, is_new, is_contradiction, contradicted_since),
+                f"/coin/{narrative['coin']}",
             )
-            repo.upsert_narrative_notification(narrative_id, user["id"], telegram_message_id)
         except Exception:
             logger.exception("Narrative-melding voor %s naar gebruiker %s is mislukt",
                               narrative["coin"], user["username"])
@@ -761,11 +779,12 @@ async def process_day_trading_signal(
         logger.info("%s nog niet genomen tegenovergestelde melding(en) voor %s automatisch genegeerd",
                      len(ignored), interp.coin)
         for user in ignored:
-            if not user["telegram_chat_id"]:
-                continue
             try:
-                await telegram_notify.send_expired_pending_message(
-                    interp.coin, interp.direction, chat_id=user["telegram_chat_id"],
+                repo.create_notification(
+                    user["id"], "expired_signal",
+                    f"Kans op {interp.coin} vervallen",
+                    f"Een nieuwe {interp.direction}-melding op {interp.coin} maakte de vorige kans achterhaald.",
+                    f"/coin/{interp.coin}",
                 )
             except Exception:
                 logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt",
@@ -798,11 +817,12 @@ async def process_day_trading_signal(
         logger.info("%s oude nog niet genomen melding(en) voor %s automatisch genegeerd (nieuw signaal)",
                      len(stale), interp.coin)
         for user in stale:
-            if not user["telegram_chat_id"]:
-                continue
             try:
-                await telegram_notify.send_stale_pending_message(
-                    interp.coin, chat_id=user["telegram_chat_id"],
+                repo.create_notification(
+                    user["id"], "expired_signal",
+                    f"Kans op {interp.coin} vervallen",
+                    f"Een oude melding op {interp.coin} is vervangen door een nieuw signaal.",
+                    f"/coin/{interp.coin}",
                 )
             except Exception:
                 logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt",
