@@ -47,6 +47,24 @@
   // vóórdat de fetch klaar is (dan gewoon een lege lijst).
   let srZoneEls = [];
 
+  // Een uitbraak-dan-terugtest-melding ("optie C") linkt hierheen met
+  // ?zone_low=...&zone_high=..., de exacte grenzen uit die ene melding
+  // (zie telegram_notify._zone_link). Zonder dit was niet te zien welke
+  // van mogelijk meerdere zelf-gedetecteerde zones op de grafiek bij de
+  // melding hoorde. Tolerantie relatief (0.5%): de zone-detectie zelf kan
+  // tegen de tijd dat iemand klikt een candle later opnieuw gedraaid zijn,
+  // exacte float-gelijkheid zou dan al niet meer matchen.
+  const urlParams = new URLSearchParams(window.location.search);
+  const highlightLow = parseFloat(urlParams.get("zone_low"));
+  const highlightHigh = parseFloat(urlParams.get("zone_high"));
+  const hasHighlightZone = !isNaN(highlightLow) && !isNaN(highlightHigh);
+  function isHighlightedZone(zone) {
+    if (!hasHighlightZone) return false;
+    const tolerance = Math.max(zone.price_high - zone.price_low, zone.price_high * 0.005);
+    return Math.abs(zone.price_low - highlightLow) <= tolerance
+      && Math.abs(zone.price_high - highlightHigh) <= tolerance;
+  }
+
   function nearestCandleTime(candles, unixSeconds) {
     let best = candles[0].time;
     let bestDiff = Math.abs(candles[0].time - unixSeconds);
@@ -269,10 +287,13 @@
       // patronen: een zone is als vlak al zichtbaar genoeg.
       srZoneEls = (data.sr_zones || []).map((zone) => {
         const el = document.createElement("div");
-        el.className = "chart-zone-sr";
-        el.innerHTML = `<span>${zone.touches}x getest</span>`;
+        const highlighted = isHighlightedZone(zone);
+        el.className = highlighted ? "chart-zone-sr chart-zone-sr-highlight" : "chart-zone-sr";
+        el.innerHTML = highlighted
+          ? `<span>🎯 gemelde zone · ${zone.touches}x getest</span>`
+          : `<span>${zone.touches}x getest</span>`;
         container.appendChild(el);
-        return { zone, el };
+        return { zone, el, highlighted };
       });
 
       chart.timeScale().fitContent();

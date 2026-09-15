@@ -124,6 +124,15 @@ def _factor_link(coin: str) -> str:
     return f"🔎 Bekijk alle {factor_count} factoren: {url}"
 
 
+def _zone_link(coin: str, zone_low: float, zone_high: float) -> str:
+    """Link naar de coin-pagina met deze ene zone gemarkeerd op de grafiek
+    (coin.js leest zone_low/zone_high uit de querystring, zie
+    isHighlightedZone). Zonder dit moet de trader zelf raden welke van
+    mogelijk meerdere zelf-gedetecteerde zones bij deze melding hoort."""
+    url = f"{config.DASHBOARD_URL}/coins/{coin}?zone_low={zone_low}&zone_high={zone_high}"
+    return f"🔎 Bekijk deze zone op de grafiek: {url}"
+
+
 def format_signal_message(signal: dict) -> str:
     """Volledige melding voor een bevestigde kans, met stop loss en take
     profit: dit is een echte, uitvoerbare trade opzet. Risicobedrag en
@@ -346,7 +355,7 @@ def format_breakout_retest_message(alert: dict) -> str:
     ]
     if alert.get("message_id") is None:
         lines += ["", "🔎 Zelf gedetecteerd door HesPulse"]
-    lines += ["", _factor_link(alert["coin"])]
+    lines += ["", _zone_link(alert["coin"], alert["zone_low"], alert["zone_high"])]
     lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
     return "\n".join(lines)
 

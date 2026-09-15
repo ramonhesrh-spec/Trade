@@ -1351,6 +1351,26 @@ main + .footer { border-top: 1px solid var(--border); }
   border-radius: 3px; white-space: nowrap; border: 1px solid var(--border-strong);
 }
 
+/* De ene zone waar een uitbraak-dan-terugtest-melding ("optie C") precies
+   naar linkt (coin.js: ?zone_low=...&zone_high=...) — amber in plaats van
+   violet, en een dikkere rand, zodat hij tussen mogelijk meerdere
+   zelf-gedetecteerde zones meteen opvalt als dé zone uit de melding. */
+.chart-zone-sr-highlight {
+  background: rgba(245, 166, 35, 0.16);
+  border-top: 2px solid rgba(245, 166, 35, 0.85);
+  border-bottom: 2px solid rgba(245, 166, 35, 0.85);
+}
+.chart-zone-sr-highlight span {
+  color: #f5a623; border-color: #f5a623;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .chart-zone-sr-highlight { animation: zone-highlight-pulse 2s ease-in-out 3; }
+}
+@keyframes zone-highlight-pulse {
+  0%, 100% { background: rgba(245, 166, 35, 0.16); }
+  50% { background: rgba(245, 166, 35, 0.32); }
+}
+
 /* Evaluatie-simulatie: hergebruikt .risk-gauge/.risk-gauge-fill volledig
    (zelfde gauge-grow-intro, zelfde vloeistof-shimmer). Alleen de
    winstdoel-balk krijgt een eigen variant, want hoger is hier beter, niet
