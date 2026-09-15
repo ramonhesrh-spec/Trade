@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Meldingen — HesPulse{% endblock %}
+{% block content %}
+
+<h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Meldingen</h2>
+<p class="muted" style="margin: -6px 0 4px; max-width: 640px;">Rustige meldingen die niet als push binnenkomen — bekijk ze hier op je
+eigen tempo.</p>
+
+{% if admin_notifications is not none %}
+<section class="card" style="--i: 0">
+  <h2>Systeem (alleen jij)</h2>
+  <ul class="notification-list">
+    {% for n in admin_notifications %}
+    <li class="{{ 'unread' if not n.is_read else '' }}">
+      <strong>{{ n.title }}</strong>
+      <p class="muted">{{ n.body }}</p>
+      <time class="muted">{{ n.created_at }}</time>
+    </li>
+    {% else %}
+    <li class="empty muted">Geen systeemmeldingen.</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section class="card" style="--i: 1">
+  <h2>Jouw meldingen</h2>
+  <ul class="notification-list">
+    {% for n in notifications %}
+    <li class="{{ 'unread' if not n.is_read else '' }}" data-notification-id="{{ n.id }}">
+      <a href="{{ n.url or '#' }}" class="mark-read-link">
+        <strong>{{ n.title }}</strong>
+        <p class="muted">{{ n.body }}</p>
+        <time class="muted">{{ n.created_at }}</time>
+      </a>
+    </li>
+    {% else %}
+    <li class="empty muted">Nog geen meldingen.</li>
+    {% endfor %}
+  </ul>
+</section>
+
+<script>
+document.querySelectorAll(".mark-read-link").forEach(function (link) {
+  link.addEventListener("click", function () {
+    var li = link.closest("li[data-notification-id]");
+    fetch("/meldingen/" + li.dataset.notificationId + "/gelezen", { method: "POST" }).catch(function () {});
+  });
+});
+</script>
+{% endblock %}

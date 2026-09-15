@@ -112,6 +112,28 @@ async def uitleg(request: Request, user: dict = Depends(require_login)):
     })
 
 
+@app.get("/meldingen")
+async def meldingen_page(request: Request, user: dict = Depends(require_login)):
+    """Rustige meldingen: geen push, alleen zichtbaar op deze pagina.
+    De admin-sectie (user_id IS NULL, systeemgezondheid/API-fouten) is
+    alleen zichtbaar voor het eigen operator-account, zelfde
+    ADMIN_USERNAME-check als de onherkende-berichten-sectie op het
+    dashboard."""
+    is_admin = bool(config.ADMIN_USERNAME) and user["username"] == config.ADMIN_USERNAME
+    return templates.TemplateResponse(request, "meldingen.html", {
+        "user": user,
+        "coins": repo.list_coins(),
+        "notifications": repo.list_notifications(user["id"]),
+        "admin_notifications": repo.list_admin_notifications() if is_admin else None,
+    })
+
+
+@app.post("/meldingen/{notification_id}/gelezen")
+async def mark_melding_gelezen(notification_id: int, user: dict = Depends(require_login)):
+    repo.mark_notification_read(notification_id, user["id"])
+    return {"ok": True}
+
+
 # ---------------------------------------------------------------------------
 # Login
 # ---------------------------------------------------------------------------
@@ -683,8 +705,8 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     # Niet herkende berichten zijn een operator-signaal (is de AI-interpretatie
     # goed afgesteld?), geen bruikbare informatie voor een gewone gebruiker:
     # die kan er toch niks mee, en het oogt onbetrouwbaar. Daarom alleen
-    # zichtbaar voor de eigen operator-account (ADMIN_TELEGRAM_CHAT_ID).
-    is_admin = bool(config.ADMIN_TELEGRAM_CHAT_ID) and user["telegram_chat_id"] == config.ADMIN_TELEGRAM_CHAT_ID
+    # zichtbaar voor de eigen operator-account (ADMIN_USERNAME).
+    is_admin = bool(config.ADMIN_USERNAME) and user["username"] == config.ADMIN_USERNAME
     unclear_messages = repo.recent_unclear_messages() if is_admin else None
 
     eval_ctx = _build_eval_context(user, request)
