@@ -210,6 +210,39 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     UNIQUE (signal_id, user_id)
 );
 
+-- Eén rij per (browser × apparaat)-abonnement op Web Push. Eén gebruiker
+-- kan meerdere rijen hebben (telefoon + PC). endpoint is uniek: een nieuw
+-- abonnement van hetzelfde apparaat overschrijft de bestaande rij i.p.v.
+-- een duplicaat aan te maken.
+CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    endpoint TEXT NOT NULL,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    device_label TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (endpoint)
+);
+CREATE INDEX IF NOT EXISTS idx_push_subscriptions_user ON push_subscriptions(user_id);
+
+-- Rustige, niet-tijdkritische meldingen die NIET pushen: vervallen
+-- pending signalen, lange-termijn-verhaal-updates, weekoverzichten,
+-- systeemgezondheid. user_id is NULL voor admin-only rijen
+-- (systeemgezondheid, herhaalde API-fouten) — zie
+-- docs/superpowers/specs/2026-09-15-push-meldingen-design.md.
+CREATE TABLE IF NOT EXISTS notifications (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER REFERENCES users(id),
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    url TEXT,
+    is_read INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read);
+
 -- Bewaakt een bron-niveau (support/resistance uit een screenshot) totdat
 -- de prijs er weer dichtbij komt. Ongeacht of het onderliggende bericht
 -- day_trading of lange_termijn was: elk bericht met een niveau krijgt een

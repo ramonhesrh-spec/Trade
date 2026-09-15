@@ -508,6 +508,103 @@ def upsert_narrative_notification(narrative_id: int, user_id: int, telegram_mess
         )
 
 
+# ---------------------------------------------------------------------------
+# Web Push abonnementen en rustige meldingen
+# ---------------------------------------------------------------------------
+
+def upsert_push_subscription(
+    user_id: int, endpoint: str, p256dh: str, auth: str, device_label: Optional[str] = None,
+) -> None:
+    """Slaat een Web Push-abonnement op. endpoint is uniek: hetzelfde
+    apparaat dat opnieuw abonneert (bijvoorbeeld na het wissen van
+    browserdata) overschrijft de bestaande rij i.p.v. een duplicaat aan
+    te maken."""
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth, device_label, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(endpoint) DO UPDATE SET
+                   user_id = excluded.user_id,
+                   p256dh = excluded.p256dh,
+                   auth = excluded.auth,
+                   device_label = excluded.device_label""",
+            (user_id, endpoint, p256dh, auth, device_label, db.now_iso()),
+        )
+
+
+def list_push_subscriptions(user_id: int) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM push_subscriptions WHERE user_id = ?", (user_id,)
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_push_subscription(endpoint: str) -> None:
+    """Aangeroepen zodra pywebpush een 404/410 teruggeeft: de browser/OS
+    kent dit abonnement niet meer, verder blijven proberen vervuilt de
+    tabel alleen maar."""
+    with db.session() as conn:
+        conn.execute("DELETE FROM push_subscriptions WHERE endpoint = ?", (endpoint,))
+
+
+def create_notification(
+    user_id: Optional[int], type: str, title: str, body: str, url: Optional[str] = None,
+) -> int:
+    """Rustige melding, geen push. user_id=None is een admin-only rij
+    (systeemgezondheid, herhaalde API-fouten), alleen zichtbaar op de
+    admin-pagina/sectie, nooit op de gewone /meldingen-lijst van een
+    normale gebruiker."""
+    with db.session() as conn:
+        cur = conn.execute(
+            """INSERT INTO notifications (user_id, type, title, body, url, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (user_id, type, title, body, url, db.now_iso()),
+        )
+        return cur.lastrowid
+
+
+def list_notifications(user_id: int, limit: int = 50) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM notifications WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
+            (user_id, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_admin_notifications(limit: int = 50) -> list[dict]:
+    """Systeemgezondheid en herhaalde-API-fouten: user_id IS NULL, alleen
+    voor de admin-pagina, nooit gemengd met een normale gebruiker se
+    eigen lijst."""
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM notifications WHERE user_id IS NULL ORDER BY created_at DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def count_unread_notifications(user_id: int) -> int:
+    with db.session() as conn:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n FROM notifications WHERE user_id = ? AND is_read = 0",
+            (user_id,),
+        ).fetchone()
+        return row["n"]
+
+
+def mark_notification_read(notification_id: int, user_id: int) -> None:
+    """user_id in de WHERE, niet alleen notification_id: een gebruiker
+    mag nooit andermans meldingsrij als gelezen markeren via een geraden
+    ID (zelfde ownership-check-patroon als update_journal_status)."""
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE notifications SET is_read = 1 WHERE id = ? AND user_id = ?",
+            (notification_id, user_id),
+        )
+
+
 def create_trendline(
     coin: str, user_id: int, label: str, x1: int, y1: float, x2: int, y2: float,
 ) -> int:
