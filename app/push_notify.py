@@ -1,16 +1,38 @@
-"""Web Push-meldingen naar de HesPulse-app, vervangt telegram_notify.py.
-Eigen VAPID-sleutelpaar (app/config.py), geen externe pushdienst: het
-abonnement zelf loopt via Apple/Google's eigen infrastructuur (dat is
-hoe Web Push werkt), maar wij bouwen en versturen de payload zelf."""
+"""Web Push-meldingen naar de HesPulse-app, vervangt de oude Telegram-bot
+als meldingenkanaal. Eigen VAPID-sleutelpaar (app/config.py), geen
+externe pushdienst: het abonnement zelf loopt via Apple/Google's eigen
+infrastructuur (dat is hoe Web Push werkt), maar wij bouwen en versturen
+de payload zelf."""
 import asyncio
 import json
 import logging
+from datetime import datetime
+from typing import Optional
 
 from pywebpush import WebPushException, webpush
 
 from app import config, repo
 
 logger = logging.getLogger("push_notify")
+
+
+def is_quiet_now(quiet_hours_start: Optional[str], quiet_hours_end: Optional[str]) -> bool:
+    """Verplaatst uit de oude Telegram-notificatiemodule (Task 11): puur
+    een tijdvenster-check, niets Telegram-specifieks, dus hoort hier net
+    zo goed thuis. Ongewijzigde logica, inclusief het dag-overschrijdende
+    venster (bijvoorbeeld "23:00" tot "07:00"). Beide velden leeg (None)
+    betekent geen stille uren ingesteld, dan altijd False."""
+    if not quiet_hours_start or not quiet_hours_end:
+        return False
+    try:
+        start = datetime.strptime(quiet_hours_start, "%H:%M").time()
+        end = datetime.strptime(quiet_hours_end, "%H:%M").time()
+    except ValueError:
+        return False
+    now = datetime.now().time()
+    if start <= end:
+        return start <= now < end
+    return now >= start or now < end
 
 
 def _send_one(subscription: dict, payload: dict) -> None:
@@ -30,9 +52,9 @@ async def send_push(user_id: int, title: str, body: str, url: str, silent: bool 
     apparaat dat de browser/OS niet meer kent (404/410 terug) wordt
     meteen verwijderd, anders blijft push_subscriptions vervuild raken
     met dode abonnementen. Eén mislukt apparaat blokkeert de andere
-    apparaten van dezelfde gebruiker niet (zelfde patroon als
-    telegram_notify.send_signal nu al per gebruiker in zijn eigen
-    try/except draait)."""
+    apparaten van dezelfde gebruiker niet (zelfde patroon als de oude
+    Telegram-verstuurfunctie al per gebruiker in zijn eigen try/except
+    draaide)."""
     if not config.VAPID_PRIVATE_KEY:
         logger.warning("VAPID_PRIVATE_KEY ontbreekt, pushmelding niet verstuurd")
         return

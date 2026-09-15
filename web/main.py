@@ -99,7 +99,7 @@ async def api_public_prices():
 @app.get("/uitleg")
 async def uitleg(request: Request, user: dict = Depends(require_login)):
     """Dezelfde uitleg als de openbare landingspagina (hoe het werkt,
-    Telegram koppelen, hoog vertrouwen), maar bereikbaar voor wie al is
+    meldingen aanzetten, hoog vertrouwen), maar bereikbaar voor wie al is
     ingelogd. De landingspagina zelf stuurt ingelogde gebruikers meteen
     door naar het dashboard, dus zonder deze pagina was die uitleg
     onbereikbaar na het inloggen."""
@@ -713,10 +713,11 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
 
     # Setup-checklist: alleen zichtbaar zolang niet alle stappen gezet zijn,
     # verdwijnt vanzelf zodra dat wel zo is. "Eerste melding ontvangen" kijkt
-    # naar telegram_sent op een echt signaal, een voorbeeldmelding
-    # (/telegram/voorbeeld) telt hier bewust niet in mee.
+    # naar telegram_sent (kolomnaam uit de Telegram-tijd, ongewijzigd sinds
+    # Taak 11) op een echt signaal, een voorbeeldmelding (/push/voorbeeld)
+    # telt hier bewust niet in mee.
     onboarding = {
-        "telegram_linked": bool(user["telegram_chat_id"]),
+        "push_enabled": bool(repo.list_push_subscriptions(user["id"])),
         "portfolio_set": user["portfolio_eur"] > 0,
         "first_alert_received": any(e["telegram_sent"] for e in all_entries),
     }
@@ -900,7 +901,6 @@ async def export_journal_csv(user: dict = Depends(require_login)):
 async def update_settings(
     portfolio_eur: float = Form(...),
     risk_percent: float = Form(...),
-    telegram_chat_id: str = Form(""),
     quiet_hours_start: str = Form(""),
     quiet_hours_end: str = Form(""),
     user: dict = Depends(require_login),
@@ -911,9 +911,7 @@ async def update_settings(
     end = quiet_hours_end.strip() or None
     if not (start and end):
         start, end = None, None
-    repo.update_user_settings(
-        user["id"], portfolio_eur, risk_percent, telegram_chat_id.strip() or None, start, end,
-    )
+    repo.update_user_settings(user["id"], portfolio_eur, risk_percent, start, end)
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
@@ -959,7 +957,7 @@ EVAL_DANGER_THRESHOLD_PCT = 85.0  # zelfde drempel als de risk-pulse-animatie el
 async def _check_eval_danger_alert(
     active_eval: dict, progress: risk.PropProgress, evaluation_id: int, user_id: int,
 ) -> None:
-    """Stuurt een Telegram-waarschuwing zodra dagverlies of drawdown de
+    """Stuurt een pushmelding zodra dagverlies of drawdown de
     85%-drempel passeert op een run die nog actief is (zelfde percentages
     als _build_eval_context laat zien op de evaluatiepagina). Vuurt maar
     één keer per overschrijding: danger_alert_sent voorkomt herhaling op
@@ -1402,7 +1400,7 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     # Journal-rijen zonder eigen entry_price (nog niet genomen) kunnen al wel
     # een per-gebruiker stop/take-override hebben (evaluatie-stop-cap) — die
     # override moet hier getoond worden, anders wijkt de coin-pagina af van
-    # het Telegram-bericht en het dashboard voor dezelfde, nog open kans.
+    # de melding en het dashboard voor dezelfde, nog open kans.
     pending_by_signal_id = {
         e["signal_id"]: e for e in entries
         if e["entry_price"] is None and e["status"] != "genegeerd"
@@ -1518,8 +1516,8 @@ async def save_coin_note(
 
 @app.post("/coins/{symbol}/unmute")
 async def unmute_coin(symbol: str, user: dict = Depends(require_login)):
-    """Zet Telegram-meldingen voor deze coin weer aan voor de ingelogde
-    gebruiker, na een eerdere mute-suggestie (zie
+    """Zet meldingen voor deze coin weer aan voor de ingelogde gebruiker,
+    na een eerdere mute-suggestie (zie
     signal_processor.REPEATED_IGNORE_MUTE_THRESHOLD)."""
     repo.unmute_coin(user["id"], symbol.upper())
     return RedirectResponse(url=f"/coins/{symbol.upper()}", status_code=303)

@@ -26,8 +26,8 @@ PERIOD_LABELS = {"week": "afgelopen week", "month": "afgelopen maand"}
 
 
 def _period_summary_text(stats: dict, auto_scan_stats: Optional[dict]) -> str:
-    """Platte-tekst variant van telegram_notify.format_period_summary voor
-    de notifications-tabel: dezelfde cijfers, zonder Telegram-markdown,
+    """Platte-tekst samenvatting voor de notifications-tabel: dezelfde
+    cijfers als de oude Telegram-samenvatting, zonder de markdown,
     emoji-koppen of dividers die niet passen in een korte lijst-rij op
     /meldingen."""
     parts = [f"{stats['signal_count']} signalen, waarvan {stats['hoog_count']} hoog vertrouwen."]

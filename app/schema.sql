@@ -9,6 +9,10 @@ CREATE TABLE IF NOT EXISTS users (
     password_hash TEXT NOT NULL,
     portfolio_eur REAL NOT NULL DEFAULT 0,
     risk_percent REAL NOT NULL DEFAULT 1.0,
+    -- Restant van de Telegram-bot (verwijderd in Taak 11): niet meer
+    -- ingevuld voor nieuwe gebruikers en niet meer gebruikt om meldingen
+    -- te routeren (dat loopt nu via push_subscriptions), kolom blijft
+    -- staan voor bestaande rijen, geen migratie om hem te verwijderen.
     telegram_chat_id TEXT,
     created_at TEXT NOT NULL,
     -- Stille uren, bijvoorbeeld "23:00" / "07:00": in dat venster komt ook
@@ -185,7 +189,9 @@ CREATE TABLE IF NOT EXISTS signals (
 
 -- Eigen trade logboek per gebruiker en per signaal: eigen risicobedrag
 -- (op basis van eigen portfolio), eigen status, eigen entry/exit en
--- notitie, en of de Telegram melding naar deze gebruiker is verstuurd.
+-- notitie, en of de melding naar deze gebruiker is verstuurd (kolomnaam
+-- telegram_sent uit de tijd van de Telegram-bot, blijft ongewijzigd
+-- staan sinds de overstap naar pushmeldingen, zie Taak 11).
 CREATE TABLE IF NOT EXISTS journal_entries (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     signal_id INTEGER NOT NULL REFERENCES signals(id),

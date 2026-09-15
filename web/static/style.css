@@ -1082,9 +1082,9 @@ main + .footer { border-top: 1px solid var(--border); }
 .how-it-works-layout { display: flex; gap: 32px; align-items: flex-start; }
 .how-it-works-layout .steps { flex: 1; min-width: 0; }
 
-/* Illustratief voorbeeld van een Telegram-melding, geen echte data: mag
-   hier meer laten zien dan de rest van de site (die altijd aan live
-   cijfers hangt), zolang het duidelijk als voorbeeld gelabeld blijft. */
+/* Illustratief voorbeeld van een melding, geen echte data: mag hier meer
+   laten zien dan de rest van de site (die altijd aan live cijfers hangt),
+   zolang het duidelijk als voorbeeld gelabeld blijft. */
 .phone-mockup { flex-shrink: 0; width: 168px; text-align: center; }
 .phone-frame {
   width: 168px; height: 220px; border-radius: 22px; padding: 8px;

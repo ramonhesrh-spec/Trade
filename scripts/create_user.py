@@ -35,21 +35,17 @@ def main() -> None:
 
     portfolio_eur = ask_float("Portfolio omvang in euro's", 0.0)
     risk_percent = ask_float("Risico per trade in procenten", config.DEFAULT_RISK_PERCENT)
-    telegram_chat_id = input("Telegram chat ID (leeg = geen Telegram meldingen): ").strip() or None
 
     user_id = repo.create_user(
         username=username,
         password_hash=hash_password(password),
         portfolio_eur=portfolio_eur,
         risk_percent=risk_percent,
-        telegram_chat_id=telegram_chat_id,
     )
 
     print(f"\nAccount klaar: {username} (id {user_id})")
-    print("Deze gebruiker kan nu inloggen op het dashboard met dit wachtwoord.")
-    if not telegram_chat_id:
-        print("Geen Telegram chat ID ingevuld, deze gebruiker krijgt geen Telegram meldingen "
-              "totdat dit alsnog wordt ingevuld (in het dashboard, onder Portfolio).")
+    print("Deze gebruiker kan nu inloggen op het dashboard met dit wachtwoord, en zet daar zelf "
+          "pushmeldingen aan via de knop \"Meldingen aanzetten\" op de portfolio kaart.")
 
 
 if __name__ == "__main__":

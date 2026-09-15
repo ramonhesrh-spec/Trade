@@ -7,10 +7,10 @@
 <section class="card onboarding-checklist" style="--i: 0">
   <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9,11 12,14 20,6"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Nog even instellen</h3>
   <ul class="checklist">
-    <li class="{{ 'checklist-done' if onboarding.telegram_linked else '' }}">
-      {{ "✓" if onboarding.telegram_linked else "○" }}
-      Telegram gekoppeld
-      {% if not onboarding.telegram_linked %}<a href="#portfolio-card">vul je chat ID in</a>{% endif %}
+    <li class="{{ 'checklist-done' if onboarding.push_enabled else '' }}">
+      {{ "✓" if onboarding.push_enabled else "○" }}
+      Meldingen aangezet
+      {% if not onboarding.push_enabled %}<a href="#portfolio-card">zet meldingen aan</a>{% endif %}
     </li>
     <li class="{{ 'checklist-done' if onboarding.portfolio_set else '' }}">
       {{ "✓" if onboarding.portfolio_set else "○" }}
@@ -20,7 +20,7 @@
     <li class="{{ 'checklist-done' if onboarding.first_alert_received else '' }}">
       {{ "✓" if onboarding.first_alert_received else "○" }}
       Eerste melding ontvangen
-      {% if not onboarding.first_alert_received and onboarding.telegram_linked %}<a href="#portfolio-card">stuur een voorbeeld</a>{% endif %}
+      {% if not onboarding.first_alert_received and onboarding.push_enabled %}<a href="#portfolio-card">stuur een voorbeeld</a>{% endif %}
     </li>
   </ul>
 </section>
@@ -359,9 +359,6 @@
       </label>
       <label>Risico per trade (%)
         <input type="number" step="0.1" name="risk_percent" value="{{ user.risk_percent }}" required>
-      </label>
-      <label>Telegram chat ID
-        <input type="text" name="telegram_chat_id" value="{{ user.telegram_chat_id or '' }}" placeholder="optioneel">
       </label>
       <label>Stille uren van
         <input type="time" name="quiet_hours_start" value="{{ user.quiet_hours_start or '' }}">

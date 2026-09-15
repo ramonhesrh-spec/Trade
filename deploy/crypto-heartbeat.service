@@ -1,5 +1,5 @@
 [Unit]
-Description=HesPulse - dagelijks levensteken via Telegram
+Description=HesPulse - dagelijks levensteken via pushmelding
 
 [Service]
 Type=oneshot

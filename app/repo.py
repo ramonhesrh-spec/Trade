@@ -803,24 +803,26 @@ def set_coin_note(symbol: str, note: str) -> None:
 
 def create_user(
     username: str, password_hash: str, portfolio_eur: float,
-    risk_percent: float, telegram_chat_id: Optional[str],
+    risk_percent: float,
 ) -> int:
     """Maakt een gebruiker aan, of werkt een bestaande bij (zelfde
     gebruikersnaam). Gebruikt door scripts/create_user.py, een beheerder die
     bewust een account aanmaakt of bijwerkt. Overschrijft desgewenst het
     wachtwoord van een bestaande gebruiker, gebruik hiervoor nooit
-    gebruikersinvoer van een openbaar formulier, dat is register_user()."""
+    gebruikersinvoer van een openbaar formulier, dat is register_user().
+    telegram_chat_id zit hier bewust niet meer bij (Taak 11): net als
+    update_user_settings mag dit een eventuele bestaande (legacy) waarde
+    niet stilzwijgend op elke aanroep naar NULL overschrijven."""
     with db.session() as conn:
         conn.execute(
             """INSERT INTO users
-               (username, password_hash, portfolio_eur, risk_percent, telegram_chat_id, created_at)
-               VALUES (?, ?, ?, ?, ?, ?)
+               (username, password_hash, portfolio_eur, risk_percent, created_at)
+               VALUES (?, ?, ?, ?, ?)
                ON CONFLICT(username) DO UPDATE SET
                  password_hash = excluded.password_hash,
                  portfolio_eur = excluded.portfolio_eur,
-                 risk_percent = excluded.risk_percent,
-                 telegram_chat_id = excluded.telegram_chat_id""",
-            (username, password_hash, portfolio_eur, risk_percent, telegram_chat_id, db.now_iso()),
+                 risk_percent = excluded.risk_percent""",
+            (username, password_hash, portfolio_eur, risk_percent, db.now_iso()),
         )
         row = conn.execute("SELECT id FROM users WHERE username = ?", (username,)).fetchone()
         return row["id"]
@@ -830,8 +832,9 @@ def register_user(username: str, password_hash: str) -> Optional[int]:
     """Voor open registratie via /registreer. In tegenstelling tot
     create_user() faalt dit gewoon (geeft None) als de gebruikersnaam al
     bestaat, in plaats van het bestaande account te overschrijven. Portfolio
-    en risicopercentage starten op 0 / de standaardwaarde, telegram_chat_id
-    leeg, in te stellen na het inloggen."""
+    en risicopercentage starten op 0 / de standaardwaarde, in te stellen na
+    het inloggen. telegram_chat_id staat hier vast op NULL: die kolom is
+    een restant van de Telegram-bot (Taak 11), niet meer instelbaar."""
     with db.session() as conn:
         existing = conn.execute(
             "SELECT 1 FROM users WHERE username = ?", (username,)
@@ -865,26 +868,20 @@ def list_users() -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def get_user_by_telegram_chat_id(chat_id: str) -> Optional[dict]:
-    """Voor de inline Genomen/Negeren-knoppen: een Telegram callback komt
-    binnen op een chat_id, niet op een dashboard-username, dus moet
-    teruggezocht worden welke gebruiker daarbij hoort."""
-    with db.session() as conn:
-        row = conn.execute("SELECT * FROM users WHERE telegram_chat_id = ?", (str(chat_id),)).fetchone()
-        return dict(row) if row else None
-
-
 def update_user_settings(
     user_id: int, portfolio_eur: float, risk_percent: float,
-    telegram_chat_id: Optional[str],
     quiet_hours_start: Optional[str] = None, quiet_hours_end: Optional[str] = None,
 ) -> None:
+    """telegram_chat_id zit hier bewust niet meer bij (Taak 11): het veld is
+    uit het instellingenformulier gehaald, dus deze functie mag een
+    eventuele bestaande (legacy) waarde niet stilzwijgend op elke opslag
+    naar NULL overschrijven."""
     with db.session() as conn:
         conn.execute(
-            """UPDATE users SET portfolio_eur = ?, risk_percent = ?, telegram_chat_id = ?,
+            """UPDATE users SET portfolio_eur = ?, risk_percent = ?,
                       quiet_hours_start = ?, quiet_hours_end = ?
                WHERE id = ?""",
-            (portfolio_eur, risk_percent, telegram_chat_id, quiet_hours_start, quiet_hours_end, user_id),
+            (portfolio_eur, risk_percent, quiet_hours_start, quiet_hours_end, user_id),
         )
 
 
@@ -1891,9 +1888,9 @@ def consecutive_autonomous_losses(coin: str, direction: str, limit: int = 3) -> 
     """Hoeveel van de laatste `limit` GESLOTEN autonome journal-regels
     (message_id IS NULL) voor deze coin+richting op rij een verlies waren,
     nieuwste eerst geteld, stopt zodra een winst wordt tegengekomen (0 als
-    de nieuwste al een winst is). Puur informatief — zie
-    telegram_notify.format_signal_message's repeated_loss_note-regel — het
-    signaal wordt hierdoor nooit onderdrukt, alleen gewaarschuwd."""
+    de nieuwste al een winst is). Puur informatief — het signaal wordt
+    hierdoor nooit onderdrukt, alleen gewaarschuwd (zie
+    signal_processor's repeated_loss_note)."""
     with db.session() as conn:
         rows = conn.execute(
             """SELECT je.result_eur AS result_eur

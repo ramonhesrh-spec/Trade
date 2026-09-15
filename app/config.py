@@ -17,10 +17,6 @@ DISCORD_BOT_TOKEN = _get("DISCORD_BOT_TOKEN")
 ANTHROPIC_API_KEY = _get("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = _get("ANTHROPIC_MODEL", "claude-sonnet-5")
 
-# Eén gedeelde Telegram bot, stuurt elke gebruiker zijn eigen bericht naar
-# zijn eigen chat ID (opgeslagen per gebruiker in de database).
-TELEGRAM_BOT_TOKEN = _get("TELEGRAM_BOT_TOKEN")
-
 EXCHANGE_ID = _get("EXCHANGE_ID", "binance")
 QUOTE_CURRENCY = _get("QUOTE_CURRENCY", "USDT")
 TIMEFRAME = "4h"
@@ -57,18 +53,12 @@ BACKUP_REMOTE = _get("BACKUP_REMOTE")
 MAX_LOGIN_ATTEMPTS = int(_get("MAX_LOGIN_ATTEMPTS", "5"))
 LOGIN_LOCKOUT_MINUTES = int(_get("LOGIN_LOCKOUT_MINUTES", "15"))
 
-# Vaste toelichting, op elk Telegram bericht en onderaan het dashboard.
+# Vaste toelichting, onderaan het dashboard.
 DISCLAIMER = "Geen advies. Regels, geen garantie. Jij beslist zelf."
 
-# Voor het welkomstbericht dat de Telegram bot terugstuurt bij /start, en
-# voor toekomstige links naar het dashboard vanuit een bot-bericht.
+# Openbaar adres van het dashboard, voor toekomstige links vanuit een
+# melding of e-mail.
 DASHBOARD_URL = _get("DASHBOARD_URL", "https://hespulse.duckdns.org")
-
-# Telegram chat ID van de beheerder (jijzelf), voor systeemwaarschuwingen
-# die niets met een specifiek handelssignaal te maken hebben: de zelfcheck
-# (app/health_check.py) en herhaalde API-fouten. Leeg = geen van beide
-# stuurt een alert, ze loggen dan alleen naar de serverlog zoals voorheen.
-ADMIN_TELEGRAM_CHAT_ID = _get("ADMIN_TELEGRAM_CHAT_ID")
 
 # Web Push: eigen VAPID-sleutelpaar, één keer gegenereerd (zie het plan
 # voor het genereercommando), bewijst aan Apple/Google dat een melding
@@ -81,7 +71,7 @@ VAPID_CLAIM_EMAIL = _get("VAPID_CLAIM_EMAIL", "mailto:admin@hespulse.duckdns.org
 
 # Gebruikersnaam van het admin-account (jijzelf): bepaalt wie de
 # systeemgezondheid-sectie op /meldingen mag zien. Vervangt de oude
-# ADMIN_TELEGRAM_CHAT_ID-vergelijking zodra Telegram weg is (Taak 8/11).
+# ADMIN_TELEGRAM_CHAT_ID-vergelijking, nu Telegram helemaal weg is (Taak 11).
 ADMIN_USERNAME = _get("ADMIN_USERNAME")
 
 # Kraken Pro referral, getoond op de openbare landingspagina.

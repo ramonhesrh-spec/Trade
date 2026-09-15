@@ -48,8 +48,8 @@
   let srZoneEls = [];
 
   // Een uitbraak-dan-terugtest-melding ("optie C") linkt hierheen met
-  // ?zone_low=...&zone_high=..., de exacte grenzen uit die ene melding
-  // (zie telegram_notify._zone_link). Zonder dit was niet te zien welke
+  // ?zone_low=...&zone_high=..., de exacte grenzen uit die ene melding.
+  // Zonder dit was niet te zien welke
   // van mogelijk meerdere zelf-gedetecteerde zones op de grafiek bij de
   // melding hoorde. Tolerantie relatief (0.5%): de zone-detectie zelf kan
   // tegen de tijd dat iemand klikt een candle later opnieuw gedraaid zijn,
@@ -301,7 +301,7 @@
       // .chart-zone-sr-blok (vaste top/hoogte), dus een eigen
       // lightweight-charts lijnserie per lijn. Violet (#a78bfa), niet
       // amber: amber (.chart-zone-sr-highlight) betekent specifiek "dit is
-      // DE zone uit de Telegram-melding die je hier bekeek", maar
+      // DE zone uit de melding die je hier bekeek", maar
       // detect_trendlines kan tot twee lijnen tegelijk teruggeven zonder
       // enige aanduiding welke (als een van beide) die melding was.
       // Violet is dezelfde kleur als de zelf-gedetecteerde horizontale

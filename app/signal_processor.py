@@ -1,5 +1,5 @@
 """Verwerkingspijplijn: interpretatie via Anthropic, technische toetsing
-voor day trading berichten, risicomanagement en Telegram melding.
+voor day trading berichten, risicomanagement en pushmelding.
 
 Dit systeem voert geen trades uit. Het geeft een melding op basis van
 regels. Elke trade blijft een handmatige beslissing.
@@ -9,7 +9,7 @@ import logging
 import time
 from typing import Optional
 
-from app import coinlist, config, exchange, explain, indicators, push_notify, repo, risk, telegram_notify
+from app import coinlist, config, exchange, explain, indicators, push_notify, repo, risk
 from app.anthropic_interpret import Interpretation, interpret_message
 
 logger = logging.getLogger("signal_processor")
@@ -345,11 +345,11 @@ def _narrative_summary_text(narrative: dict, is_new: bool, is_contradiction: boo
     """Kale-tekst samenvatting van een narrative-update voor de
     notifications-tabel: coin, richting en of dit een nieuw verhaal, een
     tegenspraak van het vorige, of een update op het lopende verhaal is.
-    Geen Telegram-opmaak/emoji en geen volledige tijdlijn zoals
-    telegram_notify.format_narrative_message die opbouwt — dat bericht
-    bewerkt één doorlopend Telegram-bericht en moet daarom de hele
-    geschiedenis tonen; hier krijgt elke update sowieso zijn eigen rij, dus
-    de tijdlijn zelf hoeft niet herhaald te worden."""
+    Geen Telegram-opmaak/emoji en geen volledige tijdlijn zoals de oude
+    Telegram-versie opbouwde — dat bericht bewerkte één doorlopend
+    Telegram-bericht en moest daarom de hele geschiedenis tonen; hier
+    krijgt elke update sowieso zijn eigen rij, dus de tijdlijn zelf hoeft
+    niet herhaald te worden."""
     direction_word = "long" if narrative["direction"] == "long" else "short"
     if is_contradiction:
         opposite = "short" if narrative["direction"] == "long" else "long"
@@ -511,12 +511,14 @@ async def run_swing_check(watch_id: int) -> None:
         )
         if stop_was_capped:
             repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, None)
-        if not user["telegram_chat_id"]:
-            continue
+        # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push
+        # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend
+        # over, en telegram_chat_id wordt sinds de overstap naar push nooit
+        # meer ingevuld voor nieuwe gebruikers.
         # Geen is_coin_muted-check hier: mute geldt bewust alleen voor
         # day-trading meldingen (zie de spec), een swing-melding is
         # zeldzaam en juist bedoeld om een grote kans nooit te missen.
-        quiet = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
 
         eval_budget_pct = None
         eval_blocked_note = None
@@ -876,33 +878,33 @@ async def process_day_trading_signal(
         if active_eval_for_display and evaluation_id is not None:
             open_risk_eur_display = repo.total_open_risk_eur_for_evaluation(evaluation_id)
             daily_remaining = risk.compute_eval_daily_budget_remaining(active_eval_for_display, open_risk_eur_display)
-            # Percentage van het VOLLEDIGE resterende dagbudget, zoals het
-            # Telegram-label ook zegt — niet van het per-trade aandeel
-            # (dagbudget / EVAL_BUDGET_TRADE_RESERVE), want dan toont een
-            # trade die precies zijn aandeel gebruikt alarmerend "100%".
+            # Percentage van het VOLLEDIGE resterende dagbudget, niet van het
+            # per-trade aandeel (dagbudget / EVAL_BUDGET_TRADE_RESERVE), want
+            # dan toont een trade die precies zijn aandeel gebruikt
+            # alarmerend "100%".
             eval_budget_pct = (risk_eur / daily_remaining * 100) if daily_remaining else 0.0
         elif active_eval_for_display and evaluation_id is None:
             eval_blocked_note = "Dagbudget of drawdown-ruimte van je evaluatie is (bijna) op, deze trade telt niet mee voor je evaluatie."
 
-        if not user["telegram_chat_id"]:
-            logger.info("Gebruiker %s heeft geen telegram_chat_id, geen melding verstuurd",
-                        user["username"])
-            continue
+        # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push
+        # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend
+        # over, en telegram_chat_id wordt sinds de overstap naar push nooit
+        # meer ingevuld voor nieuwe gebruikers.
 
         if muted:
             # De logboekregel bestaat al (hierboven aangemaakt): trackrecord
-            # en dashboard-cijfers blijven kloppen, alleen de Telegram-melding
+            # en dashboard-cijfers blijven kloppen, alleen de pushmelding
             # zelf wordt overgeslagen, dat is precies wat "uitzetten" betekent.
-            logger.info("Coin %s is gemute voor gebruiker %s, geen Telegram-melding verstuurd",
+            logger.info("Coin %s is gemute voor gebruiker %s, geen pushmelding verstuurd",
                         interp.coin, user["username"])
             continue
 
         if not confirmed and not notify_on_reject:
             # Autonome marktscan (app/market_scanner.py) geeft
             # notify_on_reject=False mee: een afgewezen ("nog geen sterke
-            # kans") autonoom signaal hoeft geen Telegram-melding te
-            # sturen, in tegenstelling tot een door de gebruiker gedeeld
-            # bericht (die krijgt altijd een bericht, ook bij afwijzing).
+            # kans") autonoom signaal hoeft geen pushmelding te sturen, in
+            # tegenstelling tot een door de gebruiker gedeeld bericht (die
+            # krijgt altijd een bericht, ook bij afwijzing).
             # De logboekregel hierboven blijft wel gewoon bestaan, het
             # trackrecord blijft compleet, alleen de melding zelf wordt
             # overgeslagen — zelfde patroon als de muted-continue hierboven.
@@ -927,7 +929,7 @@ async def process_day_trading_signal(
         # Bij precies 1 is dit de enige, geen samenvattingsregel nodig.
         pending_count = repo.count_pending_signals(user["id"])
 
-        force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             title = f"{push_notify.coin_symbol(interp.coin)} {interp.coin} {interp.direction}, {signal_data['confidence']}"
             body = f"Entry {signal_data['price']:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
@@ -980,10 +982,11 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
     entries = {e["user_id"]: e for e in repo.list_journal_entries_for_signal(signal_id)}
     for user in repo.list_users():
         entry = entries.get(user["id"])
-        if (
-            not entry or entry["exit_price"] is not None or entry["status"] == "genegeerd"
-            or not user["telegram_chat_id"]
-        ):
+        # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push
+        # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend
+        # over, en telegram_chat_id wordt sinds de overstap naar push nooit
+        # meer ingevuld voor nieuwe gebruikers.
+        if not entry or entry["exit_price"] is not None or entry["status"] == "genegeerd":
             continue
         if repo.is_coin_muted(user["id"], signal_data["coin"]):
             continue
@@ -1030,7 +1033,7 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
                 ),
             }
 
-        force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             coin = message_data["coin"]
             confirmed = message_data["technical_confirmed"]

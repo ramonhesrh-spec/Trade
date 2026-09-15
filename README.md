@@ -1,21 +1,22 @@
 # HesPulse
 
 Crypto day trading alertsysteem. Combineert Discord DM berichten en live
-technische data, en stuurt meldingen via Telegram. Het systeem voert geen
-trades uit. Jij beslist zelf.
+technische data, en stuurt pushmeldingen naar je telefoon of browser. Het
+systeem voert geen trades uit. Jij beslist zelf.
 
 ## Hoe het werkt
 
 Jij stuurt zelf relevante berichten uit een betaalde Discord community door,
 via Forward, naar de DM van je eigen bot account. Het systeem leest die DM,
 interpreteert de tekst via de Anthropic API, toetst dat tegen live koersdata
-op Binance, en stuurt een Telegram melding. Alles wordt gelogd in een sqlite
-database en is terug te zien in het webdashboard.
+op Binance, en stuurt een pushmelding. Alles wordt gelogd in een sqlite
+database en is terug te zien in het webdashboard, inclusief een rustige
+meldingenlijst op `/meldingen`.
 
 Meerdere mensen kunnen hetzelfde systeem gebruiken. Iedereen ziet dezelfde
 signalen (dezelfde Discord berichten, dezelfde technische toetsing), maar
 elke gebruiker heeft zijn eigen login, eigen portfolio, eigen risico
-instelling, eigen Telegram meldingen met zijn eigen risicobedrag, en zijn
+instelling, eigen pushmeldingen met zijn eigen risicobedrag, en zijn
 eigen logboek: status, entry, exit en notities. De ene gebruiker kan het
 logboek van de andere niet zien of wijzigen.
 
@@ -36,11 +37,11 @@ blijft voor elke gebruiker apart.
 - `app/signal_processor.py` — verbindt alle stappen, met een paar
   herhaalpogingen bij een tijdelijke Anthropic storing, herkent dubbele
   berichten, en zet een nieuw signaal af tegen recente lange termijn context
-- `app/telegram_notify.py` — Telegram meldingen, inclusief positiegrootte
-  en een vaste disclaimer
+- `app/push_notify.py` — Web Push meldingen (eigen VAPID-sleutelpaar, geen
+  externe pushdienst), inclusief positiegrootte
 - `app/repo.py`, `app/db.py`, `app/schema.sql` — sqlite logging
 - `app/backup.py` — dagelijkse back-up, optioneel ook naar een externe locatie
-- `app/heartbeat.py` — dagelijks levensteken via Telegram
+- `app/heartbeat.py` — dagelijks levensteken via pushmelding
 - `app/level_check.py` — periodieke check: heeft een open trade zijn stop
   loss of take profit al geraakt, en is de prijs weer terug bij het niveau
   van een nog niet genomen signaal (proactief, niet alleen bij een nieuw
@@ -68,15 +69,27 @@ blijft voor elke gebruiker apart.
    permissions `View Channels` en `Read Message History`.
 5. Zet de token in `.env` als `DISCORD_BOT_TOKEN`.
 
-### 2. Telegram bot aanmaken
+### 2. VAPID-sleutelpaar genereren (Web Push)
 
-1. Zoek in Telegram naar BotFather, stuur `/newbot`, bewaar de token. Dit is
-   één bot voor iedereen, elke gebruiker krijgt straks zijn eigen chat ID.
-2. Zet de token in `.env` als `TELEGRAM_BOT_TOKEN`.
-3. Voor elke gebruiker apart: stuur zelf een bericht naar de nieuwe bot
-   vanaf je eigen Telegram account, en haal je chat ID op, bijvoorbeeld via
-   `@userinfobot`. Dit chat ID vul je zo in bij het aanmaken van het account
-   (stap 4), niet in `.env`.
+Eén keer genereren, hetzelfde sleutelpaar geldt voor alle gebruikers. Bewijst
+aan Apple/Google dat een melding echt van HesPulse komt (RFC 8292), geen
+account of registratie bij een externe partij nodig.
+
+```bash
+python3 -c "
+from py_vapid import Vapid02
+v = Vapid02()
+v.generate_keys()
+print('VAPID_PUBLIC_KEY=' + v.public_key_str())
+print('VAPID_PRIVATE_KEY=' + v.private_key_str())
+"
+```
+
+Zet beide waarden in `.env` als `VAPID_PUBLIC_KEY` en `VAPID_PRIVATE_KEY`,
+en vul `VAPID_CLAIM_EMAIL` in (een contactadres, verplicht door de Web
+Push-standaard). Elke gebruiker zet daarna zelf, na het inloggen, zijn eigen
+pushmeldingen aan via de knop "Meldingen aanzetten" op zijn dashboard, geen
+losse token of chat ID per gebruiker nodig.
 
 ### 3. Anthropic API sleutel
 
@@ -93,8 +106,7 @@ cp .env.example .env
 
 python3 scripts/create_user.py
 # maakt de database aan (als die nog niet bestaat) en je eigen account,
-# met gebruikersnaam, wachtwoord, portfolio, risicopercentage en Telegram
-# chat ID.
+# met gebruikersnaam, wachtwoord, portfolio en risicopercentage.
 ```
 
 Dit script is voor jou als beheerder: handig om je eigen eerste account
@@ -109,7 +121,7 @@ Voor je vrienden hoeft dat niet, die maken zelf een account aan via
 python3 scripts/test_step1_bitcoin.py
 
 # Stap 2 t/m 5: bot starten, DM's worden gelezen, geïnterpreteerd, getoetst
-# en gemeld via Telegram
+# en gemeld via een pushmelding
 python3 main.py
 
 # Stap 6 t/m 8: dashboard starten
@@ -193,10 +205,10 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now crypto-heartbeat.timer
 ```
 
-Stuurt elke ochtend om 09:00 een kort Telegram bericht naar elke gebruiker
-met een ingevuld chat ID: "Goedemorgen trader. Nieuwe dag, nieuwe kansen.
-HesPulse draait, laatste controle: ..." Zonder dit merk je een
-crash pas op als er een tijd lang geen meldingen meer binnenkomen.
+Stuurt elke ochtend om 09:00 een korte pushmelding naar elke gebruiker:
+"Goedemorgen trader. Nieuwe dag, nieuwe kansen. HesPulse draait, laatste
+controle: ..." Zonder dit merk je een crash pas op als er een tijd lang
+geen meldingen meer binnenkomen.
 
 ### Systeemzelfcheck
 
@@ -208,15 +220,16 @@ sudo systemctl enable --now crypto-health-check.timer
 ```
 
 Checkt elk uur of alle vijf systeemonderdelen (bot, dashboard, back-up,
-levensteken, niveau-check) echt actief én enabled zijn, en stuurt een
-Telegram bericht naar `ADMIN_TELEGRAM_CHAT_ID` (in `.env`, jouw eigen chat
-ID) zodra er iets ontbreekt. Zonder `ADMIN_TELEGRAM_CHAT_ID` blijft dit
-alleen in de serverlog staan. Dit is ontstaan doordat de back-up- en
-levensteken-timer op deze VPS ooit nooit geïnstalleerd bleken te zijn,
-zonder dat iemand dat opmerkte, zie ook `app/health_check.py`.
+levensteken, niveau-check) echt actief én enabled zijn, en legt zodra er
+iets ontbreekt een admin-only rij vast op `/meldingen` (zichtbaar voor het
+account waarvan de gebruikersnaam gelijk is aan `ADMIN_USERNAME` in
+`.env`). Zonder `ADMIN_USERNAME` blijft dit alleen in de serverlog staan.
+Dit is ontstaan doordat de back-up- en levensteken-timer op deze VPS ooit
+nooit geïnstalleerd bleken te zijn, zonder dat iemand dat opmerkte, zie ook
+`app/health_check.py`.
 
-Dezelfde `ADMIN_TELEGRAM_CHAT_ID` bepaalt ook welk account op het dashboard
-de "niet herkende berichten" sectie te zien krijgt: dat is een
+Dezelfde `ADMIN_USERNAME` bepaalt ook welk account op het dashboard de
+"niet herkende berichten" sectie te zien krijgt: dat is een
 operator-signaal (staat de AI-interpretatie goed?), geen bruikbare
 informatie voor een gewone gebruiker, zie `web/main.py:dashboard()`.
 
@@ -231,11 +244,12 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now crypto-weekly-summary.timer crypto-monthly-summary.timer
 ```
 
-Stuurt elke gebruiker met een gekoppelde Telegram chat een korte
-samenvatting: aantal signalen, winrate, resultaat, beste en zwakste
-trade. Wekelijks op zondagavond 20:00, maandelijks op de 1e van de maand
-om 09:00. Geen bericht als er in die periode niks gebeurd is, dat
-voorkomt een lege samenvatting.
+Zet voor elke gebruiker een korte samenvatting klaar op `/meldingen`:
+aantal signalen, winrate, resultaat, beste en zwakste trade. Een rustige
+melding, geen pushmelding: hij staat te wachten tot je zelf de pagina
+opent. Wekelijks op zondagavond 20:00, maandelijks op de 1e van de maand
+om 09:00. Geen rij als er in die periode niks gebeurd is, dat voorkomt een
+lege samenvatting.
 
 ### Seintje bij geraakte stop loss of take profit
 
@@ -257,7 +271,7 @@ Checkt elke 15 minuten twee dingen:
 Beide sturen één keer een seintje per logboekregel, geen herhaling zolang
 er niets verandert. Een reset in het dashboard maakt een nieuw seintje
 weer mogelijk.
-Zo ja, dan krijg je daar één keer een Telegram bericht over, met het
+Zo ja, dan krijg je daar één keer een pushmelding over, met het
 verzoek om de trade zelf te sluiten in het dashboard. Er wordt niets
 automatisch gesloten, en je krijgt niet elke 15 minuten opnieuw hetzelfde
 seintje.
@@ -276,7 +290,7 @@ Draait elk uur (op minuut 7, niet op het hele uur: dat zou botsen met het
 coin uit de dynamische coinlijst op een day-trading kans, zonder dat er
 eerst een Discord bericht doorgestuurd hoeft te worden. Richting komt uit
 de EMA9/EMA21 trend, de rest van de toetsing (technische factoren, stop
-loss, take profit, positiegrootte, Telegram melding per gebruiker) is
+loss, take profit, positiegrootte, pushmelding per gebruiker) is
 exact dezelfde `process_day_trading_signal`-logica als een normaal, door
 een gebruiker doorgestuurd signaal.
 
@@ -348,18 +362,19 @@ inloggen tijdelijk geblokkeerd.
 ### Een tweede gebruiker toevoegen
 
 Wil een vriend hetzelfde systeem gebruiken, met zijn eigen login, eigen
-portfolio en eigen Telegram meldingen, maar op basis van dezelfde
+portfolio en eigen pushmeldingen, maar op basis van dezelfde
 signalen die jij al binnenkrijgt via Discord? Hij gaat zelf naar
 `https://jouw-domein.nl/registreer` en maakt daar zijn eigen account aan
 met een gebruikersnaam en wachtwoord. Jij hoeft niets te doen.
 
 Na het inloggen zet hij zelf, via de portfolio kaart op zijn dashboard,
-zijn eigen portfolio in euro's, risicopercentage en Telegram chat ID
-(die hij zelf ophaalt via `@userinfobot` nadat hij een bericht naar
-jullie gedeelde Telegram bot heeft gestuurd). Hij ziet dezelfde signalen
-als jij, maar zijn eigen risicobedrag, zijn eigen statusknoppen, en zijn
-eigen winrate en resultaat. Wat jij invult bij een melding (genomen,
-entry, exit, notitie) is niet zichtbaar voor hem, en andersom.
+zijn eigen portfolio in euro's en risicopercentage in, en klikt op
+"Meldingen aanzetten" om zijn eigen pushmeldingen aan te zetten (zijn
+browser vraagt eenmalig om toestemming, geen bot of chat ID nodig). Hij
+ziet dezelfde signalen als jij, maar zijn eigen risicobedrag, zijn eigen
+statusknoppen, en zijn eigen winrate en resultaat. Wat jij invult bij een
+melding (genomen, entry, exit, notitie) is niet zichtbaar voor hem, en
+andersom.
 
 Registratie is open voor iedereen die de link heeft, dat is bewust zo
 gekozen. Tegen geautomatiseerde spam-registraties zit een limiet van
@@ -395,17 +410,18 @@ trade blijft een handmatige beslissing.
 - Technische bevestiging kijkt naar EMA9/EMA21 trend, MACD momentum, RSI
   extremen en volume ten opzichte van het gemiddelde. Aanpasbaar in
   `app/indicators.py`.
-- Elk Telegram bericht toont ook een voorgestelde positiegrootte in coin
-  eenheden: risicobedrag gedeeld door de afstand tussen entry en stop loss.
-  Dat is de hoeveelheid die bij dat risicobedrag hoort, niet alleen het
-  bedrag zelf.
+- Elke melding rekent ook een voorgestelde positiegrootte in coin eenheden
+  uit: risicobedrag gedeeld door de afstand tussen entry en stop loss. Dat
+  is de hoeveelheid die bij dat risicobedrag hoort, niet alleen het bedrag
+  zelf. Te zien op het dashboard, de pushmelding zelf blijft kort (coin,
+  richting, prijs, stop loss, take profit).
 - Mislukt de Anthropic interpretatie door een tijdelijke fout (timeout,
   overbelasting), dan probeert het systeem het tot drie keer, met een
   oplopende pauze ertussen. Lukt het dan nog niet, dan wordt het bericht
   gelogd als onduidelijk met de foutmelding erbij, in plaats van stil
   onverwerkt te blijven. Zie dit terug op `/berichten` in het dashboard.
-- Elk Telegram bericht en het dashboard tonen een vaste toelichting: geen
-  advies, regels, geen garantie, jij beslist zelf.
+- Het dashboard toont overal een vaste toelichting: geen advies, regels,
+  geen garantie, jij beslist zelf.
 - Lange termijn berichten (categorie `lange_termijn`) worden niet getoond
   in een aparte pagina, ze blijven op de achtergrond in de database staan.
   Komt er daarna een nieuw day trading signaal voor dezelfde coin, dan
@@ -417,7 +433,7 @@ trade blijft een handmatige beslissing.
 - Stuur je hetzelfde bericht binnen 24 uur nogmaals door (bijvoorbeeld per
   ongeluk twee keer geforward), dan herkent het systeem dat aan de exacte
   tekst en verwerkt het niet opnieuw: geen tweede Anthropic aanroep, geen
-  tweede signaal, geen dubbele Telegram melding. Het tweede bericht wordt
+  tweede signaal, geen dubbele pushmelding. Het tweede bericht wordt
   wel gelogd, met een verwijzing naar het eerste.
 - Winrate alleen zegt weinig over hoe goed het systeem werkt, een hoge
   winrate met kleine winsten en een paar grote verliezen kan alsnog

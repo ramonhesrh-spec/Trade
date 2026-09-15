@@ -16,7 +16,7 @@ import asyncio
 import logging
 from typing import Optional
 
-from app import exchange, indicators, push_notify, repo, risk, telegram_notify
+from app import exchange, indicators, push_notify, repo, risk
 from app.anthropic_interpret import Interpretation
 from app.signal_processor import process_day_trading_signal
 
@@ -82,12 +82,14 @@ async def _check_breakout_retest(coin: str, direction: str, df, ind) -> None:
         swing_low=zone.price_low if direction == "long" else None,
         swing_high=zone.price_high if direction == "short" else None,
     )
+    # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push slaat
+    # een gebruiker zonder push-abonnement zelf al stilzwijgend over, en
+    # telegram_chat_id wordt sinds de overstap naar push nooit meer
+    # ingevuld voor nieuwe gebruikers.
     for user in repo.list_users():
-        if not user["telegram_chat_id"]:
-            continue
         if repo.is_coin_muted(user["id"], coin):
             continue
-        force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, zelf gedetecteerd"
             body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
@@ -160,12 +162,14 @@ async def _check_trendline_retest(coin: str, direction: str, df, ind) -> None:
         swing_low=current_value if direction == "long" else None,
         swing_high=current_value if direction == "short" else None,
     )
+    # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push slaat
+    # een gebruiker zonder push-abonnement zelf al stilzwijgend over, en
+    # telegram_chat_id wordt sinds de overstap naar push nooit meer
+    # ingevuld voor nieuwe gebruikers.
     for user in repo.list_users():
-        if not user["telegram_chat_id"]:
-            continue
         if repo.is_coin_muted(user["id"], coin):
             continue
-        force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, zelf gedetecteerd"
             body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"

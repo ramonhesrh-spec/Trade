@@ -19,15 +19,12 @@ import asyncio
 import logging
 from typing import Optional
 
-from telegram import Bot
-
 from datetime import datetime, timedelta, timezone
 
-from app import config, exchange, indicators, repo
+from app import exchange, indicators, push_notify, repo
 from app.signal_processor import (
     SWING_WATCH_MAX_AGE_DAYS, _price_broke_through, _price_near_level, run_swing_check,
 )
-from app.telegram_notify import DIVIDER, _coin_label, _factor_link
 
 logger = logging.getLogger("level_check")
 
@@ -64,11 +61,6 @@ def _level_hit(direction: str, current_price: float, stop_loss: float, take_prof
 
 
 async def check_open_trades() -> None:
-    if not config.TELEGRAM_BOT_TOKEN:
-        logger.warning("TELEGRAM_BOT_TOKEN ontbreekt, geen seintjes verstuurd")
-        return
-
-    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
     entries = repo.list_open_entries_with_levels()
     logger.info("%d open logboekregels om te checken", len(entries))
 
@@ -90,25 +82,15 @@ async def check_open_trades() -> None:
         if not hit:
             continue
 
-        if not entry["telegram_chat_id"]:
-            repo.mark_level_alert_sent(entry["id"])
-            continue
-
+        # Geen telegram_chat_id-gate meer hier (Taak 11): push_notify.send_push
+        # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend over,
+        # en telegram_chat_id wordt sinds de overstap naar push nooit meer
+        # ingevuld voor nieuwe gebruikers, dus zou hier iedereen overslaan.
         hit_emoji = "🎯" if hit == "take profit" else "🛑"
-        text = (
-            f"{hit_emoji} {_coin_label(coin)} · {entry['direction'].upper()}\n"
-            f"{DIVIDER}\n"
-            f"{hit.capitalize()} geraakt\n\n"
-            f"Entry: {entry['entry_price']:.4f}\n"
-            f"Nu: {current_price:.4f}\n"
-            f"{DIVIDER}\n"
-            f"Sluit je hem? Vul de exit in op het dashboard.\n\n"
-            f"{_factor_link(coin)}\n"
-            f"{DIVIDER}\n"
-            f"⚠️ {config.DISCLAIMER}"
-        )
+        title = f"{hit_emoji} {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
+        body = f"{hit.capitalize()} geraakt · Entry {entry['entry_price']:.4f} · Nu {current_price:.4f}"
         try:
-            await bot.send_message(chat_id=entry["telegram_chat_id"], text=text)
+            await push_notify.send_push(entry["user_id"], title, body, f"/coin/{coin}")
             logger.info("Seintje verstuurd naar %s voor %s (%s)", entry["username"], coin, hit)
         except Exception:
             logger.exception("Seintje naar %s voor %s is mislukt", entry["username"], coin)
@@ -135,11 +117,6 @@ async def check_pending_signals() -> None:
     trading vaak het beste instapmoment, niet het moment van de eerste
     melding zelf. Dit is de proactieve kant, naast de reactieve verwerking
     van een nieuw Discord bericht."""
-    if not config.TELEGRAM_BOT_TOKEN:
-        logger.warning("TELEGRAM_BOT_TOKEN ontbreekt, geen seintjes verstuurd")
-        return
-
-    bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
     entries = repo.list_pending_entries_with_price()
     logger.info("%d nog niet genomen signalen om te checken", len(entries))
 
@@ -176,10 +153,9 @@ async def check_pending_signals() -> None:
         if not at_signal_level and not matched_level:
             continue
 
-        if not entry["telegram_chat_id"]:
-            repo.mark_level_alert_sent(entry["id"])
-            continue
-
+        # Zie de gelijknamige why-comment in check_open_trades hierboven:
+        # geen telegram_chat_id-gate meer, push_notify.send_push handelt een
+        # gebruiker zonder push-abonnement zelf al af.
         if matched_level:
             level_desc = f"{matched_level['price_level']}"
             if matched_level["pattern_name"]:
@@ -188,20 +164,10 @@ async def check_pending_signals() -> None:
         else:
             level_line = f"Signaalniveau: {entry['signal_price']:.4f}"
 
-        text = (
-            f"🔔 {_coin_label(coin)} · {entry['direction'].upper()}\n"
-            f"{DIVIDER}\n"
-            f"Terug bij een interessant niveau ({entry['confidence']})\n\n"
-            f"{level_line}\n"
-            f"Nu: {current_price:.4f}\n"
-            f"{DIVIDER}\n"
-            f"Nog steeds interessant? Check de actuele toetsing.\n\n"
-            f"{_factor_link(coin)}\n"
-            f"{DIVIDER}\n"
-            f"⚠️ {config.DISCLAIMER}"
-        )
+        title = f"🔔 {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
+        body = f"Terug bij een interessant niveau ({entry['confidence']}) · {level_line} · Nu {current_price:.4f}"
         try:
-            await bot.send_message(chat_id=entry["telegram_chat_id"], text=text)
+            await push_notify.send_push(entry["user_id"], title, body, f"/coin/{coin}")
             logger.info("Niveau-seintje verstuurd naar %s voor %s", entry["username"], coin)
         except Exception:
             logger.exception("Niveau-seintje naar %s voor %s is mislukt", entry["username"], coin)
