@@ -280,16 +280,23 @@ def check_divergence(df: pd.DataFrame, direction: str, lookback: int = 20) -> tu
 
 
 def check_candle_pattern(df: pd.DataFrame, direction: str) -> tuple[str, bool, str]:
-    """Bullish/bearish engulfing op de signaal-candle (de laatste, meest
-    recente candle): die candle slokt de vorige volledig op in tegengestelde
-    richting, een klassiek omslagpatroon. Extra bevestiging op de candle
-    zelf, naast de indicatoren die alleen naar prijs en gemiddelden kijken."""
+    """Bullish/bearish engulfing op de signaal-candle: die candle slokt de
+    vorige volledig op in tegengestelde richting, een klassiek
+    omslagpatroon. Extra bevestiging op de candle zelf, naast de
+    indicatoren die alleen naar prijs en gemiddelden kijken.
+
+    Gebruikt de laatst AFGESLOTEN candle, niet de allerlaatste: zelfde
+    reden als de Volume-factor in compute_indicators — de allerlaatste
+    candle is meestal nog in wording, en een engulfing-vorm is per
+    definitie een afgesloten-candle-patroon. Halverwege een candle kan de
+    vorm nog compleet veranderen voor hij sluit."""
     direction = direction.lower()
-    if len(df) < 2:
+    if len(df) < 3:
         return ("Candlepatroon", True, "te weinig candles om een patroon te beoordelen")
 
-    prev = df.iloc[-2]
-    last = df.iloc[-1]
+    last_closed = len(df) - 2
+    prev = df.iloc[last_closed - 1]
+    last = df.iloc[last_closed]
     prev_bullish = prev["close"] > prev["open"]
     prev_bearish = prev["close"] < prev["open"]
     last_bullish = last["close"] > last["open"]
@@ -508,9 +515,15 @@ def check_candle_pattern_extended(
     minstens één patroon in de kant van `direction` op de laatste candle,
     dan is de factor gehaald. Vervangt de aanroep van check_candle_pattern
     in signal_processor.compute_advanced_extra_factors (check_candle_pattern
-    zelf blijft ongewijzigd bestaan)."""
+    zelf blijft ongewijzigd bestaan).
+
+    Gebruikt de laatst AFGESLOTEN candle als signaal-candle, niet de
+    allerlaatste: zelfde reden als check_candle_pattern hierboven — de
+    allerlaatste candle is meestal nog in wording, en elk van deze
+    patronen (engulfing, hamer, ster, doji) is per definitie een
+    afgesloten-candle-vorm."""
     direction = direction.lower()
-    last_index = len(df) - 1
+    last_index = len(df) - 2
 
     _, engulfing_ok, engulfing_detail = check_candle_pattern(df, direction)
     if engulfing_ok:
@@ -539,10 +552,15 @@ def scan_candle_patterns(
     """Alle single-candle- en sterpatronen over de laatste `lookback`
     candles, ELK gevonden patroon (niet gefilterd op een verwachte
     richting — dit is voor weergave op de grafiek, niet voor de score).
-    Elk element: {"index": int, "pattern": str, "direction": "bullish"|"bearish"}."""
+    Elk element: {"index": int, "pattern": str, "direction": "bullish"|"bearish"}.
+
+    Sluit de allerlaatste candle uit, net als check_candle_pattern_extended:
+    die staat meestal nog niet vast, dus een patroon-marker daar op de
+    grafiek zou een vorm tonen die zo weer kan verdwijnen."""
     start = max(0, len(df) - lookback)
+    end = len(df) - 1
     found: list[dict] = []
-    for i in range(start, len(df)):
+    for i in range(start, end):
         for name, pattern_direction in detect_single_candle_patterns(df, i, ema9_series, ema21_series):
             found.append({"index": i, "pattern": name, "direction": pattern_direction})
         star = detect_star_pattern(df, i)
@@ -659,14 +677,35 @@ SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE = 6.0
 BTC_FLAT_EMA_GAP_ATR_MULTIPLE = 0.3
 
 
-def check_sr_zone(direction: str, entry_price: float, atr: float, zones: list[SRZone]) -> tuple[str, bool, str]:
+# Hoeveel candles terug gekeken wordt om te bepalen of de prijs al een
+# terugveer heeft laten zien, voor de bounce-check hieronder. Kort genoeg
+# om alleen de actuele test van de zone te vangen, niet een willekeurige
+# oudere candle.
+SR_ZONE_BOUNCE_LOOKBACK = 5
+
+# Hoe ver de prijs al minstens van zijn recente laagste/hoogste punt af
+# moet zijn bewogen, in de handelsrichting en in ATR gemeten, om als
+# bevestigde terugveer te tellen in plaats van "nog aan het vallen/
+# stijgen richting de zone". Zelfde schaal als
+# BREAKOUT_RETEST_TOLERANCE_ATR_MULTIPLE: geen twijfelachtig kleine
+# reactie, een echte.
+SR_ZONE_BOUNCE_MIN_REACTION_ATR_MULTIPLE = 0.3
+
+
+def check_sr_zone(
+    direction: str, entry_price: float, atr: float, zones: list[SRZone], df: pd.DataFrame,
+) -> tuple[str, bool, str]:
     """Is er een bruikbare zone aan de stop-kant van de prijs (onder de
     entry bij long, erboven bij short) binnen SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE
-    x ATR? Zelfde kant-bepaling als risk.compute_stop_take_from_levels
-    gebruikt voor community-niveaus, hier toegepast op zelf-gedetecteerde
-    zones. Geen aparte richting-afhankelijke detectie nodig: een zone is
-    een zone, welke kant hem "steun" maakt hangt puur af van waar de
-    entry-prijs zit."""
+    x ATR, ÉN heeft de prijs al een bevestigde terugveer laten zien sinds
+    zijn recente laagste/hoogste punt? Zonder die tweede eis bevestigde
+    deze factor al zodra de prijs toevallig dichtbij een zone stond, ook
+    middenin een val naar die zone toe — het verschil tussen "bij steun"
+    en "steun bevestigd". Zelfde kant-bepaling als
+    risk.compute_stop_take_from_levels gebruikt voor community-niveaus,
+    hier toegepast op zelf-gedetecteerde zones. Geen aparte richting-
+    afhankelijke detectie nodig: een zone is een zone, welke kant hem
+    "steun" maakt hangt puur af van waar de entry-prijs zit."""
     direction = direction.lower()
     max_distance = SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * atr
     edges = [edge for zone in zones for edge in (zone.price_low, zone.price_high)]
@@ -681,7 +720,19 @@ def check_sr_zone(direction: str, entry_price: float, atr: float, zones: list[SR
 
     nearest = max(candidates) if direction == "long" else min(candidates)
     distance_atr = abs(entry_price - nearest) / atr if atr else 0.0
-    return ("Steun/weerstand", True, f"zone op {distance_atr:.1f}x ATR afstand")
+
+    recent = df.tail(SR_ZONE_BOUNCE_LOOKBACK)
+    if direction == "long":
+        reaction_atr = (entry_price - float(recent["low"].min())) / atr if atr else 0.0
+    else:
+        reaction_atr = (float(recent["high"].max()) - entry_price) / atr if atr else 0.0
+
+    if reaction_atr < SR_ZONE_BOUNCE_MIN_REACTION_ATR_MULTIPLE:
+        return (
+            "Steun/weerstand", False,
+            f"zone op {distance_atr:.1f}x ATR afstand, maar nog geen bevestigde terugveer",
+        )
+    return ("Steun/weerstand", True, f"zone op {distance_atr:.1f}x ATR afstand, terugveer bevestigd")
 
 
 # Hoe ver de prijs nog voorbij een doorbroken zone mag zitten om "nu aan
@@ -1007,7 +1058,9 @@ def confirms_direction(
     andere vier passen. Zonder die harde eis zou een coin die al fors
     gelopen is (bijvoorbeeld 10%+ in een paar uur) alsnog bevestigen zodra
     de andere vier toevallig kloppen — precies het chasen dat deze factor
-    moet voorkomen.
+    moet voorkomen. Deze harde eis geldt in BEIDE versies hieronder, niet
+    alleen de basisversie: zonder dat zou de bescherming stilzwijgend
+    verdwijnen zodra ENABLE_ADVANCED_FACTORS aanstaat.
 
     Uitgebreide versie (`include_advanced=True`, aan via
     config.ENABLE_ADVANCED_FACTORS): daar komen drie vaste factoren bij,
@@ -1017,10 +1070,12 @@ def confirms_direction(
     RSI 1u, Divergentie, Candlepatroon, Liquiditeit, Steun/weerstand: elk
     een (naam, ok, detail) tuple, berekend buiten deze functie omdat ze
     andere data nodig hebben — zie signal_processor.compute_advanced_extra_factors).
-    Bevestigd is hier een kwestie van hoeveel van de factoren in totaal
-    kloppen (zie CONFIRM_THRESHOLD), niet van elke losse factor apart hard
-    vereisen: bij 17 factoren samen (5 basis + 12 uitgebreid) blokkeert
-    anders één marginale miss een verder overtuigend signaal.
+    Bevestigd is hier een kwestie van hoeveel van de OVERIGE factoren
+    (dus zonder Uitgerektheid, die blijft de eigen harde eis hierboven)
+    in totaal kloppen (zie CONFIRM_THRESHOLD), niet van elke losse factor
+    apart hard vereisen: bij 16 overige factoren samen (4 basis + 12
+    uitgebreid) blokkeert anders één marginale miss een verder
+    overtuigend signaal.
 
     Ontbreekt een extra check (bijvoorbeeld BTC-trend bij een BTC-signaal
     zelf), dan wordt hij simpelweg niet meegegeven en telt hij niet mee.
@@ -1040,6 +1095,15 @@ def confirms_direction(
         core_passed = sum(1 for name, ok, _ in factors if ok and name != "Uitgerektheid")
         confirmed = extension_ok and core_passed >= BASIC_CONFIRM_MIN_PASSED
         return confirmed, breakdown
+
+    # Zelfde harde eis als in de basisversie hierboven: zonder deze
+    # extractie viel Uitgerektheid hier terug in de gewone percentage-
+    # telling van alle 17 factoren samen, en kon een coin die al ver
+    # voorbij EXTENSION_MAX_ATR_MULTIPLE zat alsnog bevestigen zolang
+    # genoeg van de andere factoren toevallig klopten — precies het
+    # chasen dat deze factor in de basisversie al voorkomt. De factor
+    # blijft wel gewoon zichtbaar in de breakdown-tekst.
+    extension_ok = next(ok for name, ok, _ in factors if name == "Uitgerektheid")
 
     strong_enough = ind.adx >= ADX_MIN
     direction_aligned = ind.adx_pos > ind.adx_neg if direction == "long" else ind.adx_neg > ind.adx_pos
@@ -1064,6 +1128,9 @@ def confirms_direction(
 
     breakdown = " | ".join(f"{'✓' if ok else '✗'} {name}: {detail}" for name, ok, detail in factors)
 
-    passed = sum(1 for _, ok, _ in factors if ok)
-    confirmed = (passed / len(factors)) >= CONFIRM_THRESHOLD
+    # Uitgerektheid telt niet mee in deze telling (zie hierboven), anders
+    # dan alle andere factoren hier.
+    other_factors = [f for f in factors if f[0] != "Uitgerektheid"]
+    passed = sum(1 for _, ok, _ in other_factors if ok)
+    confirmed = extension_ok and (passed / len(other_factors)) >= CONFIRM_THRESHOLD
     return confirmed, breakdown

@@ -73,7 +73,7 @@ def evaluate_signal(row: dict) -> dict:
         _, vol_pct_ok, _ = indicators.check_volume_percentile(ind)
         results["Volume-percentiel"] = vol_pct_ok
         zones = indicators.detect_sr_zones(df)
-        _, sr_ok, _ = indicators.check_sr_zone(direction, ind.price, ind.atr, zones)
+        _, sr_ok, _ = indicators.check_sr_zone(direction, ind.price, ind.atr, zones, df)
         results["Steun/weerstand"] = sr_ok
     except Exception as exc:
         results["4u data"] = None

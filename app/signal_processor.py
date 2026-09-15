@@ -628,7 +628,7 @@ async def compute_advanced_extra_factors(
         factors.append(("Liquiditeit", False, "kon niet opgehaald worden, telt als niet bevestigd"))
 
     try:
-        factors.append(indicators.check_sr_zone(direction, entry_price, atr, zones))
+        factors.append(indicators.check_sr_zone(direction, entry_price, atr, zones, df))
     except Exception:
         logger.exception("Steun/weerstand voor %s kon niet berekend worden", coin)
         factors.append(("Steun/weerstand", False, "kon niet berekend worden, telt als niet bevestigd"))
