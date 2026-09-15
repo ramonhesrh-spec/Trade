@@ -296,6 +296,19 @@
         return { zone, el, highlighted };
       });
 
+      // Trendlijnen (indicators.detect_trendlines, via het trendlines-veld
+      // van /api/candles): een diagonale lijn past niet in het
+      // .chart-zone-sr-blok (vaste top/hoogte), dus een eigen
+      // lightweight-charts lijnserie per lijn, amber (#f5a623) net als de
+      // "gemelde zone"-highlight van optie C — zelfde kanaal, zelfde
+      // kleurtaal.
+      (data.trendlines || []).forEach((line) => {
+        const series = chart.addLineSeries({
+          color: "#f5a623", lineWidth: 2, lastValueVisible: false, priceLineVisible: false,
+        });
+        series.setData(line.points);
+      });
+
       chart.timeScale().fitContent();
       positionZones();
 
