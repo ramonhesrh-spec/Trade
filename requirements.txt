@@ -12,3 +12,4 @@ python-multipart>=0.0.12
 pyjwt>=2.9
 bcrypt>=4.2
 python-dotenv>=1.0
+pywebpush>=2.0

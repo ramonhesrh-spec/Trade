@@ -70,6 +70,20 @@ DASHBOARD_URL = _get("DASHBOARD_URL", "https://hespulse.duckdns.org")
 # stuurt een alert, ze loggen dan alleen naar de serverlog zoals voorheen.
 ADMIN_TELEGRAM_CHAT_ID = _get("ADMIN_TELEGRAM_CHAT_ID")
 
+# Web Push: eigen VAPID-sleutelpaar, één keer gegenereerd (zie het plan
+# voor het genereercommando), bewijst aan Apple/Google dat een melding
+# echt van HesPulse komt. VAPID_CLAIM_EMAIL is het contactadres dat de
+# pushdienst mag gebruiken bij misbruik-signalen, vereist door de Web
+# Push-standaard (RFC 8292).
+VAPID_PUBLIC_KEY = _get("VAPID_PUBLIC_KEY")
+VAPID_PRIVATE_KEY = _get("VAPID_PRIVATE_KEY")
+VAPID_CLAIM_EMAIL = _get("VAPID_CLAIM_EMAIL", "mailto:admin@hespulse.duckdns.org")
+
+# Gebruikersnaam van het admin-account (jijzelf): bepaalt wie de
+# systeemgezondheid-sectie op /meldingen mag zien. Vervangt de oude
+# ADMIN_TELEGRAM_CHAT_ID-vergelijking zodra Telegram weg is (Taak 8/11).
+ADMIN_USERNAME = _get("ADMIN_USERNAME")
+
 # Kraken Pro referral, getoond op de openbare landingspagina.
 KRAKEN_REFERRAL_URL = "https://proinvite.kraken.com/9f1e/4zto3wcm"
 KRAKEN_REFERRAL_CODE = "dc992yg8"
