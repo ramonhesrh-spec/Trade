@@ -909,8 +909,7 @@ async def process_day_trading_signal(
 
         force_silent = telegram_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            confidence = signal_data["confidence"].upper()
-            title = f"{push_notify.coin_symbol(interp.coin)} {interp.coin} {interp.direction}, {confidence.lower()} vertrouwen"
+            title = f"{push_notify.coin_symbol(interp.coin)} {interp.coin} {interp.direction}, {signal_data['confidence']}"
             body = f"Entry {signal_data['price']:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
             await push_notify.send_push(
                 user["id"], title, body, f"/coin/{interp.coin}", silent=force_silent,
