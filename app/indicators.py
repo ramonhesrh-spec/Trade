@@ -820,6 +820,58 @@ def detect_trendlines(df: pd.DataFrame, atr: float, lookback: int = SR_ZONE_LOOK
     return lines
 
 
+def find_trendline_breakout_retest(
+    df: pd.DataFrame, trendlines: list[Trendline], atr: float, direction: str,
+) -> list[tuple[Trendline, int]]:
+    """Zelfde patroon als find_breakout_retest: crossing-detectie op de
+    laatste candle die van de verkeerde naar de goede kant van het niveau
+    sloot, dan checken of dat sindsdien standhield — nu tegen een
+    bewegende lijnwaarde in plaats van een vaste zone-grens. Werkt op
+    hetzelfde geschoven venster (df.tail(SR_ZONE_LOOKBACK)) als
+    detect_trendlines, zodat line.value_at(index) in beide functies
+    dezelfde candle aanwijst. Alleen een uitbraak ná line.last_index
+    telt: de lijn kan niet gebroken zijn vóór zijn eigen laatste
+    bevestigende pivot. Geeft (lijn, candles_since_breakout) terug voor
+    elke lijn die nu een geldige terugtest is."""
+    window = df.tail(SR_ZONE_LOOKBACK).reset_index(drop=True)
+    closes = window["close"]
+    direction = direction.lower()
+    hits: list[tuple[Trendline, int]] = []
+
+    for line in trendlines:
+        if (direction == "long") != (line.kind == "resistance"):
+            continue
+
+        line_values = pd.Series([line.value_at(i) for i in range(len(closes))])
+        if direction == "long":
+            broke = (closes.shift(1) <= line_values.shift(1)) & (closes > line_values)
+        else:
+            broke = (closes.shift(1) >= line_values.shift(1)) & (closes < line_values)
+
+        breakout_indices = [idx for idx in closes.index[broke] if idx > line.last_index]
+        if not breakout_indices:
+            continue
+        breakout_idx = breakout_indices[-1]
+        since_breakout = closes.iloc[breakout_idx + 1:]
+        since_line = line_values.iloc[breakout_idx + 1:]
+        if direction == "long":
+            if (since_breakout < since_line).any():
+                continue
+        else:
+            if (since_breakout > since_line).any():
+                continue
+
+        last_index = len(closes) - 1
+        last_close = closes.iloc[last_index]
+        current_line_value = line.value_at(last_index)
+        tolerance = BREAKOUT_RETEST_TOLERANCE_ATR_MULTIPLE * atr
+        candles_since = last_index - breakout_idx
+        if abs(last_close - current_line_value) <= tolerance and candles_since > 0:
+            hits.append((line, candles_since))
+
+    return hits
+
+
 # Hoeveel keer de ATR de prijs maximaal van zijn EMA21 af mag staan
 # (in de richting van de trade) voor de Uitgerektheid-factor in
 # basic_factors hierboven. Boven deze grens is de beweging al voor een
