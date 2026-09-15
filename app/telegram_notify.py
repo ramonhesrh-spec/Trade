@@ -398,6 +398,11 @@ def format_trendline_retest_message(alert: dict) -> str:
         f"Deze lijn was eerder {kind_label}, is {alert['candles_since']} candle(s) geleden "
         "doorbroken en wordt nu opnieuw getest.",
         "",
+        # Onvoorwaardelijk (in tegenstelling tot format_breakout_retest_message's
+        # message_id-check): elke trendlijn-melding komt per definitie uit de
+        # marktscan, er bestaat geen Discord-bron-variant van dit berichttype.
+        "🔎 Zelf gedetecteerd door HesPulse",
+        "",
         _trendline_link(alert["coin"]),
     ]
     lines += [DIVIDER, f"⚠️ {config.DISCLAIMER}"]
