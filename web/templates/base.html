@@ -894,6 +894,18 @@
       navigator.serviceWorker.register("/static/service-worker.js").catch(function () {});
     });
   }
+
+  // Tijdelijke debug-console (?debug=1): toont console-logs/fouten op het
+  // scherm zelf, voor het opsporen van de iOS-pushmeldingbug zonder Mac +
+  // Safari Web Inspector nodig te hebben. Alleen actief met de query-param,
+  // geen enkele impact op normaal gebruik. Weer verwijderen zodra de bug
+  // gevonden is.
+  if (window.location.search.indexOf("debug=1") !== -1) {
+    var erudaScript = document.createElement("script");
+    erudaScript.src = "https://cdn.jsdelivr.net/npm/eruda";
+    erudaScript.onload = function () { window.eruda.init(); };
+    document.body.appendChild(erudaScript);
+  }
 </script>
 </body>
 </html>
