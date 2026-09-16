@@ -1,7 +1,8 @@
 """Backtest: hoeveel van je eigen historische day trading signalen zouden
 elke nieuwe factor (ADX+richting, volatiliteit, BTC-trend, 1u bevestiging,
-RSI 1u, divergentie, candlepatroon, volume-percentiel, liquiditeit) gehaald
-hebben, als die toen al hadden meegeteld.
+RSI 1u, divergentie, candlepatroon, volume-percentiel, liquiditeit,
+steun/weerstand, premium/discount, liquidity sweep — elk ook op daily waar
+van toepassing) gehaald hebben, als die toen al hadden meegeteld.
 
 Draai dit VOOR je ENABLE_ADVANCED_FACTORS=true zet in .env. De drempels
 (ADX 20, ATR moet stijgen, 2 miljoen volume) zijn leerboek-standaarden,
@@ -75,6 +76,11 @@ def evaluate_signal(row: dict) -> dict:
         zones = indicators.detect_sr_zones(df)
         _, sr_ok, _ = indicators.check_sr_zone(direction, ind.price, ind.atr, zones, df)
         results["Steun/weerstand"] = sr_ok
+        swing_low, swing_high = indicators.swing_levels(df)
+        _, pd_ok, _ = indicators.check_premium_discount(direction, ind.price, swing_low, swing_high)
+        results["Premium/discount"] = pd_ok
+        _, sweep_ok, _ = indicators.check_liquidity_sweep(direction, df)
+        results["Liquidity sweep"] = sweep_ok
     except Exception as exc:
         results["4u data"] = None
         print(f"    (4u data mislukt: {exc})")
@@ -109,9 +115,16 @@ def evaluate_signal(row: dict) -> dict:
         results["Daily-trend"] = daily_ok
         _, daily_rsi_ok, _ = indicators.check_daily_rsi(direction, daily_ind)
         results["RSI daily"] = daily_rsi_ok
+        daily_swing_low, daily_swing_high = indicators.swing_levels(daily_df)
+        _, daily_pd_ok, _ = indicators.check_daily_premium_discount(direction, ind.price, daily_swing_low, daily_swing_high)
+        results["Premium/discount (dag)"] = daily_pd_ok
+        _, daily_sweep_ok, _ = indicators.check_daily_liquidity_sweep(direction, daily_df)
+        results["Liquidity sweep (dag)"] = daily_sweep_ok
     except Exception as exc:
         results["Daily-trend"] = None
         results["RSI daily"] = None
+        results["Premium/discount (dag)"] = None
+        results["Liquidity sweep (dag)"] = None
         print(f"    (daily data mislukt: {exc})")
 
     # Liquiditeit: benadering. De exchange-ticker geeft alleen het HUIDIGE
