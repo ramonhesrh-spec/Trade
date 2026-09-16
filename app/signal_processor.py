@@ -601,7 +601,14 @@ async def compute_advanced_extra_factors(
         try:
             btc_df = await asyncio.to_thread(exchange.fetch_ohlcv, "BTC")
             btc_ind = indicators.compute_indicators(btc_df)
-            factors.append(indicators.check_btc_trend(direction, btc_ind))
+            # BTC-trend is nu een harde eis in confirms_direction (zie
+            # daar). Bij een vlakke BTC is er geen "tegen de trade in"
+            # om op te blokkeren, en zou een altcoin die op eigen kracht
+            # uitbreekt onterecht geblokkeerd worden — dezelfde
+            # btc_is_flat die de marktscan al gebruikt om een cyclus over
+            # te slaan bij een zijwaartse BTC.
+            if not indicators.btc_is_flat(btc_ind):
+                factors.append(indicators.check_btc_trend(direction, btc_ind))
         except Exception:
             logger.exception("BTC-trend kon niet berekend worden")
             factors.append(("BTC-trend", False, "kon niet opgehaald worden, telt als niet bevestigd"))

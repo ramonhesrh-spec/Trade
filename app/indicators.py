@@ -1071,14 +1071,26 @@ def confirms_direction(
     een (naam, ok, detail) tuple, berekend buiten deze functie omdat ze
     andere data nodig hebben — zie signal_processor.compute_advanced_extra_factors).
     Bevestigd is hier een kwestie van hoeveel van de OVERIGE factoren
-    (dus zonder Uitgerektheid, die blijft de eigen harde eis hierboven)
-    in totaal kloppen (zie CONFIRM_THRESHOLD), niet van elke losse factor
-    apart hard vereisen: bij 16 overige factoren samen (4 basis + 12
-    uitgebreid) blokkeert anders één marginale miss een verder
-    overtuigend signaal.
+    (dus zonder Uitgerektheid en BTC-trend, die allebei hun eigen harde
+    eis hebben, zie hieronder) in totaal kloppen (zie CONFIRM_THRESHOLD),
+    niet van elke losse factor apart hard vereisen: bij 15 overige
+    factoren samen (4 basis + 11 uitgebreid) blokkeert anders één
+    marginale miss een verder overtuigend signaal.
+
+    BTC-trend is, als hij aanwezig is, een tweede harde eis naast
+    Uitgerektheid: staat BTC zelf duidelijk tegen de trade in, dan
+    bevestigt een altcoin-signaal nooit, ongeacht hoeveel van de andere
+    factoren toevallig kloppen — anders kon één BTC-short en één
+    ETH-long tegelijk allebei "bevestigd" heten terwijl de markt duidelijk
+    één kant op ging. Alleen van toepassing als BTC zelf een duidelijke
+    trend heeft; signal_processor.compute_advanced_extra_factors laat de
+    factor weg zodra `btc_is_flat` true is, zodat een altcoin die op
+    eigen kracht uitbreekt tijdens een zijwaartse BTC niet onterecht
+    geblokkeerd wordt.
 
     Ontbreekt een extra check (bijvoorbeeld BTC-trend bij een BTC-signaal
-    zelf), dan wordt hij simpelweg niet meegegeven en telt hij niet mee.
+    zelf, of bij een vlakke BTC), dan wordt hij simpelweg niet meegegeven
+    en telt hij niet mee, ook niet als harde eis.
     """
     direction = direction.lower()
     if direction not in ("long", "short"):
@@ -1128,9 +1140,17 @@ def confirms_direction(
 
     breakdown = " | ".join(f"{'✓' if ok else '✗'} {name}: {detail}" for name, ok, detail in factors)
 
-    # Uitgerektheid telt niet mee in deze telling (zie hierboven), anders
-    # dan alle andere factoren hier.
-    other_factors = [f for f in factors if f[0] != "Uitgerektheid"]
+    # BTC-trend is, net als Uitgerektheid, een harde eis als hij aanwezig
+    # is (zie de docstring hierboven) — anders was BTC-trend maar 1 stem
+    # tussen 15+ andere factoren en kon een altcoin-signaal alsnog
+    # "bevestigd" heten terwijl BTC zelf duidelijk de andere kant op ging.
+    # Afwezig (BTC-signaal zelf, of BTC vlak) telt hij simpelweg niet mee,
+    # ook niet als harde eis — geen enkele False hier dus.
+    btc_trend_ok = next((ok for name, ok, _ in factors if name == "BTC-trend"), True)
+
+    # Uitgerektheid en BTC-trend tellen niet mee in deze telling (zie
+    # hierboven), anders dan alle andere factoren hier.
+    other_factors = [f for f in factors if f[0] not in ("Uitgerektheid", "BTC-trend")]
     passed = sum(1 for _, ok, _ in other_factors if ok)
-    confirmed = extension_ok and (passed / len(other_factors)) >= CONFIRM_THRESHOLD
+    confirmed = extension_ok and btc_trend_ok and (passed / len(other_factors)) >= CONFIRM_THRESHOLD
     return confirmed, breakdown
