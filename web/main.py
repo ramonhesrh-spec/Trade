@@ -872,7 +872,10 @@ async def api_push_debug_log(request: Request, user: dict = Depends(require_logi
     journalctl -u crypto-web, direct leesbaar op de VPS. Weer verwijderen
     zodra de pushmeldingbug gevonden is."""
     data = await request.json()
-    logger.info("PUSH-DEBUG (%s): %s", user["username"], data.get("message", ""))
+    # warning, niet info: web/main.py configureert geen logging.basicConfig,
+    # dus een kale info-regel wordt nergens getoond (geen handler onder
+    # WARNING). Puur voor deze tijdelijke debug-tool, zie de docstring.
+    logger.warning("PUSH-DEBUG (%s): %s", user["username"], data.get("message", ""))
     return {"ok": True}
 
 
