@@ -864,6 +864,18 @@ async def api_push_subscribe(request: Request, user: dict = Depends(require_logi
     return {"ok": True}
 
 
+@app.post("/api/push/debug-log")
+async def api_push_debug_log(request: Request, user: dict = Depends(require_login)):
+    """Tijdelijk: push-subscribe.js kan op iOS geen console tonen zonder Mac
+    + Safari Web Inspector, dus rapporteert elke stap van de abonneerpoging
+    hierheen in plaats van naar de (onbereikbare) browserconsole. Landt in
+    journalctl -u crypto-web, direct leesbaar op de VPS. Weer verwijderen
+    zodra de pushmeldingbug gevonden is."""
+    data = await request.json()
+    logger.info("PUSH-DEBUG (%s): %s", user["username"], data.get("message", ""))
+    return {"ok": True}
+
+
 @app.get("/export/logboek.csv")
 async def export_journal_csv(user: dict = Depends(require_login)):
     entries = repo.list_journal(user["id"], status=None, limit=100000)
