@@ -743,7 +743,9 @@ def check_premium_discount(
     plaatsing bepaalt)? Long is sterker onder het midden (equilibrium),
     short erboven — de klassieke SMC-knip op 50%, geen marge: een long
     net onder equilibrium is nog altijd relatief goedkoop, een long er
-    net boven is dat per definitie niet meer."""
+    net boven is dat per definitie niet meer. Precies op equilibrium
+    telt zowel long als short als ok — met echte prijzen een randgeval
+    dat in de praktijk niet voorkomt, bewust niet apart afgehandeld."""
     direction = direction.lower()
     if swing_high == swing_low:
         return ("Premium/discount", False, "range te vlak om te bepalen")
@@ -764,7 +766,9 @@ def check_daily_premium_discount(
     """Zelfde check als check_premium_discount, maar op de swing-range van
     de dagcandle in plaats van 4u — een daily premium/discount-zone is een
     sterker signaal, dezelfde reden waarom Daily-trend naast de 4u-
-    trendfactor bestaat."""
+    trendfactor bestaat. Precies op equilibrium telt zowel long als short
+    als ok — met echte prijzen een randgeval dat in de praktijk niet
+    voorkomt, bewust niet apart afgehandeld."""
     direction = direction.lower()
     if daily_swing_high == daily_swing_low:
         return ("Premium/discount (dag)", False, "range te vlak om te bepalen")
@@ -794,9 +798,17 @@ def _find_liquidity_sweep(window: pd.DataFrame, direction: str) -> Optional[Pivo
     stop-kant (low voor long, high voor short) die door een van de
     laatste LIQUIDITY_SWEEP_RECENT_CANDLES candles met zijn pen doorbroken
     is, waarna diezelfde candle terugsloot aan de oorspronkelijke kant.
-    Geeft de meest recente treffer terug, of None."""
+    Geeft de eerst passende treffer terug (nieuwste candle het eerst
+    geprobeerd; bij meerdere geraakte pivots op dezelfde candle telt de
+    volgorde van _find_pivots, niet per se de meest recente pivot), of
+    None."""
     pivots = _find_pivots(window)
     kind = "low" if direction == "long" else "high"
+    # Met de huidige constantes (SR_PIVOT_WINDOW == LIQUIDITY_SWEEP_RECENT_CANDLES)
+    # sluit _find_pivots zelf al pivots binnen dit venster uit (zijn eigen
+    # rechter bevestigingsvenster), dus dit filter is vandaag redundant —
+    # blijft staan als expliciete garantie, mocht een van beide constantes
+    # ooit onafhankelijk veranderen.
     cutoff = len(window) - LIQUIDITY_SWEEP_RECENT_CANDLES
     candidates = [p for p in pivots if p.kind == kind and p.index < cutoff]
     if not candidates:
@@ -822,7 +834,7 @@ def check_liquidity_sweep(direction: str, df: pd.DataFrame) -> tuple[str, bool, 
     naar een bevestigde terugveer over meerdere candles, dit naar één
     scherpe pen-doorbraak-en-terugsluiting. Bewust een andere naam dan
     check_liquidity (24u handelsvolume) — compleet ander concept, zie die
-    functie se docstring."""
+    functie zijn docstring."""
     direction = direction.lower()
     window = df.tail(SR_ZONE_LOOKBACK).reset_index(drop=True)
     hit = _find_liquidity_sweep(window, direction)
@@ -1223,7 +1235,7 @@ def confirms_direction(
 
     # Zelfde harde eis als in de basisversie hierboven: zonder deze
     # extractie viel Uitgerektheid hier terug in de gewone percentage-
-    # telling van alle 17 factoren samen, en kon een coin die al ver
+    # telling van alle 21 factoren samen, en kon een coin die al ver
     # voorbij EXTENSION_MAX_ATR_MULTIPLE zat alsnog bevestigen zolang
     # genoeg van de andere factoren toevallig klopten — precies het
     # chasen dat deze factor in de basisversie al voorkomt. De factor
