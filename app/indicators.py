@@ -1052,18 +1052,20 @@ EXTENSION_MAX_ATR_MULTIPLE = 3.0
 BASIC_CONFIRM_MIN_PASSED = 3
 
 # In de uitgebreide versie telt geen enkele factor apart als harde eis: met
-# 17 factoren in totaal (5 basis + 12 uitgebreid) blokkeert anders één
+# 21 factoren in totaal (5 basis + 16 uitgebreid) blokkeert anders één
 # marginale miss (bijvoorbeeld volume op 0.89x in plaats van 1.0x) een
 # verder overtuigend signaal volledig, terwijl bijna alle andere factoren
 # wel klopten. Minstens 60% is hier de grens: is dat gehaald, dan is het
 # een melding waard, en blijft het aan de gebruiker zelf om op basis van de
 # zichtbare ✓/✗ per factor te beslissen of hij hem neemt. De factoren die
-# hun eigen candle-data ophalen (BTC-trend, Daily-trend, RSI daily, 1u
-# bevestiging, RSI 1u, Divergentie, Candlepatroon, Liquiditeit) tellen
-# "fail-closed" mee: lukt het ophalen niet, dan telt de factor als niet
-# gehaald in plaats van dat de melding daarop crasht of de factor
-# overslaat, dus een tijdelijke ophaalfout kan in het slechtste geval één
-# factor kosten.
+# hun eigen candle-data ophalen (BTC-trend, Daily-trend, RSI daily,
+# Premium/discount (dag), Liquidity sweep (dag), 1u bevestiging, RSI 1u,
+# Divergentie, Candlepatroon, Liquiditeit) tellen "fail-closed" mee: lukt
+# het ophalen niet, dan telt de factor als niet gehaald in plaats van dat
+# de melding daarop crasht of de factor overslaat, dus een tijdelijke
+# ophaalfout kan in het slechtste geval meerdere factoren kosten (voor de
+# daily-fetch: Daily-trend, RSI daily, Premium/discount (dag) en Liquidity
+# sweep (dag) tegelijk).
 CONFIRM_THRESHOLD = 0.6
 
 
@@ -1175,15 +1177,17 @@ def confirms_direction(
     config.ENABLE_ADVANCED_FACTORS): daar komen drie vaste factoren bij,
     trendsterkte (ADX), volatiliteit (ATR t.o.v. zijn eigen 20-candle
     gemiddelde) en volume-percentiel, plus wat er in `extra_factors`
-    meegegeven wordt (BTC-trend, Daily-trend, RSI daily, 1u bevestiging,
-    RSI 1u, Divergentie, Candlepatroon, Liquiditeit, Steun/weerstand: elk
-    een (naam, ok, detail) tuple, berekend buiten deze functie omdat ze
-    andere data nodig hebben — zie signal_processor.compute_advanced_extra_factors).
+    meegegeven wordt (BTC-trend, Daily-trend, RSI daily, Premium/discount,
+    Premium/discount (dag), Liquidity sweep, Liquidity sweep (dag), 1u
+    bevestiging, RSI 1u, Divergentie, Candlepatroon, Liquiditeit,
+    Steun/weerstand: elk een (naam, ok, detail) tuple, berekend buiten
+    deze functie omdat ze andere data nodig hebben — zie
+    signal_processor.compute_advanced_extra_factors).
     Bevestigd is hier een kwestie van hoeveel van de OVERIGE factoren
     (dus zonder Uitgerektheid en BTC-trend, die allebei hun eigen harde
     eis hebben, zie hieronder) in totaal kloppen (zie CONFIRM_THRESHOLD),
-    niet van elke losse factor apart hard vereisen: bij 15 overige
-    factoren samen (4 basis + 11 uitgebreid) blokkeert anders één
+    niet van elke losse factor apart hard vereisen: bij 19 overige
+    factoren samen (4 basis + 15 uitgebreid) blokkeert anders één
     marginale miss een verder overtuigend signaal.
 
     BTC-trend is, als hij aanwezig is, een tweede harde eis naast
