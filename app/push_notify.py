@@ -8,12 +8,20 @@ import json
 import logging
 from datetime import datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from pywebpush import WebPushException, webpush
 
 from app import config, repo
 
 logger = logging.getLogger("push_notify")
+
+# De server draait op UTC, maar het "van/tot"-veld in het dashboard is een
+# kaal <input type="time"> dat de gebruiker in zijn eigen (Nederlandse)
+# klok invult. Zonder deze tijdzone zou de vergelijking hieronder tegen de
+# kale server-tijd lopen, en zomertijd/wintertijd zou de stille uren dan
+# ieder half jaar 1-2 uur laten opschuiven.
+QUIET_HOURS_TIMEZONE = ZoneInfo("Europe/Amsterdam")
 
 
 def is_quiet_now(quiet_hours_start: Optional[str], quiet_hours_end: Optional[str]) -> bool:
@@ -29,7 +37,7 @@ def is_quiet_now(quiet_hours_start: Optional[str], quiet_hours_end: Optional[str
         end = datetime.strptime(quiet_hours_end, "%H:%M").time()
     except ValueError:
         return False
-    now = datetime.now().time()
+    now = datetime.now(QUIET_HOURS_TIMEZONE).time()
     if start <= end:
         return start <= now < end
     return now >= start or now < end
