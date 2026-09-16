@@ -618,10 +618,15 @@ async def compute_advanced_extra_factors(
         daily_ind = indicators.compute_indicators(daily_df)
         factors.append(indicators.check_daily_trend(direction, daily_ind))
         factors.append(indicators.check_daily_rsi(direction, daily_ind))
+        daily_swing_low, daily_swing_high = indicators.swing_levels(daily_df)
+        factors.append(indicators.check_daily_premium_discount(direction, entry_price, daily_swing_low, daily_swing_high))
+        factors.append(indicators.check_daily_liquidity_sweep(direction, daily_df))
     except Exception:
         logger.exception("Daily-trend/RSI voor %s kon niet berekend worden", coin)
         factors.append(("Daily-trend", False, "kon niet opgehaald worden, telt als niet bevestigd"))
         factors.append(("RSI daily", False, "kon niet opgehaald worden, telt als niet bevestigd"))
+        factors.append(("Premium/discount (dag)", False, "kon niet opgehaald worden, telt als niet bevestigd"))
+        factors.append(("Liquidity sweep (dag)", False, "kon niet opgehaald worden, telt als niet bevestigd"))
 
     try:
         df_1h = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1h")
@@ -658,6 +663,19 @@ async def compute_advanced_extra_factors(
     except Exception:
         logger.exception("Steun/weerstand voor %s kon niet berekend worden", coin)
         factors.append(("Steun/weerstand", False, "kon niet berekend worden, telt als niet bevestigd"))
+
+    try:
+        swing_low, swing_high = indicators.swing_levels(df)
+        factors.append(indicators.check_premium_discount(direction, entry_price, swing_low, swing_high))
+    except Exception:
+        logger.exception("Premium/discount voor %s kon niet berekend worden", coin)
+        factors.append(("Premium/discount", False, "kon niet berekend worden, telt als niet bevestigd"))
+
+    try:
+        factors.append(indicators.check_liquidity_sweep(direction, df))
+    except Exception:
+        logger.exception("Liquidity sweep voor %s kon niet berekend worden", coin)
+        factors.append(("Liquidity sweep", False, "kon niet berekend worden, telt als niet bevestigd"))
 
     return factors
 
