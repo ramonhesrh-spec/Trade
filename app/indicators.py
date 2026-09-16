@@ -735,6 +735,115 @@ def check_sr_zone(
     return ("Steun/weerstand", True, f"zone op {distance_atr:.1f}x ATR afstand, terugveer bevestigd")
 
 
+def check_premium_discount(
+    direction: str, entry_price: float, swing_low: float, swing_high: float,
+) -> tuple[str, bool, str]:
+    """Ligt de entry in de goedkope (discount) of dure (premium) helft van
+    de recente swing-range (swing_levels, dezelfde die ook de stop-
+    plaatsing bepaalt)? Long is sterker onder het midden (equilibrium),
+    short erboven — de klassieke SMC-knip op 50%, geen marge: een long
+    net onder equilibrium is nog altijd relatief goedkoop, een long er
+    net boven is dat per definitie niet meer."""
+    direction = direction.lower()
+    if swing_high == swing_low:
+        return ("Premium/discount", False, "range te vlak om te bepalen")
+    equilibrium = (swing_low + swing_high) / 2
+    if direction == "long":
+        ok = entry_price <= equilibrium
+        kant = "discount" if ok else "premium"
+    else:
+        ok = entry_price >= equilibrium
+        kant = "premium" if ok else "discount"
+    detail = f"entry in {kant}-zone (equilibrium {equilibrium:.4f})"
+    return ("Premium/discount", ok, detail)
+
+
+def check_daily_premium_discount(
+    direction: str, entry_price: float, daily_swing_low: float, daily_swing_high: float,
+) -> tuple[str, bool, str]:
+    """Zelfde check als check_premium_discount, maar op de swing-range van
+    de dagcandle in plaats van 4u — een daily premium/discount-zone is een
+    sterker signaal, dezelfde reden waarom Daily-trend naast de 4u-
+    trendfactor bestaat."""
+    direction = direction.lower()
+    if daily_swing_high == daily_swing_low:
+        return ("Premium/discount (dag)", False, "range te vlak om te bepalen")
+    equilibrium = (daily_swing_low + daily_swing_high) / 2
+    if direction == "long":
+        ok = entry_price <= equilibrium
+        kant = "discount" if ok else "premium"
+    else:
+        ok = entry_price >= equilibrium
+        kant = "premium" if ok else "discount"
+    detail = f"entry in {kant}-zone op daily (equilibrium {equilibrium:.4f})"
+    return ("Premium/discount (dag)", ok, detail)
+
+
+# Hoeveel van de laatste candles gecontroleerd worden op een sweep van een
+# eerdere pivot. Kort genoeg om alleen een verse sweep te vangen, niet een
+# willekeurige oude pen-doorbraak die allang geen rol meer speelt — zelfde
+# soort venster als SR_ZONE_BOUNCE_LOOKBACK, kleiner omdat een sweep per
+# definitie een kortstondige gebeurtenis is (één candle, niet een
+# meerdaagse terugveer).
+LIQUIDITY_SWEEP_RECENT_CANDLES = 3
+
+
+def _find_liquidity_sweep(window: pd.DataFrame, direction: str) -> Optional[Pivot]:
+    """Gedeelde kernlogica voor check_liquidity_sweep en
+    check_daily_liquidity_sweep: zoekt in `window` een pivot van de
+    stop-kant (low voor long, high voor short) die door een van de
+    laatste LIQUIDITY_SWEEP_RECENT_CANDLES candles met zijn pen doorbroken
+    is, waarna diezelfde candle terugsloot aan de oorspronkelijke kant.
+    Geeft de meest recente treffer terug, of None."""
+    pivots = _find_pivots(window)
+    kind = "low" if direction == "long" else "high"
+    cutoff = len(window) - LIQUIDITY_SWEEP_RECENT_CANDLES
+    candidates = [p for p in pivots if p.kind == kind and p.index < cutoff]
+    if not candidates:
+        return None
+
+    recent = window.tail(LIQUIDITY_SWEEP_RECENT_CANDLES)
+    for _, candle in recent.iloc[::-1].iterrows():
+        for p in candidates:
+            if direction == "long":
+                swept = candle["low"] < p.price and candle["close"] > p.price
+            else:
+                swept = candle["high"] > p.price and candle["close"] < p.price
+            if swept:
+                return p
+    return None
+
+
+def check_liquidity_sweep(direction: str, df: pd.DataFrame) -> tuple[str, bool, str]:
+    """Liquidity sweep op de hoofd-timeframe (4u): is er, in de laatste
+    LIQUIDITY_SWEEP_RECENT_CANDLES candles, een stop-hunt geweest van een
+    eerdere pivot-low (long) of pivot-high (short), gevolgd door een close
+    terug aan de goede kant? Andere invalshoek dan check_sr_zone: die kijkt
+    naar een bevestigde terugveer over meerdere candles, dit naar één
+    scherpe pen-doorbraak-en-terugsluiting. Bewust een andere naam dan
+    check_liquidity (24u handelsvolume) — compleet ander concept, zie die
+    functie se docstring."""
+    direction = direction.lower()
+    window = df.tail(SR_ZONE_LOOKBACK).reset_index(drop=True)
+    hit = _find_liquidity_sweep(window, direction)
+    if hit is None:
+        return ("Liquidity sweep", False, "geen recente stop-hunt gevonden")
+    return ("Liquidity sweep", True, f"stop-hunt van {hit.price:.4f}, candle sloot terug aan de goede kant")
+
+
+def check_daily_liquidity_sweep(direction: str, daily_df: pd.DataFrame) -> tuple[str, bool, str]:
+    """Zelfde check als check_liquidity_sweep, maar op de dagcandle — een
+    sweep van een daily swing high/low is een sterker signaal, klassieke
+    SMC-liquiditeit zit vaak juist op dagniveau (de meest voor de hand
+    liggende stop-plek voor de meeste marktdeelnemers)."""
+    direction = direction.lower()
+    window = daily_df.tail(SR_ZONE_LOOKBACK).reset_index(drop=True)
+    hit = _find_liquidity_sweep(window, direction)
+    if hit is None:
+        return ("Liquidity sweep (dag)", False, "geen recente stop-hunt op daily gevonden")
+    return ("Liquidity sweep (dag)", True, f"stop-hunt op daily van {hit.price:.4f}, candle sloot terug aan de goede kant")
+
+
 # Hoe ver de prijs nog voorbij een doorbroken zone mag zitten om "nu aan
 # het terugtesten" te tellen (in ATR): zelfde soort ATR-genormaliseerde
 # marge als BTC_FLAT_EMA_GAP_ATR_MULTIPLE.
