@@ -36,6 +36,20 @@ templates.env.globals["disclaimer"] = config.DISCLAIMER
 app = FastAPI(title="HesPulse")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
+
+@app.get("/service-worker.js")
+async def service_worker():
+    """Zelfde bestand als /static/service-worker.js, maar dan op de root
+    geserveerd: een service worker kan alleen pagina's binnen zijn eigen
+    pad beheren (tenzij de server een Service-Worker-Allowed-header stuurt,
+    wat hier niet gebeurt), dus vanaf /static/ zou hij nooit /dashboard
+    kunnen bedienen. navigator.serviceWorker.ready op /dashboard bleef
+    daardoor voor altijd hangen, precies de oorzaak van de kapotte
+    pushmelding-knop. Zie base.html voor de registratie."""
+    return FileResponse(
+        str(BASE_DIR / "static" / "service-worker.js"), media_type="application/javascript",
+    )
+
 SESSION_COOKIE = "session"
 SERVER_STARTED_AT = db.now_iso()
 
