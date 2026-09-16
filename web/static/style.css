@@ -117,7 +117,10 @@ a { color: var(--accent); }
   background: var(--bg-elevated);
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0; z-index: 10;
-  padding: 12px 24px 10px;
+  /* max() i.p.v. gewoon env(): op een telefoon zonder notch/Dynamic
+     Island is safe-area-inset-top 0, dan blijft de normale 12px staan
+     in plaats van dat de topbar te dun wordt. */
+  padding: max(12px, env(safe-area-inset-top)) 24px 10px;
 }
 .topbar-top { display: flex; align-items: center; justify-content: space-between; gap: 16px; position: relative; z-index: 1; }
 .topbar .brand { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
@@ -341,7 +344,7 @@ html.page-transition-out body { opacity: 0; transform: translateY(-4px); }
 @media (max-width: 560px) { .live-pill { display: none; } }
 
 @media (max-width: 700px) {
-  .topbar { padding: 10px 14px 8px; }
+  .topbar { padding: max(10px, env(safe-area-inset-top)) 14px 8px; }
   .brand-logo { height: 20px; width: 20px; }
   .topbar .brand span { font-size: 14px; }
   .topbar nav { gap: 14px; margin-top: 8px; }
