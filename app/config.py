@@ -17,6 +17,14 @@ DISCORD_BOT_TOKEN = _get("DISCORD_BOT_TOKEN")
 ANTHROPIC_API_KEY = _get("ANTHROPIC_API_KEY")
 ANTHROPIC_MODEL = _get("ANTHROPIC_MODEL", "claude-sonnet-5")
 
+# Voor het herschrijven van al berekende feiten in gewone taal (explain.py:
+# explain_signal, summarize_message) is het zwaardere ANTHROPIC_MODEL niet
+# nodig, dat verzint toch niets nieuws, het herformuleert alleen. Dit pad
+# wordt elk uur per gevolgde coin aangeroepen door de marktscan, ook bij
+# een afwijzing die nooit gepusht wordt, dus de kosten lopen hier het
+# snelst op.
+ANTHROPIC_EXPLAIN_MODEL = _get("ANTHROPIC_EXPLAIN_MODEL", "claude-haiku-4-5-20251001")
+
 EXCHANGE_ID = _get("EXCHANGE_ID", "binance")
 QUOTE_CURRENCY = _get("QUOTE_CURRENCY", "USDT")
 TIMEFRAME = "4h"

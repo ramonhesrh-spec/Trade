@@ -42,7 +42,7 @@ def explain_signal(
     )
     try:
         response = client.messages.create(
-            model=config.ANTHROPIC_MODEL,
+            model=config.ANTHROPIC_EXPLAIN_MODEL,
             max_tokens=300,
             system=SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
@@ -80,7 +80,7 @@ def summarize_message(coin: str, raw_text: str) -> str:
     prompt = f"Coin: {coin}\nBericht:\n{raw_text}"
     try:
         response = client.messages.create(
-            model=config.ANTHROPIC_MODEL,
+            model=config.ANTHROPIC_EXPLAIN_MODEL,
             max_tokens=400,
             system=SUMMARY_SYSTEM_PROMPT,
             messages=[{"role": "user", "content": prompt}],
