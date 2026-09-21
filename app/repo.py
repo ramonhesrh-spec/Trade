@@ -2273,9 +2273,12 @@ def winrate_for_user(user_id: int) -> dict:
     signalen die voor DEZE gebruiker (zijn eigen drempel) bevestigd waren
     en waarvan de uitkomst al vaststaat, hoeveel raakten take-profit."""
     with db.session() as conn:
-        threshold = conn.execute(
+        user_row = conn.execute(
             "SELECT confirm_threshold_pct FROM users WHERE id = ?", (user_id,)
-        ).fetchone()["confirm_threshold_pct"]
+        ).fetchone()
+        if not user_row:
+            raise ValueError(f"Onbekende gebruiker: {user_id}")
+        threshold = user_row["confirm_threshold_pct"]
         rows = conn.execute(
             """SELECT pass_pct, hard_gates_ok, auto_outcome
                FROM signals
