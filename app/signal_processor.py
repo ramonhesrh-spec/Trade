@@ -473,6 +473,8 @@ async def run_swing_check(watch_id: int) -> None:
         "ema9": ind_4h.ema9, "ema21": ind_4h.ema21, "atr": ind_4h.atr,
         "atr_avg20": ind_4h.atr_avg20, "adx": ind_4h.adx,
         "technical_confirmed": 1,
+        "pass_pct": None,
+        "hard_gates_ok": 1,
         "confidence": "niveau bevestigd",
         "reason": reason,
         "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,

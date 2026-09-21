@@ -1053,7 +1053,7 @@ def update_signal(signal_id: int, data: dict) -> None:
     fields = [
         "price", "rsi", "macd", "macd_signal", "volume_ratio", "ema9", "ema21", "atr",
         "atr_avg20", "adx",
-        "technical_confirmed", "confidence", "reason", "stop_loss", "take_profit",
+        "technical_confirmed", "pass_pct", "hard_gates_ok", "confidence", "reason", "stop_loss", "take_profit",
         "context_note", "plain_explanation",
     ]
     values = [data.get(f) for f in fields]
