@@ -668,6 +668,10 @@
       .then((data) => {
         if (seq !== requestSeq) return; // een nieuwere aanvraag is al onderweg, deze respons is verouderd
         if (data.error) { previewEl.textContent = ""; return; }
+        if (data.used_risk_eur === null) {
+          previewEl.textContent = "Vul een risicobedrag in om de positie te berekenen.";
+          return;
+        }
         const notional = data.notional_eur !== null ? formatEur(data.notional_eur) : "-";
         const coinLabel = SYMBOL.replace("USDT", "");
         let text = `Positie ≈ ${data.position_size !== null ? data.position_size.toFixed(6) : "-"} ${coinLabel} (${notional} notioneel), risico ${formatEur(data.used_risk_eur)}.`;

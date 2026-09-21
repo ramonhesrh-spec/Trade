@@ -1373,11 +1373,14 @@ async def _fetch_practice_trade_calc(symbol: str, direction: str):
 def _resolve_practice_risk_eur(
     user: dict, active_eval: Optional[dict], manual_risk_eur: Optional[float],
     direction: str, entry_price: float, stop_loss: float, take_profit: float,
-) -> tuple[float, Optional[str], bool, Optional[float], float, bool, float, float]:
+) -> tuple[Optional[float], Optional[str], bool, Optional[float], float, bool, float, float]:
     """Risicobedrag voor een oefentrade, en cost_rate voor de fee-aanpassing
-    van compute_position_size (Task 3). Zonder actieve evaluatie: exact
-    zoals bij een echt signaal zonder evaluatie, handmatige invoer of
-    portfolio_eur x risk_percent, geen fees. Met actieve evaluatie EN
+    van compute_position_size (Task 3). Zonder actieve evaluatie: alleen de
+    handmatige invoer telt nog mee (None als die leeg is) — de oude
+    portfolio_eur x risk_percent-terugval is sinds de puur-signalen-
+    herziening altijd 0 (portfolio_eur heeft geen zichtbaar formulier meer),
+    dus die zou alleen een misleidende "positie van 0" tonen in plaats van
+    eerlijk te zeggen dat er geen bedrag is opgegeven. Met actieve evaluatie EN
     voldoende budget: dezelfde dagbudget/drawdown/hefboom-grenzen als een
     echt signaal (risk.compute_eval_risk_eur), en handmatige invoer wordt
     daar nu OOK door gecapt, niet alleen door de hefboomlimiet. Met actieve
@@ -1394,18 +1397,11 @@ def _resolve_practice_risk_eur(
     effectieve stop/take vervangen de ruwe waarden overal waar die verder
     gebruikt worden (sizing, opslag, weergave)."""
     if not active_eval:
-        computed_risk_eur = (
-            manual_risk_eur if manual_risk_eur is not None
-            else risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
-        )
-        return computed_risk_eur, None, False, None, 0.0, False, stop_loss, take_profit
+        return manual_risk_eur, None, False, None, 0.0, False, stop_loss, take_profit
 
     open_risk_eur = repo.total_open_risk_eur_for_evaluation(active_eval["id"])
     if risk.eval_sizing_blocked(active_eval, open_risk_eur):
-        computed_risk_eur = (
-            manual_risk_eur if manual_risk_eur is not None
-            else risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"])
-        )
+        computed_risk_eur = manual_risk_eur
         leverage_note = (
             "Systeem: dagbudget of drawdown-ruimte van je evaluatie is (bijna) op, "
             "deze oefentrade telt niet mee voor je evaluatie."
@@ -1448,9 +1444,7 @@ async def preview_practice_trade(
 
     # Geen voor-invulling bij een leeg risicoveld: _resolve_practice_risk_eur
     # leest None zelf als "bepaal het bedrag", en dat valt met een actieve
-    # evaluatie op het evaluatie-bedrag uit, niet op portfolio x risk_percent.
-    # De aanmaakroute geeft None door, dus hier ook — anders toont de preview
-    # een ander bedrag dan er bij versturen echt gebruikt wordt.
+    # evaluatie op het evaluatie-bedrag uit, niet op een handmatig bedrag.
     manual_risk_eur = _parse_optional_float(risk_eur)
 
     _df, ind, stop_take = await _fetch_practice_trade_calc(symbol, direction)
@@ -1461,7 +1455,14 @@ async def preview_practice_trade(
     ) = _resolve_practice_risk_eur(
         user, active_eval, manual_risk_eur, direction, ind.price, stop_take.stop_loss, stop_take.take_profit,
     )
-    position_size = risk.compute_position_size(used_risk_eur, ind.price, effective_stop_loss, cost_rate=cost_rate)
+    # Zonder actieve evaluatie EN zonder handmatig bedrag heeft
+    # _resolve_practice_risk_eur niets om op te rekenen (geen portfolio-
+    # terugval meer sinds Taak 11) — compute_position_size zou op None
+    # crashen, dus dan expliciet niets berekenen in plaats van te gokken.
+    position_size = (
+        risk.compute_position_size(used_risk_eur, ind.price, effective_stop_loss, cost_rate=cost_rate)
+        if used_risk_eur is not None else None
+    )
     notional_eur = (position_size * ind.price) if position_size else None
 
     return JSONResponse({

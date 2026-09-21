@@ -253,6 +253,9 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
         {{ key|capitalize }} ({{ pct }}%)
       </button>
       {% endfor %}
+      {% if not advanced_factors_enabled %}
+      <p class="muted" style="margin: 6px 0 0; font-size: 12px;">Zolang geavanceerde factoren uit staan (zie /uitleg), tellen Normaal en Streng hetzelfde: HesPulse toetst dan maar 4 factoren, dus fijnere percentages zijn niet mogelijk.</p>
+      {% endif %}
     </form>
   </div>
 </section>
