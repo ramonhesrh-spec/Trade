@@ -91,7 +91,7 @@ async def _check_breakout_retest(coin: str, direction: str, df, ind) -> None:
             continue
         force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, zelf gedetecteerd"
+            title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, uitbraak + terugtest"
             body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
             await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
         except Exception:
@@ -171,7 +171,7 @@ async def _check_trendline_retest(coin: str, direction: str, df, ind) -> None:
             continue
         force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, zelf gedetecteerd"
+            title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, trendlijn-terugtest"
             body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
             await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
         except Exception:
