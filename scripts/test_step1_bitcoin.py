@@ -30,7 +30,7 @@ def main() -> None:
     print(f"  ATR:           {ind.atr:.2f}")
 
     for direction in ("long", "short"):
-        confirmed, reason = indicators.confirms_direction(ind, direction)
+        confirmed, reason, _, _ = indicators.confirms_direction(ind, direction)
         levels = risk.compute_stop_take(direction=direction, entry_price=ind.price, atr=ind.atr)
         risk_eur = risk.compute_risk_eur(portfolio_eur=10000, risk_percent=1.0)
         print(f"\nRichting {direction}: bevestigd = {confirmed} ({reason})")

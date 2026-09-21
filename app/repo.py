@@ -893,7 +893,7 @@ def insert_signal(data: dict) -> int:
     fields = [
         "message_id", "coin", "direction", "category", "price", "rsi", "macd",
         "macd_signal", "volume_ratio", "ema9", "ema21", "atr", "atr_avg20", "adx",
-        "technical_confirmed", "confidence", "reason", "stop_loss", "take_profit",
+        "technical_confirmed", "pass_pct", "hard_gates_ok", "confidence", "reason", "stop_loss", "take_profit",
         "context_note", "is_practice", "plain_explanation", "trade_type",
     ]
     values = [

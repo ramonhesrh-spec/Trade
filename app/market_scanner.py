@@ -262,7 +262,7 @@ async def scan_market() -> None:
             # signaal slaat deze check over en gaat altijd door: die moet
             # elke cyclus ververst blijven, ook als hij nu niet meer
             # bevestigt.
-            confirmed, _ = indicators.confirms_direction(ind, direction)
+            confirmed, _, _, _ = indicators.confirms_direction(ind, direction)
             if not confirmed and not was_open_before:
                 continue
 

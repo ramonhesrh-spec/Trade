@@ -26,7 +26,7 @@ def check_coin(coin: str) -> dict:
     df = exchange.fetch_ohlcv(coin)
     ind = indicators.compute_indicators(df)
     direction = "long" if ind.ema9 > ind.ema21 else "short"
-    confirmed, detail = indicators.confirms_direction(ind, direction)
+    confirmed, detail, _, _ = indicators.confirms_direction(ind, direction)
     zones = indicators.detect_sr_zones(df)
     factors = indicators.basic_factors(direction, ind)
 

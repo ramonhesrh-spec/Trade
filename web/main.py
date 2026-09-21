@@ -1351,7 +1351,7 @@ async def create_practice_trade(
     if config.ENABLE_ADVANCED_FACTORS:
         zones = indicators.detect_sr_zones(df)
         extra_factors = await compute_advanced_extra_factors(symbol, direction, df, ind.price, ind.atr, zones)
-    confirmed, reason = indicators.confirms_direction(
+    confirmed, reason, pass_pct, hard_gates_ok = indicators.confirms_direction(
         ind, direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
     )
 
@@ -1372,6 +1372,8 @@ async def create_practice_trade(
         "volume_ratio": ind.volume_ratio, "ema9": ind.ema9, "ema21": ind.ema21, "atr": ind.atr,
         "atr_avg20": ind.atr_avg20, "adx": ind.adx,
         "technical_confirmed": int(confirmed),
+        "pass_pct": pass_pct,
+        "hard_gates_ok": int(hard_gates_ok),
         "confidence": confidence,
         "reason": reason, "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,
         "context_note": None, "is_practice": 1, "plain_explanation": plain_explanation or None,

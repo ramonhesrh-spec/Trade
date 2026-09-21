@@ -1230,8 +1230,11 @@ def confirms_direction(
         # bevestigen zolang trend/momentum/RSI/volume toevallig kloppen.
         extension_ok = next(ok for name, ok, _ in factors if name == "Uitgerektheid")
         core_passed = sum(1 for name, ok, _ in factors if ok and name != "Uitgerektheid")
+        # 4 basic factors excluding Uitgerektheid
+        pass_pct = (core_passed / 4) * 100
+        hard_gates_ok = extension_ok
         confirmed = extension_ok and core_passed >= BASIC_CONFIRM_MIN_PASSED
-        return confirmed, breakdown
+        return confirmed, breakdown, pass_pct, hard_gates_ok
 
     # Zelfde harde eis als in de basisversie hierboven: zonder deze
     # extractie viel Uitgerektheid hier terug in de gewone percentage-
@@ -1277,5 +1280,7 @@ def confirms_direction(
     # hierboven), anders dan alle andere factoren hier.
     other_factors = [f for f in factors if f[0] not in ("Uitgerektheid", "BTC-trend")]
     passed = sum(1 for _, ok, _ in other_factors if ok)
-    confirmed = extension_ok and btc_trend_ok and (passed / len(other_factors)) >= CONFIRM_THRESHOLD
-    return confirmed, breakdown
+    pass_pct = (passed / len(other_factors)) * 100 if other_factors else 100.0
+    hard_gates_ok = extension_ok and btc_trend_ok
+    confirmed = hard_gates_ok and pass_pct >= CONFIRM_THRESHOLD * 100
+    return confirmed, breakdown, pass_pct, hard_gates_ok

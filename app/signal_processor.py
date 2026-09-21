@@ -718,7 +718,7 @@ async def process_day_trading_signal(
             interp.coin, interp.direction, df, ind.price, ind.atr, zones,
         )
 
-    confirmed, reason = indicators.confirms_direction(
+    confirmed, reason, pass_pct, hard_gates_ok = indicators.confirms_direction(
         ind, interp.direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
     )
     # Geen bericht (autonoom marktscan-signaal, zie app/market_scanner.py)
@@ -787,6 +787,8 @@ async def process_day_trading_signal(
         "atr_avg20": ind.atr_avg20,
         "adx": ind.adx,
         "technical_confirmed": int(confirmed),
+        "pass_pct": pass_pct,
+        "hard_gates_ok": int(hard_gates_ok),
         "confidence": confidence,
         "reason": reason,
         "stop_loss": stop_take.stop_loss,
