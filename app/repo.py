@@ -1649,6 +1649,32 @@ def mark_level_alert_sent(entry_id: int) -> None:
         conn.execute("UPDATE journal_entries SET level_alert_sent = 1 WHERE id = ?", (entry_id,))
 
 
+def list_unresolved_signals_with_levels() -> list[dict]:
+    """Signalen (van elke gebruiker samen, want stop_loss/take_profit zijn
+    per signaal gedeeld) waarvan nog niet vastgesteld is of de take-profit
+    of de stop-loss al geraakt is. Dit voedt het volledig automatische
+    trackrecord, los van of een gebruiker het signaal ooit als "genomen"
+    markeerde."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, coin, direction, stop_loss, take_profit, created_at
+               FROM signals
+               WHERE auto_outcome IS NULL
+                 AND stop_loss IS NOT NULL
+                 AND take_profit IS NOT NULL
+                 AND is_practice = 0"""
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def mark_signal_auto_outcome(signal_id: int, outcome: str, occurred_at: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE signals SET auto_outcome = ?, auto_outcome_at = ? WHERE id = ?",
+            (outcome, occurred_at, signal_id),
+        )
+
+
 def count_pending_signals(user_id: int) -> int:
     """Aantal echte meldingen die nog op een keuze wachten (nog niet
     Genomen/Aangepast/Genegeerd). Basis voor het cijfer op het app-icoon."""

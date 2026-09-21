@@ -21,7 +21,7 @@ from typing import Optional
 
 from datetime import datetime, timedelta, timezone
 
-from app import exchange, indicators, push_notify, repo
+from app import db, exchange, indicators, push_notify, repo
 from app.signal_processor import (
     SWING_WATCH_MAX_AGE_DAYS, _price_broke_through, _price_near_level, run_swing_check,
 )
@@ -96,6 +96,36 @@ async def check_open_trades() -> None:
         except Exception:
             logger.exception("Seintje naar %s voor %s is mislukt", entry["username"], coin)
         repo.mark_level_alert_sent(entry["id"])
+
+
+async def check_signal_outcomes() -> None:
+    """Volledig automatisch trackrecord: voor elk signaal waarvan de
+    uitkomst nog niet vaststaat, checkt dit of de live prijs inmiddels de
+    take-profit of de stop-loss geraakt heeft. Onafhankelijk van of een
+    gebruiker het signaal ooit als "genomen" markeerde — dit is precies
+    waarom het trackrecord niet meer van een handmatige actie afhangt."""
+    signals = repo.list_unresolved_signals_with_levels()
+    logger.info("%d signalen zonder vastgestelde uitkomst om te checken", len(signals))
+
+    coin_prices: dict[str, float] = {}
+    for signal in signals:
+        coin = signal["coin"]
+        if coin not in coin_prices:
+            try:
+                coin_prices[coin] = await asyncio.to_thread(exchange.fetch_last_price, coin)
+            except Exception:
+                logger.exception("Kon geen live prijs ophalen voor %s, sla over", coin)
+                coin_prices[coin] = None
+        current_price = coin_prices[coin]
+        if current_price is None:
+            continue
+
+        hit = _level_hit(signal["direction"], current_price, signal["stop_loss"], signal["take_profit"])
+        if not hit:
+            continue
+        outcome = "take_profit" if hit == "take profit" else "stop_loss"
+        repo.mark_signal_auto_outcome(signal["id"], outcome, db.now_iso())
+        logger.info("Signaal %s (%s) automatisch afgesloten: %s", signal["id"], coin, outcome)
 
 
 def _nearest_level(current_price: float, atr: float, levels: list[dict]) -> Optional[dict]:
@@ -236,6 +266,7 @@ async def check_narratives() -> None:
 
 async def run_all_checks() -> None:
     await check_open_trades()
+    await check_signal_outcomes()
     await check_pending_signals()
     await check_swing_watches()
     await check_narratives()
