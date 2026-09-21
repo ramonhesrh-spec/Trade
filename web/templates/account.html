@@ -34,10 +34,6 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
     <span class="summary-value">{{ taken_entries|length }}</span>
     <span class="summary-label">open positie{{ "s" if taken_entries|length != 1 else "" }}</span>
   </div>
-  <div class="summary-stat {{ 'risk-pulse' if open_risk_pct >= 25 else '' }}">
-    <span class="summary-value {{ 'danger' if open_risk_pct >= 25 else ('warn' if open_risk_pct >= 10 else '') }}">{{ "%.0f"|format(open_risk_pct) }}%</span>
-    <span class="summary-label">risico open</span>
-  </div>
 </section>
 
 {% if unclear_messages %}
@@ -109,6 +105,7 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
       {% if e.entry_price is none %}
       <form action="/journal/{{ e.id }}/delete-practice" method="post" class="reset-form"
             onsubmit="return confirm('Deze kapotte oefentrade weggooien?');">
+        <input type="hidden" name="next" value="/account">
         <button type="submit" class="button-reset">Weggooien</button>
       </form>
       {% else %}
@@ -140,6 +137,7 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
       </form>
       <form action="/journal/{{ e.id }}/delete-practice" method="post" class="reset-form"
             onsubmit="return confirm('Deze oefentrade weggooien?');">
+        <input type="hidden" name="next" value="/account">
         <button type="submit" class="button-reset">Weggooien</button>
       </form>
       {% endif %}
@@ -246,7 +244,7 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
       {% endif %}
     </form>
     <form action="/instellingen/drempel" method="post" class="threshold-form" style="margin-top: 12px;">
-      <p class="muted" style="margin: 0 0 6px;">Hoe streng moet een signaal zijn voordat je een melding krijgt?</p>
+      <p class="muted" style="margin: 0 0 6px;">Vanaf welk percentage geldt een signaal voor jou als bevestigd? (Je krijgt sowieso van elk signaal een melding — dit bepaalt alleen de bevestigd/afgewezen-markering en je eigen winrate.)</p>
       {% for key, pct in {"soepel": 45, "normaal": 60, "streng": 75}.items() %}
       <button type="submit" name="preset" value="{{ key }}"
               class="threshold-option{% if user.confirm_threshold_pct == pct %} is-active{% endif %}">
@@ -427,6 +425,7 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
               <option value="genegeerd">Genegeerd</option>
             </select>
             <input type="number" step="any" name="entry_price" placeholder="eigen entry">
+            <input type="hidden" name="next" value="/account">
             <button type="submit">Bevestig</button>
           </form>
           {% elif e.entry_price is not none and e.exit_price is none %}
@@ -445,6 +444,7 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
             <summary class="confidence-why">{% if e.note %}{{ e.note[:30] }}{{ "…" if e.note|length > 30 else "" }}{% else %}+ notitie{% endif %}</summary>
             <form action="/journal/{{ e.id }}/note" method="post" class="note-form">
               <input type="text" name="note" value="{{ e.note or '' }}" placeholder="Wat ging hier goed of niet?">
+              <input type="hidden" name="next" value="/account">
               <button type="submit">Opslaan</button>
             </form>
           </details>

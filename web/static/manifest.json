@@ -2,7 +2,7 @@
   "name": "HesPulse",
   "short_name": "HesPulse",
   "description": "Crypto day-trading meldingen en logboek",
-  "start_url": "/dashboard",
+  "start_url": "/signalen",
   "display": "standalone",
   "background_color": "#0a0e0f",
   "theme_color": "#0a0e0f",

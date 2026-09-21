@@ -81,7 +81,7 @@ async def landing(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     user_id = security.verify_session_token(token) if token else None
     if user_id and repo.get_user(user_id):
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="/signalen", status_code=303)
 
     return templates.TemplateResponse(request, "landing.html", {
         "kraken_referral_url": config.KRAKEN_REFERRAL_URL,
@@ -204,7 +204,7 @@ async def login_submit(request: Request, username: str = Form(...), password: st
         )
 
     token = security.create_session_token(user["id"])
-    response = RedirectResponse(url="/dashboard", status_code=303)
+    response = RedirectResponse(url="/signalen", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 
@@ -259,7 +259,7 @@ async def register_submit(
         return error("Deze gebruikersnaam is al in gebruik.")
 
     token = security.create_session_token(user_id)
-    response = RedirectResponse(url="/dashboard", status_code=303)
+    response = RedirectResponse(url="/signalen", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 
@@ -895,9 +895,6 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
     }
     onboarding_complete = all(onboarding.values())
 
-    open_risk_eur = sum(e["risk_eur"] or 0 for e in taken_entries if e["evaluation_id"] is None)
-    open_risk_pct = (open_risk_eur / user["portfolio_eur"] * 100) if user["portfolio_eur"] else 0
-
     total_realized_eur = cumulative[-1]["cumulative_eur"] if cumulative else 0.0
     starting_portfolio_eur = user["portfolio_eur"] - total_realized_eur
     portfolio_change_pct = (
@@ -915,8 +912,6 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
         "pending_entries": pending_entries,
         "ticker_coins": ticker_coins,
         "last_signal_text": last_signal_text,
-        "open_risk_eur": open_risk_eur,
-        "open_risk_pct": open_risk_pct,
         "correlation_warning": correlation_warning,
         "practice_open": practice_open,
         "practice_closed": practice_closed,
@@ -1108,11 +1103,12 @@ async def update_journal_status(
     entry_id: int,
     status: str = Form(...),
     entry_price: str = Form(""),
+    next: str = Form(""),
     user: dict = Depends(require_login),
 ):
     entry = float(entry_price) if entry_price.strip() else None
     repo.update_journal_status(entry_id, user["id"], status, entry_price=entry)
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url=_safe_next(next), status_code=303)
 
 
 def _safe_next(next_path: str) -> str:
@@ -1247,13 +1243,14 @@ async def reset_journal(
 @app.post("/journal/{entry_id}/delete-practice")
 async def delete_practice_trade(
     entry_id: int,
+    next: str = Form(""),
     user: dict = Depends(require_login),
 ):
     """Een oefentrade heeft geen echte melding om naar terug te vallen,
     dus 'weggooien' verwijdert de regel echt, anders dan de 'Terugzetten'
     knop bij een echte trade."""
     repo.delete_practice_entry(entry_id, user["id"])
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url=_safe_next(next), status_code=303)
 
 
 def _parse_optional_float(raw: str) -> Optional[float]:
@@ -1286,10 +1283,11 @@ async def update_journal_levels(
 async def update_journal_note(
     entry_id: int,
     note: str = Form(""),
+    next: str = Form(""),
     user: dict = Depends(require_login),
 ):
     repo.update_journal_note(entry_id, user["id"], note)
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url=_safe_next(next), status_code=303)
 
 
 # ---------------------------------------------------------------------------

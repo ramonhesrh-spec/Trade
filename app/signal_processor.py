@@ -946,23 +946,6 @@ async def process_day_trading_signal(
                         interp.coin, user["username"])
             continue
 
-        # Alleen bij een bevestigde kans zinvol: een afwijzing is toch geen
-        # trade die risico toevoegt. Toont waar het TOTALE open risico
-        # zou uitkomen als deze kans ook genomen wordt, niet alleen het
-        # risicobedrag van deze ene trade op zich. Een evaluatie-gekoppelde
-        # trade blijft eruit: die is tegen het virtuele evaluatiesaldo
-        # gesized, dus zijn risk_eur optellen bij een percentage van het
-        # echte portfolio geeft een onzinnige, alarmerende uitslag
-        # (total_open_risk_eur laat zulke trades om dezelfde reden al weg).
-        open_risk_pct = None
-        if confirmed and user["portfolio_eur"] and evaluation_id is None:
-            current_open_risk = repo.total_open_risk_eur(user["id"])
-            open_risk_pct = (current_open_risk + risk_eur) / user["portfolio_eur"] * 100
-
-        # Inclusief deze nieuwe kans zelf (net aangemaakt met status 'nieuw').
-        # Bij precies 1 is dit de enige, geen samenvattingsregel nodig.
-        pending_count = repo.count_pending_signals(user["id"])
-
         force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             title = f"{push_notify.coin_symbol(interp.coin)} {interp.coin} {interp.direction}, {signal_data['confidence']}"

@@ -2282,12 +2282,15 @@ def list_evaluation_trade_context(evaluation_id: int) -> list[dict]:
 # Per-gebruiker bevestigde status en winrate
 # ---------------------------------------------------------------------------
 
-def user_confirmed(pass_pct: float, hard_gates_ok: bool, threshold_pct: float) -> bool:
+def user_confirmed(pass_pct: Optional[float], hard_gates_ok: bool, threshold_pct: float) -> bool:
     """Of een signaal voor DEZE gebruiker als bevestigd geldt: de twee
     harde eisen (al verwerkt in hard_gates_ok) blijven voor iedereen hard,
     alleen het percentage van de gepoolde factoren wordt per gebruiker
-    tegen zijn eigen drempel gelegd."""
-    return hard_gates_ok and pass_pct >= threshold_pct
+    tegen zijn eigen drempel gelegd. pass_pct is None voor legacy-signalen
+    (van vóór deze kolom bestond) en voor swing-signalen (die geen gepoold
+    percentage hebben) - zo'n signaal telt nooit als bevestigd, ongeacht
+    de drempel."""
+    return bool(hard_gates_ok) and pass_pct is not None and pass_pct >= threshold_pct
 
 
 def winrate_for_user(user_id: int) -> dict:
