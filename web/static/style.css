@@ -1276,6 +1276,24 @@ main + .footer { border-top: 1px solid var(--border); }
 .trendline-remove:hover { background: var(--red-bg); color: var(--red); }
 #chart.is-drawing { cursor: crosshair; }
 
+/* Standaard toont de grafiek alleen zones/niveaus rond het actuele signaal
+   (coin.js: applyLayerVisibility); deze knop roept de rest op. Mobiel-eerst:
+   volle breedte is de primaire aanname (klein scherm, duimbereik), smaller
+   op een breder scherm, niet andersom. */
+.layer-toggle {
+  width: 100%;
+  padding: 10px 14px;
+  margin: 8px 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-interactive);
+  background: var(--panel);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+@media (min-width: 700px) {
+  .layer-toggle { width: auto; }
+}
+
 /* Kern van het herontwerp: de grafiek staat als eerste in de bron, en
    krijgt de meeste ruimte, in plaats van pas halverwege de pagina te
    verschijnen achter twee kaarten, een oefenblok en een trendlijn-balk.

@@ -126,9 +126,38 @@
   // de labelhoogte zelf (11px tekst + 1px padding boven/onder + rand).
   const ZONE_LABEL_MIN_GAP = 20;
 
+  // Standaard toont de grafiek alleen de zones/niveaus rond het meest
+  // recente signaal (activeWindow, prijs ± 3x ATR) — de rest is oproepbaar
+  // via de #toggle-all-layers-knop (showAllLayers). latestSignal en
+  // activeWindow worden pas in de .then()-callback hieronder gevuld (ze
+  // hebben de fetch-respons nodig), maar moeten hier al gedeclareerd staan
+  // zodat positionZones()/applyLayerVisibility() ze veilig kunnen lezen,
+  // ook als de knop al vóór de fetch is voltooid wordt aangeklikt.
+  let showAllLayers = false;
+  let latestSignal = null;
+  let activeWindow = null;
+
+  function inActiveWindow(price) {
+    if (!activeWindow) return true;
+    return price >= activeWindow[0] && price <= activeWindow[1];
+  }
+
   function positionZones() {
     const labels = [];
     zoneEls.forEach(({ group, el }) => {
+      // De showAllLayers/activeWindow-check staat HIER, niet (ook) los in
+      // applyLayerVisibility(): positionZones() draait ook rechtstreeks
+      // vanaf pan/zoom/resize (de subscribe-aanroepen en de
+      // ResizeObserver verderop), buiten applyLayerVisibility() om. Stond
+      // de zichtbaarheidscheck alleen daar, dan zette elke pan of zoom een
+      // verborgen zone stilzwijgend weer op "block" (priceToCoordinate
+      // geeft hier bijna altijd een geldige coördinaat terug, ook voor een
+      // zone ver buiten het huidige venster) en verdween het effect van de
+      // knop bij de eerstvolgende interactie met de grafiek.
+      if (!(showAllLayers || inActiveWindow((group.high + group.low) / 2))) {
+        el.style.display = "none";
+        return;
+      }
       const yHigh = candleSeries.priceToCoordinate(group.high);
       const yLow = candleSeries.priceToCoordinate(group.low);
       if (yHigh === null || yLow === null) {
@@ -144,6 +173,11 @@
       labels.push({ span: el.querySelector("span"), elTop: yHigh, naturalPageTop: yHigh + 2 });
     });
     srZoneEls.forEach(({ zone, el }) => {
+      const mid = (zone.price_high + zone.price_low) / 2;
+      if (!(showAllLayers || inActiveWindow(mid))) {
+        el.style.display = "none";
+        return;
+      }
       const yHigh = candleSeries.priceToCoordinate(zone.price_high);
       const yLow = candleSeries.priceToCoordinate(zone.price_low);
       if (yHigh === null || yLow === null) {
@@ -168,6 +202,15 @@
       span.style.top = `${pageTop - elTop}px`;
       lastPageTop = pageTop;
     });
+  }
+
+  // showAllLayers is hierboven al gezet vóór het aanroepen; deze functie
+  // is de enige plek die het toggelt en opnieuw laat renderen.
+  // positionZones() past de zichtbaarheidscheck zelf al toe (zie de
+  // comment daarin) zodat diezelfde regel ook bij pan/zoom/resize
+  // overeind blijft, dus hier alleen doorgeven.
+  function applyLayerVisibility() {
+    positionZones();
   }
 
   // Een vaste 2-decimalen as-precisie (de standaard) is voor een coin onder
@@ -208,6 +251,19 @@
         const latest = recentSignals[0];
         addTradeLines(latest, `signaal ${latest.direction} (${latest.confidence})`);
       }
+
+      // Venster rond het meest recente signaal (recentSignals is al
+      // nieuwste-eerst gesorteerd, net als de rest van het dashboard).
+      // Ontbreekt atr (oudere signalen, of nog niet berekend), dan geeft
+      // de formule hieronder NaN, en elke NaN-vergelijking in
+      // inActiveWindow() is altijd false — dat zou stilzwijgend ALLE
+      // zones verbergen in plaats van ze allemaal te tonen. Zonder
+      // bruikbare atr dus geen venster (null), zodat inActiveWindow()
+      // terugvalt op "altijd zichtbaar".
+      latestSignal = recentSignals[0];
+      activeWindow = (latestSignal && Number.isFinite(latestSignal.atr) && latestSignal.atr)
+        ? [latestSignal.price - 3 * latestSignal.atr, latestSignal.price + 3 * latestSignal.atr]
+        : null;
 
       // Geen axis-label bij bron niveaus: bij dicht bij elkaar liggende
       // niveaus vallen die badges anders over elkaar heen en worden
@@ -320,6 +376,7 @@
 
       chart.timeScale().fitContent();
       positionZones();
+      applyLayerVisibility();
 
       const loadingEl = document.getElementById("chart-loading");
       if (loadingEl) loadingEl.remove();
@@ -537,6 +594,15 @@
     trendlines.forEach(drawLine);
     renderList();
   })();
+
+  const toggleBtn = document.getElementById("toggle-all-layers");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      showAllLayers = !showAllLayers;
+      toggleBtn.textContent = showAllLayers ? "Alleen actueel signaal" : "Alle niveaus tonen";
+      applyLayerVisibility();
+    });
+  }
 })();
 
 (function () {
