@@ -2254,3 +2254,46 @@ def list_evaluation_trade_context(evaluation_id: int) -> list[dict]:
             "risk_percent_used": (row["risk_eur"] / balance_at_entry * 100) if balance_at_entry else None,
         })
     return trades
+
+
+# ---------------------------------------------------------------------------
+# Per-gebruiker bevestigde status en winrate
+# ---------------------------------------------------------------------------
+
+def user_confirmed(pass_pct: float, hard_gates_ok: bool, threshold_pct: float) -> bool:
+    """Of een signaal voor DEZE gebruiker als bevestigd geldt: de twee
+    harde eisen (al verwerkt in hard_gates_ok) blijven voor iedereen hard,
+    alleen het percentage van de gepoolde factoren wordt per gebruiker
+    tegen zijn eigen drempel gelegd."""
+    return hard_gates_ok and pass_pct >= threshold_pct
+
+
+def winrate_for_user(user_id: int) -> dict:
+    """Winrate puur op basis van het automatische trackrecord: van de
+    signalen die voor DEZE gebruiker (zijn eigen drempel) bevestigd waren
+    en waarvan de uitkomst al vaststaat, hoeveel raakten take-profit."""
+    with db.session() as conn:
+        threshold = conn.execute(
+            "SELECT confirm_threshold_pct FROM users WHERE id = ?", (user_id,)
+        ).fetchone()["confirm_threshold_pct"]
+        rows = conn.execute(
+            """SELECT pass_pct, hard_gates_ok, auto_outcome
+               FROM signals
+               WHERE is_practice = 0 AND pass_pct IS NOT NULL"""
+        ).fetchall()
+
+    total = wins = losses = open_count = 0
+    for row in rows:
+        if not user_confirmed(row["pass_pct"], bool(row["hard_gates_ok"]), threshold):
+            continue
+        total += 1
+        if row["auto_outcome"] == "take_profit":
+            wins += 1
+        elif row["auto_outcome"] == "stop_loss":
+            losses += 1
+        else:
+            open_count += 1
+
+    resolved = wins + losses
+    winrate_pct = (wins / resolved * 100) if resolved else None
+    return {"total": total, "wins": wins, "losses": losses, "open": open_count, "winrate_pct": winrate_pct}
