@@ -186,6 +186,34 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "quiet_hours_end" not in existing_users:
         conn.execute("ALTER TABLE users ADD COLUMN quiet_hours_end TEXT")
 
+    cur = conn.cursor()
+    cur.execute("PRAGMA table_info(users)")
+    user_columns = {row[1] for row in cur.fetchall()}
+    if "confirm_threshold_pct" not in user_columns:
+        cur.execute(
+            "ALTER TABLE users ADD COLUMN confirm_threshold_pct REAL NOT NULL DEFAULT 60.0"
+        )
+    if "confirm_threshold_set_at" not in user_columns:
+        cur.execute("ALTER TABLE users ADD COLUMN confirm_threshold_set_at TEXT")
+
+    cur.execute("PRAGMA table_info(signals)")
+    signal_columns = {row[1] for row in cur.fetchall()}
+    if "pass_pct" not in signal_columns:
+        cur.execute("ALTER TABLE signals ADD COLUMN pass_pct REAL")
+    if "hard_gates_ok" not in signal_columns:
+        cur.execute("ALTER TABLE signals ADD COLUMN hard_gates_ok INTEGER NOT NULL DEFAULT 1")
+    if "auto_outcome" not in signal_columns:
+        cur.execute("ALTER TABLE signals ADD COLUMN auto_outcome TEXT")
+    if "auto_outcome_at" not in signal_columns:
+        cur.execute("ALTER TABLE signals ADD COLUMN auto_outcome_at TEXT")
+        # Index hoort hier, niet in schema.sql: op het moment dat schema.sql
+        # voor een NIEUWE database draait bestaat de kolom al, maar op een
+        # bestaande database bestond hij een regel geleden nog niet.
+        cur.execute(
+            "CREATE INDEX IF NOT EXISTS idx_signals_auto_outcome_pending "
+            "ON signals(auto_outcome) WHERE auto_outcome IS NULL"
+        )
+
     existing_coins = {row["name"] for row in conn.execute("PRAGMA table_info(coins)")}
     if "note" not in existing_coins:
         conn.execute("ALTER TABLE coins ADD COLUMN note TEXT")

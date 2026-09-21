@@ -19,7 +19,20 @@ CREATE TABLE IF NOT EXISTS users (
     -- een bevestigde kans stil binnen. Beide leeg (NULL) = geen stille
     -- uren, altijd geluid bij een bevestigde kans (het bestaande gedrag).
     quiet_hours_start TEXT,
-    quiet_hours_end TEXT
+    quiet_hours_end TEXT,
+    -- Drempel (percentage) waarboven de gepoolde factoren voor DEZE
+    -- gebruiker als "bevestigd" tellen. De twee harde eisen (Uitgerektheid,
+    -- BTC-trend) blijven voor iedereen hard, dit percentage geldt alleen
+    -- voor de rest. Standaard 60.0, gelijk aan de oude globale
+    -- CONFIRM_THRESHOLD, zodat een bestaande gebruiker zonder wijziging
+    -- exact hetzelfde gedrag ziet als voorheen.
+    confirm_threshold_pct REAL NOT NULL DEFAULT 60.0,
+    -- NULL totdat de gebruiker bewust op één van de drie drempel-knoppen
+    -- klikt (Task 5). Los van confirm_threshold_pct zelf nodig, want de
+    -- default (60.0) is numeriek gelijk aan de "Normaal"-stand, dus de
+    -- waarde alleen kan "nog niet gekozen" niet van "bewust Normaal
+    -- gekozen" onderscheiden. Voedt de onboarding-checklist (Task 9).
+    confirm_threshold_set_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -184,6 +197,24 @@ CREATE TABLE IF NOT EXISTS signals (
     -- tijdshorizon) en worden apart geteld in winrate/journaal.
     trade_type TEXT NOT NULL DEFAULT 'day_trading',
     plain_explanation TEXT,
+    -- Kaal percentage gepoolde factoren dat raak was (bv. 68.0 voor 11 van
+    -- 16), los van welke drempel een individuele gebruiker instelt. Elke
+    -- gebruiker vergelijkt dit percentage zelf tegen zijn eigen
+    -- confirm_threshold_pct, zodat de technische berekening en de
+    -- AI-uitleg maar één keer per signaal hoeven te draaien.
+    pass_pct REAL,
+    -- Of de twee harde eisen (Uitgerektheid, BTC-trend) allebei klopten,
+    -- los van pass_pct. Nodig omdat "technical_confirmed" al het EINDRESULTAAT
+    -- op de globale drempel is; om een ANDERE (per-gebruiker) drempel tegen
+    -- pass_pct te leggen moet los vaststaan of de harde eisen al dan niet
+    -- geslaagd waren, ongeacht welke drempel je gebruikt.
+    hard_gates_ok INTEGER NOT NULL DEFAULT 1,
+    -- Automatisch, op prijsdata gebaseerd trackrecord: is de take-profit
+    -- of de stop-loss van DIT signaal geraakt, ongeacht of een gebruiker
+    -- het ooit als "genomen" markeerde. NULL zolang nog geen van beide
+    -- geraakt is.
+    auto_outcome TEXT,
+    auto_outcome_at TEXT,
     created_at TEXT NOT NULL
 );
 
