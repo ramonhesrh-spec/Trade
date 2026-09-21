@@ -328,8 +328,8 @@ function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
 // Instellingen opslaan zonder volledige paginaherlaad: zelfde aanpak als
 // hierboven (server-gerenderde fragment ophalen, vervangen met een fade),
 // nu voor de portfolio-kaart. Bij een fout gewoon een echte paginaherlaad,
-// nooit een stille mislukking bij iets dat het risicobedrag van elke
-// toekomstige melding beinvloedt.
+// nooit een stille mislukking bij iets dat de stille uren of (voor een
+// evaluatie-gekoppelde trade) risk_percent beinvloedt.
 //
 // Luistert op document zelf (niet op het formulier direct): na een
 // geslaagde opslag wordt #portfolio-card, inclusief het formulier erin,
@@ -350,7 +350,16 @@ function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
     try {
       const resp = await fetch(form.action, { method: "POST", body: new FormData(form), cache: "no-store" });
       if (!resp.ok) throw new Error("verzoek mislukt");
-      const html = await resp.text();
+      // Niet de respons van de POST zelf gebruiken: die volgt de server-
+      // redirect naar het vaste /dashboard (nog steeds de volledige,
+      // ongewijzigde kaart, zie CLAUDE.md over die route), terwijl dit
+      // formulier net zo goed vanaf /account kan komen (Taak 11: daar mist
+      // de kaart het portfolio_eur/risk_percent-formulier expres). Door
+      // zelf de HUIDIGE pagina opnieuw op te halen komt de vervangende
+      // kaart altijd overeen met de pagina waar de gebruiker al op stond.
+      const freshResp = await fetch(location.pathname + location.search, { cache: "no-store" });
+      if (!freshResp.ok) throw new Error("verzoek mislukt");
+      const html = await freshResp.text();
       const doc = new DOMParser().parseFromString(html, "text/html");
       const fresh = doc.getElementById("portfolio-card");
       const current = document.getElementById("portfolio-card");

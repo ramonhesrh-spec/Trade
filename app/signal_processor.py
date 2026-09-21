@@ -390,7 +390,7 @@ async def _send_narrative_notifications(
 
 def _resolve_signal_risk(
     user: dict, direction: str, entry_price: float, stop_loss: float, take_profit: float,
-) -> tuple[float, Optional[int], float, float, float]:
+) -> tuple[Optional[float], Optional[int], float, float, float]:
     """Risicobedrag, evaluation_id (of None), cost_rate, en de effectieve
     (mogelijk ingeperkte) stop_loss/take_profit voor één signaal aan één
     gebruiker. Gebruikt de actieve evaluatie als sizing-basis zodra die er
@@ -398,9 +398,11 @@ def _resolve_signal_risk(
     loss op basis van het evaluatiesaldo (zie risk.apply_eval_stop_cap),
     zodat een klein evaluatiesaldo niet door één te brede
     marktstructuur-stop meteen een groot deel van het dagbudget/de
-    drawdown-ruimte kan kosten. Valt anders terug op het bestaande
-    portfolio_eur x risk_percent-gedrag met de ONGEWIJZIGDE, gedeelde
-    stop_loss/take_profit — exact zoals vóór dit deelproject."""
+    drawdown-ruimte kan kosten. Zonder actieve (of budget-toelatende)
+    evaluatie is er geen sizing-basis meer (Taak 11: de generieke
+    portfolio_eur x risk_percent-sizing is verwijderd) — risk_eur wordt dan
+    None, met de ONGEWIJZIGDE, gedeelde stop_loss/take_profit zodat het
+    signaal zelf onveranderd getoond blijft."""
     active_eval = repo.get_active_evaluation(user["id"])
     if active_eval:
         open_risk_eur = repo.total_open_risk_eur_for_evaluation(active_eval["id"])
@@ -412,7 +414,7 @@ def _resolve_signal_risk(
             )
             cost_rate = risk.EVAL_TRADE_FEE_RATE + risk.EVAL_LEVERAGE_DAILY_RATE * risk.EVAL_SIZING_DAYS_ASSUMPTION
             return risk_eur, active_eval["id"], cost_rate, capped.stop_loss, capped.take_profit
-    return risk.compute_risk_eur(user["portfolio_eur"], user["risk_percent"]), None, 0.0, stop_loss, take_profit
+    return None, None, 0.0, stop_loss, take_profit
 
 
 async def run_swing_check(watch_id: int) -> None:
@@ -507,7 +509,10 @@ async def run_swing_check(watch_id: int) -> None:
         ):
             effective_stop_loss, effective_take_profit = stop_take.stop_loss, stop_take.take_profit
             stop_was_capped = False
-        position_size = risk.compute_position_size(risk_eur, ind_4h.price, effective_stop_loss, cost_rate=cost_rate)
+        position_size = (
+            risk.compute_position_size(risk_eur, ind_4h.price, effective_stop_loss, cost_rate=cost_rate)
+            if risk_eur is not None else None
+        )
         entry_id = repo.create_journal_entry(
             signal_id, user["id"], risk_eur, evaluation_id=evaluation_id, position_size=position_size,
         )
@@ -883,7 +888,7 @@ async def process_day_trading_signal(
         )
         position_size = (
             risk.compute_position_size(risk_eur, ind.price, effective_stop_loss, cost_rate=cost_rate)
-            if confirmed else None
+            if risk_eur is not None and confirmed else None
         )
         entry_id = repo.create_journal_entry(
             signal_id, user["id"], risk_eur, evaluation_id=evaluation_id, position_size=position_size,

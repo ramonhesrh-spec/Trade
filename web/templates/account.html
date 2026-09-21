@@ -198,9 +198,7 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
   </div>
   <div class="card" id="portfolio-card">
     <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h3"/><path d="M3 10h18"/></svg>Portfolio ({{ user.username }})</h3>
-    {% if not user.portfolio_eur %}
-    <p class="warning">Je portfolio staat nog op €0, meldingen krijgen daardoor een risicobedrag en positiegrootte van 0. Vul hieronder je omvang in.</p>
-    {% else %}
+    {% if user.portfolio_eur %}
     <p class="big">€{{ "%.2f"|format(user.portfolio_eur) }}</p>
     {% if total_realized_eur != 0 %}
     <p class="muted">
@@ -208,15 +206,17 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
       <span class="{{ 'pos' if total_realized_eur >= 0 else 'neg' }}">{{ "+" if total_realized_eur >= 0 else "" }}€{{ "%.2f"|format(total_realized_eur) }} ({{ "+" if portfolio_change_pct >= 0 else "" }}{{ "%.1f"|format(portfolio_change_pct) }}%)</span>
     </p>
     {% endif %}
-    <p class="muted levels-hint">Past zich automatisch aan na elke gesloten trade, winst of verlies, zodat risico per trade altijd hetzelfde percentage van je actuele kapitaal blijft. Pas hieronder alleen aan als je zelf geld hebt toegevoegd of opgenomen.</p>
+    <p class="muted levels-hint">Past zich automatisch aan na elke gesloten trade, winst of verlies.</p>
     {% endif %}
+    <!-- Taak 11: het formulier om portfolio_eur/risk_percent zelf in te
+         stellen is hier verwijderd (geen generieke portfolio-sizing meer
+         buiten een evaluatie om), maar allebei blijven als verborgen velden
+         meegestuurd zodat dit formulier de stille-uren-instelling (die wel
+         nog een echte, aparte functie is) kan blijven opslaan zonder de
+         backend-route aan te passen. -->
     <form action="/settings/portfolio" method="post" class="inline-form">
-      <label>Omvang in euro's
-        <input type="number" step="0.01" name="portfolio_eur" value="{{ user.portfolio_eur }}" required>
-      </label>
-      <label>Risico per trade (%)
-        <input type="number" step="0.1" name="risk_percent" value="{{ user.risk_percent }}" required>
-      </label>
+      <input type="hidden" name="portfolio_eur" value="{{ user.portfolio_eur }}">
+      <input type="hidden" name="risk_percent" value="{{ user.risk_percent }}">
       <label>Stille uren van
         <input type="time" name="quiet_hours_start" value="{{ user.quiet_hours_start or '' }}">
       </label>
