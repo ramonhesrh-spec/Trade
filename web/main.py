@@ -813,6 +813,130 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     })
 
 
+@app.get("/account")
+async def account_page(request: Request, status: str = "alle", user: dict = Depends(require_login)):
+    """Mijn account: journaal, portfolio, instellingen en winrate, los van
+    de kale signalenlijst op /signalen (zie CLAUDE.md 'pure signals'-
+    uitgangspunt). Zelfde context-opbouw als de oudere /dashboard-route
+    (die blijft ongewijzigd bestaan tot een latere taak hem uitfaseert),
+    behalve de individuele-signalen-actiesectie ("Open nu") en de
+    evaluatie-kaart, die hier niet getoond worden, en de winrate: die komt
+    hier uit repo.winrate_for_user (het volledig automatische, prijs-
+    gebaseerde trackrecord) in plaats van de oude, handmatige-status-
+    gebaseerde berekening."""
+    all_entries = repo.list_journal(user["id"], status=None)
+    for entry in all_entries:
+        entry["position_size"] = _position_size(entry)
+        entry["result_pct_of_risk"] = (
+            entry["result_eur"] / entry["risk_eur"] * 100
+            if entry["result_eur"] is not None and entry["risk_eur"] else None
+        )
+    real_entries = [e for e in all_entries if not e["is_practice"]]
+    practice_entries = [e for e in all_entries if e["is_practice"]]
+
+    entries = _filter_journal(real_entries, status)
+    # Bucketed hoog/laag-vertrouwen winrate, uitsluitend nog nodig als
+    # input voor _add_signal_context hieronder (advies op de oefentrade-
+    # kaarten): de winrate die deze pagina zelf toont is repo.winrate_for_user
+    # verderop, niet dit handmatige-status-gebaseerde cijfer.
+    confidence_winrate = repo.winrate_stats(user["id"])
+    open_entries = _add_signal_context(
+        await _enrich_open_positions(_filter_journal(real_entries, "open")), confidence_winrate,
+    )
+    taken_entries = [e for e in open_entries if e["entry_price"] is not None]
+    pending_entries = [e for e in open_entries if e["entry_price"] is None]
+    _attach_discipline_facts(taken_entries)
+
+    for e in taken_entries:
+        e["sltp_progress_pct"] = (
+            risk.compute_sltp_progress_pct(e["direction"], e["current_price"], e["stop_loss"], e["take_profit"])
+            if e["current_price"] is not None and e["stop_loss"] and e["take_profit"] else None
+        )
+    seen_ticker_coins: set[str] = set()
+    ticker_coins = []
+    for e in taken_entries:
+        if e["coin"] not in seen_ticker_coins:
+            seen_ticker_coins.add(e["coin"])
+            ticker_coins.append({"coin": e["coin"], "current_price": e["current_price"]})
+
+    last_signal_row = repo.list_recent_signals_for_user(user["id"], limit=1)
+    last_signal_text = None
+    if last_signal_row:
+        s = last_signal_row[0]
+        last_signal_text = f"{s['coin']} · {s['direction']} · {s['confidence']}"
+
+    direction_counts: dict[str, int] = {}
+    for e in taken_entries:
+        direction_counts[e["direction"]] = direction_counts.get(e["direction"], 0) + 1
+    correlation_warning = next(
+        (
+            {"direction": d, "count": n}
+            for d, n in direction_counts.items() if n > 1
+        ),
+        None,
+    )
+    practice_open = _add_signal_context(
+        await _enrich_open_positions([e for e in practice_entries if e["exit_price"] is None]), confidence_winrate,
+    )
+    _attach_discipline_facts(practice_open)
+    practice_closed = [e for e in practice_entries if e["exit_price"] is not None]
+    cumulative = repo.cumulative_result_series(user["id"])
+    heatmap_weeks = _build_heatmap_weeks(repo.daily_results(user["id"]))
+    ratio_stats = repo.winrate_by_ratio(user["id"])
+    coin_stats = repo.coin_stats(user["id"])
+    coins = repo.list_coins()
+    is_admin = bool(config.ADMIN_USERNAME) and user["username"] == config.ADMIN_USERNAME
+    unclear_messages = repo.recent_unclear_messages() if is_admin else None
+
+    eval_ctx = _build_eval_context(user, request)
+
+    onboarding = {
+        "push_enabled": bool(repo.list_push_subscriptions(user["id"])),
+        "portfolio_set": user["portfolio_eur"] > 0,
+        "first_alert_received": any(e["telegram_sent"] for e in all_entries),
+    }
+    onboarding_complete = all(onboarding.values())
+
+    open_risk_eur = sum(e["risk_eur"] or 0 for e in taken_entries if e["evaluation_id"] is None)
+    open_risk_pct = (open_risk_eur / user["portfolio_eur"] * 100) if user["portfolio_eur"] else 0
+
+    total_realized_eur = cumulative[-1]["cumulative_eur"] if cumulative else 0.0
+    starting_portfolio_eur = user["portfolio_eur"] - total_realized_eur
+    portfolio_change_pct = (
+        (total_realized_eur / starting_portfolio_eur * 100) if starting_portfolio_eur else 0.0
+    )
+
+    return templates.TemplateResponse(request, "account.html", {
+        "user": user,
+        "onboarding": onboarding,
+        "onboarding_complete": onboarding_complete,
+        "market_scan_enabled": repo.is_market_scan_enabled(),
+        "entries": entries,
+        "open_entries": open_entries,
+        "taken_entries": taken_entries,
+        "pending_entries": pending_entries,
+        "ticker_coins": ticker_coins,
+        "last_signal_text": last_signal_text,
+        "open_risk_eur": open_risk_eur,
+        "open_risk_pct": open_risk_pct,
+        "correlation_warning": correlation_warning,
+        "practice_open": practice_open,
+        "practice_closed": practice_closed,
+        "winrate": repo.winrate_for_user(user["id"]),
+        "cumulative": cumulative,
+        "heatmap_weeks": heatmap_weeks,
+        "ratio_stats": ratio_stats,
+        "coin_stats": coin_stats,
+        "coins": coins,
+        "status_filter": status,
+        "starting_portfolio_eur": starting_portfolio_eur,
+        "total_realized_eur": total_realized_eur,
+        "portfolio_change_pct": portfolio_change_pct,
+        "unclear_messages": unclear_messages,
+        **eval_ctx,
+    })
+
+
 @app.get("/api/open_positions")
 async def api_open_positions(user: dict = Depends(require_login)):
     """Ververst de live prijs en PnL van open posities, gebruikt door het

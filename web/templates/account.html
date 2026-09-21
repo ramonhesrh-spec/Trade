@@ -1,0 +1,588 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}Mijn account — HesPulse{% endblock %}
+{% block content %}
+
+<h2>Mijn account</h2>
+<p class="muted" style="margin: -6px 0 4px; max-width: 640px;">Journaal, portfolio, instellingen en winrate.
+Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">Signalen</a>.</p>
+
+{% if not onboarding_complete %}
+<section class="card onboarding-checklist" style="--i: 0">
+  <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9,11 12,14 20,6"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Nog even instellen</h3>
+  <ul class="checklist">
+    <li class="{{ 'checklist-done' if onboarding.push_enabled else '' }}">
+      {{ "✓" if onboarding.push_enabled else "○" }}
+      Meldingen aangezet
+      {% if not onboarding.push_enabled %}<a href="#portfolio-card">zet meldingen aan</a>{% endif %}
+    </li>
+    <li class="{{ 'checklist-done' if onboarding.portfolio_set else '' }}">
+      {{ "✓" if onboarding.portfolio_set else "○" }}
+      Portfolio ingevuld
+      {% if not onboarding.portfolio_set %}<a href="#portfolio-card">vul je omvang in</a>{% endif %}
+    </li>
+    <li class="{{ 'checklist-done' if onboarding.first_alert_received else '' }}">
+      {{ "✓" if onboarding.first_alert_received else "○" }}
+      Eerste melding ontvangen
+      {% if not onboarding.first_alert_received and onboarding.push_enabled %}<a href="#portfolio-card">stuur een voorbeeld</a>{% endif %}
+    </li>
+  </ul>
+</section>
+{% endif %}
+
+<section class="summary-strip" style="--i: 0">
+  <div class="summary-stat">
+    <span class="summary-value">{{ pending_entries|length }}</span>
+    <span class="summary-label">nieuwe kans{{ "en" if pending_entries|length != 1 else "" }}</span>
+  </div>
+  <div class="summary-stat">
+    <span class="summary-value">{{ taken_entries|length }}</span>
+    <span class="summary-label">open positie{{ "s" if taken_entries|length != 1 else "" }}</span>
+  </div>
+  <div class="summary-stat {{ 'risk-pulse' if open_risk_pct >= 25 else '' }}">
+    <span class="summary-value {{ 'danger' if open_risk_pct >= 25 else ('warn' if open_risk_pct >= 10 else '') }}">{{ "%.0f"|format(open_risk_pct) }}%</span>
+    <span class="summary-label">risico open</span>
+  </div>
+</section>
+
+{% if unclear_messages %}
+<details class="stats-collapse js-accordion" style="--i: 1">
+  <summary class="stats-summary">
+    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span>{{ unclear_messages|length }} bericht{{ "en" if unclear_messages|length != 1 else "" }} niet herkend</span>
+    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </summary>
+  <p class="muted" style="margin: 10px 0 12px; font-size: 12.5px;">Deze berichten kon het systeem niet als duidelijk signaal lezen. Daarom is hier geen melding of trade-kans uit ontstaan, in plaats van dat je dat moet raden.</p>
+  <ul class="unclear-list">
+    {% for m in unclear_messages %}
+    <li>
+      <span class="mono muted" style="font-size: 11px;">{{ m.received_at[:16] | replace("T", " ") }}</span>
+      {% if m.coin %}<span class="badge badge-status">{{ m.coin }}</span>{% endif %}
+      <span class="unclear-text">{{ m.raw_text[:140] if m.raw_text else "(alleen een afbeelding)" }}{{ "…" if m.raw_text and m.raw_text|length > 140 else "" }}</span>
+      {% if m.note %}<span class="muted unclear-note">{{ m.note }}</span>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+</details>
+{% endif %}
+
+{% if practice_open or practice_closed %}
+<details class="stats-collapse js-accordion" {{ "open" if practice_open else "" }} style="--i: 2">
+  <summary class="stats-summary">
+    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+    <span>Oefentrades</span>
+    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </summary>
+  <p class="muted" style="margin: 10px 0 12px;">Handmatig aangemaakt om te oefenen. Telt niet mee in je echte winrate hierboven.</p>
+  {% if practice_open %}
+  <div class="open-grid">
+    {% for e in practice_open %}
+    <div class="card open-card practice-card">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start;">
+        <div>
+          <a href="/coins/{{ e.coin }}" style="font-weight: 700; color: var(--text); text-decoration: none; font-size: 15px;">{{ e.coin }}</a>
+          <span class="badge badge-{{ e.direction }}" style="margin-left: 6px;">{{ e.direction }}</span>
+        </div>
+        <span class="badge badge-status">oefening</span>
+      </div>
+      <div class="confidence-line">
+        <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
+        {% if e.reason and e.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
+      </div>
+      {% if e.reason %}
+      <details class="confidence-detail js-accordion">
+        <summary class="confidence-why">waarom {{ e.confidence.split(" ")[0] }}?</summary>
+        <div class="reason-popup">
+          {{ macros.reason_popup(e) }}
+        </div>
+      </details>
+      {% endif %}
+      <div class="data-grid">
+        <div class="cell"><div class="k">Entry</div><div class="v">{{ "%.4f"|format(e.entry_price) if e.entry_price is not none else "-" }}</div></div>
+        <div class="cell"><div class="k">Nu</div><div class="v" data-price="{{ e.id }}">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}</div></div>
+        <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
+        <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
+        <div class="cell"><div class="k">Grootte</div><div class="v">{{ "%.6f"|format(e.position_size) ~ " " ~ e.coin if e.position_size else "-" }}</div></div>
+      </div>
+      <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="mono {{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
+        {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
+        <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
+      </p>
+      <p class="muted advice-text">{{ e.advice }}</p>
+      {% if e.note %}<p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">{{ e.note }}</p>{% endif %}
+      {{ macros.discipline_facts(e) }}
+      {% if e.entry_price is none %}
+      <form action="/journal/{{ e.id }}/delete-practice" method="post" class="reset-form"
+            onsubmit="return confirm('Deze kapotte oefentrade weggooien?');">
+        <button type="submit" class="button-reset">Weggooien</button>
+      </form>
+      {% else %}
+      <details class="confidence-detail levels-detail js-accordion">
+        <summary class="confidence-why">SL, TP of grootte aanpassen</summary>
+        <form action="/journal/{{ e.id }}/levels" method="post" class="levels-form">
+          <label>Stop loss
+            <input type="number" step="any" name="stop_loss" value="{{ '%.4f'|format(e.stop_loss) if e.stop_loss else '' }}">
+          </label>
+          <label>Take profit
+            <input type="number" step="any" name="take_profit" value="{{ '%.4f'|format(e.take_profit) if e.take_profit else '' }}">
+          </label>
+          <label>Grootte ({{ e.coin }})
+            <input type="number" step="any" name="position_size"
+                   value="{{ '%.6f'|format(e.position_size_override) if e.position_size_override is not none else '' }}"
+                   placeholder="{{ '%.6f'|format(e.position_size) if e.position_size else 'auto' }}">
+          </label>
+          <button type="submit">Opslaan</button>
+        </form>
+        <p class="muted levels-hint">Leeg laten zet een veld terug op de berekende standaard.</p>
+      </details>
+      <form action="/journal/{{ e.id }}/close" method="post" class="close-form">
+        <div class="price-input-group">
+          <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
+          <button type="button" class="fill-price-btn" data-fill-price="{{ e.id }}">nu</button>
+        </div>
+        <input type="datetime-local" name="exit_time" class="exit-time-input" required>
+        <button type="submit">Sluiten</button>
+      </form>
+      <form action="/journal/{{ e.id }}/delete-practice" method="post" class="reset-form"
+            onsubmit="return confirm('Deze oefentrade weggooien?');">
+        <button type="submit" class="button-reset">Weggooien</button>
+      </form>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% if practice_closed %}
+  <div class="table-scroll" style="margin-top: 12px;">
+  <table class="signals">
+    <thead><tr><th>Coin</th><th>Richting</th><th class="num">Resultaat</th></tr></thead>
+    <tbody>
+      {% for e in practice_closed %}
+      <tr class="{{ e.direction }}">
+        <td><a href="/coins/{{ e.coin }}">{{ e.coin }}</a></td>
+        <td><span class="badge badge-{{ e.direction }}">{{ e.direction }}</span></td>
+        <td class="num {{ 'pos' if (e.result_eur or 0) >= 0 else 'neg' }}">€{{ "%.2f"|format(e.result_eur) if e.result_eur is not none else "-" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% endif %}
+</details>
+{% endif %}
+
+<details class="stats-collapse js-accordion" open id="stats-collapse" style="--i: 3">
+  <summary class="stats-summary">
+    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M18.7 8 12 14.7l-3.3-3.4L4 16"/></svg>
+    <span>Statistieken en instellingen</span>
+    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </summary>
+<section class="cards">
+  <div class="card">
+    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6l7-3z"/><polyline points="9,12 11,14 15,10"/></svg>Winrate (automatisch trackrecord)</h3>
+    {% if winrate.winrate_pct is none %}
+    <div class="empty-state">
+      <div class="empty-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M18.7 8 12 14.7l-3.3-3.4L4 16"/></svg></div>
+      <p class="empty-title">Nog geen bevestigd signaal afgerond</p>
+      <p class="empty-body">Zodra een signaal binnen jouw drempel take-profit of stop loss raakt, verschijnt hier je winrate. Puur gemeten op de koers, geen handmatige status.</p>
+    </div>
+    {% else %}
+    <div class="winrate-ring-wrap">
+      <svg class="winrate-ring" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+        <circle class="winrate-ring-track" cx="32" cy="32" r="26"/>
+        <circle class="winrate-ring-fill" cx="32" cy="32" r="26"
+                style="--ring-offset: {{ '%.2f'|format(163.36 * (1 - winrate.winrate_pct / 100)) }};"/>
+      </svg>
+      <span class="winrate-ring-value big">{{ "%.1f"|format(winrate.winrate_pct) }}%</span>
+    </div>
+    <p class="muted">{{ winrate.wins }} van {{ winrate.wins + winrate.losses }} afgeronde bevestigde signalen</p>
+    {% endif %}
+    {% if winrate.open %}
+    <p class="muted levels-hint">{{ winrate.open }} bevestigd signaal{{ "en" if winrate.open != 1 else "" }} nog open, telt nog niet mee.</p>
+    {% endif %}
+  </div>
+  <div class="card" id="portfolio-card">
+    <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M16 12h3"/><path d="M3 10h18"/></svg>Portfolio ({{ user.username }})</h3>
+    {% if not user.portfolio_eur %}
+    <p class="warning">Je portfolio staat nog op €0, meldingen krijgen daardoor een risicobedrag en positiegrootte van 0. Vul hieronder je omvang in.</p>
+    {% else %}
+    <p class="big">€{{ "%.2f"|format(user.portfolio_eur) }}</p>
+    {% if total_realized_eur != 0 %}
+    <p class="muted">
+      gestart op €{{ "%.2f"|format(starting_portfolio_eur) }}, sinds dan
+      <span class="{{ 'pos' if total_realized_eur >= 0 else 'neg' }}">{{ "+" if total_realized_eur >= 0 else "" }}€{{ "%.2f"|format(total_realized_eur) }} ({{ "+" if portfolio_change_pct >= 0 else "" }}{{ "%.1f"|format(portfolio_change_pct) }}%)</span>
+    </p>
+    {% endif %}
+    <p class="muted levels-hint">Past zich automatisch aan na elke gesloten trade, winst of verlies, zodat risico per trade altijd hetzelfde percentage van je actuele kapitaal blijft. Pas hieronder alleen aan als je zelf geld hebt toegevoegd of opgenomen.</p>
+    {% endif %}
+    <form action="/settings/portfolio" method="post" class="inline-form">
+      <label>Omvang in euro's
+        <input type="number" step="0.01" name="portfolio_eur" value="{{ user.portfolio_eur }}" required>
+      </label>
+      <label>Risico per trade (%)
+        <input type="number" step="0.1" name="risk_percent" value="{{ user.risk_percent }}" required>
+      </label>
+      <label>Stille uren van
+        <input type="time" name="quiet_hours_start" value="{{ user.quiet_hours_start or '' }}">
+      </label>
+      <label>tot
+        <input type="time" name="quiet_hours_end" value="{{ user.quiet_hours_end or '' }}">
+      </label>
+      <button type="submit">Opslaan</button>
+    </form>
+    <p class="muted levels-hint">Binnen dit venster komt ook een bevestigde kans stil binnen, zonder geluid. Beide velden leeg laten zet stille uren weer uit.</p>
+    <div id="push-subscribe-block" style="margin-top: 12px;">
+      <button id="push-subscribe-btn" type="button">Meldingen aanzetten</button>
+      <p id="push-subscribe-status" class="muted" style="margin: 4px 0 0; font-size: 12.5px;" hidden></p>
+    </div>
+    <script src="/static/push-subscribe.js?v=2" defer></script>
+    <form action="/push/voorbeeld" method="post" class="inline-form">
+      <button type="submit" class="button-link">Stuur mezelf een testpush</button>
+    </form>
+    <form action="/settings/market_scan" method="post" style="margin-top: 12px;">
+      {% if market_scan_enabled %}
+      <input type="hidden" name="enabled" value="0">
+      <button type="submit" class="button-reset">Autonome marktscan uitzetten</button>
+      <p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">Nu aan: elk uur zoekt HesPulse zelf naar kansen, ook zonder doorgestuurd bericht.</p>
+      {% else %}
+      <input type="hidden" name="enabled" value="1">
+      <button type="submit">Autonome marktscan aanzetten</button>
+      <p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">Nu uit: HesPulse reageert alleen nog op doorgestuurde berichten.</p>
+      {% endif %}
+    </form>
+    <form action="/instellingen/drempel" method="post" class="threshold-form" style="margin-top: 12px;">
+      <p class="muted" style="margin: 0 0 6px;">Hoe streng moet een signaal zijn voordat je een melding krijgt?</p>
+      {% for key, pct in {"soepel": 45, "normaal": 60, "streng": 75}.items() %}
+      <button type="submit" name="preset" value="{{ key }}"
+              class="threshold-option{% if user.confirm_threshold_pct == pct %} is-active{% endif %}">
+        {{ key|capitalize }} ({{ pct }}%)
+      </button>
+      {% endfor %}
+    </form>
+  </div>
+</section>
+{% if heatmap_weeks %}
+<section class="heatmap-section">
+  <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="16" y1="2" x2="16" y2="6"/></svg>Trade-kalender</h3>
+  {% set trade_count = namespace(n=0) %}
+  {% for week in heatmap_weeks %}{% for day in week %}{% if day and day.value %}{% set trade_count.n = trade_count.n + 1 %}{% endif %}{% endfor %}{% endfor %}
+  {% if trade_count.n == 0 %}
+  <p class="muted">Nog geen gesloten trades in de laatste weken, hier verschijnt straks per dag je resultaat.</p>
+  {% else %}
+  <div class="heatmap-grid">
+    {% for week in heatmap_weeks %}
+    <div class="heatmap-week">
+      {% for day in week %}
+      {% if day is none %}
+      <div class="heat-cell heat-empty"></div>
+      {% else %}
+      <div class="heat-cell heat-level-{{ day.level }}"
+           title="{{ day.date }}{{ ': €%.2f'|format(day.value) if day.value else ': geen trades' }}"></div>
+      {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  <div class="heatmap-legend">
+    <span>verlies</span>
+    <span class="heat-cell heat-level--3"></span>
+    <span class="heat-cell heat-level--2"></span>
+    <span class="heat-cell heat-level--1"></span>
+    <span class="heat-cell heat-level-0"></span>
+    <span class="heat-cell heat-level-1"></span>
+    <span class="heat-cell heat-level-2"></span>
+    <span class="heat-cell heat-level-3"></span>
+    <span>winst</span>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+</details>
+<script>
+  // Standaard open (ook zonder JS, of traag JS), maar op een klein scherm
+  // is dit secundaire informatie: winrate en instellingen die je zelden
+  // wijzigt. Dicht klappen zodra we weten dat het een klein scherm is,
+  // meteen bij het laden, voordat er iets zichtbaar wordt.
+  if (window.matchMedia("(max-width: 700px)").matches) {
+    document.getElementById("stats-collapse").removeAttribute("open");
+  }
+</script>
+
+<details class="stats-collapse js-accordion" id="historie-collapse" style="--i: 4">
+  <summary class="stats-summary">
+    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,17 9,11 13,15 21,5"/><polyline points="15,5 21,5 21,11"/></svg>
+    <span>Historie en trackrecord</span>
+    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </summary>
+  <p class="muted" style="margin: 10px 0 16px; font-size: 12.5px;">Cumulatief resultaat, of de score klopt met de uitkomst, en resultaat per coin. Cijfers over tijd, niet wat je nu moet doen.</p>
+
+  <h3 class="open-subheading">Cumulatief resultaat</h3>
+  <canvas id="cumulative-chart" height="80"></canvas>
+
+  <h3 class="open-subheading" style="margin-top: 22px;">Klopt de score met de uitkomst?</h3>
+  {% if ratio_stats %}
+  <p class="muted" style="margin: 0 0 12px;">Per score (hoeveel van de getoonde factoren klopten) de winrate van je
+  eigen gesloten trades. Zo zie je of een hogere score ook echt vaker tot winst leidt, niet alleen in theorie.</p>
+  <canvas id="ratio-chart" height="80"></canvas>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+    <p class="empty-title">Nog geen gesloten trades</p>
+    <p class="empty-body muted">Zodra je eerste trade gesloten is, verschijnt hier of de score ook klopte met de uitkomst.</p>
+  </div>
+  {% endif %}
+
+  <h3 class="open-subheading" style="margin-top: 22px;">Resultaat per coin</h3>
+  {% if coin_stats %}
+  <table class="signals">
+    <thead>
+      <tr>
+        <th>Coin</th>
+        <th class="num">Trades</th>
+        <th class="num">Winrate</th>
+        <th class="num">Gemiddeld resultaat</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for c in coin_stats %}
+      <tr>
+        <td><a href="/coins/{{ c.coin }}">{{ c.coin }}</a></td>
+        <td class="num">{{ c.total }}</td>
+        <td class="num">{{ c.winrate }}%</td>
+        <td class="num {{ 'pos' if c.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(c.avg_result_eur) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">Nog geen gesloten trades om een trackrecord per coin te tonen.</p>
+  {% endif %}
+</details>
+
+<section style="--i: 5">
+  <div class="table-header">
+    <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Meldingen</h2>
+    <form method="get" action="/account" class="inline-form">
+      <label>Filter
+        <select name="status" onchange="this.form.submit()">
+          <option value="alle" {% if status_filter == "alle" %}selected{% endif %}>Alle</option>
+          <option value="open" {% if status_filter == "open" %}selected{% endif %}>Open</option>
+          <option value="gesloten" {% if status_filter == "gesloten" %}selected{% endif %}>Gesloten</option>
+          <option value="genegeerd" {% if status_filter == "genegeerd" %}selected{% endif %}>Genegeerd</option>
+        </select>
+      </label>
+      <a href="/export/logboek.csv" class="button-primary">Exporteer csv</a>
+    </form>
+  </div>
+
+  <div class="table-scroll">
+  <table class="signals table-wide">
+    <thead>
+      <tr>
+        <th>Tijdstip</th>
+        <th>Coin</th>
+        <th>Richting</th>
+        <th>Vertrouwen</th>
+        <th class="num">Entry</th>
+        <th class="num">SL / TP</th>
+        <th>Status</th>
+        <th class="num">Resultaat</th>
+        <th>Acties</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for e in entries %}
+      <tr class="{{ e.direction }}">
+        <td>{{ e.created_at[:16] | replace("T", " ") }}</td>
+        <td><a href="/coins/{{ e.coin }}">{{ e.coin }}</a></td>
+        <td><span class="badge badge-{{ e.direction }}">{{ e.direction }}</span></td>
+        <td>
+          <details class="confidence-detail js-accordion">
+            <summary>
+              <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
+              {% if e.reason and e.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
+            </summary>
+            <div class="reason-popup">
+              {{ macros.reason_popup(e) }}
+            </div>
+          </details>
+        </td>
+        <td class="num">
+          {{ "%.4f"|format(e.price) if e.price else "-" }}
+          {% if e.position_size %}<span class="muted entry-size">{{ "%.6f"|format(e.position_size) }} {{ e.coin }}</span>{% endif %}
+        </td>
+        <td class="num sltp-cell">
+          <span class="neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</span>
+          <span class="pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</span>
+        </td>
+        <td><span class="badge badge-status">{{ e.status }}</span></td>
+        <td class="num">
+          {% if e.result_eur is not none %}
+            <span class="{{ 'pos' if e.result_eur >= 0 else 'neg' }}">
+              €{{ "%.2f"|format(e.result_eur) }}{% if e.result_pct_of_risk is not none %} ({{ "%.1f"|format(e.result_pct_of_risk) }}%){% endif %}
+            </span>
+          {% else %}-{% endif %}
+        </td>
+        <td class="actions">
+          {% if e.status == "nieuw" %}
+          <form action="/journal/{{ e.id }}/status" method="post" class="status-form">
+            <select name="status">
+              <option value="genomen">Genomen</option>
+              <option value="aangepast">Aangepast</option>
+              <option value="genegeerd">Genegeerd</option>
+            </select>
+            <input type="number" step="any" name="entry_price" placeholder="eigen entry">
+            <button type="submit">Bevestig</button>
+          </form>
+          {% elif e.entry_price is not none and e.exit_price is none %}
+          <form action="/journal/{{ e.id }}/close" method="post" class="close-form">
+            <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
+            <input type="datetime-local" name="exit_time" required>
+            <button type="submit">Sluiten</button>
+          </form>
+          {% elif e.result_eur is not none %}
+            <button type="button" class="button-link share-btn"
+                    data-share="{{ e.coin }} {{ e.direction|upper }} — entry {{ '%.4f'|format(e.entry_price) }} naar exit {{ '%.4f'|format(e.exit_price) }} — {{ '%+.2f'|format(e.result_eur) }} euro{% if e.result_pct_of_risk is not none %} ({{ '%+.1f'|format(e.result_pct_of_risk) }}%){% endif %} — via HesPulse" title="Deel dit resultaat">Delen</button>
+          {% else %}
+            <span class="muted">-</span>
+          {% endif %}
+          <details class="confidence-detail js-accordion note-toggle" {{ "open" if not e.note else "" }}>
+            <summary class="confidence-why">{% if e.note %}{{ e.note[:30] }}{{ "…" if e.note|length > 30 else "" }}{% else %}+ notitie{% endif %}</summary>
+            <form action="/journal/{{ e.id }}/note" method="post" class="note-form">
+              <input type="text" name="note" value="{{ e.note or '' }}" placeholder="Wat ging hier goed of niet?">
+              <button type="submit">Opslaan</button>
+            </form>
+          </details>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="9" class="muted">Nog geen meldingen.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+
+<script defer src="/static/dashboard.js"></script>
+
+<script defer src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script defer>
+  // Los van dashboard.js: die moet altijd meteen werken (live koersen,
+  // trade nemen/sluiten), ook als de Chart.js CDN traag is of niet
+  // laadt. Zelfde defer-volgorde-garantie, maar in zijn eigen ketting
+  // ná dashboard.js in de broncode, dus dashboard.js wacht er nooit op.
+  //
+  // De charts staan nu in een standaard dichtgeklapte sectie. Chart.js
+  // meet de breedte van het canvas bij het aanmaken: in een dichtgeklapt
+  // <details> is die breedte 0, en blijft de grafiek daarna kapot ook
+  // als je opent. Daarom pas aanmaken bij de eerste keer openen, niet
+  // meteen bij het laden van de pagina.
+  const cumulativeData = {{ cumulative | tojson }};
+  const ratioStats = {{ ratio_stats | tojson }};
+  let historyChartsRendered = false;
+
+  function renderHistoryCharts() {
+    if (historyChartsRendered || typeof Chart === "undefined") return;
+    historyChartsRendered = true;
+
+    const cumulativeCtx = document.getElementById("cumulative-chart");
+    if (cumulativeCtx) {
+      // Zelftekenende lijn: elk punt krijgt zijn eigen animatievertraging,
+      // zodat de grafiek van links naar rechts lijkt te worden getekend in
+      // plaats van in zijn geheel te faden. Uit bij prefers-reduced-motion.
+      const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const totalDuration = reduceMotion ? 0 : 2200;
+      const pointCount = Math.max(cumulativeData.length, 1);
+      const delayBetweenPoints = totalDuration / pointCount;
+      const previousY = (ctx) => {
+        if (ctx.index === 0) return ctx.chart.scales.y.getPixelForValue(0);
+        const meta = ctx.chart.getDatasetMeta(ctx.datasetIndex);
+        return meta.data[ctx.index - 1].getProps(["y"], true).y;
+      };
+      const drawAnimation = totalDuration === 0 ? false : {
+        x: {
+          type: "number", easing: "linear", duration: delayBetweenPoints, from: NaN,
+          delay(ctx) {
+            if (ctx.type !== "data" || ctx.xStarted) return 0;
+            ctx.xStarted = true;
+            return ctx.index * delayBetweenPoints;
+          },
+        },
+        y: {
+          type: "number", easing: "linear", duration: delayBetweenPoints,
+          from: (ctx) => previousY(ctx),
+          delay(ctx) {
+            if (ctx.type !== "data" || ctx.yStarted) return 0;
+            ctx.yStarted = true;
+            return ctx.index * delayBetweenPoints;
+          },
+        },
+      };
+      new Chart(cumulativeCtx, {
+        type: "line",
+        data: {
+          labels: cumulativeData.map((p) => p.time.slice(0, 10)),
+          datasets: [{
+            label: "Cumulatief resultaat (euro)",
+            data: cumulativeData.map((p) => p.cumulative_eur),
+            borderColor: "#17e5d6",
+            backgroundColor: "rgba(23, 229, 214, 0.12)",
+            fill: true,
+            tension: 0.1,
+          }],
+        },
+        options: {
+          animation: drawAnimation,
+          scales: {
+            x: { ticks: { color: "#7d8c8a" }, grid: { color: "#1c2526" } },
+            y: { ticks: { color: "#7d8c8a" }, grid: { color: "#1c2526" } },
+          },
+          plugins: { legend: { labels: { color: "#eaf1f0" } } },
+        },
+      });
+    }
+
+    const ratioCtx = document.getElementById("ratio-chart");
+    if (ratioCtx && ratioStats.length) {
+      new Chart(ratioCtx, {
+        type: "bar",
+        data: {
+          labels: ratioStats.map((r) => r.ratio),
+          datasets: [{
+            label: "Winrate",
+            data: ratioStats.map((r) => r.winrate),
+            backgroundColor: ratioStats.map((r) => r.passed / r.total >= 0.75 ? "#17e5d6" : "#556c67"),
+            borderRadius: 4,
+            maxBarThickness: 56,
+          }],
+        },
+        options: {
+          scales: {
+            x: { ticks: { color: "#7d8c8a" }, grid: { display: false } },
+            y: { ticks: { color: "#7d8c8a", callback: (v) => v + "%" }, grid: { color: "#1c2526" }, min: 0, max: 100 },
+          },
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              callbacks: {
+                label: (ctx) => {
+                  const r = ratioStats[ctx.dataIndex];
+                  return `Winrate ${r.winrate}% (n=${r.trades})`;
+                },
+              },
+            },
+          },
+        },
+      });
+    }
+  }
+
+  const historieDetails = document.getElementById("historie-collapse");
+  if (historieDetails) {
+    if (historieDetails.open) renderHistoryCharts();
+    historieDetails.addEventListener("toggle", () => {
+      if (historieDetails.open) renderHistoryCharts();
+    });
+  }
+</script>
+{% endblock %}
