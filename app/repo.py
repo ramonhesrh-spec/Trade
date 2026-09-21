@@ -2314,6 +2314,13 @@ def winrate_for_user(user_id: int) -> dict:
     for row in rows:
         if not user_confirmed(row["pass_pct"], bool(row["hard_gates_ok"]), threshold):
             continue
+        # Een "vervallen" signaal (te oud geworden zonder ooit de take-profit
+        # of stop-loss te raken, zie level_check.SIGNAL_MAX_AGE_DAYS) is geen
+        # nog open kans meer en heeft ook geen echte uitkomst - het telt
+        # nergens in mee, net zoals een oefentrade (is_practice) al buiten
+        # elke winrate-query blijft.
+        if row["auto_outcome"] == "vervallen":
+            continue
         total += 1
         if row["auto_outcome"] == "take_profit":
             wins += 1

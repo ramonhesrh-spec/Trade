@@ -28,6 +28,18 @@ from app.signal_processor import (
 
 logger = logging.getLogger("level_check")
 
+# Hoe lang een day-trading signaal zonder vastgestelde uitkomst blijft
+# meedraaien in de automatische trackrecord-check voor het als "vervallen"
+# telt in plaats van "nog open". Day trading draait hier op 4-uurs candles
+# en is bedoeld om zich binnen uren tot een paar dagen te ontwikkelen, dus
+# 14 dagen is al ruim: genoeg marge voor een trage markt of een meerdaagse
+# positie, maar nog altijd ver onder de maanden waarin een oud, allang niet
+# meer relevant signaal anders alsnog willekeurig een win of loss zou
+# scoren zodra de prijs er per toeval doorheen zwabbert. Bewust veel korter
+# dan SWING_WATCH_MAX_AGE_DAYS (84): swing-niveaus bewaken een structureel
+# support/weerstand-niveau over weken tot maanden, day trading niet.
+SIGNAL_MAX_AGE_DAYS = 14
+
 # Hoe dicht de prijs bij het oorspronkelijke signaalniveau moet komen voordat
 # een nog niet genomen signaal een "weer interessant" seintje krijgt. In ATR,
 # dezelfde maatstaf als de stop-afstand, zodat het meebeweegt met hoe
@@ -121,11 +133,17 @@ async def check_signal_outcomes() -> None:
             continue
 
         hit = _level_hit(signal["direction"], current_price, signal["stop_loss"], signal["take_profit"])
-        if not hit:
+        if hit:
+            outcome = "take_profit" if hit == "take profit" else "stop_loss"
+            repo.mark_signal_auto_outcome(signal["id"], outcome, db.now_iso())
+            logger.info("Signaal %s (%s) automatisch afgesloten: %s", signal["id"], coin, outcome)
             continue
-        outcome = "take_profit" if hit == "take profit" else "stop_loss"
-        repo.mark_signal_auto_outcome(signal["id"], outcome, db.now_iso())
-        logger.info("Signaal %s (%s) automatisch afgesloten: %s", signal["id"], coin, outcome)
+
+        created_at = datetime.fromisoformat(signal["created_at"])
+        age_days = (datetime.now(timezone.utc) - created_at).days
+        if age_days > SIGNAL_MAX_AGE_DAYS:
+            repo.mark_signal_auto_outcome(signal["id"], "vervallen", db.now_iso())
+            logger.info("Signaal %s (%s) vervallen na %s dagen zonder uitkomst", signal["id"], coin, age_days)
 
 
 def _nearest_level(current_price: float, atr: float, levels: list[dict]) -> Optional[dict]:
