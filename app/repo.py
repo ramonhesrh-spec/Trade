@@ -1101,6 +1101,7 @@ _JOURNAL_SELECT = """
         s.stop_loss AS stop_loss_default, s.take_profit AS take_profit_default,
         s.confidence AS confidence, s.technical_confirmed AS technical_confirmed,
         s.pass_pct AS pass_pct, s.hard_gates_ok AS hard_gates_ok,
+        s.auto_outcome AS auto_outcome,
         s.rsi AS rsi, s.ema9 AS ema9, s.ema21 AS ema21,
         s.macd AS macd, s.macd_signal AS macd_signal, s.volume_ratio AS volume_ratio,
         s.atr_avg20 AS atr_avg20, s.adx AS adx,

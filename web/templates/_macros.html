@@ -135,6 +135,10 @@
     <span class="coin-symbol">{{ entry.coin }}</span>
     <span class="direction {{ entry.direction }}">{{ entry.direction|upper }}</span>
     <span class="pass-pct">{{ "%.0f"|format(entry.pass_pct) if entry.pass_pct is not none else "-" }}%</span>
+    {% if entry.auto_outcome == "take_profit" %}<span class="badge badge-outcome-win">✓ take profit</span>
+    {% elif entry.auto_outcome == "stop_loss" %}<span class="badge badge-outcome-loss">✗ stop loss</span>
+    {% elif entry.auto_outcome == "vervallen" %}<span class="badge badge-outcome-expired">vervallen</span>
+    {% endif %}
   </div>
   <div class="signal-card-levels">
     Entry {{ "%.4f"|format(entry.price) if entry.price is not none else "-" }} ·
