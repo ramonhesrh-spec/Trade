@@ -892,8 +892,7 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
 
     onboarding = {
         "push_enabled": bool(repo.list_push_subscriptions(user["id"])),
-        "portfolio_set": user["portfolio_eur"] > 0,
-        "first_alert_received": any(e["telegram_sent"] for e in all_entries),
+        "threshold_chosen": user["confirm_threshold_set_at"] is not None,
     }
     onboarding_complete = all(onboarding.values())
 

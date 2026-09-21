@@ -16,15 +16,10 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
       Meldingen aangezet
       {% if not onboarding.push_enabled %}<a href="#portfolio-card">zet meldingen aan</a>{% endif %}
     </li>
-    <li class="{{ 'checklist-done' if onboarding.portfolio_set else '' }}">
-      {{ "✓" if onboarding.portfolio_set else "○" }}
-      Portfolio ingevuld
-      {% if not onboarding.portfolio_set %}<a href="#portfolio-card">vul je omvang in</a>{% endif %}
-    </li>
-    <li class="{{ 'checklist-done' if onboarding.first_alert_received else '' }}">
-      {{ "✓" if onboarding.first_alert_received else "○" }}
-      Eerste melding ontvangen
-      {% if not onboarding.first_alert_received and onboarding.push_enabled %}<a href="#portfolio-card">stuur een voorbeeld</a>{% endif %}
+    <li class="{{ 'checklist-done' if onboarding.threshold_chosen else '' }}">
+      {{ "✓" if onboarding.threshold_chosen else "○" }}
+      Drempel gekozen
+      {% if not onboarding.threshold_chosen %}<a href="#portfolio-card">kies je drempel</a>{% endif %}
     </li>
   </ul>
 </section>
