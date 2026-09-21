@@ -952,8 +952,8 @@ table.signals tbody tr.short td:first-child::before { background: var(--red); }
 
 .table-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 4px; }
 
-form.inline-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
-form.inline-form label { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); gap: 5px; font-weight: 500; }
+form.inline-form, div.inline-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+form.inline-form label, div.inline-form label { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); gap: 5px; font-weight: 500; }
 
 form.threshold-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .threshold-option { font-size: 12.5px; font-weight: 600; }

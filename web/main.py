@@ -24,8 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import advice as advice_module
-from app import config, db, exchange, explain, indicators, push_notify, repo, risk, security
-from app.signal_processor import compute_advanced_extra_factors
+from app import config, db, exchange, indicators, push_notify, repo, risk, security
 
 logger = logging.getLogger("web")
 
@@ -1479,73 +1478,6 @@ async def preview_practice_trade(
         "max_risk_eur": max_risk_eur,
         "note": leverage_note,
     })
-
-
-@app.post("/coins/{symbol}/oefen")
-async def create_practice_trade(
-    symbol: str,
-    direction: str = Form(...),
-    risk_eur: str = Form(""),
-    user: dict = Depends(require_login),
-):
-    symbol = symbol.upper()
-    if direction not in ("long", "short") or not repo.coin_is_tracked(symbol):
-        return RedirectResponse(url=f"/coins/{symbol}", status_code=303)
-
-    df, ind, stop_take = await _fetch_practice_trade_calc(symbol, direction)
-
-    extra_factors = None
-    if config.ENABLE_ADVANCED_FACTORS:
-        zones = indicators.detect_sr_zones(df)
-        extra_factors = await compute_advanced_extra_factors(symbol, direction, df, ind.price, ind.atr, zones)
-    confirmed, reason, pass_pct, hard_gates_ok = indicators.confirms_direction(
-        ind, direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
-    )
-
-    confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"
-    plain_explanation = await asyncio.to_thread(
-        explain.explain_signal, symbol, direction, confidence, reason,
-        ind.price, stop_take.stop_loss, stop_take.take_profit,
-    )
-
-    message_id = repo.insert_message("Handmatige oefentrade", [])
-    repo.mark_message_processed(
-        message_id, symbol, direction, "oefening", False,
-        note="Handmatige oefentrade, aangemaakt vanaf het dashboard",
-    )
-    signal_id = repo.insert_signal({
-        "message_id": message_id, "coin": symbol, "direction": direction, "category": "oefening",
-        "price": ind.price, "rsi": ind.rsi, "macd": ind.macd, "macd_signal": ind.macd_signal,
-        "volume_ratio": ind.volume_ratio, "ema9": ind.ema9, "ema21": ind.ema21, "atr": ind.atr,
-        "atr_avg20": ind.atr_avg20, "adx": ind.adx,
-        "technical_confirmed": int(confirmed),
-        "pass_pct": pass_pct,
-        "hard_gates_ok": int(hard_gates_ok),
-        "confidence": confidence,
-        "reason": reason, "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,
-        "context_note": None, "is_practice": 1, "plain_explanation": plain_explanation or None,
-    })
-    active_eval = repo.get_active_evaluation(user["id"])
-    manual_risk_eur = _parse_optional_float(risk_eur)
-    (
-        computed_risk_eur, leverage_note, _capped, _max_risk_eur, cost_rate, link_to_evaluation,
-        effective_stop_loss, effective_take_profit,
-    ) = _resolve_practice_risk_eur(
-        user, active_eval, manual_risk_eur, direction, ind.price, stop_take.stop_loss, stop_take.take_profit,
-    )
-    position_size = risk.compute_position_size(computed_risk_eur, ind.price, effective_stop_loss, cost_rate=cost_rate)
-
-    entry_id = repo.create_journal_entry(
-        signal_id, user["id"], computed_risk_eur,
-        evaluation_id=active_eval["id"] if link_to_evaluation else None, position_size=position_size,
-    )
-    repo.update_journal_status(entry_id, user["id"], "genomen", entry_price=ind.price)
-    if effective_stop_loss != stop_take.stop_loss:
-        repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, None)
-    if leverage_note:
-        repo.update_journal_note(entry_id, user["id"], leverage_note)
-
-    return RedirectResponse(url="/dashboard", status_code=303)
 
 
 # ---------------------------------------------------------------------------
