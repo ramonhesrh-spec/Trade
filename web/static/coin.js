@@ -137,6 +137,16 @@
   let latestSignal = null;
   let activeWindow = null;
 
+  // Venster van de laatste 20 candles (prijsrange), gebruikt om een
+  // zelf-gedetecteerde SR-zone die buiten activeWindow valt niet meteen
+  // hard te verbergen maar te vervagen als hij tenminste nog "recent"
+  // is: ergens binnen de prijsrange van wat er de laatste 20 candles is
+  // gebeurd. Pas gevuld in de .then()-callback hieronder (heeft
+  // data.candles nodig); tot die tijd blijft recent() false via de
+  // Number.isFinite-guards, niet crashend op undefined-vergelijkingen.
+  let recentLow = null;
+  let recentHigh = null;
+
   function inActiveWindow(price) {
     if (!activeWindow) return true;
     return price >= activeWindow[0] && price <= activeWindow[1];
@@ -174,7 +184,12 @@
     });
     srZoneEls.forEach(({ zone, el }) => {
       const mid = (zone.price_high + zone.price_low) / 2;
-      if (!(showAllLayers || inActiveWindow(mid))) {
+      const relevant = showAllLayers || inActiveWindow(mid);
+      // recentLow/recentHigh zijn nog null vóór de fetch is opgelost; dan
+      // is een zone per definitie niet "recent" (geen undefined-vergelijking).
+      const recent = recentLow !== null && recentHigh !== null
+        && mid >= recentLow && mid <= recentHigh;
+      if (!relevant && !recent) {
         el.style.display = "none";
         return;
       }
@@ -187,6 +202,13 @@
       el.style.display = "block";
       el.style.top = `${yHigh}px`;
       el.style.height = `${Math.max(yLow - yHigh, 2)}px`;
+      // Niet-relevant maar wel recent: laten zien maar vervagen, in plaats
+      // van hard verbergen (zie de comment bij recentLow/recentHigh
+      // hierboven). toggle() zet de klasse ook weer AF zodra een zone weer
+      // relevant wordt (bijv. na een nieuw signaal) — cruciaal: dit moet op
+      // elke pass onvoorwaardelijk aangeroepen worden, niet alleen als
+      // vervaagd, anders blijft een zone die weer relevant wordt vervaagd.
+      el.classList.toggle("is-faded", !relevant && recent);
       labels.push({ span: el.querySelector("span"), elTop: yHigh, naturalPageTop: yHigh + 2 });
     });
 
@@ -264,6 +286,15 @@
       activeWindow = (latestSignal && Number.isFinite(latestSignal.atr) && latestSignal.atr)
         ? [latestSignal.price - 3 * latestSignal.atr, latestSignal.price + 3 * latestSignal.atr]
         : null;
+
+      // Zie de comment bij de declaratie van recentLow/recentHigh
+      // hierboven. "Oud" voor een zone zonder eigen tijdstip: buiten de
+      // prijsrange van de laatste 20 candles.
+      if (data.candles.length) {
+        const recentCandles = data.candles.slice(-20);
+        recentLow = Math.min(...recentCandles.map((c) => c.low));
+        recentHigh = Math.max(...recentCandles.map((c) => c.high));
+      }
 
       // Geen axis-label bij bron niveaus: bij dicht bij elkaar liggende
       // niveaus vallen die badges anders over elkaar heen en worden

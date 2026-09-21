@@ -1397,6 +1397,10 @@ main + .footer { border-top: 1px solid var(--border); }
   background: rgba(167, 139, 250, 0.10); border-top: 1px dashed rgba(167, 139, 250, 0.5);
   border-bottom: 1px dashed rgba(167, 139, 250, 0.5);
 }
+/* Buiten activeWindow maar nog binnen de laatste-20-candles prijsrange
+   (coin.js: positionZones()) — niet relevant genoeg voor volle nadruk,
+   maar ook niet weggegooid als "oud": vervagen in plaats van verbergen. */
+.chart-zone-sr.is-faded { opacity: 0.25; }
 /* right, zelfde reden als .chart-zone span hierboven: dit label mag niet
    over de linksuitgelijnde titel van een stop-loss/take-profit-lijn heen
    vallen, en dat gebeurt bij een zelf-gedetecteerde zone vaker dan bij een
