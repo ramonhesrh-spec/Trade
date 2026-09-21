@@ -112,6 +112,7 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
       <details class="confidence-detail levels-detail js-accordion">
         <summary class="confidence-why">SL, TP of grootte aanpassen</summary>
         <form action="/journal/{{ e.id }}/levels" method="post" class="levels-form">
+          <input type="hidden" name="next" value="/account">
           <label>Stop loss
             <input type="number" step="any" name="stop_loss" value="{{ '%.4f'|format(e.stop_loss) if e.stop_loss else '' }}">
           </label>
@@ -133,6 +134,7 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
           <button type="button" class="fill-price-btn" data-fill-price="{{ e.id }}">nu</button>
         </div>
         <input type="datetime-local" name="exit_time" class="exit-time-input" required>
+        <input type="hidden" name="next" value="/account">
         <button type="submit">Sluiten</button>
       </form>
       <form action="/journal/{{ e.id }}/delete-practice" method="post" class="reset-form"
@@ -432,6 +434,7 @@ Losse signalen, gesorteerd op slagingspercentage, staan op <a href="/signalen">S
           <form action="/journal/{{ e.id }}/close" method="post" class="close-form">
             <input type="number" step="any" name="exit_price" placeholder="exit prijs" required>
             <input type="datetime-local" name="exit_time" required>
+            <input type="hidden" name="next" value="/account">
             <button type="submit">Sluiten</button>
           </form>
           {% elif e.result_eur is not none %}
