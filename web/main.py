@@ -148,26 +148,47 @@ async def mark_melding_gelezen(notification_id: int, user: dict = Depends(requir
 
 
 @app.get("/signalen")
-async def signalen_page(request: Request, user: dict = Depends(require_login)):
+async def signalen_page(request: Request, alles: bool = False, user: dict = Depends(require_login)):
     """Kale, puur signalen-pagina (geen journaal/portfolio-content, zie
     CLAUDE.md 'pure signals'-uitgangspunt van deze taak): dezelfde
     gedeelde signalen als het dashboard, maar hier gesorteerd op hoogste
     slagingspercentage in plaats van chronologisch. Swing-signalen hebben
     geen pass_pct (nog niet gevalideerd op die tijdshorizon, zie
     signal_processor._build_swing_signal) en horen dus niet tussen een op
-    percentage gesorteerde lijst; die blijven hier buiten beeld."""
+    percentage gesorteerde lijst; die blijven hier buiten beeld.
+
+    Standaard alleen nog open signalen (auto_outcome IS NULL): het hele
+    punt van deze pagina is "wat is er nu", en een allang afgeronde kans
+    met een hoog percentage hoort niet boven een vers signaal te staan.
+    Afgeronde signalen (win/verlies/vervallen) blijven bereikbaar via
+    ?alles=1 — pass_pct blijft dan de sorteersleutel voor open signalen,
+    maar een resolved signaal met een oud, toevallig hoog percentage mag
+    een net binnengekomen open signaal niet meer overstemmen, dus resolved
+    signalen zakken altijd onder de nog-open signalen (en sorteren onderling
+    op meest recent eerst, niet op percentage)."""
     entries = [
         e for e in repo.list_signalen_for_user(user["id"]) if e["pass_pct"] is not None
     ]
+    if not alles:
+        entries = [e for e in entries if e["auto_outcome"] is None]
     for entry in entries:
         entry["user_confirmed"] = repo.user_confirmed(
             entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"]
         )
-    entries.sort(key=lambda e: e["pass_pct"], reverse=True)
+    if alles:
+        # Open signalen eerst (op percentage), pas daarna resolved signalen
+        # (op recentheid) — anders overstemt een oud, toevallig hoog
+        # percentage van een allang afgeronde kans een vers, nog open signaal.
+        open_entries = sorted((e for e in entries if e["auto_outcome"] is None), key=lambda e: e["pass_pct"], reverse=True)
+        resolved_entries = sorted((e for e in entries if e["auto_outcome"] is not None), key=lambda e: e["created_at"], reverse=True)
+        entries = open_entries + resolved_entries
+    else:
+        entries.sort(key=lambda e: e["pass_pct"], reverse=True)
     return templates.TemplateResponse(request, "signalen.html", {
         "user": user,
         "coins": repo.list_coins(),
         "entries": entries,
+        "showing_all": alles,
     })
 
 
@@ -906,6 +927,7 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
         "onboarding": onboarding,
         "onboarding_complete": onboarding_complete,
         "market_scan_enabled": repo.is_market_scan_enabled(),
+        "advanced_factors_enabled": config.ENABLE_ADVANCED_FACTORS,
         "entries": entries,
         "open_entries": open_entries,
         "taken_entries": taken_entries,
