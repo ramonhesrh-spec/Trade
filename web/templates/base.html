@@ -319,7 +319,12 @@
   </div>
   {% endif %}
   <nav>
-    <a href="/dashboard">Dashboard</a>
+    <a href="/signalen">Signalen</a>
+    {# /account komt pas in Task 7 (journaal/portfolio verhuist daarheen);
+       tot die route bestaat wijst deze link naar /dashboard zodat de
+       navigatie nooit een 404 oplevert. Bij Task 7: href hier bijwerken
+       naar /account. #}
+    <a href="/dashboard">Mijn account</a>
     <details class="coin-menu js-accordion">
       <summary>
         Coins

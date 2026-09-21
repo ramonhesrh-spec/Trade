@@ -148,6 +148,30 @@ async def mark_melding_gelezen(notification_id: int, user: dict = Depends(requir
     return {"ok": True}
 
 
+@app.get("/signalen")
+async def signalen_page(request: Request, user: dict = Depends(require_login)):
+    """Kale, puur signalen-pagina (geen journaal/portfolio-content, zie
+    CLAUDE.md 'pure signals'-uitgangspunt van deze taak): dezelfde
+    gedeelde signalen als het dashboard, maar hier gesorteerd op hoogste
+    slagingspercentage in plaats van chronologisch. Swing-signalen hebben
+    geen pass_pct (nog niet gevalideerd op die tijdshorizon, zie
+    signal_processor._build_swing_signal) en horen dus niet tussen een op
+    percentage gesorteerde lijst; die blijven hier buiten beeld."""
+    entries = [
+        e for e in repo.list_signalen_for_user(user["id"]) if e["pass_pct"] is not None
+    ]
+    for entry in entries:
+        entry["user_confirmed"] = repo.user_confirmed(
+            entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"]
+        )
+    entries.sort(key=lambda e: e["pass_pct"], reverse=True)
+    return templates.TemplateResponse(request, "signalen.html", {
+        "user": user,
+        "coins": repo.list_coins(),
+        "entries": entries,
+    })
+
+
 # ---------------------------------------------------------------------------
 # Login
 # ---------------------------------------------------------------------------

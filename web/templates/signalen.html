@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}Signalen — HesPulse{% endblock %}
+{% block content %}
+
+<h2>Signalen</h2>
+<p class="muted" style="margin: -6px 0 4px; max-width: 640px;">Alle signalen, hoogste slagingspercentage eerst. Puur signaalinformatie — je
+journaal en portfolio staan op <a href="/dashboard">Mijn account</a>.</p>
+
+<section class="card" style="--i: 0">
+  {% if not entries %}
+  <p class="muted empty">Nog geen signalen.</p>
+  {% else %}
+  <div class="signal-list">
+    {% for entry in entries %}
+    {{ macros.signal_card(entry) }}
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}

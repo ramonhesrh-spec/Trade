@@ -121,3 +121,25 @@
   <button type="submit" class="button-reset">Verkeerd ingevuld? Terugzetten</button>
 </form>
 {% endmacro %}
+
+{# Kaal signaalkaartje: alleen coin/richting/percentage en de drie niveaus,
+   géén Genomen/Negeren-knoppen of journaal-status — bewust puur signaal-
+   informatie, gebruikt op /signalen (Task 6) en de coinpagina (Task 12).
+   entry.user_confirmed moet door de aanroeper al gezet zijn via
+   repo.user_confirmed(entry.pass_pct, entry.hard_gates_ok, drempel van
+   de ingelogde gebruiker) — deze macro rekent zelf niets uit, anders zou
+   elke aanroeper zijn eigen drempel-vergelijking moeten kennen. #}
+{% macro signal_card(entry) %}
+<div class="signal-card {{ 'is-confirmed' if entry.user_confirmed else 'is-rejected' }}">
+  <div class="signal-card-head">
+    <span class="coin-symbol">{{ entry.coin }}</span>
+    <span class="direction {{ entry.direction }}">{{ entry.direction|upper }}</span>
+    <span class="pass-pct">{{ "%.0f"|format(entry.pass_pct) if entry.pass_pct is not none else "-" }}%</span>
+  </div>
+  <div class="signal-card-levels">
+    Entry {{ "%.4f"|format(entry.price) if entry.price is not none else "-" }} ·
+    Stop {{ "%.4f"|format(entry.stop_loss) if entry.stop_loss else "-" }} ·
+    Take profit {{ "%.4f"|format(entry.take_profit) if entry.take_profit else "-" }}
+  </div>
+</div>
+{% endmacro %}

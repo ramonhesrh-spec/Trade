@@ -1100,6 +1100,7 @@ _JOURNAL_SELECT = """
         COALESCE(je.take_profit_override, s.take_profit) AS take_profit,
         s.stop_loss AS stop_loss_default, s.take_profit AS take_profit_default,
         s.confidence AS confidence, s.technical_confirmed AS technical_confirmed,
+        s.pass_pct AS pass_pct, s.hard_gates_ok AS hard_gates_ok,
         s.rsi AS rsi, s.ema9 AS ema9, s.ema21 AS ema21,
         s.macd AS macd, s.macd_signal AS macd_signal, s.volume_ratio AS volume_ratio,
         s.atr_avg20 AS atr_avg20, s.adx AS adx,
@@ -1114,10 +1115,12 @@ _JOURNAL_SELECT = """
 """
 
 
-def list_recent_signals_for_user(user_id: int, limit: int = 1) -> list[dict]:
-    """Meest recente ECHTE signalen (geen oefentrade-events) die deze
-    gebruiker een logboekregel opleverden, nieuwste eerst. Gebruikt voor
-    het laatste-seintje-bannertje op het dashboard (/api/system_status)."""
+def list_signalen_for_user(user_id: int, limit: int = 500) -> list[dict]:
+    """Alle ECHTE signalen (geen oefentrade-events) die deze gebruiker via
+    zijn eigen logboekregel te zien krijgt, nieuwste eerst. Gedeelde basis
+    voor zowel het laatste-seintje-bannertje (list_recent_signals_for_user,
+    limit=1) als de losstaande, kale Signalen-pagina (/signalen, Task 6),
+    die deze lijst zelf nog op pass_pct herschikt."""
     with db.session() as conn:
         rows = conn.execute(
             _JOURNAL_SELECT + """
@@ -1126,6 +1129,13 @@ def list_recent_signals_for_user(user_id: int, limit: int = 1) -> list[dict]:
             (user_id, limit),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def list_recent_signals_for_user(user_id: int, limit: int = 1) -> list[dict]:
+    """Meest recente ECHTE signalen (geen oefentrade-events) die deze
+    gebruiker een logboekregel opleverden, nieuwste eerst. Gebruikt voor
+    het laatste-seintje-bannertje op het dashboard (/api/system_status)."""
+    return list_signalen_for_user(user_id, limit=limit)
 
 
 def create_journal_entry(
