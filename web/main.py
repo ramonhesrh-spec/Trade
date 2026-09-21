@@ -1724,9 +1724,9 @@ async def update_confirm_threshold_setting(
     if preset not in CONFIRM_THRESHOLD_PRESETS:
         # Onbekende waarde (geknoei met het formulier of een toekomstige
         # preset die nog niet bestaat) mag nooit crashen, negeer stil.
-        return RedirectResponse(url="/dashboard", status_code=303)
+        return RedirectResponse(url="/account", status_code=303)
     repo.update_confirm_threshold(user["id"], CONFIRM_THRESHOLD_PRESETS[preset])
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url="/account", status_code=303)
 
 
 @app.post("/coins/{symbol}/trendlines")
