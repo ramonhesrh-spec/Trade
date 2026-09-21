@@ -939,6 +939,10 @@ table.signals tbody tr.short td:first-child::before { background: var(--red); }
 form.inline-form { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
 form.inline-form label { display: flex; flex-direction: column; font-size: 11px; color: var(--muted); gap: 5px; font-weight: 500; }
 
+form.threshold-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.threshold-option { font-size: 12.5px; font-weight: 600; }
+.threshold-option.is-active { background: var(--accent); border-color: var(--accent); color: #052624; }
+
 input, select, button {
   background: var(--bg-elevated); color: var(--text); border: 1px solid var(--border-interactive);
   border-radius: var(--radius-sm); padding: 7px 10px; font-size: 13px;

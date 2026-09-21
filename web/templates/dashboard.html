@@ -388,6 +388,15 @@
       <p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">Nu uit: HesPulse reageert alleen nog op doorgestuurde berichten.</p>
       {% endif %}
     </form>
+    <form action="/instellingen/drempel" method="post" class="threshold-form" style="margin-top: 12px;">
+      <p class="muted" style="margin: 0 0 6px;">Hoe streng moet een signaal zijn voordat je een melding krijgt?</p>
+      {% for key, pct in {"soepel": 45, "normaal": 60, "streng": 75}.items() %}
+      <button type="submit" name="preset" value="{{ key }}"
+              class="threshold-option{% if user.confirm_threshold_pct == pct %} is-active{% endif %}">
+        {{ key|capitalize }} ({{ pct }}%)
+      </button>
+      {% endfor %}
+    </form>
   </div>
 </section>
 {% if heatmap_weeks %}

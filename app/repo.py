@@ -885,6 +885,18 @@ def update_user_settings(
         )
 
 
+def update_confirm_threshold(user_id: int, threshold_pct: float) -> None:
+    """Zet confirm_threshold_set_at mee op het huidige moment: Task 9's
+    onboarding-check leest dit veld om te weten of een gebruiker de drempel
+    al bewust heeft gekozen (NULL = nog nooit een preset aangeklikt), dus
+    een update van de drempel zonder dit veld zou die check stuk maken."""
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE users SET confirm_threshold_pct = ?, confirm_threshold_set_at = ? WHERE id = ?",
+            (threshold_pct, db.now_iso(), user_id),
+        )
+
+
 # ---------------------------------------------------------------------------
 # Signalen: gedeelde technische toetsing, hetzelfde voor iedereen
 # ---------------------------------------------------------------------------

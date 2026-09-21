@@ -1565,6 +1565,22 @@ async def toggle_market_scan(enabled: str = Form(...), user: dict = Depends(requ
     return RedirectResponse(url="/dashboard", status_code=303)
 
 
+CONFIRM_THRESHOLD_PRESETS = {"soepel": 45.0, "normaal": 60.0, "streng": 75.0}
+
+
+@app.post("/instellingen/drempel")
+async def update_confirm_threshold_setting(
+    preset: str = Form(...),
+    user: dict = Depends(require_login),
+):
+    if preset not in CONFIRM_THRESHOLD_PRESETS:
+        # Onbekende waarde (geknoei met het formulier of een toekomstige
+        # preset die nog niet bestaat) mag nooit crashen, negeer stil.
+        return RedirectResponse(url="/dashboard", status_code=303)
+    repo.update_confirm_threshold(user["id"], CONFIRM_THRESHOLD_PRESETS[preset])
+    return RedirectResponse(url="/dashboard", status_code=303)
+
+
 @app.post("/coins/{symbol}/trendlines")
 async def create_trendline(
     symbol: str,
