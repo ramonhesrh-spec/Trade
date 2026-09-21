@@ -1525,6 +1525,10 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         if pending_entry is not None:
             s["stop_loss"] = pending_entry["stop_loss"]
             s["take_profit"] = pending_entry["take_profit"]
+    for entry in recent_signals:
+        entry["user_confirmed"] = repo.user_confirmed(
+            entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"]
+        )
     winrate = repo.winrate_stats(user["id"])
     open_trades = _add_signal_context(open_trades, winrate)
     recent_signals = _add_signal_context(recent_signals, winrate)

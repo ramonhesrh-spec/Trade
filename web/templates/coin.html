@@ -167,6 +167,16 @@
 </details>
 {% endif %}
 
+<section class="coin-signals">
+  <h2>Signalen voor {{ symbol }}</h2>
+  {% if not recent_signals %}
+  <p class="muted">Nog geen signalen voor deze coin.</p>
+  {% endif %}
+  {% for entry in recent_signals %}
+  {{ macros.signal_card(entry) }}
+  {% endfor %}
+</section>
+
 <details class="stats-collapse js-accordion" style="--i: 3">
   <summary class="stats-summary">
     <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="m19 9-5 5-4-4-3 3"/></svg>
