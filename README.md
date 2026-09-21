@@ -298,6 +298,23 @@ Een systeembrede noodrem staat op het dashboard (Instellingen): staat die
 uit, doet de scan niets die cyclus. Er is geen noodrem per gebruiker, dit
 is een systeembrede instelling.
 
+### Periodieke factor-drift-check
+
+```bash
+sudo cp deploy/crypto-factor-check.service /etc/systemd/system/
+sudo cp deploy/crypto-factor-check.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-factor-check.timer
+```
+
+Draait elke zondagavond om 21:00 (`scripts/backtest_factors.py` handmatig
+draaien blijft mogelijk, maar dit doet dezelfde berekening automatisch en
+waarschuwt zelf). Vergelijkt per technische factor de pass-rate over de
+laatste 50 signalen met zijn bredere historische gemiddelde; zakt een
+factor 15 procentpunt of meer daaronder, dan komt er een admin-only rij op
+`/meldingen` (zichtbaar voor `ADMIN_USERNAME`, zie "Systeemzelfcheck"
+hierboven), als signaal dat de markt mogelijk veranderd is voor die factor.
+
 Een nieuwe database-migratie in deze release (de `signals`-tabel rebuild
 in `app/db.py`, nodig voor autonome signalen zonder brongbericht) draait
 bij het opstarten van `crypto-bot`. Herstart daarom bij deze release

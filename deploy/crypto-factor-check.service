@@ -1,0 +1,9 @@
+[Unit]
+Description=HesPulse - wekelijkse controle op factor-drift
+
+[Service]
+Type=oneshot
+User=crypto
+WorkingDirectory=/opt/crypto-alerts
+EnvironmentFile=/opt/crypto-alerts/.env
+ExecStart=/opt/crypto-alerts/.venv/bin/python3 scripts/factor_drift_check.py

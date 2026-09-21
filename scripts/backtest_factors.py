@@ -27,6 +27,12 @@ import pandas as pd
 
 from app import config, db, exchange, indicators, repo
 
+# Bredere basislijn voor scripts/factor_drift_check.py: "generous maar
+# bounded" — groot genoeg voor een zinvol historisch gemiddelde, maar niet
+# onbegrensd, want evaluate_signal() doet meerdere live exchange-aanroepen
+# per signaal en dit draait als onbewaakte wekelijkse cron.
+FACTOR_DRIFT_HISTORICAL_LIMIT = 200
+
 
 def _historical_df(coin: str, timeframe: str, before: datetime, candles_needed: int = 220) -> pd.DataFrame:
     """Candles die eindigen net voor `before`. ccxt haalt vooruit vanaf een
@@ -145,15 +151,12 @@ def evaluate_signal(row: dict) -> dict:
     return results
 
 
-def main(limit: int) -> None:
-    db.init_db()
-    signals = repo.list_day_trading_signals_for_backtest(limit=limit)
-    print(f"{len(signals)} historische day trading signalen gevonden, backtest start...\n")
-
+def aggregate_pass_rates(results_list: list[dict]) -> dict[str, tuple[int, int]]:
+    """Vouwt een lijst van evaluate_signal()-resultaten samen tot
+    {factor_naam: (aantal_geslaagd, aantal_getoetst)}, None-resultaten
+    (niet te berekenen voor dat signaal) tellen niet mee in total."""
     totals: dict[str, list[int]] = {}
-    for i, row in enumerate(signals, 1):
-        print(f"[{i}/{len(signals)}] {row['coin']} {row['direction']} ({row['created_at'][:16]})...")
-        results = evaluate_signal(row)
+    for results in results_list:
         for factor, ok in results.items():
             if ok is None:
                 continue
@@ -161,6 +164,44 @@ def main(limit: int) -> None:
             totals[factor][1] += 1
             if ok:
                 totals[factor][0] += 1
+    return {factor: (passed, total) for factor, (passed, total) in totals.items()}
+
+
+def compute_factor_pass_rates(
+    lookback: int = 50, historical_limit: int = FACTOR_DRIFT_HISTORICAL_LIMIT
+) -> dict[str, tuple[float, float]]:
+    """Per factor: (pass-rate% over de laatste `lookback` signalen, pass-rate%
+    over de laatste `historical_limit` signalen als bredere basislijn).
+    Evalueert elk signaal in de historical_limit-set maar ÉÉN keer (evaluate_signal
+    doet meerdere live exchange-aanroepen per signaal) en leest de recente
+    deelverzameling terug uit diezelfde al-berekende lijst, in plaats van
+    lookback-signalen een tweede keer te evalueren — anders dubbele
+    API-kosten voor exact de signalen die in beide vensters vallen.
+    list_day_trading_signals_for_backtest geeft meest-recent-eerst terug,
+    dus de eerste `lookback` van de opgehaalde set ZIJN de recente signalen."""
+    signals = repo.list_day_trading_signals_for_backtest(limit=historical_limit)
+    results_list = [evaluate_signal(row) for row in signals]
+    recent_totals = aggregate_pass_rates(results_list[:lookback])
+    historical_totals = aggregate_pass_rates(results_list)
+    rates: dict[str, tuple[float, float]] = {}
+    for factor, (r_passed, r_total) in recent_totals.items():
+        h_passed, h_total = historical_totals.get(factor, (0, 0))
+        if r_total == 0 or h_total == 0:
+            continue  # geen zinvolle vergelijking mogelijk
+        rates[factor] = (r_passed / r_total * 100, h_passed / h_total * 100)
+    return rates
+
+
+def main(limit: int) -> None:
+    db.init_db()
+    signals = repo.list_day_trading_signals_for_backtest(limit=limit)
+    print(f"{len(signals)} historische day trading signalen gevonden, backtest start...\n")
+
+    results_list = []
+    for i, row in enumerate(signals, 1):
+        print(f"[{i}/{len(signals)}] {row['coin']} {row['direction']} ({row['created_at'][:16]})...")
+        results_list.append(evaluate_signal(row))
+    totals = aggregate_pass_rates(results_list)
 
     print("\n=== Resultaat ===")
     if not signals:
