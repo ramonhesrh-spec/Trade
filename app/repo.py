@@ -1066,7 +1066,7 @@ def update_signal(signal_id: int, data: dict) -> None:
         "price", "rsi", "macd", "macd_signal", "volume_ratio", "ema9", "ema21", "atr",
         "atr_avg20", "adx",
         "technical_confirmed", "pass_pct", "hard_gates_ok", "confidence", "reason", "stop_loss", "take_profit",
-        "context_note", "plain_explanation",
+        "context_note", "plain_explanation", "nearest_sr_zone_price",
     ]
     values = [data.get(f) for f in fields]
     with db.session() as conn:
