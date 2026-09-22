@@ -171,11 +171,14 @@ def _nearest_level(current_price: float, atr: float, levels: list[dict]) -> Opti
 
 async def check_pending_signals() -> None:
     """Signalen die nog niet genomen zijn: als de prijs weer terugkomt naar
-    het niveau waarop het signaal binnenkwam, óf naar een bron niveau uit
-    een gedeelde screenshot (support, weerstand, retest), is dat voor day
-    trading vaak het beste instapmoment, niet het moment van de eerste
-    melding zelf. Dit is de proactieve kant, naast de reactieve verwerking
-    van een nieuw Discord bericht."""
+    de zelf-gedetecteerde betere-entry-zone (suggested_entry_low/high, zie
+    signal_processor.py), naar het niveau waarop het signaal binnenkwam,
+    óf naar een bron niveau uit een gedeelde screenshot (support,
+    weerstand, retest), is dat voor day trading vaak het beste
+    instapmoment, niet het moment van de eerste melding zelf. Dit is de
+    proactieve kant, naast de reactieve verwerking van een nieuw Discord
+    bericht. De entry-zone krijgt voorrang op de andere twee: die zone is
+    expliciet gekozen als beter dan het kale signaalniveau."""
     entries = repo.list_pending_entries_with_price()
     logger.info("%d nog niet genomen signalen om te checken", len(entries))
 
@@ -196,26 +199,40 @@ async def check_pending_signals() -> None:
         if current_price is None:
             continue
 
+        # Geen minimumleeftijd zoals bij at_signal_level hieronder: de
+        # entry-zone wordt bewust geclampt om nooit de prijs op het moment
+        # van berekenen te bevatten (zie signal_processor.py), dus een
+        # match hier is altijd echte beweging richting een betere prijs,
+        # nooit "nog niet weg geweest" zoals bij een vers signaal.
+        in_entry_zone = (
+            entry["suggested_entry_low"] is not None
+            and entry["suggested_entry_high"] is not None
+            and entry["suggested_entry_low"] <= current_price <= entry["suggested_entry_high"]
+        )
+
         signal_age = datetime.now(timezone.utc) - datetime.fromisoformat(entry["signal_created_at"])
         at_signal_level = (
-            signal_age >= timedelta(minutes=PENDING_LEVEL_MIN_AGE_MINUTES)
+            not in_entry_zone
+            and signal_age >= timedelta(minutes=PENDING_LEVEL_MIN_AGE_MINUTES)
             and entry["signal_price"] is not None
             and abs(current_price - entry["signal_price"]) <= entry["atr"] * PENDING_LEVEL_ATR_MULTIPLIER
         )
 
         matched_level = None
-        if not at_signal_level:
+        if not in_entry_zone and not at_signal_level:
             if coin not in coin_levels:
                 coin_levels[coin] = repo.list_source_levels(coin)
             matched_level = _nearest_level(current_price, entry["atr"], coin_levels[coin])
 
-        if not at_signal_level and not matched_level:
+        if not in_entry_zone and not at_signal_level and not matched_level:
             continue
 
         # Zie de gelijknamige why-comment in check_open_trades hierboven:
         # geen telegram_chat_id-gate meer, push_notify.send_push handelt een
         # gebruiker zonder push-abonnement zelf al af.
-        if matched_level:
+        if in_entry_zone:
+            level_line = f"Betere entry: {entry['suggested_entry_low']:.4f}–{entry['suggested_entry_high']:.4f}"
+        elif matched_level:
             level_desc = f"{matched_level['price_level']}"
             if matched_level["pattern_name"]:
                 level_desc += f" ({matched_level['pattern_name']})"
@@ -224,7 +241,8 @@ async def check_pending_signals() -> None:
             level_line = f"Signaalniveau: {entry['signal_price']:.4f}"
 
         title = f"🔔 {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
-        body = f"Terug bij een interessant niveau ({entry['confidence']}) · {level_line} · Nu {current_price:.4f}"
+        heading = "Terug in de betere-entry-zone" if in_entry_zone else "Terug bij een interessant niveau"
+        body = f"{heading} ({entry['confidence']}) · {level_line} · Nu {current_price:.4f}"
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
         try:
             await push_notify.send_push(entry["user_id"], title, body, f"/coins/{coin}", silent=silent)

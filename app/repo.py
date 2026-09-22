@@ -1691,12 +1691,16 @@ def list_pending_entries_with_price() -> list[dict]:
     of de prijs weer dicht bij het niveau van een nog niet genomen signaal
     komt. Gebruikt dezelfde level_alert_sent vlag als de SL/TP check op
     open trades: een regel zonder eigen entry kan die twee nooit
-    tegelijk nodig hebben, dus hergebruik is hier veilig."""
+    tegelijk nodig hebben, dus hergebruik is hier veilig.
+    suggested_entry_low/high erbij voor de "terug in de betere-entry-zone"
+    check, die voorrang krijgt op de andere twee triggers."""
     with db.session() as conn:
         rows = conn.execute(
             """SELECT je.id AS id, je.user_id AS user_id,
                       s.coin AS coin, s.direction AS direction, s.price AS signal_price,
                       s.atr AS atr, s.confidence AS confidence, s.created_at AS signal_created_at,
+                      s.suggested_entry_low AS suggested_entry_low,
+                      s.suggested_entry_high AS suggested_entry_high,
                       u.username AS username, u.telegram_chat_id AS telegram_chat_id,
                       u.quiet_hours_start AS quiet_hours_start, u.quiet_hours_end AS quiet_hours_end
                FROM journal_entries je
