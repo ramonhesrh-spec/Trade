@@ -933,11 +933,15 @@ def get_signal(signal_id: int) -> Optional[dict]:
 
 def list_day_trading_signals_for_backtest(limit: int = 50) -> list[dict]:
     """Echte (niet-oefen) day trading signalen, meest recent eerst, voor
-    scripts/backtest_factors.py: hoeveel van je eigen historische signalen
-    zouden de nieuwe factoren gehaald hebben."""
+    scripts/backtest_factors.py (hoeveel van je eigen historische signalen
+    zouden de nieuwe factoren gehaald hebben) en
+    scripts/backtest_hard_gates.py (hoeveel zouden de nieuwe harde eisen
+    gehaald hebben). price/stop_loss/take_profit zijn de daadwerkelijk
+    gebruikte niveaus op dat moment, nodig voor een R:R-herberekening
+    zonder een aparte exchange-aanroep."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT id, coin, direction, created_at FROM signals
+            """SELECT id, coin, direction, created_at, price, stop_loss, take_profit FROM signals
                WHERE category = 'day_trading' AND is_practice = 0
                ORDER BY created_at DESC LIMIT ?""",
             (limit,),
