@@ -209,6 +209,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE signals ADD COLUMN suggested_entry_low REAL")
     if "suggested_entry_high" not in existing_signals:
         conn.execute("ALTER TABLE signals ADD COLUMN suggested_entry_high REAL")
+    if "pattern_name" not in existing_signals:
+        conn.execute("ALTER TABLE signals ADD COLUMN pattern_name TEXT")
     # Index hier aanmaken, nooit in schema.sql: op het moment dat schema.sql
     # voor een NIEUWE database draait bestaat de kolom al, maar op een
     # bestaande database bestond hij een regel geleden nog niet. IF NOT EXISTS
@@ -229,6 +231,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE coins ADD COLUMN last_breakout_retest_key TEXT")
     if "last_trendline_retest_key" not in existing_coins:
         conn.execute("ALTER TABLE coins ADD COLUMN last_trendline_retest_key TEXT")
+    if "last_pattern_key" not in existing_coins:
+        conn.execute("ALTER TABLE coins ADD COLUMN last_pattern_key TEXT")
 
     existing_prop_evaluations = {row["name"] for row in conn.execute("PRAGMA table_info(prop_evaluations)")}
     if "danger_alert_sent" not in existing_prop_evaluations:

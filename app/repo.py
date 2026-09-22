@@ -759,6 +759,21 @@ def set_trendline_retest_key(coin: str, key: str) -> None:
         )
 
 
+def get_pattern_key(coin: str) -> Optional[str]:
+    with db.session() as conn:
+        row = conn.execute(
+            "SELECT last_pattern_key FROM coins WHERE symbol = ?", (coin.upper(),),
+        ).fetchone()
+        return row["last_pattern_key"] if row else None
+
+
+def set_pattern_key(coin: str, key: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE coins SET last_pattern_key = ? WHERE symbol = ?", (key, coin.upper()),
+        )
+
+
 def list_coins() -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(
@@ -907,7 +922,7 @@ def insert_signal(data: dict) -> int:
         "macd_signal", "volume_ratio", "ema9", "ema21", "atr", "atr_avg20", "adx",
         "technical_confirmed", "pass_pct", "hard_gates_ok", "confidence", "reason", "stop_loss", "take_profit",
         "context_note", "is_practice", "plain_explanation", "trade_type", "nearest_sr_zone_price",
-        "suggested_entry_low", "suggested_entry_high",
+        "suggested_entry_low", "suggested_entry_high", "pattern_name",
     ]
     values = [
         data.get("is_practice", 0) if f == "is_practice"
@@ -1111,7 +1126,7 @@ _JOURNAL_SELECT = """
         je.evaluation_id AS evaluation_id,
         je.dismissed_at AS dismissed_at,
         s.coin AS coin, s.direction AS direction, s.category AS category,
-        s.trade_type AS trade_type,
+        s.trade_type AS trade_type, s.pattern_name AS pattern_name,
         s.price AS price,
         s.message_id AS message_id,
         COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss,

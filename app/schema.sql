@@ -150,7 +150,12 @@ CREATE TABLE IF NOT EXISTS coins (
     -- (app/market_scanner.py): "richting:soort:lijnwaarde" van de laatst
     -- gemelde trendlijn voor deze coin. Zelfde soort dedup als
     -- last_breakout_retest_key hierboven, nu voor een diagonale lijn.
-    last_trendline_retest_key TEXT
+    last_trendline_retest_key TEXT,
+    -- Dedup voor de patroon-melding (app/market_scanner.py):
+    -- "richting:patroonnaam:neckline" van het laatst gemelde patroon voor
+    -- deze coin. Zelfde soort dedup als last_breakout_retest_key/
+    -- last_trendline_retest_key hierboven.
+    last_pattern_key TEXT
 );
 
 -- Coins waarvoor een gebruiker zelf geen Telegram-meldingen meer wil,
@@ -203,6 +208,12 @@ CREATE TABLE IF NOT EXISTS signals (
     -- confirm_threshold_pct, zodat de technische berekening en de
     -- AI-uitleg maar één keer per signaal hoeven te draaien.
     pass_pct REAL,
+    -- Naam van het herkende chart-patroon (bijv. "head & shoulders",
+    -- "rising wedge"), alleen gezet als trade_type = 'patroon'. Puur
+    -- weergave, telt niet mee in enige berekening — de entry/stop/take
+    -- van het signaal zelf zijn al op het patroon gebaseerd op het
+    -- moment van aanmaken (zie app/patterns.py).
+    pattern_name TEXT,
     -- Of de twee harde eisen (Uitgerektheid, BTC-trend) allebei klopten,
     -- los van pass_pct. Nodig omdat "technical_confirmed" al het EINDRESULTAAT
     -- op de globale drempel is; om een ANDERE (per-gebruiker) drempel tegen
