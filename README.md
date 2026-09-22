@@ -344,17 +344,18 @@ bij: die draait, sinds de kritischere signaaltoetsing, altijd als eigen
 harde eis, los van of deze uitgebreide toetsing aan staat — zie de bullet
 hierover bij "Praktische keuzes in deze versie" hieronder.
 
-Op twee na is geen van deze vijftien factoren apart hard vereist:
-Uitgerektheid (basisfactor) en BTC-trend (voor altcoins met een duidelijk
-trending BTC) moeten allebei altijd kloppen, ongeacht de rest. De overige
-achttien factoren (4 basis + 3 vast + 11 uitgebreid) tellen gezamenlijk mee,
-en minstens 60% moet kloppen (zie `CONFIRM_THRESHOLD` in
-`app/indicators.py`).
+Van deze vijftien factoren is alleen BTC-trend (voor altcoins met een
+duidelijk trending BTC) apart hard vereist, net als de basisfactor
+Uitgerektheid buiten deze vijftien om — die twee moeten allebei altijd
+kloppen, ongeacht de rest. De overige achttien factoren (4 basis + 3 vast +
+11 uitgebreid) tellen gezamenlijk mee, en minstens 60% moet kloppen (zie
+`CONFIRM_THRESHOLD` in `app/indicators.py`).
 
-Staat standaard uit. De drempels (ADX 20, ATR moet stijgen, 2 miljoen
-volume) zijn leerboek-standaarden, nog niet getoetst aan je eigen
-signaalgeschiedenis. Draai eerst het backtest-script om te zien hoe streng
-dat in de praktijk uitpakt voor jouw eigen signalen:
+Staat standaard uit. De drempels (ADX minimaal 15, ATR mag tot 10% onder
+het 20-candle-gemiddelde zakken, 2 miljoen volume) zijn leerboek-standaarden,
+nog niet getoetst aan je eigen signaalgeschiedenis. Draai eerst het
+backtest-script om te zien hoe streng dat in de praktijk uitpakt voor jouw
+eigen signalen:
 
 ```bash
 python3 scripts/backtest_factors.py --limit 50
