@@ -150,3 +150,77 @@ def find_reversal_patterns(df: pd.DataFrame) -> list[PatternMatch]:
     matches += find_head_and_shoulders(df, "high")
     matches += find_head_and_shoulders(df, "low")
     return matches
+
+
+# Hoeveel de breedte tussen de twee lijnen aan begin en eind van het
+# venster nog van elkaar mag afwijken (als fractie van de gemiddelde
+# breedte) om als "ongeveer evenwijdig" (kanaal) te tellen in plaats van
+# convergerend/divergerend (wedge/driehoek).
+CHANNEL_PARALLEL_TOLERANCE_PCT = 0.15
+
+# De twee lijnen moeten minstens dit veelvoud van de ATR uit elkaar
+# liggen, anders is de "vorm" ruis: twee bijna samenvallende lijnen zijn
+# geen bruikbaar kanaal/wedge.
+MIN_PATTERN_WIDTH_ATR_MULTIPLE = 0.5
+
+
+def classify_channel_wedge(
+    trendlines: list[indicators.Trendline], window_len: int, atr: float,
+) -> Optional[PatternMatch]:
+    """Herkent kanaal/wedge uit de twee lijnen van indicators.detect_trendlines:
+    resistance (bovenlijn) en support (onderlijn) allebei dezelfde kant op
+    hellend. Beide omhoog en ongeveer evenwijdig -> rising channel
+    (bearish, breekt naar beneden door de steunlijn); beide omhoog en
+    convergerend -> rising wedge (zelfde richting, scherper). Beide omlaag
+    en evenwijdig -> descending channel (bullish, breekt naar boven door
+    de weerstandlijn); beide omlaag en convergerend -> falling wedge.
+
+    Driehoek-vormen (tegengestelde hellingen: symmetrical/expanding
+    triangle) hebben geen betrouwbare richting uit geometrie alleen — het
+    patronenblad van de gebruiker plaatst ze zelf apart als "50/50 kans".
+    Die blijven hier bewust ongedetecteerd (geen PatternMatch, dus geen
+    aparte melding); een echte uitbraak van zo'n vorm wordt al gevangen
+    door de bestaande indicators.find_trendline_breakout_retest via
+    market_scanner._check_trendline_retest, ongeacht welke kant hij
+    doorbreekt."""
+    resistance = next((l for l in trendlines if l.kind == "resistance"), None)
+    support = next((l for l in trendlines if l.kind == "support"), None)
+    if resistance is None or support is None:
+        return None
+
+    start_idx, end_idx = 0, window_len - 1
+    width_start = resistance.value_at(start_idx) - support.value_at(start_idx)
+    width_end = resistance.value_at(end_idx) - support.value_at(end_idx)
+    if width_start <= 0 or width_end <= 0:
+        return None  # lijnen kruisen al binnen dit venster, geen bruikbare vorm
+    if atr and min(width_start, width_end) < MIN_PATTERN_WIDTH_ATR_MULTIPLE * atr:
+        return None
+
+    res_rising = resistance.slope > 0
+    sup_rising = support.slope > 0
+    if res_rising != sup_rising:
+        return None  # driehoek-vorm, zie docstring
+
+    avg_width = (width_start + width_end) / 2
+    width_change_pct = (width_end - width_start) / avg_width
+    parallel = abs(width_change_pct) <= CHANNEL_PARALLEL_TOLERANCE_PCT
+
+    if res_rising:
+        name = "rising channel" if parallel else "rising wedge"
+        direction = "short"
+        breakout_level = support.value_at(end_idx)
+        stop_loss = resistance.value_at(end_idx) * (1 + PATTERN_STOP_MARGIN_PCT)
+        height = width_start
+        target = breakout_level - height
+    else:
+        name = "descending channel" if parallel else "falling wedge"
+        direction = "long"
+        breakout_level = resistance.value_at(end_idx)
+        stop_loss = support.value_at(end_idx) * (1 - PATTERN_STOP_MARGIN_PCT)
+        height = width_start
+        target = breakout_level + height
+
+    return PatternMatch(
+        name=name, direction=direction, neckline=breakout_level, extreme=stop_loss,
+        target=target, stop_loss=stop_loss, confirmed_index=end_idx, pattern_kind="channel_wedge",
+    )
