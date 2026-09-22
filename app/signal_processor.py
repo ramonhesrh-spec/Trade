@@ -49,6 +49,12 @@ SWING_WATCH_ATR_MULTIPLIER = 0.5
 # ooit dichtbij kwam, voor hij automatisch vervalt (12 weken).
 SWING_WATCH_MAX_AGE_DAYS = 84
 
+# Onder deze verhouding is een setup geen goede trade meer, ongeacht hoeveel
+# andere factoren wel kloppen — een niveau-gebaseerde stop
+# (risk.compute_stop_take_from_levels) kan de verhouding laten zakken tot
+# zijn eigen ondergrens van 1:1, dat is lager dan hier acceptabel is.
+MIN_RISK_REWARD_RATIO = 1.5
+
 
 def _price_near_level(current_price: float, level_price: float, atr: float) -> bool:
     """Zuivere functie: is de prijs dichtbij genoeg om de volledige
@@ -749,6 +755,13 @@ async def process_day_trading_signal(
         stop_take = risk.compute_stop_take(
             interp.direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high,
         )
+    risk_distance = abs(ind.price - stop_take.stop_loss)
+    reward_distance = abs(stop_take.take_profit - ind.price)
+    risk_reward_ratio = (reward_distance / risk_distance) if risk_distance else 0.0
+    if risk_reward_ratio < MIN_RISK_REWARD_RATIO:
+        hard_gates_ok = False
+        confirmed = False
+        reason += f" | ✗ Risico/rendement: {risk_reward_ratio:.1f} tegen 1, onder de ondergrens van {MIN_RISK_REWARD_RATIO}"
     context_note = _build_context_note(interp.coin, interp.direction)
 
     confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"
