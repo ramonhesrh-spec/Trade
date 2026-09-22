@@ -135,7 +135,17 @@ async def check_signal_outcomes() -> None:
         hit = _level_hit(signal["direction"], current_price, signal["stop_loss"], signal["take_profit"])
         if hit:
             outcome = "take_profit" if hit == "take profit" else "stop_loss"
-            repo.mark_signal_auto_outcome(signal["id"], outcome, db.now_iso())
+            occurred_at = db.now_iso()
+            repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at)
+            # Een zelf-gedetecteerde zone die net een stop loss veroorzaakte
+            # gaat op cooldown (zie repo.recent_sr_zone_failure) zodat een
+            # volgend signaal vlakbij dezelfde rand niet meteen dezelfde fout
+            # herhaalt. Bron-niveaus uit een gedeeld screenshot tellen hier
+            # niet mee: die komen niet uit onze eigen zone-detectie.
+            if outcome == "stop_loss" and signal["nearest_sr_zone_price"] is not None:
+                repo.record_sr_zone_failure(
+                    signal["coin"], signal["direction"], signal["nearest_sr_zone_price"], occurred_at,
+                )
             logger.info("Signaal %s (%s) automatisch afgesloten: %s", signal["id"], coin, outcome)
             continue
 

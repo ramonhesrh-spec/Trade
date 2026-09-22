@@ -1680,7 +1680,7 @@ def list_unresolved_signals_with_levels() -> list[dict]:
     markeerde."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT id, coin, direction, stop_loss, take_profit, created_at
+            """SELECT id, coin, direction, stop_loss, take_profit, created_at, nearest_sr_zone_price
                FROM signals
                WHERE auto_outcome IS NULL
                  AND stop_loss IS NOT NULL

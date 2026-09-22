@@ -748,10 +748,36 @@ async def process_day_trading_signal(
             interp.coin, interp.direction, df, ind.price, ind.atr, zones,
         )
 
+    # Dezelfde edges/kant-bepaling-logica als indicators.check_sr_zone gebruikt
+    # intern, hier apart herhaald in plaats van check_sr_zone's eigen
+    # (name, ok, detail)-vorm uit te breiden — dat zou die vorm inconsistent
+    # maken met elke andere factor-functie hier, en de twee aanroepers van
+    # check_sr_zone (dit bestand, scripts/backtest_factors.py) zouden dan
+    # allebei aangepast moeten worden voor een waarde die alleen hier nodig is.
+    edges = [edge for zone in zones for edge in (zone.price_low, zone.price_high)]
+    if interp.direction.lower() == "long":
+        zone_candidates = [e for e in edges if e < ind.price]
+        nearest_sr_zone_price = max(zone_candidates) if zone_candidates else None
+    else:
+        zone_candidates = [e for e in edges if e > ind.price]
+        nearest_sr_zone_price = min(zone_candidates) if zone_candidates else None
+
     confirmed, reason, pass_pct, hard_gates_ok = indicators.confirms_direction(
         ind, interp.direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
         daily_trend_factor=daily_trend_factor,
     )
+
+    # Zelfde zone die de laatste keer al een stop loss veroorzaakte: een
+    # nieuw signaal vlakbij diezelfde rand herhaalt vermoedelijk dezelfde
+    # fout, dus telt hier mee als harde eis naast de andere confirms_direction-
+    # uitkomst in plaats van als losse parallelle check.
+    if nearest_sr_zone_price is not None and repo.recent_sr_zone_failure(
+        interp.coin, interp.direction, nearest_sr_zone_price, ind.atr,
+    ):
+        hard_gates_ok = False
+        confirmed = False
+        reason += " | ✗ Zone recent gefaald: deze steun/weerstand-zone veroorzaakte de laatste 3 dagen al een stop loss"
+
     # Geen bericht (autonoom marktscan-signaal, zie app/market_scanner.py)
     # betekent geen bron-niveaus om mee te wegen — die komen altijd uit een
     # gedeeld screenshot. De SR-zone-niveaus (zone_levels, hieronder)
@@ -827,6 +853,7 @@ async def process_day_trading_signal(
         "technical_confirmed": int(confirmed),
         "pass_pct": pass_pct,
         "hard_gates_ok": int(hard_gates_ok),
+        "nearest_sr_zone_price": nearest_sr_zone_price,
         "confidence": confidence,
         "reason": reason,
         "stop_loss": stop_take.stop_loss,
