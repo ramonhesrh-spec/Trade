@@ -425,7 +425,7 @@ def _resolve_signal_risk(
 
 async def _fanout_confirmed_signal(
     signal_id: int, coin: str, direction: str, entry_price: float,
-    stop_loss: float, take_profit: float, title: str,
+    stop_loss: float, take_profit: float, premise_level: float, title: str,
     make_body: Callable[[float, float, bool], str],
 ) -> None:
     """Deelt een al-bevestigd signaal (geen gepoold percentage, altijd
@@ -436,16 +436,29 @@ async def _fanout_confirmed_signal(
     fan-out-logica, alleen titel en berichttekst verschillen per soort.
     make_body ontvangt de EFFECTIEVE (mogelijk ingeperkte) stop/take voor
     deze ene gebruiker en of die stop gecapt werd, zodat de melding altijd
-    de daadwerkelijke cijfers voor deze gebruiker toont."""
+    de daadwerkelijke cijfers voor deze gebruiker toont.
+
+    entry_price is de LIVE prijs op het moment van bevestiging (gebruikt
+    voor position sizing en de coin-link in de pushmelding). premise_level
+    is het niveau waar de hele trade-premisse op steunt (het bewaakte
+    bron-niveau bij een swing-watch, de patroon-trigger bij een
+    chart-patroon) — dat kan inmiddels van entry_price afwijken (prijs
+    beweegt tussen het zetten van het niveau en de latere bevestiging), dus
+    de twee zijn expres losse parameters."""
     for user in repo.list_users():
         active_eval_for_display = repo.get_active_evaluation(user["id"])
         risk_eur, evaluation_id, cost_rate, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
             user, direction, entry_price, stop_loss, take_profit,
         )
+        # Vergeleken met premise_level, niet met de live entry_price: een
+        # gecapte stop die voorbij het niveau ligt waar de trade zijn
+        # bestaansrecht aan ontleent, verdedigt die premisse niet meer, dan
+        # is de ongecapte stop nuttiger dan een gecapte stop die zijn reden
+        # van bestaan al kwijt is.
         stop_was_capped = effective_stop_loss != stop_loss
         if stop_was_capped and (
-            (direction == "long" and effective_stop_loss >= entry_price)
-            or (direction == "short" and effective_stop_loss <= entry_price)
+            (direction == "long" and effective_stop_loss >= premise_level)
+            or (direction == "short" and effective_stop_loss <= premise_level)
         ):
             effective_stop_loss, effective_take_profit = stop_loss, take_profit
             stop_was_capped = False
@@ -466,6 +479,12 @@ async def _fanout_confirmed_signal(
                 "deze trade telt niet mee voor je evaluatie."
             )
 
+        # Geen telegram_chat_id-gate: push_notify.send_push slaat een
+        # gebruiker zonder push-abonnement zelf al stilzwijgend over. Geen
+        # is_coin_muted-check: mute geldt bewust alleen voor day-trading
+        # meldingen (zie de spec), dit is een autonoom bevestigd signaal
+        # (swing-watch of chart-patroon) dat juist bedoeld is om een grote
+        # kans nooit te missen.
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             body = make_body(effective_stop_loss, effective_take_profit, stop_was_capped)
@@ -558,6 +577,7 @@ async def run_swing_check(watch_id: int) -> None:
 
     await _fanout_confirmed_signal(
         signal_id, coin, direction, ind_4h.price, stop_take.stop_loss, stop_take.take_profit,
+        premise_level=watch["price_level"],
         title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, swing-kans",
         make_body=_swing_body,
     )
