@@ -129,10 +129,17 @@
    repo.user_confirmed(entry.pass_pct, entry.hard_gates_ok, drempel van
    de ingelogde gebruiker) — deze macro rekent zelf niets uit, anders zou
    elke aanroeper zijn eigen drempel-vergelijking moeten kennen. #}
+{# signal.id verschilt van bron: /signalen levert journal_entries.id via
+   _JOURNAL_SELECT (signal_id is dan de echte signals.id), de coinpagina
+   levert signals.id rechtstreeks via SELECT s.* (geen signal_id-kolom).
+   Deze anchor moet in beide gevallen naar dezelfde, echte signals.id
+   wijzen, anders springt de coin-link van /signalen naar de verkeerde
+   kaart op de coinpagina. #}
 {% macro signal_card(entry) %}
-<div class="signal-card {{ 'is-confirmed' if entry.user_confirmed else 'is-rejected' }}">
+{% set anchor_id = entry.signal_id if entry.signal_id is defined and entry.signal_id else entry.id %}
+<div class="signal-card {{ 'is-confirmed' if entry.user_confirmed else 'is-rejected' }}" id="signal-{{ anchor_id }}">
   <div class="signal-card-head">
-    <span class="coin-symbol">{{ entry.coin }}</span>
+    <a class="coin-symbol" href="/coins/{{ entry.coin }}#signal-{{ anchor_id }}">{{ entry.coin }}</a>
     <span class="direction {{ entry.direction }}">{{ entry.direction|upper }}</span>
     <span class="pass-pct">{{ "%.0f"|format(entry.pass_pct) if entry.pass_pct is not none else "-" }}%</span>
     {% if entry.auto_outcome == "take_profit" %}<span class="badge badge-outcome-win">✓ take profit</span>
@@ -149,6 +156,14 @@
   <div class="signal-card-entry-zone muted">
     Mogelijk betere entry: {{ "%.4f"|format(entry.suggested_entry_low) }}–{{ "%.4f"|format(entry.suggested_entry_high) }}
   </div>
+  {% endif %}
+  {% if entry.reason %}
+  <details class="confidence-detail js-accordion">
+    <summary class="confidence-why">waarom {{ "%.0f"|format(entry.pass_pct) ~ "%" if entry.pass_pct is not none else "dit signaal" }}?</summary>
+    <div class="reason-popup">
+      {{ reason_popup(entry) }}
+    </div>
+  </details>
   {% endif %}
 </div>
 {% endmacro %}
