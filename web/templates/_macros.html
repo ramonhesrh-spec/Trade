@@ -18,7 +18,13 @@
    daily-factor altijd als mislukt (die regel begint met "Daily: ", niet met
    "✓") en negeerde de scheiding tussen de twee tijdshorizons. #}
 {% macro reason_factors(entry, p_style='') %}
-{% if entry.trade_type != 'swing' %}
+{% if entry.trade_type == "patroon" %}
+{# entry.reason is hier één platte zin ("Patroon: ..., richting ..."), geen
+   " | "-gescheiden factoren zoals dagtrading — op " | " splitsen en de
+   ✓/✗-kleuring toepassen zou de zin altijd rood ("mislukt") kleuren, terwijl
+   het gewoon een neutrale beschrijving van het herkende patroon is. #}
+<p class="muted"{% if p_style %} style="{{ p_style }}"{% endif %}>{{ entry.reason }}</p>
+{% elif entry.trade_type != 'swing' %}
 {% for factor in entry.reason.split(" | ") %}
 <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}"{% if p_style %} style="{{ p_style }}"{% endif %}>{{ factor }}</p>
 {% endfor %}
@@ -34,10 +40,12 @@
 
 {% macro reason_popup(entry) %}
 {% if entry.plain_explanation %}<p class="plain-explanation">{{ entry.plain_explanation }}</p>{% endif %}
-{% if entry.trade_type != 'swing' %}
-<p class="muted reason-legend">De vinkjes hieronder zijn nu gemeten (RSI, volume, trend, momentum). De slagingskans hierboven is een inschatting op basis van eerdere trades, geen garantie voor deze trade.</p>
-{% else %}
+{% if entry.trade_type == "swing" %}
 <p class="muted reason-legend">Twee losse toetsen, geen gecombineerd cijfer: dit is nog niet gevalideerd op deze tijdshorizon zoals de day-trading-toets dat wel is.</p>
+{% elif entry.trade_type == "patroon" %}
+<p class="muted reason-legend">Herkend chart-patroon, geen gepoold percentage: entry/stop/take zijn gebaseerd op de gemeten beweging van het patroon zelf.</p>
+{% else %}
+<p class="muted reason-legend">De vinkjes hieronder zijn nu gemeten (RSI, volume, trend, momentum). De slagingskans hierboven is een inschatting op basis van eerdere trades, geen garantie voor deze trade.</p>
 {% endif %}
 {{ reason_factors(entry) }}
 {% endmacro %}
@@ -145,6 +153,8 @@
     <span class="pass-pct">{{ "%.0f"|format(entry.pass_pct) }}%</span>
     {% elif entry.trade_type == "swing" %}
     <span class="badge badge-swing" title="Bevestigd op een bewaakt steun/weerstand-niveau, geen gepoold percentage">swing</span>
+    {% elif entry.trade_type == "patroon" %}
+    <span class="badge badge-swing" title="Chart-patroon herkend door HesPulse, geen gepoold percentage">{{ entry.pattern_name }}</span>
     {% endif %}
     {% if entry.auto_outcome == "take_profit" %}<span class="badge badge-outcome-win">✓ take profit</span>
     {% elif entry.auto_outcome == "stop_loss" %}<span class="badge badge-outcome-loss">✗ stop loss</span>
@@ -156,7 +166,11 @@
     Stop {{ "%.4f"|format(entry.stop_loss) if entry.stop_loss else "-" }} ·
     Take profit {{ "%.4f"|format(entry.take_profit) if entry.take_profit else "-" }}
   </div>
-  {% if entry.suggested_entry_low is defined and entry.suggested_entry_low is not none %}
+  {% if entry.trade_type == "patroon" and entry.suggested_entry_low is defined and entry.suggested_entry_low is not none %}
+  <div class="signal-card-entry-zone muted">
+    Retest: {{ "%.4f"|format(entry.suggested_entry_low) }}–{{ "%.4f"|format(entry.suggested_entry_high) }}
+  </div>
+  {% elif entry.suggested_entry_low is defined and entry.suggested_entry_low is not none %}
   <div class="signal-card-entry-zone muted">
     Mogelijk betere entry: {{ "%.4f"|format(entry.suggested_entry_low) }}–{{ "%.4f"|format(entry.suggested_entry_high) }}
   </div>
