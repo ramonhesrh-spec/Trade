@@ -70,7 +70,7 @@
 {% macro open_trade_body(e, redirect_to=none) %}
 {% if e.reason %}
 <details class="confidence-detail js-accordion">
-  <summary class="confidence-why">{% if e.trade_type == 'swing' %}waarom dit bewaakte niveau?{% else %}waarom {{ e.confidence.split(" ")[0] }}?{% endif %}</summary>
+  <summary class="confidence-why">{% if e.trade_type == 'swing' %}waarom dit bewaakte niveau?{% elif e.trade_type == 'patroon' %}waarom dit patroon?{% else %}waarom {{ e.confidence.split(" ")[0] }}?{% endif %}</summary>
   <div class="reason-popup">
     {{ reason_popup(e) }}
   </div>
