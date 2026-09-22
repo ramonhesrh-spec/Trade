@@ -287,12 +287,12 @@ def _check_neckline_retest(df: pd.DataFrame, match: PatternMatch, atr: float) ->
     if match.direction == "short":
         if (since > match.neckline).any():
             return None
-        if current <= match.neckline + tolerance:
+        if abs(current - match.neckline) <= tolerance:
             return (match.neckline - tolerance, match.neckline + tolerance)
     else:
         if (since < match.neckline).any():
             return None
-        if current >= match.neckline - tolerance:
+        if abs(current - match.neckline) <= tolerance:
             return (match.neckline - tolerance, match.neckline + tolerance)
     return None
 
