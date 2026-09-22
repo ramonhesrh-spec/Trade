@@ -5,14 +5,22 @@ al getoond worden."""
 
 
 def build_advice(signal: dict) -> str:
-    # technical_confirmed betekent voor een swing-signaal iets anders (het
-    # bewaakte niveau is bevestigd, geen 3-van-4-toets), dus het
-    # day-trading-advies eronder klopt er niet voor.
+    # technical_confirmed betekent voor een swing- of patroon-signaal iets
+    # anders (het bewaakte niveau respectievelijk het patroon is bevestigd,
+    # geen 3-van-4-toets), dus het day-trading-advies eronder klopt er niet
+    # voor.
     if signal.get("trade_type") == "swing":
         return (
             "Geen automatisch advies voor een bewaakt niveau: beoordeel de "
             "daily- en 4-uur-factoren in de melding zelf, dit is geen "
             "3-van-4-toets zoals bij day trading."
+        )
+    if signal.get("trade_type") == "patroon":
+        return (
+            "Geen automatisch advies voor een patroon-signaal "
+            f"({signal.get('pattern_name') or 'onbekend patroon'}): beoordeel de "
+            "nek/lijn en de doorbraak zelf, dit is geen 3-van-4-toets zoals "
+            "bij day trading."
         )
     if signal.get("technical_confirmed"):
         return "Alle vier factoren kloppen, dit is volgens de regels een directe instap."

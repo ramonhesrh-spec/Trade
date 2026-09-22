@@ -201,7 +201,7 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
         entries = [e for e in entries if e["auto_outcome"] is None]
     for entry in entries:
         entry["user_confirmed"] = (
-            entry["trade_type"] == "swing" or
+            entry["trade_type"] in ("swing", "patroon") or
             repo.user_confirmed(entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"])
         )
     pass_pct_sort_key = lambda e: e["pass_pct"] if e["pass_pct"] is not None else -1
@@ -588,13 +588,14 @@ def _eval_coaching_tip(
 def _add_signal_context(entries: list[dict], winrate: dict) -> list[dict]:
     """Voegt aan elk signaal het concrete advies toe (wat kan je beter
     doen dan nu instappen) en een slagingskans op basis van de eigen
-    trackrecord van dit vertrouwen-niveau tot nu toe. Een swing-signaal
-    heeft geen vertrouwen-label (zie de spec), dus geen geleende
-    day-trading-slagingskans: dat zou een gemeten day-trading-statistiek
-    als voorspelling voor een andere soort trade laten doorgaan."""
+    trackrecord van dit vertrouwen-niveau tot nu toe. Een swing- of
+    patroon-signaal heeft geen vertrouwen-label (zie de spec), dus geen
+    geleende day-trading-slagingskans: dat zou een gemeten
+    day-trading-statistiek als voorspelling voor een andere soort trade
+    laten doorgaan."""
     for entry in entries:
         entry["advice"] = advice_module.build_advice(entry)
-        if entry.get("trade_type") == "swing":
+        if entry.get("trade_type") in ("swing", "patroon"):
             entry["success_rate"] = None
             entry["success_sample"] = None
             continue
@@ -1592,7 +1593,7 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
             s["take_profit"] = pending_entry["take_profit"]
     for entry in recent_signals:
         entry["user_confirmed"] = (
-            entry["trade_type"] == "swing" or
+            entry["trade_type"] in ("swing", "patroon") or
             repo.user_confirmed(entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"])
         )
     winrate = repo.winrate_stats(user["id"])
