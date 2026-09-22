@@ -1109,6 +1109,11 @@ _JOURNAL_SELECT = """
         s.atr_avg20 AS atr_avg20, s.adx AS adx,
         s.reason AS reason, s.context_note AS context_note, s.created_at AS created_at,
         s.is_practice AS is_practice, s.plain_explanation AS plain_explanation,
+        -- Task 5 added these to `signals` assuming every reader picks them up
+        -- automatically, but this is an explicit column list, not `SELECT s.*`
+        -- (unlike list_recent_signals) — without naming them here, signal_card's
+        -- entry-zone note (Task 6) 500s on /signalen with an UndefinedError.
+        s.suggested_entry_low AS suggested_entry_low, s.suggested_entry_high AS suggested_entry_high,
         COALESCE(mcr.message_summary, m.message_summary, 'Zelf gedetecteerd door HesPulse')
             AS message_summary
     FROM journal_entries je

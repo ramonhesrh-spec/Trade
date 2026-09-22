@@ -1026,7 +1026,14 @@ async def process_day_trading_signal(
         force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             title = f"{push_notify.coin_symbol(interp.coin)} {interp.coin} {interp.direction}, {signal_data['confidence']}"
-            body = f"Entry {signal_data['price']:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            entry_zone_note = (
+                f" · Mogelijk betere entry: {suggested_entry_low:.4f}–{suggested_entry_high:.4f}"
+                if suggested_entry_low is not None else ""
+            )
+            body = (
+                f"Entry {signal_data['price']:.4f} · Stop {effective_stop_loss:.4f} · "
+                f"Take profit {effective_take_profit:.4f}{entry_zone_note}"
+            )
             if signal_data.get("repeated_loss_note"):
                 body += f"\n{signal_data['repeated_loss_note']}"
             if eval_blocked_note:
