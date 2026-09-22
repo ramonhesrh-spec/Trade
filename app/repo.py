@@ -1062,7 +1062,14 @@ def find_open_signal(coin: str, direction: str) -> Optional[dict]:
 
 def update_signal(signal_id: int, data: dict) -> None:
     # message_id staat bewust NIET in deze lijst: een signaal houdt zijn
-    # originele bron vast, ook bij een update.
+    # originele bron vast, ook bij een update. created_at ook niet: dit
+    # veld is de bron van waarheid voor "hoe oud is dit signaal echt"
+    # (leeftijd op /signalen, de 14-dagen-vervaltermijn in level_check.py).
+    # Voorheen werd created_at hier wél bijgewerkt naar nu — de autonome
+    # marktscan ververst een open signaal elke cyclus (nu elke 20 minuten),
+    # dus dat liet een signaal van dagen oud voortdurend als "net nu"
+    # ogen, en zou de 14-dagen-vervaltermijn nooit laten aanslaan zolang de
+    # scan bleef verversen.
     fields = [
         "price", "rsi", "macd", "macd_signal", "volume_ratio", "ema9", "ema21", "atr",
         "atr_avg20", "adx",
@@ -1073,9 +1080,9 @@ def update_signal(signal_id: int, data: dict) -> None:
     values = [data.get(f) for f in fields]
     with db.session() as conn:
         conn.execute(
-            f"""UPDATE signals SET {", ".join(f"{f} = ?" for f in fields)}, created_at = ?
+            f"""UPDATE signals SET {", ".join(f"{f} = ?" for f in fields)}
                 WHERE id = ?""",
-            (*values, db.now_iso(), signal_id),
+            (*values, signal_id),
         )
 
 
