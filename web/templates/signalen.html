@@ -3,11 +3,15 @@
 {% block title %}Signalen — HesPulse{% endblock %}
 {% block content %}
 
-<h2>Signalen</h2>
-<p class="muted" style="margin: -6px 0 4px; max-width: 640px;">
-  {% if showing_all %}Alle signalen, open eerst op percentage, afgeronde signalen daarna op recentheid.{% else %}Open signalen, hoogste slagingspercentage eerst.{% endif %}
-  Puur signaalinformatie — je journaal en portfolio staan op <a href="/account">Mijn account</a>.
-  {% if showing_all %}<a href="/signalen">Alleen open tonen</a>{% else %}<a href="/signalen?alles=1">Ook afgeronde signalen tonen</a>{% endif %}
+<div class="page-head">
+  <h2>Signalen</h2>
+  <div class="view-toggle">
+    <a href="/signalen" class="{{ 'active' if not showing_all }}">Open</a>
+    <a href="/signalen?alles=1" class="{{ 'active' if showing_all }}">Alle</a>
+  </div>
+</div>
+<p class="page-intro">
+  {% if showing_all %}Alle signalen: open eerst op percentage, afgeronde daarna op datum.{% else %}Open signalen, hoogste percentage eerst.{% endif %}
 </p>
 
 <section class="card" style="--i: 0">

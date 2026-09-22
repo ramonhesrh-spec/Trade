@@ -357,11 +357,28 @@ html.page-transition-out body { opacity: 0; transform: translateY(-4px); }
 main { padding: 28px 24px 60px; max-width: 1200px; margin: 0 auto; }
 
 main h2, main h3 {
-  display: flex; align-items: center; gap: 10px; font-size: 19px; font-weight: 700;
-  letter-spacing: -0.01em;
+  display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 700;
+  letter-spacing: -0.015em;
 }
 main h3 { font-size: 15px; gap: 8px; }
 .h2-icon { width: 19px; height: 19px; flex-shrink: 0; color: var(--accent); }
+
+/* Vaste kop-plus-intro-opbouw voor een kale paginatop (nu alleen
+   /signalen, bedoeld om verder uit te rollen): één vaste stijl i.p.v. een
+   losse inline style="margin: ..." per pagina, en ruimte voor een
+   view-toggle rechts van de titel in plaats van een navigatielink
+   middenin de introzin. */
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.page-head h2 { margin: 0; }
+.page-intro { margin: 6px 0 20px; max-width: 640px; font-size: 13.5px; color: var(--muted); }
+
+/* Een filter tussen twee vaste standen (open/alles, actief/gearchiveerd,
+   etc.) als bediening naast de titel, niet als kale link midden in
+   lopende tekst. */
+.view-toggle { display: inline-flex; border: 1px solid var(--border); border-radius: var(--radius-sm); overflow: hidden; font-size: 12.5px; flex-shrink: 0; }
+.view-toggle a { padding: 5px 12px; color: var(--muted); text-decoration: none; }
+.view-toggle a.active { background: var(--panel-hover); color: var(--text); font-weight: 600; }
+.view-toggle a:not(.active):hover { color: var(--text-dim); background: var(--panel); }
 
 .stats-collapse { margin-bottom: 28px; }
 .stats-summary {
