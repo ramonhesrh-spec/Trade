@@ -141,14 +141,19 @@ def find_reversal_patterns(df: pd.DataFrame) -> list[PatternMatch]:
     """Alle bevestigde double/triple top/bottom- en head & shoulders-
     matches in dit candle-venster, nieuwste eerst niet gegarandeerd (zie
     caller: market_scanner pakt zelf de match met de hoogste
-    confirmed_index)."""
+    confirmed_index). Werkt op hetzelfde df.tail(SR_ZONE_LOOKBACK)-venster
+    als classify_channel_wedge/find_divergence, anders leven confirmed_index-
+    waarden in incompatibele coördinatenstelsels en wint een (mogelijk
+    maanden-oud) reversal-patroon altijd de recentheids-vergelijking bij de
+    caller."""
+    window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
     matches: list[PatternMatch] = []
-    matches += find_double_triple(df, "high", 2)
-    matches += find_double_triple(df, "low", 2)
-    matches += find_double_triple(df, "high", 3)
-    matches += find_double_triple(df, "low", 3)
-    matches += find_head_and_shoulders(df, "high")
-    matches += find_head_and_shoulders(df, "low")
+    matches += find_double_triple(window, "high", 2)
+    matches += find_double_triple(window, "low", 2)
+    matches += find_double_triple(window, "high", 3)
+    matches += find_double_triple(window, "low", 3)
+    matches += find_head_and_shoulders(window, "high")
+    matches += find_head_and_shoulders(window, "low")
     return matches
 
 
@@ -164,8 +169,32 @@ CHANNEL_PARALLEL_TOLERANCE_PCT = 0.15
 MIN_PATTERN_WIDTH_ATR_MULTIPLE = 0.5
 
 
+def _find_line_break(
+    window: pd.DataFrame, line: indicators.Trendline, direction: str,
+) -> Optional[int]:
+    """Zoekt het begin van de nog altijd actieve doorbraak van deze lijn: de
+    laatste candle moet er nu voorbij sluiten (close, niet alleen een
+    schaduw, zelfde eis als _find_neckline_break), anders is er geen actieve
+    doorbraak. Teruggegeven wordt de EERSTE candle van deze ononderbroken
+    reeks, niet de laatste — anders schuift de waarde elke scan-cyclus door
+    en verandert de afgeleide neckline (en daarmee de dedup-key) mee, precies
+    de drift-bug die voor trendlijn-retest elders al is opgelost."""
+    closes = window["close"]
+    last_idx = len(window) - 1
+
+    def beyond(i: int) -> bool:
+        return closes.iloc[i] < line.value_at(i) if direction == "short" else closes.iloc[i] > line.value_at(i)
+
+    if not beyond(last_idx):
+        return None
+    idx = last_idx
+    while idx > 0 and beyond(idx - 1):
+        idx -= 1
+    return idx
+
+
 def classify_channel_wedge(
-    trendlines: list[indicators.Trendline], window_len: int, atr: float,
+    df: pd.DataFrame, trendlines: list[indicators.Trendline], atr: float,
 ) -> Optional[PatternMatch]:
     """Herkent kanaal/wedge uit de twee lijnen van indicators.detect_trendlines:
     resistance (bovenlijn) en support (onderlijn) allebei dezelfde kant op
@@ -182,7 +211,14 @@ def classify_channel_wedge(
     aparte melding); een echte uitbraak van zo'n vorm wordt al gevangen
     door de bestaande indicators.find_trendline_breakout_retest via
     market_scanner._check_trendline_retest, ongeacht welke kant hij
-    doorbreekt."""
+    doorbreekt.
+
+    De vorm alleen is niet genoeg voor een live signaal: de prijs moet de
+    relevante lijn ook daadwerkelijk doorbroken hebben (_find_line_break),
+    anders zou elke cyclus waarin de vorm nog staat opnieuw "bevestigen"
+    zonder dat er iets gebeurd is."""
+    window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
+    window_len = len(window)
     resistance = next((l for l in trendlines if l.kind == "resistance"), None)
     support = next((l for l in trendlines if l.kind == "support"), None)
     if resistance is None or support is None:
@@ -208,21 +244,28 @@ def classify_channel_wedge(
     if res_rising:
         name = "rising channel" if parallel else "rising wedge"
         direction = "short"
-        breakout_level = support.value_at(end_idx)
-        stop_loss = resistance.value_at(end_idx) * (1 + PATTERN_STOP_MARGIN_PCT)
-        height = width_start
-        target = breakout_level - height
+        breaking_line = support
     else:
         name = "descending channel" if parallel else "falling wedge"
         direction = "long"
-        breakout_level = resistance.value_at(end_idx)
-        stop_loss = support.value_at(end_idx) * (1 - PATTERN_STOP_MARGIN_PCT)
-        height = width_start
+        breaking_line = resistance
+
+    confirmed_index = _find_line_break(window, breaking_line, direction)
+    if confirmed_index is None:
+        return None
+
+    breakout_level = breaking_line.value_at(confirmed_index)
+    height = width_start
+    if direction == "short":
+        stop_loss = resistance.value_at(confirmed_index) * (1 + PATTERN_STOP_MARGIN_PCT)
+        target = breakout_level - height
+    else:
+        stop_loss = support.value_at(confirmed_index) * (1 - PATTERN_STOP_MARGIN_PCT)
         target = breakout_level + height
 
     return PatternMatch(
         name=name, direction=direction, neckline=breakout_level, extreme=stop_loss,
-        target=target, stop_loss=stop_loss, confirmed_index=end_idx, pattern_kind="channel_wedge",
+        target=target, stop_loss=stop_loss, confirmed_index=confirmed_index, pattern_kind="channel_wedge",
     )
 
 
@@ -306,6 +349,12 @@ def find_entry_options(
     prijs al is teruggekeerd, het retest-niveau (bevestigd). retest_low/
     retest_high zijn None zolang er nog geen retest is geweest — de kaart
     toont dan alleen de uitbraak-optie."""
+    # match.confirmed_index leeft in de lokale ruimte van het
+    # SR_ZONE_LOOKBACK-venster (zie find_reversal_patterns), dus het df
+    # waartegen hij hieronder vergeleken wordt moet datzelfde venster zijn.
+    # De tweede .tail() in het channel_wedge-pad hieronder is daarmee
+    # idempotent (len(df) <= SR_ZONE_LOOKBACK).
+    df = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
     if match.pattern_kind == "channel_wedge" and trendlines:
         line = next(
             (l for l in trendlines if (l.kind == "resistance") == (match.direction == "long")), None,

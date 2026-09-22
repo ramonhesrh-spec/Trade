@@ -84,7 +84,7 @@ def run(coin: str, timeframe: str, years: float) -> None:
         atr_now = atr_series.iloc[start - 1] if start - 1 < len(atr_series) else None
         if atr_now and atr_now == atr_now:  # niet NaN
             trendlines = indicators.detect_trendlines(window, atr_now)
-            match = patterns.classify_channel_wedge(trendlines, len(window), atr_now)
+            match = patterns.classify_channel_wedge(window, trendlines, atr_now)
             if match:
                 outcome = classify_outcome(full_df, match, atr_series, start - lookback)
                 by_name.setdefault(match.name, []).append(outcome)

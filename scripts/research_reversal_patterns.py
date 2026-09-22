@@ -21,7 +21,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pandas as pd
 
 from app import exchange
-from app.patterns import PatternMatch, find_reversal_patterns
+from app.patterns import PatternMatch, find_double_triple, find_head_and_shoulders
 
 # Hoeveel candles na de nek-doorbraak de uitkomst afgewacht wordt voor het
 # patroon als "voltooid" geldt, target of niet.
@@ -40,6 +40,22 @@ def _atr(df: pd.DataFrame, window: int = 14) -> pd.Series:
         high - low, (high - prev_close).abs(), (low - prev_close).abs(),
     ], axis=1).max(axis=1)
     return tr.rolling(window).mean()
+
+
+def all_reversal_matches(df: pd.DataFrame) -> list[PatternMatch]:
+    """Zelfde zes detectoren als patterns.find_reversal_patterns, maar over
+    de VOLLEDIGE meegegeven historie. find_reversal_patterns zelf windowt op
+    de laatste SR_ZONE_LOOKBACK candles (dat is wat live signalering nodig
+    heeft, en het houdt confirmed_index vergelijkbaar met de andere
+    detectoren) — hier is juist de hele historie het onderzoeksobject, en
+    classify_outcome hieronder indexeert ook op diezelfde volledige df."""
+    matches: list[PatternMatch] = []
+    for n in (2, 3):
+        matches += find_double_triple(df, "high", n)
+        matches += find_double_triple(df, "low", n)
+    matches += find_head_and_shoulders(df, "high")
+    matches += find_head_and_shoulders(df, "low")
+    return matches
 
 
 def classify_outcome(df: pd.DataFrame, match: PatternMatch, atr: pd.Series) -> str:
@@ -69,7 +85,7 @@ def run(coin: str, timeframe: str, years: float) -> None:
     df = exchange.fetch_ohlcv(coin, timeframe=timeframe, limit=limit)
     atr = _atr(df)
 
-    all_matches = find_reversal_patterns(df)
+    all_matches = all_reversal_matches(df)
 
     print(f"{coin} {timeframe}, {len(df)} candles ({years} jaar), {len(all_matches)} bevestigde patronen\n")
 

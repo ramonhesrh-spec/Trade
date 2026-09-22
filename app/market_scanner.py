@@ -206,6 +206,17 @@ def _same_pattern(existing_key: Optional[str], direction: str, match, atr: float
     return abs(prev_neckline - match.neckline) <= PATTERN_DEDUP_ATR_MULTIPLE * atr
 
 
+def _valid_stop_take(direction: str, entry_price: float, stop_loss: float, take_profit: float) -> bool:
+    """Ligt de stop aan de verliezende en de take aan de winnende kant van de
+    prijs waarop we melden? Patroongeometrie (of een prijs die sinds de
+    doorbraak flink is doorgelopen) kan anders een omgekeerde stop/take
+    opleveren, en die gaat ongecontroleerd de positiegrootte en de
+    automatische trackrecord in."""
+    if direction == "long":
+        return stop_loss < entry_price < take_profit
+    return take_profit < entry_price < stop_loss
+
+
 async def _check_chart_patterns(coin: str, df, ind) -> None:
     """Los van de dagtrading-richting van deze scan-cyclus: een chart-
     patroon (top/bottom, head & shoulders, kanaal/wedge, divergence) heeft
@@ -218,13 +229,22 @@ async def _check_chart_patterns(coin: str, df, ind) -> None:
 
     candidates: list = []
     candidates += patterns.find_reversal_patterns(df)
-    wedge = patterns.classify_channel_wedge(trendlines, window_len, ind.atr)
+    wedge = patterns.classify_channel_wedge(df, trendlines, ind.atr)
     if wedge:
         candidates.append(wedge)
     divergence = patterns.find_divergence(df)
     if divergence:
         candidates.append(divergence)
 
+    # Alle drie detectoren geven confirmed_index in dezelfde lokale
+    # venster-ruimte terug, dus "hoe oud is deze match" is hier een eerlijke
+    # vergelijking: een patroon dat al tientallen candles geleden bevestigde
+    # is geen live kans meer, en mag ook niet de recentheids-selectie
+    # hieronder winnen.
+    candidates = [
+        c for c in candidates
+        if (window_len - 1) - c.confirmed_index <= patterns.NECKLINE_RETEST_MAX_WAIT_CANDLES
+    ]
     if not candidates:
         return
     match = max(candidates, key=lambda m: m.confirmed_index)
@@ -235,11 +255,15 @@ async def _check_chart_patterns(coin: str, df, ind) -> None:
 
     entry_options = patterns.find_entry_options(df, match, ind.atr, trendlines=trendlines)
 
-    if match.stop_loss is not None and match.target is not None:
+    if match.stop_loss is not None and match.target is not None and _valid_stop_take(
+        match.direction, ind.price, match.stop_loss, match.target,
+    ):
         stop_loss, take_profit = match.stop_loss, match.target
     else:
-        # divergence: geen eigen gemeten beweging, terugval op de
-        # bestaande ATR-methode (zie de spec, sectie "Stop/take").
+        # divergence (geen eigen gemeten beweging) of een patroon waarvan de
+        # stop/take niet meer aan de juiste kant van de live prijs ligt:
+        # terugval op de bestaande ATR-methode (zie de spec, sectie
+        # "Stop/take").
         stop_take = risk.compute_stop_take(match.direction, ind.price, ind.atr)
         stop_loss, take_profit = stop_take.stop_loss, stop_take.take_profit
 
