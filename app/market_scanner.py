@@ -16,9 +16,9 @@ import asyncio
 import logging
 from typing import Optional
 
-from app import exchange, indicators, push_notify, repo, risk
+from app import exchange, indicators, patterns, push_notify, repo, risk
 from app.anthropic_interpret import Interpretation
-from app.signal_processor import process_day_trading_signal
+from app.signal_processor import fanout_confirmed_signal, process_day_trading_signal
 
 logger = logging.getLogger("market_scanner")
 
@@ -186,6 +186,107 @@ async def _check_trendline_retest(coin: str, direction: str, df, ind) -> None:
     repo.set_trendline_retest_key(coin, key)
 
 
+# Dedup-marge voor de patroon-melding: hoe dicht de neckline/stop van een
+# nieuw gevonden patroon bij die van het laatst gemelde patroon voor deze
+# coin+richting moet liggen om als "hetzelfde patroon" te tellen. Zelfde
+# aanpak als TRENDLINE_DEDUP_ATR_MULTIPLE hierboven.
+PATTERN_DEDUP_ATR_MULTIPLE = 1.0
+
+
+def _same_pattern(existing_key: Optional[str], direction: str, match, atr: float) -> bool:
+    if not existing_key:
+        return False
+    try:
+        prev_direction, prev_name, prev_neckline_s = existing_key.split(":")
+        prev_neckline = float(prev_neckline_s)
+    except (ValueError, AttributeError):
+        return False
+    if prev_direction != direction or prev_name != match.name or not atr:
+        return False
+    return abs(prev_neckline - match.neckline) <= PATTERN_DEDUP_ATR_MULTIPLE * atr
+
+
+async def _check_chart_patterns(coin: str, df, ind) -> None:
+    """Los van de dagtrading-richting van deze scan-cyclus: een chart-
+    patroon (top/bottom, head & shoulders, kanaal/wedge, divergence) heeft
+    zijn EIGEN richting uit de vorm zelf, niet uit ind.ema9/ind.ema21. Geen
+    percentage-toets, geen harde eisen (R:R/dagtrend/BTC-trend) — een
+    bevestigd patroon is zelf de bevestiging, zie
+    docs/superpowers/specs/2026-09-22-patroonherkenning-design.md."""
+    trendlines = indicators.detect_trendlines(df, ind.atr)
+    window_len = len(df.tail(indicators.SR_ZONE_LOOKBACK))
+
+    candidates: list = []
+    candidates += patterns.find_reversal_patterns(df)
+    wedge = patterns.classify_channel_wedge(trendlines, window_len, ind.atr)
+    if wedge:
+        candidates.append(wedge)
+    divergence = patterns.find_divergence(df)
+    if divergence:
+        candidates.append(divergence)
+
+    if not candidates:
+        return
+    match = max(candidates, key=lambda m: m.confirmed_index)
+
+    key = f"{match.direction}:{match.name}:{match.neckline:.8f}"
+    if _same_pattern(repo.get_pattern_key(coin), match.direction, match, ind.atr):
+        return
+
+    entry_options = patterns.find_entry_options(df, match, ind.atr, trendlines=trendlines)
+
+    if match.stop_loss is not None and match.target is not None:
+        stop_loss, take_profit = match.stop_loss, match.target
+    else:
+        # divergence: geen eigen gemeten beweging, terugval op de
+        # bestaande ATR-methode (zie de spec, sectie "Stop/take").
+        stop_take = risk.compute_stop_take(match.direction, ind.price, ind.atr)
+        stop_loss, take_profit = stop_take.stop_loss, stop_take.take_profit
+
+    # suggested_entry_low/high zijn bestaande kolommen (van een eerder
+    # plan, daar gevuld met de dagtrading-entry-zone-suggestie) — hier
+    # hergebruikt voor exact hetzelfde soort informatie (een optionele,
+    # tweede entry-band naast de live prijs), in plaats van twee nieuwe
+    # kolommen voor hetzelfde concept. Task 8 leest ze uit voor de
+    # "Retest: ..."-regel op de kaart. None zolang er nog geen retest is.
+    signal_data = {
+        "message_id": None, "coin": coin, "direction": match.direction,
+        "category": "day_trading", "trade_type": "patroon", "pattern_name": match.name,
+        "price": ind.price, "rsi": ind.rsi, "macd": ind.macd, "macd_signal": ind.macd_signal,
+        "volume_ratio": ind.volume_ratio, "ema9": ind.ema9, "ema21": ind.ema21,
+        "atr": ind.atr, "atr_avg20": ind.atr_avg20, "adx": ind.adx,
+        "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1,
+        "confidence": "patroon bevestigd",
+        "reason": f"Patroon: {match.name}, richting {match.direction}",
+        "stop_loss": stop_loss, "take_profit": take_profit,
+        "context_note": None, "is_practice": 0, "plain_explanation": None,
+        "suggested_entry_low": entry_options["retest_low"],
+        "suggested_entry_high": entry_options["retest_high"],
+    }
+    signal_id = repo.insert_signal(signal_data)
+
+    def _pattern_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
+        retest_note = (
+            f" · Retest {entry_options['retest_low']:.4f}–{entry_options['retest_high']:.4f}"
+            if entry_options["retest_low"] is not None else ""
+        )
+        return (
+            f"Uitbraak {entry_options['breakout_level']:.4f}{retest_note} · "
+            f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+        )
+
+    # premise_level = match.neckline: de uitbraak/trigger-prijs van het
+    # patroon is de premisse van deze trade (net als watch["price_level"]
+    # bij een swing-watch), niet ind.price (de live prijs op het moment
+    # van detectie, die intussen al verder kan zijn doorgelopen).
+    await fanout_confirmed_signal(
+        signal_id, coin, match.direction, ind.price, stop_loss, take_profit, match.neckline,
+        title=f"{push_notify.coin_symbol(coin)} {coin} {match.direction}, {match.name}",
+        make_body=_pattern_body,
+    )
+    repo.set_pattern_key(coin, key)
+
+
 async def scan_market() -> None:
     if not repo.is_market_scan_enabled():
         logger.info("Marktscan staat uit (noodrem), niets gedaan")
@@ -220,6 +321,7 @@ async def scan_market() -> None:
 
             await _check_breakout_retest(coin, direction, df, ind)
             await _check_trendline_retest(coin, direction, df, ind)
+            await _check_chart_patterns(coin, df, ind)
 
             # Vóór de cooldown-check bepaald (in plaats van erna): een coin
             # met een al bestaand open signaal moet elke cyclus ververst
