@@ -629,14 +629,16 @@ async def compute_advanced_extra_factors(
     try:
         daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
         daily_ind = indicators.compute_indicators(daily_df)
-        factors.append(indicators.check_daily_trend(direction, daily_ind))
+        # Daily-trend zelf wordt niet meer hier berekend: die is nu een
+        # altijd-actieve harde eis in confirms_direction, opgehaald in
+        # process_day_trading_signal (zie daar), anders zou hij hier
+        # dubbel tellen.
         factors.append(indicators.check_daily_rsi(direction, daily_ind))
         daily_swing_low, daily_swing_high = indicators.swing_levels(daily_df)
         factors.append(indicators.check_daily_premium_discount(direction, entry_price, daily_swing_low, daily_swing_high))
         factors.append(indicators.check_daily_liquidity_sweep(direction, daily_df))
     except Exception:
         logger.exception("Daily-trend/RSI voor %s kon niet berekend worden", coin)
-        factors.append(("Daily-trend", False, "kon niet opgehaald worden, telt als niet bevestigd"))
         factors.append(("RSI daily", False, "kon niet opgehaald worden, telt als niet bevestigd"))
         factors.append(("Premium/discount (dag)", False, "kon niet opgehaald worden, telt als niet bevestigd"))
         factors.append(("Liquidity sweep (dag)", False, "kon niet opgehaald worden, telt als niet bevestigd"))
@@ -725,6 +727,21 @@ async def process_day_trading_signal(
     swing_low, swing_high = indicators.swing_levels(df)
     zones = indicators.detect_sr_zones(df)
 
+    daily_trend_factor = None
+    try:
+        daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, interp.coin, "1d")
+        daily_ind = indicators.compute_indicators(daily_df)
+        # Net als BTC-trend (indicators.btc_is_flat): een coin zonder
+        # duidelijke eigen dagtrend mag niet hard geblokkeerd worden, dat
+        # zou een normale consolidatie vlak voor een uitbraak onterecht
+        # wegfilteren. btc_is_flat is ondanks zijn naam coin-onafhankelijk
+        # (alleen ema9/ema21/atr), dus rechtstreeks herbruikbaar hier.
+        if not indicators.btc_is_flat(daily_ind):
+            daily_trend_factor = indicators.check_daily_trend(interp.direction, daily_ind)
+    except Exception:
+        logger.exception("Dagtrend kon niet berekend worden voor %s", interp.coin)
+        daily_trend_factor = ("Daily-trend", False, "kon niet opgehaald worden, telt als niet bevestigd")
+
     extra_factors = None
     if config.ENABLE_ADVANCED_FACTORS:
         extra_factors = await compute_advanced_extra_factors(
@@ -733,6 +750,7 @@ async def process_day_trading_signal(
 
     confirmed, reason, pass_pct, hard_gates_ok = indicators.confirms_direction(
         ind, interp.direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
+        daily_trend_factor=daily_trend_factor,
     )
     # Geen bericht (autonoom marktscan-signaal, zie app/market_scanner.py)
     # betekent geen bron-niveaus om mee te wegen — die komen altijd uit een

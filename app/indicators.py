@@ -1160,7 +1160,7 @@ def basic_factors(direction: str, ind: Indicators) -> list[tuple[str, bool, str]
 
 def confirms_direction(
     ind: Indicators, direction: str, extra_factors: list[tuple[str, bool, str]] | None = None,
-    include_advanced: bool = False,
+    include_advanced: bool = False, daily_trend_factor: tuple[str, bool, str] | None = None,
 ) -> tuple[bool, str]:
     """Bepaalt of de technische data de richting uit het Discord bericht steunt.
 
@@ -1213,9 +1213,22 @@ def confirms_direction(
     eigen kracht uitbreekt tijdens een zijwaartse BTC niet onterecht
     geblokkeerd wordt.
 
+    Daily-trend is, in BEIDE versies (basis en uitgebreid), een derde
+    harde eis naast Uitgerektheid en (in de uitgebreide versie) BTC-trend:
+    wijst de dagtrend van de coin zelf duidelijk tegen de trade in, dan
+    bevestigt het signaal nooit, ongeacht hoeveel van de andere factoren
+    toevallig kloppen — anders zou een dagtrading-signaal tegen de eigen
+    grotere trend in alsnog "bevestigd" kunnen heten. Alleen van
+    toepassing als de coin zelf een duidelijke dagtrend heeft;
+    process_day_trading_signal laat de factor weg zodra `btc_is_flat` (die
+    ondanks zijn naam coin-onafhankelijk is) true is voor de dagcandle,
+    zodat een coin die vlak vóór een uitbraak consolideert niet onterecht
+    geblokkeerd wordt.
+
     Ontbreekt een extra check (bijvoorbeeld BTC-trend bij een BTC-signaal
-    zelf, of bij een vlakke BTC), dan wordt hij simpelweg niet meegegeven
-    en telt hij niet mee, ook niet als harde eis.
+    zelf, of bij een vlakke BTC of vlakke dagtrend), dan wordt hij
+    simpelweg niet meegegeven en telt hij niet mee, ook niet als harde
+    eis.
     """
     direction = direction.lower()
     if direction not in ("long", "short"):
@@ -1232,8 +1245,14 @@ def confirms_direction(
         core_passed = sum(1 for name, ok, _ in factors if ok and name != "Uitgerektheid")
         # 4 basic factors excluding Uitgerektheid
         pass_pct = (core_passed / 4) * 100
-        hard_gates_ok = extension_ok
-        confirmed = extension_ok and core_passed >= BASIC_CONFIRM_MIN_PASSED
+        # Daily-trend zit niet in basic_factors() (die kost geen extra
+        # candle-fetch), dus wordt hier los toegevoegd aan de breakdown en
+        # als harde eis meegewogen, net als Uitgerektheid hierboven.
+        daily_trend_ok = daily_trend_factor[1] if daily_trend_factor is not None else True
+        if daily_trend_factor is not None:
+            breakdown += f" | {'✓' if daily_trend_factor[1] else '✗'} {daily_trend_factor[0]}: {daily_trend_factor[2]}"
+        hard_gates_ok = extension_ok and daily_trend_ok
+        confirmed = hard_gates_ok and core_passed >= BASIC_CONFIRM_MIN_PASSED
         return confirmed, breakdown, pass_pct, hard_gates_ok
 
     # Zelfde harde eis als in de basisversie hierboven: zonder deze
@@ -1265,6 +1284,8 @@ def confirms_direction(
     ]
     if extra_factors:
         factors.extend(extra_factors)
+    if daily_trend_factor is not None:
+        factors.append(daily_trend_factor)
 
     breakdown = " | ".join(f"{'✓' if ok else '✗'} {name}: {detail}" for name, ok, detail in factors)
 
@@ -1275,12 +1296,15 @@ def confirms_direction(
     # Afwezig (BTC-signaal zelf, of BTC vlak) telt hij simpelweg niet mee,
     # ook niet als harde eis — geen enkele False hier dus.
     btc_trend_ok = next((ok for name, ok, _ in factors if name == "BTC-trend"), True)
+    # Daily-trend is, net als BTC-trend, een harde eis als hij aanwezig is
+    # (zie de docstring hierboven) — de eigen dagtrend van de coin.
+    daily_trend_ok = next((ok for name, ok, _ in factors if name == "Daily-trend"), True)
 
-    # Uitgerektheid en BTC-trend tellen niet mee in deze telling (zie
-    # hierboven), anders dan alle andere factoren hier.
-    other_factors = [f for f in factors if f[0] not in ("Uitgerektheid", "BTC-trend")]
+    # Uitgerektheid, BTC-trend en Daily-trend tellen niet mee in deze
+    # telling (zie hierboven), anders dan alle andere factoren hier.
+    other_factors = [f for f in factors if f[0] not in ("Uitgerektheid", "BTC-trend", "Daily-trend")]
     passed = sum(1 for _, ok, _ in other_factors if ok)
     pass_pct = (passed / len(other_factors)) * 100 if other_factors else 100.0
-    hard_gates_ok = extension_ok and btc_trend_ok
+    hard_gates_ok = extension_ok and btc_trend_ok and daily_trend_ok
     confirmed = hard_gates_ok and pass_pct >= CONFIRM_THRESHOLD * 100
     return confirmed, breakdown, pass_pct, hard_gates_ok
