@@ -187,25 +187,33 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     maar een resolved signaal met een oud, toevallig hoog percentage mag
     een net binnengekomen open signaal niet meer overstemmen, dus resolved
     signalen zakken altijd onder de nog-open signalen (en sorteren onderling
-    op meest recent eerst, niet op percentage)."""
-    entries = [
-        e for e in repo.list_signalen_for_user(user["id"]) if e["pass_pct"] is not None
-    ]
+    op meest recent eerst, niet op percentage).
+
+    Een swing-signaal ("Bewaakt niveau") heeft geen pass_pct (geen gepoold
+    percentage, zie signal_processor.run_swing_check) maar is wel een
+    volwaardige, bevestigde kans met een eigen pushmelding — die hoorde
+    eerder per ongeluk hier helemaal niet bij (filter op pass_pct is not
+    None liet ze volledig verdwijnen, ook onder ?alles=1). Ze zakken nu
+    onder de percentage-signalen (pass_pct_sort_key = -1) in plaats van
+    onderuit te vallen."""
+    entries = repo.list_signalen_for_user(user["id"])
     if not alles:
         entries = [e for e in entries if e["auto_outcome"] is None]
     for entry in entries:
-        entry["user_confirmed"] = repo.user_confirmed(
-            entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"]
+        entry["user_confirmed"] = (
+            entry["trade_type"] == "swing" or
+            repo.user_confirmed(entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"])
         )
+    pass_pct_sort_key = lambda e: e["pass_pct"] if e["pass_pct"] is not None else -1
     if alles:
         # Open signalen eerst (op percentage), pas daarna resolved signalen
         # (op recentheid) — anders overstemt een oud, toevallig hoog
         # percentage van een allang afgeronde kans een vers, nog open signaal.
-        open_entries = sorted((e for e in entries if e["auto_outcome"] is None), key=lambda e: e["pass_pct"], reverse=True)
+        open_entries = sorted((e for e in entries if e["auto_outcome"] is None), key=pass_pct_sort_key, reverse=True)
         resolved_entries = sorted((e for e in entries if e["auto_outcome"] is not None), key=lambda e: e["created_at"], reverse=True)
         entries = open_entries + resolved_entries
     else:
-        entries.sort(key=lambda e: e["pass_pct"], reverse=True)
+        entries.sort(key=pass_pct_sort_key, reverse=True)
     return templates.TemplateResponse(request, "signalen.html", {
         "user": user,
         "coins": repo.list_coins(),
@@ -1579,8 +1587,9 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
             s["stop_loss"] = pending_entry["stop_loss"]
             s["take_profit"] = pending_entry["take_profit"]
     for entry in recent_signals:
-        entry["user_confirmed"] = repo.user_confirmed(
-            entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"]
+        entry["user_confirmed"] = (
+            entry["trade_type"] == "swing" or
+            repo.user_confirmed(entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"])
         )
     winrate = repo.winrate_stats(user["id"])
     open_trades = _add_signal_context(open_trades, winrate)

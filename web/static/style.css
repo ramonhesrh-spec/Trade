@@ -905,6 +905,7 @@ table.signals tbody tr.short td:first-child::before { background: var(--red); }
 .badge-laag { background: var(--border); color: var(--muted); }
 .badge-status { background: var(--panel-hover); color: var(--text-dim); border: 1px solid var(--border-strong); }
 .badge-pending { background: rgba(217, 168, 60, 0.14); color: #d9a83c; border: 1px solid rgba(217, 168, 60, 0.4); }
+.badge-swing { background: var(--accent-bg); color: var(--accent); }
 .badge-outcome-win { background: var(--green-bg); color: var(--green); }
 .badge-outcome-loss { background: var(--red-bg); color: var(--red); }
 .badge-outcome-expired { background: var(--border); color: var(--muted); }
