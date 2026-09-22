@@ -224,3 +224,48 @@ def classify_channel_wedge(
         name=name, direction=direction, neckline=breakout_level, extreme=stop_loss,
         target=target, stop_loss=stop_loss, confirmed_index=end_idx, pattern_kind="channel_wedge",
     )
+
+
+def find_divergence(df: pd.DataFrame) -> Optional[PatternMatch]:
+    """Bullish divergence: prijs zet een lagere bodem neer, RSI juist een
+    hogere (minder oversold dan de vorige bodem) — momentum zwakt af
+    terwijl de prijs nog daalt, vaak een voorbode van een omkeer. Bearish:
+    spiegelbeeld op pieken. Kijkt alleen naar de laatste twee pivots van
+    hetzelfde soort, niet naar elk historisch paar: voor live signalering
+    telt of er NU een divergentie staat, niet of er ooit één stond.
+
+    Puur momentum-signaal, geen eigen neckline/hoogte zoals top/bottom of
+    channel_wedge — target/stop_loss blijven None, de caller (Task 4/7)
+    valt voor deze pattern_kind terug op risk.compute_stop_take (ATR)."""
+    window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
+    rsi_series = ta.momentum.RSIIndicator(window["close"], window=14).rsi()
+    pivots = indicators._find_pivots(window)
+
+    lows = sorted([p for p in pivots if p.kind == "low"], key=lambda p: p.index)
+    if len(lows) >= 2:
+        prev, last = lows[-2], lows[-1]
+        rsi_prev, rsi_last = rsi_series.iloc[prev.index], rsi_series.iloc[last.index]
+        if (
+            not pd.isna(rsi_prev) and not pd.isna(rsi_last)
+            and last.price < prev.price and rsi_last > rsi_prev
+        ):
+            return PatternMatch(
+                name="bullish divergence", direction="long", neckline=last.price,
+                extreme=last.price, target=None, stop_loss=None,
+                confirmed_index=last.index, pattern_kind="divergence",
+            )
+
+    highs = sorted([p for p in pivots if p.kind == "high"], key=lambda p: p.index)
+    if len(highs) >= 2:
+        prev, last = highs[-2], highs[-1]
+        rsi_prev, rsi_last = rsi_series.iloc[prev.index], rsi_series.iloc[last.index]
+        if (
+            not pd.isna(rsi_prev) and not pd.isna(rsi_last)
+            and last.price > prev.price and rsi_last < rsi_prev
+        ):
+            return PatternMatch(
+                name="bearish divergence", direction="short", neckline=last.price,
+                extreme=last.price, target=None, stop_loss=None,
+                confirmed_index=last.index, pattern_kind="divergence",
+            )
+    return None
