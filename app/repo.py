@@ -936,12 +936,16 @@ def list_day_trading_signals_for_backtest(limit: int = 50) -> list[dict]:
     scripts/backtest_factors.py (hoeveel van je eigen historische signalen
     zouden de nieuwe factoren gehaald hebben) en
     scripts/backtest_hard_gates.py (hoeveel zouden de nieuwe harde eisen
-    gehaald hebben). price/stop_loss/take_profit zijn de daadwerkelijk
-    gebruikte niveaus op dat moment, nodig voor een R:R-herberekening
-    zonder een aparte exchange-aanroep."""
+    gehaald hebben, en wint de doorgelaten groep vaker dan de afgewezen
+    groep). price/stop_loss/take_profit zijn de daadwerkelijk gebruikte
+    niveaus op dat moment, nodig voor een R:R-herberekening zonder een
+    aparte exchange-aanroep. auto_outcome is de al bekende, automatisch
+    bijgehouden echte uitkomst (take_profit/stop_loss/vervallen/nog open),
+    zie level_check.py — geen nieuwe berekening, puur uitlezen."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT id, coin, direction, created_at, price, stop_loss, take_profit FROM signals
+            """SELECT id, coin, direction, created_at, price, stop_loss, take_profit, auto_outcome
+               FROM signals
                WHERE category = 'day_trading' AND is_practice = 0
                ORDER BY created_at DESC LIMIT ?""",
             (limit,),
