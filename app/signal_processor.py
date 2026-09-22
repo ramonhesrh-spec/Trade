@@ -7,7 +7,7 @@ regels. Elke trade blijft een handmatige beslissing.
 import asyncio
 import logging
 import time
-from typing import Optional
+from typing import Callable, Optional
 
 from app import coinlist, config, exchange, explain, indicators, push_notify, repo, risk
 from app.anthropic_interpret import Interpretation, interpret_message
@@ -423,6 +423,63 @@ def _resolve_signal_risk(
     return None, None, 0.0, stop_loss, take_profit
 
 
+async def _fanout_confirmed_signal(
+    signal_id: int, coin: str, direction: str, entry_price: float,
+    stop_loss: float, take_profit: float, title: str,
+    make_body: Callable[[float, float, bool], str],
+) -> None:
+    """Deelt een al-bevestigd signaal (geen gepoold percentage, altijd
+    gemeld) met alle gebruikers: journaalregel + pushmelding per gebruiker,
+    met per-gebruiker evaluatie-sizing en stop-cap. Gedeeld tussen
+    run_swing_check (swing) en market_scanner._check_chart_patterns
+    (patroon) — beide zijn "autonoom bevestigd"-signalen met identieke
+    fan-out-logica, alleen titel en berichttekst verschillen per soort.
+    make_body ontvangt de EFFECTIEVE (mogelijk ingeperkte) stop/take voor
+    deze ene gebruiker en of die stop gecapt werd, zodat de melding altijd
+    de daadwerkelijke cijfers voor deze gebruiker toont."""
+    for user in repo.list_users():
+        active_eval_for_display = repo.get_active_evaluation(user["id"])
+        risk_eur, evaluation_id, cost_rate, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
+            user, direction, entry_price, stop_loss, take_profit,
+        )
+        stop_was_capped = effective_stop_loss != stop_loss
+        if stop_was_capped and (
+            (direction == "long" and effective_stop_loss >= entry_price)
+            or (direction == "short" and effective_stop_loss <= entry_price)
+        ):
+            effective_stop_loss, effective_take_profit = stop_loss, take_profit
+            stop_was_capped = False
+        position_size = (
+            risk.compute_position_size(risk_eur, entry_price, effective_stop_loss, cost_rate=cost_rate)
+            if risk_eur is not None else None
+        )
+        entry_id = repo.create_journal_entry(
+            signal_id, user["id"], risk_eur, evaluation_id=evaluation_id, position_size=position_size,
+        )
+        if stop_was_capped:
+            repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, None)
+
+        eval_blocked_note = None
+        if active_eval_for_display and evaluation_id is None:
+            eval_blocked_note = (
+                "Dagbudget of drawdown-ruimte van je evaluatie is (bijna) op, "
+                "deze trade telt niet mee voor je evaluatie."
+            )
+
+        quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        try:
+            body = make_body(effective_stop_loss, effective_take_profit, stop_was_capped)
+            if eval_blocked_note:
+                body += f"\n{eval_blocked_note}"
+            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=quiet)
+            repo.mark_journal_telegram_sent(entry_id)
+        except Exception:
+            logger.exception("Melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
+
+fanout_confirmed_signal = _fanout_confirmed_signal
+
+
 async def run_swing_check(watch_id: int) -> None:
     """Draait de volledige swing-toets voor een bewaakte watch: daily en
     4-uur factoren apart (geen gecombineerd vertrouwenscijfer), stop loss/
@@ -492,69 +549,18 @@ async def run_swing_check(watch_id: int) -> None:
     }
     signal_id = repo.insert_signal(signal_data)
 
-    for user in repo.list_users():
-        active_eval_for_display = repo.get_active_evaluation(user["id"])
-        risk_eur, evaluation_id, cost_rate, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
-            user, direction, ind_4h.price, stop_take.stop_loss, stop_take.take_profit,
+    def _swing_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
+        pattern_note = f" ({watch['pattern_name']})" if watch["pattern_name"] else ""
+        return (
+            f"Vanuit bewaakt niveau {watch['price_level']:.4f}{pattern_note} · "
+            f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
         )
-        max_pct_for_display = (
-            risk.eval_max_stop_pct(active_eval_for_display["tier_amount"])
-            if active_eval_for_display and evaluation_id is not None else None
-        )
-        # Een swing-stop staat expres net voorbij het bewaakte niveau: de
-        # hele premisse van het signaal is dat het niveau standhoudt. Zou
-        # de cap de stop tot voorbij dat niveau optrekken (long) of
-        # terugtrekken (short), dan verdedigt de "gecapte" stop het niveau
-        # niet meer en is hij zinlozer dan de bredere, ongecapte stop. Dan
-        # liever geen cap voor deze ene trade dan een omgekeerde premisse.
-        level = watch["price_level"]
-        stop_was_capped = effective_stop_loss != stop_take.stop_loss
-        if stop_was_capped and (
-            (direction == "long" and effective_stop_loss >= level)
-            or (direction == "short" and effective_stop_loss <= level)
-        ):
-            effective_stop_loss, effective_take_profit = stop_take.stop_loss, stop_take.take_profit
-            stop_was_capped = False
-        position_size = (
-            risk.compute_position_size(risk_eur, ind_4h.price, effective_stop_loss, cost_rate=cost_rate)
-            if risk_eur is not None else None
-        )
-        entry_id = repo.create_journal_entry(
-            signal_id, user["id"], risk_eur, evaluation_id=evaluation_id, position_size=position_size,
-        )
-        if stop_was_capped:
-            repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, None)
-        # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push
-        # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend
-        # over, en telegram_chat_id wordt sinds de overstap naar push nooit
-        # meer ingevuld voor nieuwe gebruikers.
-        # Geen is_coin_muted-check hier: mute geldt bewust alleen voor
-        # day-trading meldingen (zie de spec), een swing-melding is
-        # zeldzaam en juist bedoeld om een grote kans nooit te missen.
-        quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
 
-        eval_budget_pct = None
-        eval_blocked_note = None
-        if active_eval_for_display and evaluation_id is not None:
-            open_risk_eur_display = repo.total_open_risk_eur_for_evaluation(evaluation_id)
-            daily_remaining = risk.compute_eval_daily_budget_remaining(active_eval_for_display, open_risk_eur_display)
-            eval_budget_pct = (risk_eur / daily_remaining * 100) if daily_remaining else 0.0
-        elif active_eval_for_display and evaluation_id is None:
-            eval_blocked_note = "Dagbudget of drawdown-ruimte van je evaluatie is (bijna) op, deze trade telt niet mee voor je evaluatie."
-
-        try:
-            title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, swing-kans"
-            pattern_note = f" ({watch['pattern_name']})" if watch["pattern_name"] else ""
-            body = (
-                f"Vanuit bewaakt niveau {watch['price_level']:.4f}{pattern_note} · "
-                f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
-            )
-            await push_notify.send_push(
-                user["id"], title, body, f"/coins/{coin}", silent=quiet,
-            )
-            repo.mark_journal_telegram_sent(entry_id)
-        except Exception:
-            logger.exception("Swing-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+    await _fanout_confirmed_signal(
+        signal_id, coin, direction, ind_4h.price, stop_take.stop_loss, stop_take.take_profit,
+        title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, swing-kans",
+        make_body=_swing_body,
+    )
 
 
 def _build_context_note(coin: str, direction: str) -> str:
