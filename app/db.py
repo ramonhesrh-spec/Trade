@@ -201,6 +201,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE signals ADD COLUMN auto_outcome TEXT")
     if "auto_outcome_at" not in existing_signals:
         conn.execute("ALTER TABLE signals ADD COLUMN auto_outcome_at TEXT")
+    if "nearest_sr_zone_price" not in existing_signals:
+        conn.execute("ALTER TABLE signals ADD COLUMN nearest_sr_zone_price REAL")
     # Index hier aanmaken, nooit in schema.sql: op het moment dat schema.sql
     # voor een NIEUWE database draait bestaat de kolom al, maar op een
     # bestaande database bestond hij een regel geleden nog niet. IF NOT EXISTS
@@ -225,6 +227,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
     existing_prop_evaluations = {row["name"] for row in conn.execute("PRAGMA table_info(prop_evaluations)")}
     if "danger_alert_sent" not in existing_prop_evaluations:
         conn.execute("ALTER TABLE prop_evaluations ADD COLUMN danger_alert_sent INTEGER NOT NULL DEFAULT 0")
+
+    # sr_zone_failures zelf heeft geen migratie nodig (CREATE TABLE IF NOT
+    # EXISTS in schema.sql dekt zowel verse als bestaande databases, want
+    # het is een heel nieuwe tabel, geen kolom op een bestaande) — alleen
+    # de index moet hier, onvoorwaardelijk, net als idx_signals_auto_outcome_pending.
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_sr_zone_failures_lookup "
+        "ON sr_zone_failures (coin, direction, failed_at)"
+    )
 
 
 def get_setting(key: str, default: str = "") -> str:

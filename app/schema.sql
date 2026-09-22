@@ -215,6 +215,12 @@ CREATE TABLE IF NOT EXISTS signals (
     -- geraakt is.
     auto_outcome TEXT,
     auto_outcome_at TEXT,
+    -- Dichtstbijzijnde zelf-gedetecteerde steun/weerstand-zonerand aan de
+    -- stop-kant van de prijs op het moment van dit signaal (los prijsgetal,
+    -- niet de hele zone) — NULL als er geen bruikbare zone dichtbij was.
+    -- Gebruikt om terug te koppelen naar sr_zone_failures zodra dit signaal
+    -- als stop_loss resolvt, zie app/level_check.py check_signal_outcomes.
+    nearest_sr_zone_price REAL,
     created_at TEXT NOT NULL
 );
 
@@ -377,6 +383,20 @@ CREATE TABLE IF NOT EXISTS registration_attempts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     attempted_at TEXT NOT NULL,
     ip_address TEXT NOT NULL
+);
+
+-- Geheugen voor zelf-gedetecteerde steun/weerstand-zones die recent een
+-- stop loss veroorzaakten: een zone die net bewees onbetrouwbaar te zijn
+-- mag niet morgen alweer een nieuw signaal bevestigen alsof er niks
+-- gebeurd is. Community-niveaus (uit een doorgestuurd bericht) staan hier
+-- expres niet in, die komen van een externe bron, niet van HesPulse's
+-- eigen detectie.
+CREATE TABLE IF NOT EXISTS sr_zone_failures (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    zone_price REAL NOT NULL,
+    failed_at TEXT NOT NULL
 );
 
 -- Indexen op kolommen waar steeds op gefilterd of gesorteerd wordt. Zonder

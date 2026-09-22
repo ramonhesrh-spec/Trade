@@ -906,7 +906,7 @@ def insert_signal(data: dict) -> int:
         "message_id", "coin", "direction", "category", "price", "rsi", "macd",
         "macd_signal", "volume_ratio", "ema9", "ema21", "atr", "atr_avg20", "adx",
         "technical_confirmed", "pass_pct", "hard_gates_ok", "confidence", "reason", "stop_loss", "take_profit",
-        "context_note", "is_practice", "plain_explanation", "trade_type",
+        "context_note", "is_practice", "plain_explanation", "trade_type", "nearest_sr_zone_price",
     ]
     values = [
         data.get("is_practice", 0) if f == "is_practice"
@@ -1696,6 +1696,36 @@ def mark_signal_auto_outcome(signal_id: int, outcome: str, occurred_at: str) -> 
             "UPDATE signals SET auto_outcome = ?, auto_outcome_at = ? WHERE id = ?",
             (outcome, occurred_at, signal_id),
         )
+
+
+def record_sr_zone_failure(coin: str, direction: str, zone_price: float, failed_at: str) -> None:
+    """Onthoudt dat een signaal gebaseerd op deze zelf-gedetecteerde zone
+    de stop loss raakte, zodat een toekomstig signaal vlakbij dezelfde zone
+    een tijdje overgeslagen kan worden — zie recent_sr_zone_failure."""
+    with db.session() as conn:
+        conn.execute(
+            "INSERT INTO sr_zone_failures (coin, direction, zone_price, failed_at) VALUES (?, ?, ?, ?)",
+            (coin, direction, zone_price, failed_at),
+        )
+
+
+def recent_sr_zone_failure(coin: str, direction: str, zone_price: float, atr: float, within_days: int = 3) -> bool:
+    """Faalde een zone die dicht genoeg bij zone_price ligt (binnen 0.5x
+    ATR, dezelfde grootteorde tolerantie als market_scanner's
+    _same_breakout_retest_zone voor een vergelijkbaar 'is dit dezelfde
+    zone'-vraagstuk) al eerder binnen within_days dagen, voor dezelfde coin
+    en richting?"""
+    if not atr:
+        return False
+    tolerance = 0.5 * atr
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=within_days)).isoformat()
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT zone_price FROM sr_zone_failures
+               WHERE coin = ? AND direction = ? AND failed_at >= ?""",
+            (coin, direction, cutoff),
+        ).fetchall()
+    return any(abs(row["zone_price"] - zone_price) <= tolerance for row in rows)
 
 
 def count_pending_signals(user_id: int) -> int:
