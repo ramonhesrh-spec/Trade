@@ -1,11 +1,14 @@
 [Unit]
-Description=Draai de HesPulse autonome marktscan elk uur
+Description=Draai de HesPulse autonome marktscan elke 20 minuten
 
 [Timer]
-# Niet OnCalendar=hourly (vuurt op :00): dat botst met
-# crypto-level-check.timer's *:0/15-grid (:00, :15, :30, :45). Minuut 7
-# vermijdt die botsing, elk uur.
-OnCalendar=*:07:00
+# Elke 20 minuten i.p.v. elk uur (was *:07:00): de whiplash-rem in
+# market_scanner.py (WHIPLASH_MIN_CONSECUTIVE_CYCLES) blijft op 2 cycli
+# staan, dus de betrouwbaarheid verandert niet — maar bij 20 minuten per
+# cyclus daalt de vertraging voor een vers signaal van tot 2 uur naar tot
+# ~40 minuten. Minuten 07/27/47 vermijden crypto-level-check.timer's
+# *:0/15-grid (:00, :15, :30, :45), zelfde reden als voorheen.
+OnCalendar=*:07,27,47:00
 Persistent=true
 
 [Install]

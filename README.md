@@ -48,7 +48,7 @@ blijft voor elke gebruiker apart.
   Discord bericht)
 - `app/market_scanner.py` — autonome marktscan: ontdekt zelf een
   day-trading kans in de dynamische coinlijst, zonder dat een gebruiker
-  eerst een Discord bericht doorstuurt, elk uur via een eigen systemd timer
+  eerst een Discord bericht doorstuurt, elke 20 minuten via een eigen systemd timer
   (hergebruikt dezelfde toetsings- en fan-out-logica als een normaal
   signaal)
 - `web/` — FastAPI dashboard met login, inclusief een berichtenoverzicht op
@@ -285,9 +285,9 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now crypto-market-scan.timer
 ```
 
-Draait elk uur (op minuut 7, niet op het hele uur: dat zou botsen met het
-`*:0/15`-grid van `crypto-level-check.timer` hierboven) en toetst zelf elke
-coin uit de dynamische coinlijst op een day-trading kans, zonder dat er
+Draait elke 20 minuten (op minuten 07/27/47, niet op het `*:0/15`-grid van
+`crypto-level-check.timer` hierboven) en toetst zelf elke coin uit de
+dynamische coinlijst op een day-trading kans, zonder dat er
 eerst een Discord bericht doorgestuurd hoeft te worden. Richting komt uit
 de EMA9/EMA21 trend, de rest van de toetsing (technische factoren, stop
 loss, take profit, positiegrootte, pushmelding per gebruiker) is

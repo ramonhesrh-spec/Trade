@@ -257,6 +257,12 @@ CREATE TABLE IF NOT EXISTS journal_entries (
     position_size_override REAL,
     position_size REAL,
     evaluation_id INTEGER REFERENCES prop_evaluations(id),
+    -- Deze gebruiker heeft dit signaal weggeklikt op /signalen ("niet
+    -- interessant"), NULL = niet weggeklikt. Puur een per-gebruiker
+    -- weergavefilter, raakt nooit signals zelf: de gedeelde trackrecord en
+    -- ieders eigen winrate (repo.winrate_for_user) lezen rechtstreeks uit
+    -- signals, niet uit journal_entries, dus dit heeft daar geen invloed op.
+    dismissed_at TEXT,
     UNIQUE (signal_id, user_id)
 );
 

@@ -1,10 +1,10 @@
 """Autonome marktscan: HesPulse ontdekt zelf een day-trading-kans, zonder
-dat een gebruiker eerst een Discord-bericht doorstuurt. Draait elk uur via
-een systemd-timer (zie deploy/crypto-market-scan.service en .timer), niet
-elke 4 uur zoals de underlying candle-timeframe: de laatste 4u-candle is
-bij Binance nog "in wording" totdat hij sluit, dus tussentijds checken
-vangt een beweging eerder op. Zelfde soort redenering als level_check.py,
-die ook vaker draait dan de candle zelf.
+dat een gebruiker eerst een Discord-bericht doorstuurt. Draait elke 20
+minuten via een systemd-timer (zie deploy/crypto-market-scan.service en
+.timer), niet elke 4 uur zoals de underlying candle-timeframe: de laatste
+4u-candle is bij Binance nog "in wording" totdat hij sluit, dus
+tussentijds checken vangt een beweging eerder op. Zelfde soort
+redenering als level_check.py, die ook vaker draait dan de candle zelf.
 
 Voor elke coin in de bestaande dynamische lijst (repo.list_coins()) wordt
 zelf een richting bepaald via de trend (EMA9 t.o.v. EMA21) en hergebruikt
@@ -22,15 +22,20 @@ from app.signal_processor import process_day_trading_signal
 
 logger = logging.getLogger("market_scanner")
 
-# Twaalf van de vierentwintig scan-cycli per dag overslaan na een verlies
-# op dezelfde coin+richting is een reële afkoelperiode zonder een kans
-# dagenlang te blokkeren. Zie de spec, sectie 4.
+# Twaalf uur overslaan na een verlies op dezelfde coin+richting is een
+# reële afkoelperiode zonder een kans dagenlang te blokkeren. In uren, niet
+# in cycli: blijft ongewijzigd correct ongeacht het scan-interval. Zie de
+# spec, sectie 4.
 AUTO_SCAN_LOSS_COOLDOWN_HOURS = 12
 
 # Whiplash-rem: een NIEUWE richting moet dit aantal scan-cycli achter
 # elkaar aanhouden voor er gemeld wordt. Voorkomt dat een EMA9/EMA21-
-# kruising die binnen een uur alweer terugklapt eerst een long en dan een
-# short melding oplevert voor dezelfde coin.
+# kruising die binnen enkele tientallen minuten alweer terugklapt eerst
+# een long en dan een short melding oplevert voor dezelfde coin. Bij het
+# huidige 20-minuten-interval (deploy/crypto-market-scan.timer) is dat tot
+# ~40 minuten vertraging voor een vers signaal — bewust ongewijzigd
+# gelaten toen het interval van elk uur naar elke 20 minuten ging, dat is
+# de betrouwbaarheidswaarborg, niet de knop om sneller te melden.
 WHIPLASH_MIN_CONSECUTIVE_CYCLES = 2
 
 
@@ -253,7 +258,7 @@ async def scan_market() -> None:
             # Cheap pre-filter, niet een tweede toetsing: alleen de
             # basisfactoren, zodat een coin die deze cyclus duidelijk niet
             # bevestigt en nog nooit een open signaal had geen kale,
-            # afgewezen rij in `signals` achterlaat (elk uur, voor
+            # afgewezen rij in `signals` achterlaat (elke cyclus, voor
             # tientallen coins, zou dat de tabel vervuilen zonder dat er
             # ooit een kans was). process_day_trading_signal doet hierna
             # nog steeds zijn eigen volledige toetsing (incl. eventuele
@@ -272,7 +277,7 @@ async def scan_market() -> None:
             # notify_on_reject=False: een autonoom afgewezen kans ("nog geen
             # sterke kans") hoeft geen Telegram-melding te sturen zoals een
             # door de gebruiker gedeeld bericht dat wel altijd krijgt — dat
-            # zou elk uur voor tientallen coins een afwijzingsbericht
+            # zou elke cyclus voor tientallen coins een afwijzingsbericht
             # opleveren. De logboekregel en de trackrecord blijven gewoon
             # bestaan, alleen de melding zelf wordt overgeslagen.
             await process_day_trading_signal(None, interp, notify_on_update=False, notify_on_reject=False)

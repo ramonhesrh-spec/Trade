@@ -1128,15 +1128,35 @@ def list_signalen_for_user(user_id: int, limit: int = 500) -> list[dict]:
     zijn eigen logboekregel te zien krijgt, nieuwste eerst. Gedeelde basis
     voor zowel het laatste-seintje-bannertje (list_recent_signals_for_user,
     limit=1) als de losstaande, kale Signalen-pagina (/signalen, Task 6),
-    die deze lijst zelf nog op pass_pct herschikt."""
+    die deze lijst zelf nog op pass_pct herschikt. Een door deze gebruiker
+    weggeklikt signaal (dismiss_signal_for_user) blijft hier permanent
+    buiten beeld, ook bij ?alles=1 en in het bannertje — dit is puur een
+    weergavefilter, de gedeelde signals-tabel en de winrate-berekening
+    zien er niets van."""
     with db.session() as conn:
         rows = conn.execute(
             _JOURNAL_SELECT + """
-            WHERE je.user_id = ? AND s.is_practice = 0
+            WHERE je.user_id = ? AND s.is_practice = 0 AND je.dismissed_at IS NULL
             ORDER BY s.created_at DESC LIMIT ?""",
             (user_id, limit),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def dismiss_signal_for_user(journal_entry_id: int, user_id: int) -> bool:
+    """Verbergt een signaal van /signalen voor deze gebruiker ("niet
+    interessant"). Zet alleen dismissed_at op de eigen journal_entries-rij,
+    raakt signals nooit — de gedeelde trackrecord en ieders eigen winrate
+    (winrate_for_user) lezen rechtstreeks uit signals, dus dit heeft daar
+    geen invloed op. user_id in de WHERE is de eigendomscheck: voorkomt dat
+    iemand een andere gebruiker se journal-rij kan verbergen via een geraden
+    id. Geeft False als er geen eigen rij met dit id bestond."""
+    with db.session() as conn:
+        cursor = conn.execute(
+            "UPDATE journal_entries SET dismissed_at = ? WHERE id = ? AND user_id = ?",
+            (db.now_iso(), journal_entry_id, user_id),
+        )
+        return cursor.rowcount > 0
 
 
 def list_recent_signals_for_user(user_id: int, limit: int = 1) -> list[dict]:

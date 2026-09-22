@@ -16,7 +16,7 @@
   {% else %}
   <div class="signal-list">
     {% for entry in entries %}
-    {{ macros.signal_card(entry) }}
+    {{ macros.signal_card(entry, dismissible=True, showing_all=showing_all) }}
     {% endfor %}
   </div>
   {% endif %}

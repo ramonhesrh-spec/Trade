@@ -175,6 +175,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE journal_entries ADD COLUMN entry_time TEXT")
     if "position_size" not in existing_journal:
         conn.execute("ALTER TABLE journal_entries ADD COLUMN position_size REAL")
+    if "dismissed_at" not in existing_journal:
+        conn.execute("ALTER TABLE journal_entries ADD COLUMN dismissed_at TEXT")
     # Index hier, nooit in schema.sql: op een bestaande database zonder de
     # kolom hierboven zou die CREATE INDEX meteen crashen, zie het
     # narrative_id-precedent verderop in dit bestand.

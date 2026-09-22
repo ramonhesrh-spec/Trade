@@ -32,6 +32,28 @@ BASE_DIR = Path(__file__).resolve().parent
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
 templates.env.globals["disclaimer"] = config.DISCLAIMER
 
+
+def _age_label(iso: str | None) -> str:
+    """Leesbare "3 uur geleden"-tekst voor een db.now_iso()-tijdstip.
+    Zelfde drempels als base.html's JS-timeAgo() voor de systeemstatus,
+    hier server-side omdat een signaalkaart niet live hoeft bij te werken
+    zoals die statuspopover dat wel doet."""
+    if not iso:
+        return "-"
+    then = datetime.fromisoformat(iso)
+    minutes = (datetime.now(timezone.utc) - then).total_seconds() / 60
+    if minutes < 1:
+        return "net nu"
+    if minutes < 60:
+        return f"{round(minutes)} min geleden"
+    hours = minutes / 60
+    if hours < 24:
+        return f"{round(hours)} uur geleden"
+    return f"{round(hours / 24)} dagen geleden"
+
+
+templates.env.filters["age"] = _age_label
+
 app = FastAPI(title="HesPulse")
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
 
@@ -190,6 +212,16 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
         "entries": entries,
         "showing_all": alles,
     })
+
+
+@app.post("/signalen/{entry_id}/verbergen")
+async def dismiss_signal(entry_id: int, alles: bool = False, user: dict = Depends(require_login)):
+    """Verbergt een signaal van /signalen voor deze gebruiker ("niet
+    interessant"). Puur een weergavefilter op de eigen journal_entries-rij,
+    zie repo.dismiss_signal_for_user — de gedeelde signalen en ieders
+    winrate blijven ongemoeid."""
+    repo.dismiss_signal_for_user(entry_id, user["id"])
+    return RedirectResponse(url=f"/signalen{'?alles=1' if alles else ''}", status_code=303)
 
 
 # ---------------------------------------------------------------------------

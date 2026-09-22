@@ -135,7 +135,7 @@
    Deze anchor moet in beide gevallen naar dezelfde, echte signals.id
    wijzen, anders springt de coin-link van /signalen naar de verkeerde
    kaart op de coinpagina. #}
-{% macro signal_card(entry) %}
+{% macro signal_card(entry, dismissible=False, showing_all=False) %}
 {% set anchor_id = entry.signal_id if entry.signal_id is defined and entry.signal_id else entry.id %}
 <div class="signal-card {{ 'is-confirmed' if entry.user_confirmed else 'is-rejected' }}" id="signal-{{ anchor_id }}">
   <div class="signal-card-head">
@@ -165,5 +165,14 @@
     </div>
   </details>
   {% endif %}
+  <div class="signal-card-meta">
+    <span class="muted">{{ entry.created_at | age }}</span>
+    {% if dismissible and entry.auto_outcome is none %}
+    <form method="post" action="/signalen/{{ entry.id }}/verbergen" class="inline-form">
+      {% if showing_all %}<input type="hidden" name="alles" value="1">{% endif %}
+      <button type="submit" class="button-link">niet interessant</button>
+    </form>
+    {% endif %}
+  </div>
 </div>
 {% endmacro %}
