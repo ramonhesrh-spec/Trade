@@ -203,6 +203,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE signals ADD COLUMN auto_outcome_at TEXT")
     if "nearest_sr_zone_price" not in existing_signals:
         conn.execute("ALTER TABLE signals ADD COLUMN nearest_sr_zone_price REAL")
+    if "suggested_entry_low" not in existing_signals:
+        conn.execute("ALTER TABLE signals ADD COLUMN suggested_entry_low REAL")
+    if "suggested_entry_high" not in existing_signals:
+        conn.execute("ALTER TABLE signals ADD COLUMN suggested_entry_high REAL")
     # Index hier aanmaken, nooit in schema.sql: op het moment dat schema.sql
     # voor een NIEUWE database draait bestaat de kolom al, maar op een
     # bestaande database bestond hij een regel geleden nog niet. IF NOT EXISTS

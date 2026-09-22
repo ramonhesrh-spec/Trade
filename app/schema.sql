@@ -221,6 +221,13 @@ CREATE TABLE IF NOT EXISTS signals (
     -- Gebruikt om terug te koppelen naar sr_zone_failures zodra dit signaal
     -- als stop_loss resolvt, zie app/level_check.py check_signal_outcomes.
     nearest_sr_zone_price REAL,
+    -- Realistische, iets betere entry-zone dan de live prijs, gebaseerd op
+    -- de dichtstbijzijnde zelf-gedetecteerde steun/weerstand-zone tussen de
+    -- entry en de stop loss — PUUR informatief, telt nergens mee in
+    -- sizing/journaal/trackrecord (product owner: live prijs blijft de
+    -- echte entry). Beide NULL als er geen bruikbare zone was.
+    suggested_entry_low REAL,
+    suggested_entry_high REAL,
     created_at TEXT NOT NULL
 );
 

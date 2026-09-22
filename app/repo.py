@@ -907,6 +907,7 @@ def insert_signal(data: dict) -> int:
         "macd_signal", "volume_ratio", "ema9", "ema21", "atr", "atr_avg20", "adx",
         "technical_confirmed", "pass_pct", "hard_gates_ok", "confidence", "reason", "stop_loss", "take_profit",
         "context_note", "is_practice", "plain_explanation", "trade_type", "nearest_sr_zone_price",
+        "suggested_entry_low", "suggested_entry_high",
     ]
     values = [
         data.get("is_practice", 0) if f == "is_practice"
@@ -1067,6 +1068,7 @@ def update_signal(signal_id: int, data: dict) -> None:
         "atr_avg20", "adx",
         "technical_confirmed", "pass_pct", "hard_gates_ok", "confidence", "reason", "stop_loss", "take_profit",
         "context_note", "plain_explanation", "nearest_sr_zone_price",
+        "suggested_entry_low", "suggested_entry_high",
     ]
     values = [data.get(f) for f in fields]
     with db.session() as conn:

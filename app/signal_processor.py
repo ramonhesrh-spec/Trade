@@ -799,6 +799,23 @@ async def process_day_trading_signal(
         stop_take = risk.compute_stop_take(
             interp.direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high,
         )
+
+    # Een bruikbare entry-zone ligt tussen de huidige prijs en de stop
+    # loss (in het voordeel van de trade: dichter bij de stop dan de
+    # huidige prijs bij long is een BETERE, niet slechtere, entry — bij
+    # short andersom), en is dus nooit voorbij de stop loss zelf. PUUR
+    # informatief (product owner): telt nergens mee in sizing/journaal/
+    # trackrecord, de live prijs (ind.price, hierboven) blijft de echte
+    # entry overal elders in deze functie.
+    if interp.direction.lower() == "long":
+        favorable = [z for z in zones if stop_take.stop_loss < z.price_low < ind.price]
+        best_zone = max(favorable, key=lambda z: z.price_high) if favorable else None
+    else:
+        favorable = [z for z in zones if ind.price < z.price_high < stop_take.stop_loss]
+        best_zone = min(favorable, key=lambda z: z.price_low) if favorable else None
+    suggested_entry_low = best_zone.price_low if best_zone else None
+    suggested_entry_high = best_zone.price_high if best_zone else None
+
     risk_distance = abs(ind.price - stop_take.stop_loss)
     reward_distance = abs(stop_take.take_profit - ind.price)
     risk_reward_ratio = (reward_distance / risk_distance) if risk_distance else 0.0
@@ -854,6 +871,8 @@ async def process_day_trading_signal(
         "pass_pct": pass_pct,
         "hard_gates_ok": int(hard_gates_ok),
         "nearest_sr_zone_price": nearest_sr_zone_price,
+        "suggested_entry_low": suggested_entry_low,
+        "suggested_entry_high": suggested_entry_high,
         "confidence": confidence,
         "reason": reason,
         "stop_loss": stop_take.stop_loss,
