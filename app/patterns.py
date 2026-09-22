@@ -269,3 +269,66 @@ def find_divergence(df: pd.DataFrame) -> Optional[PatternMatch]:
                 confirmed_index=last.index, pattern_kind="divergence",
             )
     return None
+
+
+def _check_neckline_retest(df: pd.DataFrame, match: PatternMatch, atr: float) -> Optional[tuple[float, float]]:
+    """Is de prijs sinds de nek-doorbraak (match.confirmed_index) weer
+    teruggekomen tot dichtbij de nek zelf, zonder de doorbraak ongedaan te
+    maken? Zelfde soort toets als indicators.find_breakout_retest, hier op
+    één niveau (de nek) in plaats van een zone met een boven- en
+    ondergrens. Geeft (low, high) van de retest-band terug, of None als er
+    nog geen (geldige) terugtest is geweest."""
+    closes = df["close"].reset_index(drop=True)
+    if match.confirmed_index >= len(closes) - 1:
+        return None
+    since = closes.iloc[match.confirmed_index + 1:]
+    tolerance = indicators.BREAKOUT_RETEST_TOLERANCE_ATR_MULTIPLE * atr
+    current = closes.iloc[-1]
+    if match.direction == "short":
+        if (since > match.neckline).any():
+            return None
+        if current <= match.neckline + tolerance:
+            return (match.neckline - tolerance, match.neckline + tolerance)
+    else:
+        if (since < match.neckline).any():
+            return None
+        if current >= match.neckline - tolerance:
+            return (match.neckline - tolerance, match.neckline + tolerance)
+    return None
+
+
+def find_entry_options(
+    df: pd.DataFrame, match: PatternMatch, atr: float,
+    trendlines: Optional[list[indicators.Trendline]] = None,
+) -> dict:
+    """Twee entry-opties voor een bevestigd patroon: het uitbraakniveau
+    zelf (breakout_level, snel, kan nog zonder terugtest zijn) en, als de
+    prijs al is teruggekeerd, het retest-niveau (bevestigd). retest_low/
+    retest_high zijn None zolang er nog geen retest is geweest — de kaart
+    toont dan alleen de uitbraak-optie."""
+    if match.pattern_kind == "channel_wedge" and trendlines:
+        line = next(
+            (l for l in trendlines if (l.kind == "resistance") == (match.direction == "long")), None,
+        )
+        if line is not None:
+            window_len = len(df.tail(indicators.SR_ZONE_LOOKBACK))
+            hits = indicators.find_trendline_breakout_retest(df, [line], atr, match.direction)
+            if hits:
+                tolerance = indicators.BREAKOUT_RETEST_TOLERANCE_ATR_MULTIPLE * atr
+                current_value = line.value_at(window_len - 1)
+                return {
+                    "breakout_level": match.neckline,
+                    "retest_low": current_value - tolerance,
+                    "retest_high": current_value + tolerance,
+                }
+        return {"breakout_level": match.neckline, "retest_low": None, "retest_high": None}
+
+    if match.pattern_kind in ("top_bottom", "hs"):
+        retest = _check_neckline_retest(df, match, atr)
+        return {
+            "breakout_level": match.neckline,
+            "retest_low": retest[0] if retest else None,
+            "retest_high": retest[1] if retest else None,
+        }
+
+    return {"breakout_level": match.neckline, "retest_low": None, "retest_high": None}
