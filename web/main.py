@@ -709,9 +709,13 @@ async def _annotate_level_outcomes(symbol: str, levels: list[dict]) -> None:
 
 def _filter_journal(all_entries: list[dict], status: str) -> list[dict]:
     """Filtert een al opgehaalde lijst logboekregels op status, dezelfde
-    regels als repo.list_journal, zonder een tweede databasebevraging."""
+    regels als repo.list_journal, zonder een tweede databasebevraging.
+    dismissed_at IS NULL hoort in "open": wat op /signalen als "niet
+    interessant" is weggeklikt, telt nergens meer mee als open kans (zelfde
+    bron als repo.count_pending_signals, het app-icoon-cijfer)."""
     if status == "open":
-        return [e for e in all_entries if e["status"] != "genegeerd" and e["exit_price"] is None]
+        return [e for e in all_entries if e["status"] != "genegeerd" and e["exit_price"] is None
+                and e["dismissed_at"] is None]
     if status == "gesloten":
         return [e for e in all_entries if e["exit_price"] is not None]
     if status == "genegeerd":

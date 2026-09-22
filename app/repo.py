@@ -1109,6 +1109,7 @@ _JOURNAL_SELECT = """
         je.note AS note,
         je.position_size_override AS position_size_override,
         je.evaluation_id AS evaluation_id,
+        je.dismissed_at AS dismissed_at,
         s.coin AS coin, s.direction AS direction, s.category AS category,
         s.trade_type AS trade_type,
         s.price AS price,
@@ -1250,6 +1251,7 @@ def list_journal(user_id: int, status: Optional[str] = None, limit: int = 500) -
             rows = conn.execute(
                 _JOURNAL_SELECT + """
                 WHERE je.user_id = ? AND je.status != 'genegeerd' AND je.exit_price IS NULL
+                  AND je.dismissed_at IS NULL
                 ORDER BY je.id DESC LIMIT ?""",
                 (user_id, limit),
             ).fetchall()
@@ -1776,12 +1778,16 @@ def recent_sr_zone_failure(coin: str, direction: str, zone_price: float, atr: fl
 
 def count_pending_signals(user_id: int) -> int:
     """Aantal echte meldingen die nog op een keuze wachten (nog niet
-    Genomen/Aangepast/Genegeerd). Basis voor het cijfer op het app-icoon."""
+    Genomen/Aangepast/Genegeerd/weggeklikt). Basis voor het cijfer op het
+    app-icoon, en dezelfde bron als "nieuwe kansen" op Mijn account en de
+    open-lijst op /signalen — dismissed_at IS NULL houdt die drie tellers
+    in lijn met elkaar: wat je op Signalen wegklikt telt nergens meer mee."""
     with db.session() as conn:
         row = conn.execute(
             """SELECT COUNT(*) AS n
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
-               WHERE je.user_id = ? AND je.status = 'nieuw' AND s.is_practice = 0""",
+               WHERE je.user_id = ? AND je.status = 'nieuw' AND s.is_practice = 0
+                 AND je.dismissed_at IS NULL""",
             (user_id,),
         ).fetchone()
         return row["n"]

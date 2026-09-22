@@ -28,17 +28,15 @@ from app.signal_processor import (
 
 logger = logging.getLogger("level_check")
 
-# Hoe lang een day-trading signaal zonder vastgestelde uitkomst blijft
-# meedraaien in de automatische trackrecord-check voor het als "vervallen"
-# telt in plaats van "nog open". Day trading draait hier op 4-uurs candles
-# en is bedoeld om zich binnen uren tot een paar dagen te ontwikkelen, dus
-# 14 dagen is al ruim: genoeg marge voor een trage markt of een meerdaagse
-# positie, maar nog altijd ver onder de maanden waarin een oud, allang niet
-# meer relevant signaal anders alsnog willekeurig een win of loss zou
-# scoren zodra de prijs er per toeval doorheen zwabbert. Bewust veel korter
-# dan SWING_WATCH_MAX_AGE_DAYS (84): swing-niveaus bewaken een structureel
-# support/weerstand-niveau over weken tot maanden, day trading niet.
-SIGNAL_MAX_AGE_DAYS = 14
+# Hoe lang een signaal (day trading of swing) zonder vastgestelde uitkomst
+# blijft meedraaien in de automatische trackrecord-check voor het als
+# "vervallen" telt (verdwijnt dan uit de open-lijst op /signalen) in
+# plaats van "nog open". De focus ligt op snelle, kortere trades: is er
+# binnen 1 dag niks gebeurd (geen TP/SL geraakt), dan is het signaal
+# simpelweg niet meer actueel genoeg om nog tussen de open kansen te
+# staan — ook een swing-kans, bewust dezelfde termijn als day trading,
+# geen aparte, langere uitzondering.
+SIGNAL_MAX_AGE_DAYS = 1
 
 # Hoe dicht de prijs bij het oorspronkelijke signaalniveau moet komen voordat
 # een nog niet genomen signaal een "weer interessant" seintje krijgt. In ATR,
