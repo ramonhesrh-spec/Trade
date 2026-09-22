@@ -255,9 +255,12 @@ async def _check_chart_patterns(coin: str, df, ind) -> None:
 
     entry_options = patterns.find_entry_options(df, match, ind.atr, trendlines=trendlines)
 
-    if match.stop_loss is not None and match.target is not None and _valid_stop_take(
-        match.direction, ind.price, match.stop_loss, match.target,
-    ):
+    used_pattern_stop_take = (
+        match.stop_loss is not None and match.target is not None and _valid_stop_take(
+            match.direction, ind.price, match.stop_loss, match.target,
+        )
+    )
+    if used_pattern_stop_take:
         stop_loss, take_profit = match.stop_loss, match.target
     else:
         # divergence (geen eigen gemeten beweging) of een patroon waarvan de
@@ -294,8 +297,17 @@ async def _check_chart_patterns(coin: str, df, ind) -> None:
             f" · Retest {entry_options['retest_low']:.4f}–{entry_options['retest_high']:.4f}"
             if entry_options["retest_low"] is not None else ""
         )
+        # Als de patroon-eigen stop/take niet aan de juiste kant van de live
+        # prijs bleken te liggen (C2-guard, used_pattern_stop_take=False) is
+        # het uitbraakniveau van het patroon zelf niet meer de premisse van
+        # deze trade — dan de live prijs tonen in plaats van een uitbraak-
+        # niveau dat niet meer bij de getoonde stop/take past.
+        level_label = (
+            f"Uitbraak {entry_options['breakout_level']:.4f}{retest_note}"
+            if used_pattern_stop_take else f"Prijs {ind.price:.4f}"
+        )
         return (
-            f"Uitbraak {entry_options['breakout_level']:.4f}{retest_note} · "
+            f"{level_label} · "
             f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
         )
 

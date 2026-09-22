@@ -177,7 +177,7 @@
   {% endif %}
   {% if entry.reason %}
   <details class="confidence-detail js-accordion">
-    <summary class="confidence-why">waarom {{ "%.0f"|format(entry.pass_pct) ~ "%" if entry.pass_pct is not none else "dit bewaakte niveau" }}?</summary>
+    <summary class="confidence-why">waarom {% if entry.pass_pct is not none %}{{ "%.0f"|format(entry.pass_pct) }}%{% elif entry.trade_type == "patroon" %}dit patroon{% else %}dit bewaakte niveau{% endif %}?</summary>
     <div class="reason-popup">
       {{ reason_popup(entry) }}
     </div>

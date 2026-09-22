@@ -46,15 +46,19 @@ def _atr(df, window: int = 14):
     return tr.rolling(window).mean()
 
 
-def classify_outcome(df, match, atr_series, start_offset: int) -> str:
+def classify_outcome(df, match, atr_series, now_index: int) -> str:
     """Zelfde soort target/invalidated/zijwaarts-classificatie als
-    research_reversal_patterns.py, hier op de absolute candle-index in de
-    volledige (niet-geschoven) df: start_offset + match.confirmed_index."""
-    abs_index = start_offset + match.confirmed_index
-    window = df.iloc[abs_index + 1:abs_index + 1 + LOOKFORWARD_CANDLES]
+    research_reversal_patterns.py, hier gemeten vanaf now_index (de laatste
+    candle van het scan-venster op deze stap, het moment waarop HesPulse dit
+    signaal daadwerkelijk zou geven) — niet vanaf match.confirmed_index (het
+    begin van de doorbraakreeks). Sinds de I3-fix is confirmed_index niet
+    meer per se de laatste venstercandle, dus meten vanaf confirmed_index zou
+    het vooruitkijk-venster laten overlappen met candles die op dit
+    scan-moment al bekend waren (zie R2, finale re-review)."""
+    window = df.iloc[now_index + 1:now_index + 1 + LOOKFORWARD_CANDLES]
     if window.empty or match.target is None or match.stop_loss is None:
         return "onbekend"
-    band = SIDEWAYS_ATR_MULT * atr_series.iloc[abs_index] if abs_index < len(atr_series) else 0.0
+    band = SIDEWAYS_ATR_MULT * atr_series.iloc[now_index] if now_index < len(atr_series) else 0.0
     invalidate_level = match.neckline
     for _, row in window.iterrows():
         if match.direction == "short":
@@ -86,7 +90,7 @@ def run(coin: str, timeframe: str, years: float) -> None:
             trendlines = indicators.detect_trendlines(window, atr_now)
             match = patterns.classify_channel_wedge(window, trendlines, atr_now)
             if match:
-                outcome = classify_outcome(full_df, match, atr_series, start - lookback)
+                outcome = classify_outcome(full_df, match, atr_series, start - 1)
                 by_name.setdefault(match.name, []).append(outcome)
 
             div_match = patterns.find_divergence(window)
@@ -95,13 +99,14 @@ def run(coin: str, timeframe: str, years: float) -> None:
                 # kan hier niet direct op toegepast worden — meet in plaats
                 # daarvan of de prijs binnen LOOKFORWARD_CANDLES in de
                 # gemelde richting bewoog (eenvoudige richtings-tref-check).
-                abs_index = (start - lookback) + div_match.confirmed_index
-                fwd = full_df.iloc[abs_index + 1:abs_index + 1 + LOOKFORWARD_CANDLES]
+                # Gemeten vanaf start - 1 ("nu"), zelfde reden als hierboven.
+                now_index = start - 1
+                fwd = full_df.iloc[now_index + 1:now_index + 1 + LOOKFORWARD_CANDLES]
                 if not fwd.empty:
                     moved_right_way = (
-                        fwd["close"].iloc[-1] > full_df["close"].iloc[abs_index]
+                        fwd["close"].iloc[-1] > full_df["close"].iloc[now_index]
                         if div_match.direction == "long" else
-                        fwd["close"].iloc[-1] < full_df["close"].iloc[abs_index]
+                        fwd["close"].iloc[-1] < full_df["close"].iloc[now_index]
                     )
                     by_name.setdefault(div_match.name, []).append(
                         "target_hit" if moved_right_way else "invalidated"
