@@ -26,7 +26,13 @@ def check_coin(coin: str) -> dict:
     df = exchange.fetch_ohlcv(coin)
     ind = indicators.compute_indicators(df)
     direction = "long" if ind.ema9 > ind.ema21 else "short"
-    confirmed, detail, _, _ = indicators.confirms_direction(ind, direction)
+    # daily_trend_factor=None: net als market_scanner.py's cheap precheck,
+    # bewust geen dagtrend-hard-gate hier — een 1d-candle per coin ophalen
+    # zou dit al trage, interactieve overzicht (alle gevolgde coins in één
+    # run) nog verder vertragen, dus dit blijft een vereenvoudigd
+    # (geen-dagtrend) scenario, niet representatief voor de volledige
+    # productietoetsing in process_day_trading_signal.
+    confirmed, detail, _, _ = indicators.confirms_direction(ind, direction, daily_trend_factor=None)
     zones = indicators.detect_sr_zones(df)
     factors = indicators.basic_factors(direction, ind)
 

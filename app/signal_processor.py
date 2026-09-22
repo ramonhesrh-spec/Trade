@@ -602,12 +602,21 @@ def _build_context_note(coin: str, direction: str) -> str:
 
 async def compute_advanced_extra_factors(
     coin: str, direction: str, df, entry_price: float, atr: float, zones: list[indicators.SRZone],
+    daily_df=None, daily_ind: indicators.Indicators | None = None,
 ) -> list[tuple[str, bool, str]]:
     """Berekent de losse checks voor de uitgebreide factorenset (BTC-trend,
     1u bevestiging, divergentie, liquiditeit). Elke check faalt individueel
     en "fail-closed" als de data ervoor niet op te halen is: beter een
     factor die ten onrechte op ✗ staat door een netwerkhapering, dan een
-    hoog-vertrouwen melding die stilzwijgend op onvolledige data steunt."""
+    hoog-vertrouwen melding die stilzwijgend op onvolledige data steunt.
+
+    daily_df/daily_ind zijn optioneel: process_day_trading_signal haalt de
+    1d-candle altijd al zelf op voor de Daily-trend-hard-gate (zie daar) en
+    geeft die hier door, zodat deze functie 'm niet nogmaals via de
+    exchange hoeft op te halen voor de andere dag-factoren (RSI daily,
+    Premium/discount (dag), Liquidity sweep (dag)) die hem ook nodig
+    hebben. Ontbreken ze (bv. de eerdere fetch faalde), dan valt deze
+    functie terug op zijn eigen fetch hieronder."""
     factors: list[tuple[str, bool, str]] = []
 
     if coin.upper() != "BTC":
@@ -627,8 +636,9 @@ async def compute_advanced_extra_factors(
             factors.append(("BTC-trend", False, "kon niet opgehaald worden, telt als niet bevestigd"))
 
     try:
-        daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
-        daily_ind = indicators.compute_indicators(daily_df)
+        if daily_df is None or daily_ind is None:
+            daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
+            daily_ind = indicators.compute_indicators(daily_df)
         # Daily-trend zelf wordt niet meer hier berekend: die is nu een
         # altijd-actieve harde eis in confirms_direction, opgehaald in
         # process_day_trading_signal (zie daar), anders zou hij hier
@@ -638,7 +648,11 @@ async def compute_advanced_extra_factors(
         factors.append(indicators.check_daily_premium_discount(direction, entry_price, daily_swing_low, daily_swing_high))
         factors.append(indicators.check_daily_liquidity_sweep(direction, daily_df))
     except Exception:
-        logger.exception("Daily-trend/RSI voor %s kon niet berekend worden", coin)
+        # Log-tekst dekt alleen nog de factoren die deze functie hier
+        # berekent (RSI daily, Premium/discount (dag), Liquidity sweep
+        # (dag)) — Daily-trend zelf heeft een eigen fetch/log in
+        # process_day_trading_signal, zie de comment hierboven.
+        logger.exception("Dag-factoren (RSI/premium-discount/liquidity sweep) voor %s konden niet berekend worden", coin)
         factors.append(("RSI daily", False, "kon niet opgehaald worden, telt als niet bevestigd"))
         factors.append(("Premium/discount (dag)", False, "kon niet opgehaald worden, telt als niet bevestigd"))
         factors.append(("Liquidity sweep (dag)", False, "kon niet opgehaald worden, telt als niet bevestigd"))
@@ -728,6 +742,8 @@ async def process_day_trading_signal(
     zones = indicators.detect_sr_zones(df)
 
     daily_trend_factor = None
+    daily_df = None
+    daily_ind = None
     try:
         daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, interp.coin, "1d")
         daily_ind = indicators.compute_indicators(daily_df)
@@ -746,6 +762,7 @@ async def process_day_trading_signal(
     if config.ENABLE_ADVANCED_FACTORS:
         extra_factors = await compute_advanced_extra_factors(
             interp.coin, interp.direction, df, ind.price, ind.atr, zones,
+            daily_df=daily_df, daily_ind=daily_ind,
         )
 
     # Dezelfde edges/kant-bepaling-logica als indicators.check_sr_zone gebruikt
@@ -756,10 +773,16 @@ async def process_day_trading_signal(
     # allebei aangepast moeten worden voor een waarde die alleen hier nodig is.
     edges = [edge for zone in zones for edge in (zone.price_low, zone.price_high)]
     if interp.direction.lower() == "long":
-        zone_candidates = [e for e in edges if e < ind.price]
+        zone_candidates = [
+            e for e in edges
+            if e < ind.price and abs(ind.price - e) <= indicators.SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * ind.atr
+        ]
         nearest_sr_zone_price = max(zone_candidates) if zone_candidates else None
     else:
-        zone_candidates = [e for e in edges if e > ind.price]
+        zone_candidates = [
+            e for e in edges
+            if e > ind.price and abs(ind.price - e) <= indicators.SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * ind.atr
+        ]
         nearest_sr_zone_price = min(zone_candidates) if zone_candidates else None
 
     confirmed, reason, pass_pct, hard_gates_ok = indicators.confirms_direction(
@@ -807,14 +830,21 @@ async def process_day_trading_signal(
     # informatief (product owner): telt nergens mee in sizing/journaal/
     # trackrecord, de live prijs (ind.price, hierboven) blijft de echte
     # entry overal elders in deze functie.
+    # Geclampt op ind.price: de favorable-filters hierboven toetsen alleen
+    # de rand die het VERST van de live prijs af ligt, dus een zone die de
+    # prijs zelf overlapt sluiten ze niet uit. Zonder de clamp zou de
+    # getoonde range dan deels een "betere entry" adverteren die feitelijk
+    # slechter is dan de huidige prijs.
     if interp.direction.lower() == "long":
         favorable = [z for z in zones if stop_take.stop_loss < z.price_low < ind.price]
         best_zone = max(favorable, key=lambda z: z.price_high) if favorable else None
+        suggested_entry_low = best_zone.price_low if best_zone else None
+        suggested_entry_high = min(best_zone.price_high, ind.price) if best_zone else None
     else:
         favorable = [z for z in zones if ind.price < z.price_high < stop_take.stop_loss]
         best_zone = min(favorable, key=lambda z: z.price_low) if favorable else None
-    suggested_entry_low = best_zone.price_low if best_zone else None
-    suggested_entry_high = best_zone.price_high if best_zone else None
+        suggested_entry_low = max(best_zone.price_low, ind.price) if best_zone else None
+        suggested_entry_high = best_zone.price_high if best_zone else None
 
     risk_distance = abs(ind.price - stop_take.stop_loss)
     reward_distance = abs(stop_take.take_profit - ind.price)
@@ -1143,9 +1173,19 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
             coin = message_data["coin"]
             confirmed = message_data["technical_confirmed"]
             title = f"{push_notify.coin_symbol(coin)} {coin} {message_data['direction']}, update"
+            # Zelfde entry_zone_note-logica als in process_day_trading_signal
+            # hierboven, anders mist deze regel juist in de pushmelding die de
+            # marktscan elke cyclus stuurt voor een al open signaal, terwijl
+            # de signaalkaart hem wel altijd toont.
+            suggested_low = message_data.get("suggested_entry_low")
+            suggested_high = message_data.get("suggested_entry_high")
+            entry_zone_note = (
+                f" · Mogelijk betere entry: {suggested_low:.4f}–{suggested_high:.4f}"
+                if suggested_low is not None else ""
+            )
             body = (
                 f"Nieuwe prijs {message_data['price']:.4f} · Stop {message_data['stop_loss']:.4f} · "
-                f"Take profit {message_data['take_profit']:.4f}"
+                f"Take profit {message_data['take_profit']:.4f}{entry_zone_note}"
                 if confirmed else
                 f"Nieuwe prijs {message_data['price']:.4f} · nog geen sterke kans"
             )

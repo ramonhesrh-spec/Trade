@@ -145,7 +145,7 @@
     Stop {{ "%.4f"|format(entry.stop_loss) if entry.stop_loss else "-" }} ·
     Take profit {{ "%.4f"|format(entry.take_profit) if entry.take_profit else "-" }}
   </div>
-  {% if entry.suggested_entry_low is not none %}
+  {% if entry.suggested_entry_low is defined and entry.suggested_entry_low is not none %}
   <div class="signal-card-entry-zone muted">
     Mogelijk betere entry: {{ "%.4f"|format(entry.suggested_entry_low) }}–{{ "%.4f"|format(entry.suggested_entry_high) }}
   </div>

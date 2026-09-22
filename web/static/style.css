@@ -514,6 +514,10 @@ main h3 { font-size: 15px; gap: 8px; }
 .signal-card-head .coin-symbol { font-weight: 700; }
 .signal-card-head .pass-pct { margin-left: auto; font-weight: 600; color: var(--text); }
 .signal-card-levels { margin-top: 4px; font-size: 12.5px; color: var(--text-dim); font-family: var(--mono); }
+/* Zelfde font-tokens als .signal-card-levels hierboven: puur informatieve
+   vervolgregel (entry-zone-suggestie), moet er als deel van datzelfde
+   blok uitzien, niet als een losse .muted-tekst in een ander lettertype. */
+.signal-card-entry-zone { margin-top: 2px; font-size: 12.5px; font-family: var(--mono); }
 
 /* Lege staat: nul trades is de startsituatie, geen fout. Een kaart die
    "0.0%" toont ziet er identiek uit als een kaart met echte data, en

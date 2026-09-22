@@ -1063,21 +1063,25 @@ EXTENSION_MAX_ATR_MULTIPLE = 3.0
 # moet tegenhouden.
 BASIC_CONFIRM_MIN_PASSED = 3
 
-# In de uitgebreide versie telt geen enkele factor apart als harde eis: met
-# 21 factoren in totaal (5 basis + 16 uitgebreid) blokkeert anders één
-# marginale miss (bijvoorbeeld volume op 0.89x in plaats van 1.0x) een
-# verder overtuigend signaal volledig, terwijl bijna alle andere factoren
-# wel klopten. Minstens 60% is hier de grens: is dat gehaald, dan is het
-# een melding waard, en blijft het aan de gebruiker zelf om op basis van de
-# zichtbare ✓/✗ per factor te beslissen of hij hem neemt. De factoren die
-# hun eigen candle-data ophalen (BTC-trend, Daily-trend, RSI daily,
-# Premium/discount (dag), Liquidity sweep (dag), 1u bevestiging, RSI 1u,
-# Divergentie, Candlepatroon, Liquiditeit) tellen "fail-closed" mee: lukt
-# het ophalen niet, dan telt de factor als niet gehaald in plaats van dat
-# de melding daarop crasht of de factor overslaat, dus een tijdelijke
+# In de uitgebreide versie telt, op Uitgerektheid, BTC-trend en Daily-trend
+# na (elk hun eigen harde eis, zie confirms_direction's docstring), geen
+# andere factor apart als harde eis: met 21 factoren in totaal (5 basis +
+# 16 uitgebreid) zou dat anders al snel één marginale miss (bijvoorbeeld
+# volume op 0.89x in plaats van 1.0x) een verder overtuigend signaal
+# volledig blokkeren, terwijl bijna alle andere factoren wel klopten.
+# Minstens 60% van de OVERIGE factoren is hier de grens: is dat gehaald,
+# dan is het een melding waard, en blijft het aan de gebruiker zelf om op
+# basis van de zichtbare ✓/✗ per factor te beslissen of hij hem neemt. De
+# factoren die hun eigen candle-data ophalen (BTC-trend, Daily-trend, RSI
+# daily, Premium/discount (dag), Liquidity sweep (dag), 1u bevestiging, RSI
+# 1u, Divergentie, Candlepatroon, Liquiditeit) tellen "fail-closed" mee:
+# lukt het ophalen niet, dan telt de factor als niet gehaald in plaats van
+# dat de melding daarop crasht of de factor overslaat, dus een tijdelijke
 # ophaalfout kan in het slechtste geval meerdere factoren kosten (voor de
-# daily-fetch: Daily-trend, RSI daily, Premium/discount (dag) en Liquidity
-# sweep (dag) tegelijk).
+# daily-fetch in signal_processor.compute_advanced_extra_factors: RSI
+# daily, Premium/discount (dag) en Liquidity sweep (dag) tegelijk —
+# Daily-trend zelf heeft een eigen, aparte fetch in
+# process_day_trading_signal).
 CONFIRM_THRESHOLD = 0.6
 
 
@@ -1189,18 +1193,20 @@ def confirms_direction(
     config.ENABLE_ADVANCED_FACTORS): daar komen drie vaste factoren bij,
     trendsterkte (ADX), volatiliteit (ATR t.o.v. zijn eigen 20-candle
     gemiddelde) en volume-percentiel, plus wat er in `extra_factors`
-    meegegeven wordt (BTC-trend, Daily-trend, RSI daily, Premium/discount,
+    meegegeven wordt (BTC-trend, RSI daily, Premium/discount,
     Premium/discount (dag), Liquidity sweep, Liquidity sweep (dag), 1u
     bevestiging, RSI 1u, Divergentie, Candlepatroon, Liquiditeit,
     Steun/weerstand: elk een (naam, ok, detail) tuple, berekend buiten
     deze functie omdat ze andere data nodig hebben — zie
-    signal_processor.compute_advanced_extra_factors).
+    signal_processor.compute_advanced_extra_factors). Daily-trend zelf komt
+    niet via `extra_factors` binnen maar via het aparte `daily_trend_factor`-
+    argument hieronder, dat geldt in beide versies.
     Bevestigd is hier een kwestie van hoeveel van de OVERIGE factoren
-    (dus zonder Uitgerektheid en BTC-trend, die allebei hun eigen harde
-    eis hebben, zie hieronder) in totaal kloppen (zie CONFIRM_THRESHOLD),
-    niet van elke losse factor apart hard vereisen: bij 19 overige
-    factoren samen (4 basis + 15 uitgebreid) blokkeert anders één
-    marginale miss een verder overtuigend signaal.
+    (dus zonder Uitgerektheid, BTC-trend en Daily-trend, die alle drie hun
+    eigen harde eis hebben, zie hieronder) in totaal kloppen (zie
+    CONFIRM_THRESHOLD), niet van elke losse factor apart hard vereisen:
+    bij 18 overige factoren samen (4 basis + 3 vast + 11 extra) blokkeert
+    anders één marginale miss een verder overtuigend signaal.
 
     BTC-trend is, als hij aanwezig is, een tweede harde eis naast
     Uitgerektheid: staat BTC zelf duidelijk tegen de trade in, dan

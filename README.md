@@ -327,9 +327,9 @@ kan het dashboard tijdens de rebuild tegen een tijdelijk inconsistente
 
 Naast de vijf basisfactoren (trend, momentum, RSI, volume, uitgerektheid)
 kan het systeem
-zestien extra factoren toetsen: trendsterkte (ADX), volatiliteit (ATR t.o.v.
+vijftien extra factoren toetsen: trendsterkte (ADX), volatiliteit (ATR t.o.v.
 zijn eigen gemiddelde), volume-percentiel, BTC-trend als filter voor andere
-coins, daily-trend en daily-RSI, bevestiging op het 1 uur tijdsbestek
+coins, daily-RSI, bevestiging op het 1 uur tijdsbestek
 (trend en RSI) naast de 4 uur, RSI/prijs-divergentie, een candlestick-
 patroonherkenning, een liquiditeitsgrens (24u handelsvolume), zelf-
 gedetecteerde steun/weerstand-zones uit de prijsgeschiedenis, premium/
@@ -338,13 +338,18 @@ swing-range?) en liquidity sweeps (een stop-hunt: een eerdere swing-low/
 -high met de pen doorbroken en teruggesloten aan de goede kant) — de
 laatste twee elk zowel op 4 uur als op de dagcandle. RSI wordt op alle
 drie tijdsbestekken (4u, 1u, daily) symmetrisch getoetst: zowel overbought
-als oversold telt tegen zowel een long als een short.
+als oversold telt tegen zowel een long als een short. Dagtrend (dezelfde
+trendcheck als de basisfactor Trend, maar op de dagcandle) hoort hier niet
+bij: die draait, sinds de kritischere signaaltoetsing, altijd als eigen
+harde eis, los van of deze uitgebreide toetsing aan staat — zie de bullet
+hierover bij "Praktische keuzes in deze versie" hieronder.
 
-Op twee na is geen van deze factoren apart hard vereist: Uitgerektheid
-(basisfactor) en BTC-trend (voor altcoins met een duidelijk trending BTC)
-moeten allebei altijd kloppen, ongeacht de rest. De overige negentien
-factoren (4 basis + 15 uitgebreid) tellen gezamenlijk mee, en minstens 60%
-moet kloppen (zie `CONFIRM_THRESHOLD` in `app/indicators.py`).
+Op twee na is geen van deze vijftien factoren apart hard vereist:
+Uitgerektheid (basisfactor) en BTC-trend (voor altcoins met een duidelijk
+trending BTC) moeten allebei altijd kloppen, ongeacht de rest. De overige
+achttien factoren (4 basis + 3 vast + 11 uitgebreid) tellen gezamenlijk mee,
+en minstens 60% moet kloppen (zie `CONFIRM_THRESHOLD` in
+`app/indicators.py`).
 
 Staat standaard uit. De drempels (ADX 20, ATR moet stijgen, 2 miljoen
 volume) zijn leerboek-standaarden, nog niet getoetst aan je eigen
@@ -433,6 +438,18 @@ trade blijft een handmatige beslissing.
 - Technische bevestiging kijkt naar EMA9/EMA21 trend, MACD momentum, RSI
   extremen en volume ten opzichte van het gemiddelde. Aanpasbaar in
   `app/indicators.py`.
+- Daarnaast gelden drie harde eisen die, elk los van de rest, een signaal
+  naar laag vertrouwen kunnen sturen: de eigen dagtrend van de coin
+  (Dagtrend, altijd actief, ook zonder `ENABLE_ADVANCED_FACTORS`), een
+  minimale risico/rendement-verhouding van 1.5 tegen 1 (Risico/rendement),
+  en geen recent gefaalde steun/weerstand-zone binnen bereik
+  (Zone-cooldown: een zone die de laatste 3 dagen al een stop loss
+  veroorzaakte, blokkeert een nieuw signaal daar). Zichtbaar als losse
+  ✗-regel op de signaalkaart zodra een van de drie een melding blokkeert.
+- Een melding kan naast de entry op de live prijs ook "Mogelijk betere
+  entry" tonen: een steun/weerstand-zone tussen de live prijs en de stop
+  loss. Puur informatief, telt nergens mee in de toetsing, positiegrootte
+  of trackrecord.
 - Elke melding rekent ook een voorgestelde positiegrootte in coin eenheden
   uit: risicobedrag gedeeld door de afstand tussen entry en stop loss. Dat
   is de hoeveelheid die bij dat risicobedrag hoort, niet alleen het bedrag

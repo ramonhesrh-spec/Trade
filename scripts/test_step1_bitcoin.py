@@ -30,7 +30,12 @@ def main() -> None:
     print(f"  ATR:           {ind.atr:.2f}")
 
     for direction in ("long", "short"):
-        confirmed, reason, _, _ = indicators.confirms_direction(ind, direction)
+        # daily_trend_factor=None: net als market_scanner.py's cheap precheck,
+        # bewust geen dagtrend-hard-gate hier — dit losse verificatiescript
+        # haalt geen 1d-candle op, dus dit blijft een vereenvoudigd
+        # (geen-dagtrend) scenario, niet representatief voor de volledige
+        # productietoetsing in process_day_trading_signal.
+        confirmed, reason, _, _ = indicators.confirms_direction(ind, direction, daily_trend_factor=None)
         levels = risk.compute_stop_take(direction=direction, entry_price=ind.price, atr=ind.atr)
         risk_eur = risk.compute_risk_eur(portfolio_eur=10000, risk_percent=1.0)
         print(f"\nRichting {direction}: bevestigd = {confirmed} ({reason})")
