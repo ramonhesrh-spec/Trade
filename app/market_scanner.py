@@ -38,6 +38,17 @@ AUTO_SCAN_LOSS_COOLDOWN_HOURS = 12
 # de betrouwbaarheidswaarborg, niet de knop om sneller te melden.
 WHIPLASH_MIN_CONSECUTIVE_CYCLES = 2
 
+# Maximum aantal structurele meldingen (uitbraak/trendlijn/patroon) dat één
+# scan-cyclus daadwerkelijk pusht, over alle coins samen. Een cyclus die op
+# meerdere coins tegelijk iets vindt (bv. een markbrede beweging die op tien
+# coins een patroon triggert) meldde voorheen alles meteen — tot 17 losse
+# pushes in 2,5 minuut, onduidelijk en overweldigend. De sterkste kandidaten
+# (_candidate_score, risk:reward) winnen een plek; de rest wordt niet
+# aangemaakt (geen signals-rij, geen dedup-key gezet) en dingt gewoon opnieuw
+# mee in een volgende cyclus als de kans dan nog steeds geldig is — niets
+# gaat blijvend verloren, het wordt alleen niet allemaal tegelijk gemeld.
+MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE = 3
+
 
 # Hoe dicht het middelpunt van een nieuw gevonden zone bij het middelpunt
 # van de vorig gemelde zone moet liggen (in ATR) om als "dezelfde zone" te
@@ -254,7 +265,27 @@ def _valid_stop_take(direction: str, entry_price: float, stop_loss: float, take_
     return take_profit < entry_price < stop_loss
 
 
-async def _find_chart_pattern_candidate(coin: str, df, ind) -> Optional[dict]:
+def _correlated_with_btc_divergence(coin: str, match, btc_divergence_direction: Optional[str]) -> bool:
+    """True als dit een divergence-match is die waarschijnlijk gewoon BTC's
+    eigen beweging weerspiegelt, niet een eigen kans van deze coin: altcoins
+    bewegen sterk gecorreleerd met BTC op een 4u-timeframe, dus een korte
+    BTC-dip (of -rally) kan op tien coins tegelijk als een "eigen" RSI-
+    divergence gezien worden terwijl het één marktbeweging is die tien keer
+    apart gemeld wordt (zie de burst van 9x "bearish divergence" in dezelfde
+    cyclus die tot deze check leidde). Alleen van toepassing op divergence
+    (top/bottom/wedge vereisen een eigen structuurbreuk, geen 2-punts
+    RSI-vergelijking, en zijn dus minder gevoelig voor pure correlatie-ruis).
+    BTC's eigen divergence wordt nooit tegen zichzelf onderdrukt."""
+    if coin == "BTC" or btc_divergence_direction is None:
+        return False
+    if match.name not in ("bullish divergence", "bearish divergence"):
+        return False
+    return match.direction == btc_divergence_direction
+
+
+async def _find_chart_pattern_candidate(
+    coin: str, df, ind, btc_divergence_direction: Optional[str] = None,
+) -> Optional[dict]:
     """Los van de dagtrading-richting van deze scan-cyclus: een chart-
     patroon (top/bottom, head & shoulders, kanaal/wedge, divergence) heeft
     zijn EIGEN richting uit de vorm zelf, niet uit ind.ema9/ind.ema21. Geen
@@ -277,7 +308,7 @@ async def _find_chart_pattern_candidate(coin: str, df, ind) -> Optional[dict]:
     if wedge:
         candidates.append(wedge)
     divergence = patterns.find_divergence(df)
-    if divergence:
+    if divergence and not _correlated_with_btc_divergence(coin, divergence, btc_divergence_direction):
         candidates.append(divergence)
 
     # Alle drie detectoren geven confirmed_index in dezelfde lokale
@@ -451,14 +482,27 @@ async def scan_market() -> None:
     # gaat de scan gewoon door zonder de vlak-check (fail-open), net als
     # elke andere Binance-storing hieronder per coin.
     btc_flat = False
+    # BTC's eigen divergence deze cyclus, eenmalig herbruikt om te bepalen
+    # of een altcoin's "eigen" divergence waarschijnlijk gewoon BTC's
+    # correlatie is (zie _correlated_with_btc_divergence). None als BTC
+    # zelf geen divergence toont, of als de ophaling hieronder al faalt.
+    btc_divergence_direction: Optional[str] = None
     try:
         btc_df = await asyncio.to_thread(exchange.fetch_ohlcv, "BTC")
         btc_ind = indicators.compute_indicators(btc_df)
         btc_flat = indicators.btc_is_flat(btc_ind)
         if btc_flat:
             logger.info("BTC is zijwaarts deze cyclus, altcoin-signalering overgeslagen")
+        btc_own_divergence = patterns.find_divergence(btc_df)
+        if btc_own_divergence:
+            btc_divergence_direction = btc_own_divergence.direction
     except Exception:
         logger.exception("Kon BTC's eigen trend niet ophalen, ga verder zonder de vlak-check")
+
+    # Structurele kandidaten (uitbraak/trendlijn/patroon) van de hele
+    # cyclus, over alle coins heen — pas na de hele scan geëvalueerd tegen
+    # MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE, zie de constante hierboven.
+    cycle_structural_candidates: list[dict] = []
 
     for coin_row in coins:
         coin = coin_row["symbol"]
@@ -486,7 +530,7 @@ async def scan_market() -> None:
             trendline_candidate = await _find_trendline_retest_candidate(coin, direction, df, ind)
             if trendline_candidate:
                 structural.append(trendline_candidate)
-            pattern_candidate = await _find_chart_pattern_candidate(coin, df, ind)
+            pattern_candidate = await _find_chart_pattern_candidate(coin, df, ind, btc_divergence_direction)
             if pattern_candidate:
                 structural.append(pattern_candidate)
 
@@ -494,6 +538,16 @@ async def scan_market() -> None:
             for candidate in structural:
                 by_direction.setdefault(candidate["direction"], []).append(candidate)
 
+            # De winnaar per richting wordt hier nog niet gemeld: pas ná de
+            # hele cyclus (alle coins) wordt over de volledige verzamelde
+            # lijst de sterkste MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE
+            # geselecteerd, zie onderaan deze functie. structural_directions_
+            # signaled hieronder betekent dus "voor deze coin GEVONDEN deze
+            # cyclus", niet per se "wordt ook gemeld" — dat is genoeg om de
+            # generieke dagtrading-melding hieronder te laten wijken: een
+            # structurele kans die deze cyclus (nog) niet de push haalt, mag
+            # nog steeds niet overschaduwd worden door een tegenstrijdige of
+            # dubbele generieke melding.
             structural_directions_signaled: set = set()
             for cand_direction, group in by_direction.items():
                 winner = max(group, key=lambda c: c["score"])
@@ -502,7 +556,7 @@ async def scan_market() -> None:
                         "%s: %s structurele kandidaten voor richting %s, '%s' wint (risk:reward %.2f)",
                         coin, len(group), cand_direction, winner["kind"], winner["score"],
                     )
-                await winner["notify"]()
+                cycle_structural_candidates.append({**winner, "coin": coin})
                 structural_directions_signaled.add(cand_direction)
 
             # Vóór de cooldown-check bepaald (in plaats van erna): een coin
@@ -589,6 +643,29 @@ async def scan_market() -> None:
             # Eén coin die faalt (bijvoorbeeld een tijdelijke Binance-storing)
             # mag de rest van de scan niet blokkeren.
             logger.exception("Marktscan voor coin %s is mislukt, ga door met de volgende", coin)
+
+    # Nu pas, over de hele cyclus (alle coins) heen: de sterkste
+    # MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE kandidaten daadwerkelijk
+    # melden. De rest is deze cyclus gevonden maar wordt niet aangemaakt —
+    # geen signals-rij, geen dedup-key — en dingt gewoon opnieuw mee in de
+    # volgende cyclus als de kans dan nog geldig is.
+    cycle_structural_candidates.sort(key=lambda c: c["score"], reverse=True)
+    to_notify = cycle_structural_candidates[:MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE]
+    skipped = cycle_structural_candidates[MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE:]
+    if skipped:
+        logger.info(
+            "%s structurele kandidaten overgeslagen (cyclus-limiet %s bereikt): %s",
+            len(skipped), MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE,
+            ", ".join(f"{c['coin']} {c['direction']} {c['kind']} ({c['score']:.2f})" for c in skipped),
+        )
+    for candidate in to_notify:
+        try:
+            await candidate["notify"]()
+        except Exception:
+            logger.exception(
+                "Melding voor %s %s (%s) is mislukt, ga door met de volgende",
+                candidate["coin"], candidate["direction"], candidate["kind"],
+            )
 
     logger.info("Marktscan klaar")
 
