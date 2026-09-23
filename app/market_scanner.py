@@ -527,13 +527,20 @@ async def scan_market() -> None:
                 continue
 
             # Al een structureel signaal (zone/lijn/patroon) gemeld voor
-            # precies deze coin en richting deze cyclus: de generieke
-            # EMA-dagtrading-melding zou dezelfde kans dan een tweede keer
-            # met een ander stop/take-niveau melden (zie hierboven). Alleen
+            # deze coin deze cyclus, ONGEACHT de richting: een generieke
+            # EMA-dagtrading-melding die de tegenovergestelde kant op wijst
+            # is niet minder verwarrend dan eentje in dezelfde richting met
+            # een ander stop/take (zie hierboven) — een gebruiker die long
+            # én short op dezelfde coin tegelijk binnenkrijgt, snapt geen
+            # van beide. Het bestaande auto_ignore_opposite_pending ruimt
+            # zo'n tegenstelling later wel op in het journaal, maar de
+            # pushmeldingen zelf zijn dan al verstuurd — dit voorkomt dat.
+            # Specifiek (patroon/trendlijn/uitbraak) wint hier altijd van
+            # generiek (EMA-trend), ook bij tegengestelde richtingen. Alleen
             # van toepassing op een NIEUW dagtrading-signaal — een al open
             # positie moet, net als bij whiplash/cooldown, altijd ververst
             # blijven.
-            if not was_open_before and direction in structural_directions_signaled:
+            if not was_open_before and structural_directions_signaled:
                 logger.info(
                     "%s %s overgeslagen: al een structureel signaal deze cyclus gemeld", coin, direction,
                 )
