@@ -26,10 +26,10 @@ vertrouwen betekent.</p>
 <section class="landing-section" id="hoog-vertrouwen" style="padding-left:0; padding-right:0;">
   <span class="status-tag tag-live">● Nu live</span>
   <h2>Wanneer is een signaal hoog vertrouwen?</h2>
-  <p>Elke melding wordt getoetst tegen vijf vaste factoren. Overal in het
-  dashboard zie je de score als ratio naast de badge, bijvoorbeeld
-  <span class="mono">4/5</span>. Klik of tik op "waarom?" om te zien welke
-  factor het is.</p>
+  <p>Elke melding wordt getoetst tegen een vaste set technische factoren.
+  Overal in het dashboard zie je de score als ratio naast de badge,
+  bijvoorbeeld <span class="mono">4/5</span>. Klik of tik op "waarom?" om
+  te zien welke factor het is, voor dat specifieke signaal.</p>
   <div class="ratio-demo" id="ratio-demo">
     <div class="ratio-demo-item ok" style="--i: 0"><span class="ratio-demo-icon">✓</span>Trend</div>
     <div class="ratio-demo-item ok" style="--i: 1"><span class="ratio-demo-icon">✓</span>Momentum</div>
@@ -42,61 +42,48 @@ vertrouwen betekent.</p>
   <div class="factor-grid">
     <div class="factor">
       <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,17 9,11 13,15 21,5"/><polyline points="15,5 21,5 21,11"/></svg>Trend</h3>
-      <p>EMA9 tegenover EMA21. Bij long moet de kortetermijn gemiddelde
-      boven de langere staan, bij short eronder. Dat laat zien dat de
-      recente prijs de trend volgt, niet ertegenin gaat.</p>
+      <p>Volgt de prijs de richting van het signaal, of gaat hij er juist
+      tegenin?</p>
     </div>
     <div class="factor">
       <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h4l2.5-7 4 14 2.5-7H20"/></svg>Momentum</h3>
-      <p>MACD lijn tegenover de signaallijn. Bij long moet de MACD lijn
-      erboven staan, bij short eronder. De trend alleen is niet genoeg, het
-      momentum moet meebewegen.</p>
+      <p>Trend alleen is niet genoeg, het momentum moet meebewegen.</p>
     </div>
     <div class="factor">
       <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15c2.5-8 5.5-8 8 0s5.5 8 8 0"/></svg>RSI</h3>
-      <p>Bij long mag de RSI nog niet boven 75 staan, bij short nog niet
-      onder 25. Instappen op een niveau dat al oververhit is, verhoogt het
-      risico op een snelle omkeer.</p>
+      <p>Is de coin al oververhit? Instappen op een uitgeput niveau
+      verhoogt het risico op een snelle omkeer.</p>
     </div>
     <div class="factor">
       <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="19" x2="5" y2="10"/><line x1="12" y1="19" x2="12" y2="5"/><line x1="19" y1="19" x2="19" y2="13"/></svg>Volume</h3>
-      <p>Het volume moet minstens gelijk zijn aan het gemiddelde van de
-      laatste 20 candles. Een beweging zonder volume erachter is minder
-      overtuigend.</p>
+      <p>Een beweging zonder volume erachter is minder overtuigend.</p>
     </div>
     <div class="factor">
       <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 19V9m8 10V5m8 14v-7"/></svg>Uitgerektheid</h3>
-      <p>Hoe ver de prijs al van zijn EMA21 af staat, in ATR gemeten. Een
-      coin die al ver gelopen is, is een minder overtuigende instap dan een
-      coin die net begint te bewegen, ook als de andere factoren wel
-      kloppen.</p>
+      <p>Is de coin al ver van zijn eigen gemiddelde weggelopen? Dat is
+      een minder overtuigende instap dan een coin die net begint te
+      bewegen.</p>
     </div>
   </div>
-  <p>Kloppen minstens drie van de vier, dan is het <strong>hoog
-  vertrouwen</strong>. Mist er meer, dan is het <strong>laag vertrouwen</strong>,
-  met de ontbrekende factor(en) erbij. Belangrijk verschil: alleen hoog
+  <p>Kloppen de meeste, dan is het <strong>hoog vertrouwen</strong>. Mist
+  er te veel, dan is het <strong>laag vertrouwen</strong>, met de
+  ontbrekende factor(en) erbij. Belangrijk verschil: alleen hoog
   vertrouwen stuurt een pushmelding. Laag vertrouwen zie je alleen op
   het dashboard, zodat je er niet mee gestoord wordt maar het ook niet
   kwijt bent. Hoog vertrouwen is geen garantie op winst, het is een optelsom
   van regels, geen voorspelling.</p>
-  <p>Drie andere eisen staan los van deze vijf, en gelden altijd:
-  <strong>Dagtrend</strong> (dezelfde trendcheck als Trend, maar op de
-  dagcandle — wijst de eigen dagtrend van de coin duidelijk tegen de trade
-  in, dan bevestigt het signaal nooit), <strong>Risico/rendement</strong>
-  (de verhouding tussen voorgestelde take profit en stop loss moet
-  minstens 1.5 tegen 1 zijn), en <strong>Zone-cooldown</strong> (een
-  steun/weerstand-zone die de laatste 3 dagen al een stop loss veroorzaakte,
-  blokkeert een nieuw signaal op diezelfde zone). Elk van de drie kan
-  alleen, los van de andere factoren, een signaal naar laag vertrouwen
-  sturen — je ziet ze als ✗-regel op de signaalkaart zodra ze een melding
-  blokkeren.</p>
+  <p>Daarnaast gelden een paar vaste vangnetten, los van de score
+  hierboven: de dagtrend van de coin zelf, een minimale verhouding tussen
+  verwachte winst en risico, en een afkoelperiode voor een niveau dat
+  recent nog een verlies opleverde. Elk daarvan kan een signaal alleen
+  naar laag vertrouwen sturen, nooit blokkeren — je ziet ze als ✗-regel op
+  de signaalkaart zodra ze een melding raken.</p>
   <p class="muted" style="font-size: 12.5px;">Zie je "Mogelijk betere
   entry" op een signaalkaart of in een melding? Dat is een zuiver
-  informatieve suggestie: een steun/weerstand-zone tussen de live prijs en
-  de stop loss, dus met een betere risico/rendement-verhouding dan
-  instappen op de live prijs zelf. Telt nergens mee in de toetsing,
-  positiegrootte of trackrecord — de live prijs blijft overal de echte
-  entry.</p>
+  informatieve suggestie, een prijszone tussen de live prijs en de stop
+  loss met een betere risico/rendement-verhouding. Telt nergens mee in de
+  toetsing, positiegrootte of trackrecord — de live prijs blijft overal de
+  echte entry.</p>
 </section>
 
 <section class="landing-section" style="padding-left:0; padding-right:0;">
@@ -157,125 +144,26 @@ vertrouwen betekent.</p>
   <span class="status-tag {{ 'tag-live' if advanced_factors_enabled else 'tag-soon' }}">
     {{ '● Actief' if advanced_factors_enabled else '○ Nog niet actief' }}
   </span>
+  <h2>Extra factoren</h2>
   {% if advanced_factors_enabled %}
-  <h2>Vijftien extra factoren</h2>
-  <p>Naast de vijf factoren en de drie harde eisen hierboven toetst
-  HesPulse ook op vijftien extra factoren. Die tellen nu mee in elke
-  melding.</p>
+  <p>Naast de basis hierboven toetst HesPulse ook op een set extra
+  technische factoren: meerdere tijdsbestekken naast elkaar, volatiliteit
+  en liquiditeit, patroonherkenning, en Smart Money-achtige concepten
+  zoals premium/discount-zones en liquidity sweeps. Die tellen gezamenlijk
+  mee als extra bevestiging naast de basisfactoren, en zijn nu actief in
+  elke melding. Bitcoin's eigen trend telt daarnaast altijd mee voor
+  altcoins.</p>
   {% else %}
-  <h2>In de maak: vijftien extra factoren</h2>
-  <p>Naast de vijf factoren en de drie harde eisen hierboven staat er een
-  uitgebreidere toetsing klaar, maar die staat nog uit. Eerst wordt
-  getoetst hoe streng de nieuwe regels in de praktijk uitpakken op eerdere
-  signalen, voor ze meetellen in een echte melding.</p>
+  <p>Naast de basis hierboven staat een uitgebreidere toetsing klaar:
+  meerdere tijdsbestekken naast elkaar, volatiliteit en liquiditeit,
+  patroonherkenning, en Smart Money-achtige concepten zoals
+  premium/discount-zones en liquidity sweeps. Eerst wordt getoetst hoe
+  streng dat in de praktijk uitpakt op eerdere signalen, voor het
+  meetelt in een echte melding.</p>
   {% endif %}
-  <div class="factor-grid">
-    <div class="factor factor-preview">
-      <h3>Trendsterkte (ADX + richting)</h3>
-      <p>ADX van minimaal 15: is er überhaupt een trend om op te varen, of
-      beweegt de coin zijwaarts? Telt alleen mee als die trend ook de kant
-      op wijst van het signaal, niet alleen sterk is.</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>Volatiliteit (ATR)</h3>
-      <p>De actuele ATR moet boven zijn eigen 20-candle gemiddelde liggen:
-      neemt de beweeglijkheid toe, in plaats van uitdovend?</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>Volume-percentiel</h3>
-      <p>Volume tegen zijn eigen spreiding van de laatste 20 candles
-      afgezet, in plaats van tegen één simpel gemiddelde. Moet minstens
-      mediaan staan.</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>BTC-trend</h3>
-      <p>Voor altcoins: staat Bitcoin zelf niet lijnrecht tegenover de
-      trade in? De hele markt volgt vaak BTC. Anders dan de andere veertien
-      factoren hieronder is dit een harde eis, net als Uitgerektheid:
-      heeft BTC een duidelijke trend die tegen de trade in gaat, dan
-      bevestigt het signaal nooit, ongeacht de rest. Beweegt BTC zelf
-      zijwaarts, dan is er niets om tegen te blokkeren en telt deze
-      factor niet mee.</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>RSI daily</h3>
-      <p>Dezelfde RSI-check als de basisfactor RSI, maar dan op de
-      dagcandle: staat de langste tijdshorizon al overbought of oversold?</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>1 uur bevestiging</h3>
-      <p>Dezelfde trendcheck als hierboven, maar dan op het kortere 1 uur
-      tijdsbestek, als extra bevestiging naast de 4 uur candle.</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>RSI 1 uur</h3>
-      <p>Dezelfde RSI-check als de basisfactor RSI, maar dan op 1 uur: staat
-      de snellere timeframe al overbought of oversold, ook als de 4 uur
-      RSI dat nog niet laat zien?</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>Divergentie</h3>
-      <p>Zet de prijs een nieuwe top of bodem neer terwijl de RSI juist
-      verzwakt? Dat is vaak een teken dat het momentum al aan het
-      afzwakken is.</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>Candlepatroon</h3>
-      <p>Staat er op de signaal-candle zelf een herkenbaar patroon:
-      engulfing, Hammer/Hanging Man, Shooting Star/Inverted Hammer, Doji,
-      of Morning/Evening Star? Eén match in de juiste richting is genoeg.</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>Liquiditeit</h3>
-      <p>Minimaal €2 miljoen 24-uurs handelsvolume. Een technisch perfecte
-      setup op een dun verhandelde coin levert in de praktijk slippage op
-      die de hele edge kan opeten.</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>Steun/weerstand</h3>
-      <p>Ligt er een zone binnen 6x ATR aan de stop-kant van de entry —
-      een prijsniveau waar de markt zelf al minstens twee keer eerder
-      keerde? Dezelfde zone verscherpt ook de voorgestelde stop loss en
-      take profit.</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>Premium/discount</h3>
-      <p>Staat de entry in de goedkope (discount) of dure (premium) helft
-      van de recente swing-range? Long is sterker onder het midden van die
-      range, short erboven — de klassieke Smart Money-knip op 50%.</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>Premium/discount (dag)</h3>
-      <p>Dezelfde check als hierboven, maar dan op de swing-range van de
-      dagcandle: een daily premium/discount-niveau is een sterker signaal
-      dan hetzelfde op 4 uur.</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>Liquidity sweep</h3>
-      <p>Is er een eerdere swing low/high met de pen doorbroken (niet de
-      slotkoers), waarna de candle terugsloot aan de goede kant? Een
-      klassieke stop-hunt: de markt haalt eerst de liquiditeit onder/boven
-      dat niveau op, en draait daarna de andere kant op.</p>
-    </div>
-    <div class="factor factor-preview">
-      <h3>Liquidity sweep (dag)</h3>
-      <p>Dezelfde check als hierboven, maar dan op de dagcandle: een sweep
-      van een daily swing high/low is een sterker signaal, dat is vaak
-      juist de meest voor de hand liggende stop-plek voor de markt.</p>
-    </div>
-  </div>
-  <div class="group-note">
-    Bij deze vijftien telt bijna geen enkele factor apart als harde eis, op
-    één uitzondering na: BTC-trend (voor altcoins met een duidelijk
-    trending BTC). De overige factoren tellen gezamenlijk mee, en
-    minstens 60% moet kloppen. Zo blokkeert één marginale miss niet meteen
-    een verder overtuigend signaal, en blijft precies zichtbaar welke
-    factor(en) niet klopten. Uitgerektheid en Dagtrend (zie helemaal
-    hierboven) hebben net als BTC-trend hun eigen harde eis, maar tellen
-    niet als "extra factor" uit deze vijftien: Uitgerektheid is een
-    basisfactor, Dagtrend draait altijd, los van deze uitgebreide
-    toetsing.
-  </div>
+  <p class="muted" style="font-size: 12.5px;">Op de signaalkaart zelf zie
+  je bij "waarom?" altijd de precieze breakdown voor dat ene signaal, ✓ of
+  ✗ per factor die meetelde.</p>
 </section>
 
 <section class="landing-section" style="padding-left:0; padding-right:0;">
