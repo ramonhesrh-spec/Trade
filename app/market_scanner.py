@@ -476,8 +476,16 @@ async def _find_chart_pattern_candidate(
         # gebruiker te horen krijgen dat zijn oude kans vervallen is zonder
         # dat er een nieuwe voor in de plaats komt.
         zones = indicators.detect_sr_zones(df)
+        # daily_trend_hard_gate=False: een chart-patroon (top/bottom, head &
+        # shoulders, wedge, divergence) is per definitie een omkeersignaal —
+        # de dagtrend nog de oude kant op zien wijzen is dan geen zwakte,
+        # dat is precies wanneer een omkeerpatroon zijn werk doet. Zie
+        # indicators.confirms_direction's docstring voor de volledige
+        # redenering. Uitbraak+terugtest/trendlijn+terugtest (hierboven in
+        # dit bestand) zijn geen zuivere omkeersignalen en houden de harde
+        # eis wel.
         _, factor_breakdown, factor_pass_pct, factor_hard_gates_ok = await compute_full_confirmation(
-            coin, match.direction, df, ind, zones,
+            coin, match.direction, df, ind, zones, daily_trend_hard_gate=False,
         )
 
         # Kansberekening (zelfde formule als web/main.py's weergave, zie

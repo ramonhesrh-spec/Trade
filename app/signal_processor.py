@@ -769,6 +769,7 @@ async def compute_advanced_extra_factors(
 
 async def compute_full_confirmation(
     coin: str, direction: str, df, ind: indicators.Indicators, zones: list[indicators.SRZone],
+    daily_trend_hard_gate: bool = True,
 ) -> tuple[bool, str, float, bool]:
     """Volledige factor-toetsing: dagtrend (met vlakke-markt-uitzondering)
     plus, bij config.ENABLE_ADVANCED_FACTORS, de uitgebreide factoren, dan
@@ -776,7 +777,12 @@ async def compute_full_confirmation(
     zodat market_scanner._check_chart_patterns exact dezelfde toetsing kan
     hergebruiken voor een patroon-richting, zonder deze logica te
     dupliceren. Retourneert (confirmed, breakdown, pass_pct, hard_gates_ok),
-    identiek aan wat confirms_direction zelf teruggeeft."""
+    identiek aan wat confirms_direction zelf teruggeeft.
+
+    daily_trend_hard_gate=False (market_scanner._find_chart_pattern_candidate,
+    voor een omkeerpatroon) zet Daily-trend om naar puur informatief in
+    plaats van blokkerend, zie indicators.confirms_direction's docstring
+    voor de volledige redenering."""
     daily_trend_factor = None
     daily_df = None
     daily_ind = None
@@ -803,7 +809,7 @@ async def compute_full_confirmation(
 
     return indicators.confirms_direction(
         ind, direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
-        daily_trend_factor=daily_trend_factor,
+        daily_trend_factor=daily_trend_factor, daily_trend_hard_gate=daily_trend_hard_gate,
     )
 
 

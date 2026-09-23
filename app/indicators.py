@@ -1165,6 +1165,7 @@ def basic_factors(direction: str, ind: Indicators) -> list[tuple[str, bool, str]
 def confirms_direction(
     ind: Indicators, direction: str, extra_factors: list[tuple[str, bool, str]] | None = None,
     include_advanced: bool = False, daily_trend_factor: tuple[str, bool, str] | None = None,
+    daily_trend_hard_gate: bool = True,
 ) -> tuple[bool, str]:
     """Bepaalt of de technische data de richting uit het Discord bericht steunt.
 
@@ -1235,6 +1236,19 @@ def confirms_direction(
     zelf, of bij een vlakke BTC of vlakke dagtrend), dan wordt hij
     simpelweg niet meegegeven en telt hij niet mee, ook niet als harde
     eis.
+
+    daily_trend_hard_gate=False (gebruikt door market_scanner voor een
+    chart-patroon, zie signal_processor.compute_full_confirmation) zet
+    Daily-trend om naar puur informatief: nog steeds zichtbaar als ✓/✗-regel,
+    maar telt niet meer mee in hard_gates_ok. Een chart-patroon (top/bottom,
+    head & shoulders, wedge, divergence) is per definitie een OMKEER-
+    signaal — de premisse is juist dat de bestaande trend gaat draaien. Een
+    dagtrend die nog de oude kant op wijst is dan geen zwakte van het
+    signaal, dat is precies de situatie waarin een omkeerpatroon zijn werk
+    doet. Eisen dat de dagtrend al is omgedraaid voor het patroon telt, zou
+    het patroon pas bevestigen nadat de omkeer grotendeels al gebeurd is.
+    Dagtrading (trend-volgend) en uitbraak/trendlijn-terugtest (kan beide
+    kanten op t.o.v. de grotere trend) blijven de harde eis wel houden.
     """
     direction = direction.lower()
     if direction not in ("long", "short"):
@@ -1257,7 +1271,7 @@ def confirms_direction(
         daily_trend_ok = daily_trend_factor[1] if daily_trend_factor is not None else True
         if daily_trend_factor is not None:
             breakdown += f" | {'✓' if daily_trend_factor[1] else '✗'} {daily_trend_factor[0]}: {daily_trend_factor[2]}"
-        hard_gates_ok = extension_ok and daily_trend_ok
+        hard_gates_ok = extension_ok and (daily_trend_ok or not daily_trend_hard_gate)
         confirmed = hard_gates_ok and core_passed >= BASIC_CONFIRM_MIN_PASSED
         return confirmed, breakdown, pass_pct, hard_gates_ok
 
@@ -1311,6 +1325,6 @@ def confirms_direction(
     other_factors = [f for f in factors if f[0] not in ("Uitgerektheid", "BTC-trend", "Daily-trend")]
     passed = sum(1 for _, ok, _ in other_factors if ok)
     pass_pct = (passed / len(other_factors)) * 100 if other_factors else 100.0
-    hard_gates_ok = extension_ok and btc_trend_ok and daily_trend_ok
+    hard_gates_ok = extension_ok and btc_trend_ok and (daily_trend_ok or not daily_trend_hard_gate)
     confirmed = hard_gates_ok and pass_pct >= CONFIRM_THRESHOLD * 100
     return confirmed, breakdown, pass_pct, hard_gates_ok
