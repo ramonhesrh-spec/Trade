@@ -735,6 +735,41 @@ async def compute_advanced_extra_factors(
     return factors
 
 
+async def compute_full_confirmation(
+    coin: str, direction: str, df, ind: indicators.Indicators, zones: list[indicators.SRZone],
+) -> tuple[bool, str, float, bool]:
+    """Volledige factor-toetsing: dagtrend (met vlakke-markt-uitzondering)
+    plus, bij config.ENABLE_ADVANCED_FACTORS, de uitgebreide factoren, dan
+    indicators.confirms_direction. Geëxtraheerd uit process_day_trading_signal
+    zodat market_scanner._check_chart_patterns exact dezelfde toetsing kan
+    hergebruiken voor een patroon-richting, zonder deze logica te
+    dupliceren. Retourneert (confirmed, breakdown, pass_pct, hard_gates_ok),
+    identiek aan wat confirms_direction zelf teruggeeft."""
+    daily_trend_factor = None
+    daily_df = None
+    daily_ind = None
+    try:
+        daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
+        daily_ind = indicators.compute_indicators(daily_df)
+        if not indicators.btc_is_flat(daily_ind):
+            daily_trend_factor = indicators.check_daily_trend(direction, daily_ind)
+    except Exception:
+        logger.exception("Dagtrend kon niet berekend worden voor %s", coin)
+        daily_trend_factor = ("Daily-trend", False, "kon niet opgehaald worden, telt als niet bevestigd")
+
+    extra_factors = None
+    if config.ENABLE_ADVANCED_FACTORS:
+        extra_factors = await compute_advanced_extra_factors(
+            coin, direction, df, ind.price, ind.atr, zones,
+            daily_df=daily_df, daily_ind=daily_ind,
+        )
+
+    return indicators.confirms_direction(
+        ind, direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
+        daily_trend_factor=daily_trend_factor,
+    )
+
+
 def _notify_new_coin(coin: str) -> None:
     """Geen Telegram-melding meer (dashboard-only, zie de declutter-ronde
     van 2026-09-14): de coin zelf wordt meteen zichtbaar in het coin-menu
@@ -767,29 +802,9 @@ async def process_day_trading_signal(
     swing_low, swing_high = indicators.swing_levels(df)
     zones = indicators.detect_sr_zones(df)
 
-    daily_trend_factor = None
-    daily_df = None
-    daily_ind = None
-    try:
-        daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, interp.coin, "1d")
-        daily_ind = indicators.compute_indicators(daily_df)
-        # Net als BTC-trend (indicators.btc_is_flat): een coin zonder
-        # duidelijke eigen dagtrend mag niet hard geblokkeerd worden, dat
-        # zou een normale consolidatie vlak voor een uitbraak onterecht
-        # wegfilteren. btc_is_flat is ondanks zijn naam coin-onafhankelijk
-        # (alleen ema9/ema21/atr), dus rechtstreeks herbruikbaar hier.
-        if not indicators.btc_is_flat(daily_ind):
-            daily_trend_factor = indicators.check_daily_trend(interp.direction, daily_ind)
-    except Exception:
-        logger.exception("Dagtrend kon niet berekend worden voor %s", interp.coin)
-        daily_trend_factor = ("Daily-trend", False, "kon niet opgehaald worden, telt als niet bevestigd")
-
-    extra_factors = None
-    if config.ENABLE_ADVANCED_FACTORS:
-        extra_factors = await compute_advanced_extra_factors(
-            interp.coin, interp.direction, df, ind.price, ind.atr, zones,
-            daily_df=daily_df, daily_ind=daily_ind,
-        )
+    confirmed, reason, pass_pct, hard_gates_ok = await compute_full_confirmation(
+        interp.coin, interp.direction, df, ind, zones,
+    )
 
     # Dezelfde edges/kant-bepaling-logica als indicators.check_sr_zone gebruikt
     # intern, hier apart herhaald in plaats van check_sr_zone's eigen
@@ -810,11 +825,6 @@ async def process_day_trading_signal(
             if e > ind.price and abs(ind.price - e) <= indicators.SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * ind.atr
         ]
         nearest_sr_zone_price = min(zone_candidates) if zone_candidates else None
-
-    confirmed, reason, pass_pct, hard_gates_ok = indicators.confirms_direction(
-        ind, interp.direction, extra_factors=extra_factors, include_advanced=config.ENABLE_ADVANCED_FACTORS,
-        daily_trend_factor=daily_trend_factor,
-    )
 
     # Zelfde zone die de laatste keer al een stop loss veroorzaakte: een
     # nieuw signaal vlakbij diezelfde rand herhaalt vermoedelijk dezelfde
