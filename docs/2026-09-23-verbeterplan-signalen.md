@@ -106,26 +106,24 @@ en kijk of MACD-tegenstrijdige signalen structureel slechter scoren dan
 MACD-bevestigde. Is dat zo, dan is MACD net zo'n kandidaat voor een harde
 eis als BTC-trend en dagtrend nu al zijn.
 
-## Bevinding 4 (operationeel, los van signaalkwaliteit): level-check lijkt
-weken niet in real time te hebben gedraaid
+## Bevinding 4 (verworpen, met bewijs): geen operationeel probleem bij
+level-check
 
-`auto_outcome_at` van alle 66 signalen valt op **21 of 22 september** —
-geen enkele eerder, ook niet voor signalen die al op 2 september zijn
-aangemaakt. Dat is geen geleidelijke spreiding, dat is een enkele
-inhaalslag. Als `crypto-level-check.timer` (elke 15 minuten, per
-`deploy/crypto-level-check.timer`) goed had gedraaid, waren deze trades
-dagen tot weken eerder als winst/verlies gemarkeerd en had je toen al
-gepushte SL/TP-meldingen gekregen in plaats van nu, achteraf, in bulk.
+**Eerdere versie van dit rapport veronderstelde hier een storing.** Op de
+VPS geverifieerd dat dit niet klopt.
 
-**Actie, op de VPS:**
-```
-sudo systemctl status crypto-level-check.timer
-sudo journalctl -u crypto-level-check.service --since "30 days ago" | head -100
-```
-Dit is een controle, geen codewijziging — mogelijk was de timer een tijd
-niet actief, of een eerdere bug in `level_check.py` is inmiddels al
-gefixt en dit is de eerste succesvolle inhaalrun. Beide zijn hier niet uit
-af te leiden zonder de VPS-logs zelf.
+`crypto-level-check.timer` staat actief sinds 5 september en draait
+sindsdien onafgebroken elke 15 minuten (bevestigd via
+`journalctl -u crypto-level-check.service --since "30 days ago"`, elke run
+op tijd, geen gaten). Dat de automatische trackrecord (`auto_outcome`) van
+alle 66 signalen pas op 21-22 september is vastgesteld, ook voor signalen
+uit begin september, komt doordat die functionaliteit zelf pas op
+**21 september 12:01** live ging (`check_signal_outcomes` in
+`app/level_check.py`, commit 67d7cd5). Vóór die datum bestond deze check
+simpelweg nog niet in de draaiende code — de eerste run erna heeft
+terecht alle bestaande open signalen in één keer met terugwerkende kracht
+doorgerekend. Geen storing, geen gemiste meldingen, gewoon een nieuwe
+feature die voor het eerst draaide.
 
 ## Bevinding 5: "laag vertrouwen" presteert dramatisch slechter, wat het
 eigen doel van dat label bevestigt
@@ -150,26 +148,19 @@ gelijkwaardige "kans" getoond moeten worden. Zie aanbeveling hieronder.
 
 ## Aanbevelingen, geprioriteerd
 
-1. **Verifieer `crypto-level-check.service`'s draaigeschiedenis op de VPS**
-   (bevinding 4), niet alleen de timer-status. De timer stond op "active
-   (waiting)" sinds 5 september, maar dat zegt niets over of de eronder
-   liggende service telkens ook echt slaagde:
-   ```
-   sudo journalctl -u crypto-level-check.service --since "30 days ago" | head -100
-   ```
-2. **Overweeg BTC-trend (en desnoods de coin-eigen 4u-trendfactor) ook op
+1. **Overweeg BTC-trend (en desnoods de coin-eigen 4u-trendfactor) ook op
    de dagcandle te meten**, niet alleen op 4u (bevinding 2), als de
    dagtrend-gate van vandaag de asymmetrie niet genoeg terugbrengt. Eerst
    meten, dan pas bouwen.
-3. **Laat dit dataset met rust en meet over 2-4 weken opnieuw.** De
+2. **Laat dit dataset met rust en meet over 2-4 weken opnieuw.** De
    dagtrend-gate ging vandaag pas live; met 66 signalen en een extreem
    eenzijdige markt-periode is dit nog geen betrouwbare basis om verder op
    te sturen. Een vervolgmeting laat zien of de asymmetrie (22/0 long/
    short) afneemt nu de nieuwe hard gates meedraaien.
-4. **Backtest MACD als mogelijke extra harde eis** (bevinding 3), niet
+3. **Backtest MACD als mogelijke extra harde eis** (bevinding 3), niet
    blind doorvoeren — eerst zien of MACD-tegenstrijdige signalen echt
    structureel slechter scoren voordat het een blokkerende eis wordt.
-5. **Overweeg laag-vertrouwen-signalen anders te presenteren** (bevinding
+4. **Overweeg laag-vertrouwen-signalen anders te presenteren** (bevinding
    5): 11.5% winrate is zwak genoeg om te heroverwegen of ze als
    volwaardige "kans" op het dashboard moeten staan, of duidelijker als
    "waarschijnlijk niet nemen" gelabeld moeten worden. Dit is een
