@@ -69,6 +69,28 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = event.notification.data && event.notification.data.url;
-  if (url) event.waitUntil(clients.openWindow(url));
+  const relativeUrl = event.notification.data && event.notification.data.url;
+  if (!relativeUrl) return;
+  // Absoluut pad, niet het kale relatieve pad dat de server meestuurt:
+  // clients.openWindow met een relatief pad is op iOS/WebKit onbetrouwbaar
+  // gebleken, vooral bij een koude start vanuit de melding (de app was nog
+  // niet open) — precies het "ik tik erop en er gebeurt niks"-gedrag.
+  const targetUrl = new URL(relativeUrl, self.location.origin).href;
+  event.waitUntil(
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
+      // Een al open venster hergebruiken en ernaartoe navigeren in plaats
+      // van altijd een nieuw venster te openen: clients.openWindow kan op
+      // iOS een aparte Safari-tab openen naast de al geïnstalleerde
+      // standalone-app, wat ook aanvoelt als "er gebeurt niks" omdat de
+      // gebruiker niet in de app zelf terechtkomt.
+      for (const client of windowClients) {
+        if ("focus" in client) {
+          client.focus();
+          if ("navigate" in client) return client.navigate(targetUrl);
+          return undefined;
+        }
+      }
+      return clients.openWindow(targetUrl);
+    })
+  );
 });
