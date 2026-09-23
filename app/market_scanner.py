@@ -253,6 +253,27 @@ async def _check_chart_patterns(coin: str, df, ind) -> None:
     if _same_pattern(repo.get_pattern_key(coin), match.direction, match, ind.atr):
         return
 
+    # Een nog niet genomen melding voor de tegenovergestelde richting van
+    # dezelfde coin is achterhaald zodra hier een nieuw patroon bevestigt:
+    # je kan niet serieus tegelijk long en short op dezelfde coin
+    # overwegen. Zelfde mechanisme als process_day_trading_signal, hier
+    # voor de eigen patroon-kans (auto_ignore_opposite_pending dekt zowel
+    # day_trading als patroon, swing blijft buiten schot).
+    ignored = repo.auto_ignore_opposite_pending(coin, match.direction)
+    if ignored:
+        logger.info("%s nog niet genomen tegenovergestelde melding(en) voor %s automatisch genegeerd (patroon)",
+                     len(ignored), coin)
+        for user in ignored:
+            try:
+                repo.create_notification(
+                    user["id"], "expired_signal",
+                    f"Kans op {coin} vervallen",
+                    f"Een nieuwe {match.direction}-melding op {coin} maakte de vorige kans achterhaald.",
+                    f"/coins/{coin}",
+                )
+            except Exception:
+                logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
     entry_options = patterns.find_entry_options(df, match, ind.atr, trendlines=trendlines)
 
     used_pattern_stop_take = (
@@ -292,6 +313,25 @@ async def _check_chart_patterns(coin: str, df, ind) -> None:
         "suggested_entry_high": entry_options["retest_high"],
     }
     signal_id = repo.insert_signal(signal_data)
+
+    # Zelfde soort opruiming als hierboven, maar voor het geval een oude
+    # nog niet genomen melding voor dezelfde coin en richting niet meer als
+    # "open" gold (bv. iedereen had die kans al afgesloten) en er dus een
+    # los nieuw signaal is aangemaakt in plaats van een update.
+    stale = repo.auto_ignore_stale_pending_for_coin(coin, exclude_signal_id=signal_id)
+    if stale:
+        logger.info("%s oude nog niet genomen melding(en) voor %s automatisch genegeerd (nieuw patroon-signaal)",
+                     len(stale), coin)
+        for user in stale:
+            try:
+                repo.create_notification(
+                    user["id"], "expired_signal",
+                    f"Kans op {coin} vervallen",
+                    f"Een oude melding op {coin} is vervangen door een nieuw signaal.",
+                    f"/coins/{coin}",
+                )
+            except Exception:
+                logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
     def _pattern_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
         retest_note = (
