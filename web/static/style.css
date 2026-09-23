@@ -518,20 +518,43 @@ main h3 { font-size: 15px; gap: 8px; }
 
 /* Kaal signaalkaartje op /signalen en de coinpagina (macros.signal_card):
    bewust géén journaal/portfolio-styling hergebruikt, dit is puur
-   signaalinformatie. Een groene rand bij een voor DEZE gebruiker
-   bevestigd signaal, grijs voor de rest — geen rood, "niet bevestigd"
-   is de neutrale rustsituatie, geen fout of verlies. */
-.signal-list { display: flex; flex-direction: column; gap: 10px; }
+   signaalinformatie. Een bevestigd signaal (entry.user_confirmed, zie
+   web/main.py::_apply_user_confirmed) is een ECHTE trade kans voor deze
+   gebruiker en krijgt een sterk visueel eigen plekje: groene rand, lichte
+   groengloed en een "trade kans"-badge, in plaats van het eerdere dunne
+   3px-randje dat nauwelijks opviel naast een afgewezen signaal. Een
+   afgewezen signaal is geen fout of verlies — geen rood, gewoon minder
+   nadruk (lagere opacity), de neutrale rustsituatie. */
+.signal-list { display: flex; flex-direction: column; gap: 12px; }
 .signal-card {
-  padding: 10px 14px; border: 1px solid var(--border); border-left: 3px solid var(--border-strong);
+  padding: 12px 16px; border: 1px solid var(--border); border-left: 3px solid var(--border-strong);
   border-radius: var(--radius-sm); background: var(--bg-elevated);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-.signal-card.is-confirmed { border-left-color: var(--green); }
-.signal-card-head { display: flex; align-items: center; gap: 10px; font-family: var(--mono); }
+.signal-card.is-confirmed {
+  border-left-width: 4px;
+  border-left-color: var(--green);
+  border-color: rgba(51, 214, 159, 0.22);
+  background: linear-gradient(165deg, rgba(51, 214, 159, 0.07), var(--bg-elevated) 55%);
+  box-shadow: 0 0 0 1px rgba(51, 214, 159, 0.08), var(--shadow-sm);
+}
+.signal-card.is-rejected { opacity: 0.72; }
+.signal-card.is-rejected:hover { opacity: 1; }
+.signal-card-head { display: flex; align-items: center; gap: 10px; font-family: var(--mono); flex-wrap: wrap; }
 .signal-card-head .coin-symbol { font-weight: 700; color: var(--text); text-decoration: none; }
 .signal-card-head .coin-symbol:hover { text-decoration: underline; }
 .signal-card-head .pass-pct { margin-left: auto; font-weight: 600; color: var(--text); }
-.signal-card-levels { margin-top: 4px; font-size: 12.5px; color: var(--text-dim); font-family: var(--mono); }
+/* Alleen op een bevestigd signaal: het label dat het onderscheid uit deze
+   sectie's why-comment concreet maakt, niet alleen een gekleurde rand die
+   je makkelijk mist tussen andere kaarten. */
+.trade-kans-badge {
+  display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700;
+  letter-spacing: 0.04em; text-transform: uppercase; color: var(--green);
+  background: rgba(51, 214, 159, 0.14); border: 1px solid rgba(51, 214, 159, 0.3);
+  border-radius: 999px; padding: 2px 8px;
+}
+.signal-card-levels { margin-top: 6px; font-size: 13px; color: var(--text-dim); font-family: var(--mono); }
+.signal-card.is-confirmed .signal-card-levels { color: var(--text); }
 /* Zelfde font-tokens als .signal-card-levels hierboven: puur informatieve
    vervolgregel (entry-zone-suggestie), moet er als deel van datzelfde
    blok uitzien, niet als een losse .muted-tekst in een ander lettertype. */
@@ -539,6 +562,10 @@ main h3 { font-size: 15px; gap: 8px; }
 .signal-card-meta { display: flex; align-items: center; justify-content: space-between; margin-top: 8px; font-size: 11.5px; }
 .signal-card-meta form { margin: 0; }
 .signal-card-meta .button-link { font-size: 11.5px; padding: 0; }
+/* Bevestigd = de why-uitklap staat standaard open (zie [open] op de
+   summary in macros.signal_card): de reden waarom dit een echte kans is
+   hoort meteen zichtbaar, niet achter nog een klik verstopt. */
+.signal-card.is-confirmed .confidence-why { color: var(--green); }
 
 /* Lege staat: nul trades is de startsituatie, geen fout. Een kaart die
    "0.0%" toont ziet er identiek uit als een kaart met echte data, en

@@ -200,14 +200,10 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     entries = repo.list_signalen_for_user(user["id"])
     if not alles:
         entries = [e for e in entries if e["auto_outcome"] is None]
-    for entry in entries:
-        entry["user_confirmed"] = (
-            entry["trade_type"] in ("swing", "patroon") or
-            repo.user_confirmed(entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"])
-        )
     winrate = repo.winrate_stats(user["id"])
     pattern_winrate = repo.pattern_winrate_stats()
     entries = _add_signal_context(entries, winrate, pattern_winrate)
+    _apply_user_confirmed(entries, user["confirm_threshold_pct"])
     # Sorteersleutel volgt per trade_type wat de kaart (signal_card) ECHT
     # toont: voor patroon is dat success_rate (de kansberekening, gemiddelde
     # van factor_pct en de historische patroon-winrate), voor dagtrading is
@@ -634,6 +630,30 @@ def _add_signal_context(entries: list[dict], winrate: dict, pattern_winrate: dic
         entry["success_rate"] = stats["winrate"]
         entry["success_sample"] = stats["total"]
     return entries
+
+
+def _apply_user_confirmed(entries: list[dict], threshold_pct: float) -> None:
+    """Zet entry['user_confirmed'] per signaal, de echte trade-kans-vlag
+    achter macros.signal_card's groene rand. Swing is altijd bevestigd
+    (geen gepoold percentage, een echte terugveer op een bewaakt niveau).
+    Dagtrading en patroon tellen pas als bevestigd zodra hun EIGEN
+    percentage (pass_pct resp. success_rate/kansberekening) de drempel van
+    deze gebruiker haalt — voorheen kreeg elk patroon-signaal hier
+    onvoorwaardelijk True, dus een kansberekening van 30% kreeg dezelfde
+    groene rand als een kansberekening van 90%, amper onderscheid tussen
+    een echte kans en ruis. Moet NA _add_signal_context draaien: patroon se
+    success_rate bestaat pas dan."""
+    for entry in entries:
+        if entry["trade_type"] == "swing":
+            entry["user_confirmed"] = True
+        elif entry["trade_type"] == "patroon":
+            entry["user_confirmed"] = repo.user_confirmed(
+                entry.get("success_rate"), bool(entry["hard_gates_ok"]), threshold_pct,
+            )
+        else:
+            entry["user_confirmed"] = repo.user_confirmed(
+                entry["pass_pct"], bool(entry["hard_gates_ok"]), threshold_pct,
+            )
 
 
 def _position_size(entry: dict) -> Optional[float]:
@@ -1630,15 +1650,11 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         if pending_entry is not None:
             s["stop_loss"] = pending_entry["stop_loss"]
             s["take_profit"] = pending_entry["take_profit"]
-    for entry in recent_signals:
-        entry["user_confirmed"] = (
-            entry["trade_type"] in ("swing", "patroon") or
-            repo.user_confirmed(entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"])
-        )
     winrate = repo.winrate_stats(user["id"])
     pattern_winrate = repo.pattern_winrate_stats()
     open_trades = _add_signal_context(open_trades, winrate, pattern_winrate)
     recent_signals = _add_signal_context(recent_signals, winrate, pattern_winrate)
+    _apply_user_confirmed(recent_signals, user["confirm_threshold_pct"])
 
     # Sparkline: laatste signalen op een rij, oudste eerst zodat het als
     # tijdlijn leest. Puur signaal-geschiedenis (niet oefentrades, dat zijn
