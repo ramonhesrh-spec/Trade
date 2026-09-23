@@ -182,10 +182,30 @@ async def check_pending_signals() -> None:
 
     coin_prices: dict[str, float] = {}
     coin_levels: dict[tuple[int, str], list[dict]] = {}
+    pattern_winrate = repo.pattern_winrate_stats()
 
     for entry in entries:
         coin = entry["coin"]
         if not entry["atr"]:
+            continue
+
+        # Een niet-bevestigd signaal krijgt sinds kort al geen eerste
+        # pushmelding meer (zie signal_processor.py), maar de journaalregel
+        # blijft gewoon bestaan (trackrecord) — zonder deze check dook
+        # precies zo'n signaal hier alsnog op zodra de prijs terugkwam, met
+        # "(laag vertrouwen)" letterlijk in de tekst: exact de melding die
+        # niet meer verstuurd had mogen worden. Zelfde vergelijking als
+        # web/main.py::_apply_user_confirmed, per gebruiker tegen zijn eigen
+        # drempel.
+        if entry["trade_type"] == "swing":
+            is_confirmed = True
+        elif entry["trade_type"] == "patroon":
+            pattern_stats = pattern_winrate.get(entry["pattern_name"])
+            success_rate = repo.pattern_kansberekening(entry["pass_pct"], pattern_stats)
+            is_confirmed = repo.user_confirmed(success_rate, bool(entry["hard_gates_ok"]), entry["confirm_threshold_pct"])
+        else:
+            is_confirmed = repo.user_confirmed(entry["pass_pct"], bool(entry["hard_gates_ok"]), entry["confirm_threshold_pct"])
+        if not is_confirmed:
             continue
         if coin not in coin_prices:
             try:
