@@ -1916,6 +1916,27 @@ def pattern_winrate_stats() -> dict[str, dict]:
     return result
 
 
+def pattern_kansberekening(factor_pct: Optional[float], pattern_stats: Optional[dict]) -> Optional[float]:
+    """Combineert het gepoolde factor-percentage van dit ene patroon-
+    signaal met de systeembrede historische winrate van dit patroontype
+    (pattern_stats, een resultaat uit pattern_winrate_stats()) tot één
+    kansberekening — gemiddelde als beide beschikbaar zijn, anders het
+    enige beschikbare cijfer, anders None. Gedeeld tussen
+    web/main.py::_add_signal_context (weergave, elke keer opnieuw berekend
+    met de actuele pattern_winrate_stats) en market_scanner.py's patroon-
+    notify (om te bepalen of een melding stil of gewoon binnenkomt), zodat
+    beide plekken exact hetzelfde cijfer tonen resp. gebruiken — zie
+    docs/superpowers/specs/2026-09-23-patroon-factor-toetsing-design.md."""
+    pattern_pct = pattern_stats["winrate"] if pattern_stats else None
+    if factor_pct is not None and pattern_pct is not None:
+        return (factor_pct + pattern_pct) / 2
+    if factor_pct is not None:
+        return factor_pct
+    if pattern_pct is not None:
+        return pattern_pct
+    return None
+
+
 def swing_winrate_stats(user_id: int) -> dict:
     """Winrate en gemiddeld resultaat van gesloten swing-trades, apart van
     winrate_stats (day trading): andere tijdshorizon, ander risicoprofiel,

@@ -427,6 +427,7 @@ async def _fanout_confirmed_signal(
     signal_id: int, coin: str, direction: str, entry_price: float,
     stop_loss: float, take_profit: float, premise_level: float, title: str,
     make_body: Callable[[float, float, bool], str],
+    force_silent: bool = False,
 ) -> None:
     """Deelt een al-bevestigd signaal (geen gepoold percentage, altijd
     gemeld) met alle gebruikers: journaalregel + pushmelding per gebruiker,
@@ -437,6 +438,12 @@ async def _fanout_confirmed_signal(
     make_body ontvangt de EFFECTIEVE (mogelijk ingeperkte) stop/take voor
     deze ene gebruiker en of die stop gecapt werd, zodat de melding altijd
     de daadwerkelijke cijfers voor deze gebruiker toont.
+
+    force_silent=True (alleen gebruikt door patroon, bij een lage
+    kansberekening) maakt de melding stil bovenop de bestaande
+    stille-uren-check hieronder, nooit ervoor in de plaats — de melding
+    zelf blijft altijd verstuurd en zichtbaar, alleen zonder geluid/
+    schermoplichten, zie market_scanner.py's patroon-notify.
 
     entry_price is de LIVE prijs op het moment van bevestiging (gebruikt
     voor position sizing en de coin-link in de pushmelding). premise_level
@@ -490,7 +497,7 @@ async def _fanout_confirmed_signal(
             body = make_body(effective_stop_loss, effective_take_profit, stop_was_capped)
             if eval_blocked_note:
                 body += f"\n{eval_blocked_note}"
-            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=quiet)
+            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=quiet or force_silent)
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
             logger.exception("Melding voor %s naar gebruiker %s is mislukt", coin, user["username"])

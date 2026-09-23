@@ -38,6 +38,14 @@ AUTO_SCAN_LOSS_COOLDOWN_HOURS = 12
 # de betrouwbaarheidswaarborg, niet de knop om sneller te melden.
 WHIPLASH_MIN_CONSECUTIVE_CYCLES = 2
 
+# Onder deze kansberekening (repo.pattern_kansberekening, zie
+# _find_chart_pattern_candidate's notify()) komt een patroon-melding stil
+# binnen in plaats van met geluid/schermoplichten: hoger dan het bestaande
+# hoog-vertrouwen-niveau voor dagtrading (60%, indicators.CONFIRM_THRESHOLD)
+# op expliciet verzoek van de gebruiker — een zwak patroon voelde op het
+# lockscreen even dringend als een sterk, dat was de kern van de klacht.
+SILENT_BELOW_KANS = 65.0
+
 # Maximum aantal structurele meldingen (uitbraak/trendlijn/patroon) dat één
 # scan-cyclus daadwerkelijk pusht, over alle coins samen. Een cyclus die op
 # meerdere coins tegelijk iets vindt (bv. een markbrede beweging die op tien
@@ -367,6 +375,16 @@ async def _find_chart_pattern_candidate(
             coin, match.direction, df, ind, zones,
         )
 
+        # Kansberekening (zelfde formule als web/main.py's weergave, zie
+        # repo.pattern_kansberekening) bepaalt hier of de melding stil
+        # binnenkomt: een patroon met een lage kans zag er voorheen op het
+        # lockscreen even dringend uit als een sterke, wat als spam voelde.
+        # De melding zelf wordt nooit tegengehouden (technical_confirmed
+        # blijft vast 1) — alleen het geluid/schermoplichten.
+        pattern_stats = repo.pattern_winrate_stats().get(match.name)
+        kansberekening = repo.pattern_kansberekening(factor_pass_pct, pattern_stats)
+        force_silent = kansberekening is None or kansberekening < SILENT_BELOW_KANS
+
         # Een nog niet genomen melding voor de tegenovergestelde richting
         # van dezelfde coin is achterhaald zodra hier een nieuw patroon
         # bevestigt: je kan niet serieus tegelijk long en short op dezelfde
@@ -458,6 +476,7 @@ async def _find_chart_pattern_candidate(
             signal_id, coin, match.direction, ind.price, stop_loss, take_profit, match.neckline,
             title=f"{push_notify.coin_symbol(coin)} {coin} {match.direction}, {match.name}",
             make_body=_pattern_body,
+            force_silent=force_silent,
         )
         repo.set_pattern_key(coin, key)
 

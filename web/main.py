@@ -616,16 +616,7 @@ def _add_signal_context(entries: list[dict], winrate: dict, pattern_winrate: dic
             continue
         if entry.get("trade_type") == "patroon":
             pattern_stats = pattern_winrate.get(entry.get("pattern_name"))
-            factor_pct = entry.get("pass_pct")
-            pattern_pct = pattern_stats["winrate"] if pattern_stats else None
-            if factor_pct is not None and pattern_pct is not None:
-                entry["success_rate"] = (factor_pct + pattern_pct) / 2
-            elif factor_pct is not None:
-                entry["success_rate"] = factor_pct
-            elif pattern_pct is not None:
-                entry["success_rate"] = pattern_pct
-            else:
-                entry["success_rate"] = None
+            entry["success_rate"] = repo.pattern_kansberekening(entry.get("pass_pct"), pattern_stats)
             entry["success_sample"] = pattern_stats["total"] if pattern_stats else None
             continue
         bucket = "hoog_vertrouwen" if entry.get("confidence") == "hoog vertrouwen" else "laag_vertrouwen"
