@@ -585,19 +585,33 @@ def _eval_coaching_tip(
     return None
 
 
-def _add_signal_context(entries: list[dict], winrate: dict) -> list[dict]:
+def _add_signal_context(entries: list[dict], winrate: dict, pattern_winrate: dict) -> list[dict]:
     """Voegt aan elk signaal het concrete advies toe (wat kan je beter
-    doen dan nu instappen) en een slagingskans op basis van de eigen
-    trackrecord van dit vertrouwen-niveau tot nu toe. Een swing- of
-    patroon-signaal heeft geen vertrouwen-label (zie de spec), dus geen
-    geleende day-trading-slagingskans: dat zou een gemeten
-    day-trading-statistiek als voorspelling voor een andere soort trade
-    laten doorgaan."""
+    doen dan nu instappen) en een slagingskans toe. Voor dagtrading is dat
+    de eigen trackrecord van dit vertrouwen-niveau; voor patroon een
+    kansberekening die het gepoolde factor-percentage van dit signaal
+    combineert met de systeembrede historische winrate van dit
+    patroontype (repo.pattern_winrate_stats). Swing heeft geen van
+    beide (zie de spec), dus geen geleende statistiek."""
     for entry in entries:
         entry["advice"] = advice_module.build_advice(entry)
-        if entry.get("trade_type") in ("swing", "patroon"):
+        if entry.get("trade_type") == "swing":
             entry["success_rate"] = None
             entry["success_sample"] = None
+            continue
+        if entry.get("trade_type") == "patroon":
+            pattern_stats = pattern_winrate.get(entry.get("pattern_name"))
+            factor_pct = entry.get("pass_pct")
+            pattern_pct = pattern_stats["winrate"] if pattern_stats else None
+            if factor_pct is not None and pattern_pct is not None:
+                entry["success_rate"] = (factor_pct + pattern_pct) / 2
+            elif factor_pct is not None:
+                entry["success_rate"] = factor_pct
+            elif pattern_pct is not None:
+                entry["success_rate"] = pattern_pct
+            else:
+                entry["success_rate"] = None
+            entry["success_sample"] = pattern_stats["total"] if pattern_stats else None
             continue
         bucket = "hoog_vertrouwen" if entry.get("confidence") == "hoog vertrouwen" else "laag_vertrouwen"
         stats = winrate[bucket]
@@ -745,8 +759,9 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
 
     entries = _filter_journal(real_entries, status)
     winrate = repo.winrate_stats(user["id"])
+    pattern_winrate = repo.pattern_winrate_stats()
     open_entries = _add_signal_context(
-        await _enrich_open_positions(_filter_journal(real_entries, "open")), winrate,
+        await _enrich_open_positions(_filter_journal(real_entries, "open")), winrate, pattern_winrate,
     )
     # Een pending regel (nog geen eigen entry ingevuld) is geen echte trade,
     # alleen een melding die op een beslissing wacht. Apart getoond van een
@@ -796,7 +811,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         None,
     )
     practice_open = _add_signal_context(
-        await _enrich_open_positions([e for e in practice_entries if e["exit_price"] is None]), winrate,
+        await _enrich_open_positions([e for e in practice_entries if e["exit_price"] is None]), winrate, pattern_winrate,
     )
     _attach_discipline_facts(practice_open)
     practice_closed = [e for e in practice_entries if e["exit_price"] is not None]
@@ -905,8 +920,9 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
     # kaarten): de winrate die deze pagina zelf toont is repo.winrate_for_user
     # verderop, niet dit handmatige-status-gebaseerde cijfer.
     confidence_winrate = repo.winrate_stats(user["id"])
+    pattern_winrate = repo.pattern_winrate_stats()
     open_entries = _add_signal_context(
-        await _enrich_open_positions(_filter_journal(real_entries, "open")), confidence_winrate,
+        await _enrich_open_positions(_filter_journal(real_entries, "open")), confidence_winrate, pattern_winrate,
     )
     taken_entries = [e for e in open_entries if e["entry_price"] is not None]
     pending_entries = [e for e in open_entries if e["entry_price"] is None]
@@ -941,7 +957,7 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
         None,
     )
     practice_open = _add_signal_context(
-        await _enrich_open_positions([e for e in practice_entries if e["exit_price"] is None]), confidence_winrate,
+        await _enrich_open_positions([e for e in practice_entries if e["exit_price"] is None]), confidence_winrate, pattern_winrate,
     )
     _attach_discipline_facts(practice_open)
     practice_closed = [e for e in practice_entries if e["exit_price"] is not None]
@@ -1604,8 +1620,9 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
             repo.user_confirmed(entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"])
         )
     winrate = repo.winrate_stats(user["id"])
-    open_trades = _add_signal_context(open_trades, winrate)
-    recent_signals = _add_signal_context(recent_signals, winrate)
+    pattern_winrate = repo.pattern_winrate_stats()
+    open_trades = _add_signal_context(open_trades, winrate, pattern_winrate)
+    recent_signals = _add_signal_context(recent_signals, winrate, pattern_winrate)
 
     # Sparkline: laatste signalen op een rij, oudste eerst zodat het als
     # tijdlijn leest. Puur signaal-geschiedenis (niet oefentrades, dat zijn
