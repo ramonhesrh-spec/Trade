@@ -208,14 +208,18 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     winrate = repo.winrate_stats(user["id"])
     pattern_winrate = repo.pattern_winrate_stats()
     entries = _add_signal_context(entries, winrate, pattern_winrate)
-    # Sorteersleutel is success_rate, niet het rauwe pass_pct: voor patroon
-    # toont de kaart (signal_card) success_rate (de kansberekening), dus
-    # sorteren op pass_pct zou een andere volgorde opleveren dan wat er te
-    # zien is. Voor dagtrading is success_rate == pass_pct-afgeleide winrate
-    # van dit vertrouwen-niveau, dus dit verandert daar niets aan de facto
-    # (pass_pct blijft elders, zoals user_confirmed hierboven, de sleutel
-    # voor niet-weergave-doeleinden).
-    success_rate_sort_key = lambda e: e["success_rate"] if e["success_rate"] is not None else -1
+    # Sorteersleutel volgt per trade_type wat de kaart (signal_card) ECHT
+    # toont: voor patroon is dat success_rate (de kansberekening, gemiddelde
+    # van factor_pct en de historische patroon-winrate), voor dagtrading is
+    # dat het eigen pass_pct van dit signaal — success_rate is voor
+    # dagtrading juist de winrate van de hele vertrouwen-emmer (hoog/laag),
+    # een en dezelfde waarde voor alle signalen in die emmer, dus daarop
+    # sorteren zou dagtrading-signalen effectief op invoervolgorde zetten
+    # in plaats van op wat de badge daadwerkelijk laat zien.
+    def success_rate_sort_key(e):
+        if e["trade_type"] == "patroon":
+            return e["success_rate"] if e["success_rate"] is not None else -1
+        return e["pass_pct"] if e["pass_pct"] is not None else -1
     if alles:
         # Open signalen eerst (op percentage), pas daarna resolved signalen
         # (op recentheid) — anders overstemt een oud, toevallig hoog
