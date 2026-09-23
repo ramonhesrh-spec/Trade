@@ -557,26 +557,36 @@ async def scan_market() -> None:
             for candidate in structural:
                 by_direction.setdefault(candidate["direction"], []).append(candidate)
 
-            # De winnaar per richting wordt hier nog niet gemeld: pas ná de
-            # hele cyclus (alle coins) wordt over de volledige verzamelde
-            # lijst de sterkste MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE
-            # geselecteerd, zie onderaan deze functie. structural_directions_
-            # signaled hieronder betekent dus "voor deze coin GEVONDEN deze
-            # cyclus", niet per se "wordt ook gemeld" — dat is genoeg om de
-            # generieke dagtrading-melding hieronder te laten wijken: een
-            # structurele kans die deze cyclus (nog) niet de push haalt, mag
-            # nog steeds niet overschaduwd worden door een tegenstrijdige of
-            # dubbele generieke melding.
-            structural_directions_signaled: set = set()
-            for cand_direction, group in by_direction.items():
-                winner = max(group, key=lambda c: c["score"])
-                if len(group) > 1:
+            # structural_directions_signaled: alle richtingen die deze coin
+            # deze cyclus GEVONDEN heeft (niet per se gemeld, zie hieronder)
+            # — genoeg om de generieke dagtrading-melding verderop te laten
+            # wijken, ongeacht welke specifieke richting het was.
+            structural_directions_signaled: set = set(by_direction.keys())
+
+            # Maar hoogstens ÉÉN kandidaat per coin dingt mee naar een
+            # daadwerkelijke melding deze cyclus, ongeacht hoeveel
+            # richtingen er gevonden zijn: uitbraak en trendlijn delen
+            # altijd dezelfde EMA-richting en kunnen dus nooit onderling
+            # botsen, maar een patroon heeft zijn EIGEN richting en kan wel
+            # tegenovergesteld zijn aan wat uitbraak/trendlijn vinden (bv.
+            # patroon short, trendlijn long voor dezelfde coin). Zonder deze
+            # stap zou de cyclusbrede top-N hieronder (die alleen op score
+            # sorteert, niet per coin dedupliceert) beide alsnog kunnen
+            # melden — long én short voor dezelfde coin, tegenstrijdig.
+            if structural:
+                if len(by_direction) > 1:
                     logger.info(
-                        "%s: %s structurele kandidaten voor richting %s, '%s' wint (risk:reward %.2f)",
-                        coin, len(group), cand_direction, winner["kind"], winner["score"],
+                        "%s: structurele kandidaten in tegenstrijdige richtingen deze cyclus (%s)",
+                        coin, ", ".join(f"{d} ({len(g)}x)" for d, g in by_direction.items()),
                     )
-                cycle_structural_candidates.append({**winner, "coin": coin})
-                structural_directions_signaled.add(cand_direction)
+                overall_winner = max(structural, key=lambda c: c["score"])
+                if len(structural) > 1:
+                    logger.info(
+                        "%s: %s structurele kandidaten totaal, '%s' (%s, risk:reward %.2f) wint",
+                        coin, len(structural), overall_winner["kind"], overall_winner["direction"],
+                        overall_winner["score"],
+                    )
+                cycle_structural_candidates.append({**overall_winner, "coin": coin})
 
             # Vóór de cooldown-check bepaald (in plaats van erna): een coin
             # met een al bestaand open signaal moet elke cyclus ververst
