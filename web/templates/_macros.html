@@ -46,7 +46,7 @@
 {% if entry.trade_type == "swing" %}
 <p class="muted reason-legend">Twee losse toetsen, geen gecombineerd cijfer: dit is nog niet gevalideerd op deze tijdshorizon zoals de day-trading-toets dat wel is.</p>
 {% elif entry.trade_type == "patroon" %}
-<p class="muted reason-legend">Herkend chart-patroon: entry/stop/take zijn gebaseerd op de gemeten beweging van het patroon zelf. De vinkjes hieronder zijn de gepoolde factoren die dit patroon ondersteunen of tegenspreken; het percentage hierboven combineert dat met de historische winrate van dit patroontype.</p>
+<p class="muted reason-legend">Autonoom gedetecteerd door HesPulse, zonder doorgestuurd bericht. De vinkjes hieronder zijn de gepoolde factoren die deze kans ondersteunen of tegenspreken; het percentage hierboven combineert dat met de historische winrate van dit type.</p>
 {% else %}
 <p class="muted reason-legend">De vinkjes hieronder zijn nu gemeten (RSI, volume, trend, momentum). De slagingskans hierboven is een inschatting op basis van eerdere trades, geen garantie voor deze trade.</p>
 {% endif %}
@@ -156,7 +156,7 @@
     {% if entry.trade_type == "swing" %}
     <span class="badge badge-swing" title="Bevestigd op een bewaakt steun/weerstand-niveau, geen gepoold percentage">swing</span>
     {% elif entry.trade_type == "patroon" %}
-    <span class="badge badge-swing" title="Chart-patroon herkend door HesPulse">{{ entry.pattern_name }}</span>
+    <span class="badge badge-swing" title="Autonoom herkend door HesPulse, zonder doorgestuurd bericht">{{ entry.pattern_name }}</span>
     {% if entry.success_rate is defined and entry.success_rate is not none %}<span class="pass-pct" title="kansberekening: gepoolde factoren + historische winrate van dit patroontype">kans {{ "%.0f"|format(entry.success_rate) }}%</span>{% endif %}
     {% elif entry.pass_pct is not none %}
     <span class="pass-pct">{{ "%.0f"|format(entry.pass_pct) }}%</span>

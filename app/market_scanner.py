@@ -116,24 +116,83 @@ async def _find_breakout_retest_candidate(coin: str, direction: str, df, ind) ->
         swing_low=zone.price_low if direction == "long" else None,
         swing_high=zone.price_high if direction == "short" else None,
     )
+    pattern_label = "uitbraak + terugtest"
 
     async def notify() -> None:
-        # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push
-        # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend
-        # over, en telegram_chat_id wordt sinds de overstap naar push nooit
-        # meer ingevuld voor nieuwe gebruikers.
-        for user in repo.list_users():
-            if repo.is_coin_muted(user["id"], coin):
-                continue
-            force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
-            try:
-                title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, uitbraak + terugtest"
-                body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
-                await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
-            except Exception:
-                logger.exception(
-                    "Pushmelding (uitbraak-terugtest) voor %s naar gebruiker %s is mislukt", coin, user["username"],
-                )
+        # Zelfde opzet als _find_chart_pattern_candidate's notify(): een
+        # echte signals-rij + journaal-fanout in plaats van alleen een
+        # kale pushmelding. Voorheen bleef uitbraak+terugtest volledig
+        # onzichtbaar zodra de melding voorbij was — geen kaart op
+        # /signalen of de coinpagina, geen trackrecord, geen winrate,
+        # niets om op te wegen. compute_full_confirmation hier binnen
+        # notify() (niet in de outer functie): draait toch al alleen voor
+        # de winnende kandidaat van deze cyclus.
+        _, factor_breakdown, factor_pass_pct, factor_hard_gates_ok = await compute_full_confirmation(
+            coin, direction, df, ind, zones,
+        )
+        pattern_stats = repo.pattern_winrate_stats().get(pattern_label)
+        kansberekening = repo.pattern_kansberekening(factor_pass_pct, pattern_stats)
+
+        ignored = repo.auto_ignore_opposite_pending(coin, direction)
+        if ignored:
+            logger.info("%s nog niet genomen tegenovergestelde melding(en) voor %s automatisch genegeerd (uitbraak+terugtest)",
+                         len(ignored), coin)
+            for user in ignored:
+                try:
+                    repo.create_notification(
+                        user["id"], "expired_signal",
+                        f"Kans op {coin} vervallen",
+                        f"Een nieuwe {direction}-melding op {coin} maakte de vorige kans achterhaald.",
+                        f"/coins/{coin}",
+                    )
+                except Exception:
+                    logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
+        signal_data = {
+            "message_id": None, "coin": coin, "direction": direction,
+            "category": "day_trading", "trade_type": "patroon", "pattern_name": pattern_label,
+            "price": ind.price, "rsi": ind.rsi, "macd": ind.macd, "macd_signal": ind.macd_signal,
+            "volume_ratio": ind.volume_ratio, "ema9": ind.ema9, "ema21": ind.ema21,
+            "atr": ind.atr, "atr_avg20": ind.atr_avg20, "adx": ind.adx,
+            "technical_confirmed": 1, "pass_pct": factor_pass_pct, "hard_gates_ok": factor_hard_gates_ok,
+            "confidence": "patroon bevestigd",
+            "reason": factor_breakdown,
+            "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,
+            "context_note": None, "is_practice": 0, "plain_explanation": None,
+            "suggested_entry_low": None, "suggested_entry_high": None,
+        }
+        signal_id = repo.insert_signal(signal_data)
+
+        stale = repo.auto_ignore_stale_pending_for_coin(coin, exclude_signal_id=signal_id)
+        if stale:
+            logger.info("%s oude nog niet genomen melding(en) voor %s automatisch genegeerd (nieuw uitbraak+terugtest-signaal)",
+                         len(stale), coin)
+            for user in stale:
+                try:
+                    repo.create_notification(
+                        user["id"], "expired_signal",
+                        f"Kans op {coin} vervallen",
+                        f"Een oude melding op {coin} is vervangen door een nieuw signaal.",
+                        f"/coins/{coin}",
+                    )
+                except Exception:
+                    logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
+        def _breakout_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
+            return f"Entry {ind.price:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+
+        # premise_level = de zone-rand die doorbroken is (weerstand-tot-
+        # steun bij long, steun-tot-weerstand bij short) — de trigger-prijs
+        # van deze trade, niet ind.price die intussen verder kan zijn
+        # doorgelopen. Zelfde rol als match.neckline bij een chart-patroon.
+        premise_level = zone.price_high if direction == "long" else zone.price_low
+        await fanout_confirmed_signal(
+            signal_id, coin, direction, ind.price, stop_take.stop_loss, stop_take.take_profit, premise_level,
+            title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, {pattern_label}",
+            make_body=_breakout_body,
+            kansberekening=kansberekening,
+            hard_gates_ok=bool(factor_hard_gates_ok),
+        )
         repo.set_breakout_retest_key(coin, key)
 
     return {
@@ -207,24 +266,78 @@ async def _find_trendline_retest_candidate(coin: str, direction: str, df, ind) -
         swing_low=current_value if direction == "long" else None,
         swing_high=current_value if direction == "short" else None,
     )
+    pattern_label = "trendlijn + terugtest"
 
     async def notify() -> None:
-        # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push
-        # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend
-        # over, en telegram_chat_id wordt sinds de overstap naar push nooit
-        # meer ingevuld voor nieuwe gebruikers.
-        for user in repo.list_users():
-            if repo.is_coin_muted(user["id"], coin):
-                continue
-            force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
-            try:
-                title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, trendlijn-terugtest"
-                body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
-                await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
-            except Exception:
-                logger.exception(
-                    "Pushmelding (trendlijn-terugtest) voor %s naar gebruiker %s is mislukt", coin, user["username"],
-                )
+        # Zelfde opzet als _find_breakout_retest_candidate hierboven: een
+        # echte signals-rij + journaal-fanout in plaats van alleen een
+        # kale pushmelding, zodat dit type ook op /signalen, de coinpagina
+        # en het trackrecord verschijnt.
+        zones = indicators.detect_sr_zones(df)
+        _, factor_breakdown, factor_pass_pct, factor_hard_gates_ok = await compute_full_confirmation(
+            coin, direction, df, ind, zones,
+        )
+        pattern_stats = repo.pattern_winrate_stats().get(pattern_label)
+        kansberekening = repo.pattern_kansberekening(factor_pass_pct, pattern_stats)
+
+        ignored = repo.auto_ignore_opposite_pending(coin, direction)
+        if ignored:
+            logger.info("%s nog niet genomen tegenovergestelde melding(en) voor %s automatisch genegeerd (trendlijn+terugtest)",
+                         len(ignored), coin)
+            for user in ignored:
+                try:
+                    repo.create_notification(
+                        user["id"], "expired_signal",
+                        f"Kans op {coin} vervallen",
+                        f"Een nieuwe {direction}-melding op {coin} maakte de vorige kans achterhaald.",
+                        f"/coins/{coin}",
+                    )
+                except Exception:
+                    logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
+        signal_data = {
+            "message_id": None, "coin": coin, "direction": direction,
+            "category": "day_trading", "trade_type": "patroon", "pattern_name": pattern_label,
+            "price": ind.price, "rsi": ind.rsi, "macd": ind.macd, "macd_signal": ind.macd_signal,
+            "volume_ratio": ind.volume_ratio, "ema9": ind.ema9, "ema21": ind.ema21,
+            "atr": ind.atr, "atr_avg20": ind.atr_avg20, "adx": ind.adx,
+            "technical_confirmed": 1, "pass_pct": factor_pass_pct, "hard_gates_ok": factor_hard_gates_ok,
+            "confidence": "patroon bevestigd",
+            "reason": factor_breakdown,
+            "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,
+            "context_note": None, "is_practice": 0, "plain_explanation": None,
+            "suggested_entry_low": None, "suggested_entry_high": None,
+        }
+        signal_id = repo.insert_signal(signal_data)
+
+        stale = repo.auto_ignore_stale_pending_for_coin(coin, exclude_signal_id=signal_id)
+        if stale:
+            logger.info("%s oude nog niet genomen melding(en) voor %s automatisch genegeerd (nieuw trendlijn+terugtest-signaal)",
+                         len(stale), coin)
+            for user in stale:
+                try:
+                    repo.create_notification(
+                        user["id"], "expired_signal",
+                        f"Kans op {coin} vervallen",
+                        f"Een oude melding op {coin} is vervangen door een nieuw signaal.",
+                        f"/coins/{coin}",
+                    )
+                except Exception:
+                    logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
+        def _trendline_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
+            return f"Entry {ind.price:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+
+        # premise_level = current_value: de lijnwaarde op het moment van
+        # bevestiging, de trigger-prijs van deze trade — zelfde rol als
+        # match.neckline bij een chart-patroon.
+        await fanout_confirmed_signal(
+            signal_id, coin, direction, ind.price, stop_take.stop_loss, stop_take.take_profit, current_value,
+            title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, {pattern_label}",
+            make_body=_trendline_body,
+            kansberekening=kansberekening,
+            hard_gates_ok=bool(factor_hard_gates_ok),
+        )
         repo.set_trendline_retest_key(coin, key)
 
     return {
