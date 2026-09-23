@@ -172,6 +172,32 @@
   </div>
 </section>
 
+{% if forming_patterns %}
+<details class="stats-collapse js-accordion" open style="--i: 2">
+  <summary class="stats-summary">
+    <svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 3v18h18"/><path d="M7 14l3-3 3 2 4-6"/><circle cx="17" cy="7" r="1.5"/></svg>
+    <span>Patronen in de maak ({{ forming_patterns|length }})</span>
+    <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </summary>
+  <p class="muted" style="margin: 0 0 10px; font-size: 12px;">De vorm staat er, maar de lijn is nog niet doorbroken — puur informatief, geen melding en geen trade-kans. Dichtst bij de kritieke lijn eerst, over alle coins heen.</p>
+  <div class="table-scroll">
+  <table class="signals">
+    <thead><tr><th>Coin</th><th>Patroon</th><th>Richting</th><th class="num">Afstand tot lijn</th></tr></thead>
+    <tbody>
+      {% for p in forming_patterns %}
+      <tr class="{{ p.direction }}">
+        <td><a href="/coins/{{ p.coin }}">{{ p.coin }}</a></td>
+        <td>{{ p.name }}</td>
+        <td><span class="badge badge-{{ p.direction }}">{{ "bullish" if p.direction == "long" else "bearish" }}</span></td>
+        <td class="num">{{ "%.1f"|format(p.distance_pct) }}% · lijn op {{ "%.4f"|format(p.key_level) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</details>
+{% endif %}
+
 {% if unclear_messages %}
 <details class="stats-collapse js-accordion" style="--i: 2">
   <summary class="stats-summary">

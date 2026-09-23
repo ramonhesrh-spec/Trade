@@ -423,6 +423,25 @@ CREATE TABLE IF NOT EXISTS sr_zone_failures (
     failed_at TEXT NOT NULL
 );
 
+-- Patronen die nog NIET doorbroken zijn (app/patterns.py's
+-- find_forming_wedge/find_forming_reversal_patterns), ververst elke
+-- marktscan-cyclus (app/market_scanner.py) per coin: DELETE + INSERT, dus
+-- deze tabel bevat altijd alleen wat er DEZE cyclus nog speelt, nooit een
+-- verouderde rij. Puur informatief, geen entry/stop/target/melding/
+-- signals-rij eraan gekoppeld -- zie de sectie "Patronen in de maak" op
+-- de coin-pagina en de overzichtssectie op het dashboard.
+CREATE TABLE IF NOT EXISTS forming_patterns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    name TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    key_level REAL NOT NULL,
+    distance_pct REAL NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_forming_patterns_coin ON forming_patterns(coin);
+CREATE INDEX IF NOT EXISTS idx_forming_patterns_distance ON forming_patterns(distance_pct);
+
 -- Indexen op kolommen waar steeds op gefilterd of gesorteerd wordt. Zonder
 -- deze doorzoekt SQLite bij elke dashboard- of coinpagina de volledige
 -- tabel, dat wordt merkbaar trager naarmate er meer berichten en trades

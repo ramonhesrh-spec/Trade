@@ -774,6 +774,38 @@ def set_pattern_key(coin: str, key: str) -> None:
         )
 
 
+def replace_forming_patterns(coin: str, patterns: list[dict]) -> None:
+    """Vervangt alle forming_patterns-rijen van deze coin door de opgegeven
+    lijst (dicts met name/direction/key_level/distance_pct), één keer per
+    marktscan-cyclus (app/market_scanner.py). DELETE + INSERT in plaats van
+    een diff: een patroon dat deze cyclus niet meer meekomt (al doorbroken,
+    of de vorm is weg) moet ook meteen uit het overzicht verdwijnen, niet
+    pas na een losse opruimstap."""
+    with db.session() as conn:
+        conn.execute("DELETE FROM forming_patterns WHERE coin = ?", (coin.upper(),))
+        now = db.now_iso()
+        conn.executemany(
+            "INSERT INTO forming_patterns (coin, name, direction, key_level, distance_pct, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                (coin.upper(), p["name"], p["direction"], p["key_level"], p["distance_pct"], now)
+                for p in patterns
+            ],
+        )
+
+
+def list_forming_patterns() -> list[dict]:
+    """Alle coins met een patroon in wording, over de hele dynamische
+    coinlijst heen -- de cross-coin overzichtssectie op het dashboard,
+    zodat niet per coin-pagina gezocht hoeft te worden. Dichtst-bij-de-
+    kritieke-lijn eerst, dat is het meest relevant om nu naar te kijken."""
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM forming_patterns ORDER BY distance_pct ASC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
 def list_coins() -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(

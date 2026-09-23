@@ -649,6 +649,19 @@ async def scan_market() -> None:
             ind = indicators.compute_indicators(df)
             direction = "long" if ind.ema9 > ind.ema21 else "short"
 
+            # Patronen in wording (nog niet doorbroken): puur informatief,
+            # geen melding/signals-rij, alleen ververst in forming_patterns
+            # zodat de coin-pagina en het dashboard-overzicht altijd de
+            # actuele stand van deze cyclus tonen. df/ind hierboven al
+            # opgehaald, geen extra Binance-aanroep nodig.
+            forming_trendlines = indicators.detect_trendlines(df, ind.atr)
+            forming: list[dict] = []
+            wedge_forming = patterns.find_forming_wedge(df, forming_trendlines, ind)
+            if wedge_forming:
+                forming.append(wedge_forming)
+            forming += patterns.find_forming_reversal_patterns(df)
+            repo.replace_forming_patterns(coin, forming)
+
             # Drie structurele mechanismen (uitbraak+terugtest, trendlijn+
             # terugtest, patroon) draaien onafhankelijk van elkaar en
             # kunnen voor dezelfde coin dezelfde richting vinden, elk met

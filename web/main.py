@@ -797,6 +797,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
     entries = _filter_journal(real_entries, status)
     winrate = repo.winrate_stats(user["id"])
     pattern_winrate = repo.pattern_winrate_stats()
+    forming_patterns = repo.list_forming_patterns()
     open_entries = _add_signal_context(
         await _enrich_open_positions(_filter_journal(real_entries, "open")), winrate, pattern_winrate,
     )
@@ -913,6 +914,7 @@ async def dashboard(request: Request, status: str = "alle", user: dict = Depends
         "open_risk_eur": open_risk_eur,
         "open_risk_pct": open_risk_pct,
         "correlation_warning": correlation_warning,
+        "forming_patterns": forming_patterns,
         "practice_open": practice_open,
         "practice_closed": practice_closed,
         "winrate": winrate,
