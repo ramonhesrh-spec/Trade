@@ -423,11 +423,15 @@ def _resolve_signal_risk(
     return None, None, 0.0, stop_loss, take_profit
 
 
+_KANSBEREKENING_NOT_APPLICABLE = object()
+
+
 async def _fanout_confirmed_signal(
     signal_id: int, coin: str, direction: str, entry_price: float,
     stop_loss: float, take_profit: float, premise_level: float, title: str,
     make_body: Callable[[float, float, bool], str],
     skip_push: bool = False,
+    kansberekening=_KANSBEREKENING_NOT_APPLICABLE, hard_gates_ok: bool = True,
 ) -> None:
     """Deelt een al-bevestigd signaal (geen gepoold percentage, altijd
     gemeld) met alle gebruikers: journaalregel + pushmelding per gebruiker,
@@ -439,11 +443,23 @@ async def _fanout_confirmed_signal(
     deze ene gebruiker en of die stop gecapt werd, zodat de melding altijd
     de daadwerkelijke cijfers voor deze gebruiker toont.
 
-    skip_push=True (alleen gebruikt door patroon, bij een lage
-    kansberekening) slaat de pushmelding voor deze gebruiker helemaal over
-    — niet stil versturen, HELEMAAL niet versturen. De journaalregel wordt
-    wel gewoon aangemaakt, dus trackrecord/dashboard blijven compleet, zie
-    market_scanner.py's patroon-notify.
+    kansberekening (alleen gebruikt door patroon) laat de push-beslissing
+    per gebruiker meelopen met diens EIGEN drempel (confirm_threshold_pct,
+    zelfde repo.user_confirmed-vergelijking als de "trade kans"-badge op
+    /signalen) in plaats van één vaste grens voor iedereen — anders kon een
+    gebruiker met een strenge drempel een pushmelding krijgen voor een
+    patroon dat op de pagina zelf als afgewezen getoond wordt. De sentinel
+    _KANSBEREKENING_NOT_APPLICABLE (default) betekent "dit signaaltype
+    heeft geen kansberekening" (swing) en valt terug op het simpele
+    skip_push. None is een geldige, andere waarde (patroon zonder genoeg
+    historische data) en telt via repo.user_confirmed altijd als niet
+    bevestigd, ongeacht de drempel. hard_gates_ok is de bijbehorende harde-
+    eisen-vlag, nodig voor diezelfde vergelijking.
+
+    skip_push=True (alleen relevant zonder kansberekening) slaat de
+    pushmelding voor deze gebruiker helemaal over — niet stil versturen,
+    HELEMAAL niet versturen. De journaalregel wordt wel gewoon aangemaakt,
+    dus trackrecord/dashboard blijven compleet.
 
     entry_price is de LIVE prijs op het moment van bevestiging (gebruikt
     voor position sizing en de coin-link in de pushmelding). premise_level
@@ -492,9 +508,13 @@ async def _fanout_confirmed_signal(
         # meldingen (zie de spec), dit is een autonoom bevestigd signaal
         # (swing-watch of chart-patroon) dat juist bedoeld is om een grote
         # kans nooit te missen.
-        if skip_push:
-            logger.info("Lage kansberekening voor %s: geen pushmelding naar gebruiker %s (skip_push)",
-                        coin, user["username"])
+        if kansberekening is _KANSBEREKENING_NOT_APPLICABLE:
+            skip_this_user = skip_push
+        else:
+            skip_this_user = not repo.user_confirmed(kansberekening, hard_gates_ok, user["confirm_threshold_pct"])
+        if skip_this_user:
+            logger.info("Onder de drempel van gebruiker %s voor %s: geen pushmelding",
+                        user["username"], coin)
             continue
 
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
