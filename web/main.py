@@ -1573,6 +1573,12 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
             if e["current_price"] is not None and e["stop_loss"] and e["take_profit"] else None
         )
     open_signal_ids = {e["signal_id"] for e in open_trades}
+    # Een tegenovergestelde melding die auto_ignore_opposite_pending/
+    # auto_ignore_stale_pending_for_coin al genegeerd heeft voor deze
+    # gebruiker (zie app/repo.py) moet hier ook niet meer als losse kaart
+    # verschijnen — anders toont deze sectie alsnog een long- en een
+    # short-signaal naast elkaar terwijl /signalen de oude al opruimde.
+    ignored_signal_ids = {e["signal_id"] for e in entries if e["status"] == "genegeerd"}
     # Journal-rijen zonder eigen entry_price (nog niet genomen) kunnen al wel
     # een per-gebruiker stop/take-override hebben (evaluatie-stop-cap) — die
     # override moet hier getoond worden, anders wijkt de coin-pagina af van
@@ -1583,7 +1589,8 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     }
     recent_signals = [
         s for s in repo.list_recent_signals(symbol)
-        if s["id"] not in open_signal_ids and (s["stop_loss"] or s["take_profit"])
+        if s["id"] not in open_signal_ids and s["id"] not in ignored_signal_ids
+        and (s["stop_loss"] or s["take_profit"])
     ]
     for s in recent_signals:
         s.setdefault("entry_price", None)  # signalen zijn geen journal-rijen, dat veld bestaat niet
