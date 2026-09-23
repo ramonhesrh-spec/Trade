@@ -5,7 +5,7 @@
 
 {% if not onboarding_complete %}
 <section class="card onboarding-checklist" style="--i: 0">
-  <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9,11 12,14 20,6"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Nog even instellen</h3>
+  <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9,11 12,14 20,6"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Instellen</h3>
   <ul class="checklist">
     <li class="{{ 'checklist-done' if onboarding.push_enabled else '' }}">
       {{ "✓" if onboarding.push_enabled else "○" }}
@@ -179,7 +179,7 @@
     <span>{{ unclear_messages|length }} bericht{{ "en" if unclear_messages|length != 1 else "" }} niet herkend</span>
     <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
   </summary>
-  <p class="muted" style="margin: 10px 0 12px; font-size: 12.5px;">Deze berichten kon het systeem niet als duidelijk signaal lezen. Daarom is hier geen melding of trade-kans uit ontstaan, in plaats van dat je dat moet raden.</p>
+  <p class="muted" style="margin: 10px 0 12px; font-size: 12.5px;">Niet herkend als duidelijk signaal, daarom geen melding of trade-kans.</p>
   <ul class="unclear-list">
     {% for m in unclear_messages %}
     <li>
@@ -397,7 +397,7 @@
       {% endif %}
     </form>
     <form action="/instellingen/drempel" method="post" class="threshold-form" style="margin-top: 12px;">
-      <p class="muted" style="margin: 0 0 6px;">Vanaf welk percentage geldt een signaal voor jou als bevestigd? (Je krijgt sowieso van elk signaal een melding — dit bepaalt alleen de bevestigd/afgewezen-markering en je eigen winrate.)</p>
+      <p class="muted" style="margin: 0 0 6px;">Vanaf welk percentage geldt een signaal voor jou als bevestigd? Bepaalt de markering en je winrate, en of een signaal een pushmelding krijgt.</p>
       {% for key, pct in {"soepel": 45, "normaal": 60, "streng": 75}.items() %}
       <button type="submit" name="preset" value="{{ key }}"
               class="threshold-option{% if user.confirm_threshold_pct == pct %} is-active{% endif %}">
@@ -460,15 +460,14 @@
     <span>Historie en trackrecord</span>
     <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
   </summary>
-  <p class="muted" style="margin: 10px 0 16px; font-size: 12.5px;">Cumulatief resultaat, of de score klopt met de uitkomst, en resultaat per coin. Cijfers over tijd, niet wat je nu moet doen.</p>
+  <p class="muted" style="margin: 10px 0 16px; font-size: 12.5px;">Cumulatief resultaat, klopt de score met de uitkomst, en resultaat per coin.</p>
 
   <h3 class="open-subheading">Cumulatief resultaat</h3>
   <canvas id="cumulative-chart" height="80"></canvas>
 
   <h3 class="open-subheading" style="margin-top: 22px;">Klopt de score met de uitkomst?</h3>
   {% if ratio_stats %}
-  <p class="muted" style="margin: 0 0 12px;">Per score (hoeveel van de getoonde factoren klopten) de winrate van je
-  eigen gesloten trades. Zo zie je of een hogere score ook echt vaker tot winst leidt, niet alleen in theorie.</p>
+  <p class="muted" style="margin: 0 0 12px;">Winrate per score van je gesloten trades: leidt een hogere score ook echt vaker tot winst?</p>
   <canvas id="ratio-chart" height="80"></canvas>
   {% else %}
   <div class="empty-state">
