@@ -24,6 +24,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 from app import advice as advice_module
+from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, push_notify, repo, risk, security
 
 logger = logging.getLogger("web")
@@ -1871,6 +1872,21 @@ async def api_candles(symbol: str, user: dict = Depends(require_login)):
     ]
 
     trendlines = indicators.detect_trendlines(df, ind.atr)
+
+    # Patronen in de maak: de vorm staat er al (wedge/kanaal, of gelijke
+    # pieken/dalen), maar de nek/lijn is nog niet doorbroken. Puur
+    # informatief — geen entry/stop/target, geen melding, geen signals-rij,
+    # zie patterns.py's find_forming_*. Los van de BEVESTIGDE patronen die
+    # via de marktscan en signals-tabel binnenkomen (Signalen voor {{ symbol }}
+    # hieronder op de pagina). Module hier als chart_patterns geïmporteerd:
+    # deze functie heeft al een lokale variabele "patterns" (de candlestick-
+    # patronen hierboven), die zou de module anders overschaduwen.
+    forming_patterns: list[dict] = []
+    wedge_forming = chart_patterns.find_forming_wedge(df, trendlines, ind)
+    if wedge_forming:
+        forming_patterns.append(wedge_forming)
+    forming_patterns += chart_patterns.find_forming_reversal_patterns(df)
+
     window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
     trendline_data = [
         {
@@ -1887,4 +1903,5 @@ async def api_candles(symbol: str, user: dict = Depends(require_login)):
     return {
         "candles": candles, "ema9": ema9_series, "ema21": ema21_series,
         "patterns": patterns, "sr_zones": sr_zones, "trendlines": trendline_data,
+        "forming_patterns": forming_patterns,
     }

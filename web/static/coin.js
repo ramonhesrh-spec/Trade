@@ -367,6 +367,24 @@
         }
       }
 
+      // Patronen in de maak (patterns.find_forming_wedge/
+      // find_forming_reversal_patterns via hetzelfde /api/candles):
+      // de vorm staat er, de lijn is nog niet doorbroken. Puur
+      // informatief, geen link naar een melding of trade-kans — vandaar
+      // geen kleur-op-richting zoals bij de bevestigde signalen, alleen
+      // een neutrale muted-tekst met hoe dichtbij de kritieke lijn is.
+      const formingListEl = document.getElementById("forming-pattern-list");
+      if (formingListEl) {
+        if (data.forming_patterns && data.forming_patterns.length) {
+          formingListEl.innerHTML = data.forming_patterns.map((p) => {
+            const richting = p.direction === "long" ? "bullish" : "bearish";
+            return `<p class="muted" style="margin: 4px 0; font-size: 12.5px;">${p.name} (${richting}) · nog ${p.distance_pct.toFixed(1)}% van de lijn op ${p.key_level.toFixed(4)}</p>`;
+          }).join("");
+        } else {
+          formingListEl.innerHTML = '<p class="muted">Geen patroon in opbouw op dit moment.</p>';
+        }
+      }
+
       // Eén blok per zelf-gedetecteerde zone, in een eigen kleur
       // (chart-zone-sr) om ze te onderscheiden van de teal community-
       // niveau-zones hierboven. Sterkte (touches) als klein label op de
@@ -421,6 +439,10 @@
       const patternListEl = document.getElementById("pattern-list");
       if (patternListEl) {
         patternListEl.innerHTML = '<p class="muted">Kon niet geladen worden.</p>';
+      }
+      const formingListEl = document.getElementById("forming-pattern-list");
+      if (formingListEl) {
+        formingListEl.innerHTML = '<p class="muted">Kon niet geladen worden.</p>';
       }
     });
 

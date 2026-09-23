@@ -137,6 +137,64 @@ def find_head_and_shoulders(df: pd.DataFrame, kind: str) -> list[PatternMatch]:
     return matches
 
 
+def find_forming_reversal_patterns(df: pd.DataFrame) -> list[dict]:
+    """Zelfde vorm-herkenning als find_double_triple/find_head_and_shoulders
+    hieronder, maar dan VOOR de nek doorbroken is: puur informatief, geen
+    entry/stop/target/melding/signals-rij. Retourneert dicts met name/
+    direction/key_level/distance_pct — geen PatternMatch, want er is nog
+    geen bevestigde entry zolang de nek niet gebroken is. Een vorm die al
+    wél doorbrak, hoort bij find_reversal_patterns, niet hier."""
+    window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
+    current_price = float(window["close"].iloc[-1])
+    forming: list[dict] = []
+
+    for kind, n in [("high", 2), ("low", 2), ("high", 3), ("low", 3)]:
+        pivots = sorted([p for p in indicators._find_pivots(window) if p.kind == kind], key=lambda p: p.index)
+        for i in range(len(pivots) - n + 1):
+            group = pivots[i:i + n]
+            prices = [p.price for p in group]
+            if not _equal_enough(prices, PEAK_TOLERANCE_PCT):
+                continue
+            start, end = group[0].index, group[-1].index
+            between = window.iloc[start:end + 1]
+            neckline = between["low"].min() if kind == "high" else between["high"].max()
+            if _find_neckline_break(window, end, neckline, kind) is not None:
+                continue  # al doorbroken, hoort bij find_reversal_patterns
+            name = f"{'triple' if n == 3 else 'double'} {'top' if kind == 'high' else 'bottom'}"
+            distance_pct = abs(current_price - neckline) / current_price * 100 if current_price else 0.0
+            forming.append({
+                "name": name, "direction": "short" if kind == "high" else "long",
+                "key_level": neckline, "distance_pct": distance_pct,
+            })
+
+    all_pivots = sorted(indicators._find_pivots(window), key=lambda p: p.index)
+    for kind, other in [("high", "low"), ("low", "high")]:
+        for i in range(len(all_pivots) - 4):
+            seq = all_pivots[i:i + 5]
+            if [p.kind for p in seq] != [kind, other, kind, other, kind]:
+                continue
+            shoulder1, trough1, head, trough2, shoulder2 = seq
+            if not _equal_enough([shoulder1.price, shoulder2.price], PEAK_TOLERANCE_PCT):
+                continue
+            head_beats_shoulders = (
+                head.price > max(shoulder1.price, shoulder2.price) * (1 + HS_HEAD_MARGIN_PCT)
+                if kind == "high" else
+                head.price < min(shoulder1.price, shoulder2.price) * (1 - HS_HEAD_MARGIN_PCT)
+            )
+            if not head_beats_shoulders:
+                continue
+            neckline = max(trough1.price, trough2.price) if kind == "high" else min(trough1.price, trough2.price)
+            if _find_neckline_break(window, shoulder2.index, neckline, kind) is not None:
+                continue
+            name = "head & shoulders" if kind == "high" else "inverse head & shoulders"
+            distance_pct = abs(current_price - neckline) / current_price * 100 if current_price else 0.0
+            forming.append({
+                "name": name, "direction": "short" if kind == "high" else "long",
+                "key_level": neckline, "distance_pct": distance_pct,
+            })
+    return forming
+
+
 def find_reversal_patterns(df: pd.DataFrame) -> list[PatternMatch]:
     """Alle bevestigde double/triple top/bottom- en head & shoulders-
     matches in dit candle-venster, nieuwste eerst niet gegarandeerd (zie
@@ -193,10 +251,17 @@ def _find_line_break(
     return idx
 
 
-def classify_channel_wedge(
+def _wedge_shape(
     df: pd.DataFrame, trendlines: list[indicators.Trendline], atr: float,
-) -> Optional[PatternMatch]:
-    """Herkent kanaal/wedge uit de twee lijnen van indicators.detect_trendlines:
+) -> Optional[tuple[str, str, indicators.Trendline, indicators.Trendline, float]]:
+    """Gedeelde geometrie-herkenning tussen classify_channel_wedge (pas een
+    match zodra de lijn ook echt doorbroken is) en find_forming_wedge (de
+    vorm alleen, nog niets doorbroken — puur informatief): welke vorm staat
+    er nu, los van of hij al bevestigd is. Geeft (name, direction,
+    breaking_line, other_line, width_start) terug, of None als er geen
+    kanaal/wedge-vorm te herkennen is.
+
+    Herkent kanaal/wedge uit de twee lijnen van indicators.detect_trendlines:
     resistance (bovenlijn) en support (onderlijn) allebei dezelfde kant op
     hellend. Beide omhoog en ongeveer evenwijdig -> rising channel
     (bearish, breekt naar beneden door de steunlijn); beide omhoog en
@@ -207,16 +272,11 @@ def classify_channel_wedge(
     Driehoek-vormen (tegengestelde hellingen: symmetrical/expanding
     triangle) hebben geen betrouwbare richting uit geometrie alleen — het
     patronenblad van de gebruiker plaatst ze zelf apart als "50/50 kans".
-    Die blijven hier bewust ongedetecteerd (geen PatternMatch, dus geen
-    aparte melding); een echte uitbraak van zo'n vorm wordt al gevangen
-    door de bestaande indicators.find_trendline_breakout_retest via
+    Die blijven hier bewust ongedetecteerd; een echte uitbraak van zo'n
+    vorm wordt al gevangen door de bestaande
+    indicators.find_trendline_breakout_retest via
     market_scanner._find_trendline_retest_candidate, ongeacht welke kant
-    hij doorbreekt.
-
-    De vorm alleen is niet genoeg voor een live signaal: de prijs moet de
-    relevante lijn ook daadwerkelijk doorbroken hebben (_find_line_break),
-    anders zou elke cyclus waarin de vorm nog staat opnieuw "bevestigen"
-    zonder dat er iets gebeurd is."""
+    hij doorbreekt."""
     window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
     window_len = len(window)
     resistance = next((l for l in trendlines if l.kind == "resistance"), None)
@@ -244,29 +304,67 @@ def classify_channel_wedge(
     if res_rising:
         name = "rising channel" if parallel else "rising wedge"
         direction = "short"
-        breaking_line = support
+        breaking_line, other_line = support, resistance
     else:
         name = "descending channel" if parallel else "falling wedge"
         direction = "long"
-        breaking_line = resistance
+        breaking_line, other_line = resistance, support
+
+    return name, direction, breaking_line, other_line, width_start
+
+
+def classify_channel_wedge(
+    df: pd.DataFrame, trendlines: list[indicators.Trendline], atr: float,
+) -> Optional[PatternMatch]:
+    """De vorm alleen is niet genoeg voor een live signaal: de prijs moet de
+    relevante lijn ook daadwerkelijk doorbroken hebben (_find_line_break),
+    anders zou elke cyclus waarin de vorm nog staat opnieuw "bevestigen"
+    zonder dat er iets gebeurd is. Zie find_forming_wedge voor de vorm
+    VOOR die doorbraak, puur informatief."""
+    shape = _wedge_shape(df, trendlines, atr)
+    if shape is None:
+        return None
+    name, direction, breaking_line, other_line, height = shape
+    window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
 
     confirmed_index = _find_line_break(window, breaking_line, direction)
     if confirmed_index is None:
         return None
 
     breakout_level = breaking_line.value_at(confirmed_index)
-    height = width_start
     if direction == "short":
-        stop_loss = resistance.value_at(confirmed_index) * (1 + PATTERN_STOP_MARGIN_PCT)
+        stop_loss = other_line.value_at(confirmed_index) * (1 + PATTERN_STOP_MARGIN_PCT)
         target = breakout_level - height
     else:
-        stop_loss = support.value_at(confirmed_index) * (1 - PATTERN_STOP_MARGIN_PCT)
+        stop_loss = other_line.value_at(confirmed_index) * (1 - PATTERN_STOP_MARGIN_PCT)
         target = breakout_level + height
 
     return PatternMatch(
         name=name, direction=direction, neckline=breakout_level, extreme=stop_loss,
         target=target, stop_loss=stop_loss, confirmed_index=confirmed_index, pattern_kind="channel_wedge",
     )
+
+
+def find_forming_wedge(
+    df: pd.DataFrame, trendlines: list[indicators.Trendline], ind: indicators.Indicators,
+) -> Optional[dict]:
+    """Zelfde vorm-herkenning als classify_channel_wedge, maar dan VOOR de
+    lijn daadwerkelijk doorbroken is: puur informatief, geen entry/stop/
+    target/melding/signals-rij — een vorm die nog niet doorbrak kan nog
+    alle kanten op. Toont hoe dicht de prijs nu bij de kritieke lijn zit,
+    zodat je een wedge kunt zien aankomen in plaats van pas bij de
+    bevestigde uitbraak. None als de vorm er niet staat, of als hij AL
+    doorbroken is (dan hoort hij bij classify_channel_wedge, niet hier)."""
+    shape = _wedge_shape(df, trendlines, ind.atr)
+    if shape is None:
+        return None
+    name, direction, breaking_line, _other_line, _height = shape
+    window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
+    if _find_line_break(window, breaking_line, direction) is not None:
+        return None
+    key_level = breaking_line.value_at(len(window) - 1)
+    distance_pct = abs(ind.price - key_level) / ind.price * 100 if ind.price else 0.0
+    return {"name": name, "direction": direction, "key_level": key_level, "distance_pct": distance_pct}
 
 
 def find_divergence(df: pd.DataFrame) -> Optional[PatternMatch]:
