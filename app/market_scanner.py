@@ -18,7 +18,7 @@ from typing import Optional
 
 from app import exchange, indicators, patterns, push_notify, repo, risk
 from app.anthropic_interpret import Interpretation
-from app.signal_processor import fanout_confirmed_signal, process_day_trading_signal
+from app.signal_processor import compute_full_confirmation, fanout_confirmed_signal, process_day_trading_signal
 
 logger = logging.getLogger("market_scanner")
 
@@ -337,6 +337,19 @@ async def _find_chart_pattern_candidate(coin: str, df, ind) -> Optional[dict]:
                 except Exception:
                     logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
+        # Zones lokaal berekend, net als _find_breakout_retest_candidate
+        # elders in dit bestand al doet — geen gedeelde cache tussen de
+        # drie kandidaat-functies in dit bestand. Hier, binnen notify(),
+        # in plaats van in de outer functie: compute_full_confirmation
+        # doet een echte Binance-aanroep (dagcandle) en signal_data/
+        # repo.insert_signal draaien toch al alleen voor de winnende
+        # kandidaat van deze cyclus — de toetsing eerder draaien zou dat
+        # werk verspillen voor elke kandidaat die deze cyclus verliest.
+        zones = indicators.detect_sr_zones(df)
+        _, factor_breakdown, factor_pass_pct, factor_hard_gates_ok = await compute_full_confirmation(
+            coin, match.direction, df, ind, zones,
+        )
+
         # suggested_entry_low/high zijn bestaande kolommen (van een eerder
         # plan, daar gevuld met de dagtrading-entry-zone-suggestie) — hier
         # hergebruikt voor exact hetzelfde soort informatie (een optionele,
@@ -349,9 +362,9 @@ async def _find_chart_pattern_candidate(coin: str, df, ind) -> Optional[dict]:
             "price": ind.price, "rsi": ind.rsi, "macd": ind.macd, "macd_signal": ind.macd_signal,
             "volume_ratio": ind.volume_ratio, "ema9": ind.ema9, "ema21": ind.ema21,
             "atr": ind.atr, "atr_avg20": ind.atr_avg20, "adx": ind.adx,
-            "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1,
+            "technical_confirmed": 1, "pass_pct": factor_pass_pct, "hard_gates_ok": factor_hard_gates_ok,
             "confidence": "patroon bevestigd",
-            "reason": f"Patroon: {match.name}, richting {match.direction}",
+            "reason": factor_breakdown,
             "stop_loss": stop_loss, "take_profit": take_profit,
             "context_note": None, "is_practice": 0, "plain_explanation": None,
             "suggested_entry_low": entry_options["retest_low"],
