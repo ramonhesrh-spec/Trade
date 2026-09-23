@@ -55,34 +55,38 @@ brede beweging (vrijwel zeker een BTC-rally, aangezien BTC zelf ook in die
 periode van ~76.500 naar ~81.858 steeg tussen 2 en 19 september) die elke
 short raakte, ongeacht hoe goed de individuele coin-opzet was.
 
-## Bevinding 2: de twee fixes die precies dit scenario aanpakken zijn al
-gebouwd — één moet je zelf nog aanzetten
+## Bevinding 2: de bestaande BTC-trend-gate keek op dezelfde tijdschaal als
+het signaal zelf, en zag de meerdaagse beweging daardoor niet
 
-- `indicators.check_btc_trend` (commit fbec4e5, **16 september**): blokkeert
-  een signaal hard als de richting tegen een duidelijke BTC-trend ingaat.
-  Zit alleen in `compute_advanced_extra_factors`, dus **alleen actief als
-  `ENABLE_ADVANCED_FACTORS=true` in je `.env` staat**.
-- De coin-eigen dagtrend als harde eis (commit a2ea9c8, **22 september,
-  vandaag al gedeployed**): blokkeert een signaal als de 4u-richting tegen
-  de eigen dagtrend van die coin ingaat, met een vlakke-markt-uitzondering.
-  **Deze staat onvoorwaardelijk aan, geen flag nodig.**
+**Correctie op een eerdere versie van dit rapport:** `ENABLE_ADVANCED_FACTORS`
+stond al op `true` tijdens dit venster (bevestigd op de VPS) — de
+BTC-trend-gate was dus wel degelijk actief. Dat de 17-september-episode er
+toch doorheen kwam, is dan ook geen configuratieprobleem maar een echte
+blinde vlek in hoe die gate werkt.
 
-Alle 66 signalen in dit onderzoek hebben `hard_gates_ok = 1` — geen ervan
-is ooit hard geblokkeerd. Voor de 21 shorts na 16 september (inclusief de
-hele 17-september-episode) zou je, als de markt toen echt duidelijk trendde
-(zeer aannemelijk gezien bevinding 1), verwachten dat minstens een deel
-van die shorts door de BTC-trend-gate geblokkeerd zou zijn — dat gebeurde
-niet. Sterke aanwijzing dat `ENABLE_ADVANCED_FACTORS` in die periode uit
-stond.
+`indicators.check_btc_trend` (commit fbec4e5, 16 september) vergelijkt
+BTC's eigen EMA9 tegen EMA21 op de **4-uurs candle**, dezelfde tijdschaal
+als het signaal zelf. Voorbeeld: signaal 80 (BTC, short, 17 september
+08:07) had op dat exacte moment `ema9 = 76352.15 < ema21 = 76634.39` —
+BTC's eigen 4u-trend stond op dat moment daadwerkelijk omlaag. De gate
+keurde de short dus terecht goed, volgens zijn eigen logica: op die ene
+4u-candle klopte de trend. Dat BTC over de volle 17 dagen (2 t/m 19
+september) per saldo van ~76.500 naar ~81.858 steeg, een meerdaagse
+op-en-neer-beweging binnen een grotere stijging, ziet een 4u-EMA-check
+niet — die is te snel/lokaal voor dat soort ruis-binnen-een-trend.
 
-**Actie:** bevestig of `ENABLE_ADVANCED_FACTORS=true` staat op de VPS. Zo
-niet: draai eerst `scripts/backtest_factors.py --limit 50` (het script
-raadt dit zelf al aan in zijn eigen docstring) om te zien of de individuele
-factoren een gezonde pass-rate geven, en zet de vlag dan aan.
+Dit is precies waarom de nieuwe, vandaag gedeployde coin-eigen-dagtrend-
+gate (commit a2ea9c8) hier wel verschil zou moeten maken: die kijkt naar
+de **dagcandle**, een substantieel tragere/grotere maatstaf die een
+meerdaagse stijging niet mist door een paar uur ruis. Onvoorwaardelijk
+actief, geen vlag nodig.
 
-De dagtrend-gate van vandaag heeft geen vlag nodig en dekt een groot deel
-van hetzelfde scenario al af, dus een deel van het probleem is al
-structureel opgelost, ook zonder die vlag.
+**Actie:** geen configuratie meer nodig, de vlag stond al goed. Blijf wel
+meten: gaat de long/short-asymmetrie merkbaar omlaag nu de dagtrend-gate
+meedraait, dan bevestigt dat deze verklaring. Blijft de asymmetrie
+bestaan, dan is de blinde vlek dieper dan alleen tijdschaal en moet de
+gate zelf herzien worden (bijvoorbeeld: BTC-trend ook op de dagcandle
+meten in plaats van op 4u).
 
 ## Bevinding 3: MACD wijst vaak de andere kant op bij shorts
 
@@ -146,12 +150,17 @@ gelijkwaardige "kans" getoond moeten worden. Zie aanbeveling hieronder.
 
 ## Aanbevelingen, geprioriteerd
 
-1. **Bevestig `ENABLE_ADVANCED_FACTORS`** en zet aan als de backtest het
-   rechtvaardigt (bevinding 2). Kost niets aan nieuwe code, mogelijk de
-   grootste hefboom.
-2. **Check `crypto-level-check.timer` op de VPS** (bevinding 4). Puur
-   operationeel, maar zonder dit weet je nooit of toekomstige SL/TP-
-   meldingen wel op tijd aankomen.
+1. **Verifieer `crypto-level-check.service`'s draaigeschiedenis op de VPS**
+   (bevinding 4), niet alleen de timer-status. De timer stond op "active
+   (waiting)" sinds 5 september, maar dat zegt niets over of de eronder
+   liggende service telkens ook echt slaagde:
+   ```
+   sudo journalctl -u crypto-level-check.service --since "30 days ago" | head -100
+   ```
+2. **Overweeg BTC-trend (en desnoods de coin-eigen 4u-trendfactor) ook op
+   de dagcandle te meten**, niet alleen op 4u (bevinding 2), als de
+   dagtrend-gate van vandaag de asymmetrie niet genoeg terugbrengt. Eerst
+   meten, dan pas bouwen.
 3. **Laat dit dataset met rust en meet over 2-4 weken opnieuw.** De
    dagtrend-gate ging vandaag pas live; met 66 signalen en een extreem
    eenzijdige markt-periode is dit nog geen betrouwbare basis om verder op
