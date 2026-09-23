@@ -25,8 +25,11 @@ def build_advice(signal: dict) -> str:
     # helft van de factoren klopt -> citeer die breakdown i.p.v. de
     # generieke "alle vier factoren"-tekst hieronder, die alleen voor
     # dagtrading klopt (technical_confirmed staat voor patroon altijd op
-    # 1, zegt dus niets over de factoren zelf).
-    if is_pattern and factor_pct is not None and factor_pct >= 50:
+    # 1, zegt dus niets over de factoren zelf). hard_gates_ok moet ook
+    # kloppen: een harde poort (bv. dagtrend) die actief tegen het patroon
+    # ingaat, mag niet als "ondersteund" verkocht worden alleen omdat de
+    # overige, zachtere factoren de 50%-drempel optillen.
+    if is_pattern and factor_pct is not None and factor_pct >= 50 and signal.get("hard_gates_ok"):
         return (
             f"Patroon ({pattern_name}) wordt ondersteund door de factoren: "
             f"{signal.get('reason') or 'geen details beschikbaar'}."

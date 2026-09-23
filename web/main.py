@@ -183,9 +183,10 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     punt van deze pagina is "wat is er nu", en een allang afgeronde kans
     met een hoog percentage hoort niet boven een vers signaal te staan.
     Afgeronde signalen (win/verlies/vervallen) blijven bereikbaar via
-    ?alles=1 — pass_pct blijft dan de sorteersleutel voor open signalen,
-    maar een resolved signaal met een oud, toevallig hoog percentage mag
-    een net binnengekomen open signaal niet meer overstemmen, dus resolved
+    ?alles=1 — success_rate (niet het rauwe pass_pct, zie de toelichting
+    verderop) blijft dan de sorteersleutel voor open signalen, maar een
+    resolved signaal met een oud, toevallig hoog percentage mag een net
+    binnengekomen open signaal niet meer overstemmen, dus resolved
     signalen zakken altijd onder de nog-open signalen (en sorteren onderling
     op meest recent eerst, niet op percentage).
 
@@ -194,7 +195,7 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     volwaardige, bevestigde kans met een eigen pushmelding — die hoorde
     eerder per ongeluk hier helemaal niet bij (filter op pass_pct is not
     None liet ze volledig verdwijnen, ook onder ?alles=1). Ze zakken nu
-    onder de percentage-signalen (pass_pct_sort_key = -1) in plaats van
+    onder de percentage-signalen (success_rate_sort_key = -1) in plaats van
     onderuit te vallen."""
     entries = repo.list_signalen_for_user(user["id"])
     if not alles:
@@ -204,16 +205,26 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
             entry["trade_type"] in ("swing", "patroon") or
             repo.user_confirmed(entry["pass_pct"], bool(entry["hard_gates_ok"]), user["confirm_threshold_pct"])
         )
-    pass_pct_sort_key = lambda e: e["pass_pct"] if e["pass_pct"] is not None else -1
+    winrate = repo.winrate_stats(user["id"])
+    pattern_winrate = repo.pattern_winrate_stats()
+    entries = _add_signal_context(entries, winrate, pattern_winrate)
+    # Sorteersleutel is success_rate, niet het rauwe pass_pct: voor patroon
+    # toont de kaart (signal_card) success_rate (de kansberekening), dus
+    # sorteren op pass_pct zou een andere volgorde opleveren dan wat er te
+    # zien is. Voor dagtrading is success_rate == pass_pct-afgeleide winrate
+    # van dit vertrouwen-niveau, dus dit verandert daar niets aan de facto
+    # (pass_pct blijft elders, zoals user_confirmed hierboven, de sleutel
+    # voor niet-weergave-doeleinden).
+    success_rate_sort_key = lambda e: e["success_rate"] if e["success_rate"] is not None else -1
     if alles:
         # Open signalen eerst (op percentage), pas daarna resolved signalen
         # (op recentheid) — anders overstemt een oud, toevallig hoog
         # percentage van een allang afgeronde kans een vers, nog open signaal.
-        open_entries = sorted((e for e in entries if e["auto_outcome"] is None), key=pass_pct_sort_key, reverse=True)
+        open_entries = sorted((e for e in entries if e["auto_outcome"] is None), key=success_rate_sort_key, reverse=True)
         resolved_entries = sorted((e for e in entries if e["auto_outcome"] is not None), key=lambda e: e["created_at"], reverse=True)
         entries = open_entries + resolved_entries
     else:
-        entries.sort(key=pass_pct_sort_key, reverse=True)
+        entries.sort(key=success_rate_sort_key, reverse=True)
     return templates.TemplateResponse(request, "signalen.html", {
         "user": user,
         "coins": repo.list_coins(),

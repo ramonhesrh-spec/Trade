@@ -95,8 +95,12 @@
         {% if e.reason and e.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
         {% if e.trade_type != 'swing' %}
         <span class="muted" style="font-size: 12px;">
-          slagingskans {{ e.success_rate }}%
-          {% if e.success_sample < 5 %}(nog weinig data){% else %}(n={{ e.success_sample }}){% endif %}
+          {% if e.success_rate is none %}
+          slagingskans (nog weinig data)
+          {% else %}
+          slagingskans {{ "%.0f"|format(e.success_rate) }}%
+          {% if e.success_sample is none or e.success_sample < 5 %}(nog weinig data){% else %}(n={{ e.success_sample }}){% endif %}
+          {% endif %}
         </span>
         {% endif %}
       </div>
@@ -125,8 +129,12 @@
         {% if e.reason and e.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
         {% if e.trade_type != 'swing' %}
         <span class="muted" style="font-size: 12px;">
-          slagingskans {{ e.success_rate }}%
-          {% if e.success_sample < 5 %}(nog weinig data){% else %}(n={{ e.success_sample }}){% endif %}
+          {% if e.success_rate is none %}
+          slagingskans (nog weinig data)
+          {% else %}
+          slagingskans {{ "%.0f"|format(e.success_rate) }}%
+          {% if e.success_sample is none or e.success_sample < 5 %}(nog weinig data){% else %}(n={{ e.success_sample }}){% endif %}
+          {% endif %}
         </span>
         {% endif %}
       </div>

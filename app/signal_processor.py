@@ -751,6 +751,11 @@ async def compute_full_confirmation(
     try:
         daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
         daily_ind = indicators.compute_indicators(daily_df)
+        # Net als BTC-trend (indicators.btc_is_flat): een coin zonder
+        # duidelijke eigen dagtrend mag niet hard geblokkeerd worden, dat
+        # zou een normale consolidatie vlak voor een uitbraak onterecht
+        # wegfilteren. btc_is_flat is ondanks zijn naam coin-onafhankelijk
+        # (alleen ema9/ema21/atr), dus rechtstreeks herbruikbaar hier.
         if not indicators.btc_is_flat(daily_ind):
             daily_trend_factor = indicators.check_daily_trend(direction, daily_ind)
     except Exception:

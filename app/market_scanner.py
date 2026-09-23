@@ -316,6 +316,26 @@ async def _find_chart_pattern_candidate(coin: str, df, ind) -> Optional[dict]:
         stop_loss, take_profit = stop_take.stop_loss, stop_take.take_profit
 
     async def notify() -> None:
+        # Zones lokaal berekend, net als _find_breakout_retest_candidate
+        # elders in dit bestand al doet — geen gedeelde cache tussen de
+        # drie kandidaat-functies in dit bestand. Hier, binnen notify(),
+        # in plaats van in de outer functie: compute_full_confirmation
+        # doet een echte Binance-aanroep (dagcandle) en signal_data/
+        # repo.insert_signal draaien toch al alleen voor de winnende
+        # kandidaat van deze cyclus — de toetsing eerder draaien zou dat
+        # werk verspillen voor elke kandidaat die deze cyclus verliest.
+        #
+        # Vóór auto_ignore_opposite_pending, niet erna: die stuurt gebruikers
+        # al een "je vorige signaal is achterhaald"-melding, en patroon mag
+        # nooit geblokkeerd worden (technical_confirmed blijft vast 1) — als
+        # compute_full_confirmation hier zou knallen na de opruiming, zou de
+        # gebruiker te horen krijgen dat zijn oude kans vervallen is zonder
+        # dat er een nieuwe voor in de plaats komt.
+        zones = indicators.detect_sr_zones(df)
+        _, factor_breakdown, factor_pass_pct, factor_hard_gates_ok = await compute_full_confirmation(
+            coin, match.direction, df, ind, zones,
+        )
+
         # Een nog niet genomen melding voor de tegenovergestelde richting
         # van dezelfde coin is achterhaald zodra hier een nieuw patroon
         # bevestigt: je kan niet serieus tegelijk long en short op dezelfde
@@ -336,19 +356,6 @@ async def _find_chart_pattern_candidate(coin: str, df, ind) -> Optional[dict]:
                     )
                 except Exception:
                     logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
-
-        # Zones lokaal berekend, net als _find_breakout_retest_candidate
-        # elders in dit bestand al doet — geen gedeelde cache tussen de
-        # drie kandidaat-functies in dit bestand. Hier, binnen notify(),
-        # in plaats van in de outer functie: compute_full_confirmation
-        # doet een echte Binance-aanroep (dagcandle) en signal_data/
-        # repo.insert_signal draaien toch al alleen voor de winnende
-        # kandidaat van deze cyclus — de toetsing eerder draaien zou dat
-        # werk verspillen voor elke kandidaat die deze cyclus verliest.
-        zones = indicators.detect_sr_zones(df)
-        _, factor_breakdown, factor_pass_pct, factor_hard_gates_ok = await compute_full_confirmation(
-            coin, match.direction, df, ind, zones,
-        )
 
         # suggested_entry_low/high zijn bestaande kolommen (van een eerder
         # plan, daar gevuld met de dagtrading-entry-zone-suggestie) — hier

@@ -2448,7 +2448,7 @@ def winrate_for_user(user_id: int) -> dict:
         rows = conn.execute(
             """SELECT pass_pct, hard_gates_ok, auto_outcome
                FROM signals
-               WHERE is_practice = 0 AND pass_pct IS NOT NULL"""
+               WHERE is_practice = 0 AND pass_pct IS NOT NULL AND trade_type != 'patroon'"""
         ).fetchall()
 
     total = wins = losses = open_count = 0

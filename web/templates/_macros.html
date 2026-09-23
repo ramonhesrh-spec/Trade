@@ -18,20 +18,26 @@
    daily-factor altijd als mislukt (die regel begint met "Daily: ", niet met
    "✓") en negeerde de scheiding tussen de twee tijdshorizons. #}
 {% macro reason_factors(entry, p_style='') %}
-{% if entry.trade_type != 'swing' %}
+{% if entry.trade_type != 'swing' and " | " in entry.reason and (entry.reason.startswith("✓") or entry.reason.startswith("✗")) %}
 {# Geldt nu ook voor patroon: sinds compute_full_confirmation ook op een
    patroon-richting draait, is entry.reason een " | "-gescheiden ✓/✗-
-   breakdown, exact dezelfde vorm als dagtrading. #}
+   breakdown, exact dezelfde vorm als dagtrading. Een patroon-signaal van
+   vóór dit plan heeft nog de oude platte tekst ("Patroon: double bottom,
+   richting long") — geen " | " en geen leidende ✓/✗, dus die valt door
+   naar de plain-tekst-tak hieronder in plaats van als kapotte
+   factor-styling (0/1 "mislukt") te renderen. #}
 {% for factor in entry.reason.split(" | ") %}
 <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}"{% if p_style %} style="{{ p_style }}"{% endif %}>{{ factor }}</p>
 {% endfor %}
-{% else %}
+{% elif entry.trade_type == 'swing' %}
 {% for group in entry.reason.split("\n") %}
 <p class="muted" style="font-weight: 600; margin: 8px 0 2px;">{{ group.split(": ", 1)[0] }}</p>
 {% for factor in group.split(": ", 1)[1].split(" | ") %}
 <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}"{% if p_style %} style="{{ p_style }}"{% endif %}>{{ factor }}</p>
 {% endfor %}
 {% endfor %}
+{% else %}
+<p class="muted"{% if p_style %} style="{{ p_style }}"{% endif %}>{{ entry.reason }}</p>
 {% endif %}
 {% endmacro %}
 
@@ -150,7 +156,7 @@
     <span class="badge badge-swing" title="Bevestigd op een bewaakt steun/weerstand-niveau, geen gepoold percentage">swing</span>
     {% elif entry.trade_type == "patroon" %}
     <span class="badge badge-swing" title="Chart-patroon herkend door HesPulse">{{ entry.pattern_name }}</span>
-    {% if entry.success_rate is not none %}<span class="pass-pct" title="kansberekening: gepoolde factoren + historische winrate van dit patroontype">{{ "%.0f"|format(entry.success_rate) }}%</span>{% endif %}
+    {% if entry.success_rate is defined and entry.success_rate is not none %}<span class="pass-pct" title="kansberekening: gepoolde factoren + historische winrate van dit patroontype">kans {{ "%.0f"|format(entry.success_rate) }}%</span>{% endif %}
     {% elif entry.pass_pct is not none %}
     <span class="pass-pct">{{ "%.0f"|format(entry.pass_pct) }}%</span>
     {% endif %}
@@ -175,7 +181,7 @@
   {% endif %}
   {% if entry.reason %}
   <details class="confidence-detail js-accordion">
-    <summary class="confidence-why">waarom {% if entry.pass_pct is not none %}{{ "%.0f"|format(entry.pass_pct) }}%{% elif entry.trade_type == "patroon" %}dit patroon{% else %}dit bewaakte niveau{% endif %}?</summary>
+    <summary class="confidence-why">waarom {% if entry.trade_type == "patroon" %}{% if entry.success_rate is defined and entry.success_rate is not none %}kans {{ "%.0f"|format(entry.success_rate) }}%{% else %}dit patroon{% endif %}{% elif entry.pass_pct is not none %}{{ "%.0f"|format(entry.pass_pct) }}%{% else %}dit bewaakte niveau{% endif %}?</summary>
     <div class="reason-popup">
       {{ reason_popup(entry) }}
     </div>
