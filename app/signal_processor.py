@@ -431,7 +431,7 @@ async def _fanout_confirmed_signal(
     """Deelt een al-bevestigd signaal (geen gepoold percentage, altijd
     gemeld) met alle gebruikers: journaalregel + pushmelding per gebruiker,
     met per-gebruiker evaluatie-sizing en stop-cap. Gedeeld tussen
-    run_swing_check (swing) en market_scanner._check_chart_patterns
+    run_swing_check (swing) en market_scanner._find_chart_pattern_candidate
     (patroon) — beide zijn "autonoom bevestigd"-signalen met identieke
     fan-out-logica, alleen titel en berichttekst verschillen per soort.
     make_body ontvangt de EFFECTIEVE (mogelijk ingeperkte) stop/take voor

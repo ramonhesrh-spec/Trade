@@ -1412,7 +1412,7 @@ def auto_ignore_opposite_pending(coin: str, direction: str) -> list[dict]:
 
     Beperkt tot day_trading en patroon: deze functie wordt aangeroepen
     vanuit process_day_trading_signal (eigen day-trading kansen) en
-    market_scanner._check_chart_patterns (eigen patroon-kansen), om zijn
+    market_scanner._find_chart_pattern_candidate (eigen patroon-kansen), om zijn
     EIGEN nog niet genomen tegenovergestelde kans van hetzelfde,
     korte-termijn soort op te ruimen — patroon draait op dezelfde 4u-candle
     als day trading, dus hoort in dezelfde emmer. Swing blijft hier bewust
@@ -1455,7 +1455,7 @@ def auto_ignore_stale_pending_for_coin(coin: str, exclude_signal_id: int) -> lis
 
     Zelfde vorm als auto_ignore_opposite_pending, en om dezelfde reden
     beperkt tot day_trading en patroon: aangeroepen vanuit
-    process_day_trading_signal en market_scanner._check_chart_patterns
+    process_day_trading_signal en market_scanner._find_chart_pattern_candidate
     voor hun eigen, korte-termijn kansen. Een nog "wachtende" swing-melding
     voor dezelfde coin heeft een eigen, veel langere tijdshorizon en mag
     daar nooit door achterhaald raken."""

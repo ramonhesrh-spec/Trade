@@ -210,8 +210,8 @@ def classify_channel_wedge(
     Die blijven hier bewust ongedetecteerd (geen PatternMatch, dus geen
     aparte melding); een echte uitbraak van zo'n vorm wordt al gevangen
     door de bestaande indicators.find_trendline_breakout_retest via
-    market_scanner._check_trendline_retest, ongeacht welke kant hij
-    doorbreekt.
+    market_scanner._find_trendline_retest_candidate, ongeacht welke kant
+    hij doorbreekt.
 
     De vorm alleen is niet genoeg voor een live signaal: de prijs moet de
     relevante lijn ook daadwerkelijk doorbroken hebben (_find_line_break),

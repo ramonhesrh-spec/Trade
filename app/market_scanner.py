@@ -64,46 +64,72 @@ def _same_breakout_retest_zone(existing_key: Optional[str], direction: str, zone
     return abs(prev_mid - new_mid) <= BREAKOUT_RETEST_DEDUP_ATR_MULTIPLE * atr
 
 
-async def _check_breakout_retest(coin: str, direction: str, df, ind) -> None:
-    """Los van de trend-confirmatie hieronder: een uitbraak-dan-terugtest
-    is een eigen, sterk entry-patroon (een zone die eerder steun/weerstand
+def _candidate_score(entry_price: float, stop_loss: float, take_profit: float) -> float:
+    """Risk:reward als vergelijkingsmaat tussen kandidaten van verschillende
+    soorten (zone/lijn/patroon) die deze cyclus voor dezelfde coin en
+    richting zouden melden: hoe verder de take t.o.v. de stop, hoe steviger
+    de kans. Dit is de enige maat die voor alle drie soorten op dezelfde
+    manier berekenbaar is — een patroonmatch heeft geen touches-telling
+    zoals een zone of trendlijn dat wel heeft."""
+    risk_amount = abs(entry_price - stop_loss)
+    if risk_amount <= 0:
+        return 0.0
+    return abs(take_profit - entry_price) / risk_amount
+
+
+async def _find_breakout_retest_candidate(coin: str, direction: str, df, ind) -> Optional[dict]:
+    """Los van de trend-confirmatie verderop: een uitbraak-dan-terugtest is
+    een eigen, sterk entry-patroon (een zone die eerder steun/weerstand
     was, doorbroken is, en nu opnieuw getest wordt) en verdient een eigen
     melding, ongeacht of confirms_direction deze cyclus ja of nee zegt.
     Dedupliceert op coin+richting+zone via coins.last_breakout_retest_key,
     met een ATR-marge (_same_breakout_retest_zone): een zone die dicht
     genoeg bij de vorig gemelde zone ligt telt als dezelfde, een echt
-    nieuwe uitbraak (andere zone, of de andere richting) stuurt opnieuw."""
+    nieuwe uitbraak (andere zone, of de andere richting) stuurt opnieuw.
+
+    Meldt niet meteen: geeft een kandidaat terug (of None) zodat
+    scan_market() eerst kan vergelijken met wat de andere structurele
+    checks deze cyclus voor dezelfde coin en richting vinden, en alleen de
+    sterkste daadwerkelijk meldt (zie _candidate_score)."""
     zones = indicators.detect_sr_zones(df)
     hits = indicators.find_breakout_retest(df, zones, ind.atr, direction)
     if not hits:
-        return
+        return None
     zone, candles_since = max(hits, key=lambda h: h[0].touches)
     key = f"{direction}:{zone.price_low:.8f}:{zone.price_high:.8f}"
     if _same_breakout_retest_zone(repo.get_breakout_retest_key(coin), direction, zone, ind.atr):
-        return  # binnen de dedup-marge van de vorige melding, geen herhaling
+        return None  # binnen de dedup-marge van de vorige melding, geen herhaling
 
     stop_take = risk.compute_stop_take(
         direction, ind.price, ind.atr,
         swing_low=zone.price_low if direction == "long" else None,
         swing_high=zone.price_high if direction == "short" else None,
     )
-    # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push slaat
-    # een gebruiker zonder push-abonnement zelf al stilzwijgend over, en
-    # telegram_chat_id wordt sinds de overstap naar push nooit meer
-    # ingevuld voor nieuwe gebruikers.
-    for user in repo.list_users():
-        if repo.is_coin_muted(user["id"], coin):
-            continue
-        force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
-        try:
-            title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, uitbraak + terugtest"
-            body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
-            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
-        except Exception:
-            logger.exception(
-                "Pushmelding (uitbraak-terugtest) voor %s naar gebruiker %s is mislukt", coin, user["username"],
-            )
-    repo.set_breakout_retest_key(coin, key)
+
+    async def notify() -> None:
+        # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push
+        # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend
+        # over, en telegram_chat_id wordt sinds de overstap naar push nooit
+        # meer ingevuld voor nieuwe gebruikers.
+        for user in repo.list_users():
+            if repo.is_coin_muted(user["id"], coin):
+                continue
+            force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+            try:
+                title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, uitbraak + terugtest"
+                body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
+                await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
+            except Exception:
+                logger.exception(
+                    "Pushmelding (uitbraak-terugtest) voor %s naar gebruiker %s is mislukt", coin, user["username"],
+                )
+        repo.set_breakout_retest_key(coin, key)
+
+    return {
+        "kind": "uitbraak+terugtest", "direction": direction,
+        "score": _candidate_score(ind.price, stop_take.stop_loss, stop_take.take_profit),
+        "notify": notify,
+    }
 
 
 TRENDLINE_DEDUP_ATR_MULTIPLE = 1.0
@@ -126,16 +152,19 @@ def _same_trendline(existing_key: Optional[str], direction: str, line, atr: floa
     return abs(prev_value - identity_value) <= TRENDLINE_DEDUP_ATR_MULTIPLE * atr
 
 
-async def _check_trendline_retest(coin: str, direction: str, df, ind) -> None:
-    """Los van _check_breakout_retest: een diagonale trendlijn (steun of
-    weerstand) is een ander patroon dan een horizontale zone, met een
-    eigen melding. Zelfde striktheid (crossing op closing-prijs, moet
+async def _find_trendline_retest_candidate(coin: str, direction: str, df, ind) -> Optional[dict]:
+    """Los van _find_breakout_retest_candidate: een diagonale trendlijn
+    (steun of weerstand) is een ander patroon dan een horizontale zone, met
+    een eigen melding. Zelfde striktheid (crossing op closing-prijs, moet
     standhouden) en zelfde ATR-dedup-marge als de optie-C-fix van
-    vandaag, zie docs/superpowers/specs/2026-09-15-trendlijn-uitbraak-design.md."""
+    vandaag, zie docs/superpowers/specs/2026-09-15-trendlijn-uitbraak-design.md.
+
+    Zelfde uitgestelde-melding-opzet als _find_breakout_retest_candidate:
+    geeft een kandidaat terug (of None) in plaats van meteen te melden."""
     trendlines = indicators.detect_trendlines(df, ind.atr)
     hits = indicators.find_trendline_breakout_retest(df, trendlines, ind.atr, direction)
     if not hits:
-        return
+        return None
     line, candles_since = max(hits, key=lambda h: h[0].touches)
 
     # last_index is HIER de laatste candle van het venster (de huidige
@@ -160,30 +189,38 @@ async def _check_trendline_retest(coin: str, direction: str, df, ind) -> None:
     identity_value = line.value_at(line.last_index)
     key = f"{direction}:{line.kind}:{identity_value:.8f}"
     if _same_trendline(repo.get_trendline_retest_key(coin), direction, line, ind.atr):
-        return
+        return None
 
     stop_take = risk.compute_stop_take(
         direction, ind.price, ind.atr,
         swing_low=current_value if direction == "long" else None,
         swing_high=current_value if direction == "short" else None,
     )
-    # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push slaat
-    # een gebruiker zonder push-abonnement zelf al stilzwijgend over, en
-    # telegram_chat_id wordt sinds de overstap naar push nooit meer
-    # ingevuld voor nieuwe gebruikers.
-    for user in repo.list_users():
-        if repo.is_coin_muted(user["id"], coin):
-            continue
-        force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
-        try:
-            title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, trendlijn-terugtest"
-            body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
-            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
-        except Exception:
-            logger.exception(
-                "Pushmelding (trendlijn-terugtest) voor %s naar gebruiker %s is mislukt", coin, user["username"],
-            )
-    repo.set_trendline_retest_key(coin, key)
+
+    async def notify() -> None:
+        # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push
+        # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend
+        # over, en telegram_chat_id wordt sinds de overstap naar push nooit
+        # meer ingevuld voor nieuwe gebruikers.
+        for user in repo.list_users():
+            if repo.is_coin_muted(user["id"], coin):
+                continue
+            force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+            try:
+                title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, trendlijn-terugtest"
+                body = f"Entry {ind.price:.4f} · Stop {stop_take.stop_loss:.4f} · Take profit {stop_take.take_profit:.4f}"
+                await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
+            except Exception:
+                logger.exception(
+                    "Pushmelding (trendlijn-terugtest) voor %s naar gebruiker %s is mislukt", coin, user["username"],
+                )
+        repo.set_trendline_retest_key(coin, key)
+
+    return {
+        "kind": "trendlijn+terugtest", "direction": direction,
+        "score": _candidate_score(ind.price, stop_take.stop_loss, stop_take.take_profit),
+        "notify": notify,
+    }
 
 
 # Dedup-marge voor de patroon-melding: hoe dicht de neckline/stop van een
@@ -217,13 +254,20 @@ def _valid_stop_take(direction: str, entry_price: float, stop_loss: float, take_
     return take_profit < entry_price < stop_loss
 
 
-async def _check_chart_patterns(coin: str, df, ind) -> None:
+async def _find_chart_pattern_candidate(coin: str, df, ind) -> Optional[dict]:
     """Los van de dagtrading-richting van deze scan-cyclus: een chart-
     patroon (top/bottom, head & shoulders, kanaal/wedge, divergence) heeft
     zijn EIGEN richting uit de vorm zelf, niet uit ind.ema9/ind.ema21. Geen
     percentage-toets, geen harde eisen (R:R/dagtrend/BTC-trend) — een
     bevestigd patroon is zelf de bevestiging, zie
-    docs/superpowers/specs/2026-09-22-patroonherkenning-design.md."""
+    docs/superpowers/specs/2026-09-22-patroonherkenning-design.md.
+
+    Zelfde uitgestelde-melding-opzet als _find_breakout_retest_candidate:
+    geeft een kandidaat terug (of None) in plaats van meteen te melden en
+    de signals-rij aan te maken. Verliest deze kandidaat het van een
+    sterkere structurele kandidaat voor dezelfde coin en richting, dan
+    wordt er nooit een signals-rij voor aangemaakt — anders bleef er een
+    verweesde rij zonder journaalregel of melding achter."""
     trendlines = indicators.detect_trendlines(df, ind.atr)
     window_len = len(df.tail(indicators.SR_ZONE_LOOKBACK))
 
@@ -246,33 +290,12 @@ async def _check_chart_patterns(coin: str, df, ind) -> None:
         if (window_len - 1) - c.confirmed_index <= patterns.NECKLINE_RETEST_MAX_WAIT_CANDLES
     ]
     if not candidates:
-        return
+        return None
     match = max(candidates, key=lambda m: m.confirmed_index)
 
     key = f"{match.direction}:{match.name}:{match.neckline:.8f}"
     if _same_pattern(repo.get_pattern_key(coin), match.direction, match, ind.atr):
-        return
-
-    # Een nog niet genomen melding voor de tegenovergestelde richting van
-    # dezelfde coin is achterhaald zodra hier een nieuw patroon bevestigt:
-    # je kan niet serieus tegelijk long en short op dezelfde coin
-    # overwegen. Zelfde mechanisme als process_day_trading_signal, hier
-    # voor de eigen patroon-kans (auto_ignore_opposite_pending dekt zowel
-    # day_trading als patroon, swing blijft buiten schot).
-    ignored = repo.auto_ignore_opposite_pending(coin, match.direction)
-    if ignored:
-        logger.info("%s nog niet genomen tegenovergestelde melding(en) voor %s automatisch genegeerd (patroon)",
-                     len(ignored), coin)
-        for user in ignored:
-            try:
-                repo.create_notification(
-                    user["id"], "expired_signal",
-                    f"Kans op {coin} vervallen",
-                    f"Een nieuwe {match.direction}-melding op {coin} maakte de vorige kans achterhaald.",
-                    f"/coins/{coin}",
-                )
-            except Exception:
-                logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+        return None
 
     entry_options = patterns.find_entry_options(df, match, ind.atr, trendlines=trendlines)
 
@@ -292,76 +315,106 @@ async def _check_chart_patterns(coin: str, df, ind) -> None:
         stop_take = risk.compute_stop_take(match.direction, ind.price, ind.atr)
         stop_loss, take_profit = stop_take.stop_loss, stop_take.take_profit
 
-    # suggested_entry_low/high zijn bestaande kolommen (van een eerder
-    # plan, daar gevuld met de dagtrading-entry-zone-suggestie) — hier
-    # hergebruikt voor exact hetzelfde soort informatie (een optionele,
-    # tweede entry-band naast de live prijs), in plaats van twee nieuwe
-    # kolommen voor hetzelfde concept. Task 8 leest ze uit voor de
-    # "Retest: ..."-regel op de kaart. None zolang er nog geen retest is.
-    signal_data = {
-        "message_id": None, "coin": coin, "direction": match.direction,
-        "category": "day_trading", "trade_type": "patroon", "pattern_name": match.name,
-        "price": ind.price, "rsi": ind.rsi, "macd": ind.macd, "macd_signal": ind.macd_signal,
-        "volume_ratio": ind.volume_ratio, "ema9": ind.ema9, "ema21": ind.ema21,
-        "atr": ind.atr, "atr_avg20": ind.atr_avg20, "adx": ind.adx,
-        "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1,
-        "confidence": "patroon bevestigd",
-        "reason": f"Patroon: {match.name}, richting {match.direction}",
-        "stop_loss": stop_loss, "take_profit": take_profit,
-        "context_note": None, "is_practice": 0, "plain_explanation": None,
-        "suggested_entry_low": entry_options["retest_low"],
-        "suggested_entry_high": entry_options["retest_high"],
+    async def notify() -> None:
+        # Een nog niet genomen melding voor de tegenovergestelde richting
+        # van dezelfde coin is achterhaald zodra hier een nieuw patroon
+        # bevestigt: je kan niet serieus tegelijk long en short op dezelfde
+        # coin overwegen. Zelfde mechanisme als process_day_trading_signal,
+        # hier voor de eigen patroon-kans (auto_ignore_opposite_pending
+        # dekt zowel day_trading als patroon, swing blijft buiten schot).
+        ignored = repo.auto_ignore_opposite_pending(coin, match.direction)
+        if ignored:
+            logger.info("%s nog niet genomen tegenovergestelde melding(en) voor %s automatisch genegeerd (patroon)",
+                         len(ignored), coin)
+            for user in ignored:
+                try:
+                    repo.create_notification(
+                        user["id"], "expired_signal",
+                        f"Kans op {coin} vervallen",
+                        f"Een nieuwe {match.direction}-melding op {coin} maakte de vorige kans achterhaald.",
+                        f"/coins/{coin}",
+                    )
+                except Exception:
+                    logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
+        # suggested_entry_low/high zijn bestaande kolommen (van een eerder
+        # plan, daar gevuld met de dagtrading-entry-zone-suggestie) — hier
+        # hergebruikt voor exact hetzelfde soort informatie (een optionele,
+        # tweede entry-band naast de live prijs), in plaats van twee nieuwe
+        # kolommen voor hetzelfde concept. Task 8 leest ze uit voor de
+        # "Retest: ..."-regel op de kaart. None zolang er nog geen retest is.
+        signal_data = {
+            "message_id": None, "coin": coin, "direction": match.direction,
+            "category": "day_trading", "trade_type": "patroon", "pattern_name": match.name,
+            "price": ind.price, "rsi": ind.rsi, "macd": ind.macd, "macd_signal": ind.macd_signal,
+            "volume_ratio": ind.volume_ratio, "ema9": ind.ema9, "ema21": ind.ema21,
+            "atr": ind.atr, "atr_avg20": ind.atr_avg20, "adx": ind.adx,
+            "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1,
+            "confidence": "patroon bevestigd",
+            "reason": f"Patroon: {match.name}, richting {match.direction}",
+            "stop_loss": stop_loss, "take_profit": take_profit,
+            "context_note": None, "is_practice": 0, "plain_explanation": None,
+            "suggested_entry_low": entry_options["retest_low"],
+            "suggested_entry_high": entry_options["retest_high"],
+        }
+        signal_id = repo.insert_signal(signal_data)
+
+        # Zelfde soort opruiming als hierboven, maar voor het geval een
+        # oude nog niet genomen melding voor dezelfde coin en richting niet
+        # meer als "open" gold (bv. iedereen had die kans al afgesloten) en
+        # er dus een los nieuw signaal is aangemaakt in plaats van een
+        # update.
+        stale = repo.auto_ignore_stale_pending_for_coin(coin, exclude_signal_id=signal_id)
+        if stale:
+            logger.info("%s oude nog niet genomen melding(en) voor %s automatisch genegeerd (nieuw patroon-signaal)",
+                         len(stale), coin)
+            for user in stale:
+                try:
+                    repo.create_notification(
+                        user["id"], "expired_signal",
+                        f"Kans op {coin} vervallen",
+                        f"Een oude melding op {coin} is vervangen door een nieuw signaal.",
+                        f"/coins/{coin}",
+                    )
+                except Exception:
+                    logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
+        def _pattern_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
+            retest_note = (
+                f" · Retest {entry_options['retest_low']:.4f}–{entry_options['retest_high']:.4f}"
+                if entry_options["retest_low"] is not None else ""
+            )
+            # Als de patroon-eigen stop/take niet aan de juiste kant van de
+            # live prijs bleken te liggen (C2-guard, used_pattern_stop_take=
+            # False) is het uitbraakniveau van het patroon zelf niet meer de
+            # premisse van deze trade — dan de live prijs tonen in plaats
+            # van een uitbraakniveau dat niet meer bij de getoonde
+            # stop/take past.
+            level_label = (
+                f"Uitbraak {entry_options['breakout_level']:.4f}{retest_note}"
+                if used_pattern_stop_take else f"Prijs {ind.price:.4f}"
+            )
+            return (
+                f"{level_label} · "
+                f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            )
+
+        # premise_level = match.neckline: de uitbraak/trigger-prijs van het
+        # patroon is de premisse van deze trade (net als watch["price_level"]
+        # bij een swing-watch), niet ind.price (de live prijs op het moment
+        # van detectie, die intussen al verder kan zijn doorgelopen).
+        await fanout_confirmed_signal(
+            signal_id, coin, match.direction, ind.price, stop_loss, take_profit, match.neckline,
+            title=f"{push_notify.coin_symbol(coin)} {coin} {match.direction}, {match.name}",
+            make_body=_pattern_body,
+        )
+        repo.set_pattern_key(coin, key)
+
+    return {
+        "kind": f"patroon ({match.name})", "direction": match.direction,
+        "score": _candidate_score(ind.price, stop_loss, take_profit),
+        "notify": notify,
     }
-    signal_id = repo.insert_signal(signal_data)
-
-    # Zelfde soort opruiming als hierboven, maar voor het geval een oude
-    # nog niet genomen melding voor dezelfde coin en richting niet meer als
-    # "open" gold (bv. iedereen had die kans al afgesloten) en er dus een
-    # los nieuw signaal is aangemaakt in plaats van een update.
-    stale = repo.auto_ignore_stale_pending_for_coin(coin, exclude_signal_id=signal_id)
-    if stale:
-        logger.info("%s oude nog niet genomen melding(en) voor %s automatisch genegeerd (nieuw patroon-signaal)",
-                     len(stale), coin)
-        for user in stale:
-            try:
-                repo.create_notification(
-                    user["id"], "expired_signal",
-                    f"Kans op {coin} vervallen",
-                    f"Een oude melding op {coin} is vervangen door een nieuw signaal.",
-                    f"/coins/{coin}",
-                )
-            except Exception:
-                logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
-
-    def _pattern_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
-        retest_note = (
-            f" · Retest {entry_options['retest_low']:.4f}–{entry_options['retest_high']:.4f}"
-            if entry_options["retest_low"] is not None else ""
-        )
-        # Als de patroon-eigen stop/take niet aan de juiste kant van de live
-        # prijs bleken te liggen (C2-guard, used_pattern_stop_take=False) is
-        # het uitbraakniveau van het patroon zelf niet meer de premisse van
-        # deze trade — dan de live prijs tonen in plaats van een uitbraak-
-        # niveau dat niet meer bij de getoonde stop/take past.
-        level_label = (
-            f"Uitbraak {entry_options['breakout_level']:.4f}{retest_note}"
-            if used_pattern_stop_take else f"Prijs {ind.price:.4f}"
-        )
-        return (
-            f"{level_label} · "
-            f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
-        )
-
-    # premise_level = match.neckline: de uitbraak/trigger-prijs van het
-    # patroon is de premisse van deze trade (net als watch["price_level"]
-    # bij een swing-watch), niet ind.price (de live prijs op het moment
-    # van detectie, die intussen al verder kan zijn doorgelopen).
-    await fanout_confirmed_signal(
-        signal_id, coin, match.direction, ind.price, stop_loss, take_profit, match.neckline,
-        title=f"{push_notify.coin_symbol(coin)} {coin} {match.direction}, {match.name}",
-        make_body=_pattern_body,
-    )
-    repo.set_pattern_key(coin, key)
 
 
 async def scan_market() -> None:
@@ -396,9 +449,41 @@ async def scan_market() -> None:
             ind = indicators.compute_indicators(df)
             direction = "long" if ind.ema9 > ind.ema21 else "short"
 
-            await _check_breakout_retest(coin, direction, df, ind)
-            await _check_trendline_retest(coin, direction, df, ind)
-            await _check_chart_patterns(coin, df, ind)
+            # Drie structurele mechanismen (uitbraak+terugtest, trendlijn+
+            # terugtest, patroon) draaien onafhankelijk van elkaar en
+            # kunnen voor dezelfde coin dezelfde richting vinden, elk met
+            # een eigen stop/take — zonder afstemming kreeg een gebruiker
+            # dan twee tegenstrijdige meldingen voor dezelfde kans (bv. SOL
+            # long met twee verschillende stops). Elke functie bepaalt hier
+            # daarom alleen OF hij zou melden (geen melding, geen
+            # DB-schrijving); pas hierna wordt per richting de sterkste
+            # kandidaat daadwerkelijk gemeld (_candidate_score: risk:reward,
+            # de enige maat die voor alle drie soorten gelijk berekenbaar is).
+            structural: list[dict] = []
+            breakout_candidate = await _find_breakout_retest_candidate(coin, direction, df, ind)
+            if breakout_candidate:
+                structural.append(breakout_candidate)
+            trendline_candidate = await _find_trendline_retest_candidate(coin, direction, df, ind)
+            if trendline_candidate:
+                structural.append(trendline_candidate)
+            pattern_candidate = await _find_chart_pattern_candidate(coin, df, ind)
+            if pattern_candidate:
+                structural.append(pattern_candidate)
+
+            by_direction: dict[str, list[dict]] = {}
+            for candidate in structural:
+                by_direction.setdefault(candidate["direction"], []).append(candidate)
+
+            structural_directions_signaled: set = set()
+            for cand_direction, group in by_direction.items():
+                winner = max(group, key=lambda c: c["score"])
+                if len(group) > 1:
+                    logger.info(
+                        "%s: %s structurele kandidaten voor richting %s, '%s' wint (risk:reward %.2f)",
+                        coin, len(group), cand_direction, winner["kind"], winner["score"],
+                    )
+                await winner["notify"]()
+                structural_directions_signaled.add(cand_direction)
 
             # Vóór de cooldown-check bepaald (in plaats van erna): een coin
             # met een al bestaand open signaal moet elke cyclus ververst
@@ -418,6 +503,19 @@ async def scan_market() -> None:
                 logger.info(
                     "%s %s overgeslagen: richting pas %s cyclus/cycli op rij, nog geen %s",
                     coin, direction, consecutive, WHIPLASH_MIN_CONSECUTIVE_CYCLES,
+                )
+                continue
+
+            # Al een structureel signaal (zone/lijn/patroon) gemeld voor
+            # precies deze coin en richting deze cyclus: de generieke
+            # EMA-dagtrading-melding zou dezelfde kans dan een tweede keer
+            # met een ander stop/take-niveau melden (zie hierboven). Alleen
+            # van toepassing op een NIEUW dagtrading-signaal — een al open
+            # positie moet, net als bij whiplash/cooldown, altijd ververst
+            # blijven.
+            if not was_open_before and direction in structural_directions_signaled:
+                logger.info(
+                    "%s %s overgeslagen: al een structureel signaal deze cyclus gemeld", coin, direction,
                 )
                 continue
 
