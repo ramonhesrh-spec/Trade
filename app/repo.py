@@ -1875,6 +1875,47 @@ def winrate_stats(user_id: int) -> dict:
     }
 
 
+# Minimaal aantal afgeronde signalen van een patroontype voordat de
+# winrate ervan getoond wordt — te weinig data geeft een misleidend
+# percentage (bijvoorbeeld 100% op 1 signaal). Zelfde soort ondergrens-
+# gedachte als SR_ZONE_MIN_TOUCHES in indicators.py, hier voor een ander
+# soort telling.
+PATTERN_MIN_SAMPLE = 5
+
+
+def pattern_winrate_stats() -> dict[str, dict]:
+    """Systeembrede winrate per patroontype (niet per gebruiker — een
+    patroon-signaal is voor iedereen hetzelfde, zie signals.auto_outcome),
+    gebruikt voor de kansberekening op een patroon-signaal. Alleen
+    patroontypes met minstens PATTERN_MIN_SAMPLE afgeronde (take_profit/
+    stop_loss) signalen krijgen een entry — te weinig data geeft een
+    misleidend percentage. Geen 'vervallen'-uitkomsten meegeteld, net als
+    de bestaande winrate_stats hierboven dat ook niet doet voor
+    dagtrading."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT pattern_name, auto_outcome, COUNT(*) AS n
+               FROM signals
+               WHERE trade_type = 'patroon' AND is_practice = 0
+                     AND auto_outcome IN ('take_profit', 'stop_loss')
+               GROUP BY pattern_name, auto_outcome"""
+        ).fetchall()
+
+    by_pattern: dict[str, dict[str, int]] = {}
+    for row in rows:
+        by_pattern.setdefault(row["pattern_name"], {})[row["auto_outcome"]] = row["n"]
+
+    result: dict[str, dict] = {}
+    for pattern_name, counts in by_pattern.items():
+        wins = counts.get("take_profit", 0)
+        losses = counts.get("stop_loss", 0)
+        total = wins + losses
+        if total < PATTERN_MIN_SAMPLE:
+            continue
+        result[pattern_name] = {"winrate": (wins / total) * 100, "total": total}
+    return result
+
+
 def swing_winrate_stats(user_id: int) -> dict:
     """Winrate en gemiddeld resultaat van gesloten swing-trades, apart van
     winrate_stats (day trading): andere tijdshorizon, ander risicoprofiel,
