@@ -95,22 +95,13 @@ def run(coin: str, timeframe: str, years: float) -> None:
 
             div_match = patterns.find_divergence(window)
             if div_match:
-                # divergence heeft geen target/stop_loss, dus classify_outcome
-                # kan hier niet direct op toegepast worden — meet in plaats
-                # daarvan of de prijs binnen LOOKFORWARD_CANDLES in de
-                # gemelde richting bewoog (eenvoudige richtings-tref-check).
-                # Gemeten vanaf start - 1 ("nu"), zelfde reden als hierboven.
-                now_index = start - 1
-                fwd = full_df.iloc[now_index + 1:now_index + 1 + LOOKFORWARD_CANDLES]
-                if not fwd.empty:
-                    moved_right_way = (
-                        fwd["close"].iloc[-1] > full_df["close"].iloc[now_index]
-                        if div_match.direction == "long" else
-                        fwd["close"].iloc[-1] < full_df["close"].iloc[now_index]
-                    )
-                    by_name.setdefault(div_match.name, []).append(
-                        "target_hit" if moved_right_way else "invalidated"
-                    )
+                # Divergence heeft sinds de structuurbevestiging (zie
+                # app/patterns.py::find_divergence) een echte neckline/
+                # target/stop_loss, net als channel_wedge -- zelfde
+                # classify_outcome-pad, geen aparte richtings-tref-check
+                # meer nodig.
+                outcome = classify_outcome(full_df, div_match, atr_series, start - 1)
+                by_name.setdefault(div_match.name, []).append(outcome)
         start += STEP_CANDLES
 
     print(f"{coin} {timeframe}, {len(full_df)} candles ({years} jaar)\n")

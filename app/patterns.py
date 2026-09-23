@@ -42,8 +42,8 @@ class PatternMatch:
     direction: str  # "long" of "short"
     neckline: float  # of lijnwaarde bij channel_wedge
     extreme: float  # hoogste piek / laagste dal van het patroon zelf
-    target: Optional[float]  # None bij divergence (geen gemeten beweging)
-    stop_loss: Optional[float]  # None bij divergence
+    target: Optional[float]  # gemeten doel, alle huidige detectoren vullen dit
+    stop_loss: Optional[float]  # alle huidige detectoren vullen dit
     confirmed_index: int  # candle-index waarop de nek/lijn daadwerkelijk doorbroken werd
     pattern_kind: str  # "top_bottom" | "hs" | "channel_wedge" | "divergence"
 
@@ -277,9 +277,15 @@ def find_divergence(df: pd.DataFrame) -> Optional[PatternMatch]:
     hetzelfde soort, niet naar elk historisch paar: voor live signalering
     telt of er NU een divergentie staat, niet of er ooit één stond.
 
-    Puur momentum-signaal, geen eigen neckline/hoogte zoals top/bottom of
-    channel_wedge — target/stop_loss blijven None, de caller (Task 4/7)
-    valt voor deze pattern_kind terug op risk.compute_stop_take (ATR)."""
+    De RSI-afwijking zegt WANNEER de kracht wegvalt, niet WAAR een entry
+    zit — puur op de RSI-conditie melden is daardoor lastig te verhandelen.
+    Daarom krijgt divergence, net als top/bottom, een structuurniveau: bij
+    bullish divergence de swing-top tussen de twee bodems, bij bearish de
+    swing-bodem tussen de twee toppen. Pas een candle die er met de close
+    voorbij sluit (dezelfde eis als _find_neckline_break, geen wick-only
+    doorbraak) telt als bevestiging. Zonder een structuurpivot tussen de
+    twee divergerende pivots, of zonder bevestigde doorbraak ervan, is er
+    geen signaal — de RSI-conditie alleen is dan niet genoeg."""
     window = df.tail(indicators.SR_ZONE_LOOKBACK).reset_index(drop=True)
     rsi_series = ta.momentum.RSIIndicator(window["close"], window=14).rsi()
     pivots = indicators._find_pivots(window)
@@ -292,11 +298,18 @@ def find_divergence(df: pd.DataFrame) -> Optional[PatternMatch]:
             not pd.isna(rsi_prev) and not pd.isna(rsi_last)
             and last.price < prev.price and rsi_last > rsi_prev
         ):
-            return PatternMatch(
-                name="bullish divergence", direction="long", neckline=last.price,
-                extreme=last.price, target=None, stop_loss=None,
-                confirmed_index=last.index, pattern_kind="divergence",
-            )
+            structure_highs = [p for p in pivots if p.kind == "high" and prev.index < p.index < last.index]
+            if structure_highs:
+                structure = max(structure_highs, key=lambda p: p.price)
+                confirmed_index = _find_neckline_break(window, last.index, structure.price, "low")
+                if confirmed_index is not None:
+                    height = structure.price - last.price
+                    return PatternMatch(
+                        name="bullish divergence", direction="long", neckline=structure.price,
+                        extreme=last.price, target=structure.price + height,
+                        stop_loss=_pattern_stop_loss(last.price, "long"),
+                        confirmed_index=confirmed_index, pattern_kind="divergence",
+                    )
 
     highs = sorted([p for p in pivots if p.kind == "high"], key=lambda p: p.index)
     if len(highs) >= 2:
@@ -306,11 +319,18 @@ def find_divergence(df: pd.DataFrame) -> Optional[PatternMatch]:
             not pd.isna(rsi_prev) and not pd.isna(rsi_last)
             and last.price > prev.price and rsi_last < rsi_prev
         ):
-            return PatternMatch(
-                name="bearish divergence", direction="short", neckline=last.price,
-                extreme=last.price, target=None, stop_loss=None,
-                confirmed_index=last.index, pattern_kind="divergence",
-            )
+            structure_lows = [p for p in pivots if p.kind == "low" and prev.index < p.index < last.index]
+            if structure_lows:
+                structure = min(structure_lows, key=lambda p: p.price)
+                confirmed_index = _find_neckline_break(window, last.index, structure.price, "high")
+                if confirmed_index is not None:
+                    height = last.price - structure.price
+                    return PatternMatch(
+                        name="bearish divergence", direction="short", neckline=structure.price,
+                        extreme=last.price, target=structure.price - height,
+                        stop_loss=_pattern_stop_loss(last.price, "short"),
+                        confirmed_index=confirmed_index, pattern_kind="divergence",
+                    )
     return None
 
 
@@ -372,7 +392,7 @@ def find_entry_options(
                 }
         return {"breakout_level": match.neckline, "retest_low": None, "retest_high": None}
 
-    if match.pattern_kind in ("top_bottom", "hs"):
+    if match.pattern_kind in ("top_bottom", "hs", "divergence"):
         retest = _check_neckline_retest(df, match, atr)
         return {
             "breakout_level": match.neckline,

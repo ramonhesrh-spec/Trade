@@ -263,7 +263,8 @@ async def _check_chart_patterns(coin: str, df, ind) -> None:
     if used_pattern_stop_take:
         stop_loss, take_profit = match.stop_loss, match.target
     else:
-        # divergence (geen eigen gemeten beweging) of een patroon waarvan de
+        # geen structuurbevestigde match (divergence zonder structuurpivot
+        # tussen de twee afwijkende pivots) of een patroon waarvan de
         # stop/take niet meer aan de juiste kant van de live prijs ligt:
         # terugval op de bestaande ATR-methode (zie de spec, sectie
         # "Stop/take").
