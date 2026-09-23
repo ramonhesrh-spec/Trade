@@ -1718,6 +1718,7 @@ def list_pending_entries_with_price() -> list[dict]:
             """SELECT je.id AS id, je.user_id AS user_id,
                       s.coin AS coin, s.direction AS direction, s.price AS signal_price,
                       s.atr AS atr, s.confidence AS confidence, s.created_at AS signal_created_at,
+                      s.message_id AS message_id,
                       s.suggested_entry_low AS suggested_entry_low,
                       s.suggested_entry_high AS suggested_entry_high,
                       u.username AS username, u.telegram_chat_id AS telegram_chat_id,

@@ -376,14 +376,17 @@ async def _find_chart_pattern_candidate(
         )
 
         # Kansberekening (zelfde formule als web/main.py's weergave, zie
-        # repo.pattern_kansberekening) bepaalt hier of de melding stil
-        # binnenkomt: een patroon met een lage kans zag er voorheen op het
-        # lockscreen even dringend uit als een sterke, wat als spam voelde.
-        # De melding zelf wordt nooit tegengehouden (technical_confirmed
-        # blijft vast 1) — alleen het geluid/schermoplichten.
+        # repo.pattern_kansberekening) bepaalt hier of de pushmelding
+        # sowieso verstuurd wordt: een patroon onder de drempel (of nog
+        # zonder genoeg data) is precies het soort "laag vertrouwen" dat op
+        # het lockscreen als spam voelde. De signals-rij en het journaal
+        # blijven wel gewoon bestaan (technical_confirmed blijft vast 1,
+        # nooit blokkeren voor het dashboard/trackrecord) — alleen de
+        # pushmelding zelf wordt overgeslagen, geen stil-maar-zichtbaar
+        # tussenweg meer.
         pattern_stats = repo.pattern_winrate_stats().get(match.name)
         kansberekening = repo.pattern_kansberekening(factor_pass_pct, pattern_stats)
-        force_silent = kansberekening is None or kansberekening < SILENT_BELOW_KANS
+        skip_push = kansberekening is None or kansberekening < SILENT_BELOW_KANS
 
         # Een nog niet genomen melding voor de tegenovergestelde richting
         # van dezelfde coin is achterhaald zodra hier een nieuw patroon
@@ -476,7 +479,7 @@ async def _find_chart_pattern_candidate(
             signal_id, coin, match.direction, ind.price, stop_loss, take_profit, match.neckline,
             title=f"{push_notify.coin_symbol(coin)} {coin} {match.direction}, {match.name}",
             make_body=_pattern_body,
-            force_silent=force_silent,
+            skip_push=skip_push,
         )
         repo.set_pattern_key(coin, key)
 
@@ -661,13 +664,11 @@ async def scan_market() -> None:
             interp = Interpretation(
                 coin=coin, direction=direction, category="day_trading", unclear=False, reason="",
             )
-            # notify_on_reject=False: een autonoom afgewezen kans ("nog geen
-            # sterke kans") hoeft geen Telegram-melding te sturen zoals een
-            # door de gebruiker gedeeld bericht dat wel altijd krijgt — dat
-            # zou elke cyclus voor tientallen coins een afwijzingsbericht
-            # opleveren. De logboekregel en de trackrecord blijven gewoon
-            # bestaan, alleen de melding zelf wordt overgeslagen.
-            await process_day_trading_signal(None, interp, notify_on_update=False, notify_on_reject=False)
+            # Een afgewezen ("nog geen sterke kans") signaal krijgt nooit een
+            # pushmelding, autonoom of gedeeld — zie process_day_trading_signal's
+            # confirmed-check. De logboekregel en de trackrecord blijven
+            # gewoon bestaan, alleen de melding zelf wordt overgeslagen.
+            await process_day_trading_signal(None, interp, notify_on_update=False)
         except Exception:
             # Eén coin die faalt (bijvoorbeeld een tijdelijke Binance-storing)
             # mag de rest van de scan niet blokkeren.

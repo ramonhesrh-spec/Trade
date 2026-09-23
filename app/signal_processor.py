@@ -427,7 +427,7 @@ async def _fanout_confirmed_signal(
     signal_id: int, coin: str, direction: str, entry_price: float,
     stop_loss: float, take_profit: float, premise_level: float, title: str,
     make_body: Callable[[float, float, bool], str],
-    force_silent: bool = False,
+    skip_push: bool = False,
 ) -> None:
     """Deelt een al-bevestigd signaal (geen gepoold percentage, altijd
     gemeld) met alle gebruikers: journaalregel + pushmelding per gebruiker,
@@ -439,11 +439,11 @@ async def _fanout_confirmed_signal(
     deze ene gebruiker en of die stop gecapt werd, zodat de melding altijd
     de daadwerkelijke cijfers voor deze gebruiker toont.
 
-    force_silent=True (alleen gebruikt door patroon, bij een lage
-    kansberekening) maakt de melding stil bovenop de bestaande
-    stille-uren-check hieronder, nooit ervoor in de plaats — de melding
-    zelf blijft altijd verstuurd en zichtbaar, alleen zonder geluid/
-    schermoplichten, zie market_scanner.py's patroon-notify.
+    skip_push=True (alleen gebruikt door patroon, bij een lage
+    kansberekening) slaat de pushmelding voor deze gebruiker helemaal over
+    — niet stil versturen, HELEMAAL niet versturen. De journaalregel wordt
+    wel gewoon aangemaakt, dus trackrecord/dashboard blijven compleet, zie
+    market_scanner.py's patroon-notify.
 
     entry_price is de LIVE prijs op het moment van bevestiging (gebruikt
     voor position sizing en de coin-link in de pushmelding). premise_level
@@ -492,12 +492,17 @@ async def _fanout_confirmed_signal(
         # meldingen (zie de spec), dit is een autonoom bevestigd signaal
         # (swing-watch of chart-patroon) dat juist bedoeld is om een grote
         # kans nooit te missen.
+        if skip_push:
+            logger.info("Lage kansberekening voor %s: geen pushmelding naar gebruiker %s (skip_push)",
+                        coin, user["username"])
+            continue
+
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             body = make_body(effective_stop_loss, effective_take_profit, stop_was_capped)
             if eval_blocked_note:
                 body += f"\n{eval_blocked_note}"
-            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=quiet or force_silent)
+            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=quiet)
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
             logger.exception("Melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
@@ -792,7 +797,7 @@ def _notify_new_coin(coin: str) -> None:
 
 async def process_day_trading_signal(
     message_id: int | None, interp: Interpretation,
-    notify_on_update: bool = True, notify_on_reject: bool = True,
+    notify_on_update: bool = True,
 ) -> None:
     tracked, is_new_coin = await asyncio.to_thread(coinlist.ensure_coin_tracked, interp.coin)
     if is_new_coin:
@@ -1088,16 +1093,16 @@ async def process_day_trading_signal(
                         interp.coin, user["username"])
             continue
 
-        if not confirmed and not notify_on_reject:
-            # Autonome marktscan (app/market_scanner.py) geeft
-            # notify_on_reject=False mee: een afgewezen ("nog geen sterke
-            # kans") autonoom signaal hoeft geen pushmelding te sturen, in
-            # tegenstelling tot een door de gebruiker gedeeld bericht (die
-            # krijgt altijd een bericht, ook bij afwijzing).
-            # De logboekregel hierboven blijft wel gewoon bestaan, het
-            # trackrecord blijft compleet, alleen de melding zelf wordt
-            # overgeslagen — zelfde patroon als de muted-continue hierboven.
-            logger.info("Afwijzing voor %s niet gemeld aan gebruiker %s (notify_on_reject=False)",
+        if not confirmed:
+            # Laag vertrouwen (technical_confirmed=0) krijgt nooit meer een
+            # pushmelding, ongeacht de bron (gedeeld bericht of autonome
+            # marktscan) — omgekeerd van de eerdere keuze om een gedeeld
+            # bericht altijd te melden, ook bij afwijzing: dat leverde in de
+            # praktijk vooral ruis op. De logboekregel hierboven blijft wel
+            # gewoon bestaan, het trackrecord blijft compleet en zichtbaar
+            # op het dashboard, alleen de melding zelf wordt overgeslagen —
+            # zelfde patroon als de muted-continue hierboven.
+            logger.info("Laag vertrouwen voor %s niet gemeld aan gebruiker %s (technical_confirmed=0)",
                         interp.coin, user["username"])
             continue
 

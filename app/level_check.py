@@ -181,7 +181,7 @@ async def check_pending_signals() -> None:
     logger.info("%d nog niet genomen signalen om te checken", len(entries))
 
     coin_prices: dict[str, float] = {}
-    coin_levels: dict[str, list[dict]] = {}
+    coin_levels: dict[tuple[int, str], list[dict]] = {}
 
     for entry in entries:
         coin = entry["coin"]
@@ -217,10 +217,19 @@ async def check_pending_signals() -> None:
         )
 
         matched_level = None
-        if not in_entry_zone and not at_signal_level:
-            if coin not in coin_levels:
-                coin_levels[coin] = repo.list_source_levels(coin)
-            matched_level = _nearest_level(current_price, entry["atr"], coin_levels[coin])
+        # Alleen niveaus uit HETZELFDE bericht als dit pending signaal, niet
+        # coin-breed: coin-breed pakte ook bron-niveaus van een totaal ander,
+        # los bericht over dezelfde coin (bv. een bearish "double top
+        # neckline" uit een oude SHORT-melding opduiken bij een lopende LONG),
+        # exact de klasse bug die list_source_levels_for_message elders in
+        # dit project al voorkomt. Een autonoom signaal (message_id is None,
+        # market_scanner.py) heeft geen bron-bericht, dus geen matched_level
+        # mogelijk — valt terug op in_entry_zone/at_signal_level hierboven.
+        if not in_entry_zone and not at_signal_level and entry["message_id"] is not None:
+            cache_key = (entry["message_id"], coin)
+            if cache_key not in coin_levels:
+                coin_levels[cache_key] = repo.list_source_levels_for_message(entry["message_id"], coin)
+            matched_level = _nearest_level(current_price, entry["atr"], coin_levels[cache_key])
 
         if not in_entry_zone and not at_signal_level and not matched_level:
             continue
