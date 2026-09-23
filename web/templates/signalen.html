@@ -10,6 +10,12 @@
     <a href="/signalen?alles=1" class="{{ 'active' if showing_all }}">Alle</a>
   </div>
 </div>
+{% if not showing_all and entries %}
+<form method="post" action="/signalen/verbergen-alles" class="inline-form"
+      onsubmit="return confirm('Alle {{ entries|length }} open signalen als niet interessant markeren?');">
+  <button type="submit" class="button-link">alles niet interessant</button>
+</form>
+{% endif %}
 <p class="page-intro">
   {% if showing_all %}Alle signalen: open eerst op percentage, afgeronde daarna op datum.{% else %}Open signalen, hoogste percentage eerst.{% endif %}
 </p>

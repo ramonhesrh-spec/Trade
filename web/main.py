@@ -247,6 +247,16 @@ async def dismiss_signal(entry_id: int, alles: bool = False, user: dict = Depend
     return RedirectResponse(url=f"/signalen{'?alles=1' if alles else ''}", status_code=303)
 
 
+@app.post("/signalen/verbergen-alles")
+async def dismiss_all_signals(user: dict = Depends(require_login)):
+    """Verbergt in één keer alle nog open signalen op /signalen ("alles
+    niet interessant"), zie repo.dismiss_all_open_signals_for_user. Landt
+    altijd op de Open-weergave (niet ?alles=1): daar staat na deze actie
+    niets meer open, precies het bedoelde resultaat."""
+    repo.dismiss_all_open_signals_for_user(user["id"])
+    return RedirectResponse(url="/signalen", status_code=303)
+
+
 # ---------------------------------------------------------------------------
 # Login
 # ---------------------------------------------------------------------------

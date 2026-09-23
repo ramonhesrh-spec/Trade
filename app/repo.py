@@ -1190,6 +1190,26 @@ def dismiss_signal_for_user(journal_entry_id: int, user_id: int) -> bool:
         return cursor.rowcount > 0
 
 
+def dismiss_all_open_signals_for_user(user_id: int) -> int:
+    """Verbergt in één keer alle nog open signalen van /signalen voor deze
+    gebruiker ("alles niet interessant") — zelfde regel als
+    dismiss_signal_for_user (alleen dismissed_at, signals blijft ongemoeid),
+    hier toegepast op elke journal_entries-rij die de "niet interessant"-
+    knop nu individueel zou tonen: nog niet verborgen, geen oefentrade, en
+    het gekoppelde signaal nog open (s.auto_outcome IS NULL). Geeft het
+    aantal geraakte rijen terug."""
+    with db.session() as conn:
+        cursor = conn.execute(
+            """UPDATE journal_entries SET dismissed_at = ?
+               WHERE user_id = ? AND dismissed_at IS NULL
+                     AND signal_id IN (
+                         SELECT id FROM signals WHERE auto_outcome IS NULL AND is_practice = 0
+                     )""",
+            (db.now_iso(), user_id),
+        )
+        return cursor.rowcount
+
+
 def list_recent_signals_for_user(user_id: int, limit: int = 1) -> list[dict]:
     """Meest recente ECHTE signalen (geen oefentrade-events) die deze
     gebruiker een logboekregel opleverden, nieuwste eerst. Gebruikt voor
