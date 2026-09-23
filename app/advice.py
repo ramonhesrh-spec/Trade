@@ -5,24 +5,34 @@ al getoond worden."""
 
 
 def build_advice(signal: dict) -> str:
-    # technical_confirmed betekent voor een swing- of patroon-signaal iets
-    # anders (het bewaakte niveau respectievelijk het patroon is bevestigd,
-    # geen 3-van-4-toets), dus het day-trading-advies eronder klopt er niet
-    # voor.
+    # technical_confirmed betekent voor een swing-signaal iets anders (het
+    # bewaakte niveau is bevestigd, geen 3-van-4-toets), dus het
+    # day-trading-advies eronder klopt er niet voor.
     if signal.get("trade_type") == "swing":
         return (
             "Geen automatisch advies voor een bewaakt niveau: beoordeel de "
             "daily- en 4-uur-factoren in de melding zelf, dit is geen "
             "3-van-4-toets zoals bij day trading."
         )
-    if signal.get("trade_type") == "patroon":
+
+    is_pattern = signal.get("trade_type") == "patroon"
+    pattern_name = signal.get("pattern_name") or "onbekend patroon"
+    factor_pct = signal.get("pass_pct")
+
+    # Een patroon-signaal heeft, sinds de factor-toetsing ook op patronen
+    # draait (zie compute_full_confirmation), een echte breakdown in
+    # signal["reason"] i.p.v. de vroegere platte "Patroon: ...". Boven de
+    # helft van de factoren klopt -> citeer die breakdown i.p.v. de
+    # generieke "alle vier factoren"-tekst hieronder, die alleen voor
+    # dagtrading klopt (technical_confirmed staat voor patroon altijd op
+    # 1, zegt dus niets over de factoren zelf).
+    if is_pattern and factor_pct is not None and factor_pct >= 50:
         return (
-            "Geen automatisch advies voor een patroon-signaal "
-            f"({signal.get('pattern_name') or 'onbekend patroon'}): beoordeel de "
-            "nek/lijn en de doorbraak zelf, dit is geen 3-van-4-toets zoals "
-            "bij day trading."
+            f"Patroon ({pattern_name}) wordt ondersteund door de factoren: "
+            f"{signal.get('reason') or 'geen details beschikbaar'}."
         )
-    if signal.get("technical_confirmed"):
+
+    if not is_pattern and signal.get("technical_confirmed"):
         return "Alle vier factoren kloppen, dit is volgens de regels een directe instap."
 
     direction = (signal.get("direction") or "").lower()
@@ -59,6 +69,9 @@ def build_advice(signal: dict) -> str:
         tips.append(f"volume ligt op {volume_ratio:.2f}x het gemiddelde, nog niet overtuigend: wacht op een sterkere beweging")
 
     if not tips:
-        tips.append("niet alle vier factoren kloppen, wacht op een duidelijkere bevestiging voor je instapt")
+        if is_pattern:
+            tips.append(f"niet alle factoren ondersteunen dit patroon ({pattern_name}) nog, beoordeel de nek/lijn zelf voor je instapt")
+        else:
+            tips.append("niet alle vier factoren kloppen, wacht op een duidelijkere bevestiging voor je instapt")
 
     return " Ook: ".join(tips) if len(tips) > 1 else tips[0]
