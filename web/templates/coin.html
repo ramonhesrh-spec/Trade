@@ -79,7 +79,7 @@
       <div class="primary-card-head">
         <span class="badge badge-{{ primary.direction }}">{{ primary.direction }}</span>
         {{ macros.self_detected(primary) }}
-        {% if primary.reason and primary.trade_type not in ('swing', 'patroon') %}<span class="confidence-ratio mono muted">{{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}</span>{% endif %}
+        {% if primary.reason and primary.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}</span>{% endif %}
         {% if open_trades %}<span class="badge badge-status">{{ primary.status }}</span>{% endif %}
       </div>
       <p class="primary-card-meta muted">
@@ -92,7 +92,7 @@
         · {{ "hoog" if primary.confidence == "hoog vertrouwen" else "laag" }} vertrouwen
         · slagingskans {{ primary.success_rate }}%{% if primary.success_sample < 5 %} (weinig data){% endif %}
         {%- endif %}
-        {%- if community_stat and primary.trade_type not in ('swing', 'patroon') %} · {{ community_stat.taken }}/{{ community_stat.total }} gebruikers namen dit{% endif %}
+        {%- if community_stat and primary.trade_type != 'swing' %} · {{ community_stat.taken }}/{{ community_stat.total }} gebruikers namen dit{% endif %}
       </p>
       {% if primary.message_summary %}
       <p class="original-message-summary">“{{ primary.message_summary }}”</p>
