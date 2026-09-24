@@ -2565,10 +2565,37 @@ def upsert_smc_setup(
     procent van de nieuwe zone ligt en werkt die bij, of maakt een nieuwe
     rij aan. alert_sent wordt bij een update nooit teruggezet — dat zou
     de eenmalige 'bouwend'-melding laten herhalen voor een setup die al
-    gemeld is."""
+    gemeld is.
+
+    Daarvóór: dezelfde structuurbreuk + sweep (coin, richting,
+    structure_level, sweep_price) is dezelfde setup, ook als hij al een
+    signaal heeft opgeleverd. Een breuk wordt vaak meerdere cycli op rij
+    opnieuw gezien (de doorbraak-candle blijft een tijd de laatste gesloten
+    30m-candle, of een volgende candle sluit opnieuw onder dezelfde pivot);
+    zonder deze check startte een al voltooide zone dan als nieuwe bouwende
+    rij met een tweede 'bouwend'-melding en later een tweede signaal. Een
+    voltooide rij wordt ongewijzigd teruggegeven (hoort bij zijn signaal),
+    de aanroeper vindt hem dan niet in list_forming_smc_setups en doet
+    niets. Exacte vergelijking is hier veilig: beide niveaus zijn rauwe
+    candle-prijzen van de exchange, geen berekende waarden."""
     now = db.now_iso()
     zone_mid = (zone_low + zone_high) / 2
     with db.session() as conn:
+        same_event = conn.execute(
+            """SELECT id, signal_id FROM smc_setups
+               WHERE coin = ? AND direction = ? AND structure_level = ? AND sweep_price = ?
+               ORDER BY id DESC LIMIT 1""",
+            (coin, direction, structure_level, sweep_price),
+        ).fetchone()
+        if same_event is not None:
+            if same_event["signal_id"] is None:
+                conn.execute(
+                    """UPDATE smc_setups SET zone_low = ?, zone_high = ?, liquidity_target = ?,
+                       updated_at = ? WHERE id = ?""",
+                    (zone_low, zone_high, liquidity_target, now, same_event["id"]),
+                )
+            return same_event["id"]
+
         existing = conn.execute(
             """SELECT id, zone_low, zone_high FROM smc_setups
                WHERE coin = ? AND direction = ? AND signal_id IS NULL""",

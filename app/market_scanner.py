@@ -693,7 +693,11 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         )
         if rejected:
             return existing_setup
-        if not in_zone and passed_without_rejection:
+        # Geen extra in_zone-eis: de candle die door de zone heen sluit
+        # heeft vrijwel altijd zelf een staart in de zone, en rejected en
+        # passed_without_rejection sluiten elkaar al uit (close aan
+        # tegenovergestelde kanten van de zone).
+        if passed_without_rejection:
             repo.delete_smc_setup(existing_setup["id"])
 
     df_30m = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="30m", limit=SMC_ZONE_SEARCH_LOOKBACK_30M)
@@ -745,6 +749,16 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         return None
     liquidity_target_pivot = min(target_pivots, key=lambda p: abs(p.price - untouched_from))
 
+    # Een bouwende setup is pas zinvol zolang de koers nog naar de zone
+    # moet terugtrekken (short: nog eronder, long: nog erboven). Zonder
+    # deze eis kon fase 1 hierboven een setup opruimen omdat de koers door
+    # de zone heen sloot, en maakte deze fase dezelfde zone in dezelfde
+    # cyclus meteen weer aan met alert_sent=0 — een tweede 'bouwt op'-push
+    # voor een zone die net ongeldig was geworden.
+    last_close = float(last_candle["close"])
+    if (direction == "short" and last_close >= zone_low) or (direction == "long" and last_close <= zone_high):
+        return None
+
     setup_id = repo.upsert_smc_setup(
         coin, direction, zone_low, zone_high,
         structure_level=structure_break.broken_pivot.price,
@@ -755,7 +769,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     setups = repo.list_forming_smc_setups()
     setup = next((s for s in setups if s["id"] == setup_id), None)
     if setup is None:
-        return None  # inmiddels al compleet gemaakt door een eerdere cyclus (race, zou niet moeten, defensief)
+        return None  # deze breuk + sweep leverde in een eerdere cyclus al een signaal op (zie upsert_smc_setup)
 
     _, rejected, _ = _smc_last_candle_state(last_candle, zone_low, zone_high, direction)
     if rejected:
