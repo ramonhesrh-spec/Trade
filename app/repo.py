@@ -1471,7 +1471,10 @@ def auto_ignore_opposite_pending(coin: str, direction: str) -> list[dict]:
     Geeft een lijst met username/telegram_chat_id van elke geraakte
     logboekregel terug, zodat de aanroeper die gebruikers kan laten weten
     dat hun kans niet meer actueel is in plaats van dit stil te laten
-    gebeuren.
+    gebeuren. "id" is de user-id van de eigenaar (zo gebruiken alle
+    aanroepers hem voor create_notification), "entry_id" de journaalregel;
+    voorheen was "id" de journaalregel, waardoor de melding bij een andere
+    gebruiker belandde of op de foreign key stukliep.
 
     Beperkt tot day_trading, patroon en smc: deze functie wordt aangeroepen
     vanuit process_day_trading_signal (eigen day-trading kansen),
@@ -1486,7 +1489,8 @@ def auto_ignore_opposite_pending(coin: str, direction: str) -> list[dict]:
     note = f"automatisch genegeerd: nieuwe {direction} melding voor {coin.upper()} maakt dit tegenovergestelde signaal achterhaald"
     with db.session() as conn:
         affected = conn.execute(
-            """SELECT je.id AS id, u.username AS username, u.telegram_chat_id AS telegram_chat_id
+            """SELECT je.id AS entry_id, u.id AS id, u.username AS username,
+                      u.telegram_chat_id AS telegram_chat_id
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id
                JOIN users u ON u.id = je.user_id
@@ -1499,7 +1503,7 @@ def auto_ignore_opposite_pending(coin: str, direction: str) -> list[dict]:
             placeholders = ",".join("?" * len(affected))
             conn.execute(
                 f"UPDATE journal_entries SET status = 'genegeerd', note = ? WHERE id IN ({placeholders})",
-                (note, *[row["id"] for row in affected]),
+                (note, *[row["entry_id"] for row in affected]),
             )
         return [dict(r) for r in affected]
 
@@ -1526,7 +1530,8 @@ def auto_ignore_stale_pending_for_coin(coin: str, exclude_signal_id: int) -> lis
     note = "automatisch genegeerd: nieuwere melding voor dezelfde coin maakt dit signaal achterhaald"
     with db.session() as conn:
         affected = conn.execute(
-            """SELECT je.id AS id, u.username AS username, u.telegram_chat_id AS telegram_chat_id
+            """SELECT je.id AS entry_id, u.id AS id, u.username AS username,
+                      u.telegram_chat_id AS telegram_chat_id
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id
                JOIN users u ON u.id = je.user_id
@@ -1539,7 +1544,7 @@ def auto_ignore_stale_pending_for_coin(coin: str, exclude_signal_id: int) -> lis
             placeholders = ",".join("?" * len(affected))
             conn.execute(
                 f"UPDATE journal_entries SET status = 'genegeerd', note = ? WHERE id IN ({placeholders})",
-                (note, *[row["id"] for row in affected]),
+                (note, *[row["entry_id"] for row in affected]),
             )
         return [dict(r) for r in affected]
 
