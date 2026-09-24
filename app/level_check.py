@@ -170,13 +170,17 @@ def _nearest_level(current_price: float, atr: float, levels: list[dict]) -> Opti
 async def check_pending_signals() -> None:
     """Signalen die nog niet genomen zijn: als de prijs weer terugkomt naar
     de zelf-gedetecteerde betere-entry-zone (suggested_entry_low/high, zie
-    signal_processor.py), naar het niveau waarop het signaal binnenkwam,
+    signal_processor.py), als een sniper-sweep alsnog gebeurt (zie
+    indicators.find_sniper_entry_price) die er bij het aanmaken van het
+    signaal nog niet was, naar het niveau waarop het signaal binnenkwam,
     óf naar een bron niveau uit een gedeelde screenshot (support,
     weerstand, retest), is dat voor day trading vaak het beste
     instapmoment, niet het moment van de eerste melding zelf. Dit is de
     proactieve kant, naast de reactieve verwerking van een nieuw Discord
-    bericht. De entry-zone krijgt voorrang op de andere twee: die zone is
-    expliciet gekozen als beter dan het kale signaalniveau."""
+    bericht. Vier situaties, in deze volgorde van voorrang: de entry-zone
+    wint eerst (expliciet gekozen als beter dan het kale signaalniveau, dus
+    als die al matcht wordt de sniper-check hieronder niet eens uitgevoerd),
+    dan de sniper-trigger, dan het kale signaalniveau, dan het bron niveau."""
     entries = repo.list_pending_entries_with_price()
     logger.info("%d nog niet genomen signalen om te checken", len(entries))
 
@@ -229,18 +233,35 @@ async def check_pending_signals() -> None:
             and entry["suggested_entry_low"] <= current_price <= entry["suggested_entry_high"]
         )
 
-        # Sniper-trigger heeft voorrang op de andere drie situaties hieronder:
-        # als de sweep alsnog gebeurt is dat een preciezere instap dan het
-        # kale signaalniveau of een bron niveau. Alleen relevant als er bij
-        # het aanmaken van het signaal nog geen sniper-treffer was
-        # (entry["sniper_entry_price"] is None, zie repo.list_pending_entries_with_price)
-        # — anders had de allereerste melding het al gemeld. Vereist verse
-        # candles (in tegenstelling tot de rest van deze functie, die alleen
-        # de live prijs nodig heeft), dus gecachet per coin+richting binnen
-        # deze cyclus zodat twee pending signalen op dezelfde coin+richting
-        # niet twee keer Binance raken.
+        # Sniper-trigger heeft voorrang op de resterende twee situaties
+        # hieronder (signaalniveau en bron niveau): als de sweep alsnog
+        # gebeurt is dat een preciezere instap dan die twee. De entry-zone
+        # hierboven wint al eerder als die matcht (dit blok wordt dan
+        # overgeslagen, in_entry_zone is dan True) — dit is dus niet de
+        # hoogste voorrang van alle vier, wel van de resterende drie. Alleen
+        # relevant als er bij het aanmaken van het signaal nog geen
+        # sniper-treffer was (entry["sniper_entry_price"] is None, zie
+        # repo.list_pending_entries_with_price) — anders had de allereerste
+        # melding het al gemeld. Swing blijft buiten scope (spec) en krijgt
+        # hier nooit een sniper_entry_price, dus die uitsluiten voorkomt een
+        # zinloze candle-fetch voor een coin die toch nooit kan kwalificeren.
+        # Zelfde reden voor auto_outcome: een signaal waarvan de uitkomst al
+        # vaststaat (zie check_signal_outcomes) is niet meer relevant, en de
+        # sniper-check is — anders dan de drie bestaande situaties, die aan
+        # het eigen niveau van het signaal vastzitten — een generieke "is er
+        # ergens een verse sweep" check, dus veel gevoeliger voor een storend
+        # vals-positief seintje op een oud, al afgesloten signaal. Vereist
+        # verse candles (in tegenstelling tot de rest van deze functie, die
+        # alleen de live prijs nodig heeft), dus gecachet per coin+richting
+        # binnen deze cyclus zodat twee pending signalen op dezelfde
+        # coin+richting niet twee keer Binance raken.
         sniper_hit: Optional[tuple[float, str]] = None
-        if not in_entry_zone and entry["sniper_entry_price"] is None:
+        if (
+            not in_entry_zone
+            and entry["sniper_entry_price"] is None
+            and entry["trade_type"] != "swing"
+            and entry["auto_outcome"] is None
+        ):
             cache_key = (coin, entry["direction"])
             if cache_key not in coin_sniper:
                 try:

@@ -1134,11 +1134,20 @@ def update_signal(signal_id: int, data: dict) -> None:
         "suggested_entry_low", "suggested_entry_high",
     ]
     values = [data.get(f) for f in fields]
+    # sniper_entry_price/sniper_reason zijn bewust STICKY (COALESCE) in plaats
+    # van een kale overschrijving zoals de rest: een latere ververs-cyclus
+    # waarin de herberekening opnieuw None oplevert (bv. de sweep is buiten
+    # het 3-candle-verse-venster gevallen) mag een al gevonden sniper niet
+    # terugzetten naar NULL — dat zou zowel de kaart laten verdwijnen als
+    # level_check.py's proactieve check laten denken dat er nog nooit een
+    # sniper gevonden is, met een dubbele melding tot gevolg.
     with db.session() as conn:
         conn.execute(
-            f"""UPDATE signals SET {", ".join(f"{f} = ?" for f in fields)}
+            f"""UPDATE signals SET {", ".join(f"{f} = ?" for f in fields)},
+                sniper_entry_price = COALESCE(?, sniper_entry_price),
+                sniper_reason = COALESCE(?, sniper_reason)
                 WHERE id = ?""",
-            (*values, signal_id),
+            (*values, data.get("sniper_entry_price"), data.get("sniper_reason"), signal_id),
         )
 
 
@@ -1776,6 +1785,7 @@ def list_pending_entries_with_price() -> list[dict]:
                       s.suggested_entry_low AS suggested_entry_low,
                       s.suggested_entry_high AS suggested_entry_high,
                       s.sniper_entry_price AS sniper_entry_price,
+                      s.auto_outcome AS auto_outcome,
                       s.trade_type AS trade_type, s.pattern_name AS pattern_name,
                       s.pass_pct AS pass_pct, s.hard_gates_ok AS hard_gates_ok,
                       u.username AS username, u.telegram_chat_id AS telegram_chat_id,
