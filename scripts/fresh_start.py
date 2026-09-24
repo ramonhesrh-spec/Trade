@@ -1,5 +1,6 @@
-"""Wist alle berichten, signalen, SMC-setups, bronniveaus, eigen getekende
-lijnen en logboekregels, voor een frisse start. Laat accounts, portfolio-instellingen,
+"""Wist alle berichten (met hun per-coin-uitkomsten), signalen, SMC-setups,
+bronniveaus, bewaakte swing-niveaus, eigen getekende lijnen en logboekregels,
+voor een frisse start. Laat accounts, portfolio-instellingen,
 de gevolgde coinlijst en de website-instellingen ongemoeid.
 
 Zet voor de zekerheid crypto-bot en crypto-web stil (sudo systemctl stop
@@ -35,17 +36,20 @@ def main() -> None:
             "journal_entries": count(conn, "journal_entries"),
             "smc_setups": count(conn, "smc_setups"),
             "signals": count(conn, "signals"),
+            "swing_watches": count(conn, "swing_watches"),
             "source_levels": count(conn, "source_levels"),
+            "message_coin_results": count(conn, "message_coin_results"),
             "trendlines": count(conn, "trendlines"),
             "messages": count(conn, "messages"),
         }
 
     print("Dit wordt permanent verwijderd:")
-    print(f"  {counts['messages']} berichten")
+    print(f"  {counts['messages']} berichten ({counts['message_coin_results']} per-coin-uitkomsten)")
     print(f"  {counts['signals']} signalen")
-    print(f"  {counts['smc_setups']} SMC-setups (bouwend en afgerond)")
+    print(f"  {counts['smc_setups']} SMC-setups (bouwend, afgerond en vervallen)")
     print(f"  {counts['journal_entries']} logboekregels (van alle gebruikers samen)")
     print(f"  {counts['source_levels']} bronniveaus")
+    print(f"  {counts['swing_watches']} bewaakte swing-niveaus")
     print(f"  {counts['trendlines']} zelf getekende lijnen")
     print()
     print("Accounts, portfolio-bedragen, risicopercentages, Telegram chat ID's, "
@@ -73,7 +77,13 @@ def main() -> None:
                 # anders faalt elke poging met een IntegrityError.
                 conn.execute("DELETE FROM smc_setups")
                 conn.execute("DELETE FROM signals")
+                # Zelfde reden: swing_watches verwijst naar source_levels en
+                # messages, message_coin_results naar messages (zonder
+                # cascade). Die laatste heeft elk verwerkt bericht, dus
+                # zonder deze regel faalde het script altijd.
+                conn.execute("DELETE FROM swing_watches")
                 conn.execute("DELETE FROM source_levels")
+                conn.execute("DELETE FROM message_coin_results")
                 conn.execute("DELETE FROM trendlines")
                 conn.execute("DELETE FROM messages")
             break
