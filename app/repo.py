@@ -2597,8 +2597,13 @@ def user_confirmed(
 
 def winrate_for_user(user_id: int) -> dict:
     """Winrate puur op basis van het automatische trackrecord: van de
-    signalen die voor DEZE gebruiker (zijn eigen drempel) bevestigd waren
-    en waarvan de uitkomst al vaststaat, hoeveel raakten take-profit."""
+    signalen die voor DEZE gebruiker (zijn eigen drempel EN, als hij
+    factoren verplicht heeft gesteld, die factoren) bevestigd waren en
+    waarvan de uitkomst al vaststaat, hoeveel raakten take-profit. Zonder
+    required_factors hier mee te wegen zou dit cijfer iets anders meten
+    dan wat de gebruiker daadwerkelijk als melding krijgt (zie
+    _fanout_confirmed_signal/_apply_user_confirmed, die het al wel
+    meewegen)."""
     with db.session() as conn:
         user_row = conn.execute(
             "SELECT confirm_threshold_pct FROM users WHERE id = ?", (user_id,)
@@ -2607,14 +2612,18 @@ def winrate_for_user(user_id: int) -> dict:
             raise ValueError(f"Onbekende gebruiker: {user_id}")
         threshold = user_row["confirm_threshold_pct"]
         rows = conn.execute(
-            """SELECT pass_pct, hard_gates_ok, auto_outcome
+            """SELECT pass_pct, hard_gates_ok, auto_outcome, reason
                FROM signals
                WHERE is_practice = 0 AND pass_pct IS NOT NULL AND trade_type != 'patroon'"""
         ).fetchall()
 
+    required_factors = list_required_factors(user_id)
     total = wins = losses = open_count = 0
     for row in rows:
-        if not user_confirmed(row["pass_pct"], bool(row["hard_gates_ok"]), threshold):
+        if not user_confirmed(
+            row["pass_pct"], bool(row["hard_gates_ok"]), threshold,
+            reason=row["reason"] or "", required_factors=required_factors,
+        ):
             continue
         # Een "vervallen" signaal (te oud geworden zonder ooit de take-profit
         # of stop-loss te raken, zie level_check.SIGNAL_MAX_AGE_DAYS) is geen
