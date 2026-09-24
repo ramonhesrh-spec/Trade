@@ -223,6 +223,12 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     winrate = repo.winrate_stats(user["id"])
     pattern_winrate = repo.pattern_winrate_stats()
     entries = _add_signal_context(entries, winrate, pattern_winrate)
+    # Zonder deze aanroep blijft entry["user_confirmed"] ongezet en leest
+    # macros.signal_card dat als Undefined (falsy), dus is-rejected voor
+    # elk SMC-signaal ongeacht de smc-tak in _apply_user_confirmed hierboven
+    # — zelfde patroon als signalen_page/dashboard hieronder.
+    required_factors = repo.list_required_factors(user["id"])
+    _apply_user_confirmed(entries, user["confirm_threshold_pct"], required_factors)
     entries.sort(key=lambda e: e["created_at"], reverse=True)
     return templates.TemplateResponse(request, "smc.html", {
         "user": user,
@@ -611,10 +617,12 @@ def _add_signal_context(entries: list[dict], winrate: dict, pattern_winrate: dic
     kansberekening die het gepoolde factor-percentage van dit signaal
     combineert met de systeembrede historische winrate van dit
     patroontype (repo.pattern_winrate_stats). Swing heeft geen van
-    beide (zie de spec), dus geen geleende statistiek."""
+    beide (zie de spec), dus geen geleende statistiek. SMC volgt hetzelfde
+    precedent als swing (zie de spec): geen kansberekening, altijd
+    gemeld, dus ook hier geen geleende statistiek."""
     for entry in entries:
         entry["advice"] = advice_module.build_advice(entry)
-        if entry.get("trade_type") == "swing":
+        if entry.get("trade_type") in ("swing", "smc"):
             entry["success_rate"] = None
             entry["success_sample"] = None
             continue
@@ -635,17 +643,22 @@ def _apply_user_confirmed(entries: list[dict], threshold_pct: float, required_fa
     achter macros.signal_card's groene rand. Swing is altijd bevestigd
     (geen gepoold percentage, een echte terugveer op een bewaakt niveau) —
     required_factors is daar niet van toepassing (zie de spec), dus die
-    tak geeft hem simpelweg niet door. Dagtrading en patroon tellen pas
-    als bevestigd zodra hun EIGEN percentage (pass_pct resp. success_rate/
-    kansberekening) de drempel van deze gebruiker haalt EN (als de
-    gebruiker zelf factoren verplicht heeft gesteld) die factoren ✓ staan
-    in de breakdown — voorheen kreeg elk patroon-signaal hier
-    onvoorwaardelijk True, dus een kansberekening van 30% kreeg dezelfde
-    groene rand als een kansberekening van 90%, amper onderscheid tussen
-    een echte kans en ruis. Moet NA _add_signal_context draaien: patroon se
-    success_rate bestaat pas dan."""
+    tak geeft hem simpelweg niet door. SMC volgt hetzelfde precedent als
+    swing (zie de spec: geen kansberekening, altijd melden, hard_gates_ok=1
+    al bij het aanmaken vastgezet) — pass_pct is voor smc bewust altijd
+    None (market_scanner.py zet het nooit), dus zonder deze tak zou
+    repo.user_confirmed(None, ...) hier altijd False geven en elk
+    SMC-signaal permanent als afgewezen (is-rejected) tonen. Dagtrading en
+    patroon tellen pas als bevestigd zodra hun EIGEN percentage (pass_pct
+    resp. success_rate/kansberekening) de drempel van deze gebruiker haalt
+    EN (als de gebruiker zelf factoren verplicht heeft gesteld) die
+    factoren ✓ staan in de breakdown — voorheen kreeg elk patroon-signaal
+    hier onvoorwaardelijk True, dus een kansberekening van 30% kreeg
+    dezelfde groene rand als een kansberekening van 90%, amper onderscheid
+    tussen een echte kans en ruis. Moet NA _add_signal_context draaien:
+    patroon se success_rate bestaat pas dan."""
     for entry in entries:
-        if entry["trade_type"] == "swing":
+        if entry["trade_type"] in ("swing", "smc"):
             entry["user_confirmed"] = True
         elif entry["trade_type"] == "patroon":
             entry["user_confirmed"] = repo.user_confirmed(

@@ -47,6 +47,8 @@
 <p class="muted reason-legend">Twee losse toetsen, geen gecombineerd cijfer: dit is nog niet gevalideerd op deze tijdshorizon zoals de day-trading-toets dat wel is.</p>
 {% elif entry.trade_type == "patroon" %}
 <p class="muted reason-legend">Autonoom gedetecteerd door HesPulse, zonder doorgestuurd bericht. De vinkjes hieronder zijn de gepoolde factoren die deze kans ondersteunen of tegenspreken; het percentage hierboven combineert dat met de historische winrate van dit type.</p>
+{% elif entry.trade_type == "smc" %}
+<p class="muted reason-legend">Structuurbreuk, liquidity sweep en een terugtrek-zone zijn hierboven de feitelijke onderbouwing — geen los gemeten technische factoren zoals bij day-trading.</p>
 {% else %}
 <p class="muted reason-legend">De vinkjes hieronder zijn nu gemeten (RSI, volume, trend, momentum). De slagingskans hierboven is een inschatting op basis van eerdere trades, geen garantie voor deze trade.</p>
 {% endif %}
