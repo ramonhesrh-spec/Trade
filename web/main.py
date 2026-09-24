@@ -211,6 +211,26 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     })
 
 
+@app.get("/smc")
+async def smc_page(request: Request, user: dict = Depends(require_login)):
+    """SMC liquidity-setups: bouwende setups bovenaan (de zone om een
+    limit order op te zetten), afgeronde signalen daaronder in dezelfde
+    stijl als /signalen. Afgeronde signalen verschijnen ook gewoon op de
+    bestaande /signalen en het dashboard (zie de spec, Component 6) —
+    deze pagina is een extra, gerichte weergave, geen aparte wereld."""
+    forming = repo.list_forming_smc_setups()
+    entries = [e for e in repo.list_signalen_for_user(user["id"]) if e["trade_type"] == "smc"]
+    winrate = repo.winrate_stats(user["id"])
+    pattern_winrate = repo.pattern_winrate_stats()
+    entries = _add_signal_context(entries, winrate, pattern_winrate)
+    entries.sort(key=lambda e: e["created_at"], reverse=True)
+    return templates.TemplateResponse(request, "smc.html", {
+        "user": user,
+        "forming": forming,
+        "entries": entries,
+    })
+
+
 @app.post("/signalen/{entry_id}/verbergen")
 async def dismiss_signal(entry_id: int, alles: bool = False, user: dict = Depends(require_login)):
     """Verbergt een signaal van /signalen voor deze gebruiker ("niet

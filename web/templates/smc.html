@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}SMC — HesPulse{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h2>SMC liquidity setups</h2>
+</div>
+<p class="page-intro">Structuurbreuk, liquidity sweep, terugtrek in een fair value gap of order block, afwijzing.</p>
+
+<section class="card" style="--i: 0">
+  <h3>Bouwende setups</h3>
+  {% if not forming %}
+  <p class="muted empty">Nog geen bouwende setup gevonden.</p>
+  {% else %}
+  {% for setup in forming %}
+  <div class="smc-setup-card">
+    <div class="smc-setup-head">
+      <strong>{{ setup.coin }}</strong>
+      <span class="muted">{{ setup.direction }}</span>
+    </div>
+    <div class="smc-setup-zone">Zone {{ "%.4f"|format(setup.zone_low) }} - {{ "%.4f"|format(setup.zone_high) }}</div>
+    <details class="confidence-detail js-accordion">
+      <summary>Waarom</summary>
+      <p class="muted">
+        Structuur brak op {{ "%.4f"|format(setup.structure_level) }},
+        sweep op {{ "%.4f"|format(setup.sweep_price) }},
+        doel bij liquidity {{ "%.4f"|format(setup.liquidity_target) }}.
+      </p>
+    </details>
+  </div>
+  {% endfor %}
+  {% endif %}
+</section>
+
+<section class="card" style="--i: 1">
+  <h3>Afgeronde signalen</h3>
+  {% if not entries %}
+  <p class="muted empty">Nog geen afgeronde SMC-signalen.</p>
+  {% else %}
+  <div class="signal-list">
+    {% for entry in entries %}
+    {{ macros.signal_card(entry, dismissible=False, showing_all=True) }}
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+{% endblock %}
