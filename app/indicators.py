@@ -1125,6 +1125,37 @@ CONFIRM_THRESHOLD = 0.6
 RSI_OVERBOUGHT = 75
 RSI_OVERSOLD = 25
 
+# Alle 18 factoren die confirms_direction in de uitgebreide toetsing
+# meeweegt (dus zonder Uitgerektheid, BTC-trend en Daily-trend — die
+# drie zijn universele harde eisen, niet per gebruiker uit te zetten,
+# zie docs/superpowers/specs/2026-09-24-verplichte-factoren-design.md).
+# Enige bron van waarheid voor zowel de validatie in de opslaan-route
+# (web/main.py::update_required_factors_setting) als de weergave op
+# /account — een naam hier die niet letterlijk overeenkomt met wat een
+# check-functie teruggeeft, betekent stilzwijgend "deze factor komt
+# nooit voor in een breakdown, dus faalt altijd fail-closed" (zie
+# repo.user_confirmed/_parse_factor_results).
+TOGGLEABLE_FACTORS: list[tuple[str, str]] = [
+    ("Trend", "EMA9 t.o.v. EMA21 volgt de richting van de trade"),
+    ("Momentum", "MACD-lijn t.o.v. signaallijn volgt de richting"),
+    ("RSI", "Niet al te extreem overbought/oversold tegen de richting in"),
+    ("Volume", "Minstens gemiddeld handelsvolume, geen dunne markt"),
+    ("Trendsterkte", "ADX sterk genoeg en wijst de juiste kant op"),
+    ("Volatiliteit", "Prijsbeweging (ATR) trekt niet samen, markt leeft"),
+    ("Volume-percentiel", "Huidig volume zit hoog genoeg t.o.v. recente historie"),
+    ("RSI daily", "RSI op dagniveau bevestigt, niet extreem tegen de richting in"),
+    ("Premium/discount", "Entry in de goedkope (long) of dure (short) helft van de recente range"),
+    ("Premium/discount (dag)", "Zelfde, op dagniveau — een sterker signaal"),
+    ("Liquidity sweep", "Recente stop-hunt (pen door een niveau, direct terug) in de goede richting"),
+    ("Liquidity sweep (dag)", "Zelfde, op dagniveau"),
+    ("1u bevestiging", "De trend op het 1-uur-timeframe bevestigt de richting"),
+    ("RSI 1u", "RSI op 1 uur bevestigt, niet extreem"),
+    ("Divergentie", "Geen waarschuwende afwijking tussen prijs en RSI"),
+    ("Candlepatroon", "Een herkenbaar candlestick-patroon ondersteunt de richting"),
+    ("Liquiditeit", "Genoeg 24u-handelsvolume om in en uit te kunnen zonder de prijs te bewegen"),
+    ("Steun/weerstand", "Een bevestigde terugveer op een zelf-gedetecteerde zone"),
+]
+
 
 def basic_factors(direction: str, ind: Indicators) -> list[tuple[str, bool, str]]:
     """De vijf basisfactoren (trend, momentum, RSI, volume, uitgerektheid)

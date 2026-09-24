@@ -171,6 +171,20 @@ CREATE TABLE IF NOT EXISTS muted_coins (
     UNIQUE(user_id, coin)
 );
 
+-- Gebruikers kunnen bepaalde technische factoren als verplicht instellen:
+-- één of meer factoren uit TOGGLEABLE_FACTORS in app/indicators.py.
+-- Een signaal telt voor deze gebruiker pas als bevestigd als zowel de
+-- universele harde eisen (Uitgerektheid, BTC-trend, Daily-trend) kloppen
+-- ÉN de gebruiker's eigen vereiste factoren ALLEMAAL kloppen.
+CREATE TABLE IF NOT EXISTS user_required_factors (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    factor_name TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(user_id, factor_name)
+);
+CREATE INDEX IF NOT EXISTS idx_user_required_factors_user ON user_required_factors(user_id);
+
 -- Verwerkte day trading signalen: gedeelde technische toetsing. Objectief,
 -- hetzelfde voor iedereen die het dashboard gebruikt.
 CREATE TABLE IF NOT EXISTS signals (
