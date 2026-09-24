@@ -347,7 +347,7 @@ html.page-transition-out body { opacity: 0; transform: translateY(-4px); }
   .topbar { padding: max(10px, env(safe-area-inset-top)) 14px 8px; }
   .brand-logo { height: 20px; width: 20px; }
   .topbar .brand span { font-size: 14px; }
-  .topbar nav { gap: 14px; margin-top: 8px; }
+  .topbar nav { gap: 8px 14px; margin-top: 8px; flex-wrap: wrap; }
   .logout-form { gap: 8px; }
   .logout-form span.muted { display: none; }
   .logout-form button { padding: 5px 10px; font-size: 12px; }
