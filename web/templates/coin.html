@@ -88,6 +88,8 @@
         · bewaakt niveau bevestigd
         {%- elif primary.trade_type == 'patroon' %}
         · patroon bevestigd: {{ primary.pattern_name }}
+        {%- elif primary.trade_type == 'smc' %}
+        · SMC-setup: structuurbreuk + sweep, afwijzing in de zone
         {%- else %}
         · {{ "hoog" if primary.confidence == "hoog vertrouwen" else "laag" }} vertrouwen
         · slagingskans {{ primary.success_rate }}%{% if primary.success_sample < 5 %} (weinig data){% endif %}
