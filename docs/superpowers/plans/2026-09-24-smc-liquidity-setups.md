@@ -653,10 +653,24 @@ def delete_smc_setup(setup_id: int) -> None:
 
 - [ ] **Step 3: Scratch-DB round-trip test**
 
+`complete_smc_setup` koppelt aan een `signal_id` die als foreign key naar
+`signals(id)` wijst (`app/schema.sql`), en `app/db.py` zet `PRAGMA
+foreign_keys=ON` op elke connectie — een niet-bestaand `signal_id` breekt
+dus met een `IntegrityError`. De test maakt daarom eerst een echte,
+minimale `signals`-rij aan via `repo.insert_signal` (de kolommen die geen
+default hebben in `signals` zijn NOT NULL: `technical_confirmed`,
+`hard_gates_ok`, `is_practice`, `confidence` — al het andere mag `None`
+blijven).
+
 ```bash
 DATABASE_PATH=/tmp/scratch_smc_task3.db python3 -c "
 from app import db, repo
 db.init_db()
+
+real_signal_id = repo.insert_signal({
+    'coin': 'BTC', 'direction': 'short', 'category': 'day_trading', 'price': 60000.0,
+    'technical_confirmed': 1, 'hard_gates_ok': 1, 'is_practice': 0, 'confidence': 'test',
+})
 
 # Nieuwe setup aanmaken
 sid = repo.upsert_smc_setup('BTC', 'short', 60000.0, 60500.0, 61000.0, 61200.0, 58000.0)
@@ -681,7 +695,7 @@ assert sid3 != sid
 assert len(repo.list_forming_smc_setups()) == 2
 
 # Compleet maken -- verdwijnt uit forming
-repo.complete_smc_setup(sid, signal_id=999)
+repo.complete_smc_setup(sid, signal_id=real_signal_id)
 forming_after = repo.list_forming_smc_setups()
 assert len(forming_after) == 1 and forming_after[0]['id'] == sid3
 
