@@ -628,6 +628,156 @@ async def _find_chart_pattern_candidate(
     }
 
 
+SMC_ZONE_SEARCH_LOOKBACK_30M = 60  # 30m-candles, ongeveer anderhalve dag
+
+
+def _smc_last_candle_state(last_candle, zone_low: float, zone_high: float, direction: str) -> tuple[bool, bool, bool]:
+    """Bepaalt voor één 15m-candle en één bouwende zone drie onafhankelijke
+    toestanden: (in_zone, rejected, passed_without_rejection).
+    in_zone: de candle raakte de zone (wick of volledige overlap).
+    rejected: de candle raakte de zone EN sloot er weer buiten aan de
+    kant die de setup ongeldig maakt voor voortzetting maar geldig maakt
+    als entry-trigger (short: sluit onder zone_low, long: sluit boven
+    zone_high) - dit is de signaal-trigger uit Task 5.
+    passed_without_rejection: het SPIEGELBEELD van rejected, niet
+    hetzelfde teken. Een short-zone ligt BOVEN de prijs die er van
+    onderaf naartoe beweegt (na de bearish structuurbreuk) — 'voorbij
+    zonder afwijzing' betekent dus dat de candle DOOR de top van de zone
+    brak (close boven zone_high) zonder ooit een rejectie-close onder
+    zone_low te laten zien: de supply hield niet stand, de setup is
+    achterhaald. Long is het spiegelbeeld (close onder zone_low, door de
+    bodem heen). Vóórdat de zone ooit bereikt is — bijvoorbeeld een
+    short-setup waarvan de laatste close nog onder zone_low ligt, op weg
+    naar boven — is dit nadrukkelijk GEEN 'passed': dat zou een net
+    aangemaakte, nog nooit geraakte setup meteen weer weggooien (de bug
+    die deze functie's test in Step 3b dichttimmert)."""
+    in_zone = (
+        zone_low <= last_candle["low"] <= zone_high
+        or zone_low <= last_candle["high"] <= zone_high
+        or (last_candle["low"] <= zone_low and last_candle["high"] >= zone_high)
+    )
+    rejected = in_zone and (
+        (direction == "short" and last_candle["close"] < zone_low) or
+        (direction == "long" and last_candle["close"] > zone_high)
+    )
+    passed_without_rejection = (
+        (direction == "short" and last_candle["close"] > zone_high) or
+        (direction == "long" and last_candle["close"] < zone_low)
+    )
+    return in_zone, rejected, passed_without_rejection
+
+
+async def _check_smc_setup(coin: str) -> Optional[dict]:
+    """SMC/ICT-liquidity-setup: structuurbreuk + sweep op 30m, terugtrek
+    naar een FVG/order-block-overlap op 15m. Volledig autonoom, los van
+    de drie bestaande structurele detectoren (uitbraak+terugtest,
+    trendlijn+terugtest, patroon) en van hun top-3-per-cyclus-cap — zie
+    de Global Constraints in dit plan. Geeft de smc_setups-rij terug
+    zodra de zone geraakt EN afgewezen is (Task 5 maakt daar het echte
+    signaal van), None in elk ander geval (geen structuurbreuk, geen
+    sweep, geen confluence-zone, of wel een bouwende setup maar nog geen
+    afwijzing).
+
+    Fase 1: bestaande bouwende setups voor deze coin tegen de huidige
+    laatste 15m-candle houden, ONAFHANKELIJK van of er deze cyclus een
+    nieuwe structuurbreuk gevonden wordt (zie de ontwerptoelichting
+    hierboven de functie-docstring van deze taak). Fase 2: pas daarna
+    zoeken naar een nieuwe breuk."""
+    df_15m = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="15m")
+    last_candle = df_15m.iloc[-1]
+
+    existing = [s for s in repo.list_forming_smc_setups() if s["coin"] == coin]
+    for existing_setup in existing:
+        in_zone, rejected, passed_without_rejection = _smc_last_candle_state(
+            last_candle, existing_setup["zone_low"], existing_setup["zone_high"], existing_setup["direction"],
+        )
+        if rejected:
+            return existing_setup
+        if not in_zone and passed_without_rejection:
+            repo.delete_smc_setup(existing_setup["id"])
+
+    df_30m = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="30m", limit=SMC_ZONE_SEARCH_LOOKBACK_30M)
+    structure_break = indicators.find_structure_break(df_30m)
+    if structure_break is None:
+        return None
+    direction = structure_break.direction
+
+    # Een nieuwe breuk in de TEGENGESTELDE richting van een bestaande
+    # bouwende setup maakt die setup achterhaald (de markt heeft zijn
+    # structuur omgedraaid voordat de oude zone geraakt werd).
+    for existing_setup in existing:
+        if existing_setup["direction"] != direction:
+            repo.delete_smc_setup(existing_setup["id"])
+
+    sweep = indicators.find_liquidity_sweep_before_break(df_30m, structure_break)
+    if sweep is None:
+        return None
+
+    fvgs = indicators.find_fair_value_gaps(df_15m, direction)
+    order_blocks = indicators.find_order_blocks(df_15m, direction)
+    zone = indicators.find_confluence_zone(fvgs, order_blocks)
+    if zone is None:
+        return None
+    zone_low, zone_high = zone
+
+    # Liquidity-doel: de eerstvolgende tegengestelde pivot voorbij de
+    # zone, op hetzelfde 30m-venster als de structuurbreuk zelf (dezelfde
+    # bron als structure_level en sweep_price, geen extra candle-fetch).
+    target_kind = "high" if direction == "long" else "low"
+    target_pivots = [
+        p for p in indicators._find_pivots(df_30m)
+        if p.kind == target_kind and (
+            (direction == "long" and p.price > zone_high) or
+            (direction == "short" and p.price < zone_low)
+        )
+    ]
+    if not target_pivots:
+        return None
+    # Dichtstbijzijnde tegengestelde pivot voorbij de zone: de eerste
+    # liquidity die de prijs waarschijnlijk gaat opzoeken, niet een verre.
+    liquidity_target_pivot = min(
+        target_pivots,
+        key=lambda p: abs(p.price - (zone_high if direction == "long" else zone_low)),
+    )
+
+    setup_id = repo.upsert_smc_setup(
+        coin, direction, zone_low, zone_high,
+        structure_level=structure_break.broken_pivot.price,
+        sweep_price=sweep.price,
+        liquidity_target=liquidity_target_pivot.price,
+    )
+
+    setups = repo.list_forming_smc_setups()
+    setup = next((s for s in setups if s["id"] == setup_id), None)
+    if setup is None:
+        return None  # inmiddels al compleet gemaakt door een eerdere cyclus (race, zou niet moeten, defensief)
+
+    _, rejected, _ = _smc_last_candle_state(last_candle, zone_low, zone_high, direction)
+    if rejected:
+        return setup
+
+    if not setup["alert_sent"]:
+        title = f"{push_notify.coin_symbol(coin)} {coin}, SMC-setup bouwt op"
+        body = (
+            f"Structuur + sweep gezien, zone {zone_low:.4f}-{zone_high:.4f}. "
+            f"Zet je limit order klaar."
+        )
+        for user in repo.list_users():
+            quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+            try:
+                await push_notify.send_push(user["id"], title, body, "/smc", silent=quiet)
+            except Exception:
+                logger.exception("SMC-bouwend-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+        repo.mark_smc_alert_sent(setup_id)
+    return None
+
+
+async def _complete_smc_setup(coin: str, setup: dict) -> None:
+    """Placeholder voor Task 4's eigen verificatie — Task 5 vervangt dit
+    door de echte signaal-aanmaak en meldingslogica."""
+    logger.info("SMC-setup compleet voor %s (id=%s), signaal-aanmaak volgt in Task 5", coin, setup["id"])
+
+
 async def scan_market() -> None:
     if not repo.is_market_scan_enabled():
         logger.info("Marktscan staat uit (noodrem), niets gedaan")
@@ -706,6 +856,13 @@ async def scan_market() -> None:
             pattern_candidate = await _find_chart_pattern_candidate(coin, df, ind, btc_divergence_direction)
             if pattern_candidate:
                 structural.append(pattern_candidate)
+
+            try:
+                smc_setup = await _check_smc_setup(coin)
+                if smc_setup:
+                    await _complete_smc_setup(coin, smc_setup)
+            except Exception:
+                logger.exception("SMC-check voor %s is mislukt, ga door met de rest van de cyclus", coin)
 
             by_direction: dict[str, list[dict]] = {}
             for candidate in structural:
