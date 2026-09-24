@@ -256,6 +256,24 @@
       <p class="muted" style="margin: 6px 0 0; font-size: 12px;">Normaal en Streng doen nu hetzelfde: de uitgebreide toetsing staat nog uit, zie /uitleg.</p>
       {% endif %}
     </form>
+    <details class="stats-collapse js-accordion" style="margin-top: 12px;">
+      <summary class="stats-summary">Belangrijke factoren</summary>
+      <p class="muted" style="margin: 8px 0 10px; font-size: 12.5px;">
+        Vink een factor aan als die voor jou verplicht is: staat hij ✗ in een
+        signaal, dan telt het voor jou nooit als bevestigd, ongeacht het
+        percentage. Niet aangevinkt telt gewoon mee in het percentage zoals nu.
+      </p>
+      <form action="/instellingen/factoren" method="post" class="required-factors-form">
+        {% for name, uitleg in toggleable_factors %}
+        <label class="factor-toggle">
+          <input type="checkbox" name="factoren" value="{{ name }}"{% if name in user_required_factors %} checked{% endif %}>
+          <span class="factor-toggle-name">{{ name }}</span>
+          <span class="muted factor-toggle-uitleg">{{ uitleg }}</span>
+        </label>
+        {% endfor %}
+        <button type="submit">Opslaan</button>
+      </form>
+    </details>
   </div>
 </section>
 {% if heatmap_weeks %}

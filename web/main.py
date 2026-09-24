@@ -1010,6 +1010,8 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
         "onboarding_complete": onboarding_complete,
         "market_scan_enabled": repo.is_market_scan_enabled(),
         "advanced_factors_enabled": config.ENABLE_ADVANCED_FACTORS,
+        "toggleable_factors": indicators.TOGGLEABLE_FACTORS,
+        "user_required_factors": repo.list_required_factors(user["id"]),
         "entries": entries,
         "open_entries": open_entries,
         "taken_entries": taken_entries,
@@ -1770,6 +1772,23 @@ async def update_confirm_threshold_setting(
         # preset die nog niet bestaat) mag nooit crashen, negeer stil.
         return RedirectResponse(url="/account", status_code=303)
     repo.update_confirm_threshold(user["id"], CONFIRM_THRESHOLD_PRESETS[preset])
+    return RedirectResponse(url="/account", status_code=303)
+
+
+@app.post("/instellingen/factoren")
+async def update_required_factors_setting(
+    factoren: list[str] = Form([]),
+    user: dict = Depends(require_login),
+):
+    # Nooit ruwe formulierinvoer direct opslaan: alleen namen uit de
+    # vaste TOGGLEABLE_FACTORS-lijst zijn geldig, geknoei met het
+    # formulier (of een verouderde factornaam) wordt stil genegeerd.
+    # Ook dedupliceren: repo.set_required_factors doet een kale INSERT
+    # per naam tegen een UNIQUE-constraint, dus een dubbele waarde in de
+    # formulierinvoer zou een IntegrityError geven.
+    valid_names = {name for name, _ in indicators.TOGGLEABLE_FACTORS}
+    factoren = list(dict.fromkeys(f for f in factoren if f in valid_names))
+    repo.set_required_factors(user["id"], factoren)
     return RedirectResponse(url="/account", status_code=303)
 
 
