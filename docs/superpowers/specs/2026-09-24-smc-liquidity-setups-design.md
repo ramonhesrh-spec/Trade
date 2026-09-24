@@ -3,7 +3,9 @@
 > **Noot na implementatie.** Een paar namen uit dit ontwerp bestaan niet
 > meer in de code: `delete_stale_smc_setups(coin, keep_ids)` werd
 > `delete_smc_setup(setup_id)` (één rij tegelijk, zodat een bouwende setup
-> meerdere cycli blijft bestaan), en `_find_smc_candidate` /
+> meerdere cycli blijft bestaan), later `invalidate_smc_setup(setup_id)`
+> (markeert met `invalidated_at` i.p.v. te verwijderen, zodat dezelfde
+> breuk + sweep niet als nieuwe setup terugkomt), en `_find_smc_candidate` /
 > `_candidate_score` werden `_check_smc_setup` + `_complete_smc_setup`
 > (SMC dingt niet mee in de structurele top-3). Het implementatieplan
 > `docs/superpowers/plans/2026-09-24-smc-liquidity-setups.md` en de code

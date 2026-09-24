@@ -2565,6 +2565,7 @@ ZONE_DEDUP_PCT = 0.3  # procent van de zone-middenprijs, geen ATR (zie de spec)
 def upsert_smc_setup(
     coin: str, direction: str, zone_low: float, zone_high: float,
     structure_level: float, sweep_price: float, liquidity_target: float,
+    seen_until: Optional[str] = None,
 ) -> int:
     """Vindt een bestaande bouwende setup (signal_id IS NULL) voor deze
     coin+richting waarvan de zone-middenprijs binnen ZONE_DEDUP_PCT
@@ -2580,31 +2581,39 @@ def upsert_smc_setup(
     30m-candle, of een volgende candle sluit opnieuw onder dezelfde pivot);
     zonder deze check startte een al voltooide zone dan als nieuwe bouwende
     rij met een tweede 'bouwend'-melding en later een tweede signaal. Een
-    voltooide rij wordt ongewijzigd teruggegeven (hoort bij zijn signaal),
-    de aanroeper vindt hem dan niet in list_forming_smc_setups en doet
-    niets. Exacte vergelijking is hier veilig: beide niveaus zijn rauwe
-    candle-prijzen van de exchange, geen berekende waarden."""
+    voltooide of vervallen rij (invalidate_smc_setup) wordt ongewijzigd
+    teruggegeven, de aanroeper vindt hem dan niet in
+    list_forming_smc_setups en doet niets. Exacte vergelijking is hier
+    veilig: beide niveaus zijn rauwe candle-prijzen van de exchange, geen
+    berekende waarden.
+
+    seen_until (updated_at) is de sluittijd van de laatste candle die de
+    aanroeper tegen deze zone beoordeeld heeft; standaard nu. Met de
+    wandklok als grens kon een candle die sloot tussen het ophalen van de
+    candles en deze upsert nooit meer beoordeeld worden: hij sloot vóór
+    updated_at, maar zat nog niet in wat de aanroeper bekeek."""
     now = db.now_iso()
+    seen_until = seen_until or now
     zone_mid = (zone_low + zone_high) / 2
     with db.session() as conn:
         same_event = conn.execute(
-            """SELECT id, signal_id FROM smc_setups
+            """SELECT id, signal_id, invalidated_at FROM smc_setups
                WHERE coin = ? AND direction = ? AND structure_level = ? AND sweep_price = ?
                ORDER BY id DESC LIMIT 1""",
             (coin, direction, structure_level, sweep_price),
         ).fetchone()
         if same_event is not None:
-            if same_event["signal_id"] is None:
+            if same_event["signal_id"] is None and same_event["invalidated_at"] is None:
                 conn.execute(
                     """UPDATE smc_setups SET zone_low = ?, zone_high = ?, liquidity_target = ?,
                        updated_at = ? WHERE id = ?""",
-                    (zone_low, zone_high, liquidity_target, now, same_event["id"]),
+                    (zone_low, zone_high, liquidity_target, seen_until, same_event["id"]),
                 )
             return same_event["id"]
 
         existing = conn.execute(
             """SELECT id, zone_low, zone_high FROM smc_setups
-               WHERE coin = ? AND direction = ? AND signal_id IS NULL""",
+               WHERE coin = ? AND direction = ? AND signal_id IS NULL AND invalidated_at IS NULL""",
             (coin, direction),
         ).fetchall()
         for row in existing:
@@ -2613,7 +2622,7 @@ def upsert_smc_setup(
                 conn.execute(
                     """UPDATE smc_setups SET zone_low = ?, zone_high = ?, structure_level = ?,
                        sweep_price = ?, liquidity_target = ?, updated_at = ? WHERE id = ?""",
-                    (zone_low, zone_high, structure_level, sweep_price, liquidity_target, now, row["id"]),
+                    (zone_low, zone_high, structure_level, sweep_price, liquidity_target, seen_until, row["id"]),
                 )
                 return row["id"]
         cur = conn.execute(
@@ -2621,17 +2630,17 @@ def upsert_smc_setup(
                (coin, direction, zone_low, zone_high, structure_level, sweep_price,
                 liquidity_target, alert_sent, created_at, updated_at)
                VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)""",
-            (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, now, now),
+            (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, now, seen_until),
         )
         return cur.lastrowid
 
 
 def list_forming_smc_setups() -> list[dict]:
-    """Alle bouwende setups (nog geen signal_id), meest recent bijgewerkt
-    eerst, voor de nieuwe /smc-pagina."""
+    """Alle bouwende setups (nog geen signal_id, niet vervallen), meest
+    recent bijgewerkt eerst, voor de nieuwe /smc-pagina."""
     with db.session() as conn:
         rows = conn.execute(
-            "SELECT * FROM smc_setups WHERE signal_id IS NULL ORDER BY updated_at DESC"
+            "SELECT * FROM smc_setups WHERE signal_id IS NULL AND invalidated_at IS NULL ORDER BY updated_at DESC"
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -2644,23 +2653,31 @@ def mark_smc_alert_sent(setup_id: int) -> None:
 def complete_smc_setup(setup_id: int, signal_id: int) -> None:
     """Koppelt de bouwende setup aan het net aangemaakte signaal — vanaf
     hier telt hij niet meer mee in list_forming_smc_setups (signal_id is
-    niet meer NULL) en wordt hij nooit meer door delete_smc_setup
+    niet meer NULL) en wordt hij nooit meer door invalidate_smc_setup
     opgeruimd."""
     with db.session() as conn:
         conn.execute("UPDATE smc_setups SET signal_id = ? WHERE id = ?", (signal_id, setup_id))
 
 
-def delete_smc_setup(setup_id: int) -> None:
-    """Verwijdert één bouwende setup: de prijs is voorbij de zone gelopen
-    zonder afwijzing, of een nieuwe, tegengestelde structuurbreuk maakte
-    hem achterhaald (zie market_scanner._check_smc_setup). Werkt op één rij tegelijk, niet op alle
+def invalidate_smc_setup(setup_id: int) -> None:
+    """Laat één bouwende setup vervallen: de prijs is voorbij de zone
+    gelopen zonder afwijzing, of een nieuwe, tegengestelde structuurbreuk
+    maakte hem achterhaald (zie market_scanner._check_smc_setup). Werkt op één rij tegelijk, niet op alle
     setups van een coin — een structuurbreuk is een eenmalige
     gebeurtenis die op de LAATSTE candle van een venster gezien wordt, dus
     'geen nieuwe breuk deze cyclus' betekent niet 'de oude setup is
     ongeldig', een bouwende setup moet over meerdere cycli blijven
-    bestaan totdat de zone geraakt wordt."""
+    bestaan totdat de zone geraakt wordt.
+
+    Markeren, niet verwijderen: zo herkent upsert_smc_setup dezelfde breuk
+    + sweep als een latere 30m-candle opnieuw onder/boven dezelfde pivot
+    sluit. Na een DELETE kwam die zone dan terug als nieuwe bouwende setup,
+    met een tweede 'bouwt op'-push voor een zone die al ongeldig was."""
     with db.session() as conn:
-        conn.execute("DELETE FROM smc_setups WHERE id = ? AND signal_id IS NULL", (setup_id,))
+        conn.execute(
+            "UPDATE smc_setups SET invalidated_at = ? WHERE id = ? AND signal_id IS NULL AND invalidated_at IS NULL",
+            (db.now_iso(), setup_id),
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -242,6 +242,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "danger_alert_sent" not in existing_prop_evaluations:
         conn.execute("ALTER TABLE prop_evaluations ADD COLUMN danger_alert_sent INTEGER NOT NULL DEFAULT 0")
 
+    # smc_setups is nieuw, maar de branch stond al op origin vóór deze kolom
+    # erbij kwam: een database waar hij al draaide heeft de tabel zonder.
+    existing_smc_setups = {row["name"] for row in conn.execute("PRAGMA table_info(smc_setups)")}
+    if "invalidated_at" not in existing_smc_setups:
+        conn.execute("ALTER TABLE smc_setups ADD COLUMN invalidated_at TEXT")
+
     # sr_zone_failures zelf heeft geen migratie nodig (CREATE TABLE IF NOT
     # EXISTS in schema.sql dekt zowel verse als bestaande databases, want
     # het is een heel nieuwe tabel, geen kolom op een bestaande) — alleen

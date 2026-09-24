@@ -683,8 +683,9 @@ SMC_MAX_CANDLES_PER_CHECK = 2
 
 
 def _smc_candles_since(closed_15m, since_iso: str) -> list:
-    """Gesloten 15m-candles die NA since_iso sloten (de laatste
-    bijwerking van de setup), oudste eerst, hoogstens
+    """Gesloten 15m-candles die NA since_iso sloten (updated_at: de
+    sluittijd van de laatste candle waartegen de setup al beoordeeld is),
+    oudste eerst, hoogstens
     SMC_MAX_CANDLES_PER_CHECK. Een candle die al sloot vóór de setup
     (opnieuw) gedefinieerd werd, heeft die zone nooit 'gezien' en mag hem
     dus ook niet afwijzen of ongeldig maken — dat werd bij het aanmaken al
@@ -735,7 +736,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
             # passed_without_rejection sluiten elkaar al uit (close aan
             # tegenovergestelde kanten van de zone).
             if passed_without_rejection:
-                repo.delete_smc_setup(existing_setup["id"])
+                repo.invalidate_smc_setup(existing_setup["id"])
                 break
 
     # +1: de nog vormende candle valt hieronder weg voor de breuk-toets.
@@ -753,7 +754,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     # structuur omgedraaid voordat de oude zone geraakt werd).
     for existing_setup in existing:
         if existing_setup["direction"] != direction:
-            repo.delete_smc_setup(existing_setup["id"])
+            repo.invalidate_smc_setup(existing_setup["id"])
 
     sweep = indicators.find_liquidity_sweep_before_break(closed_30m, structure_break)
     if sweep is None:
@@ -809,12 +810,13 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         structure_level=structure_break.broken_pivot.price,
         sweep_price=sweep.price,
         liquidity_target=liquidity_target_pivot.price,
+        seen_until=(last_candle["timestamp"] + timedelta(minutes=SMC_ENTRY_CANDLE_MINUTES)).isoformat(),
     )
 
     setups = repo.list_forming_smc_setups()
     setup = next((s for s in setups if s["id"] == setup_id), None)
     if setup is None:
-        return None  # deze breuk + sweep leverde in een eerdere cyclus al een signaal op (zie upsert_smc_setup)
+        return None  # deze breuk + sweep leverde al een signaal op of is vervallen (zie upsert_smc_setup)
 
     _, rejected, _ = _smc_last_candle_state(last_candle, zone_low, zone_high, direction)
     if rejected:

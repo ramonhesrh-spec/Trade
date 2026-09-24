@@ -483,7 +483,13 @@ CREATE TABLE IF NOT EXISTS smc_setups (
     alert_sent INTEGER NOT NULL DEFAULT 0,
     signal_id INTEGER REFERENCES signals(id),
     created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL
+    -- Sluittijd van de laatste 15m-candle die tegen deze zone beoordeeld
+    -- is, geen wandklok-tijd: zie market_scanner._smc_candles_since.
+    updated_at TEXT NOT NULL,
+    -- Gezet i.p.v. de rij te verwijderen zodra de setup vervalt: dezelfde
+    -- breuk + sweep wordt vaak later nog eens gezien en mag dan niet als
+    -- nieuwe bouwende setup (met nieuwe push) terugkomen.
+    invalidated_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_smc_setups_coin ON smc_setups(coin);
 
