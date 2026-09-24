@@ -2510,6 +2510,45 @@ def list_evaluation_trade_context(evaluation_id: int) -> list[dict]:
 
 
 # ---------------------------------------------------------------------------
+# Per-gebruiker verplichte factoren
+# ---------------------------------------------------------------------------
+
+def list_required_factors(user_id: int) -> set[str]:
+    """Alle factoren die deze gebruiker verplicht heeft gesteld."""
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT factor_name FROM user_required_factors WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+        return {row["factor_name"] for row in rows}
+
+
+def list_required_factors_all_users() -> dict[int, set[str]]:
+    """Batch-variant voor de marktscan-fanout en level_check.py: één query
+    voor alle gebruikers tegelijk in plaats van één per gebruiker per
+    signaal — zelfde 'één keer per cyclus, niet per rij'-discipline als
+    pattern_winrate_stats()/winrate_stats() elders in dit bestand."""
+    with db.session() as conn:
+        rows = conn.execute("SELECT user_id, factor_name FROM user_required_factors").fetchall()
+    result: dict[int, set[str]] = {}
+    for row in rows:
+        result.setdefault(row["user_id"], set()).add(row["factor_name"])
+    return result
+
+
+def set_required_factors(user_id: int, factor_names: list[str]) -> None:
+    """Vervangt de hele set in één transactie (DELETE + INSERT): de
+    instellingenpagina stuurt altijd de complete, actuele lijst, geen los
+    toevoegen/verwijderen nodig."""
+    with db.session() as conn:
+        conn.execute("DELETE FROM user_required_factors WHERE user_id = ?", (user_id,))
+        conn.executemany(
+            "INSERT INTO user_required_factors (user_id, factor_name, created_at) VALUES (?, ?, ?)",
+            [(user_id, name, db.now_iso()) for name in factor_names],
+        )
+
+
+# ---------------------------------------------------------------------------
 # Per-gebruiker bevestigde status en winrate
 # ---------------------------------------------------------------------------
 
