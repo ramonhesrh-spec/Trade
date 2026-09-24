@@ -263,6 +263,12 @@ html.page-transition-out body { opacity: 0; transform: translateY(-4px); }
 }
 @media (max-width: 560px) { .last-signal-pill { display: none; } }
 .topbar nav { display: flex; align-items: center; gap: 18px; margin-top: 10px; }
+/* .nav-links is de scrollbare rij losse links; .coin-menu (met zijn
+   dropdown) staat er bewust BUITEN als eigen flex-item, niet erin — een
+   voorouder met overflow-x:auto dwingt overflow-y ook naar auto (CSS-spec),
+   wat de absoluut gepositioneerde .coin-menu-list zou afknippen zodra hij
+   binnen de scrollende rij zou zitten. */
+.nav-links { display: flex; align-items: center; gap: 18px; min-width: 0; }
 .topbar nav a {
   color: var(--text-dim); text-decoration: none; font-size: 13px; font-weight: 500;
   white-space: nowrap; flex-shrink: 0; transition: color .15s;
@@ -281,7 +287,10 @@ html.page-transition-out body { opacity: 0; transform: translateY(-4px); }
 .coin-menu .chevron { width: 14px; height: 14px; transition: transform .15s; }
 .coin-menu[open] .chevron { transform: rotate(180deg); }
 .coin-menu-list {
-  position: absolute; top: calc(100% + 10px); left: 0; z-index: 20;
+  /* Rechts uitgelijnd i.p.v. links: Coins staat nu als laatste item in de
+     nav (zie base.html), een links geopend menu zou daardoor rechts van
+     het scherm af vallen. */
+  position: absolute; top: calc(100% + 10px); right: 0; z-index: 20;
   background: var(--bg-elevated); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   box-shadow: var(--shadow-md); padding: 6px; display: flex; flex-direction: column; gap: 1px;
   min-width: 140px; max-height: 60vh; overflow-y: auto;
@@ -347,7 +356,19 @@ html.page-transition-out body { opacity: 0; transform: translateY(-4px); }
   .topbar { padding: max(10px, env(safe-area-inset-top)) 14px 8px; }
   .brand-logo { height: 20px; width: 20px; }
   .topbar .brand span { font-size: 14px; }
-  .topbar nav { gap: 8px 14px; margin-top: 8px; flex-wrap: wrap; }
+  .topbar nav { gap: 12px; margin-top: 8px; }
+  /* Horizontaal scrollen i.p.v. wrappen: blijft één opgeruimde regel,
+     geen tweede rij die de topbar verticaal laat groeien. De mask-fade
+     laat zien dat er meer te scrollen valt zonder een aparte pijl/knop.
+     Scrollbar zelf verborgen (blijft met vinger/trackpad te bedienen),
+     dat past bij de rest van deze strakke, chrome-arme UI. */
+  .nav-links {
+    overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+    mask-image: linear-gradient(to right, black calc(100% - 28px), transparent 100%);
+    padding-right: 8px;
+  }
+  .nav-links::-webkit-scrollbar { display: none; }
   .logout-form { gap: 8px; }
   .logout-form span.muted { display: none; }
   .logout-form button { padding: 5px 10px; font-size: 12px; }
