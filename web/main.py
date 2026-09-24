@@ -200,7 +200,8 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     winrate = repo.winrate_stats(user["id"])
     pattern_winrate = repo.pattern_winrate_stats()
     entries = _add_signal_context(entries, winrate, pattern_winrate)
-    _apply_user_confirmed(entries, user["confirm_threshold_pct"])
+    required_factors = repo.list_required_factors(user["id"])
+    _apply_user_confirmed(entries, user["confirm_threshold_pct"], required_factors)
     entries.sort(key=lambda e: e["created_at"], reverse=True)
     return templates.TemplateResponse(request, "signalen.html", {
         "user": user,
@@ -609,13 +610,16 @@ def _add_signal_context(entries: list[dict], winrate: dict, pattern_winrate: dic
     return entries
 
 
-def _apply_user_confirmed(entries: list[dict], threshold_pct: float) -> None:
+def _apply_user_confirmed(entries: list[dict], threshold_pct: float, required_factors: set[str]) -> None:
     """Zet entry['user_confirmed'] per signaal, de echte trade-kans-vlag
     achter macros.signal_card's groene rand. Swing is altijd bevestigd
-    (geen gepoold percentage, een echte terugveer op een bewaakt niveau).
-    Dagtrading en patroon tellen pas als bevestigd zodra hun EIGEN
-    percentage (pass_pct resp. success_rate/kansberekening) de drempel van
-    deze gebruiker haalt — voorheen kreeg elk patroon-signaal hier
+    (geen gepoold percentage, een echte terugveer op een bewaakt niveau) —
+    required_factors is daar niet van toepassing (zie de spec), dus die
+    tak geeft hem simpelweg niet door. Dagtrading en patroon tellen pas
+    als bevestigd zodra hun EIGEN percentage (pass_pct resp. success_rate/
+    kansberekening) de drempel van deze gebruiker haalt EN (als de
+    gebruiker zelf factoren verplicht heeft gesteld) die factoren ✓ staan
+    in de breakdown — voorheen kreeg elk patroon-signaal hier
     onvoorwaardelijk True, dus een kansberekening van 30% kreeg dezelfde
     groene rand als een kansberekening van 90%, amper onderscheid tussen
     een echte kans en ruis. Moet NA _add_signal_context draaien: patroon se
@@ -626,10 +630,12 @@ def _apply_user_confirmed(entries: list[dict], threshold_pct: float) -> None:
         elif entry["trade_type"] == "patroon":
             entry["user_confirmed"] = repo.user_confirmed(
                 entry.get("success_rate"), bool(entry["hard_gates_ok"]), threshold_pct,
+                reason=entry.get("reason") or "", required_factors=required_factors,
             )
         else:
             entry["user_confirmed"] = repo.user_confirmed(
                 entry["pass_pct"], bool(entry["hard_gates_ok"]), threshold_pct,
+                reason=entry.get("reason") or "", required_factors=required_factors,
             )
 
 
@@ -1633,7 +1639,8 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     pattern_winrate = repo.pattern_winrate_stats()
     open_trades = _add_signal_context(open_trades, winrate, pattern_winrate)
     recent_signals = _add_signal_context(recent_signals, winrate, pattern_winrate)
-    _apply_user_confirmed(recent_signals, user["confirm_threshold_pct"])
+    required_factors = repo.list_required_factors(user["id"])
+    _apply_user_confirmed(recent_signals, user["confirm_threshold_pct"], required_factors)
 
     # Sparkline: laatste signalen op een rij, oudste eerst zodat het als
     # tijdlijn leest. Puur signaal-geschiedenis (niet oefentrades, dat zijn
