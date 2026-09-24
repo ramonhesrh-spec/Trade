@@ -138,8 +138,10 @@
    informatie, gebruikt op /signalen (Task 6) en de coinpagina (Task 12).
    entry.user_confirmed moet door de aanroeper al gezet zijn via
    repo.user_confirmed(entry.pass_pct, entry.hard_gates_ok, drempel van
-   de ingelogde gebruiker) — deze macro rekent zelf niets uit, anders zou
-   elke aanroeper zijn eigen drempel-vergelijking moeten kennen. #}
+   de ingelogde gebruiker, plus reason/required_factors als die gebruiker
+   factoren verplicht heeft gesteld) — deze macro rekent zelf niets uit,
+   anders zou elke aanroeper zijn eigen drempel-vergelijking moeten
+   kennen. #}
 {# signal.id verschilt van bron: /signalen levert journal_entries.id via
    _JOURNAL_SELECT (signal_id is dan de echte signals.id), de coinpagina
    levert signals.id rechtstreeks via SELECT s.* (geen signal_id-kolom).

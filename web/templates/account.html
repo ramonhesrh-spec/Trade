@@ -263,6 +263,9 @@
         signaal, dan telt het voor jou nooit als bevestigd, ongeacht het
         percentage. Niet aangevinkt telt gewoon mee in het percentage zoals nu.
       </p>
+      {% if not advanced_factors_enabled %}
+      <p class="muted" style="margin: 6px 0 10px; font-size: 12px;">Let op: de uitgebreide toetsing staat nog uit (zie /uitleg) — alleen Trend, Momentum, RSI en Volume worden nu berekend. Een ander factor verplicht stellen betekent dat je nooit meer een bevestigd signaal krijgt.</p>
+      {% endif %}
       <form action="/instellingen/factoren" method="post" class="required-factors-form">
         {% for name, uitleg in toggleable_factors %}
         <label class="factor-toggle">

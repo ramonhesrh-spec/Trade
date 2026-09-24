@@ -2588,6 +2588,7 @@ def user_confirmed(
     bevestigd, ongeacht het percentage. Alleen relevant voor day_trading/
     patroon-signalen; voor swing wordt required_factors simpelweg niet
     meegegeven door de aanroeper."""
+    reason = reason or ""
     base_confirmed = bool(hard_gates_ok) and pass_pct is not None and pass_pct >= threshold_pct
     if not base_confirmed or not required_factors:
         return base_confirmed
