@@ -174,30 +174,26 @@ async def mark_melding_gelezen(notification_id: int, user: dict = Depends(requir
 async def signalen_page(request: Request, alles: bool = False, user: dict = Depends(require_login)):
     """Kale, puur signalen-pagina (geen journaal/portfolio-content, zie
     CLAUDE.md 'pure signals'-uitgangspunt van deze taak): dezelfde
-    gedeelde signalen als het dashboard, maar hier gesorteerd op hoogste
-    slagingspercentage in plaats van chronologisch. Swing-signalen hebben
-    geen pass_pct (nog niet gevalideerd op die tijdshorizon, zie
-    signal_processor._build_swing_signal) en horen dus niet tussen een op
-    percentage gesorteerde lijst; die blijven hier buiten beeld.
+    gedeelde signalen als het dashboard, hier chronologisch, nieuwste
+    eerst — dit is de live feed van wat er nu gebeurt, geen ranglijst.
+    Percentage/kansberekening blijft zichtbaar als badge op de kaart
+    (signal_card), stuurt alleen de volgorde niet meer aan. Eerder
+    sorteerde deze pagina op hoogste slagingspercentage; dat had een
+    reëel nadeel dat chronologisch niet heeft (een nog niet gevalideerd
+    swing-signaal had geen sorteersleutel en moest apart afgevangen
+    worden) en verborg bovendien net binnengekomen signalen onder oudere,
+    toevallig hoger scorende signalen — precies tegengesteld aan "wat is
+    er nu".
 
     Standaard alleen nog open signalen (auto_outcome IS NULL): het hele
     punt van deze pagina is "wat is er nu", en een allang afgeronde kans
-    met een hoog percentage hoort niet boven een vers signaal te staan.
-    Afgeronde signalen (win/verlies/vervallen) blijven bereikbaar via
-    ?alles=1 — success_rate (niet het rauwe pass_pct, zie de toelichting
-    verderop) blijft dan de sorteersleutel voor open signalen, maar een
-    resolved signaal met een oud, toevallig hoog percentage mag een net
-    binnengekomen open signaal niet meer overstemmen, dus resolved
-    signalen zakken altijd onder de nog-open signalen (en sorteren onderling
-    op meest recent eerst, niet op percentage).
-
-    Een swing-signaal ("Bewaakt niveau") heeft geen pass_pct (geen gepoold
-    percentage, zie signal_processor.run_swing_check) maar is wel een
-    volwaardige, bevestigde kans met een eigen pushmelding — die hoorde
-    eerder per ongeluk hier helemaal niet bij (filter op pass_pct is not
-    None liet ze volledig verdwijnen, ook onder ?alles=1). Ze zakken nu
-    onder de percentage-signalen (success_rate_sort_key = -1) in plaats van
-    onderuit te vallen."""
+    hoort niet tussen een net binnengekomen signaal te staan. Afgeronde
+    signalen (win/verlies/vervallen) blijven bereikbaar via ?alles=1,
+    daar gewoon tussen de rest op created_at — chronologisch heeft geen
+    aparte open/resolved-scheiding nodig zoals de oude percentage-sortering
+    die wel had (die moest voorkomen dat een oud, toevallig hoog percentage
+    een vers signaal overstemde; dat risico bestaat niet meer zodra tijd
+    zelf de sorteersleutel is)."""
     entries = repo.list_signalen_for_user(user["id"])
     if not alles:
         entries = [e for e in entries if e["auto_outcome"] is None]
@@ -205,27 +201,7 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     pattern_winrate = repo.pattern_winrate_stats()
     entries = _add_signal_context(entries, winrate, pattern_winrate)
     _apply_user_confirmed(entries, user["confirm_threshold_pct"])
-    # Sorteersleutel volgt per trade_type wat de kaart (signal_card) ECHT
-    # toont: voor patroon is dat success_rate (de kansberekening, gemiddelde
-    # van factor_pct en de historische patroon-winrate), voor dagtrading is
-    # dat het eigen pass_pct van dit signaal — success_rate is voor
-    # dagtrading juist de winrate van de hele vertrouwen-emmer (hoog/laag),
-    # een en dezelfde waarde voor alle signalen in die emmer, dus daarop
-    # sorteren zou dagtrading-signalen effectief op invoervolgorde zetten
-    # in plaats van op wat de badge daadwerkelijk laat zien.
-    def success_rate_sort_key(e):
-        if e["trade_type"] == "patroon":
-            return e["success_rate"] if e["success_rate"] is not None else -1
-        return e["pass_pct"] if e["pass_pct"] is not None else -1
-    if alles:
-        # Open signalen eerst (op percentage), pas daarna resolved signalen
-        # (op recentheid) — anders overstemt een oud, toevallig hoog
-        # percentage van een allang afgeronde kans een vers, nog open signaal.
-        open_entries = sorted((e for e in entries if e["auto_outcome"] is None), key=success_rate_sort_key, reverse=True)
-        resolved_entries = sorted((e for e in entries if e["auto_outcome"] is not None), key=lambda e: e["created_at"], reverse=True)
-        entries = open_entries + resolved_entries
-    else:
-        entries.sort(key=success_rate_sort_key, reverse=True)
+    entries.sort(key=lambda e: e["created_at"], reverse=True)
     return templates.TemplateResponse(request, "signalen.html", {
         "user": user,
         "coins": repo.list_coins(),

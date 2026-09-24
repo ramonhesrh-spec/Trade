@@ -152,18 +152,24 @@
   <div class="signal-card-head">
     <a class="coin-symbol" href="/coins/{{ entry.coin }}#signal-{{ anchor_id }}">{{ entry.coin }}</a>
     <span class="direction {{ entry.direction }}">{{ entry.direction|upper }}</span>
-    {% if entry.user_confirmed %}<span class="trade-kans-badge">✓ trade kans</span>{% endif %}
     {% if entry.trade_type == "swing" %}
     <span class="badge badge-swing" title="Bevestigd op een bewaakt steun/weerstand-niveau, geen gepoold percentage">swing</span>
     {% elif entry.trade_type == "patroon" %}
     <span class="badge badge-swing" title="Autonoom herkend door HesPulse, zonder doorgestuurd bericht">{{ entry.pattern_name }}</span>
-    {% if entry.success_rate is defined and entry.success_rate is not none %}<span class="pass-pct" title="kansberekening: gepoolde factoren + historische winrate van dit patroontype">kans {{ "%.0f"|format(entry.success_rate) }}%</span>{% endif %}
-    {% elif entry.pass_pct is not none %}
-    <span class="pass-pct">{{ "%.0f"|format(entry.pass_pct) }}%</span>
     {% endif %}
     {% if entry.auto_outcome == "take_profit" %}<span class="badge badge-outcome-win">✓ take profit</span>
     {% elif entry.auto_outcome == "stop_loss" %}<span class="badge badge-outcome-loss">✗ stop loss</span>
     {% elif entry.auto_outcome == "vervallen" %}<span class="badge badge-outcome-expired">vervallen</span>
+    {% endif %}
+    {# Eén pil i.p.v. de vroegere twee losse badges (trade-kans-badge +
+       pass-pct), die samen vaak naar een tweede regel omsloegen. Zelfde
+       informatie, ✓ + percentage samen wanneer bevestigd. #}
+    {% if entry.trade_type == "patroon" and entry.success_rate is defined and entry.success_rate is not none %}
+    <span class="signal-pct{{ ' is-confirmed' if entry.user_confirmed else '' }}" title="kansberekening: gepoolde factoren + historische winrate van dit patroontype">{{ '✓ ' if entry.user_confirmed }}kans {{ "%.0f"|format(entry.success_rate) }}%</span>
+    {% elif entry.pass_pct is not none %}
+    <span class="signal-pct{{ ' is-confirmed' if entry.user_confirmed else '' }}">{{ '✓ ' if entry.user_confirmed }}{{ "%.0f"|format(entry.pass_pct) }}%</span>
+    {% elif entry.user_confirmed %}
+    <span class="signal-pct is-confirmed">✓ trade kans</span>
     {% endif %}
   </div>
   <div class="signal-card-levels">
@@ -187,7 +193,11 @@
   </div>
   {% endif %}
   {% if entry.reason %}
-  <details class="confidence-detail js-accordion"{% if entry.user_confirmed %} open{% endif %}>
+  {# Standaard dicht, ook bij een bevestigde kans: de volledige factoren-
+     lijst (tot 16 regels) maakte de kaart torenhoog zodra hij vanzelf
+     openklapte. Percentage/badges hierboven blijven de snelle scan,
+     de redenering is er nog steeds, nu pas na een klik. #}
+  <details class="confidence-detail js-accordion">
     <summary class="confidence-why">waarom {% if entry.trade_type == "patroon" %}{% if entry.success_rate is defined and entry.success_rate is not none %}kans {{ "%.0f"|format(entry.success_rate) }}%{% else %}dit patroon{% endif %}{% elif entry.pass_pct is not none %}{{ "%.0f"|format(entry.pass_pct) }}%{% else %}dit bewaakte niveau{% endif %}?</summary>
     <div class="reason-popup">
       {{ reason_popup(entry) }}

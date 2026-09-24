@@ -525,7 +525,12 @@ main h3 { font-size: 15px; gap: 8px; }
    3px-randje dat nauwelijks opviel naast een afgewezen signaal. Een
    afgewezen signaal is geen fout of verlies — geen rood, gewoon minder
    nadruk (lagere opacity), de neutrale rustsituatie. */
-.signal-list { display: flex; flex-direction: column; gap: 12px; }
+/* Grid i.p.v. een enkele kolom: nu de kaart standaard dicht is (zie de
+   why-comment bij .confidence-detail in _macros.html) past een kaart in
+   een derde van de eerdere hoogte, dus passen er meerdere naast elkaar op
+   een breed scherm. minmax(280px, 1fr) valt vanzelf terug naar 1 kolom
+   zodra het scherm te smal wordt (telefoon), geen aparte media query nodig. */
+.signal-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
 .signal-card {
   padding: 12px 16px; border: 1px solid var(--border); border-left: 3px solid var(--border-strong);
   border-radius: var(--radius-sm); background: var(--bg-elevated);
@@ -543,15 +548,17 @@ main h3 { font-size: 15px; gap: 8px; }
 .signal-card-head { display: flex; align-items: center; gap: 10px; font-family: var(--mono); flex-wrap: wrap; }
 .signal-card-head .coin-symbol { font-weight: 700; color: var(--text); text-decoration: none; }
 .signal-card-head .coin-symbol:hover { text-decoration: underline; }
-.signal-card-head .pass-pct { margin-left: auto; font-weight: 600; color: var(--text); }
-/* Alleen op een bevestigd signaal: het label dat het onderscheid uit deze
-   sectie's why-comment concreet maakt, niet alleen een gekleurde rand die
-   je makkelijk mist tussen andere kaarten. */
-.trade-kans-badge {
-  display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700;
-  letter-spacing: 0.04em; text-transform: uppercase; color: var(--green);
-  background: rgba(51, 214, 159, 0.14); border: 1px solid rgba(51, 214, 159, 0.3);
-  border-radius: 999px; padding: 2px 8px;
+/* Eén pil voor percentage/kansberekening, i.p.v. de vroegere aparte
+   trade-kans-badge + pass-pct-tekst ernaast (die samen vaak omsloegen naar
+   een tweede regel op de kop van de kaart). Bevestigd krijgt dezelfde
+   groene behandeling als voorheen de aparte badge, alleen nu in één label. */
+.signal-pct {
+  margin-left: auto; font-family: var(--sans); font-size: 11px; font-weight: 700;
+  letter-spacing: 0.02em; padding: 2px 8px; border-radius: 999px;
+  background: var(--border); color: var(--muted);
+}
+.signal-pct.is-confirmed {
+  color: var(--green); background: rgba(51, 214, 159, 0.14); border: 1px solid rgba(51, 214, 159, 0.3);
 }
 .signal-card-levels { margin-top: 6px; font-size: 13px; color: var(--text-dim); font-family: var(--mono); }
 .signal-card.is-confirmed .signal-card-levels { color: var(--text); }
