@@ -26,6 +26,7 @@ from fastapi.templating import Jinja2Templates
 from app import advice as advice_module
 from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, push_notify, repo, risk, security
+from app.market_scanner import STOP_MARGIN_PCT, TARGET_MARGIN_PCT
 
 logger = logging.getLogger("web")
 
@@ -219,6 +220,15 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     bestaande /signalen en het dashboard (zie de spec, Component 6) —
     deze pagina is een extra, gerichte weergave, geen aparte wereld."""
     forming = repo.list_forming_smc_setups()
+    # Zelfde formule als market_scanner._complete_smc_setup: stop en doel
+    # hangen alleen af van sweep_price/liquidity_target, niet van de
+    # (nog onbekende) entry-prijs, dus dit is geen schatting maar het
+    # exacte cijfer dat straks ook echt gebruikt wordt — tenzij de setup
+    # intussen vervalt of vervangen wordt door een nieuwe structuurbreuk.
+    for setup in forming:
+        sign = -1 if setup["direction"] == "long" else 1
+        setup["preview_stop_loss"] = setup["sweep_price"] + STOP_MARGIN_PCT / 100 * setup["sweep_price"] * sign
+        setup["preview_take_profit"] = setup["liquidity_target"] + TARGET_MARGIN_PCT / 100 * setup["liquidity_target"] * sign
     entries = [e for e in repo.list_signalen_for_user(user["id"]) if e["trade_type"] == "smc"]
     winrate = repo.winrate_stats(user["id"])
     pattern_winrate = repo.pattern_winrate_stats()

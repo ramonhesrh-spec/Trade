@@ -19,13 +19,18 @@
       <strong>{{ setup.coin }}</strong>
       <span class="muted">{{ setup.direction }}</span>
     </div>
-    <div class="smc-setup-zone">Zone {{ "%.4f"|format(setup.zone_low) }} - {{ "%.4f"|format(setup.zone_high) }}</div>
+    <div class="smc-setup-zone">Entry-zone {{ "%.4f"|format(setup.zone_low) }} - {{ "%.4f"|format(setup.zone_high) }}</div>
+    <div class="smc-setup-levels muted">
+      Stop {{ "%.4f"|format(setup.preview_stop_loss) }} · Doel {{ "%.4f"|format(setup.preview_take_profit) }}
+    </div>
     <details class="confidence-detail js-accordion">
       <summary>Waarom</summary>
       <p class="muted">
         Structuur brak op {{ "%.4f"|format(setup.structure_level) }},
         sweep op {{ "%.4f"|format(setup.sweep_price) }},
         doel bij liquidity {{ "%.4f"|format(setup.liquidity_target) }}.
+        Stop en doel liggen al vast, dit wordt pas een melding als de zone
+        een afwijzende candle geeft en risico/rendement boven de ondergrens ligt.
       </p>
     </details>
   </div>
