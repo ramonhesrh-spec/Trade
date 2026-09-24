@@ -17,13 +17,16 @@ def build_advice(signal: dict) -> str:
 
     # Zelfde reden voor smc: technical_confirmed staat daar vast op 1 en er
     # zijn geen RSI/EMA/MACD/volume-waarden opgeslagen, dus "alle vier
-    # factoren kloppen" zou een meting beweren die nooit gedaan is.
+    # factoren kloppen" zou een meting beweren die nooit gedaan is. "Bij het
+    # ontstaan van de setup": het doel wordt daarna niet opnieuw getoetst, de
+    # koers kan er vóór de afwijzing al geweest zijn.
     if signal.get("trade_type") == "smc":
         return (
             "Geen factorentoets voor een SMC-setup: de onderbouwing is "
             "structureel (structuurbreuk, liquidity sweep en een afwijzing in "
             "de terugtrek-zone). De stop ligt net voorbij de sweep, het doel "
-            "net vóór de eerstvolgende nog niet opgehaalde liquidity."
+            "net vóór de eerstvolgende liquidity die bij het ontstaan van de "
+            "setup nog niet opgehaald was."
         )
 
     is_pattern = signal.get("trade_type") == "patroon"
