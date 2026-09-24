@@ -1481,17 +1481,19 @@ async def main():
     # geraakt+afgewezen-pad in _check_smc_setup vereist een langere
     # candle-reeks om exact op te zetten dan zinvol is in een scratch-
     # script; deze taak test dat pad al apart in Task 5 Step 3).
+    # fanout_confirmed_signal blijft hier ONGEMOCKT (in tegenstelling tot
+    # Task 5 Step 3, waar het wel gemockt wordt): fanout_confirmed_signal
+    # is zelf de functie die de journal_entries-rij aanmaakt, en de
+    # laatste check hieronder (SMC-signaal moet op de gewone signalenlijst
+    # staan) leest precies die rij — mocken zou die insert overslaan en de
+    # laatste assertie per constructie laten falen (dat was hier eerder
+    # een echte fout in dit script).
     setup = repo.list_forming_smc_setups()[0]
     def fake_fetch_entry(coin, timeframe='4h', limit=200, since=None):
         rows = [(90, 91, 89, 90)] * 5
         return pd.DataFrame(rows, columns=['open', 'high', 'low', 'close']).assign(volume=100.0)
-    with patch.object(market_scanner.exchange, 'fetch_ohlcv', side_effect=fake_fetch_entry), \
-         patch.object(market_scanner, 'fanout_confirmed_signal', new=AsyncMock()) as fanout_mock:
+    with patch.object(market_scanner.exchange, 'fetch_ohlcv', side_effect=fake_fetch_entry):
         await market_scanner._complete_smc_setup('ETH', setup)
-        assert fanout_mock.await_count == 1
-        signal_id = fanout_mock.await_args.args[0]
-        signal = repo.get_signal(signal_id)
-        assert signal['trade_type'] == 'smc'
         assert repo.list_forming_smc_setups() == []
         print('Fase 2 OK: compleet, signaal aangemaakt, bouwende setup opgeruimd')
 
