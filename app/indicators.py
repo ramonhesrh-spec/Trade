@@ -856,6 +856,59 @@ def check_daily_liquidity_sweep(direction: str, daily_df: pd.DataFrame) -> tuple
     return ("Liquidity sweep (dag)", True, f"stop-hunt op daily van {hit.price:.4f}, candle sloot terug aan de goede kant")
 
 
+@dataclass
+class StructureBreak:
+    direction: str          # "long" of "short"
+    broken_pivot: Pivot     # de swing-high/low die brak
+    break_index: int        # candle-index van de sluiting die brak
+
+
+def find_structure_break(window: pd.DataFrame) -> Optional[StructureBreak]:
+    """Market structure shift: de laatste candle in window sluit voorbij
+    een eerdere, bevestigde swing (via de bestaande _find_pivots) — een
+    close onder de meest recente swing-low is een bearish breuk, een
+    close boven de meest recente swing-high een bullish breuk. Een staart
+    die er doorheen prikt zonder dat de candle er ook mee sluit telt
+    niet, dat is een sweep, geen structuurbreuk (zie
+    find_liquidity_sweep_before_break hieronder). Kijkt alleen naar de
+    LAATSTE candle van window — een breuk die eerder in het venster
+    gebeurde en toen niet gezien is, wordt niet met terugwerkende kracht
+    alsnog gevonden, elke scan-cyclus kijkt opnieuw naar de actuele
+    laatste candle."""
+    pivots = _find_pivots(window)
+    last_index = len(window) - 1
+    last_close = window["close"].iloc[last_index]
+
+    recent_low = max((p for p in pivots if p.kind == "low"), key=lambda p: p.index, default=None)
+    if recent_low is not None and last_close < recent_low.price:
+        return StructureBreak(direction="short", broken_pivot=recent_low, break_index=last_index)
+
+    recent_high = max((p for p in pivots if p.kind == "high"), key=lambda p: p.index, default=None)
+    if recent_high is not None and last_close > recent_high.price:
+        return StructureBreak(direction="long", broken_pivot=recent_high, break_index=last_index)
+
+    return None
+
+
+def find_liquidity_sweep_before_break(
+    window: pd.DataFrame, structure_break: StructureBreak,
+) -> Optional[Pivot]:
+    """Hergebruikt de bestaande _find_liquidity_sweep (al gebruikt door de
+    sniper-entry-feature) op het venster tot en met de doorbraak-candle,
+    met DEZELFDE richting als de structuurbreuk — niet tegengesteld.
+    _find_liquidity_sweep's eigen conventie is al dat direction="short"
+    een sweep aan de high-kant betekent (kind="high" intern), en dat is
+    precies de buy-side liquidity die een bearish reversal voedt: prijs
+    veegt eerst een eerdere high leeg voordat hij hard omlaag draait en
+    een eerdere low doorbreekt (de structuurbreuk zelf). Bij
+    direction="long" spiegelt dit: een sweep van een eerdere low, de
+    sell-side liquidity die een bullish reversal voedt. Geeft de geveegde
+    pivot terug (wordt in Task 5 de stop), of None als er geen sweep vlak
+    voor de breuk zat — dan is het geen geldige setup."""
+    pre_break_window = window.iloc[:structure_break.break_index + 1]
+    return _find_liquidity_sweep(pre_break_window, structure_break.direction)
+
+
 def find_sniper_entry_price(direction: str, df: pd.DataFrame) -> Optional[tuple[float, str]]:
     """Dunne laag over _find_liquidity_sweep: geeft de rauwe sweep-prijs en
     een leesbare "waarom is dit een sniper-entry"-uitleg terug, in plaats
