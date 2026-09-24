@@ -188,6 +188,7 @@ async def check_pending_signals() -> None:
     coin_levels: dict[tuple[int, str], list[dict]] = {}
     coin_sniper: dict[tuple[str, str], Optional[tuple[float, str]]] = {}
     pattern_winrate = repo.pattern_winrate_stats()
+    required_by_user = repo.list_required_factors_all_users()
 
     for entry in entries:
         coin = entry["coin"]
@@ -207,9 +208,15 @@ async def check_pending_signals() -> None:
         elif entry["trade_type"] == "patroon":
             pattern_stats = pattern_winrate.get(entry["pattern_name"])
             success_rate = repo.pattern_kansberekening(entry["pass_pct"], pattern_stats)
-            is_confirmed = repo.user_confirmed(success_rate, bool(entry["hard_gates_ok"]), entry["confirm_threshold_pct"])
+            is_confirmed = repo.user_confirmed(
+                success_rate, bool(entry["hard_gates_ok"]), entry["confirm_threshold_pct"],
+                reason=entry["reason"] or "", required_factors=required_by_user.get(entry["user_id"], set()),
+            )
         else:
-            is_confirmed = repo.user_confirmed(entry["pass_pct"], bool(entry["hard_gates_ok"]), entry["confirm_threshold_pct"])
+            is_confirmed = repo.user_confirmed(
+                entry["pass_pct"], bool(entry["hard_gates_ok"]), entry["confirm_threshold_pct"],
+                reason=entry["reason"] or "", required_factors=required_by_user.get(entry["user_id"], set()),
+            )
         if not is_confirmed:
             continue
         if coin not in coin_prices:

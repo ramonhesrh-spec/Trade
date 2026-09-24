@@ -1788,6 +1788,7 @@ def list_pending_entries_with_price() -> list[dict]:
                       s.auto_outcome AS auto_outcome,
                       s.trade_type AS trade_type, s.pattern_name AS pattern_name,
                       s.pass_pct AS pass_pct, s.hard_gates_ok AS hard_gates_ok,
+                      s.reason AS reason,
                       u.username AS username, u.telegram_chat_id AS telegram_chat_id,
                       u.quiet_hours_start AS quiet_hours_start, u.quiet_hours_end AS quiet_hours_end,
                       u.confirm_threshold_pct AS confirm_threshold_pct
