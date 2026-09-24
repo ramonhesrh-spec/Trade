@@ -909,6 +909,99 @@ def find_liquidity_sweep_before_break(
     return _find_liquidity_sweep(pre_break_window, structure_break.direction)
 
 
+ZONE_SEARCH_LOOKBACK = 40       # 15m-candles, ongeveer tien uur
+DISPLACEMENT_LOOKBACK = 10      # candles voor het gemiddelde bereik
+DISPLACEMENT_RANGE_MULTIPLE = 2.0
+
+
+@dataclass
+class FVG:
+    low: float
+    high: float
+
+
+def find_fair_value_gaps(df: pd.DataFrame, direction: str) -> list[FVG]:
+    """Klassieke drie-candle fair value gap, alleen binnen de laatste
+    ZONE_SEARCH_LOOKBACK candles (zie de ontwerpbeslissing in dit plan).
+    Voor short (bearish setup): candle 1's low boven candle 3's high, het
+    gat daartussen is de zone waar prijs later tegenaan kan lopen voordat
+    hij verder zakt — deze bearish FVG ontstaat tijdens de displacement
+    die de structuurbreuk zelf veroorzaakte. Voor long het spiegelbeeld.
+    Nieuwste eerst."""
+    window = df.tail(ZONE_SEARCH_LOOKBACK).reset_index(drop=True)
+    gaps: list[FVG] = []
+    for i in range(2, len(window)):
+        c1_low, c1_high = window["low"].iloc[i - 2], window["high"].iloc[i - 2]
+        c3_low, c3_high = window["low"].iloc[i], window["high"].iloc[i]
+        if direction == "short" and c1_low > c3_high:
+            gaps.append(FVG(low=float(c3_high), high=float(c1_low)))
+        elif direction == "long" and c1_high < c3_low:
+            gaps.append(FVG(low=float(c1_high), high=float(c3_low)))
+    gaps.reverse()
+    return gaps
+
+
+@dataclass
+class OrderBlock:
+    low: float
+    high: float
+
+
+def find_order_blocks(df: pd.DataFrame, direction: str) -> list[OrderBlock]:
+    """De laatste candle in de tegengestelde kleur vlak vóór een sterke
+    displacement-beweging: voor short de laatste groene candle voor een
+    duidelijke rode dump. 'Duidelijk' is hier candle_range minstens
+    DISPLACEMENT_RANGE_MULTIPLE keer het gemiddelde bereik van de
+    voorgaande DISPLACEMENT_LOOKBACK candles — zelfde soort maat als
+    elders in dit bestand voor 'een echte beweging' (geen losse, nieuwe
+    aparte definitie). Loopt terug vanaf de displacement-candle tot de
+    eerste tegengestelde candle, voor het geval de displacement zelf uit
+    meerdere candles op rij bestaat. Alleen binnen ZONE_SEARCH_LOOKBACK
+    candles. Nieuwste eerst."""
+    window = df.tail(ZONE_SEARCH_LOOKBACK).reset_index(drop=True)
+    blocks: list[OrderBlock] = []
+    for i in range(DISPLACEMENT_LOOKBACK, len(window)):
+        candle_range = window["high"].iloc[i] - window["low"].iloc[i]
+        prior = window.iloc[i - DISPLACEMENT_LOOKBACK:i]
+        avg_range = (prior["high"] - prior["low"]).mean()
+        if avg_range <= 0 or candle_range < DISPLACEMENT_RANGE_MULTIPLE * avg_range:
+            continue
+        is_down = window["close"].iloc[i] < window["open"].iloc[i]
+        is_up = window["close"].iloc[i] > window["open"].iloc[i]
+        if direction == "short" and not is_down:
+            continue
+        if direction == "long" and not is_up:
+            continue
+        j = i - 1
+        while j >= 0:
+            open_j, close_j = window["open"].iloc[j], window["close"].iloc[j]
+            if direction == "short" and close_j > open_j:
+                blocks.append(OrderBlock(low=float(window["low"].iloc[j]), high=float(window["high"].iloc[j])))
+                break
+            if direction == "long" and close_j < open_j:
+                blocks.append(OrderBlock(low=float(window["low"].iloc[j]), high=float(window["high"].iloc[j])))
+                break
+            j -= 1
+    blocks.reverse()
+    return blocks
+
+
+def find_confluence_zone(fvgs: list[FVG], order_blocks: list[OrderBlock]) -> Optional[tuple[float, float]]:
+    """Enige geldige terugtrek-zone: een fair value gap en een order
+    block die elkaar overlappen. Geen overlap, geen zone — puur alleen
+    een FVG of alleen een order block telt niet mee. fvgs/order_blocks
+    zijn al nieuwste-eerst gesorteerd (zie hierboven), dus de eerste
+    gevonden overlap is ook de meest recente. Geeft (low, high) van de
+    overlap terug."""
+    for fvg in fvgs:
+        for block in order_blocks:
+            overlap_low = max(fvg.low, block.low)
+            overlap_high = min(fvg.high, block.high)
+            if overlap_low < overlap_high:
+                return (overlap_low, overlap_high)
+    return None
+
+
 def find_sniper_entry_price(direction: str, df: pd.DataFrame) -> Optional[tuple[float, str]]:
     """Dunne laag over _find_liquidity_sweep: geeft de rauwe sweep-prijs en
     een leesbare "waarom is dit een sniper-entry"-uitleg terug, in plaats
