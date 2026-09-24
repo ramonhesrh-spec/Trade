@@ -14,6 +14,7 @@ docs/superpowers/specs/2026-09-14-autonome-marktscan-design.md.
 """
 import asyncio
 import logging
+from datetime import datetime, timedelta
 from typing import Optional
 
 from app import exchange, indicators, patterns, push_notify, repo, risk
@@ -667,41 +668,81 @@ def _smc_last_candle_state(last_candle, zone_low: float, zone_high: float, direc
     return in_zone, rejected, passed_without_rejection
 
 
+SMC_ENTRY_CANDLE_MINUTES = 15
+
+# Hoeveel 15m-candles fase 1 hoogstens per bouwende setup beoordeelt: alle
+# candles die sinds de vorige scan gesloten zijn. De scan draait elke 20
+# minuten (deploy/crypto-market-scan.timer), dus er kunnen er twee sluiten
+# tussen twee runs — alleen de allerlaatste bekijken sloeg zo één op de
+# vier 15m-candles over, inclusief een afwijzing of doorbraak die precies
+# daarop gebeurde. Begrensd (geen onbeperkte inhaalslag) zodat een
+# afwijzing waar _complete_smc_setup geen geldige trade van kon maken niet
+# elke volgende cyclus opnieuw als trigger terugkomt.
+SMC_MAX_CANDLES_PER_CHECK = 2
+
+
+def _smc_candles_since(closed_15m, since_iso: str) -> list:
+    """Gesloten 15m-candles die NA since_iso sloten (de laatste
+    bijwerking van de setup), oudste eerst, hoogstens
+    SMC_MAX_CANDLES_PER_CHECK. Een candle die al sloot vóór de setup
+    (opnieuw) gedefinieerd werd, heeft die zone nooit 'gezien' en mag hem
+    dus ook niet afwijzen of ongeldig maken — dat werd bij het aanmaken al
+    tegen de laatste gesloten candle getoetst."""
+    since = datetime.fromisoformat(since_iso)
+    close_times = closed_15m["timestamp"] + timedelta(minutes=SMC_ENTRY_CANDLE_MINUTES)
+    fresh = closed_15m[close_times > since].tail(SMC_MAX_CANDLES_PER_CHECK)
+    return [candle for _, candle in fresh.iterrows()]
+
+
 async def _check_smc_setup(coin: str) -> Optional[dict]:
     """SMC/ICT-liquidity-setup: structuurbreuk + sweep op 30m, terugtrek
     naar een FVG/order-block-overlap op 15m. Volledig autonoom, los van
     de drie bestaande structurele detectoren (uitbraak+terugtest,
-    trendlijn+terugtest, patroon) en van hun top-3-per-cyclus-cap — zie
-    de Global Constraints in dit plan. Geeft de smc_setups-rij terug
-    zodra de zone geraakt EN afgewezen is (Task 5 maakt daar het echte
-    signaal van), None in elk ander geval (geen structuurbreuk, geen
-    sweep, geen confluence-zone, of wel een bouwende setup maar nog geen
-    afwijzing).
+    trendlijn+terugtest, patroon) en van hun top-3-per-cyclus-cap. Geeft
+    de smc_setups-rij terug zodra de zone geraakt EN afgewezen is
+    (_complete_smc_setup maakt daar het echte signaal van), None in elk
+    ander geval (geen structuurbreuk, geen sweep, geen confluence-zone, of
+    wel een bouwende setup maar nog geen afwijzing).
 
-    Fase 1: bestaande bouwende setups voor deze coin tegen de huidige
-    laatste 15m-candle houden, ONAFHANKELIJK van of er deze cyclus een
-    nieuwe structuurbreuk gevonden wordt (zie de ontwerptoelichting
-    hierboven de functie-docstring van deze taak). Fase 2: pas daarna
+    Alles wordt beoordeeld op GESLOTEN candles (iloc[:-1], zelfde conventie
+    als de volume- en candlepatroon-factoren in indicators.py): de laatste
+    candle van de exchange is nog in wording, een 'close onder de swing-low'
+    of 'afwijzing' halverwege die candle kan voor het sluiten nog volledig
+    omdraaien.
+
+    Fase 1: bestaande bouwende setups voor deze coin toetsen tegen de
+    15m-candles die sinds hun laatste bijwerking gesloten zijn,
+    ONAFHANKELIJK van of er deze cyclus een nieuwe structuurbreuk gevonden
+    wordt — een breuk is een eenmalige gebeurtenis op de candle die op dat
+    moment de laatste was, een bouwende setup moet de cycli daarna blijven
+    bestaan tot de zone geraakt of doorbroken wordt. Fase 2: pas daarna
     zoeken naar een nieuwe breuk."""
     df_15m = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="15m")
-    last_candle = df_15m.iloc[-1]
+    closed_15m = df_15m.iloc[:-1]
+    last_candle = closed_15m.iloc[-1]
 
     existing = [s for s in repo.list_forming_smc_setups() if s["coin"] == coin]
     for existing_setup in existing:
-        in_zone, rejected, passed_without_rejection = _smc_last_candle_state(
-            last_candle, existing_setup["zone_low"], existing_setup["zone_high"], existing_setup["direction"],
-        )
-        if rejected:
-            return existing_setup
-        # Geen extra in_zone-eis: de candle die door de zone heen sluit
-        # heeft vrijwel altijd zelf een staart in de zone, en rejected en
-        # passed_without_rejection sluiten elkaar al uit (close aan
-        # tegenovergestelde kanten van de zone).
-        if passed_without_rejection:
-            repo.delete_smc_setup(existing_setup["id"])
+        for candle in _smc_candles_since(closed_15m, existing_setup["updated_at"]):
+            in_zone, rejected, passed_without_rejection = _smc_last_candle_state(
+                candle, existing_setup["zone_low"], existing_setup["zone_high"], existing_setup["direction"],
+            )
+            if rejected:
+                return existing_setup
+            # Geen extra in_zone-eis: de candle die door de zone heen sluit
+            # heeft vrijwel altijd zelf een staart in de zone, en rejected en
+            # passed_without_rejection sluiten elkaar al uit (close aan
+            # tegenovergestelde kanten van de zone).
+            if passed_without_rejection:
+                repo.delete_smc_setup(existing_setup["id"])
+                break
 
-    df_30m = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="30m", limit=SMC_ZONE_SEARCH_LOOKBACK_30M)
-    structure_break = indicators.find_structure_break(df_30m)
+    # +1: de nog vormende candle valt hieronder weg voor de breuk-toets.
+    df_30m = await asyncio.to_thread(
+        exchange.fetch_ohlcv, coin, timeframe="30m", limit=SMC_ZONE_SEARCH_LOOKBACK_30M + 1,
+    )
+    closed_30m = df_30m.iloc[:-1]
+    structure_break = indicators.find_structure_break(closed_30m)
     if structure_break is None:
         return None
     direction = structure_break.direction
@@ -713,12 +754,12 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         if existing_setup["direction"] != direction:
             repo.delete_smc_setup(existing_setup["id"])
 
-    sweep = indicators.find_liquidity_sweep_before_break(df_30m, structure_break)
+    sweep = indicators.find_liquidity_sweep_before_break(closed_30m, structure_break)
     if sweep is None:
         return None
 
-    fvgs = indicators.find_fair_value_gaps(df_15m, direction)
-    order_blocks = indicators.find_order_blocks(df_15m, direction)
+    fvgs = indicators.find_fair_value_gaps(closed_15m, direction)
+    order_blocks = indicators.find_order_blocks(closed_15m, direction)
     zone = indicators.find_confluence_zone(fvgs, order_blocks)
     if zone is None:
         return None
@@ -731,7 +772,10 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     # niet genoeg: de net gebroken pivot zelf, en elke oudere pivot waar de
     # doorbraak-beweging al doorheen liep, ligt ook voorbij de zone maar
     # die liquidity is al opgehaald — zo'n doel gaf een take profit aan de
-    # verkeerde kant van de entry zodra de afwijzing eronder sloot.
+    # verkeerde kant van de entry zodra de afwijzing eronder sloot. Hier
+    # WEL inclusief de nog vormende 30m-candle (df_30m, niet closed_30m):
+    # een niveau waar de prijs al doorheen handelde is opgehaald, of die
+    # candle nu al gesloten is of niet.
     since_break = df_30m.iloc[structure_break.break_index:]
     if direction == "long":
         untouched_from = max(zone_high, float(since_break["high"].max()))
@@ -739,7 +783,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         untouched_from = min(zone_low, float(since_break["low"].min()))
     target_kind = "high" if direction == "long" else "low"
     target_pivots = [
-        p for p in indicators._find_pivots(df_30m)
+        p for p in indicators._find_pivots(closed_30m)
         if p.kind == target_kind and (
             (direction == "long" and p.price > untouched_from) or
             (direction == "short" and p.price < untouched_from)
@@ -776,10 +820,10 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         return setup
 
     if not setup["alert_sent"]:
-        title = f"{push_notify.coin_symbol(coin)} {coin}, SMC-setup bouwt op"
+        title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, SMC-setup bouwt op"
         body = (
-            f"Structuur + sweep gezien, zone {zone_low:.4f}-{zone_high:.4f}. "
-            f"Zet je limit order klaar."
+            f"Structuur + sweep gezien ({direction}), zone {zone_low:.4f}-{zone_high:.4f}. "
+            f"Zet je {direction} limit order klaar."
         )
         for user in repo.list_users():
             quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
@@ -795,7 +839,7 @@ STOP_MARGIN_PCT = 0.1    # procent, marge voorbij de sweep
 TARGET_MARGIN_PCT = 0.5  # procent, marge vóór de liquidity
 
 
-async def _complete_smc_setup(coin: str, setup: dict) -> None:
+async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     """Bouwt het echte signaal zodra _check_smc_setup een afgewezen zone
     teruggeeft. Geen ATR: stop en doel zijn volledig structuur-gebaseerd
     (zie de spec en de Global Constraints in dit plan). sign is voor
@@ -823,7 +867,25 @@ async def _complete_smc_setup(coin: str, setup: dict) -> None:
             "SMC-setup %s voor %s niet gemeld: stop %.4f / doel %.4f liggen niet aan de juiste kant van entry %.4f (%s)",
             setup["id"], coin, stop_loss, take_profit, entry_price, direction,
         )
-        return
+        return None
+
+    # Zelfde opruiming als de andere detectoren vóór hun insert_signal: een
+    # nog niet genomen melding voor de andere richting op deze coin is
+    # achterhaald zodra hier een smc-signaal ontstaat.
+    ignored = repo.auto_ignore_opposite_pending(coin, direction)
+    if ignored:
+        logger.info("%s nog niet genomen tegenovergestelde melding(en) voor %s automatisch genegeerd (smc)",
+                    len(ignored), coin)
+        for user in ignored:
+            try:
+                repo.create_notification(
+                    user["id"], "expired_signal",
+                    f"Kans op {coin} vervallen",
+                    f"Een nieuwe {direction}-melding op {coin} maakte de vorige kans achterhaald.",
+                    f"/coins/{coin}",
+                )
+            except Exception:
+                logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
     reason = (
         f"SMC-liquidity-setup: structuur brak op {setup['structure_level']:.4f}, "
@@ -867,6 +929,23 @@ async def _complete_smc_setup(coin: str, setup: dict) -> None:
         make_body=_smc_body,
         reason=reason,
     )
+    return signal_id
+
+
+async def _run_smc_check(coin: str) -> Optional[str]:
+    """De SMC-check voor één coin, met een eigen try/except: een
+    Binance-storing op 30m/15m mag de 4u-detectoren niet blokkeren, en
+    omgekeerd (daarom draait scan_market dit vóór en buiten zijn 4u-blok).
+    Geeft de richting terug als er deze cyclus een smc-signaal ontstond,
+    zodat scan_market voor dezelfde coin geen tegenstrijdige melding meer
+    stuurt."""
+    try:
+        setup = await _check_smc_setup(coin)
+        if setup and await _complete_smc_setup(coin, setup) is not None:
+            return setup["direction"]
+    except Exception:
+        logger.exception("SMC-check voor %s is mislukt, ga door met de rest van de cyclus", coin)
+    return None
 
 
 async def scan_market() -> None:
@@ -907,6 +986,12 @@ async def scan_market() -> None:
 
     for coin_row in coins:
         coin = coin_row["symbol"]
+        # SMC vóór de BTC-vlak-rem en buiten het 4u-blok hieronder: de
+        # vlak-rem beschermt de kwaliteit van de 4u-detectoren in een
+        # zijwaartse markt, smc's structuur+sweep+zone werkt lokaal per coin
+        # op 30m/15m en staat daar los van. Een 4u-fout voor deze coin mag
+        # de smc-check evenmin overslaan.
+        smc_direction = await _run_smc_check(coin)
         if btc_flat and coin != "BTC":
             continue
         try:
@@ -948,12 +1033,19 @@ async def scan_market() -> None:
             if pattern_candidate:
                 structural.append(pattern_candidate)
 
-            try:
-                smc_setup = await _check_smc_setup(coin)
-                if smc_setup:
-                    await _complete_smc_setup(coin, smc_setup)
-            except Exception:
-                logger.exception("SMC-check voor %s is mislukt, ga door met de rest van de cyclus", coin)
+            # Deze cyclus al een smc-signaal op deze coin gepusht: een
+            # structurele kandidaat de andere kant op zou aan het eind van de
+            # cyclus alsnog tegenovergesteld melden. Die kandidaat valt hier
+            # af en dingt volgende cyclus gewoon opnieuw mee (zelfde als bij
+            # de cyclus-limiet hieronder).
+            if smc_direction:
+                opposed = [c for c in structural if c["direction"] != smc_direction]
+                if opposed:
+                    logger.info(
+                        "%s: %s structurele kandidaat/kandidaten tegen het smc-signaal (%s) in overgeslagen",
+                        coin, len(opposed), smc_direction,
+                    )
+                    structural = [c for c in structural if c["direction"] == smc_direction]
 
             by_direction: dict[str, list[dict]] = {}
             for candidate in structural:
@@ -962,8 +1054,11 @@ async def scan_market() -> None:
             # structural_directions_signaled: alle richtingen die deze coin
             # deze cyclus GEVONDEN heeft (niet per se gemeld, zie hieronder)
             # — genoeg om de generieke dagtrading-melding verderop te laten
-            # wijken, ongeacht welke specifieke richting het was.
+            # wijken, ongeacht welke specifieke richting het was. Een
+            # smc-signaal van deze cyclus telt ook mee: dat is al gepusht.
             structural_directions_signaled: set = set(by_direction.keys())
+            if smc_direction:
+                structural_directions_signaled.add(smc_direction)
 
             # Maar hoogstens ÉÉN kandidaat per coin dingt mee naar een
             # daadwerkelijke melding deze cyclus, ongeacht hoeveel

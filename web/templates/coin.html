@@ -79,7 +79,7 @@
       <div class="primary-card-head">
         <span class="badge badge-{{ primary.direction }}">{{ primary.direction }}</span>
         {{ macros.self_detected(primary) }}
-        {% if primary.reason and primary.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}</span>{% endif %}
+        {% if primary.reason and primary.trade_type not in ('swing', 'smc') %}<span class="confidence-ratio mono muted">{{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}</span>{% endif %}
         {% if open_trades %}<span class="badge badge-status">{{ primary.status }}</span>{% endif %}
       </div>
       <p class="primary-card-meta muted">
@@ -111,7 +111,7 @@
     </div>
 
     <div class="card">
-      <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>{% if primary.trade_type == 'swing' %}Waarom dit bewaakte niveau{% elif primary.trade_type == 'patroon' %}Waarom dit patroon{% else %}Waarom {{ primary.confidence.split(" ")[0] }} ({{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}){% endif %}</h3>
+      <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>{% if primary.trade_type == 'swing' %}Waarom dit bewaakte niveau{% elif primary.trade_type == 'patroon' %}Waarom dit patroon{% elif primary.trade_type == 'smc' %}Waarom deze SMC-setup{% else %}Waarom {{ primary.confidence.split(" ")[0] }} ({{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}){% endif %}</h3>
       {% if primary.plain_explanation %}<p class="plain-explanation">{{ primary.plain_explanation }}</p>{% endif %}
       {{ macros.reason_factors(primary, p_style="margin: 0 0 5px; font-size: 12.5px;") }}
       <p class="muted advice-text" style="margin-top: 8px;">{{ primary.advice }}</p>

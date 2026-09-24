@@ -1,5 +1,5 @@
-"""Wist alle berichten, signalen, bronniveaus, eigen getekende lijnen en
-logboekregels, voor een frisse start. Laat accounts, portfolio-instellingen,
+"""Wist alle berichten, signalen, SMC-setups, bronniveaus, eigen getekende
+lijnen en logboekregels, voor een frisse start. Laat accounts, portfolio-instellingen,
 de gevolgde coinlijst en de website-instellingen ongemoeid.
 
 Zet voor de zekerheid crypto-bot en crypto-web stil (sudo systemctl stop
@@ -33,6 +33,7 @@ def main() -> None:
     with db.session() as conn:
         counts = {
             "journal_entries": count(conn, "journal_entries"),
+            "smc_setups": count(conn, "smc_setups"),
             "signals": count(conn, "signals"),
             "source_levels": count(conn, "source_levels"),
             "trendlines": count(conn, "trendlines"),
@@ -42,6 +43,7 @@ def main() -> None:
     print("Dit wordt permanent verwijderd:")
     print(f"  {counts['messages']} berichten")
     print(f"  {counts['signals']} signalen")
+    print(f"  {counts['smc_setups']} SMC-setups (bouwend en afgerond)")
     print(f"  {counts['journal_entries']} logboekregels (van alle gebruikers samen)")
     print(f"  {counts['source_levels']} bronniveaus")
     print(f"  {counts['trendlines']} zelf getekende lijnen")
@@ -67,6 +69,9 @@ def main() -> None:
         try:
             with db.session() as conn:
                 conn.execute("DELETE FROM journal_entries")
+                # Vóór signals: smc_setups.signal_id verwijst ernaar (FK),
+                # anders faalt elke poging met een IntegrityError.
+                conn.execute("DELETE FROM smc_setups")
                 conn.execute("DELETE FROM signals")
                 conn.execute("DELETE FROM source_levels")
                 conn.execute("DELETE FROM trendlines")

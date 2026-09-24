@@ -1473,14 +1473,15 @@ def auto_ignore_opposite_pending(coin: str, direction: str) -> list[dict]:
     dat hun kans niet meer actueel is in plaats van dit stil te laten
     gebeuren.
 
-    Beperkt tot day_trading en patroon: deze functie wordt aangeroepen
-    vanuit process_day_trading_signal (eigen day-trading kansen) en
-    market_scanner._find_chart_pattern_candidate (eigen patroon-kansen), om zijn
-    EIGEN nog niet genomen tegenovergestelde kans van hetzelfde,
-    korte-termijn soort op te ruimen — patroon draait op dezelfde 4u-candle
-    als day trading, dus hoort in dezelfde emmer. Swing blijft hier bewust
-    buiten: die heeft een eigen, veel langere tijdshorizon en mag nooit
-    door een losstaand day-trading- of patroon-signaal achterhaald raken."""
+    Beperkt tot day_trading, patroon en smc: deze functie wordt aangeroepen
+    vanuit process_day_trading_signal (eigen day-trading kansen),
+    market_scanner's structurele detectoren (patroon-kansen) en
+    market_scanner._complete_smc_setup (smc-kansen), om zijn EIGEN nog niet
+    genomen tegenovergestelde kans van hetzelfde, korte-termijn soort op te
+    ruimen — patroon draait op dezelfde 4u-candle als day trading, smc op
+    30m/15m nog korter, dus alle drie horen in dezelfde emmer. Swing blijft
+    hier bewust buiten: die heeft een eigen, veel langere tijdshorizon en mag
+    nooit door een losstaand korte-termijn-signaal achterhaald raken."""
     opposite = "short" if direction.lower() == "long" else "long"
     note = f"automatisch genegeerd: nieuwe {direction} melding voor {coin.upper()} maakt dit tegenovergestelde signaal achterhaald"
     with db.session() as conn:
@@ -1491,7 +1492,7 @@ def auto_ignore_opposite_pending(coin: str, direction: str) -> list[dict]:
                JOIN users u ON u.id = je.user_id
                WHERE je.entry_price IS NULL AND je.status != 'genegeerd'
                      AND s.coin = ? AND s.direction = ? AND s.is_practice = 0
-                     AND s.trade_type IN ('day_trading', 'patroon')""",
+                     AND s.trade_type IN ('day_trading', 'patroon', 'smc')""",
             (coin.upper(), opposite),
         ).fetchall()
         if affected:

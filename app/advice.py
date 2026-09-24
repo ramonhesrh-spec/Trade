@@ -15,6 +15,17 @@ def build_advice(signal: dict) -> str:
             "3-van-4-toets zoals bij day trading."
         )
 
+    # Zelfde reden voor smc: technical_confirmed staat daar vast op 1 en er
+    # zijn geen RSI/EMA/MACD/volume-waarden opgeslagen, dus "alle vier
+    # factoren kloppen" zou een meting beweren die nooit gedaan is.
+    if signal.get("trade_type") == "smc":
+        return (
+            "Geen factorentoets voor een SMC-setup: de onderbouwing is "
+            "structureel (structuurbreuk, liquidity sweep en een afwijzing in "
+            "de terugtrek-zone). De stop ligt net voorbij de sweep, het doel "
+            "net vóór de eerstvolgende nog niet opgehaalde liquidity."
+        )
+
     is_pattern = signal.get("trade_type") == "patroon"
     pattern_name = signal.get("pattern_name") or "onbekend patroon"
     factor_pct = signal.get("pass_pct")

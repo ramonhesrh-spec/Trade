@@ -48,7 +48,7 @@
 {% elif entry.trade_type == "patroon" %}
 <p class="muted reason-legend">Autonoom gedetecteerd door HesPulse, zonder doorgestuurd bericht. De vinkjes hieronder zijn de gepoolde factoren die deze kans ondersteunen of tegenspreken; het percentage hierboven combineert dat met de historische winrate van dit type.</p>
 {% elif entry.trade_type == "smc" %}
-<p class="muted reason-legend">Structuurbreuk, liquidity sweep en een terugtrek-zone zijn hierboven de feitelijke onderbouwing — geen los gemeten technische factoren zoals bij day-trading.</p>
+<p class="muted reason-legend">Structuurbreuk, liquidity sweep en een terugtrek-zone hieronder zijn de feitelijke onderbouwing — geen los gemeten technische factoren zoals bij day-trading.</p>
 {% else %}
 <p class="muted reason-legend">De vinkjes hieronder zijn nu gemeten (RSI, volume, trend, momentum). De slagingskans hierboven is een inschatting op basis van eerdere trades, geen garantie voor deze trade.</p>
 {% endif %}
@@ -72,10 +72,16 @@
    dashboard.js), aanpassen van SL/TP/grootte, sluiten, terugzetten. Zelfde
    op het dashboard en op de coinpagina, anders loopt de ene plek uit de
    pas met de andere zodra er iets aan verandert. #}
+{# "waarom ...?"-kop boven de redenering van een journaalregel. Stond los
+   in open_trade_body en op de nog-te-beslissen-kaart van het dashboard;
+   die tweede liep achter (toonde voor swing/smc het eerste woord van
+   confidence, bv. "waarom SMC-setup?"). #}
+{% macro why_label(e) %}{% if e.trade_type == 'swing' %}waarom dit bewaakte niveau?{% elif e.trade_type == 'patroon' %}waarom dit patroon?{% elif e.trade_type == 'smc' %}waarom deze SMC-setup?{% else %}waarom {{ e.confidence.split(" ")[0] }}?{% endif %}{% endmacro %}
+
 {% macro open_trade_body(e, redirect_to=none) %}
 {% if e.reason %}
 <details class="confidence-detail js-accordion">
-  <summary class="confidence-why">{% if e.trade_type == 'swing' %}waarom dit bewaakte niveau?{% elif e.trade_type == 'patroon' %}waarom dit patroon?{% else %}waarom {{ e.confidence.split(" ")[0] }}?{% endif %}</summary>
+  <summary class="confidence-why">{{ why_label(e) }}</summary>
   <div class="reason-popup">
     {{ reason_popup(e) }}
   </div>
@@ -160,6 +166,8 @@
     <span class="badge badge-swing" title="Bevestigd op een bewaakt steun/weerstand-niveau, geen gepoold percentage">swing</span>
     {% elif entry.trade_type == "patroon" %}
     <span class="badge badge-swing" title="Autonoom herkend door HesPulse, zonder doorgestuurd bericht">{{ entry.pattern_name }}</span>
+    {% elif entry.trade_type == "smc" %}
+    <span class="badge badge-swing" title="Autonoom herkend door HesPulse: structuurbreuk + liquidity sweep op 30m, afwijzing in de terugtrek-zone op 15m — geen gepoold percentage">SMC</span>
     {% endif %}
     {% if entry.auto_outcome == "take_profit" %}<span class="badge badge-outcome-win">✓ take profit</span>
     {% elif entry.auto_outcome == "stop_loss" %}<span class="badge badge-outcome-loss">✗ stop loss</span>
@@ -202,7 +210,7 @@
      openklapte. Percentage/badges hierboven blijven de snelle scan,
      de redenering is er nog steeds, nu pas na een klik. #}
   <details class="confidence-detail js-accordion">
-    <summary class="confidence-why">waarom {% if entry.trade_type == "patroon" %}{% if entry.success_rate is defined and entry.success_rate is not none %}kans {{ "%.0f"|format(entry.success_rate) }}%{% else %}dit patroon{% endif %}{% elif entry.pass_pct is not none %}{{ "%.0f"|format(entry.pass_pct) }}%{% else %}dit bewaakte niveau{% endif %}?</summary>
+    <summary class="confidence-why">waarom {% if entry.trade_type == "patroon" %}{% if entry.success_rate is defined and entry.success_rate is not none %}kans {{ "%.0f"|format(entry.success_rate) }}%{% else %}dit patroon{% endif %}{% elif entry.trade_type == "smc" %}deze SMC-setup{% elif entry.pass_pct is not none %}{{ "%.0f"|format(entry.pass_pct) }}%{% else %}dit bewaakte niveau{% endif %}?</summary>
     <div class="reason-popup">
       {{ reason_popup(entry) }}
     </div>

@@ -92,8 +92,8 @@
       <div class="confidence-line">
         <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
         {{ macros.self_detected(e) }}
-        {% if e.reason and e.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
-        {% if e.trade_type != 'swing' %}
+        {% if e.reason and e.trade_type not in ('swing', 'smc') %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
+        {% if e.trade_type not in ('swing', 'smc') %}
         <span class="muted" style="font-size: 12px;">
           {% if e.success_rate is none %}
           slagingskans (nog weinig data)
@@ -126,8 +126,8 @@
       <div class="confidence-line">
         <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
         {{ macros.self_detected(e) }}
-        {% if e.reason and e.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
-        {% if e.trade_type != 'swing' %}
+        {% if e.reason and e.trade_type not in ('swing', 'smc') %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
+        {% if e.trade_type not in ('swing', 'smc') %}
         <span class="muted" style="font-size: 12px;">
           {% if e.success_rate is none %}
           slagingskans (nog weinig data)
@@ -140,7 +140,7 @@
       </div>
       {% if e.reason %}
       <details class="confidence-detail js-accordion">
-        <summary class="confidence-why">waarom {{ e.confidence.split(" ")[0] }}?</summary>
+        <summary class="confidence-why">{{ macros.why_label(e) }}</summary>
         <div class="reason-popup">
           {{ macros.reason_popup(e) }}
         </div>
@@ -240,7 +240,7 @@
       </div>
       <div class="confidence-line">
         <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
-        {% if e.reason and e.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
+        {% if e.reason and e.trade_type not in ('swing', 'smc') %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
       </div>
       {% if e.reason %}
       <details class="confidence-detail js-accordion">
@@ -571,7 +571,7 @@
           <details class="confidence-detail js-accordion">
             <summary>
               <span class="badge {{ 'badge-hoog' if e.confidence == 'hoog vertrouwen' else 'badge-laag' }}">{{ e.confidence.split(" ")[0] }}</span>
-              {% if e.reason and e.trade_type != 'swing' %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
+              {% if e.reason and e.trade_type not in ('swing', 'smc') %}<span class="confidence-ratio mono muted">{{ e.reason.count("✓") }}/{{ e.reason.split(" | ")|length }}</span>{% endif %}
             </summary>
             <div class="reason-popup">
               {{ macros.reason_popup(e) }}
