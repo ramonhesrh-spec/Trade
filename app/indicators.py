@@ -856,6 +856,34 @@ def check_daily_liquidity_sweep(direction: str, daily_df: pd.DataFrame) -> tuple
     return ("Liquidity sweep (dag)", True, f"stop-hunt op daily van {hit.price:.4f}, candle sloot terug aan de goede kant")
 
 
+def find_sniper_entry_price(direction: str, df: pd.DataFrame) -> Optional[tuple[float, str]]:
+    """Dunne laag over _find_liquidity_sweep: geeft de rauwe sweep-prijs en
+    een leesbare "waarom is dit een sniper-entry"-uitleg terug, in plaats
+    van de korte factor-detail-string die check_liquidity_sweep bouwt voor
+    de gepoolde 16-factoren-toets. Zelfde window, zelfde detectie —
+    check_liquidity_sweep zelf blijft ongewijzigd; dit is een aparte,
+    op-maat-gemaakte laag eroverheen, specifiek voor sniper-gebruik
+    (signal_processor.py, market_scanner.py, level_check.py). Alleen de
+    4u-timeframe (df hier is altijd de 4u-candles), geen daily-variant in
+    v1 — check_daily_liquidity_sweep blijft een aparte, gepoolde factor."""
+    direction = direction.lower()
+    window = df.tail(SR_ZONE_LOOKBACK).reset_index(drop=True)
+    hit = _find_liquidity_sweep(window, direction)
+    if hit is None:
+        return None
+    if direction == "long":
+        reason = (
+            f"Stop-hunt: prijs werd even onder {hit.price:.4f} geduwd en sloot er "
+            "meteen weer boven — de klassieke bear trap, hier zaten net de stops van anderen."
+        )
+    else:
+        reason = (
+            f"Stop-hunt: prijs werd even boven {hit.price:.4f} geduwd en sloot er "
+            "meteen weer onder — de klassieke bull trap, hier zaten net de stops van anderen."
+        )
+    return (hit.price, reason)
+
+
 # Hoe ver de prijs nog voorbij een doorbroken zone mag zitten om "nu aan
 # het terugtesten" te tellen (in ATR): zelfde soort ATR-genormaliseerde
 # marge als BTC_FLAT_EMA_GAP_ATR_MULTIPLE.
