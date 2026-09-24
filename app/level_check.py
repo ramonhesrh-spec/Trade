@@ -182,6 +182,7 @@ async def check_pending_signals() -> None:
 
     coin_prices: dict[str, float] = {}
     coin_levels: dict[tuple[int, str], list[dict]] = {}
+    coin_sniper: dict[tuple[str, str], Optional[tuple[float, str]]] = {}
     pattern_winrate = repo.pattern_winrate_stats()
 
     for entry in entries:
@@ -228,9 +229,32 @@ async def check_pending_signals() -> None:
             and entry["suggested_entry_low"] <= current_price <= entry["suggested_entry_high"]
         )
 
+        # Sniper-trigger heeft voorrang op de andere drie situaties hieronder:
+        # als de sweep alsnog gebeurt is dat een preciezere instap dan het
+        # kale signaalniveau of een bron niveau. Alleen relevant als er bij
+        # het aanmaken van het signaal nog geen sniper-treffer was
+        # (entry["sniper_entry_price"] is None, zie repo.list_pending_entries_with_price)
+        # — anders had de allereerste melding het al gemeld. Vereist verse
+        # candles (in tegenstelling tot de rest van deze functie, die alleen
+        # de live prijs nodig heeft), dus gecachet per coin+richting binnen
+        # deze cyclus zodat twee pending signalen op dezelfde coin+richting
+        # niet twee keer Binance raken.
+        sniper_hit: Optional[tuple[float, str]] = None
+        if not in_entry_zone and entry["sniper_entry_price"] is None:
+            cache_key = (coin, entry["direction"])
+            if cache_key not in coin_sniper:
+                try:
+                    sniper_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin)
+                    coin_sniper[cache_key] = indicators.find_sniper_entry_price(entry["direction"], sniper_df)
+                except Exception:
+                    logger.exception("Kon geen candles ophalen voor sniper-check op %s, sla over", coin)
+                    coin_sniper[cache_key] = None
+            sniper_hit = coin_sniper[cache_key]
+
         signal_age = datetime.now(timezone.utc) - datetime.fromisoformat(entry["signal_created_at"])
         at_signal_level = (
             not in_entry_zone
+            and sniper_hit is None
             and signal_age >= timedelta(minutes=PENDING_LEVEL_MIN_AGE_MINUTES)
             and entry["signal_price"] is not None
             and abs(current_price - entry["signal_price"]) <= entry["atr"] * PENDING_LEVEL_ATR_MULTIPLIER
@@ -245,31 +269,37 @@ async def check_pending_signals() -> None:
         # dit project al voorkomt. Een autonoom signaal (message_id is None,
         # market_scanner.py) heeft geen bron-bericht, dus geen matched_level
         # mogelijk — valt terug op in_entry_zone/at_signal_level hierboven.
-        if not in_entry_zone and not at_signal_level and entry["message_id"] is not None:
-            cache_key = (entry["message_id"], coin)
-            if cache_key not in coin_levels:
-                coin_levels[cache_key] = repo.list_source_levels_for_message(entry["message_id"], coin)
-            matched_level = _nearest_level(current_price, entry["atr"], coin_levels[cache_key])
+        if not in_entry_zone and sniper_hit is None and not at_signal_level and entry["message_id"] is not None:
+            message_cache_key = (entry["message_id"], coin)
+            if message_cache_key not in coin_levels:
+                coin_levels[message_cache_key] = repo.list_source_levels_for_message(entry["message_id"], coin)
+            matched_level = _nearest_level(current_price, entry["atr"], coin_levels[message_cache_key])
 
-        if not in_entry_zone and not at_signal_level and not matched_level:
+        if not in_entry_zone and sniper_hit is None and not at_signal_level and not matched_level:
             continue
 
         # Zie de gelijknamige why-comment in check_open_trades hierboven:
         # geen telegram_chat_id-gate meer, push_notify.send_push handelt een
         # gebruiker zonder push-abonnement zelf al af.
-        if in_entry_zone:
-            level_line = f"Betere entry: {entry['suggested_entry_low']:.4f}–{entry['suggested_entry_high']:.4f}"
-        elif matched_level:
-            level_desc = f"{matched_level['price_level']}"
-            if matched_level["pattern_name"]:
-                level_desc += f" ({matched_level['pattern_name']})"
-            level_line = f"Bron niveau: {level_desc}"
+        if sniper_hit is not None:
+            sniper_price, sniper_reason = sniper_hit
+            title = f"🎯 {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()} — sniper-trigger geraakt"
+            body = f"{sniper_price:.4f} · {sniper_reason} · Nu {current_price:.4f}"
         else:
-            level_line = f"Signaalniveau: {entry['signal_price']:.4f}"
+            if in_entry_zone:
+                level_line = f"Betere entry: {entry['suggested_entry_low']:.4f}–{entry['suggested_entry_high']:.4f}"
+            elif matched_level:
+                level_desc = f"{matched_level['price_level']}"
+                if matched_level["pattern_name"]:
+                    level_desc += f" ({matched_level['pattern_name']})"
+                level_line = f"Bron niveau: {level_desc}"
+            else:
+                level_line = f"Signaalniveau: {entry['signal_price']:.4f}"
 
-        title = f"🔔 {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
-        heading = "Terug in de betere-entry-zone" if in_entry_zone else "Terug bij een interessant niveau"
-        body = f"{heading} ({entry['confidence']}) · {level_line} · Nu {current_price:.4f}"
+            title = f"🔔 {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
+            heading = "Terug in de betere-entry-zone" if in_entry_zone else "Terug bij een interessant niveau"
+            body = f"{heading} ({entry['confidence']}) · {level_line} · Nu {current_price:.4f}"
+
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
         try:
             await push_notify.send_push(entry["user_id"], title, body, f"/coins/{coin}", silent=silent)
