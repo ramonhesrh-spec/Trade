@@ -772,8 +772,8 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     return None
 
 
-STOP_MARGIN_PCT = 1      # procent, marge voorbij de sweep
-TARGET_MARGIN_PCT = 1    # procent, marge vóór de liquidity
+STOP_MARGIN_PCT = 0.1    # procent, marge voorbij de sweep
+TARGET_MARGIN_PCT = 0.5  # procent, marge vóór de liquidity
 
 
 async def _complete_smc_setup(coin: str, setup: dict) -> None:
@@ -785,7 +785,7 @@ async def _complete_smc_setup(coin: str, setup: dict) -> None:
     doel ligt ook BOVEN de liquidity-low (dichter bij de entry, 'net
     vóór' het niveau) — voor long allebei eronder. Zie de spec's
     zelf-review-correctie voor het concrete rekenvoorbeeld (short,
-    sweep_price 2820, liquidity_target 2600 -> stop 2848, doel 2626)."""
+    sweep_price 2820, liquidity_target 2600 -> stop 2823, doel 2613)."""
     direction = setup["direction"]
     sign = -1 if direction == "long" else 1
     stop_loss = setup["sweep_price"] + STOP_MARGIN_PCT / 100 * setup["sweep_price"] * sign
