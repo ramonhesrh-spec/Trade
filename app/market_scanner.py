@@ -772,10 +772,70 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     return None
 
 
+STOP_MARGIN_PCT = 1      # procent, marge voorbij de sweep
+TARGET_MARGIN_PCT = 1    # procent, marge vóór de liquidity
+
+
 async def _complete_smc_setup(coin: str, setup: dict) -> None:
-    """Placeholder voor Task 4's eigen verificatie — Task 5 vervangt dit
-    door de echte signaal-aanmaak en meldingslogica."""
-    logger.info("SMC-setup compleet voor %s (id=%s), signaal-aanmaak volgt in Task 5", coin, setup["id"])
+    """Bouwt het echte signaal zodra _check_smc_setup een afgewezen zone
+    teruggeeft. Geen ATR: stop en doel zijn volledig structuur-gebaseerd
+    (zie de spec en de Global Constraints in dit plan). sign is voor
+    zowel stop als doel hetzelfde teken, dat is geen typefout: voor short
+    ligt de stop BOVEN de geveegde high (verder van de entry af) en het
+    doel ligt ook BOVEN de liquidity-low (dichter bij de entry, 'net
+    vóór' het niveau) — voor long allebei eronder. Zie de spec's
+    zelf-review-correctie voor het concrete rekenvoorbeeld (short,
+    sweep_price 2820, liquidity_target 2600 -> stop 2848, doel 2626)."""
+    direction = setup["direction"]
+    sign = -1 if direction == "long" else 1
+    stop_loss = setup["sweep_price"] + STOP_MARGIN_PCT / 100 * setup["sweep_price"] * sign
+    take_profit = setup["liquidity_target"] + TARGET_MARGIN_PCT / 100 * setup["liquidity_target"] * sign
+
+    df_15m = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="15m")
+    entry_price = float(df_15m["close"].iloc[-1])
+
+    reason = (
+        f"SMC-liquidity-setup: structuur brak op {setup['structure_level']:.4f}, "
+        f"sweep op {setup['sweep_price']:.4f}, zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, "
+        f"doel bij liquidity {setup['liquidity_target']:.4f}."
+    )
+
+    sniper = indicators.find_sniper_entry_price(direction, df_15m)
+    sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
+
+    signal_data = {
+        "message_id": None, "coin": coin, "direction": direction,
+        "category": "day_trading", "trade_type": "smc", "pattern_name": "SMC liquidity sweep",
+        "price": entry_price, "rsi": None, "macd": None, "macd_signal": None,
+        "volume_ratio": None, "ema9": None, "ema21": None,
+        "atr": None, "atr_avg20": None, "adx": None,
+        "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1,
+        "confidence": "SMC-setup bevestigd",
+        "reason": reason,
+        "stop_loss": stop_loss, "take_profit": take_profit,
+        "context_note": None, "is_practice": 0, "plain_explanation": None,
+        "suggested_entry_low": None, "suggested_entry_high": None,
+        "sniper_entry_price": sniper_entry_price, "sniper_reason": sniper_reason,
+    }
+    signal_id = repo.insert_signal(signal_data)
+    repo.complete_smc_setup(setup["id"], signal_id)
+
+    def _smc_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
+        base = (
+            f"Entry {entry_price:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}\n"
+            f"Zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, doel bij liquidity {setup['liquidity_target']:.4f}"
+        )
+        if sniper_entry_price is not None:
+            base += f"\n🎯 Sniper: {sniper_entry_price:.4f} — {sniper_reason}"
+        return base
+
+    premise_level = setup["zone_high"] if direction == "short" else setup["zone_low"]
+    await fanout_confirmed_signal(
+        signal_id, coin, direction, entry_price, stop_loss, take_profit, premise_level,
+        title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, SMC liquidity sweep",
+        make_body=_smc_body,
+        reason=reason,
+    )
 
 
 async def scan_market() -> None:
