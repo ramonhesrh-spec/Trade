@@ -467,6 +467,26 @@ CREATE TABLE IF NOT EXISTS forming_patterns (
 CREATE INDEX IF NOT EXISTS idx_forming_patterns_coin ON forming_patterns(coin);
 CREATE INDEX IF NOT EXISTS idx_forming_patterns_distance ON forming_patterns(distance_pct);
 
+-- SMC liquidity setups die nog gebouwd worden: bouwende structuurbreuk/sweep
+-- combinaties die nog geen day_trading signaal hebben opgeleverd. Eén per
+-- bouwende setup, vervalt als de prijs voorbij de zone loopt, of wordt
+-- gekoppeld aan een day_trading signaal zodra die ontstaat.
+CREATE TABLE IF NOT EXISTS smc_setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    zone_low REAL NOT NULL,
+    zone_high REAL NOT NULL,
+    structure_level REAL NOT NULL,
+    sweep_price REAL NOT NULL,
+    liquidity_target REAL NOT NULL,
+    alert_sent INTEGER NOT NULL DEFAULT 0,
+    signal_id INTEGER REFERENCES signals(id),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_smc_setups_coin ON smc_setups(coin);
+
 -- Indexen op kolommen waar steeds op gefilterd of gesorteerd wordt. Zonder
 -- deze doorzoekt SQLite bij elke dashboard- of coinpagina de volledige
 -- tabel, dat wordt merkbaar trager naarmate er meer berichten en trades

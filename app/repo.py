@@ -2550,6 +2550,87 @@ def set_required_factors(user_id: int, factor_names: list[str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# SMC liquidity setups
+# ---------------------------------------------------------------------------
+
+ZONE_DEDUP_PCT = 0.3  # procent van de zone-middenprijs, geen ATR (zie de spec)
+
+
+def upsert_smc_setup(
+    coin: str, direction: str, zone_low: float, zone_high: float,
+    structure_level: float, sweep_price: float, liquidity_target: float,
+) -> int:
+    """Vindt een bestaande bouwende setup (signal_id IS NULL) voor deze
+    coin+richting waarvan de zone-middenprijs binnen ZONE_DEDUP_PCT
+    procent van de nieuwe zone ligt en werkt die bij, of maakt een nieuwe
+    rij aan. alert_sent wordt bij een update nooit teruggezet — dat zou
+    de eenmalige 'bouwend'-melding laten herhalen voor een setup die al
+    gemeld is."""
+    now = db.now_iso()
+    zone_mid = (zone_low + zone_high) / 2
+    with db.session() as conn:
+        existing = conn.execute(
+            """SELECT id, zone_low, zone_high FROM smc_setups
+               WHERE coin = ? AND direction = ? AND signal_id IS NULL""",
+            (coin, direction),
+        ).fetchall()
+        for row in existing:
+            existing_mid = (row["zone_low"] + row["zone_high"]) / 2
+            if existing_mid and abs(existing_mid - zone_mid) <= ZONE_DEDUP_PCT / 100 * zone_mid:
+                conn.execute(
+                    """UPDATE smc_setups SET zone_low = ?, zone_high = ?, structure_level = ?,
+                       sweep_price = ?, liquidity_target = ?, updated_at = ? WHERE id = ?""",
+                    (zone_low, zone_high, structure_level, sweep_price, liquidity_target, now, row["id"]),
+                )
+                return row["id"]
+        cur = conn.execute(
+            """INSERT INTO smc_setups
+               (coin, direction, zone_low, zone_high, structure_level, sweep_price,
+                liquidity_target, alert_sent, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)""",
+            (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, now, now),
+        )
+        return cur.lastrowid
+
+
+def list_forming_smc_setups() -> list[dict]:
+    """Alle bouwende setups (nog geen signal_id), meest recent bijgewerkt
+    eerst, voor de nieuwe /smc-pagina."""
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT * FROM smc_setups WHERE signal_id IS NULL ORDER BY updated_at DESC"
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def mark_smc_alert_sent(setup_id: int) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE smc_setups SET alert_sent = 1 WHERE id = ?", (setup_id,))
+
+
+def complete_smc_setup(setup_id: int, signal_id: int) -> None:
+    """Koppelt de bouwende setup aan het net aangemaakte signaal — vanaf
+    hier telt hij niet meer mee in list_forming_smc_setups (signal_id is
+    niet meer NULL) en wordt hij nooit meer door delete_smc_setup
+    opgeruimd."""
+    with db.session() as conn:
+        conn.execute("UPDATE smc_setups SET signal_id = ? WHERE id = ?", (signal_id, setup_id))
+
+
+def delete_smc_setup(setup_id: int) -> None:
+    """Verwijdert één bouwende setup: de prijs is voorbij de zone gelopen
+    zonder afwijzing, of een nieuwe, tegengestelde structuurbreuk maakte
+    hem achterhaald (zie Task 4). Werkt op één rij tegelijk, niet op alle
+    setups van een coin — een structuurbreuk is een eenmalige
+    gebeurtenis die op de LAATSTE candle van een venster gezien wordt, dus
+    'geen nieuwe breuk deze cyclus' betekent niet 'de oude setup is
+    ongeldig', een bouwende setup moet over meerdere cycli blijven
+    bestaan totdat de zone geraakt wordt."""
+    with db.session() as conn:
+        conn.execute("DELETE FROM smc_setups WHERE id = ? AND signal_id IS NULL", (setup_id,))
+
+
+# ---------------------------------------------------------------------------
 # Per-gebruiker bevestigde status en winrate
 # ---------------------------------------------------------------------------
 
