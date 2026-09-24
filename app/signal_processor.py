@@ -1012,7 +1012,14 @@ async def process_day_trading_signal(
     # je kan niet serieus tegelijk long en short op dezelfde coin overwegen.
     # Een al genomen trade (eigen entry al ingevuld) is een echte positie en
     # blijft hier altijd buiten schot.
-    ignored = repo.auto_ignore_opposite_pending(interp.coin, interp.direction)
+    # Niet bij een stille refresh (marktscan ververst een signaal dat al open
+    # stond, niemand krijgt een melding): dan is er geen nieuwe melding die
+    # de andere kant achterhaalt. Anders zette elke scancyclus een net
+    # gemelde tegengestelde kans (bv. een smc-short tegen een genomen
+    # 4u-long in) op genegeerd, met een 'Kans vervallen' naar alle eigenaars.
+    existing = repo.find_open_signal(interp.coin, interp.direction)
+    silent_refresh = existing is not None and not notify_on_update
+    ignored = [] if silent_refresh else repo.auto_ignore_opposite_pending(interp.coin, interp.direction)
     if ignored:
         logger.info("%s nog niet genomen tegenovergestelde melding(en) voor %s automatisch genegeerd",
                      len(ignored), interp.coin)
@@ -1027,8 +1034,6 @@ async def process_day_trading_signal(
             except Exception:
                 logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt",
                                   interp.coin, user["username"])
-
-    existing = repo.find_open_signal(interp.coin, interp.direction)
 
     if existing:
         signal_id = existing["id"]
