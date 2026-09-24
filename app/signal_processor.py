@@ -432,6 +432,7 @@ async def _fanout_confirmed_signal(
     make_body: Callable[[float, float, bool], str],
     skip_push: bool = False,
     kansberekening=_KANSBEREKENING_NOT_APPLICABLE, hard_gates_ok: bool = True,
+    reason: str = "",
 ) -> None:
     """Deelt een al-bevestigd signaal (geen gepoold percentage, altijd
     gemeld) met alle gebruikers: journaalregel + pushmelding per gebruiker,
@@ -456,6 +457,12 @@ async def _fanout_confirmed_signal(
     bevestigd, ongeacht de drempel. hard_gates_ok is de bijbehorende harde-
     eisen-vlag, nodig voor diezelfde vergelijking.
 
+    reason is de factor-breakdown-tekst van dit signaal (dezelfde
+    "✓ Naam: ... | ✗ Naam: ..."-tekst als signals.reason), nodig om per
+    gebruiker zijn eigen verplichte-factoren-eis te toetsen (zie
+    repo.user_confirmed). Alleen relevant samen met kansberekening
+    (patroon); bij de sentinel (swing) wordt hij simpelweg niet gebruikt.
+
     skip_push=True (alleen relevant zonder kansberekening) slaat de
     pushmelding voor deze gebruiker helemaal over — niet stil versturen,
     HELEMAAL niet versturen. De journaalregel wordt wel gewoon aangemaakt,
@@ -468,6 +475,7 @@ async def _fanout_confirmed_signal(
     chart-patroon) — dat kan inmiddels van entry_price afwijken (prijs
     beweegt tussen het zetten van het niveau en de latere bevestiging), dus
     de twee zijn expres losse parameters."""
+    required_by_user = repo.list_required_factors_all_users()
     for user in repo.list_users():
         active_eval_for_display = repo.get_active_evaluation(user["id"])
         risk_eur, evaluation_id, cost_rate, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
@@ -511,7 +519,10 @@ async def _fanout_confirmed_signal(
         if kansberekening is _KANSBEREKENING_NOT_APPLICABLE:
             skip_this_user = skip_push
         else:
-            skip_this_user = not repo.user_confirmed(kansberekening, hard_gates_ok, user["confirm_threshold_pct"])
+            skip_this_user = not repo.user_confirmed(
+                kansberekening, hard_gates_ok, user["confirm_threshold_pct"],
+                reason=reason, required_factors=required_by_user.get(user["id"], set()),
+            )
         if skip_this_user:
             logger.info("Onder de drempel van gebruiker %s voor %s: geen pushmelding",
                         user["username"], coin)

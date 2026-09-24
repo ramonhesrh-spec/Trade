@@ -199,6 +199,7 @@ async def _find_breakout_retest_candidate(coin: str, direction: str, df, ind) ->
             make_body=_breakout_body,
             kansberekening=kansberekening,
             hard_gates_ok=bool(factor_hard_gates_ok),
+            reason=factor_breakdown,
         )
         repo.set_breakout_retest_key(coin, key)
 
@@ -351,6 +352,7 @@ async def _find_trendline_retest_candidate(coin: str, direction: str, df, ind) -
             make_body=_trendline_body,
             kansberekening=kansberekening,
             hard_gates_ok=bool(factor_hard_gates_ok),
+            reason=factor_breakdown,
         )
         repo.set_trendline_retest_key(coin, key)
 
@@ -615,6 +617,7 @@ async def _find_chart_pattern_candidate(
             make_body=_pattern_body,
             kansberekening=kansberekening,
             hard_gates_ok=bool(factor_hard_gates_ok),
+            reason=factor_breakdown,
         )
         repo.set_pattern_key(coin, key)
 
