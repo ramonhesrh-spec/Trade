@@ -720,25 +720,30 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         return None
     zone_low, zone_high = zone
 
-    # Liquidity-doel: de eerstvolgende tegengestelde pivot voorbij de
-    # zone, op hetzelfde 30m-venster als de structuurbreuk zelf (dezelfde
-    # bron als structure_level en sweep_price, geen extra candle-fetch).
+    # Liquidity-doel: de dichtstbijzijnde tegengestelde pivot die de prijs
+    # sinds de breuk nog NIET geraakt heeft, op hetzelfde 30m-venster als
+    # de structuurbreuk zelf (dezelfde bron als structure_level en
+    # sweep_price, geen extra candle-fetch). Alleen "voorbij de zone" was
+    # niet genoeg: de net gebroken pivot zelf, en elke oudere pivot waar de
+    # doorbraak-beweging al doorheen liep, ligt ook voorbij de zone maar
+    # die liquidity is al opgehaald — zo'n doel gaf een take profit aan de
+    # verkeerde kant van de entry zodra de afwijzing eronder sloot.
+    since_break = df_30m.iloc[structure_break.break_index:]
+    if direction == "long":
+        untouched_from = max(zone_high, float(since_break["high"].max()))
+    else:
+        untouched_from = min(zone_low, float(since_break["low"].min()))
     target_kind = "high" if direction == "long" else "low"
     target_pivots = [
         p for p in indicators._find_pivots(df_30m)
         if p.kind == target_kind and (
-            (direction == "long" and p.price > zone_high) or
-            (direction == "short" and p.price < zone_low)
+            (direction == "long" and p.price > untouched_from) or
+            (direction == "short" and p.price < untouched_from)
         )
     ]
     if not target_pivots:
         return None
-    # Dichtstbijzijnde tegengestelde pivot voorbij de zone: de eerste
-    # liquidity die de prijs waarschijnlijk gaat opzoeken, niet een verre.
-    liquidity_target_pivot = min(
-        target_pivots,
-        key=lambda p: abs(p.price - (zone_high if direction == "long" else zone_low)),
-    )
+    liquidity_target_pivot = min(target_pivots, key=lambda p: abs(p.price - untouched_from))
 
     setup_id = repo.upsert_smc_setup(
         coin, direction, zone_low, zone_high,
@@ -793,6 +798,18 @@ async def _complete_smc_setup(coin: str, setup: dict) -> None:
 
     df_15m = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="15m")
     entry_price = float(df_15m["close"].iloc[-1])
+
+    # Stop en doel liggen vast sinds de setup bouwde, de live prijs niet:
+    # een afwijzing die al voorbij het doel sloot, of een prijs die sinds de
+    # afwijzing boven de stop (short) uitliep, is geen trade meer. Geen
+    # ATR-terugval zoals bij patroon — smc's hele premisse is structuur-
+    # gebaseerde stop/doel, dan liever geen signaal.
+    if not _valid_stop_take(direction, entry_price, stop_loss, take_profit):
+        logger.info(
+            "SMC-setup %s voor %s niet gemeld: stop %.4f / doel %.4f liggen niet aan de juiste kant van entry %.4f (%s)",
+            setup["id"], coin, stop_loss, take_profit, entry_price, direction,
+        )
+        return
 
     reason = (
         f"SMC-liquidity-setup: structuur brak op {setup['structure_level']:.4f}, "
