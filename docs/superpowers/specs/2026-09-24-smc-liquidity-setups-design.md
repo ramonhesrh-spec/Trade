@@ -254,11 +254,18 @@ BOVEN de geveegde high (verder van de entry af) en het doel ligt ook
 BOVEN de liquidity-low (dichter bij de entry, "net vóór" het niveau) —
 voor long allebei eronder. Zelf-review-correctie: een eerdere versie van
 deze formule had voor het doel het omgekeerde teken, wat het doel voorbij
-de liquidity in plaats van ervóór had gelegd. Geverifieerd met een
-concreet voorbeeld (short: sweep_price 2820, liquidity_target 2600 →
-stop 2848, doel 2626, beide aan de juiste kant). `STOP_MARGIN_PCT`/
-`TARGET_MARGIN_PCT`: nieuwe, kleine percentages (bijvoorbeeld 0,1% voor
-de stop, 0,5% voor het doel), puur prijs-gebaseerd, geen ATR.
+de liquidity in plaats van ervóór had gelegd. `STOP_MARGIN_PCT`/
+`TARGET_MARGIN_PCT`: nieuwe, kleine percentages, 0,1% voor de stop en
+0,5% voor het doel — dit zijn geen vrijblijvende voorbeeldwaarden maar de
+daadwerkelijk te gebruiken constanten, puur prijs-gebaseerd, geen ATR.
+Geverifieerd met een concreet voorbeeld (short: sweep_price 2820,
+liquidity_target 2600 → stop 2823, doel 2613, beide aan de juiste kant;
+**tweede zelf-review-correctie, tijdens de SDD-uitvoering van Task 5
+gevonden**: een eerdere versie van dit voorbeeld noemde ten onrechte
+"stop 2848, doel 2626" — die getallen kloppen alleen bij 1%-marges, niet
+bij de hierboven genoemde 0,1%/0,5%. Nagerekend en gecorrigeerd; de
+0,1%/0,5%-percentages zelf staan niet ter discussie, alleen het
+illustratieve rekenvoorbeeld was fout).
 
 `risk.compute_position_size(risk_eur, entry_price, stop_loss, cost_rate)`
 wordt ongewijzigd hergebruikt — die functie was al zuiver

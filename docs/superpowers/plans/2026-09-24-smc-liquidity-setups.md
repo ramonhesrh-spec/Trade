@@ -1125,7 +1125,7 @@ async def _complete_smc_setup(coin: str, setup: dict) -> None:
     doel ligt ook BOVEN de liquidity-low (dichter bij de entry, 'net
     vóór' het niveau) — voor long allebei eronder. Zie de spec's
     zelf-review-correctie voor het concrete rekenvoorbeeld (short,
-    sweep_price 2820, liquidity_target 2600 -> stop 2848, doel 2626)."""
+    sweep_price 2820, liquidity_target 2600 -> stop 2823, doel 2613)."""
     direction = setup["direction"]
     sign = -1 if direction == "long" else 1
     stop_loss = setup["sweep_price"] + STOP_MARGIN_PCT / 100 * setup["sweep_price"] * sign
@@ -1194,10 +1194,10 @@ def compute(direction, sweep_price, liquidity_target):
     take_profit = liquidity_target + TARGET_MARGIN_PCT / 100 * liquidity_target * sign
     return stop_loss, take_profit
 
-# Short: sweep_price 2820, liquidity_target 2600 -> stop 2848, doel 2626 (uit de spec)
+# Short: sweep_price 2820, liquidity_target 2600 -> stop 2823, doel 2613 (uit de spec)
 stop, target = compute('short', 2820.0, 2600.0)
-assert round(stop, 0) == 2848, stop
-assert round(target, 0) == 2626, target
+assert round(stop, 0) == 2823, stop
+assert round(target, 0) == 2613, target
 
 # Long, spiegelbeeld: sweep_price 2600 (geveegde low), liquidity_target 2820 (hoge liquidity)
 stop, target = compute('long', 2600.0, 2820.0)
@@ -1223,7 +1223,7 @@ from app import db, repo, market_scanner
 db.init_db()
 uid = repo.create_user('testuser', 'x', 1000.0, 1.0)
 
-setup_id = repo.upsert_smc_setup('ETH', 'short', 2695.0, 2710.0, 2820.0, 2825.0, 2600.0)
+setup_id = repo.upsert_smc_setup('ETH', 'short', 2695.0, 2710.0, 2815.0, 2820.0, 2600.0)
 
 def fake_fetch_ohlcv(coin, timeframe='4h', limit=200, since=None):
     rows = [(2700, 2705, 2695, 2698)] * 5
@@ -1241,8 +1241,8 @@ async def main():
         assert signal['trade_type'] == 'smc'
         assert signal['pass_pct'] is None
         assert signal['hard_gates_ok'] == 1
-        assert round(signal['stop_loss'], 0) == 2848
-        assert round(signal['take_profit'], 0) == 2626
+        assert round(signal['stop_loss'], 0) == 2823
+        assert round(signal['take_profit'], 0) == 2613
 
         # De bouwende setup is nu gekoppeld, verdwenen uit forming
         assert repo.list_forming_smc_setups() == []
