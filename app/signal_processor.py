@@ -925,6 +925,9 @@ async def process_day_trading_signal(
         suggested_entry_low = max(best_zone.price_low, ind.price) if best_zone else None
         suggested_entry_high = best_zone.price_high if best_zone else None
 
+    sniper = indicators.find_sniper_entry_price(interp.direction, df)
+    sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
+
     risk_distance = abs(ind.price - stop_take.stop_loss)
     reward_distance = abs(stop_take.take_profit - ind.price)
     risk_reward_ratio = (reward_distance / risk_distance) if risk_distance else 0.0
@@ -982,6 +985,8 @@ async def process_day_trading_signal(
         "nearest_sr_zone_price": nearest_sr_zone_price,
         "suggested_entry_low": suggested_entry_low,
         "suggested_entry_high": suggested_entry_high,
+        "sniper_entry_price": sniper_entry_price,
+        "sniper_reason": sniper_reason,
         "confidence": confidence,
         "reason": reason,
         "stop_loss": stop_take.stop_loss,
@@ -1139,9 +1144,13 @@ async def process_day_trading_signal(
                 f" · Mogelijk betere entry: {suggested_entry_low:.4f}–{suggested_entry_high:.4f}"
                 if suggested_entry_low is not None else ""
             )
+            sniper_line = (
+                f"\n🎯 Sniper: {signal_data['sniper_entry_price']:.4f} — {signal_data['sniper_reason']}"
+                if signal_data.get("sniper_entry_price") is not None else ""
+            )
             body = (
                 f"Entry {signal_data['price']:.4f} · Stop {effective_stop_loss:.4f} · "
-                f"Take profit {effective_take_profit:.4f}{entry_zone_note}"
+                f"Take profit {effective_take_profit:.4f}{entry_zone_note}{sniper_line}"
             )
             if signal_data.get("repeated_loss_note"):
                 body += f"\n{signal_data['repeated_loss_note']}"
@@ -1262,9 +1271,13 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
                 f" · Mogelijk betere entry: {suggested_low:.4f}–{suggested_high:.4f}"
                 if suggested_low is not None else ""
             )
+            sniper_line = (
+                f"\n🎯 Sniper: {message_data['sniper_entry_price']:.4f} — {message_data['sniper_reason']}"
+                if message_data.get("sniper_entry_price") is not None else ""
+            )
             body = (
                 f"Nieuwe prijs {message_data['price']:.4f} · Stop {message_data['stop_loss']:.4f} · "
-                f"Take profit {message_data['take_profit']:.4f}{entry_zone_note}"
+                f"Take profit {message_data['take_profit']:.4f}{entry_zone_note}{sniper_line}"
                 if confirmed else
                 f"Nieuwe prijs {message_data['price']:.4f} · nog geen sterke kans"
             )
