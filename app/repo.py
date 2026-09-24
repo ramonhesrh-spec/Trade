@@ -2552,15 +2552,46 @@ def set_required_factors(user_id: int, factor_names: list[str]) -> None:
 # Per-gebruiker bevestigde status en winrate
 # ---------------------------------------------------------------------------
 
-def user_confirmed(pass_pct: Optional[float], hard_gates_ok: bool, threshold_pct: float) -> bool:
-    """Of een signaal voor DEZE gebruiker als bevestigd geldt: de twee
-    harde eisen (al verwerkt in hard_gates_ok) blijven voor iedereen hard,
-    alleen het percentage van de gepoolde factoren wordt per gebruiker
-    tegen zijn eigen drempel gelegd. pass_pct is None voor legacy-signalen
-    (van vóór deze kolom bestond) en voor swing-signalen (die geen gepoold
-    percentage hebben) - zo'n signaal telt nooit als bevestigd, ongeacht
-    de drempel."""
-    return bool(hard_gates_ok) and pass_pct is not None and pass_pct >= threshold_pct
+def _parse_factor_results(reason: str) -> dict[str, bool]:
+    """Zelfde breakdown-formaat als confirms_direction opbouwt
+    ("✓ Trend: ... | ✗ Volume: ..."), maar dan ALLE voorkomende factoren
+    met hun ✓/✗-status, niet alleen de gefaalde (vergelijk
+    signal_processor._extract_failing_factors, die alleen de ✗'s
+    teruggeeft en hier niet volstaat: fail-closed op afwezigheid vereist
+    weten welke namen WEL voorkwamen, niet alleen welke faalden)."""
+    results: dict[str, bool] = {}
+    for part in reason.split(" | "):
+        part = part.strip()
+        if part[:1] in ("✓", "✗"):
+            name = part[1:].split(":", 1)[0].strip()
+            results[name] = part.startswith("✓")
+    return results
+
+
+def user_confirmed(
+    pass_pct: Optional[float], hard_gates_ok: bool, threshold_pct: float,
+    reason: str = "", required_factors: Optional[set[str]] = None,
+) -> bool:
+    """Of een signaal voor DEZE gebruiker als bevestigd geldt. Twee lagen:
+    (1) de twee harde eisen (al verwerkt in hard_gates_ok) plus het
+    percentage van de gepoolde factoren tegen de eigen drempel van de
+    gebruiker — het bestaande gedrag, ongewijzigd als required_factors
+    leeg of None is. pass_pct is None voor legacy-signalen (van vóór deze
+    kolom bestond) en voor swing-signalen (die geen gepoold percentage
+    hebben) - zo'n signaal telt nooit als bevestigd, ongeacht de drempel.
+    (2) optioneel, bovenop laag 1: required_factors is de set factoren die
+    DEZE gebruiker zelf verplicht heeft gesteld (zie
+    list_required_factors) — staat er ook maar één van ✗, of komt hij
+    helemaal niet voor in reason (fail-closed, nooit gecheckt telt als
+    niet voldaan), dan telt het signaal voor deze gebruiker nooit als
+    bevestigd, ongeacht het percentage. Alleen relevant voor day_trading/
+    patroon-signalen; voor swing wordt required_factors simpelweg niet
+    meegegeven door de aanroeper."""
+    base_confirmed = bool(hard_gates_ok) and pass_pct is not None and pass_pct >= threshold_pct
+    if not base_confirmed or not required_factors:
+        return base_confirmed
+    results = _parse_factor_results(reason)
+    return all(results.get(f, False) for f in required_factors)
 
 
 def winrate_for_user(user_id: int) -> dict:
