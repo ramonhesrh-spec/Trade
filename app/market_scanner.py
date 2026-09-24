@@ -19,7 +19,12 @@ from typing import Optional
 
 from app import exchange, indicators, patterns, push_notify, repo, risk
 from app.anthropic_interpret import Interpretation
-from app.signal_processor import compute_full_confirmation, fanout_confirmed_signal, process_day_trading_signal
+from app.signal_processor import (
+    MIN_RISK_REWARD_RATIO,
+    compute_full_confirmation,
+    fanout_confirmed_signal,
+    process_day_trading_signal,
+)
 
 logger = logging.getLogger("market_scanner")
 
@@ -870,6 +875,23 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
         logger.info(
             "SMC-setup %s voor %s niet gemeld: stop %.4f / doel %.4f liggen niet aan de juiste kant van entry %.4f (%s)",
             setup["id"], coin, stop_loss, take_profit, entry_price, direction,
+        )
+        return None
+
+    # Zelfde ondergrens als het dagtrading-pad (signal_processor.py), zelfde
+    # "geen signaal" in plaats van "signaal met lagere confidence" als
+    # hierboven bij _valid_stop_take: smc heeft geen pass_pct/hard_gates_ok
+    # confidence-schaal om een zwakke verhouding in te laten wegen, dus een
+    # setup die er niet aan voldoet mag geen signaal worden.
+    risk_distance = abs(entry_price - stop_loss)
+    reward_distance = abs(take_profit - entry_price)
+    risk_reward_ratio = (reward_distance / risk_distance) if risk_distance else 0.0
+    if risk_reward_ratio < MIN_RISK_REWARD_RATIO:
+        logger.info(
+            "SMC-setup %s voor %s niet gemeld: risico/rendement %.2f tegen 1 ligt onder de ondergrens van %s "
+            "(stop %.4f / doel %.4f / entry %.4f, %s)",
+            setup["id"], coin, risk_reward_ratio, MIN_RISK_REWARD_RATIO,
+            stop_loss, take_profit, entry_price, direction,
         )
         return None
 
