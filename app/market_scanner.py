@@ -148,6 +148,9 @@ async def _find_breakout_retest_candidate(coin: str, direction: str, df, ind) ->
                 except Exception:
                     logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
+        sniper = indicators.find_sniper_entry_price(direction, df)
+        sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
+
         signal_data = {
             "message_id": None, "coin": coin, "direction": direction,
             "category": "day_trading", "trade_type": "patroon", "pattern_name": pattern_label,
@@ -160,6 +163,7 @@ async def _find_breakout_retest_candidate(coin: str, direction: str, df, ind) ->
             "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,
             "context_note": None, "is_practice": 0, "plain_explanation": None,
             "suggested_entry_low": None, "suggested_entry_high": None,
+            "sniper_entry_price": sniper_entry_price, "sniper_reason": sniper_reason,
         }
         signal_id = repo.insert_signal(signal_data)
 
@@ -179,7 +183,10 @@ async def _find_breakout_retest_candidate(coin: str, direction: str, df, ind) ->
                     logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
         def _breakout_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
-            return f"Entry {ind.price:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            base = f"Entry {ind.price:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            if sniper_entry_price is not None:
+                base += f"\n🎯 Sniper: {sniper_entry_price:.4f} — {sniper_reason}"
+            return base
 
         # premise_level = de zone-rand die doorbroken is (weerstand-tot-
         # steun bij long, steun-tot-weerstand bij short) — de trigger-prijs
@@ -295,6 +302,9 @@ async def _find_trendline_retest_candidate(coin: str, direction: str, df, ind) -
                 except Exception:
                     logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
+        sniper = indicators.find_sniper_entry_price(direction, df)
+        sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
+
         signal_data = {
             "message_id": None, "coin": coin, "direction": direction,
             "category": "day_trading", "trade_type": "patroon", "pattern_name": pattern_label,
@@ -307,6 +317,7 @@ async def _find_trendline_retest_candidate(coin: str, direction: str, df, ind) -
             "stop_loss": stop_take.stop_loss, "take_profit": stop_take.take_profit,
             "context_note": None, "is_practice": 0, "plain_explanation": None,
             "suggested_entry_low": None, "suggested_entry_high": None,
+            "sniper_entry_price": sniper_entry_price, "sniper_reason": sniper_reason,
         }
         signal_id = repo.insert_signal(signal_data)
 
@@ -326,7 +337,10 @@ async def _find_trendline_retest_candidate(coin: str, direction: str, df, ind) -
                     logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
         def _trendline_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
-            return f"Entry {ind.price:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            base = f"Entry {ind.price:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            if sniper_entry_price is not None:
+                base += f"\n🎯 Sniper: {sniper_entry_price:.4f} — {sniper_reason}"
+            return base
 
         # premise_level = current_value: de lijnwaarde op het moment van
         # bevestiging, de trigger-prijs van deze trade — zelfde rol als
@@ -528,6 +542,9 @@ async def _find_chart_pattern_candidate(
         # tweede entry-band naast de live prijs), in plaats van twee nieuwe
         # kolommen voor hetzelfde concept. Task 8 leest ze uit voor de
         # "Retest: ..."-regel op de kaart. None zolang er nog geen retest is.
+        sniper = indicators.find_sniper_entry_price(match.direction, df)
+        sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
+
         signal_data = {
             "message_id": None, "coin": coin, "direction": match.direction,
             "category": "day_trading", "trade_type": "patroon", "pattern_name": match.name,
@@ -541,6 +558,7 @@ async def _find_chart_pattern_candidate(
             "context_note": None, "is_practice": 0, "plain_explanation": None,
             "suggested_entry_low": entry_options["retest_low"],
             "suggested_entry_high": entry_options["retest_high"],
+            "sniper_entry_price": sniper_entry_price, "sniper_reason": sniper_reason,
         }
         signal_id = repo.insert_signal(signal_data)
 
@@ -579,10 +597,13 @@ async def _find_chart_pattern_candidate(
                 f"Uitbraak {entry_options['breakout_level']:.4f}{retest_note}"
                 if used_pattern_stop_take else f"Prijs {ind.price:.4f}"
             )
-            return (
+            base = (
                 f"{level_label} · "
                 f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
             )
+            if sniper_entry_price is not None:
+                base += f"\n🎯 Sniper: {sniper_entry_price:.4f} — {sniper_reason}"
+            return base
 
         # premise_level = match.neckline: de uitbraak/trigger-prijs van het
         # patroon is de premisse van deze trade (net als watch["price_level"]
