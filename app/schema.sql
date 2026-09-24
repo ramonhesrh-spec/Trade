@@ -239,6 +239,17 @@ CREATE TABLE IF NOT EXISTS signals (
     -- echte entry). Beide NULL als er geen bruikbare zone was.
     suggested_entry_low REAL,
     suggested_entry_high REAL,
+    -- Precieze liquidity-sweep-prijs (zie indicators.find_sniper_entry_price)
+    -- op het moment van dit signaal: een stop-hunt van een eerdere
+    -- pivot-low/-high, gevolgd door een close terug aan de goede kant —
+    -- scherper en preciezer dan de brede suggested_entry_low/high-zone
+    -- hierboven. NULL als er bij aanmaak geen sweep was (level_check.py
+    -- probeert het dan later nog een keer, zie check_pending_signals).
+    sniper_entry_price REAL,
+    -- Leesbare "waarom is dit een sniper-entry"-uitleg bij sniper_entry_price
+    -- hierboven, voor op de signaalkaart en in de pushmelding. NULL
+    -- wanneer sniper_entry_price ook NULL is.
+    sniper_reason TEXT,
     created_at TEXT NOT NULL
 );
 

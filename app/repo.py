@@ -955,6 +955,7 @@ def insert_signal(data: dict) -> int:
         "technical_confirmed", "pass_pct", "hard_gates_ok", "confidence", "reason", "stop_loss", "take_profit",
         "context_note", "is_practice", "plain_explanation", "trade_type", "nearest_sr_zone_price",
         "suggested_entry_low", "suggested_entry_high", "pattern_name",
+        "sniper_entry_price", "sniper_reason",
     ]
     values = [
         data.get("is_practice", 0) if f == "is_practice"
@@ -1177,6 +1178,7 @@ _JOURNAL_SELECT = """
         -- (unlike list_recent_signals) — without naming them here, signal_card's
         -- entry-zone note (Task 6) 500s on /signalen with an UndefinedError.
         s.suggested_entry_low AS suggested_entry_low, s.suggested_entry_high AS suggested_entry_high,
+        s.sniper_entry_price AS sniper_entry_price, s.sniper_reason AS sniper_reason,
         COALESCE(mcr.message_summary, m.message_summary, 'Zelf gedetecteerd door HesPulse')
             AS message_summary
     FROM journal_entries je
@@ -1773,6 +1775,7 @@ def list_pending_entries_with_price() -> list[dict]:
                       s.message_id AS message_id,
                       s.suggested_entry_low AS suggested_entry_low,
                       s.suggested_entry_high AS suggested_entry_high,
+                      s.sniper_entry_price AS sniper_entry_price,
                       s.trade_type AS trade_type, s.pattern_name AS pattern_name,
                       s.pass_pct AS pass_pct, s.hard_gates_ok AS hard_gates_ok,
                       u.username AS username, u.telegram_chat_id AS telegram_chat_id,
