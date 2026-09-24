@@ -2653,7 +2653,7 @@ def complete_smc_setup(setup_id: int, signal_id: int) -> None:
 def delete_smc_setup(setup_id: int) -> None:
     """Verwijdert één bouwende setup: de prijs is voorbij de zone gelopen
     zonder afwijzing, of een nieuwe, tegengestelde structuurbreuk maakte
-    hem achterhaald (zie Task 4). Werkt op één rij tegelijk, niet op alle
+    hem achterhaald (zie market_scanner._check_smc_setup). Werkt op één rij tegelijk, niet op alle
     setups van een coin — een structuurbreuk is een eenmalige
     gebeurtenis die op de LAATSTE candle van een venster gezien wordt, dus
     'geen nieuwe breuk deze cyclus' betekent niet 'de oude setup is

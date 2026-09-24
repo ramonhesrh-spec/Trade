@@ -874,7 +874,9 @@ def find_structure_break(window: pd.DataFrame) -> Optional[StructureBreak]:
     LAATSTE candle van window — een breuk die eerder in het venster
     gebeurde en toen niet gezien is, wordt niet met terugwerkende kracht
     alsnog gevonden, elke scan-cyclus kijkt opnieuw naar de actuele
-    laatste candle."""
+    laatste candle. De aanroeper geeft alleen gesloten candles mee: een
+    close onder de swing-low halverwege een nog vormende candle is nog
+    geen close."""
     pivots = _find_pivots(window)
     last_index = len(window) - 1
     last_close = window["close"].iloc[last_index]
@@ -903,8 +905,9 @@ def find_liquidity_sweep_before_break(
     een eerdere low doorbreekt (de structuurbreuk zelf). Bij
     direction="long" spiegelt dit: een sweep van een eerdere low, de
     sell-side liquidity die een bullish reversal voedt. Geeft de geveegde
-    pivot terug (wordt in Task 5 de stop), of None als er geen sweep vlak
-    voor de breuk zat — dan is het geen geldige setup."""
+    pivot terug (de stop van het latere signaal komt er net voorbij te
+    liggen), of None als er geen sweep vlak voor de breuk zat — dan is het
+    geen geldige setup."""
     pre_break_window = window.iloc[:structure_break.break_index + 1]
     return _find_liquidity_sweep(pre_break_window, structure_break.direction)
 
@@ -922,8 +925,10 @@ class FVG:
 
 def find_fair_value_gaps(df: pd.DataFrame, direction: str) -> list[FVG]:
     """Klassieke drie-candle fair value gap, alleen binnen de laatste
-    ZONE_SEARCH_LOOKBACK candles (zie de ontwerpbeslissing in dit plan).
-    Voor short (bearish setup): candle 1's low boven candle 3's high, het
+    ZONE_SEARCH_LOOKBACK candles: zonder die begrenzing telde een oud,
+    allang gevuld gat van dagen geleden nog als zone, terwijl de zone bij
+    de displacement van déze structuurbreuk hoort, niet bij willekeurige
+    oude gaten in de prijsgeschiedenis. Voor short (bearish setup): candle 1's low boven candle 3's high, het
     gat daartussen is de zone waar prijs later tegenaan kan lopen voordat
     hij verder zakt — deze bearish FVG ontstaat tijdens de displacement
     die de structuurbreuk zelf veroorzaakte. Voor long het spiegelbeeld.
@@ -1009,9 +1014,13 @@ def find_sniper_entry_price(direction: str, df: pd.DataFrame) -> Optional[tuple[
     de gepoolde 16-factoren-toets. Zelfde window, zelfde detectie —
     check_liquidity_sweep zelf blijft ongewijzigd; dit is een aparte,
     op-maat-gemaakte laag eroverheen, specifiek voor sniper-gebruik
-    (signal_processor.py, market_scanner.py, level_check.py). Alleen de
-    4u-timeframe (df hier is altijd de 4u-candles), geen daily-variant in
-    v1 — check_daily_liquidity_sweep blijft een aparte, gepoolde factor."""
+    (signal_processor.py, market_scanner.py, level_check.py). Niets hierin
+    is aan een timeframe gebonden (pivots + de laatste
+    LIQUIDITY_SWEEP_RECENT_CANDLES candles van df): de dagtrading-,
+    uitbraak-, trendlijn- en patroon-aanroepers geven 4u-candles mee, de
+    smc-signaalaanmaak 15m-candles, omdat een smc-entry op 15m getriggerd
+    wordt en een sweep op 4u daar te grof voor is. Geen daily-variant —
+    check_daily_liquidity_sweep blijft een aparte, gepoolde factor."""
     direction = direction.lower()
     window = df.tail(SR_ZONE_LOOKBACK).reset_index(drop=True)
     hit = _find_liquidity_sweep(window, direction)

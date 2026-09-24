@@ -632,14 +632,15 @@ async def _find_chart_pattern_candidate(
 SMC_ZONE_SEARCH_LOOKBACK_30M = 60  # 30m-candles, ongeveer anderhalve dag
 
 
-def _smc_last_candle_state(last_candle, zone_low: float, zone_high: float, direction: str) -> tuple[bool, bool, bool]:
-    """Bepaalt voor één 15m-candle en één bouwende zone drie onafhankelijke
-    toestanden: (in_zone, rejected, passed_without_rejection).
+def _smc_last_candle_state(candle, zone_low: float, zone_high: float, direction: str) -> tuple[bool, bool, bool]:
+    """Bepaalt voor één gesloten 15m-candle en één bouwende zone drie
+    onafhankelijke toestanden: (in_zone, rejected, passed_without_rejection).
     in_zone: de candle raakte de zone (wick of volledige overlap).
     rejected: de candle raakte de zone EN sloot er weer buiten aan de
     kant die de setup ongeldig maakt voor voortzetting maar geldig maakt
     als entry-trigger (short: sluit onder zone_low, long: sluit boven
-    zone_high) - dit is de signaal-trigger uit Task 5.
+    zone_high) — dit is het moment waarop _complete_smc_setup het signaal
+    maakt.
     passed_without_rejection: het SPIEGELBEELD van rejected, niet
     hetzelfde teken. Een short-zone ligt BOVEN de prijs die er van
     onderaf naartoe beweegt (na de bearish structuurbreuk) — 'voorbij
@@ -649,21 +650,21 @@ def _smc_last_candle_state(last_candle, zone_low: float, zone_high: float, direc
     achterhaald. Long is het spiegelbeeld (close onder zone_low, door de
     bodem heen). Vóórdat de zone ooit bereikt is — bijvoorbeeld een
     short-setup waarvan de laatste close nog onder zone_low ligt, op weg
-    naar boven — is dit nadrukkelijk GEEN 'passed': dat zou een net
-    aangemaakte, nog nooit geraakte setup meteen weer weggooien (de bug
-    die deze functie's test in Step 3b dichttimmert)."""
+    naar boven — is dit nadrukkelijk GEEN 'passed': met hetzelfde teken
+    als rejected zou elke net aangemaakte, nog nooit geraakte setup de
+    cyclus erna meteen weer weggegooid worden."""
     in_zone = (
-        zone_low <= last_candle["low"] <= zone_high
-        or zone_low <= last_candle["high"] <= zone_high
-        or (last_candle["low"] <= zone_low and last_candle["high"] >= zone_high)
+        zone_low <= candle["low"] <= zone_high
+        or zone_low <= candle["high"] <= zone_high
+        or (candle["low"] <= zone_low and candle["high"] >= zone_high)
     )
     rejected = in_zone and (
-        (direction == "short" and last_candle["close"] < zone_low) or
-        (direction == "long" and last_candle["close"] > zone_high)
+        (direction == "short" and candle["close"] < zone_low) or
+        (direction == "long" and candle["close"] > zone_high)
     )
     passed_without_rejection = (
-        (direction == "short" and last_candle["close"] > zone_high) or
-        (direction == "long" and last_candle["close"] < zone_low)
+        (direction == "short" and candle["close"] > zone_high) or
+        (direction == "long" and candle["close"] < zone_low)
     )
     return in_zone, rejected, passed_without_rejection
 
@@ -841,14 +842,15 @@ TARGET_MARGIN_PCT = 0.5  # procent, marge vóór de liquidity
 
 async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     """Bouwt het echte signaal zodra _check_smc_setup een afgewezen zone
-    teruggeeft. Geen ATR: stop en doel zijn volledig structuur-gebaseerd
-    (zie de spec en de Global Constraints in dit plan). sign is voor
+    teruggeeft, en geeft de nieuwe signal_id terug (None als er geen
+    geldige trade van te maken was). Geen ATR: stop en doel zijn volledig
+    structuur-gebaseerd, de hele premisse van een smc-setup is dat de
+    sweep de stop en de volgende liquidity het doel bepaalt. sign is voor
     zowel stop als doel hetzelfde teken, dat is geen typefout: voor short
     ligt de stop BOVEN de geveegde high (verder van de entry af) en het
     doel ligt ook BOVEN de liquidity-low (dichter bij de entry, 'net
-    vóór' het niveau) — voor long allebei eronder. Zie de spec's
-    zelf-review-correctie voor het concrete rekenvoorbeeld (short,
-    sweep_price 2820, liquidity_target 2600 -> stop 2823, doel 2613)."""
+    vóór' het niveau) — voor long allebei eronder. Rekenvoorbeeld (short):
+    sweep_price 2820, liquidity_target 2600 -> stop 2823, doel 2613."""
     direction = setup["direction"]
     sign = -1 if direction == "long" else 1
     stop_loss = setup["sweep_price"] + STOP_MARGIN_PCT / 100 * setup["sweep_price"] * sign

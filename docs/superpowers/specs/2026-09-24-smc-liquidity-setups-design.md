@@ -1,5 +1,15 @@
 # SMC liquidity setups — design
 
+> **Noot na implementatie.** Een paar namen uit dit ontwerp bestaan niet
+> meer in de code: `delete_stale_smc_setups(coin, keep_ids)` werd
+> `delete_smc_setup(setup_id)` (één rij tegelijk, zodat een bouwende setup
+> meerdere cycli blijft bestaan), en `_find_smc_candidate` /
+> `_candidate_score` werden `_check_smc_setup` + `_complete_smc_setup`
+> (SMC dingt niet mee in de structurele top-3). Het implementatieplan
+> `docs/superpowers/plans/2026-09-24-smc-liquidity-setups.md` en de code
+> zelf zijn leidend voor de uiteindelijke namen en details; dit document
+> legt alleen het ontwerp vast.
+
 ## Probleem
 
 De bestaande drie structurele detectoren (uitbraak+terugtest, trendlijn+

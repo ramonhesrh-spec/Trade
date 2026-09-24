@@ -225,8 +225,8 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     entries = _add_signal_context(entries, winrate, pattern_winrate)
     # Zonder deze aanroep blijft entry["user_confirmed"] ongezet en leest
     # macros.signal_card dat als Undefined (falsy), dus is-rejected voor
-    # elk SMC-signaal ongeacht de smc-tak in _apply_user_confirmed hierboven
-    # — zelfde patroon als signalen_page/dashboard hieronder.
+    # elk SMC-signaal ongeacht de smc-tak in _apply_user_confirmed hieronder
+    # — zelfde patroon als signalen_page hierboven en het dashboard hieronder.
     required_factors = repo.list_required_factors(user["id"])
     _apply_user_confirmed(entries, user["confirm_threshold_pct"], required_factors)
     entries.sort(key=lambda e: e["created_at"], reverse=True)
