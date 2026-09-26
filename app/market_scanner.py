@@ -1028,28 +1028,25 @@ async def scan_market() -> None:
     coins = repo.list_coins()
     logger.info("Marktscan gestart, %s coins in de dynamische lijst", len(coins))
 
-    # BTC's eigen trend eenmalig per cyclus ophalen (niet per altcoin
-    # herhalen): als BTC zelf zijwaarts beweegt, is een altcoin-signaal
-    # vaker ruis dan een echte kans. Kan deze ophaling zelf mislukken, dan
-    # gaat de scan gewoon door zonder de vlak-check (fail-open), net als
-    # elke andere Binance-storing hieronder per coin.
-    btc_flat = False
-    # BTC's eigen divergence deze cyclus, eenmalig herbruikt om te bepalen
-    # of een altcoin's "eigen" divergence waarschijnlijk gewoon BTC's
-    # correlatie is (zie _correlated_with_btc_divergence). None als BTC
-    # zelf geen divergence toont, of als de ophaling hieronder al faalt.
+    # BTC's eigen divergence eenmalig per cyclus ophalen (niet per altcoin
+    # herhalen), om te bepalen of een altcoin's "eigen" divergence
+    # waarschijnlijk gewoon BTC's correlatie is (zie
+    # _correlated_with_btc_divergence). None als BTC zelf geen divergence
+    # toont, of als de ophaling hieronder faalt (fail-open, net als elke
+    # andere Binance-storing hieronder per coin).
+    #
+    # Vroeger stond hier ook een BTC-vlak-rem die altcoin-signalering een
+    # hele cyclus oversloeg zodra BTC zelf zijwaarts bewoog — expliciet
+    # verwijderd op verzoek: altcoin-kansen moeten ook zichtbaar blijven
+    # als BTC zelf even geen duidelijke trend heeft.
     btc_divergence_direction: Optional[str] = None
     try:
         btc_df = await asyncio.to_thread(exchange.fetch_ohlcv, "BTC")
-        btc_ind = indicators.compute_indicators(btc_df)
-        btc_flat = indicators.btc_is_flat(btc_ind)
-        if btc_flat:
-            logger.info("BTC is zijwaarts deze cyclus, altcoin-signalering overgeslagen")
         btc_own_divergence = patterns.find_divergence(btc_df)
         if btc_own_divergence:
             btc_divergence_direction = btc_own_divergence.direction
     except Exception:
-        logger.exception("Kon BTC's eigen trend niet ophalen, ga verder zonder de vlak-check")
+        logger.exception("Kon BTC's eigen divergence niet ophalen, ga verder zonder die context")
 
     # Structurele kandidaten (uitbraak/trendlijn/patroon) van de hele
     # cyclus, over alle coins heen — pas na de hele scan geëvalueerd tegen
@@ -1058,14 +1055,10 @@ async def scan_market() -> None:
 
     for coin_row in coins:
         coin = coin_row["symbol"]
-        # SMC vóór de BTC-vlak-rem en buiten het 4u-blok hieronder: de
-        # vlak-rem beschermt de kwaliteit van de 4u-detectoren in een
-        # zijwaartse markt, smc's structuur+sweep+zone werkt lokaal per coin
-        # op 30m/15m en staat daar los van. Een 4u-fout voor deze coin mag
-        # de smc-check evenmin overslaan.
+        # SMC draait altijd buiten het 4u-blok hieronder: smc's structuur+
+        # sweep+zone werkt lokaal per coin op 30m/15m, een 4u-fout voor deze
+        # coin mag de smc-check niet overslaan.
         smc_direction = await _run_smc_check(coin)
-        if btc_flat and coin != "BTC":
-            continue
         try:
             df = await asyncio.to_thread(exchange.fetch_ohlcv, coin)
             ind = indicators.compute_indicators(df)

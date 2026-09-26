@@ -695,9 +695,10 @@ async def compute_advanced_extra_factors(
             # BTC-trend is nu een harde eis in confirms_direction (zie
             # daar). Bij een vlakke BTC is er geen "tegen de trade in"
             # om op te blokkeren, en zou een altcoin die op eigen kracht
-            # uitbreekt onterecht geblokkeerd worden — dezelfde
-            # btc_is_flat die de marktscan al gebruikt om een cyclus over
-            # te slaan bij een zijwaartse BTC.
+            # uitbreekt onterecht geblokkeerd worden. market_scanner.py
+            # sloeg altcoin-signalering vroeger een hele cyclus over bij
+            # een zijwaartse BTC, dat is inmiddels verwijderd; deze factor
+            # hier blijft wel gewoon een zachte, niet-blokkerende toets.
             if not indicators.btc_is_flat(btc_ind):
                 factors.append(indicators.check_btc_trend(direction, btc_ind))
         except Exception:
