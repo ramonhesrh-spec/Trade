@@ -822,22 +822,31 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         return None
     liquidity_target_pivot = min(target_pivots, key=lambda p: abs(p.price - untouched_from))
 
-    # TARGET_MARGIN_PCT is een percentage van de PRIJS, niet van de afstand
-    # tussen zone en liquidity-doel. Op een coin met een hoge prijs en een
-    # kleine afstand (bv. ETH: doel maar een paar punten voorbij de zone)
-    # kan die marge groter zijn dan de hele afstand, en het doel zo tot
-    # voorbij de zone zelf duwen — _valid_stop_take zou zo'n setup later
-    # toch afwijzen zodra de afwijzing binnenkomt, maar dan is de
-    # "bouwt op"-melding al verstuurd voor een setup die nooit een geldig
-    # signaal kon worden. Hier al overslaan voorkomt die dode melding.
-    target_sign = 1 if direction == "short" else -1
-    projected_take_profit = liquidity_target_pivot.price * (1 + target_sign * TARGET_MARGIN_PCT / 100)
-    if (direction == "short" and projected_take_profit >= zone_low) or (
-        direction == "long" and projected_take_profit <= zone_high
-    ):
+    # STOP_MARGIN_PCT/TARGET_MARGIN_PCT zijn een percentage van de PRIJS,
+    # niet van de afstand tussen zone en sweep/liquidity-doel. Op een coin
+    # met een hoge prijs en een kleine afstand kan die marge groter zijn dan
+    # de hele afstand, of kan de rauwe sweep zelf al binnen de zone liggen
+    # in plaats van eronder/erboven (short/long) — in beide gevallen komt
+    # de stop of het doel dan aan de verkeerde kant van de zone terecht.
+    # _valid_stop_take zou zo'n setup later toch afwijzen zodra de
+    # afwijzing binnenkomt, maar dan is de "bouwt op"-melding al verstuurd
+    # voor een setup die nooit een geldig signaal kon worden. Hier al
+    # overslaan voorkomt die dode melding.
+    sign = 1 if direction == "short" else -1
+    projected_stop_loss = sweep.price * (1 + sign * STOP_MARGIN_PCT / 100)
+    projected_take_profit = liquidity_target_pivot.price * (1 + sign * TARGET_MARGIN_PCT / 100)
+    stop_niet_voorbij_zone = (
+        (direction == "short" and projected_stop_loss <= zone_high) or
+        (direction == "long" and projected_stop_loss >= zone_low)
+    )
+    doel_niet_voorbij_zone = (
+        (direction == "short" and projected_take_profit >= zone_low) or
+        (direction == "long" and projected_take_profit <= zone_high)
+    )
+    if stop_niet_voorbij_zone or doel_niet_voorbij_zone:
         logger.info(
-            "%s %s SMC-setup overgeslagen: doel %.4f (na marge) ligt niet voorbij de zone %.4f-%.4f",
-            coin, direction, projected_take_profit, zone_low, zone_high,
+            "%s %s SMC-setup overgeslagen: stop %.4f / doel %.4f (na marge) liggen niet voorbij de zone %.4f-%.4f",
+            coin, direction, projected_stop_loss, projected_take_profit, zone_low, zone_high,
         )
         return None
 
