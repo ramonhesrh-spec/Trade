@@ -14,7 +14,7 @@ docs/superpowers/specs/2026-09-14-autonome-marktscan-design.md.
 """
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from app import exchange, indicators, patterns, push_notify, repo, risk
@@ -636,6 +636,19 @@ async def _find_chart_pattern_candidate(
 
 SMC_ZONE_SEARCH_LOOKBACK_30M = 60  # 30m-candles, ongeveer anderhalve dag
 
+STOP_MARGIN_PCT = 0.1    # procent, marge voorbij de sweep
+TARGET_MARGIN_PCT = 0.5  # procent, marge vóór de liquidity
+
+# Een bouwende setup die dit lang niet is opgelost (geraakt+afgewezen, of
+# doorbroken zonder afwijzing) wordt als vervallen beschouwd. Zonder deze
+# grens bleef een zone voor altijd "bouwend" staan zodra de prijs simpelweg
+# wegliep in de gunstige richting zonder ooit terug te keren: het bestaande
+# passed_without_rejection-oordeel signaleert alleen een mislukte kant
+# (short: close boven de zone, long: eronder), niet "de koers is te ver weg
+# om nog terug te keren". Zelfde 1-dag-grens als SIGNAL_MAX_AGE_DAYS in
+# level_check.py voor een gewoon signaal.
+SMC_SETUP_MAX_AGE_HOURS = 24
+
 
 def _smc_last_candle_state(candle, zone_low: float, zone_high: float, direction: str) -> tuple[bool, bool, bool]:
     """Bepaalt voor één gesloten 15m-candle en één bouwende zone drie
@@ -730,6 +743,15 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
 
     existing = [s for s in repo.list_forming_smc_setups() if s["coin"] == coin]
     for existing_setup in existing:
+        created_at = datetime.fromisoformat(existing_setup["created_at"])
+        age_hours = (datetime.now(timezone.utc) - created_at).total_seconds() / 3600
+        if age_hours > SMC_SETUP_MAX_AGE_HOURS:
+            repo.invalidate_smc_setup(existing_setup["id"])
+            logger.info(
+                "%s %s SMC-setup vervallen na %.0f uur zonder afwijzing of doorbraak",
+                coin, existing_setup["direction"], age_hours,
+            )
+            continue
         for candle in _smc_candles_since(closed_15m, existing_setup["updated_at"]):
             in_zone, rejected, passed_without_rejection = _smc_last_candle_state(
                 candle, existing_setup["zone_low"], existing_setup["zone_high"], existing_setup["direction"],
@@ -800,6 +822,25 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         return None
     liquidity_target_pivot = min(target_pivots, key=lambda p: abs(p.price - untouched_from))
 
+    # TARGET_MARGIN_PCT is een percentage van de PRIJS, niet van de afstand
+    # tussen zone en liquidity-doel. Op een coin met een hoge prijs en een
+    # kleine afstand (bv. ETH: doel maar een paar punten voorbij de zone)
+    # kan die marge groter zijn dan de hele afstand, en het doel zo tot
+    # voorbij de zone zelf duwen — _valid_stop_take zou zo'n setup later
+    # toch afwijzen zodra de afwijzing binnenkomt, maar dan is de
+    # "bouwt op"-melding al verstuurd voor een setup die nooit een geldig
+    # signaal kon worden. Hier al overslaan voorkomt die dode melding.
+    target_sign = 1 if direction == "short" else -1
+    projected_take_profit = liquidity_target_pivot.price * (1 + target_sign * TARGET_MARGIN_PCT / 100)
+    if (direction == "short" and projected_take_profit >= zone_low) or (
+        direction == "long" and projected_take_profit <= zone_high
+    ):
+        logger.info(
+            "%s %s SMC-setup overgeslagen: doel %.4f (na marge) ligt niet voorbij de zone %.4f-%.4f",
+            coin, direction, projected_take_profit, zone_low, zone_high,
+        )
+        return None
+
     # Een bouwende setup is pas zinvol zolang de koers nog naar de zone
     # moet terugtrekken (short: nog eronder, long: nog erboven). Zonder
     # deze eis kon fase 1 hierboven een setup opruimen omdat de koers door
@@ -841,10 +882,6 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
                 logger.exception("SMC-bouwend-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
         repo.mark_smc_alert_sent(setup_id)
     return None
-
-
-STOP_MARGIN_PCT = 0.1    # procent, marge voorbij de sweep
-TARGET_MARGIN_PCT = 0.5  # procent, marge vóór de liquidity
 
 
 async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
