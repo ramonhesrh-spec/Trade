@@ -795,8 +795,23 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     if sweep is None:
         return None
 
-    fvgs = indicators.find_fair_value_gaps(closed_15m, direction)
-    order_blocks = indicators.find_order_blocks(closed_15m, direction)
+    # Zonder deze afbakening zochten find_fair_value_gaps/find_order_blocks
+    # los in de laatste ZONE_SEARCH_LOOKBACK (10 uur) 15m-candles, zonder
+    # koppeling aan DEZE structuurbreuk. In een coin met meerdere bewegingen
+    # in dezelfde richting binnen die 10 uur pakte find_confluence_zone dan
+    # de eerste overlap die hij tegenkwam, ook als die uit een andere,
+    # oudere beweging kwam dan de displacement die de structuur brak — een
+    # afwijzing op zo'n zone bevestigt dan niets over de eigenlijke
+    # sweep+breuk-premisse van deze setup. sweep.index wijst terug in
+    # closed_30m (zelfde 0-based positie, zie find_liquidity_sweep_before_break),
+    # dus de sweep-candle zijn eigen tijdstip is de ondergrens: de
+    # displacement die de structuur brak begint per definitie niet vóór de
+    # sweep die hem voedde.
+    sweep_time = closed_30m["timestamp"].iloc[sweep.index]
+    displacement_15m = closed_15m[closed_15m["timestamp"] >= sweep_time]
+
+    fvgs = indicators.find_fair_value_gaps(displacement_15m, direction)
+    order_blocks = indicators.find_order_blocks(displacement_15m, direction)
     zone = indicators.find_confluence_zone(fvgs, order_blocks)
     if zone is None:
         return None
@@ -932,11 +947,15 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
         )
         return None
 
-    if not stop_within_max_distance(entry_price, stop_loss):
-        logger.info(
-            "SMC-setup %s voor %s niet gemeld: stopafstand tot entry %.4f ligt boven de ondergrens", setup["id"], coin, entry_price,
-        )
-        return None
+    # Geen stop_within_max_distance-toets hier, bewust anders dan de andere
+    # drie detectoren: die grens (1,5%) is gebouwd voor ATR-gebaseerde
+    # stops, waar een strakke stop een teken van precisie is. SMC's stop
+    # ligt vast op de sweep-prijs (structuur, geen ATR) — die sweep zit op
+    # veel coins verder dan 1,5% van de entry af, zonder dat de setup zelf
+    # minder geldig is. De hergebruikte grens hield hierdoor structureel
+    # goede SMC-setups tegen. De kwaliteitsborging zit al in de eigen
+    # stappen hierboven (structuurbreuk, sweep vóór de breuk, confluence-
+    # zone, stop/doel aan de juiste kant) en in de R:R-eis hieronder.
 
     # Zelfde ondergrens als het dagtrading-pad (signal_processor.py), zelfde
     # "geen signaal" in plaats van "signaal met lagere confidence" als

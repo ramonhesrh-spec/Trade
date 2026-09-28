@@ -64,9 +64,11 @@ MAX_STOP_DISTANCE_PCT = 1.5
 
 def stop_within_max_distance(entry_price: float, stop_loss: float) -> bool:
     """True als de stop-afstand tot de entry binnen MAX_STOP_DISTANCE_PCT
-    ligt. Gedeelde check voor elk detectiepad (dagtrading, uitbraak,
-    trendlijn, patroon, smc) — zelfde precedent als MIN_RISK_REWARD_RATIO
-    hierboven, nu op stopafstand in plaats van op risico/rendement."""
+    ligt. Gedeelde check voor elk ATR-gebaseerd detectiepad (dagtrading,
+    uitbraak, trendlijn, patroon) — zelfde precedent als
+    MIN_RISK_REWARD_RATIO hierboven, nu op stopafstand in plaats van op
+    risico/rendement. Smc gebruikt dit bewust niet: die stop ligt vast op
+    de sweep-prijs, geen ATR, zie market_scanner.py::_complete_smc_setup."""
     if not entry_price:
         return False
     distance_pct = abs(entry_price - stop_loss) / entry_price * 100
