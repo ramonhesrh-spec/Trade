@@ -54,7 +54,7 @@ WHIPLASH_MIN_CONSECUTIVE_CYCLES = 2
 # aangemaakt (geen signals-rij, geen dedup-key gezet) en dingt gewoon opnieuw
 # mee in een volgende cyclus als de kans dan nog steeds geldig is — niets
 # gaat blijvend verloren, het wordt alleen niet allemaal tegelijk gemeld.
-MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE = 3
+MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE = 1
 
 
 # Hoe dicht het middelpunt van een nieuw gevonden zone bij het middelpunt

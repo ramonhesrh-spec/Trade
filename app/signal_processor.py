@@ -53,13 +53,13 @@ SWING_WATCH_MAX_AGE_DAYS = 84
 # andere factoren wel kloppen — een niveau-gebaseerde stop
 # (risk.compute_stop_take_from_levels) kan de verhouding laten zakken tot
 # zijn eigen ondergrens van 1:1, dat is lager dan hier acceptabel is.
-MIN_RISK_REWARD_RATIO = 1.5
+MIN_RISK_REWARD_RATIO = 2.0
 
 # Focus op de strakste, preciestste entries: een signaal met een stop
 # verder dan dit percentage van de entry af wordt niet gemeld, ongeacht
 # hoe goed de rest van de setup is. Minder meldingen, en de meldingen die
 # er nog wel zijn hebben een klein, beheersbaar risico per trade.
-MAX_STOP_DISTANCE_PCT = 3.0
+MAX_STOP_DISTANCE_PCT = 1.5
 
 
 def stop_within_max_distance(entry_price: float, stop_loss: float) -> bool:
