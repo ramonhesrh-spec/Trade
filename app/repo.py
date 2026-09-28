@@ -1813,6 +1813,26 @@ def mark_level_alert_sent(entry_id: int) -> None:
         conn.execute("UPDATE journal_entries SET level_alert_sent = 1 WHERE id = ?", (entry_id,))
 
 
+def pending_directions_for_coin(coin: str) -> set[str]:
+    """Alle richtingen waarin deze coin nu nog minstens één niet-genomen,
+    niet-genegeerd signaal heeft staan, over alle trade_types en
+    gebruikers heen (dus ook swing, die auto_ignore_opposite_pending
+    bewust buiten zichzelf houdt — zie daar). Gebruikt door
+    level_check.check_pending_signals om een proactieve niveau-melding
+    stil te houden zolang er een tegenstrijdig signaal open staat, zonder
+    een van beide signalen zelf aan te passen."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT DISTINCT s.direction AS direction
+               FROM journal_entries je
+               JOIN signals s ON s.id = je.signal_id
+               WHERE s.coin = ? AND je.entry_price IS NULL
+                     AND je.status != 'genegeerd' AND s.is_practice = 0""",
+            (coin.upper(),),
+        ).fetchall()
+        return {r["direction"] for r in rows}
+
+
 def list_unresolved_signals_with_levels() -> list[dict]:
     """Signalen (van elke gebruiker samen, want stop_loss/take_profit zijn
     per signaal gedeeld) waarvan nog niet vastgesteld is of de take-profit

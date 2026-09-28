@@ -187,6 +187,7 @@ async def check_pending_signals() -> None:
     coin_prices: dict[str, float] = {}
     coin_levels: dict[tuple[int, str], list[dict]] = {}
     coin_sniper: dict[tuple[str, str], Optional[tuple[float, str]]] = {}
+    coin_directions: dict[str, set[str]] = {}
     pattern_winrate = repo.pattern_winrate_stats()
     required_by_user = repo.list_required_factors_all_users()
 
@@ -304,6 +305,19 @@ async def check_pending_signals() -> None:
             matched_level = _nearest_level(current_price, entry["atr"], coin_levels[message_cache_key])
 
         if not in_entry_zone and sniper_hit is None and not at_signal_level and not matched_level:
+            continue
+
+        # Tegenstrijdig open signaal op dezelfde coin (bv. een swing long
+        # naast een patroon short, zie auto_ignore_opposite_pending's eigen
+        # why-comment in repo.py: swing wordt daar bewust buitengehouden)
+        # houdt de proactieve niveau-melding stil, zonder een van beide
+        # signalen zelf te wijzigen — geen level_alert_sent hier zetten,
+        # zodat dezelfde melding alsnog verstuurd wordt zodra de
+        # tegenstrijdige kant is opgelost (genomen, genegeerd, of vervallen).
+        opposite = "short" if entry["direction"].lower() == "long" else "long"
+        if coin not in coin_directions:
+            coin_directions[coin] = repo.pending_directions_for_coin(coin)
+        if opposite in coin_directions[coin]:
             continue
 
         # Zie de gelijknamige why-comment in check_open_trades hierboven:
