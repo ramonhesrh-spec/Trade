@@ -55,6 +55,23 @@ SWING_WATCH_MAX_AGE_DAYS = 84
 # zijn eigen ondergrens van 1:1, dat is lager dan hier acceptabel is.
 MIN_RISK_REWARD_RATIO = 1.5
 
+# Focus op de strakste, preciestste entries: een signaal met een stop
+# verder dan dit percentage van de entry af wordt niet gemeld, ongeacht
+# hoe goed de rest van de setup is. Minder meldingen, en de meldingen die
+# er nog wel zijn hebben een klein, beheersbaar risico per trade.
+MAX_STOP_DISTANCE_PCT = 3.0
+
+
+def stop_within_max_distance(entry_price: float, stop_loss: float) -> bool:
+    """True als de stop-afstand tot de entry binnen MAX_STOP_DISTANCE_PCT
+    ligt. Gedeelde check voor elk detectiepad (dagtrading, uitbraak,
+    trendlijn, patroon, smc) — zelfde precedent als MIN_RISK_REWARD_RATIO
+    hierboven, nu op stopafstand in plaats van op risico/rendement."""
+    if not entry_price:
+        return False
+    distance_pct = abs(entry_price - stop_loss) / entry_price * 100
+    return distance_pct <= MAX_STOP_DISTANCE_PCT
+
 
 def _price_near_level(current_price: float, level_price: float, atr: float) -> bool:
     """Zuivere functie: is de prijs dichtbij genoeg om de volledige
@@ -947,6 +964,11 @@ async def process_day_trading_signal(
         hard_gates_ok = False
         confirmed = False
         reason += f" | ✗ Risico/rendement: {risk_reward_ratio:.1f} tegen 1, onder de ondergrens van {MIN_RISK_REWARD_RATIO}"
+    if not stop_within_max_distance(ind.price, stop_take.stop_loss):
+        hard_gates_ok = False
+        confirmed = False
+        stop_distance_pct = risk_distance / ind.price * 100 if ind.price else 0.0
+        reason += f" | ✗ Stopafstand: {stop_distance_pct:.1f}% van entry, boven de ondergrens van {MAX_STOP_DISTANCE_PCT}%"
     context_note = _build_context_note(interp.coin, interp.direction)
 
     confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"

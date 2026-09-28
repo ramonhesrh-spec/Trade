@@ -24,6 +24,7 @@ from app.signal_processor import (
     compute_full_confirmation,
     fanout_confirmed_signal,
     process_day_trading_signal,
+    stop_within_max_distance,
 )
 
 logger = logging.getLogger("market_scanner")
@@ -122,6 +123,8 @@ async def _find_breakout_retest_candidate(coin: str, direction: str, df, ind) ->
         swing_low=zone.price_low if direction == "long" else None,
         swing_high=zone.price_high if direction == "short" else None,
     )
+    if not stop_within_max_distance(ind.price, stop_take.stop_loss):
+        return None
     pattern_label = "uitbraak + terugtest"
 
     async def notify() -> None:
@@ -280,6 +283,8 @@ async def _find_trendline_retest_candidate(coin: str, direction: str, df, ind) -
         swing_low=current_value if direction == "long" else None,
         swing_high=current_value if direction == "short" else None,
     )
+    if not stop_within_max_distance(ind.price, stop_take.stop_loss):
+        return None
     pattern_label = "trendlijn + terugtest"
 
     async def notify() -> None:
@@ -480,6 +485,9 @@ async def _find_chart_pattern_candidate(
         # "Stop/take").
         stop_take = risk.compute_stop_take(match.direction, ind.price, ind.atr)
         stop_loss, take_profit = stop_take.stop_loss, stop_take.take_profit
+
+    if not stop_within_max_distance(ind.price, stop_loss):
+        return None
 
     async def notify() -> None:
         # Zones lokaal berekend, net als _find_breakout_retest_candidate
@@ -921,6 +929,12 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
         logger.info(
             "SMC-setup %s voor %s niet gemeld: stop %.4f / doel %.4f liggen niet aan de juiste kant van entry %.4f (%s)",
             setup["id"], coin, stop_loss, take_profit, entry_price, direction,
+        )
+        return None
+
+    if not stop_within_max_distance(entry_price, stop_loss):
+        logger.info(
+            "SMC-setup %s voor %s niet gemeld: stopafstand tot entry %.4f ligt boven de ondergrens", setup["id"], coin, entry_price,
         )
         return None
 
