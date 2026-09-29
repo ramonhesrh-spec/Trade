@@ -55,42 +55,67 @@ PENDING_LEVEL_ATR_MULTIPLIER = 0.5
 PENDING_LEVEL_MIN_AGE_MINUTES = 90
 
 
-def _level_hit(direction: str, current_price: float, stop_loss: float, take_profit: float) -> str:
-    """Geeft "stop loss", "take profit" of "" terug."""
-    if direction == "long":
-        if stop_loss is not None and current_price <= stop_loss:
-            return "stop loss"
-        if take_profit is not None and current_price >= take_profit:
-            return "take profit"
-    else:
-        if stop_loss is not None and current_price >= stop_loss:
-            return "stop loss"
-        if take_profit is not None and current_price <= take_profit:
-            return "take profit"
-    return ""
+# Timeframe + aantal candles per cyclus om een stop/take-treffer te zoeken.
+# De oude aanpak toetste één losse live prijs op het exacte moment van de
+# poll (exchange.fetch_last_price) — een kort duikje dat precies tussen twee
+# 15-minuten-cycli gebeurde en weer herstelde werd zo nooit gezien, ook niet
+# als het zich een paar keer herhaalde (zie het DOGE/SMC-signaal 400: zes
+# losse duikjes onder de stop over anderhalf uur, geen van de zes viel samen
+# met een van de zes polls in diezelfde periode, dus nooit als stop_loss
+# herkend). Candle-hoog/laag ziet een duikje ongeacht wanneer binnen de
+# candle het gebeurde. 6x 5m = 30 minuten, ruim boven de 15 minuten tussen
+# twee cycli als marge tegen een vertraagde cyclus.
+LEVEL_CHECK_CANDLE_TIMEFRAME = "5m"
+LEVEL_CHECK_CANDLE_LOOKBACK = 6
+
+
+def _level_hit_in_candles(
+    direction: str, stop_loss: Optional[float], take_profit: Optional[float], candles,
+) -> Optional[tuple[str, float, object]]:
+    """Doorloopt `candles` oudste-eerst en geeft (hit, prijs, tijdstip) van
+    de EERSTE candle terug waarvan de hoog/laag stop of take raakte — hit is
+    "stop loss" of "take profit", prijs de candle-hoog/laag waarop het
+    niveau geraakt werd (niet de prijs op het moment van checken), tijdstip
+    de candle-starttijd. None als geen enkele candle een niveau raakte."""
+    for _, candle in candles.iterrows():
+        if direction == "long":
+            if stop_loss is not None and candle["low"] <= stop_loss:
+                return "stop loss", float(candle["low"]), candle["timestamp"]
+            if take_profit is not None and candle["high"] >= take_profit:
+                return "take profit", float(candle["high"]), candle["timestamp"]
+        else:
+            if stop_loss is not None and candle["high"] >= stop_loss:
+                return "stop loss", float(candle["high"]), candle["timestamp"]
+            if take_profit is not None and candle["low"] <= take_profit:
+                return "take profit", float(candle["low"]), candle["timestamp"]
+    return None
 
 
 async def check_open_trades() -> None:
     entries = repo.list_open_entries_with_levels()
     logger.info("%d open logboekregels om te checken", len(entries))
 
-    coin_prices: dict[str, float] = {}
+    coin_candles: dict[str, object] = {}
 
     for entry in entries:
         coin = entry["coin"]
-        if coin not in coin_prices:
+        if coin not in coin_candles:
             try:
-                coin_prices[coin] = await asyncio.to_thread(exchange.fetch_last_price, coin)
+                coin_candles[coin] = await asyncio.to_thread(
+                    exchange.fetch_ohlcv, coin,
+                    timeframe=LEVEL_CHECK_CANDLE_TIMEFRAME, limit=LEVEL_CHECK_CANDLE_LOOKBACK,
+                )
             except Exception:
-                logger.exception("Kon geen live prijs ophalen voor %s, sla over", coin)
-                coin_prices[coin] = None
-        current_price = coin_prices[coin]
-        if current_price is None:
+                logger.exception("Kon geen candles ophalen voor %s, sla over", coin)
+                coin_candles[coin] = None
+        candles = coin_candles[coin]
+        if candles is None:
             continue
 
-        hit = _level_hit(entry["direction"], current_price, entry["stop_loss"], entry["take_profit"])
-        if not hit:
+        hit_result = _level_hit_in_candles(entry["direction"], entry["stop_loss"], entry["take_profit"], candles)
+        if hit_result is None:
             continue
+        hit, hit_price, _hit_at = hit_result
 
         # Geen telegram_chat_id-gate meer hier (Taak 11): push_notify.send_push
         # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend over,
@@ -98,7 +123,7 @@ async def check_open_trades() -> None:
         # ingevuld voor nieuwe gebruikers, dus zou hier iedereen overslaan.
         hit_emoji = "🎯" if hit == "take profit" else "🛑"
         title = f"{hit_emoji} {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
-        body = f"{hit.capitalize()} geraakt · Entry {entry['entry_price']:.4f} · Nu {current_price:.4f}"
+        body = f"{hit.capitalize()} geraakt · Entry {entry['entry_price']:.4f} · Op {hit_price:.4f}"
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
         try:
             await push_notify.send_push(entry["user_id"], title, body, f"/coins/{coin}", silent=silent)
@@ -110,30 +135,38 @@ async def check_open_trades() -> None:
 
 async def check_signal_outcomes() -> None:
     """Volledig automatisch trackrecord: voor elk signaal waarvan de
-    uitkomst nog niet vaststaat, checkt dit of de live prijs inmiddels de
-    take-profit of de stop-loss geraakt heeft. Onafhankelijk van of een
-    gebruiker het signaal ooit als "genomen" markeerde — dit is precies
-    waarom het trackrecord niet meer van een handmatige actie afhangt."""
+    uitkomst nog niet vaststaat, checkt dit of de candle-hoog/laag sinds de
+    vorige cyclus inmiddels de take-profit of de stop-loss geraakt heeft.
+    Onafhankelijk van of een gebruiker het signaal ooit als "genomen"
+    markeerde — dit is precies waarom het trackrecord niet meer van een
+    handmatige actie afhangt."""
     signals = repo.list_unresolved_signals_with_levels()
     logger.info("%d signalen zonder vastgestelde uitkomst om te checken", len(signals))
 
-    coin_prices: dict[str, float] = {}
+    coin_candles: dict[str, object] = {}
     for signal in signals:
         coin = signal["coin"]
-        if coin not in coin_prices:
+        if coin not in coin_candles:
             try:
-                coin_prices[coin] = await asyncio.to_thread(exchange.fetch_last_price, coin)
+                coin_candles[coin] = await asyncio.to_thread(
+                    exchange.fetch_ohlcv, coin,
+                    timeframe=LEVEL_CHECK_CANDLE_TIMEFRAME, limit=LEVEL_CHECK_CANDLE_LOOKBACK,
+                )
             except Exception:
-                logger.exception("Kon geen live prijs ophalen voor %s, sla over", coin)
-                coin_prices[coin] = None
-        current_price = coin_prices[coin]
-        if current_price is None:
+                logger.exception("Kon geen candles ophalen voor %s, sla over", coin)
+                coin_candles[coin] = None
+        candles = coin_candles[coin]
+        if candles is None:
             continue
 
-        hit = _level_hit(signal["direction"], current_price, signal["stop_loss"], signal["take_profit"])
-        if hit:
+        hit_result = _level_hit_in_candles(signal["direction"], signal["stop_loss"], signal["take_profit"], candles)
+        if hit_result is not None:
+            hit, _hit_price, hit_at = hit_result
             outcome = "take_profit" if hit == "take profit" else "stop_loss"
-            occurred_at = db.now_iso()
+            # Tijdstip van de candle zelf, niet "nu ontdekt": preciezer voor
+            # het trackrecord, en kan door de bredere candle-lookback
+            # hierboven best een stukje in het verleden liggen.
+            occurred_at = hit_at.isoformat()
             repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at)
             # Een zelf-gedetecteerde zone die net een stop loss veroorzaakte
             # gaat op cooldown (zie repo.recent_sr_zone_failure) zodat een
