@@ -255,6 +255,7 @@ async def check_pending_signals() -> None:
     coin_levels: dict[tuple[int, str], list[dict]] = {}
     coin_sniper: dict[tuple[str, str], Optional[tuple[float, str]]] = {}
     coin_directions: dict[str, set[str]] = {}
+    coin_entry_zone_candles: dict[str, object] = {}
     pattern_winrate = repo.pattern_winrate_stats()
     required_by_user = repo.list_required_factors_all_users()
 
@@ -297,16 +298,39 @@ async def check_pending_signals() -> None:
         if current_price is None:
             continue
 
-        # Geen minimumleeftijd zoals bij at_signal_level hieronder: de
-        # entry-zone wordt bewust geclampt om nooit de prijs op het moment
-        # van berekenen te bevatten (zie signal_processor.py), dus een
-        # match hier is altijd echte beweging richting een betere prijs,
-        # nooit "nog niet weg geweest" zoals bij een vers signaal.
-        in_entry_zone = (
+        # Ruwe prijscheck blijft de poort (ongewijzigd sinds eerder): geen
+        # minimumleeftijd nodig, de entry-zone wordt bewust geclampt om
+        # nooit de prijs op het moment van berekenen te bevatten (zie
+        # signal_processor.py), dus een match hier is altijd echte
+        # beweging richting een betere prijs, nooit "nog niet weg geweest"
+        # zoals bij een vers signaal. Maar de ruwe prijscheck alleen was
+        # niet genoeg: signaal 418 (ETH long) stuurde deze melding zodra de
+        # prijs terugkwam in de zone en viel er binnen 20 minuten dwars
+        # doorheen. in_entry_zone is daarom pas True als een 15m-candle
+        # ook echt een afwijzing van de zone laat zien (zelfde logica als
+        # de SMC-detector), niet alleen "de prijs staat er toevallig".
+        raw_in_entry_zone = (
             entry["suggested_entry_low"] is not None
             and entry["suggested_entry_high"] is not None
             and entry["suggested_entry_low"] <= current_price <= entry["suggested_entry_high"]
         )
+        in_entry_zone = False
+        if raw_in_entry_zone:
+            if coin not in coin_entry_zone_candles:
+                try:
+                    df = await asyncio.to_thread(
+                        exchange.fetch_ohlcv, coin, timeframe=ENTRY_ZONE_CONFIRM_TIMEFRAME,
+                        limit=ENTRY_ZONE_CONFIRM_LOOKBACK_CANDLES + 1,  # +1: laatste candle is nog vormend
+                    )
+                    coin_entry_zone_candles[coin] = df.iloc[:-1]
+                except Exception:
+                    logger.exception("Kon geen candles ophalen voor zone-bevestiging op %s, sla over", coin)
+                    coin_entry_zone_candles[coin] = None
+            candles = coin_entry_zone_candles[coin]
+            if candles is not None:
+                in_entry_zone = _entry_zone_rejection_seen(
+                    entry["direction"], entry["suggested_entry_low"], entry["suggested_entry_high"], candles,
+                )
 
         # Sniper-trigger heeft voorrang op de resterende twee situaties
         # hieronder (signaalniveau en bron niveau): als de sweep alsnog
