@@ -357,29 +357,12 @@ async def evaluate_narrative(coin: str, direction: str, result_id: int) -> None:
 def _resolve_signal_risk(
     user: dict, direction: str, entry_price: float, stop_loss: float, take_profit: float,
 ) -> tuple[Optional[float], Optional[int], float, float, float]:
-    """Risicobedrag, evaluation_id (of None), cost_rate, en de effectieve
-    (mogelijk ingeperkte) stop_loss/take_profit voor één signaal aan één
-    gebruiker. Gebruikt de actieve evaluatie als sizing-basis zodra die er
-    is en er nog voldoende budget is — inclusief het inperken van de stop
-    loss op basis van het evaluatiesaldo (zie risk.apply_eval_stop_cap),
-    zodat een klein evaluatiesaldo niet door één te brede
-    marktstructuur-stop meteen een groot deel van het dagbudget/de
-    drawdown-ruimte kan kosten. Zonder actieve (of budget-toelatende)
-    evaluatie is er geen sizing-basis meer (Taak 11: de generieke
-    portfolio_eur x risk_percent-sizing is verwijderd) — risk_eur wordt dan
-    None, met de ONGEWIJZIGDE, gedeelde stop_loss/take_profit zodat het
-    signaal zelf onveranderd getoond blijft."""
-    active_eval = repo.get_active_evaluation(user["id"])
-    if active_eval:
-        open_risk_eur = repo.total_open_risk_eur_for_evaluation(active_eval["id"])
-        if not risk.eval_sizing_blocked(active_eval, open_risk_eur):
-            max_pct = risk.eval_max_stop_pct(active_eval["tier_amount"])
-            capped = risk.apply_eval_stop_cap(direction, entry_price, stop_loss, take_profit, max_pct)
-            risk_eur = risk.compute_eval_risk_eur(
-                active_eval, user["risk_percent"], open_risk_eur, entry_price, capped.stop_loss,
-            )
-            cost_rate = risk.EVAL_TRADE_FEE_RATE + risk.EVAL_LEVERAGE_DAILY_RATE * risk.EVAL_SIZING_DAYS_ASSUMPTION
-            return risk_eur, active_eval["id"], cost_rate, capped.stop_loss, capped.take_profit
+    """Geen enkele automatische positiegrootte-bron meer (evaluatie en de
+    generieke portfolio_eur x risk_percent-sizing zijn allebei verwijderd)
+    — risk_eur/evaluation_id zijn altijd None, stop_loss/take_profit blijven
+    ongewijzigd. Signatuur bewust ongewijzigd gelaten: dit voorkomt dat elke
+    aanroeper elders in dit bestand ook aangepast moet worden voor een
+    functie die toch al bijna niets meer doet."""
     return None, None, 0.0, stop_loss, take_profit
 
 
@@ -1195,46 +1178,6 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
             continue
 
         message_data = signal_data
-        if entry["entry_price"] is None and entry["evaluation_id"] is not None:
-            linked_eval = repo.get_evaluation(entry["evaluation_id"])
-            stop_was_capped = False
-            effective_stop_loss, effective_take_profit = signal_data["stop_loss"], signal_data["take_profit"]
-            max_pct_for_display = None
-            if linked_eval and linked_eval["status"] == "actief":
-                open_risk_eur = repo.total_open_risk_eur_for_evaluation(entry["evaluation_id"])
-                if not risk.eval_sizing_blocked(linked_eval, open_risk_eur):
-                    max_pct_for_display = risk.eval_max_stop_pct(linked_eval["tier_amount"])
-                    capped = risk.apply_eval_stop_cap(
-                        signal_data["direction"], signal_data["price"],
-                        signal_data["stop_loss"], signal_data["take_profit"], max_pct_for_display,
-                    )
-                    effective_stop_loss, effective_take_profit = capped.stop_loss, capped.take_profit
-                    stop_was_capped = effective_stop_loss != signal_data["stop_loss"]
-            repo.update_journal_levels(
-                entry["id"], user["id"],
-                effective_stop_loss if stop_was_capped else None,
-                effective_take_profit if stop_was_capped else None,
-                None,
-            )
-            # De opgeslagen (auto-)positiegrootte is gesized tegen de OUDE
-            # effectieve stop; zonder dit meeschalen blijft hij daarop
-            # hangen zodra effective_stop_loss hierboven verandert, en komt
-            # de getoonde grootte niet meer overeen met entry["risk_eur"]
-            # tegen de NIEUWE stop. Alleen zinvol voor een bevestigde kans,
-            # net als bij het aanmaken (position_size is anders None).
-            if signal_data.get("technical_confirmed"):
-                cost_rate = risk.EVAL_TRADE_FEE_RATE + risk.EVAL_LEVERAGE_DAILY_RATE * risk.EVAL_SIZING_DAYS_ASSUMPTION
-                new_position_size = risk.compute_position_size(
-                    entry["risk_eur"] or 0.0, signal_data["price"], effective_stop_loss, cost_rate=cost_rate,
-                )
-                repo.update_journal_position_size(entry["id"], user["id"], new_position_size)
-            message_data = {
-                **signal_data, "stop_loss": effective_stop_loss, "take_profit": effective_take_profit,
-                "stop_capped_pct": (
-                    (max_pct_for_display * 100)
-                    if stop_was_capped and max_pct_for_display is not None else None
-                ),
-            }
 
         force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:

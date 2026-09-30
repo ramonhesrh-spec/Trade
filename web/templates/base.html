@@ -152,54 +152,11 @@
     }
     window.HP.confetti = fireConfetti;
 
-    // Vooraf bepalen of deze paginalading zichzelf meteen weer verlaat voor
-    // het geslaagd/mislukt-reveal (zie het blok hieronder): een winnende
-    // trade die toevallig ook het winstdoel van de evaluatie haalt, levert
-    // zowel closed_win=1 als evaluatie_geslaagd=1 tegelijk op. Zonder deze
-    // guard zou fireConfetti() vlak vóór de synchrone location.replace()
-    // hieronder afgaan en nooit de kans krijgen om te renderen voordat de
-    // pagina wordt weggegooid -- de gebruiker ziet vrijwel meteen de groene
-    // puls op /evaluatie, dat is dan de vervangende bevestiging.
-    var willRedirectForEval = (
-      (location.search.indexOf("evaluatie_geslaagd=1") !== -1 || location.search.indexOf("evaluatie_mislukt=1") !== -1)
-      && location.pathname !== "/evaluatie"
-    );
-
-    // Bij een gewone paginanavigatie (geen AJAX-swap, bv. vanaf de
-    // coin-pagina) staat het seintje in de URL. Meteen weer verwijderen,
-    // zodat verversen de confetti niet herhaalt.
     if (location.search.indexOf("closed_win=1") !== -1) {
-      if (!willRedirectForEval) fireConfetti();
+      fireConfetti();
       var url = new URL(location.href);
       url.searchParams.delete("closed_win");
       history.replaceState(null, "", url.pathname + url.search + url.hash);
-    }
-
-    // Geslaagd/mislukt-seintje: de server zet de reveal-klasse
-    // (eval-reveal-pass/eval-reveal-fail) al bij het renderen op basis van
-    // eval_display.status, deze query-parameter is puur wat de /evaluatie-
-    // route naar eval_history[0] laat terugvallen als er geen actieve run
-    // meer is (zie web/main.py). De sluitroute redirect na een geslaagde/
-    // mislukte run altijd naar dashboard of coin-pagina (waar de knop stond),
-    // nooit naar /evaluatie zelf -- dus zonder ingrijpen zou de vlag hier
-    // stilletjes gestript worden zonder dat de gebruiker het reveal ooit te
-    // zien krijgt. Op elke andere pagina dan /evaluatie sturen we daarom
-    // meteen door (location.replace, niet href, zodat de tussenpagina niet
-    // in de terug-historie komt); pas op /evaluatie zelf, waar de kaart met
-    // de reveal-klasse daadwerkelijk bestaat, ruimen we de vlag na het tonen
-    // op -- zonder die opruiming zou een refresh of een teruggekeerde/
-    // gedeelde URL de animatie telkens opnieuw afspelen in plaats van
-    // precies één keer.
-    if (location.search.indexOf("evaluatie_geslaagd=1") !== -1 || location.search.indexOf("evaluatie_mislukt=1") !== -1) {
-      if (location.pathname !== "/evaluatie") {
-        var evalFlag = location.search.indexOf("evaluatie_geslaagd=1") !== -1 ? "evaluatie_geslaagd" : "evaluatie_mislukt";
-        location.replace("/evaluatie?" + evalFlag + "=1");
-      } else {
-        var evalStatusUrl = new URL(location.href);
-        evalStatusUrl.searchParams.delete("evaluatie_geslaagd");
-        evalStatusUrl.searchParams.delete("evaluatie_mislukt");
-        history.replaceState(null, "", evalStatusUrl.pathname + evalStatusUrl.search + evalStatusUrl.hash);
-      }
     }
   })();
 </script>

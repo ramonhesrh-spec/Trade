@@ -100,7 +100,6 @@
       </p>
       <p class="muted advice-text">{{ e.advice }}</p>
       {% if e.note %}<p class="muted" style="margin: var(--space-2) 0 0; font-size: var(--text-base);">{{ e.note }}</p>{% endif %}
-      {{ macros.discipline_facts(e) }}
       {% if e.entry_price is none %}
       <form action="/journal/{{ e.id }}/delete-practice" method="post" class="reset-form"
             onsubmit="return confirm('Deze kapotte oefentrade weggooien?');">

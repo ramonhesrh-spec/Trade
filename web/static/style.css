@@ -1583,33 +1583,7 @@ main + .footer { border-top: 1px solid var(--border); }
    gevaarlijker: geen rood/amber-opbouw, altijd groen. */
 .risk-gauge-fill.goal-fill { background: var(--green); }
 
-.prop-eval-head {
-  display: flex; justify-content: space-between; align-items: baseline;
-  margin-bottom: var(--space-6); font-size: var(--text-base);
-}
 .prop-eval-days { display: flex; flex-wrap: wrap; gap: var(--space-2); margin: var(--space-7) 0 var(--space-2); }
 .prop-eval-stop { margin-top: var(--space-6); }
 .prop-eval-start { display: flex; flex-wrap: wrap; gap: var(--space-6); align-items: flex-end; }
 .prop-eval-start label { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-base); color: var(--muted); }
-
-/* Eenmalig geslaagd/mislukt-moment: vuurt precies één keer via een
-   URL-vlag die client-side wordt gelezen en meteen weer verwijderd
-   (zelfde patroon als closed_win/fireConfetti hierboven in dit bestand),
-   nooit als doorlopende animatie — animation-iteration-count is eindig. */
-.eval-reveal-pass { animation: eval-pass-glow 700ms ease 3; }
-@keyframes eval-pass-glow {
-  0%, 100% { box-shadow: 0 0 0 rgba(51, 214, 159, 0); }
-  50% { box-shadow: 0 0 20px rgba(51, 214, 159, 0.6); }
-}
-.eval-reveal-fail { animation: eval-fail-shake 480ms ease 1; }
-@keyframes eval-fail-shake {
-  0%, 100% { transform: translateX(0); }
-  20% { transform: translateX(-6px); }
-  40% { transform: translateX(6px); }
-  60% { transform: translateX(-6px); }
-  80% { transform: translateX(6px); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .eval-reveal-pass,
-  .eval-reveal-fail { animation: none; }
-}

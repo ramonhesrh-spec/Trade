@@ -407,201 +407,6 @@ def _build_eval_day_dots(daily_results: list[dict]) -> list[dict]:
     return dots
 
 
-def _build_eval_context(user: dict, request: Request) -> dict:
-    """Evaluatie-simulatie context, gedeeld door het dashboard (compacte
-    samenvatting) en de eigen /evaluatie-pagina (volledige weergave). Bij
-    een net beëindigde run (geslaagd/mislukt) is er geen actieve run meer
-    om te tonen, maar de reveal-melding in de URL vraagt om die laatste
-    run toch één keer te laten zien in zijn eindtoestand."""
-    active_evaluation = repo.get_active_evaluation(user["id"])
-    eval_history = repo.list_evaluations_for_user(user["id"])
-    eval_display = active_evaluation
-    if not eval_display and (request.query_params.get("evaluatie_geslaagd") or request.query_params.get("evaluatie_mislukt")):
-        eval_display = eval_history[0] if eval_history else None
-
-    eval_day_number = None
-    eval_daily_loss_used_pct = 0.0
-    eval_drawdown_used_pct = 0.0
-    eval_profit_progress_pct = 0.0
-    eval_daily_results = []
-    eval_daily_loss_remaining_eur = None
-    eval_next_trade_budget_eur = None
-    if eval_display:
-        end_reference = (
-            datetime.fromisoformat(eval_display["ended_at"]) if eval_display["ended_at"]
-            else datetime.now(timezone.utc)
-        )
-        eval_day_number = (end_reference.date() - datetime.fromisoformat(eval_display["started_at"]).date()).days + 1
-
-        # Is de handelsdag inmiddels doorgeschoven zonder dat er een trade
-        # gesloten is (dan is de opgeslagen staat nog van gisteren), dan
-        # rekent deze helper al met een verse dag — anders toont de balk en
-        # de risk-pulse ademhaling het verlies van een dag die al voorbij
-        # is. Zelfde functie als de sizing gebruikt, zodat weergave en
-        # blokkade nooit uit elkaar kunnen lopen.
-        display_day_start_balance = risk.effective_day_start_balance(eval_display)
-
-        daily_loss_amount = display_day_start_balance * eval_display["max_daily_loss_pct"] / 100
-        loss_so_far = max(0.0, display_day_start_balance - eval_display["current_balance"])
-        eval_daily_loss_used_pct = min(100.0, (loss_so_far / daily_loss_amount * 100) if daily_loss_amount else 0.0)
-        eval_daily_loss_remaining_eur = max(0.0, daily_loss_amount - loss_so_far)
-        eval_next_trade_budget_eur = eval_daily_loss_remaining_eur / risk.EVAL_BUDGET_TRADE_RESERVE
-
-        drawdown_amount = eval_display["tier_amount"] * eval_display["max_drawdown_pct"] / 100
-        drawdown_so_far = max(0.0, eval_display["tier_amount"] - eval_display["current_balance"])
-        eval_drawdown_used_pct = min(100.0, (drawdown_so_far / drawdown_amount * 100) if drawdown_amount else 0.0)
-
-        profit_amount = eval_display["tier_amount"] * eval_display["profit_target_pct"] / 100
-        profit_so_far = max(0.0, eval_display["current_balance"] - eval_display["tier_amount"])
-        eval_profit_progress_pct = min(100.0, (profit_so_far / profit_amount * 100) if profit_amount else 0.0)
-
-        eval_daily_results = _build_eval_day_dots(repo.list_evaluation_daily_results(eval_display["id"]))
-
-    # Risico van oefentrades die al genomen maar nog niet gesloten zijn:
-    # zit nog niet in current_balance verwerkt (dat gebeurt pas op close),
-    # dus zonder dit is er geen zicht op wat er gecombineerd op het spel
-    # staat als je meerdere oefentrades tegelijk open hebt. Alleen zinvol
-    # voor een echt actieve run: een net beëindigde run (eval_display bij
-    # de reveal-fallback) kan geen nieuwe open oefentrades meer krijgen.
-    eval_open_risk_eur = 0.0
-    eval_open_risk_pct = 0.0
-    if active_evaluation:
-        eval_open_risk_eur = repo.total_open_risk_eur_for_evaluation(active_evaluation["id"])
-        eval_open_risk_pct = (
-            eval_open_risk_eur / active_evaluation["current_balance"] * 100
-            if active_evaluation["current_balance"] else 0.0
-        )
-
-    return {
-        "eval_display": eval_display,
-        "eval_history": eval_history,
-        "eval_day_number": eval_day_number,
-        "eval_daily_loss_used_pct": eval_daily_loss_used_pct,
-        "eval_drawdown_used_pct": eval_drawdown_used_pct,
-        "eval_profit_progress_pct": eval_profit_progress_pct,
-        "eval_daily_results": eval_daily_results,
-        "eval_daily_loss_remaining_eur": eval_daily_loss_remaining_eur,
-        "eval_next_trade_budget_eur": eval_next_trade_budget_eur,
-        "eval_open_risk_eur": eval_open_risk_eur,
-        "eval_open_risk_pct": eval_open_risk_pct,
-    }
-
-
-def _eval_history_stats(eval_history: list[dict]) -> Optional[dict]:
-    """Patronen uit afgeronde evaluatie-runs voor de geschiedenis-sectie:
-    gemiddeld aantal dagen tot slagen/falen (elk apart pas getoond vanaf 2
-    afgeronde runs van dat type, anders is 'gemiddeld' misleidend voor een
-    losse uitschieter) en de meest voorkomende faalreden. Geeft None
-    terug als er nergens genoeg data voor is."""
-    passed = [e for e in eval_history if e["status"] == "geslaagd" and e["ended_at"]]
-    failed = [e for e in eval_history if e["status"] == "mislukt" and e["ended_at"]]
-
-    def _avg_days(runs: list[dict]) -> float:
-        days = [
-            (datetime.fromisoformat(r["ended_at"]).date() - datetime.fromisoformat(r["started_at"]).date()).days + 1
-            for r in runs
-        ]
-        return sum(days) / len(days)
-
-    avg_days_to_pass = _avg_days(passed) if len(passed) >= 2 else None
-    avg_days_to_fail = _avg_days(failed) if len(failed) >= 2 else None
-
-    common_fail_reason = None
-    if len(failed) >= 2:
-        reasons = Counter(r["closed_reason"] for r in failed if r["closed_reason"])
-        if reasons:
-            common_fail_reason = reasons.most_common(1)[0][0]
-
-    if avg_days_to_pass is None and avg_days_to_fail is None and common_fail_reason is None:
-        return None
-    return {
-        "avg_days_to_pass": avg_days_to_pass,
-        "avg_days_to_fail": avg_days_to_fail,
-        "common_fail_reason": common_fail_reason,
-    }
-
-
-def _attach_discipline_facts(entries: list[dict]) -> None:
-    """Zet trade_number_in_day en risk_percent_used op elke entry die aan
-    een evaluatie gekoppeld is (mutatie in place, zelfde patroon als
-    entry['position_size'] = _position_size(entry) elders). Puur feiten op
-    de kaart zelf, geen oordeel -- de patroonanalyse zit apart in
-    _build_discipline_profile. Eén lookup per unieke evaluation_id, niet
-    per entry, want list_evaluation_trade_context haalt toch de hele run op."""
-    eval_ids = {e["evaluation_id"] for e in entries if e.get("evaluation_id")}
-    for eval_id in eval_ids:
-        context_by_id = {t["id"]: t for t in repo.list_evaluation_trade_context(eval_id)}
-        for entry in entries:
-            if entry.get("evaluation_id") == eval_id and entry["id"] in context_by_id:
-                ctx = context_by_id[entry["id"]]
-                entry["trade_number_in_day"] = ctx["trade_number_in_day"]
-                entry["risk_percent_used"] = ctx["risk_percent_used"]
-
-
-MIN_DISCIPLINE_SAMPLE = 5  # gesloten trades nodig voor de sectie überhaupt te tonen
-MIN_BUCKET_SAMPLE = 2  # per uitsplitsing, zelfde drempel als elders (avg_days_to_pass/fail)
-
-
-def _build_discipline_profile(evaluation_id: int) -> Optional[dict]:
-    """Winratio-uitsplitsingen over de gesloten, aan deze run gekoppelde
-    trades: per vertrouwen-niveau, per volgnummer die handelsdag (eerste
-    trade tegenover latere), en per risicogrootte (eigen mediaan-split,
-    geen vast percentage, want dit moet het patroon van déze gebruiker
-    laten zien, niet een aanname erover). Puur beschrijvend, geen advies
-    -- de evaluatiepagina trekt er zelf geen conclusie uit, dat is aan de
-    gebruiker. Geeft None terug als er te weinig gesloten trades zijn om
-    iets zinnigs te zeggen, zelfde principe als _eval_history_stats."""
-    trades = repo.list_evaluation_trade_context(evaluation_id)
-    closed = [t for t in trades if t["result_eur"] is not None]
-    if len(closed) < MIN_DISCIPLINE_SAMPLE:
-        return None
-
-    def _win_rate_by(group_fn) -> Optional[list[dict]]:
-        groups: dict[str, list[dict]] = {}
-        for t in closed:
-            key = group_fn(t)
-            if key is None:
-                continue
-            groups.setdefault(key, []).append(t)
-        rows = [
-            {
-                "label": label,
-                "win_rate": sum(1 for t in group if t["result_eur"] > 0) / len(group) * 100,
-                "n": len(group),
-            }
-            for label, group in groups.items() if len(group) >= MIN_BUCKET_SAMPLE
-        ]
-        return rows or None
-
-    by_confidence = _win_rate_by(lambda t: t["confidence"])
-
-    by_trade_number = _win_rate_by(
-        lambda t: "eerste trade van de dag" if t["trade_number_in_day"] == 1
-        else ("latere trade die dag" if t["trade_number_in_day"] and t["trade_number_in_day"] > 1 else None)
-    )
-
-    by_risk_size = None
-    risk_values = sorted(t["risk_percent_used"] for t in closed if t["risk_percent_used"] is not None)
-    if len(risk_values) >= MIN_DISCIPLINE_SAMPLE:
-        median_risk = risk_values[len(risk_values) // 2]
-        by_risk_size = _win_rate_by(
-            lambda t: (
-                None if t["risk_percent_used"] is None
-                else ("kleiner risico (≤ jouw mediaan)" if t["risk_percent_used"] <= median_risk
-                      else "groter risico (> jouw mediaan)")
-            )
-        )
-
-    if by_confidence is None and by_trade_number is None and by_risk_size is None:
-        return None
-    return {
-        "by_confidence": by_confidence,
-        "by_trade_number": by_trade_number,
-        "by_risk_size": by_risk_size,
-        "sample_size": len(closed),
-    }
-
-
 def _eval_coaching_tip(
     eval_display: Optional[dict], daily_loss_used_pct: float, drawdown_used_pct: float, profit_progress_pct: float,
 ) -> Optional[str]:
@@ -842,7 +647,6 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
     )
     taken_entries = [e for e in open_entries if e["entry_price"] is not None]
     pending_entries = [e for e in open_entries if e["entry_price"] is None]
-    _attach_discipline_facts(taken_entries)
 
     for e in taken_entries:
         e["sltp_progress_pct"] = (
@@ -875,7 +679,6 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
     practice_open = _add_signal_context(
         await _enrich_open_positions([e for e in practice_entries if e["exit_price"] is None]), confidence_winrate, pattern_winrate,
     )
-    _attach_discipline_facts(practice_open)
     practice_closed = [e for e in practice_entries if e["exit_price"] is not None]
     cumulative = repo.cumulative_result_series(user["id"])
     heatmap_weeks = _build_heatmap_weeks(repo.daily_results(user["id"]))
@@ -884,8 +687,6 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
     coins = repo.list_coins()
     is_admin = bool(config.ADMIN_USERNAME) and user["username"] == config.ADMIN_USERNAME
     unclear_messages = repo.recent_unclear_messages() if is_admin else None
-
-    eval_ctx = _build_eval_context(user, request)
 
     onboarding = {
         "push_enabled": bool(repo.list_push_subscriptions(user["id"])),
@@ -927,7 +728,6 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
         "total_realized_eur": total_realized_eur,
         "portfolio_change_pct": portfolio_change_pct,
         "unclear_messages": unclear_messages,
-        **eval_ctx,
     })
 
 
@@ -1123,49 +923,6 @@ def _safe_next(next_path: str) -> str:
     return "/dashboard"
 
 
-EVAL_DANGER_THRESHOLD_PCT = 85.0  # zelfde drempel als de risk-pulse-animatie elders in de app
-
-
-async def _check_eval_danger_alert(
-    active_eval: dict, progress: risk.PropProgress, evaluation_id: int, user_id: int,
-) -> None:
-    """Stuurt een pushmelding zodra dagverlies of drawdown de
-    85%-drempel passeert op een run die nog actief is (zelfde percentages
-    als _build_eval_context laat zien op de evaluatiepagina). Vuurt maar
-    één keer per overschrijding: danger_alert_sent voorkomt herhaling op
-    elke volgende trade-close, en wordt teruggezet zodra het percentage
-    weer onder de drempel zakt, zodat een latere nieuwe overschrijding in
-    dezelfde run wél weer gemeld wordt."""
-    daily_loss_amount = progress.day_start_balance * active_eval["max_daily_loss_pct"] / 100
-    loss_so_far = max(0.0, progress.day_start_balance - progress.current_balance)
-    daily_loss_used_pct = min(100.0, (loss_so_far / daily_loss_amount * 100) if daily_loss_amount else 0.0)
-    daily_remaining_eur = max(0.0, daily_loss_amount - loss_so_far)
-
-    drawdown_amount = active_eval["tier_amount"] * active_eval["max_drawdown_pct"] / 100
-    drawdown_so_far = max(0.0, active_eval["tier_amount"] - progress.current_balance)
-    drawdown_used_pct = min(100.0, (drawdown_so_far / drawdown_amount * 100) if drawdown_amount else 0.0)
-    drawdown_remaining_eur = max(0.0, drawdown_amount - drawdown_so_far)
-
-    in_danger_zone = daily_loss_used_pct >= EVAL_DANGER_THRESHOLD_PCT or drawdown_used_pct >= EVAL_DANGER_THRESHOLD_PCT
-    if not in_danger_zone:
-        if active_eval["danger_alert_sent"]:
-            repo.set_evaluation_danger_alert_sent(evaluation_id, False)
-        return
-
-    if active_eval["danger_alert_sent"]:
-        return
-
-    if drawdown_used_pct >= daily_loss_used_pct:
-        pct_type, pct_value, remaining_eur = "drawdown", drawdown_used_pct, drawdown_remaining_eur
-    else:
-        pct_type, pct_value, remaining_eur = "dagverlies", daily_loss_used_pct, daily_remaining_eur
-
-    title = f"Evaluatie: {pct_type} op {pct_value:.0f}%"
-    body = f"Nog {remaining_eur:.0f} EUR ruimte over van {active_eval['tier_amount']:.0f} EUR tier."
-    await push_notify.send_push(user_id, title, body, "/evaluatie", silent=False)
-    repo.set_evaluation_danger_alert_sent(evaluation_id, True)
-
-
 @app.post("/journal/{entry_id}/close")
 async def close_journal(
     entry_id: int,
@@ -1179,35 +936,6 @@ async def close_journal(
     try:
         result_eur, is_practice, evaluation_id = repo.close_journal_trade(entry_id, user["id"], exit_price, exit_time)
         won = (not is_practice) and result_eur > 0
-        if evaluation_id:
-            active_eval = repo.get_evaluation(evaluation_id)
-            # Een run die al eerder is afgesloten (door een andere trade,
-            # of handmatig gestopt) is bevroren: dit resultaat telt niet
-            # meer mee, zie de spec.
-            if active_eval and active_eval["status"] == "actief":
-                # BEWUST datetime.now(timezone.utc), NIET exit_time: exit_time
-                # is een naive, browser-LOKALE tijd (<input type="datetime-local">,
-                # zie close_journal_trade's eigen comment daarover), terwijl
-                # trading_day_label een UTC-instant verwacht (Kraken's 00:30 UTC-
-                # grens). risk.effective_day_start_balance en repo.create_evaluation
-                # gebruiken ALLEBEI nog steeds now(timezone.utc) voor dezelfde
-                # grens — hier overschakelen naar exit_time zou die drie uit
-                # elkaar trekken en kan een echte dagverlies-overtreding stil
-                # laten slagen (met een offset-tijdzone gebruiker, geverifieerd
-                # in review). Eerder overwogen als fix voor "inconsistent met
-                # de exit_time-gebaseerde dag-groepering in
-                # list_evaluation_daily_results/list_evaluation_balance_curve",
-                # maar die twee zijn puur weergave; dit hier is de pass/fail-poort
-                # en moet op dezelfde basis blijven als de andere twee.
-                progress = risk.evaluate_prop_progress(active_eval, result_eur, datetime.now(timezone.utc))
-                repo.update_evaluation_state(
-                    evaluation_id, progress.current_balance, progress.day_start_balance, progress.day_start_date,
-                )
-                if progress.status != "actief":
-                    repo.close_evaluation(evaluation_id, progress.status, progress.closed_reason)
-                    eval_flag = "evaluatie_geslaagd" if progress.status == "geslaagd" else "evaluatie_mislukt"
-                else:
-                    await _check_eval_danger_alert(active_eval, progress, evaluation_id, user["id"])
     except ValueError:
         # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
         # entry prijs ingevuld). Stil negeren, niets om te sluiten.
@@ -1301,48 +1029,6 @@ async def update_journal_note(
 PROP_EVAL_TIERS = (5000.0, 10000.0, 25000.0, 50000.0, 100000.0, 200000.0)
 
 
-@app.post("/evaluatie/start")
-async def start_evaluation(user: dict = Depends(require_login)):
-    # Nieuwe evaluatie-runs starten kan sinds HesPulse-verkleinen
-    # (2026-09-30) niet meer (zie de spec: ongewenst, prop-evaluatie is
-    # weinig gebruikt en kost onderhoud). De route blijft bestaan zodat een
-    # oude bladwijzer of het startformulier (nu verwijderd, evaluatie.html)
-    # niet op een 404 uitkomt — stil negeren en terug naar /evaluatie, dat
-    # bestaande/afgesloten runs blijft tonen.
-    return RedirectResponse(url="/evaluatie", status_code=303)
-
-
-@app.post("/evaluatie/stop")
-async def stop_evaluation(user: dict = Depends(require_login)):
-    active = repo.get_active_evaluation(user["id"])
-    if active:
-        repo.close_evaluation(active["id"], "gestopt", "handmatig gestopt")
-    return RedirectResponse(url="/evaluatie", status_code=303)
-
-
-@app.get("/evaluatie")
-async def evaluatie_page(request: Request, user: dict = Depends(require_login)):
-    eval_ctx = _build_eval_context(user, request)
-    eval_display = eval_ctx["eval_display"]
-    balance_curve = repo.list_evaluation_balance_curve(eval_display["id"]) if eval_display else []
-    eval_stats = _eval_history_stats(eval_ctx["eval_history"])
-    eval_coaching_tip = _eval_coaching_tip(
-        eval_display, eval_ctx["eval_daily_loss_used_pct"], eval_ctx["eval_drawdown_used_pct"],
-        eval_ctx["eval_profit_progress_pct"],
-    )
-    discipline_profile = _build_discipline_profile(eval_display["id"]) if eval_display else None
-
-    return templates.TemplateResponse(request, "evaluatie.html", {
-        "user": user,
-        "coins": repo.list_coins(),
-        "balance_curve": balance_curve,
-        "eval_stats": eval_stats,
-        "eval_coaching_tip": eval_coaching_tip,
-        "discipline_profile": discipline_profile,
-        **eval_ctx,
-    })
-
-
 # ---------------------------------------------------------------------------
 # Grafiekpagina per coin
 # ---------------------------------------------------------------------------
@@ -1356,14 +1042,10 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     open_trades = await _enrich_open_positions(
         [e for e in entries if e["entry_price"] is not None and e["exit_price"] is None]
     )
-    # Zonder dit toont dezelfde open evaluatie-trade wel "2e trade vandaag"
-    # op het dashboard maar niets op de coin-pagina: allebei renderen via
-    # macros.open_trade_body, dus allebei hebben deze feiten nodig.
-    _attach_discipline_facts(open_trades)
-    # Zelfde reden: macros.open_trade_body's SL/TP-voortgangsbalk leest
-    # sltp_progress_pct, dat de dashboard-route al zet maar deze route nog
-    # niet — zonder dit rendert de balk hier met een lege/ongeldige
-    # "width: %" in plaats van gewoon weggelaten te worden.
+    # macros.open_trade_body's SL/TP-voortgangsbalk leest sltp_progress_pct,
+    # dat de dashboard-route al zet maar deze route nog niet — zonder dit
+    # rendert de balk hier met een lege/ongeldige "width: %" in plaats van
+    # gewoon weggelaten te worden.
     for e in open_trades:
         e["sltp_progress_pct"] = (
             risk.compute_sltp_progress_pct(e["direction"], e["current_price"], e["stop_loss"], e["take_profit"])
@@ -1455,11 +1137,8 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         for entry in narrative["timeline"]
     ]
 
-    active_evaluation = repo.get_active_evaluation(user["id"])
-
     return templates.TemplateResponse(request, "coin.html", {
         "user": user,
-        "active_evaluation": active_evaluation,
         "symbol": symbol,
         "source_levels": source_levels,
         "images": repo.list_recent_images_for_coin(symbol),
