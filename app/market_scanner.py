@@ -192,7 +192,10 @@ async def _find_breakout_retest_candidate(coin: str, direction: str, df, ind) ->
                     logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
         def _breakout_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
-            base = f"Entry {ind.price:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            base = (
+                f"Entry {ind.price:.4f}\n"
+                f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            )
             if sniper_entry_price is not None:
                 base += f"\n🎯 Sniper: {sniper_entry_price:.4f} — {sniper_reason}"
             return base
@@ -349,7 +352,10 @@ async def _find_trendline_retest_candidate(coin: str, direction: str, df, ind) -
                     logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
         def _trendline_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
-            base = f"Entry {ind.price:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            base = (
+                f"Entry {ind.price:.4f}\n"
+                f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
+            )
             if sniper_entry_price is not None:
                 base += f"\n🎯 Sniper: {sniper_entry_price:.4f} — {sniper_reason}"
             return base
@@ -614,7 +620,7 @@ async def _find_chart_pattern_candidate(
                 if used_pattern_stop_take else f"Prijs {ind.price:.4f}"
             )
             base = (
-                f"{level_label} · "
+                f"{level_label}\n"
                 f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
             )
             if sniper_entry_price is not None:
@@ -1020,7 +1026,8 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
 
     def _smc_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
         base = (
-            f"Entry {entry_price:.4f} · Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}\n"
+            f"Entry {entry_price:.4f}\n"
+            f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}\n"
             f"Zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, doel bij liquidity {setup['liquidity_target']:.4f}"
         )
         if sniper_entry_price is not None:

@@ -574,7 +574,7 @@ async def run_swing_check(watch_id: int) -> None:
     def _swing_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
         pattern_note = f" ({watch['pattern_name']})" if watch["pattern_name"] else ""
         return (
-            f"Vanuit bewaakt niveau {watch['price_level']:.4f}{pattern_note} · "
+            f"Vanuit bewaakt niveau {watch['price_level']:.4f}{pattern_note}\n"
             f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
         )
 
@@ -1241,10 +1241,12 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
             coin = message_data["coin"]
             confirmed = message_data["technical_confirmed"]
             title = f"{push_notify.coin_symbol(coin)} {coin} {message_data['direction']}, update"
-            # Zelfde regel-per-regel-opbouw als process_day_trading_signal
-            # hierboven, zelfde reden (visuele verfijning, 2026-09-30): een
-            # dichte, met · gescheiden regel is lastig te scannen op een
-            # lockscreen.
+            # Regel-per-regel-opbouw, zelfde reden als process_day_trading_signal
+            # hierboven (visuele verfijning, 2026-09-30): een dichte, met ·
+            # gescheiden regel is lastig te scannen op een lockscreen.
+            # De entry-zone-regel hoort hier ook in te staan, anders mist deze
+            # melding (die de marktscan elke cyclus stuurt voor een al open
+            # signaal) 'm juist, terwijl de signaalkaart 'm wel altijd toont.
             suggested_low = message_data.get("suggested_entry_low")
             suggested_high = message_data.get("suggested_entry_high")
             if confirmed:
