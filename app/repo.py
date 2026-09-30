@@ -1574,30 +1574,6 @@ def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_tim
     else:
         result_eur = risk_eur * (result_pct / 100)
 
-    # Fees en hefboomkosten van een Kraken Prop-achtig evaluatie-account
-    # gelden alleen voor trades die aan een evaluatie hangen; een gewone
-    # portfolio-trade kent dit systeem niet en result_eur blijft daar
-    # ongewijzigd, exact het bestaande gedrag.
-    if entry["evaluation_id"] is not None:
-        notional_eur = (entry["position_size"] or 0.0) * entry_price
-        trade_fee_eur = notional_eur * risk.EVAL_TRADE_FEE_RATE
-        days_held = 0.0
-        if entry["entry_time"]:
-            # entry_time is altijd tz-aware (db.now_iso()), maar exit_time komt
-            # in productie van een <input type="datetime-local"> formulierveld
-            # (web/main.py) en is dan tz-naive; naive min aware crasht met een
-            # TypeError. Beide naar naive normaliseren voordat we aftrekken
-            # voorkomt dat, ongeacht welke van de twee een offset meedraagt.
-            exit_dt = datetime.fromisoformat(exit_time)
-            entry_dt = datetime.fromisoformat(entry["entry_time"])
-            if exit_dt.tzinfo is not None:
-                exit_dt = exit_dt.replace(tzinfo=None)
-            if entry_dt.tzinfo is not None:
-                entry_dt = entry_dt.replace(tzinfo=None)
-            days_held = max(0.0, (exit_dt - entry_dt).total_seconds() / 86400)
-        leverage_cost_eur = notional_eur * risk.EVAL_LEVERAGE_DAILY_RATE * days_held
-        result_eur -= (trade_fee_eur + leverage_cost_eur)
-
     with db.session() as conn:
         conn.execute(
             """UPDATE journal_entries
