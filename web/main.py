@@ -489,11 +489,11 @@ def _apply_user_confirmed(entries: list[dict], threshold_pct: float, required_fa
 
 def _position_size(entry: dict) -> Optional[float]:
     """Eigen positiegrootte als die is ingevuld, anders de grootte waarmee de
-    trade daadwerkelijk gesized is (journal_entries.position_size, bij het
-    aanmaken opgeslagen inclusief de fee-/hefboomcorrectie van een
-    evaluatie-trade). Alleen voor oude regels van vóór die kolom bestond
-    valt dit terug op een herberekening — die trades kenden nog geen
-    kostencorrectie, dus daar ís de kale berekening de juiste waarde."""
+    trade destijds gesized is (journal_entries.position_size, alleen nog
+    gevuld op oude regels van vóór evaluatie/generieke sizing weg waren).
+    Voor de oudste regels van vóór die kolom bestond valt dit terug op een
+    herberekening. Puur historische weergave — nieuwe journaalregels
+    krijgen nooit meer een risk_eur/position_size."""
     if entry.get("position_size_override") is not None:
         return entry["position_size_override"]
     if entry.get("position_size") is not None:
@@ -818,21 +818,16 @@ async def export_journal_csv(user: dict = Depends(require_login)):
     writer = csv.writer(buffer)
     writer.writerow([
         "tijdstip", "coin", "richting", "vertrouwen", "technisch_bevestigd",
-        "prijs", "stop_loss", "take_profit", "risicobedrag_eur", "status",
-        "entry_price", "exit_price", "exit_time", "resultaat_eur", "resultaat_pct", "notitie",
-        "evaluatie_gekoppeld",
+        "prijs", "stop_loss", "take_profit", "status",
+        "entry_price", "exit_price", "exit_time", "resultaat_pct", "notitie",
     ])
     for e in entries:
         writer.writerow([
             e["created_at"], e["coin"], e["direction"], e["confidence"],
             "ja" if e["technical_confirmed"] else "nee",
-            e["price"], e["stop_loss"], e["take_profit"], e["risk_eur"], e["status"],
-            e["entry_price"], e["exit_price"], e["exit_time"], e["result_eur"], e["result_pct"],
+            e["price"], e["stop_loss"], e["take_profit"], e["status"],
+            e["entry_price"], e["exit_price"], e["exit_time"], e["result_pct"],
             e["note"] or "",
-            # Zonder deze kolom mengen euro's op evaluatie-schaal (tier_amount)
-            # zich onopvallend tussen euro's op echte portfolio-schaal in
-            # dezelfde risicobedrag_eur/resultaat_eur-kolommen.
-            "ja" if e.get("evaluation_id") else "nee",
         ])
 
     filename = f"hespulse-logboek-{user['username']}.csv"

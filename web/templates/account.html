@@ -407,7 +407,6 @@
         </td>
         <td class="num">
           {{ "%.4f"|format(e.price) if e.price else "-" }}
-          {% if e.position_size %}<span class="muted entry-size">{{ "%.6f"|format(e.position_size) }} {{ e.coin }}</span>{% endif %}
         </td>
         <td class="num sltp-cell">
           <span class="neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</span>
@@ -415,10 +414,8 @@
         </td>
         <td><span class="badge badge-status">{{ e.status }}</span></td>
         <td class="num">
-          {% if e.result_eur is not none %}
-            <span class="{{ 'pos' if e.result_eur >= 0 else 'neg' }}">
-              €{{ "%.2f"|format(e.result_eur) }}{% if e.result_pct_of_risk is not none %} ({{ "%.1f"|format(e.result_pct_of_risk) }}%){% endif %}
-            </span>
+          {% if e.result_pct is not none %}
+            <span class="{{ 'pos' if e.result_pct >= 0 else 'neg' }}">{{ "%.1f"|format(e.result_pct) }}%</span>
           {% else %}-{% endif %}
         </td>
         <td class="actions">
@@ -440,9 +437,9 @@
             <input type="hidden" name="next" value="/account">
             <button type="submit">Sluiten</button>
           </form>
-          {% elif e.result_eur is not none %}
+          {% elif e.result_pct is not none %}
             <button type="button" class="button-link share-btn"
-                    data-share="{{ e.coin }} {{ e.direction|upper }} — entry {{ '%.4f'|format(e.entry_price) }} naar exit {{ '%.4f'|format(e.exit_price) }} — {{ '%+.2f'|format(e.result_eur) }} euro{% if e.result_pct_of_risk is not none %} ({{ '%+.1f'|format(e.result_pct_of_risk) }}%){% endif %} — via HesPulse" title="Deel dit resultaat">Delen</button>
+                    data-share="{{ e.coin }} {{ e.direction|upper }} — entry {{ '%.4f'|format(e.entry_price) }} naar exit {{ '%.4f'|format(e.exit_price) }} — {{ '%+.1f'|format(e.result_pct) }}% — via HesPulse" title="Deel dit resultaat">Delen</button>
           {% else %}
             <span class="muted">-</span>
           {% endif %}

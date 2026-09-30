@@ -80,7 +80,6 @@
   <div class="cell"><div class="k">Nu</div><div class="v" data-price="{{ e.id }}">{{ "%.4f"|format(e.current_price) if e.current_price else "-" }}<span class="price-direction" data-price-direction="{{ e.id }}" aria-hidden="true"></span></div></div>
   <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
   <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
-  <div class="cell"><div class="k">Grootte</div><div class="v">{{ "%.6f"|format(e.position_size) ~ " " ~ e.coin if e.position_size else "-" }}</div></div>
 </div>
 {% if e.sltp_progress_pct is not none %}
 <div class="sltp-progress" data-sltp="{{ e.id }}" data-stop="{{ e.stop_loss }}" data-take="{{ e.take_profit }}" data-direction="{{ e.direction }}">
@@ -102,11 +101,6 @@
     </label>
     <label>Take profit
       <input type="number" step="any" name="take_profit" value="{{ '%.4f'|format(e.take_profit) if e.take_profit else '' }}">
-    </label>
-    <label>Grootte ({{ e.coin }})
-      <input type="number" step="any" name="position_size"
-             value="{{ '%.6f'|format(e.position_size_override) if e.position_size_override is not none else '' }}"
-             placeholder="{{ '%.6f'|format(e.position_size) if e.position_size else 'auto' }}">
     </label>
     <button type="submit">Opslaan</button>
   </form>
