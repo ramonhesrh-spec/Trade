@@ -770,10 +770,6 @@ async def api_system_status(user: dict = Depends(require_login)):
             "received_at": s["created_at"],
         }
 
-    portfolio = user.get("portfolio_eur")
-    open_risk = repo.total_open_risk_eur(user["id"])
-    risk_pct = (open_risk / portfolio * 100) if portfolio else None
-
     return {
         "exchange_ok": exchange_ok,
         "last_message_at": repo.last_message_received_at(),
@@ -781,10 +777,9 @@ async def api_system_status(user: dict = Depends(require_login)):
         "checked_at": db.now_iso(),
         "pending_count": repo.count_pending_signals(user["id"]),
         "unread_notifications": repo.count_unread_notifications(user["id"]),
-        "week_result_eur": repo.week_result_eur(user["id"]),
+        "week_result_pct": repo.week_result_eur(user["id"]),
         "volatility_ratio": repo.largest_open_position_volatility(user["id"]),
         "last_signal": last_signal,
-        "risk_pct": risk_pct,
     }
 
 
@@ -923,8 +918,8 @@ async def close_journal(
     won = False
     eval_flag = None
     try:
-        result_eur, is_practice, evaluation_id = repo.close_journal_trade(entry_id, user["id"], exit_price, exit_time)
-        won = (not is_practice) and result_eur > 0
+        result_pct, is_practice = repo.close_journal_trade(entry_id, user["id"], exit_price, exit_time)
+        won = (not is_practice) and result_pct > 0
     except ValueError:
         # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
         # entry prijs ingevuld). Stil negeren, niets om te sluiten.

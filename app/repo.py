@@ -1547,59 +1547,32 @@ def delete_practice_entry(entry_id: int, user_id: int) -> None:
         )
 
 
-def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_time: str) -> tuple[float, bool, Optional[int]]:
-    """Sluit de trade af en geeft (result_eur, is_practice, evaluation_id)
-    terug: is_practice bepaalt of dit voor de winst-confetti telt,
-    evaluation_id (kan None zijn) vertelt de caller of dit resultaat nog op
-    een lopende evaluatie-simulatie moet worden bijgeschreven."""
+def close_journal_trade(entry_id: int, user_id: int, exit_price: float, exit_time: str) -> tuple[float, bool]:
+    """Sluit de trade af en geeft (result_pct, is_practice) terug:
+    is_practice bepaalt of dit voor de winst-confetti telt. result_pct is
+    de kale procentuele koersbeweging tussen entry en exit, richting-
+    bewust — geen enkele geld-berekening meer sinds evaluatie en generieke
+    positiegrootte weg zijn (zie de spec, addendum)."""
     entry = get_journal_entry(entry_id, user_id)
     if not entry or entry["entry_price"] is None or entry["status"] == "genegeerd":
         raise ValueError("kan alleen sluiten als er een entry prijs is ingevuld en de trade niet genegeerd is")
 
     entry_price = entry["entry_price"]
     direction = entry["direction"].lower()
-    risk_eur = entry["risk_eur"] or 0.0
-    stop_loss = entry["stop_loss"]
 
     if direction == "long":
         result_pct = (exit_price - entry_price) / entry_price * 100
-        risk_per_unit = entry_price - stop_loss if stop_loss else None
     else:
         result_pct = (entry_price - exit_price) / entry_price * 100
-        risk_per_unit = stop_loss - entry_price if stop_loss else None
-
-    if risk_per_unit and risk_per_unit > 0:
-        move = (exit_price - entry_price) if direction == "long" else (entry_price - exit_price)
-        result_eur = risk_eur * (move / risk_per_unit)
-    else:
-        result_eur = risk_eur * (result_pct / 100)
 
     with db.session() as conn:
         conn.execute(
             """UPDATE journal_entries
-               SET exit_price = ?, exit_time = ?, result_eur = ?, result_pct = ?
+               SET exit_price = ?, exit_time = ?, result_pct = ?
                WHERE id = ? AND user_id = ?""",
-            (exit_price, exit_time, result_eur, result_pct, entry_id, user_id),
+            (exit_price, exit_time, result_pct, entry_id, user_id),
         )
-        # Positiegrootte en risicobedrag schalen mee met het echte, actuele
-        # kapitaal, niet met een vast bedrag dat nooit meebeweegt met winst
-        # of verlies: zo blijft "risico X% per trade" ook X% betekenen na
-        # een reeks winsten of verliezen, precies zoals professionele
-        # risicomanagement dat toepast. Alleen echte trades tellen mee, een
-        # oefentrade raakt nooit het echte portfoliobedrag.
-        # Een aan een evaluatie gekoppelde trade telt hier ook nooit mee, ook
-        # niet als het een echt signaal is (is_practice=0): zijn resultaat is
-        # op evaluatieschaal berekend (tier_amount, inclusief prop-fees
-        # hierboven) en wordt apart op het virtuele evaluatiesaldo
-        # bijgeschreven via risk.evaluate_prop_progress/
-        # update_evaluation_progress — ook op het echte portfolio optellen zou
-        # dat evaluatiebedrag een tweede keer, op echt geld, toepassen.
-        if not entry["is_practice"] and entry["evaluation_id"] is None:
-            conn.execute(
-                "UPDATE users SET portfolio_eur = portfolio_eur + ? WHERE id = ?",
-                (result_eur, user_id),
-            )
-    return result_eur, bool(entry["is_practice"]), entry["evaluation_id"]
+    return result_pct, bool(entry["is_practice"])
 
 
 def update_journal_note(entry_id: int, user_id: int, note: str) -> None:
