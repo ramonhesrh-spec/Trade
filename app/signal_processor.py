@@ -270,24 +270,9 @@ async def _process_one_coin(message_id: int, raw_text: str, interp: Interpretati
                         level.price_level, interp.coin, live_price,
                     )
                     continue
-                source_level_id = repo.insert_source_level(
+                repo.insert_source_level(
                     message_id, interp.coin, level.price_level, level.pattern_name,
                 )
-                # Alleen voor niet-day_trading categorieën (lange_termijn,
-                # aandelen): een day_trading bericht krijgt al volledige,
-                # directe, niveau-bewuste behandeling via zijn eigen
-                # pijplijn (process_day_trading_signal). Een parallelle
-                # swing-watch voor exact hetzelfde bericht voegt niets toe
-                # behalve een dubbele melding en dubbel risicobedrag voor
-                # dezelfde kans.
-                if interp.category != "day_trading":
-                    try:
-                        await evaluate_level_watch(
-                            message_id, interp.coin, interp.direction, source_level_id, level.price_level,
-                        )
-                    except Exception:
-                        logger.exception("Swing-watch evaluatie voor %s (bericht %s) is mislukt",
-                                          interp.coin, message_id)
 
     if interp.category != "day_trading":
         logger.info("Bericht %s (coin %s) valt in categorie %s, alleen gelogd, geen melding",
@@ -323,40 +308,6 @@ async def _process_one_coin(message_id: int, raw_text: str, interp: Interpretati
         return
 
     await process_day_trading_signal(message_id, interp)
-
-
-async def evaluate_level_watch(
-    message_id: int, coin: str, direction: str, source_level_id: int, level_price: float,
-) -> None:
-    """Aangeroepen voor elk opgeslagen bron-niveau van een bericht in een
-    niet-day_trading categorie (lange_termijn, aandelen): maakt een
-    swing_watches-regel aan en checkt meteen of de prijs nu al dichtbij
-    genoeg is om door te gaan naar de volledige toets. Zo niet, blijft de
-    watch "wachtend" en pakt level_check.check_swing_watches() hem later
-    periodiek op. Wordt bewust NIET aangeroepen voor day_trading berichten:
-    die krijgen hun eigen niveau al direct via process_day_trading_signal
-    (zie de trade_type-filter in handle_message hierboven) — een aparte
-    swing-watch voor exact hetzelfde bericht zou alleen een dubbele
-    melding en dubbel risicobedrag opleveren."""
-    if (direction or "").lower() not in ("long", "short"):
-        return  # "neutraal" (of None, bv. een lange-termijn niveau zonder
-        # duidelijke richting) heeft geen kant om een niveau tegen te toetsen
-    existing = [w for w in repo.active_swing_watches_for_coin(coin) if w["direction"] == direction.lower()]
-    if existing:
-        logger.info(
-            "Al een wachtende swing-watch voor %s %s (watch %s), geen nieuwe aangemaakt voor bericht %s",
-            coin, direction, existing[0]["id"], message_id,
-        )
-        return
-    watch_id = repo.create_swing_watch(message_id, source_level_id, coin, direction)
-    try:
-        daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
-    except Exception:
-        logger.exception("Kon daily data voor %s niet ophalen, watch %s blijft wachtend", coin, watch_id)
-        return
-    daily_ind = indicators.compute_indicators(daily_df)
-    if _price_near_level(daily_ind.price, level_price, daily_ind.atr):
-        await run_swing_check(watch_id)
 
 
 async def evaluate_narrative(coin: str, direction: str, result_id: int) -> None:
