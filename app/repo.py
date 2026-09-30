@@ -1274,23 +1274,6 @@ def total_open_risk_eur(user_id: int) -> float:
         return row["total"]
 
 
-def total_open_risk_eur_for_evaluation(evaluation_id: int) -> float:
-    """Som van het risicobedrag van alle nog open oefentrades die aan deze
-    evaluatie-run gekoppeld zijn. Zelfde 'echt open'-definitie als
-    total_open_risk_eur, maar dan tegen evaluation_id in plaats van
-    user_id: dit is precies het gecombineerde risico dat nog niet in
-    current_balance verwerkt is (dat gebeurt pas op close, zie
-    close_journal_trade)."""
-    with db.session() as conn:
-        row = conn.execute(
-            """SELECT COALESCE(SUM(je.risk_eur), 0) AS total
-               FROM journal_entries je
-               WHERE je.evaluation_id = ? AND je.entry_price IS NOT NULL AND je.exit_price IS NULL""",
-            (evaluation_id,),
-        ).fetchone()
-        return row["total"]
-
-
 def list_journal(user_id: int, status: Optional[str] = None, limit: int = 500) -> list[dict]:
     with db.session() as conn:
         if status == "open":
@@ -1352,19 +1335,9 @@ def update_journal_status(
     entry_id: int, user_id: int, status: str, entry_price: Optional[float] = None,
 ) -> None:
     """Zet entry_time altijd samen met entry_price: het moment waarop een
-    trade daadwerkelijk genomen wordt, nodig om bij het sluiten de
-    werkelijke hefboomkosten van een evaluatie-trade te berekenen (zie
-    close_journal_trade). Geen aparte parameter: elke bestaande aanroeper
-    die al entry_price meegeeft omdat de trade genomen wordt, krijgt dit
-    gratis mee.
-
-    Als deze regel aan een evaluatie gekoppeld is en nog geen position_size
-    heeft (een signaal dat bij het versturen niet bevestigd was — dus geen
-    positiegrootte kreeg — maar later toch genomen wordt), wordt die hier
-    alsnog berekend tegen de WERKELIJKE entry_price. Zonder dit blijft
-    position_size None, waardoor close_journal_trade's fee/hefboomkosten-
-    berekening (notional_eur = position_size * entry_price) op nul uitkomt
-    en een evaluatie-trade zo geen fees betaalt.
+    trade daadwerkelijk genomen wordt. Geen aparte parameter: elke
+    bestaande aanroeper die al entry_price meegeeft omdat de trade genomen
+    wordt, krijgt dit gratis mee.
 
     Dashboard/repo bepalen "nog niet genomen" overal aan de hand van
     entry_price IS NULL, niet aan de hand van status (zie bijvoorbeeld
@@ -1388,34 +1361,11 @@ def update_journal_status(
                 entry_price = signal_row["price"]
 
         if entry_price is not None:
-            row = conn.execute(
-                """SELECT je.evaluation_id AS evaluation_id, je.risk_eur AS risk_eur,
-                          je.position_size AS position_size,
-                          COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss
-                   FROM journal_entries je JOIN signals s ON s.id = je.signal_id
-                   WHERE je.id = ? AND je.user_id = ?""",
-                (entry_id, user_id),
-            ).fetchone()
-            if (
-                row and row["position_size"] is None and row["evaluation_id"] is not None
-                and row["stop_loss"] is not None
-            ):
-                cost_rate = risk.EVAL_TRADE_FEE_RATE + risk.EVAL_LEVERAGE_DAILY_RATE * risk.EVAL_SIZING_DAYS_ASSUMPTION
-                position_size = risk.compute_position_size(
-                    row["risk_eur"] or 0.0, entry_price, row["stop_loss"], cost_rate=cost_rate,
-                )
-                conn.execute(
-                    """UPDATE journal_entries
-                       SET status = ?, entry_price = ?, entry_time = ?, position_size = ?
-                       WHERE id = ? AND user_id = ?""",
-                    (status, entry_price, db.now_iso(), position_size, entry_id, user_id),
-                )
-            else:
-                conn.execute(
-                    """UPDATE journal_entries SET status = ?, entry_price = ?, entry_time = ?
-                       WHERE id = ? AND user_id = ?""",
-                    (status, entry_price, db.now_iso(), entry_id, user_id),
-                )
+            conn.execute(
+                """UPDATE journal_entries SET status = ?, entry_price = ?, entry_time = ?
+                   WHERE id = ? AND user_id = ?""",
+                (status, entry_price, db.now_iso(), entry_id, user_id),
+            )
         else:
             conn.execute(
                 "UPDATE journal_entries SET status = ? WHERE id = ? AND user_id = ?",
@@ -2292,216 +2242,6 @@ def coin_stats(user_id: int) -> list[dict]:
 
     stats.sort(key=lambda s: s["total"], reverse=True)
     return stats
-
-
-# ---------------------------------------------------------------------------
-# Kraken Prop-achtige evaluatie simulatie
-# ---------------------------------------------------------------------------
-
-def create_evaluation(
-    user_id: int, tier_amount: float, profit_target_pct: float, max_drawdown_pct: float,
-) -> int:
-    """Nieuwe evaluatie-run, status 'actief', saldo begint op tier_amount.
-    De aanroeper (web/main.py) controleert dat de gebruiker nog geen
-    actieve run heeft — dezelfde verantwoordelijkheidsverdeling als
-    evaluate_narrative's 'hoogstens één actief narrative per coin'."""
-    now = db.now_iso()
-    today_label = risk.trading_day_label(datetime.now(timezone.utc))
-    with db.session() as conn:
-        cur = conn.execute(
-            """INSERT INTO prop_evaluations
-               (user_id, tier_amount, profit_target_pct, max_drawdown_pct,
-                current_balance, day_start_balance, day_start_date, started_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (user_id, tier_amount, profit_target_pct, max_drawdown_pct,
-             tier_amount, tier_amount, today_label, now),
-        )
-        return cur.lastrowid
-
-
-def get_active_evaluation(user_id: int) -> Optional[dict]:
-    with db.session() as conn:
-        row = conn.execute(
-            "SELECT * FROM prop_evaluations WHERE user_id = ? AND status = 'actief' ORDER BY id DESC LIMIT 1",
-            (user_id,),
-        ).fetchone()
-        return dict(row) if row else None
-
-
-def get_evaluation(evaluation_id: int) -> Optional[dict]:
-    with db.session() as conn:
-        row = conn.execute("SELECT * FROM prop_evaluations WHERE id = ?", (evaluation_id,)).fetchone()
-        return dict(row) if row else None
-
-
-def list_evaluations_for_user(user_id: int) -> list[dict]:
-    """Geschiedenis voor het dashboard, nieuwste eerst."""
-    with db.session() as conn:
-        rows = conn.execute(
-            "SELECT * FROM prop_evaluations WHERE user_id = ? ORDER BY started_at DESC",
-            (user_id,),
-        ).fetchall()
-        return [dict(r) for r in rows]
-
-
-def update_evaluation_state(
-    evaluation_id: int, current_balance: float, day_start_balance: float, day_start_date: str,
-) -> None:
-    with db.session() as conn:
-        conn.execute(
-            """UPDATE prop_evaluations
-               SET current_balance = ?, day_start_balance = ?, day_start_date = ?
-               WHERE id = ?""",
-            (current_balance, day_start_balance, day_start_date, evaluation_id),
-        )
-
-
-def set_evaluation_danger_alert_sent(evaluation_id: int, sent: bool) -> None:
-    """Eenmalig-vuur-vlag voor de Telegram-waarschuwing bij de 85%-drempel
-    (zie web/main.py's close-route). Ook gebruikt om terug te zetten naar
-    False zodra het percentage weer onder de drempel zakt, zodat een
-    latere nieuwe overschrijding in dezelfde run opnieuw gemeld wordt."""
-    with db.session() as conn:
-        conn.execute(
-            "UPDATE prop_evaluations SET danger_alert_sent = ? WHERE id = ?",
-            (int(sent), evaluation_id),
-        )
-
-
-def close_evaluation(evaluation_id: int, status: str, closed_reason: str) -> None:
-    with db.session() as conn:
-        conn.execute(
-            "UPDATE prop_evaluations SET status = ?, closed_reason = ?, ended_at = ? WHERE id = ?",
-            (status, closed_reason, db.now_iso(), evaluation_id),
-        )
-
-
-def list_evaluation_daily_results(evaluation_id: int) -> list[dict]:
-    """Netto resultaat per handelsdag voor deze run, oudste eerst. Voedt de
-    dag-stippen op het dashboard. Groepeert met risk.trading_day_label,
-    gebaseerd op hetzelfde ingevulde exit_time-veld als de saldo-berekening
-    gebruikte op het moment van sluiten."""
-    with db.session() as conn:
-        rows = conn.execute(
-            """SELECT exit_time, result_eur FROM journal_entries
-               WHERE evaluation_id = ? AND exit_price IS NOT NULL
-               ORDER BY exit_time""",
-            (evaluation_id,),
-        ).fetchall()
-    daily: dict[str, float] = {}
-    for row in rows:
-        try:
-            label = risk.trading_day_label(datetime.fromisoformat(row["exit_time"]))
-        except (ValueError, TypeError):
-            # Een niet-ISO exit_time (bv. handmatig ingevoerd op een browser
-            # zonder datetime-local-ondersteuning) mag de hele heatmap en
-            # daarmee het dashboard niet laten crashen — die ene dag
-            # ontbreekt dan gewoon in de stippen.
-            continue
-        daily[label] = daily.get(label, 0.0) + (row["result_eur"] or 0.0)
-    return [{"date": date, "value": value} for date, value in sorted(daily.items())]
-
-
-def list_evaluation_balance_curve(evaluation_id: int) -> list[dict]:
-    """Cumulatieve saldo-lijn voor de grafiek op de evaluatie-pagina: één
-    punt bij de start (tier_amount, started_at) en daarna één punt per
-    gesloten, aan deze run gekoppelde trade, oplopend saldo. Anders dan
-    list_evaluation_daily_results (dat per handelsdag optelt voor de
-    dag-stippen) geeft dit de exacte volgorde van individuele trades
-    terug, voor een vloeiende lijn in plaats van een dagoverzicht."""
-    evaluation = get_evaluation(evaluation_id)
-    if not evaluation:
-        return []
-    with db.session() as conn:
-        rows = conn.execute(
-            """SELECT exit_time, result_eur FROM journal_entries
-               WHERE evaluation_id = ? AND exit_price IS NOT NULL
-               ORDER BY exit_time""",
-            (evaluation_id,),
-        ).fetchall()
-    curve = [{"time": evaluation["started_at"], "balance": evaluation["tier_amount"]}]
-    running = evaluation["tier_amount"]
-    for row in rows:
-        try:
-            datetime.fromisoformat(row["exit_time"])
-        except (ValueError, TypeError):
-            # Zelfde beschermende patroon als list_evaluation_daily_results:
-            # een niet-ISO exit_time mag de grafiek niet laten crashen of
-            # een onbruikbaar punt opleveren, die ene sluiting ontbreekt
-            # dan gewoon in de lijn.
-            continue
-        running += (row["result_eur"] or 0.0)
-        curve.append({"time": row["exit_time"], "balance": running})
-    return curve
-
-
-def list_evaluation_trade_context(evaluation_id: int) -> list[dict]:
-    """Elke aan deze run gekoppelde, DAADWERKELIJK GENOMEN trade (open of
-    gesloten) met de context die het disciplineprofiel op de
-    evaluatiepagina nodig heeft: welk volgnummer die trade was op zijn
-    handelsdag (op basis van created_at), hoeveel procent van het
-    toenmalige saldo het risico was, en het vertrouwen-niveau van het
-    signaal. Sluit een nog niet genomen (entry_price NULL) of genegeerde
-    kans uit: sinds echte, aan een evaluatie gekoppelde signalen ontstaat
-    een logboekregel al bij de MELDING, niet bij het nemen (anders dan een
-    oefentrade, die altijd meteen genomen wordt) — zonder dit filter telde
-    elke ontvangen melding mee als "trade vandaag", ook een die nooit
-    genomen is. Puur feiten, geen oordeel: het disciplineprofiel trekt daar
-    zelf patronen uit in plaats van dat hier al een vaste regel ingebakken
-    zit.
-
-    Saldo-op-dat-moment is tier_amount plus het resultaat van elke trade
-    die vóór dit created_at al gesloten was (exit_time < created_at,
-    beide ISO-strings, dus lexicografisch vergelijkbaar) — dezelfde
-    chronologie als list_evaluation_balance_curve, maar hier per
-    open-moment in plaats van per sluit-moment, omdat risico bepaald
-    wordt bij het openen, niet bij het sluiten."""
-    evaluation = get_evaluation(evaluation_id)
-    if not evaluation:
-        return []
-    with db.session() as conn:
-        rows = [dict(row) for row in conn.execute(
-            """SELECT je.id AS id, je.created_at AS created_at, je.exit_time AS exit_time,
-                      je.risk_eur AS risk_eur, je.result_eur AS result_eur,
-                      s.coin AS coin, s.direction AS direction, s.confidence AS confidence
-               FROM journal_entries je JOIN signals s ON s.id = je.signal_id
-               WHERE je.evaluation_id = ? AND je.entry_price IS NOT NULL
-                     AND (je.status != 'genegeerd' OR je.exit_price IS NOT NULL)
-               ORDER BY je.created_at""",
-            (evaluation_id,),
-        )]
-
-    day_counts: dict[str, int] = {}
-    trades = []
-    for row in rows:
-        created_at = row["created_at"]
-        if row["risk_eur"] is None:
-            continue
-        balance_at_entry = evaluation["tier_amount"] + sum(
-            (r["result_eur"] or 0.0) for r in rows
-            if r["exit_time"] and r["exit_time"] < created_at
-        )
-        try:
-            day_label = risk.trading_day_label(datetime.fromisoformat(created_at))
-        except (ValueError, TypeError):
-            # Zelfde beschermende patroon als list_evaluation_daily_results:
-            # een niet-ISO created_at mag deze trade niet laten crashen,
-            # hij telt dan gewoon niet mee voor het dag-volgnummer.
-            day_label = None
-        trade_number_in_day = None
-        if day_label is not None:
-            day_counts[day_label] = day_counts.get(day_label, 0) + 1
-            trade_number_in_day = day_counts[day_label]
-        trades.append({
-            "id": row["id"],
-            "coin": row["coin"],
-            "direction": row["direction"],
-            "confidence": row["confidence"],
-            "result_eur": row["result_eur"],
-            "trade_number_in_day": trade_number_in_day,
-            "risk_percent_used": (row["risk_eur"] / balance_at_entry * 100) if balance_at_entry else None,
-        })
-    return trades
 
 
 # ---------------------------------------------------------------------------

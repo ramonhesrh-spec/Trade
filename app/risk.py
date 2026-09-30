@@ -3,7 +3,6 @@ low/high, gedeeld, hetzelfde voor iedereen), take profit op basis van de
 zo ontstane risicoafstand, en risicobedrag in euro's op basis van een eigen
 portfoliobedrag per gebruiker."""
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 ATR_BUFFER_MULTIPLIER = 0.25  # ruimte onder/boven de swing, tegen een korte wick-stop
@@ -11,62 +10,10 @@ ATR_STOP_MULTIPLIER_FALLBACK = 1.5  # als er geen swing-data is
 RISK_REWARD_RATIO = 2.0  # take profit op 2x de werkelijke stop-afstand
 
 
-def trading_day_label(dt: datetime) -> str:
-    """Het handelsdag-label (YYYY-MM-DD) voor een UTC-tijdstip, met dezelfde
-    00:30 UTC-grens als Kraken's eigen dagverlies-reset: vóór 00:30 UTC
-    hoort een tijdstip nog bij de vorige kalenderdag. Op precies deze ene
-    plek geïmplementeerd, alle evaluatie-code hergebruikt hem in plaats van
-    de grens ergens anders opnieuw te berekenen."""
-    if dt.hour == 0 and dt.minute < 30:
-        dt = dt - timedelta(days=1)
-    return dt.date().isoformat()
-
-
 @dataclass
 class StopTake:
     stop_loss: float
     take_profit: float
-
-
-@dataclass
-class PropProgress:
-    current_balance: float
-    day_start_balance: float
-    day_start_date: str
-    status: str
-    closed_reason: Optional[str]
-
-
-def evaluate_prop_progress(evaluation: dict, result_eur: float, closed_at: datetime) -> PropProgress:
-    """Verwerkt het resultaat van één aan een evaluatie-run gekoppelde
-    trade: past het virtuele saldo aan, reset de dagverlies-referentie bij
-    een nieuwe handelsdag, en bepaalt of de run daarmee geslaagd of
-    mislukt is. Drawdown wordt vóór dagverlies gecheckt: een verlies dat
-    allebei zou raken telt als de ernstigere, nooit-resettende drawdown-
-    overtreding, niet als een dagverlies dat morgen weer op nul begint."""
-    today_label = trading_day_label(closed_at)
-    day_start_balance = evaluation["day_start_balance"]
-    day_start_date = evaluation["day_start_date"]
-    if today_label != day_start_date:
-        day_start_balance = evaluation["current_balance"]
-        day_start_date = today_label
-
-    current_balance = evaluation["current_balance"] + result_eur
-    tier_amount = evaluation["tier_amount"]
-
-    status = "actief"
-    closed_reason = None
-    if current_balance <= tier_amount * (1 - evaluation["max_drawdown_pct"] / 100):
-        status, closed_reason = "mislukt", "maximale drawdown geraakt"
-    elif current_balance <= day_start_balance * (1 - evaluation["max_daily_loss_pct"] / 100):
-        status, closed_reason = "mislukt", "maximaal dagverlies geraakt"
-    elif current_balance >= tier_amount * (1 + evaluation["profit_target_pct"] / 100):
-        status, closed_reason = "geslaagd", "winstdoel gehaald"
-
-    return PropProgress(
-        current_balance=current_balance, day_start_balance=day_start_balance,
-        day_start_date=day_start_date, status=status, closed_reason=closed_reason,
-    )
 
 
 def compute_stop_take(
@@ -109,95 +56,6 @@ def compute_stop_take(
 # verwaarloosbare afstand). Val in dat geval terug op de gewone
 # ATR-berekening.
 MIN_LEVEL_STOP_DISTANCE_ATR_FRACTION = 0.5
-
-# Hoeveel keer het evaluatiesaldo een positie maximaal notional mag zijn,
-# exact de hefboomlimiet van de echte Kraken Prop. Was voorheen alleen in
-# web/main.py voor oefentrades, geldt nu voor elke evaluatie-gesizede trade.
-MAX_EVAL_LEVERAGE = 5.0
-
-# Reserveer bij het sizen van één trade ruimte voor nog dit aantal - 1
-# volgende trades dezelfde dag/run, in plaats van in één klap het hele
-# resterende budget op te souperen.
-EVAL_BUDGET_TRADE_RESERVE = 3
-
-# Onder dit percentage van het VOLLEDIGE dagbudget of de VOLLEDIGE
-# drawdown-ruimte is verder sizen op de evaluatie zinloos: elke nieuwe
-# trade zou toch nagenoeg nul risico mogen nemen.
-EVAL_BUDGET_BLOCK_THRESHOLD_PCT = 5.0
-
-
-def effective_day_start_balance(evaluation: dict) -> float:
-    """Het saldo waar het dagverlies-budget vandaag tegen gemeten moet
-    worden. De opgeslagen day_start_balance/day_start_date rollen pas over
-    binnen evaluate_prop_progress, en die draait alleen bij het sluiten van
-    een trade: staat de opgeslagen dag al achter op de huidige handelsdag,
-    dan is er simpelweg nog niks gesloten sinds middernacht en begint de
-    nieuwe dag bij het huidige saldo. Zonder deze correctie zou de eerste
-    trade van een nieuwe dag nog tegen het uitgeputte budget van gisteren
-    gesized (en dan onterecht geblokkeerd) worden. Op één plek, gedeeld door
-    de sizing hieronder en de weergave in web/main.py:_build_eval_context."""
-    if trading_day_label(datetime.now(timezone.utc)) != evaluation["day_start_date"]:
-        return evaluation["current_balance"]
-    return evaluation["day_start_balance"]
-
-
-def compute_eval_daily_budget_remaining(evaluation: dict, open_risk_eur: float) -> float:
-    """Wat er nog over is van het dagverlies-budget van de evaluatie: het
-    toegestane dagverlies min wat vandaag al verloren is, min het risico
-    dat al vaststaat in nog open evaluatie-trades (dat risico is nog niet
-    in current_balance verwerkt, zie repo.total_open_risk_eur_for_evaluation)."""
-    day_start_balance = effective_day_start_balance(evaluation)
-    daily_loss_amount = day_start_balance * evaluation["max_daily_loss_pct"] / 100
-    loss_so_far = max(0.0, day_start_balance - evaluation["current_balance"])
-    return max(0.0, daily_loss_amount - loss_so_far - open_risk_eur)
-
-
-def compute_eval_drawdown_budget_remaining(evaluation: dict, open_risk_eur: float) -> float:
-    """Zelfde als compute_eval_daily_budget_remaining, maar tegen de
-    nooit-resettende drawdown-ruimte (tier_amount, niet day_start_balance)."""
-    drawdown_amount = evaluation["tier_amount"] * evaluation["max_drawdown_pct"] / 100
-    drawdown_so_far = max(0.0, evaluation["tier_amount"] - evaluation["current_balance"])
-    return max(0.0, drawdown_amount - drawdown_so_far - open_risk_eur)
-
-
-def eval_sizing_blocked(evaluation: dict, open_risk_eur: float) -> bool:
-    """True als het dagbudget of de drawdown-ruimte al zo goed als op is:
-    dan heeft verder evaluatie-sizen geen zin meer, de trade valt terug op
-    gewone portfolio-sizing en telt niet mee voor de evaluatie."""
-    daily_budget = effective_day_start_balance(evaluation) * evaluation["max_daily_loss_pct"] / 100
-    drawdown_budget = evaluation["tier_amount"] * evaluation["max_drawdown_pct"] / 100
-    daily_remaining_pct = (
-        compute_eval_daily_budget_remaining(evaluation, open_risk_eur) / daily_budget * 100
-        if daily_budget else 0.0
-    )
-    drawdown_remaining_pct = (
-        compute_eval_drawdown_budget_remaining(evaluation, open_risk_eur) / drawdown_budget * 100
-        if drawdown_budget else 0.0
-    )
-    return (
-        daily_remaining_pct < EVAL_BUDGET_BLOCK_THRESHOLD_PCT
-        or drawdown_remaining_pct < EVAL_BUDGET_BLOCK_THRESHOLD_PCT
-    )
-
-
-def compute_eval_risk_eur(
-    evaluation: dict, risk_percent: float, open_risk_eur: float,
-    entry_price: float, stop_loss: float,
-) -> float:
-    """Risicobedrag voor één evaluatie-gesizede trade: het kleinste van de
-    persoonlijke risk_percent-cap tegen het evaluatiesaldo, een derde van
-    het resterend dagbudget, een derde van de resterende drawdown-ruimte,
-    en de hefboomcap. Aanroeper checkt vooraf eval_sizing_blocked; deze
-    functie zelf gaat er niet vanuit dat er nog voldoende budget is."""
-    personal_cap = evaluation["current_balance"] * risk_percent / 100
-    daily_share = compute_eval_daily_budget_remaining(evaluation, open_risk_eur) / EVAL_BUDGET_TRADE_RESERVE
-    drawdown_share = compute_eval_drawdown_budget_remaining(evaluation, open_risk_eur) / EVAL_BUDGET_TRADE_RESERVE
-    stop_distance = abs(entry_price - stop_loss)
-    leverage_cap = (
-        MAX_EVAL_LEVERAGE * evaluation["current_balance"] * stop_distance / entry_price
-        if stop_distance > 0 and entry_price > 0 else float("inf")
-    )
-    return max(0.0, min(personal_cap, daily_share, drawdown_share, leverage_cap))
 
 
 def compute_stop_take_from_levels(
@@ -265,87 +123,6 @@ def compute_stop_take_from_levels(
         take_profit = entry_price - RISK_REWARD_RATIO * risk_distance
 
     return StopTake(stop_loss=stop_loss, take_profit=take_profit)
-
-
-# Bij dit evaluatiesaldo (of hoger) wordt de stop loss niet meer ingeperkt:
-# het maximum groeit dan naar STOP_CAP_MAX_PCT, wat in de praktijk geen
-# enkele normale marktstructuur-stop meer raakt (die liggen vrijwel altijd
-# onder de 5%).
-STOP_CAP_REFERENCE_TIER = 10_000.0
-# Bij een (bijna) nul zo groot gekozen evaluatie-tier (tier_amount, niet het
-# live current_balance — de cap verandert dus NIET mee met winst/verlies
-# binnen dezelfde evaluatie, alleen met de gekozen groottekeuze) mag de stop
-# nog maar dit percentage van de entry-prijs zijn.
-STOP_CAP_MIN_PCT = 0.01
-# Vanaf STOP_CAP_REFERENCE_TIER (tier_amount): dit percentage, functioneel
-# "geen grens".
-STOP_CAP_MAX_PCT = 0.10
-
-
-def eval_max_stop_pct(tier_amount: float) -> float:
-    """Maximale stop-afstand als fractie van de entry-prijs, lineair
-    oplopend van STOP_CAP_MIN_PCT (bij tier_amount 0) tot STOP_CAP_MAX_PCT
-    (bij STOP_CAP_REFERENCE_TIER en hoger). Geen harde knip: een evaluatie
-    net onder de referentie-tier krijgt bijna dezelfde ruimte als er net
-    boven, in plaats van een plotselinge sprong."""
-    fraction = min(max(tier_amount, 0.0) / STOP_CAP_REFERENCE_TIER, 1.0)
-    return STOP_CAP_MIN_PCT + (STOP_CAP_MAX_PCT - STOP_CAP_MIN_PCT) * fraction
-
-
-def apply_eval_stop_cap(
-    direction: str, entry_price: float, stop_loss: float, take_profit: float, max_stop_pct: float,
-) -> StopTake:
-    """Trekt een te brede stop loss in tot max_stop_pct van de entry-prijs.
-    Take profit schaalt evenredig mee, zodat de risk:reward-verhouding van
-    de oorspronkelijke berekening exact behouden blijft (in plaats van een
-    aparte doelberekening te herhalen, die bij een niveau-gebaseerd target
-    andere aannames zou maken dan de oorspronkelijke keuze). Geen wijziging
-    als de bestaande stop al binnen de grens valt — dit is een bovengrens,
-    geen streefwaarde."""
-    direction = direction.lower()
-    max_distance = entry_price * max_stop_pct
-    if direction == "long":
-        current_distance = entry_price - stop_loss
-        if current_distance <= max_distance or current_distance <= 0:
-            return StopTake(stop_loss=stop_loss, take_profit=take_profit)
-        scale = max_distance / current_distance
-        reward_distance = take_profit - entry_price
-        return StopTake(
-            stop_loss=entry_price - max_distance,
-            take_profit=entry_price + reward_distance * scale,
-        )
-    elif direction == "short":
-        current_distance = stop_loss - entry_price
-        if current_distance <= max_distance or current_distance <= 0:
-            return StopTake(stop_loss=stop_loss, take_profit=take_profit)
-        scale = max_distance / current_distance
-        reward_distance = entry_price - take_profit
-        return StopTake(
-            stop_loss=entry_price + max_distance,
-            take_profit=entry_price - reward_distance * scale,
-        )
-    else:
-        raise ValueError(f"onbekende richting: {direction}")
-
-
-def compute_risk_eur(portfolio_eur: float, risk_percent: float) -> float:
-    return portfolio_eur * (risk_percent / 100.0)
-
-
-# Round-trip handelsfee (open + sluiten) van een evaluatie-account, als
-# fractie van de positiewaarde.
-EVAL_TRADE_FEE_RATE = 0.0008
-# Hefboom-/financieringskosten per dag dat een evaluatie-positie openstaat,
-# als fractie van de positiewaarde.
-EVAL_LEVERAGE_DAILY_RATE = 0.00033
-# Voorzichtige aanname voor hoeveel dagen een trade openstaat, gebruikt om
-# VOORAF (bij het bepalen van de positiegrootte) een hefboomkost in te
-# schatten voor iets waarvan de werkelijke duur nog niet bekend is. Dit is
-# een day-trading-systeem, de meeste trades zijn binnen een dag klaar; de
-# WERKELIJKE kost wordt bij het sluiten opnieuw en exact berekend (zie
-# repo.close_journal_trade), dus een te lage aanname hier wordt daar
-# gecorrigeerd, niet stilzwijgend gemist.
-EVAL_SIZING_DAYS_ASSUMPTION = 1.0
 
 
 def compute_position_size(
