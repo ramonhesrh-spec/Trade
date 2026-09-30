@@ -1122,18 +1122,14 @@ async def process_day_trading_signal(
         force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             title = f"{push_notify.coin_symbol(interp.coin)} {interp.coin} {interp.direction}, {signal_data['confidence']}"
-            entry_zone_note = (
-                f" · Mogelijk betere entry: {suggested_entry_low:.4f}–{suggested_entry_high:.4f}"
-                if suggested_entry_low is not None else ""
-            )
-            sniper_line = (
-                f"\n🎯 Sniper: {signal_data['sniper_entry_price']:.4f} — {signal_data['sniper_reason']}"
-                if signal_data.get("sniper_entry_price") is not None else ""
-            )
             body = (
-                f"Entry {signal_data['price']:.4f} · Stop {effective_stop_loss:.4f} · "
-                f"Take profit {effective_take_profit:.4f}{entry_zone_note}{sniper_line}"
+                f"Entry {signal_data['price']:.4f}\n"
+                f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
             )
+            if suggested_entry_low is not None:
+                body += f"\nMogelijk betere entry: {suggested_entry_low:.4f}–{suggested_entry_high:.4f}"
+            if signal_data.get("sniper_entry_price") is not None:
+                body += f"\n🎯 Sniper: {signal_data['sniper_entry_price']:.4f} — {signal_data['sniper_reason']}"
             if signal_data.get("repeated_loss_note"):
                 body += f"\n{signal_data['repeated_loss_note']}"
             if signal_data.get("context_note"):
@@ -1245,26 +1241,23 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
             coin = message_data["coin"]
             confirmed = message_data["technical_confirmed"]
             title = f"{push_notify.coin_symbol(coin)} {coin} {message_data['direction']}, update"
-            # Zelfde entry_zone_note-logica als in process_day_trading_signal
-            # hierboven, anders mist deze regel juist in de pushmelding die de
-            # marktscan elke cyclus stuurt voor een al open signaal, terwijl
-            # de signaalkaart hem wel altijd toont.
+            # Zelfde regel-per-regel-opbouw als process_day_trading_signal
+            # hierboven, zelfde reden (visuele verfijning, 2026-09-30): een
+            # dichte, met · gescheiden regel is lastig te scannen op een
+            # lockscreen.
             suggested_low = message_data.get("suggested_entry_low")
             suggested_high = message_data.get("suggested_entry_high")
-            entry_zone_note = (
-                f" · Mogelijk betere entry: {suggested_low:.4f}–{suggested_high:.4f}"
-                if suggested_low is not None else ""
-            )
-            sniper_line = (
-                f"\n🎯 Sniper: {message_data['sniper_entry_price']:.4f} — {message_data['sniper_reason']}"
-                if message_data.get("sniper_entry_price") is not None else ""
-            )
-            body = (
-                f"Nieuwe prijs {message_data['price']:.4f} · Stop {message_data['stop_loss']:.4f} · "
-                f"Take profit {message_data['take_profit']:.4f}{entry_zone_note}{sniper_line}"
-                if confirmed else
-                f"Nieuwe prijs {message_data['price']:.4f} · nog geen sterke kans"
-            )
+            if confirmed:
+                body = (
+                    f"Nieuwe prijs {message_data['price']:.4f}\n"
+                    f"Stop {message_data['stop_loss']:.4f} · Take profit {message_data['take_profit']:.4f}"
+                )
+                if suggested_low is not None:
+                    body += f"\nMogelijk betere entry: {suggested_low:.4f}–{suggested_high:.4f}"
+                if message_data.get("sniper_entry_price") is not None:
+                    body += f"\n🎯 Sniper: {message_data['sniper_entry_price']:.4f} — {message_data['sniper_reason']}"
+            else:
+                body = f"Nieuwe prijs {message_data['price']:.4f} · nog geen sterke kans"
             if message_data.get("repeated_loss_note"):
                 body += f"\n{message_data['repeated_loss_note']}"
             await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
