@@ -214,24 +214,33 @@ ENTRY_ZONE_CONFIRM_LOOKBACK_CANDLES = 8  # 2 uur, gesloten candles
 
 
 def _entry_zone_rejection_seen(direction: str, zone_low: float, zone_high: float, candles) -> bool:
-    """True zodra minstens één candle in `candles` de zone raakte (wick of
-    volledige overlap) EN aan de gunstige kant weer sloot (long: close
-    boven zone_high, short: eronder). `candles` moet alleen gesloten
-    candles bevatten — de aanroeper filtert de nog vormende laatste candle
-    er al uit, zie check_pending_signals."""
+    """True als de MEEST RECENTE relevante staat in `candles` een afwijzing
+    is: minstens één candle raakte de zone (wick of volledige overlap) EN
+    sloot aan de gunstige kant (long: close boven zone_high, short:
+    eronder), en geen latere candle sloot daarna dwars door de andere kant
+    van de zone heen (dat maakt een eerdere afwijzing ongeldig — de zone is
+    dan alsnog gebroken, precies het scenario dat deze functie moet
+    voorkomen). Doorloopt `candles` oudste-eerst en houdt de lopende staat
+    bij in plaats van te stoppen bij de eerste treffer. `candles` moet
+    alleen gesloten candles bevatten — de aanroeper filtert de nog vormende
+    laatste candle er al uit, zie check_pending_signals."""
+    rejected = False
     for _, candle in candles.iterrows():
         touched = (
             zone_low <= candle["low"] <= zone_high
             or zone_low <= candle["high"] <= zone_high
             or (candle["low"] <= zone_low and candle["high"] >= zone_high)
         )
-        if not touched:
-            continue
-        if direction == "long" and candle["close"] > zone_high:
-            return True
-        if direction == "short" and candle["close"] < zone_low:
-            return True
-    return False
+        if touched:
+            if direction == "long" and candle["close"] > zone_high:
+                rejected = True
+            elif direction == "short" and candle["close"] < zone_low:
+                rejected = True
+        if direction == "long" and candle["close"] < zone_low:
+            rejected = False
+        elif direction == "short" and candle["close"] > zone_high:
+            rejected = False
+    return rejected
 
 
 async def check_pending_signals() -> None:
@@ -328,9 +337,31 @@ async def check_pending_signals() -> None:
                     coin_entry_zone_candles[coin] = None
             candles = coin_entry_zone_candles[coin]
             if candles is not None:
+                # Alleen candles die sloten NA het ontstaan van dit signaal
+                # tellen mee als bevestiging — zelfde reden als
+                # market_scanner._smc_candles_since: een candle die al sloot
+                # vóór het signaal (en daarmee de zone) bestond, heeft de
+                # zone nooit 'gezien' en mag hem dus ook niet afwijzen.
+                # Zonder deze filter kan ruis van vóór het signaal de zone
+                # al bevestigen, omdat de bovenkant van de entry-zone vaak
+                # zo goed als de signaalprijs zelf is.
+                signal_created_at = datetime.fromisoformat(entry["signal_created_at"])
+                relevant_candles = candles[candles["timestamp"] >= signal_created_at]
                 in_entry_zone = _entry_zone_rejection_seen(
-                    entry["direction"], entry["suggested_entry_low"], entry["suggested_entry_high"], candles,
+                    entry["direction"], entry["suggested_entry_low"], entry["suggested_entry_high"], relevant_candles,
                 )
+
+        if raw_in_entry_zone and not in_entry_zone:
+            # Ruwe zone-match zonder bevestiging: de spec zegt expliciet
+            # "geen melding deze cyclus", niet "val terug op sniper/
+            # signaalniveau/bron niveau" — zonder deze skip zou een
+            # onbevestigde zone-match alsnog via at_signal_level een
+            # melding sturen (de bovenkant van de entry-zone is meestal
+            # zo goed als de signaalprijs zelf) en level_alert_sent
+            # verbruiken, waarna de bevestigde zone-melding nooit meer af
+            # kan gaan. Exact het 418-patroon, alleen met een andere
+            # titel.
+            continue
 
         # Sniper-trigger heeft voorrang op de resterende twee situaties
         # hieronder (signaalniveau en bron niveau): als de sweep alsnog
