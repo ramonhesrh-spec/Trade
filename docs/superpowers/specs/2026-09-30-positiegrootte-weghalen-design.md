@@ -113,6 +113,43 @@ als dat zinvol blijft — dit werkt de implementatie-plan-fase verder uit.
   functioneel identiek, verliezen alleen de `risk_eur`/`position_size`-
   berekening die er nu nog inzit.
 
+## Addendum: ontdekte ripple-effecten (na spec-goedkeuring, tijdens planning)
+
+Tijdens de planfase bleek de daadwerkelijke omvang groter dan hierboven
+beschreven: `result_eur`/`risk_eur` worden niet alleen in de journaaltabel en
+CSV-export gebruikt, maar ook door een reeks losse statistiek- en
+weergavefuncties die na deze opschoning altijd nul/leeg zouden worden
+(omdat `risk_eur` op elke nieuwe trade al 0 wordt zodra de evaluatie en de
+rekenhulp weg zijn — dat gebeurt sowieso, ongeacht wat dit project doet).
+Gebruiker heeft bevestigd (AskUserQuestion, "Ja, allemaal mee") dat deze
+ook naar percentage-gebaseerd moeten, in plaats van stil op nul te
+bevriezen:
+
+- **Ambient achtergrondgloed** (`base.html`'s `portfolioGlow`, gevoed door
+  `/api/system_status`'s `week_result_eur`) — wordt gevoed door een
+  percentage-equivalent.
+- **Cumulatieve resultaatgrafiek** (`repo.cumulative_result_series`) — som
+  van `result_pct` in plaats van `result_eur`.
+- **Trade-kalender-heatmap** (`repo.daily_results`) — zelfde omzetting.
+- **Wekelijkse/maandelijkse samenvatting** (`app/periodic_summary.py`,
+  `repo.period_stats`/`period_stats_auto_scan`) — tekst toont percentage
+  in plaats van "+€X".
+- **Overige statistiek-functies** in `app/repo.py` die `result_eur`
+  sommeren/middelen voor winrate-uitsplitsingen (`winrate_stats`,
+  `coin_stats`, en vergelijkbare) — consistent omgezet.
+- **Live PnL op een open trade-kaart** (`risk.compute_unrealized_pnl`,
+  getoond als "€X (+Y%)" op elke open-positie-kaart, bijgewerkt door
+  `dashboard.js`-polling): de huidige `pnl_pct` is zelf ook
+  risicogewogen (`pnl_eur / risk_eur * 100`, dus een R-multiple), niet de
+  kale koersbeweging — wordt eveneens 0 zodra `risk_eur` altijd 0 is.
+  Consistent met de rest van deze addendum: `pnl_eur` weg, `pnl_pct`
+  herdefinieerd als de kale procentuele koersbeweging (zelfde formule als
+  `journal_entries.result_pct`).
+
+Dit raakt geen nieuwe scope-BESLISSING (alles hierboven volgt rechtstreeks
+uit "puur percentage" + "alles weg"), maar wel een substantieel groter
+implementatie-oppervlak dan de oorspronkelijke spec-tekst suggereerde.
+
 ## Testen
 
 Geen pytest-suite. Verificatie zoals gebruikelijk in dit project:
