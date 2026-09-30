@@ -1791,23 +1791,18 @@ def largest_open_position_volatility(user_id: int) -> Optional[float]:
 
 
 def winrate_stats(user_id: int) -> dict:
-    """Winrate en gemiddeld resultaat apart voor hoog en laag vertrouwen,
-    op basis van gesloten trades van deze gebruiker. Winrate alleen zegt
-    weinig over de verhouding tussen winst en verlies per trade, het
-    gemiddelde resultaat erbij geeft een eerlijker beeld.
+    """Winrate en gemiddeld resultaatpercentage apart voor hoog en laag
+    vertrouwen, op basis van gesloten trades van deze gebruiker. Winrate
+    alleen zegt weinig over de verhouding tussen winst en verlies per
+    trade, het gemiddelde resultaat erbij geeft een eerlijker beeld.
 
-    Het percentage hoort bij het risicobedrag, niet bij de rauwe koersbeweging
-    (dat is wat journal_entries.result_pct is: hoeveel de onderliggende prijs
-    zelf bewoog, los van positiegrootte). Naast een risicogewogen euro-bedrag
-    is die koers-% zinloos en zelfs misleidend: een trade die 30x het risico
-    won kan een kleine koersbeweging hebben gehad met een kleine stop loss.
-    Het percentage hier is dus result_eur t.o.v. het eigen risk_eur van die
-    trade, zodat het altijd dezelfde verhouding toont als het eurobedrag
-    ernaast."""
+    avg_result_pct is het gemiddelde van journal_entries.result_pct: hoeveel
+    de onderliggende prijs zelf bewoog, los van positiegrootte (er is geen
+    positiegrootte/risicobedrag meer om tegen af te zetten, zie het
+    spec-addendum)."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT s.confidence AS confidence, je.result_eur AS result_eur,
-                      je.risk_eur AS risk_eur
+            """SELECT s.confidence AS confidence, je.result_pct AS result_pct
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
                      AND je.evaluation_id IS NULL AND s.trade_type = 'day_trading'""",
@@ -1817,18 +1812,13 @@ def winrate_stats(user_id: int) -> dict:
     def stats_for(confidence: str) -> dict:
         subset = [r for r in rows if r["confidence"] == confidence]
         total = len(subset)
-        wins = len([r for r in subset if r["result_eur"] is not None and r["result_eur"] > 0])
+        wins = len([r for r in subset if r["result_pct"] is not None and r["result_pct"] > 0])
         winrate = (wins / total * 100) if total else 0.0
-        eur_values = [r["result_eur"] for r in subset if r["result_eur"] is not None]
-        pct_values = [
-            r["result_eur"] / r["risk_eur"] * 100
-            for r in subset if r["result_eur"] is not None and r["risk_eur"]
-        ]
-        avg_eur = sum(eur_values) / len(eur_values) if eur_values else 0.0
+        pct_values = [r["result_pct"] for r in subset if r["result_pct"] is not None]
         avg_pct = sum(pct_values) / len(pct_values) if pct_values else 0.0
         return {
             "total": total, "wins": wins, "winrate": round(winrate, 1),
-            "avg_result_eur": round(avg_eur, 2), "avg_result_pct": round(avg_pct, 1),
+            "avg_result_pct": round(avg_pct, 1),
         }
 
     return {
@@ -1900,31 +1890,27 @@ def pattern_kansberekening(factor_pct: Optional[float], pattern_stats: Optional[
 
 
 def swing_winrate_stats(user_id: int) -> dict:
-    """Winrate en gemiddeld resultaat van gesloten swing-trades, apart van
-    winrate_stats (day trading): andere tijdshorizon, ander risicoprofiel,
-    en swing heeft geen hoog/laag vertrouwen-label om op te splitsen (geen
-    vertrouwenscijfer zonder backtest op deze tijdshorizon, zie de spec)."""
+    """Winrate en gemiddeld resultaatpercentage van gesloten swing-trades,
+    apart van winrate_stats (day trading): andere tijdshorizon, ander
+    risicoprofiel, en swing heeft geen hoog/laag vertrouwen-label om op te
+    splitsen (geen vertrouwenscijfer zonder backtest op deze tijdshorizon,
+    zie de spec)."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT je.result_eur AS result_eur, je.risk_eur AS risk_eur
+            """SELECT je.result_pct AS result_pct
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL
                      AND s.is_practice = 0 AND je.evaluation_id IS NULL AND s.trade_type = 'swing'""",
             (user_id,),
         ).fetchall()
     total = len(rows)
-    wins = len([r for r in rows if r["result_eur"] is not None and r["result_eur"] > 0])
+    wins = len([r for r in rows if r["result_pct"] is not None and r["result_pct"] > 0])
     winrate = (wins / total * 100) if total else 0.0
-    eur_values = [r["result_eur"] for r in rows if r["result_eur"] is not None]
-    pct_values = [
-        r["result_eur"] / r["risk_eur"] * 100
-        for r in rows if r["result_eur"] is not None and r["risk_eur"]
-    ]
-    avg_eur = sum(eur_values) / len(eur_values) if eur_values else 0.0
+    pct_values = [r["result_pct"] for r in rows if r["result_pct"] is not None]
     avg_pct = sum(pct_values) / len(pct_values) if pct_values else 0.0
     return {
         "total": total, "wins": wins, "winrate": round(winrate, 1),
-        "avg_result_eur": round(avg_eur, 2), "avg_result_pct": round(avg_pct, 1),
+        "avg_result_pct": round(avg_pct, 1),
     }
 
 
@@ -1941,7 +1927,7 @@ def winrate_by_ratio(user_id: int) -> list[dict]:
     te maken heeft."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT s.reason AS reason, je.result_eur AS result_eur
+            """SELECT s.reason AS reason, je.result_pct AS result_pct
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
                      AND je.evaluation_id IS NULL AND s.trade_type = 'day_trading'""",
@@ -1956,7 +1942,7 @@ def winrate_by_ratio(user_id: int) -> list[dict]:
         factors = reason.split(" | ")
         total = len(factors)
         passed = sum(1 for f in factors if f.startswith("✓"))
-        buckets.setdefault((passed, total), []).append((row["result_eur"] or 0) > 0)
+        buckets.setdefault((passed, total), []).append((row["result_pct"] or 0) > 0)
 
     result = []
     for (passed, total), outcomes in sorted(buckets.items(), key=lambda kv: (kv[0][1], kv[0][0])):
@@ -1969,28 +1955,28 @@ def winrate_by_ratio(user_id: int) -> list[dict]:
     return result
 
 
-def week_result_eur(user_id: int) -> Optional[float]:
-    """Resultaat van echte gesloten trades in de laatste 7 dagen. None als
-    er niets gesloten is deze week (niet hetzelfde als 0: 0 is exact
-    quitte, None is 'geen data om iets over te zeggen'). Gebruikt om de
-    ambient achtergrond een beetje mee te laten kleuren met hoe de week
-    gaat, geen harde metric."""
+def week_result_pct(user_id: int) -> Optional[float]:
+    """Gemiddeld resultaatpercentage van echte gesloten trades in de
+    laatste 7 dagen. None als er niets gesloten is deze week (niet
+    hetzelfde als 0: 0 is exact quitte, None is 'geen data om iets over te
+    zeggen'). Gebruikt om de ambient achtergrond een beetje mee te laten
+    kleuren met hoe de week gaat, geen harde metric."""
     week_ago = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     with db.session() as conn:
         row = conn.execute(
-            """SELECT SUM(je.result_eur) AS total, COUNT(*) AS n
+            """SELECT AVG(je.result_pct) AS avg_pct, COUNT(*) AS n
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
                      AND je.evaluation_id IS NULL AND je.exit_time >= ?""",
             (user_id, week_ago),
         ).fetchone()
-        return round(row["total"], 2) if row["n"] else None
+        return round(row["avg_pct"], 2) if row["n"] else None
 
 
 def cumulative_result_series(user_id: int) -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT je.exit_time AS exit_time, je.result_eur AS result_eur
+            """SELECT je.exit_time AS exit_time, je.result_pct AS result_pct
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
                      AND je.evaluation_id IS NULL
@@ -2000,20 +1986,20 @@ def cumulative_result_series(user_id: int) -> list[dict]:
     series = []
     running = 0.0
     for row in rows:
-        running += row["result_eur"] or 0.0
-        series.append({"time": row["exit_time"], "cumulative_eur": round(running, 2)})
+        running += row["result_pct"] or 0.0
+        series.append({"time": row["exit_time"], "cumulative_pct": round(running, 2)})
     return series
 
 
 def daily_results(user_id: int, days: int = 126) -> dict:
-    """Resultaat per dag (som van result_eur van echte, gesloten trades) van
-    de laatste `days` dagen, als {"YYYY-MM-DD": bedrag}. Basis voor de
-    trade-kalender heatmap op het dashboard: een dag zonder gesloten
-    trades komt simpelweg niet in dit dict voor."""
+    """Resultaatpercentage per dag (som van result_pct van echte, gesloten
+    trades) van de laatste `days` dagen, als {"YYYY-MM-DD": percentage}.
+    Basis voor de trade-kalender heatmap: een dag zonder gesloten trades
+    komt simpelweg niet in dit dict voor."""
     cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT je.exit_time AS exit_time, je.result_eur AS result_eur
+            """SELECT je.exit_time AS exit_time, je.result_pct AS result_pct
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
                      AND je.evaluation_id IS NULL AND je.exit_time >= ?""",
@@ -2024,7 +2010,7 @@ def daily_results(user_id: int, days: int = 126) -> dict:
         if not row["exit_time"]:
             continue
         day = row["exit_time"][:10]
-        by_day[day] = by_day.get(day, 0.0) + (row["result_eur"] or 0.0)
+        by_day[day] = by_day.get(day, 0.0) + (row["result_pct"] or 0.0)
     return by_day
 
 
@@ -2046,7 +2032,7 @@ def recent_autonomous_loss(coin: str, direction: str, hours: int) -> bool:
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     with db.session() as conn:
         row = conn.execute(
-            """SELECT je.result_eur AS result_eur
+            """SELECT je.result_pct AS result_pct
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id
                WHERE s.coin = ? AND s.direction = ? AND s.message_id IS NULL
@@ -2055,7 +2041,7 @@ def recent_autonomous_loss(coin: str, direction: str, hours: int) -> bool:
                ORDER BY je.exit_time DESC LIMIT 1""",
             (coin.upper(), direction.lower(), cutoff),
         ).fetchone()
-    return bool(row and row["result_eur"] is not None and row["result_eur"] < 0)
+    return bool(row and row["result_pct"] is not None and row["result_pct"] < 0)
 
 
 def consecutive_autonomous_losses(coin: str, direction: str, limit: int = 3) -> int:
@@ -2067,7 +2053,7 @@ def consecutive_autonomous_losses(coin: str, direction: str, limit: int = 3) -> 
     signal_processor's repeated_loss_note)."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT je.result_eur AS result_eur
+            """SELECT je.result_pct AS result_pct
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id
                WHERE s.coin = ? AND s.direction = ? AND s.message_id IS NULL
@@ -2077,7 +2063,7 @@ def consecutive_autonomous_losses(coin: str, direction: str, limit: int = 3) -> 
         ).fetchall()
     count = 0
     for row in rows:
-        if row["result_eur"] is not None and row["result_eur"] < 0:
+        if row["result_pct"] is not None and row["result_pct"] < 0:
             count += 1
         else:
             break
@@ -2106,24 +2092,24 @@ def period_stats(user_id: int, since_iso: str) -> dict:
             (user_id, since_iso),
         ).fetchone()
         closed = conn.execute(
-            """SELECT je.result_eur AS result_eur, s.coin AS coin
+            """SELECT je.result_pct AS result_pct, s.coin AS coin
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_time >= ? AND je.exit_price IS NOT NULL
                      AND s.is_practice = 0 AND je.evaluation_id IS NULL""",
             (user_id, since_iso),
         ).fetchall()
 
-    wins = sum(1 for r in closed if r["result_eur"] is not None and r["result_eur"] > 0)
-    total_result = sum(r["result_eur"] or 0 for r in closed)
-    with_result = [dict(r) for r in closed if r["result_eur"] is not None]
-    best = max(with_result, key=lambda r: r["result_eur"], default=None)
-    worst = min(with_result, key=lambda r: r["result_eur"], default=None)
+    wins = sum(1 for r in closed if r["result_pct"] is not None and r["result_pct"] > 0)
+    total_result = sum(r["result_pct"] or 0 for r in closed)
+    with_result = [dict(r) for r in closed if r["result_pct"] is not None]
+    best = max(with_result, key=lambda r: r["result_pct"], default=None)
+    worst = min(with_result, key=lambda r: r["result_pct"], default=None)
     return {
         "signal_count": signals_row["n"] or 0,
         "hoog_count": signals_row["hoog"] or 0,
         "closed_count": len(closed),
         "wins": wins,
-        "total_result_eur": total_result,
+        "total_result_pct": total_result,
         "best": best,
         "worst": worst if worst != best else None,
     }
@@ -2143,13 +2129,13 @@ def period_stats_auto_scan(user_id: int, since_iso: str) -> dict:
             (user_id, since_iso),
         ).fetchone()
         closed = conn.execute(
-            """SELECT je.result_eur AS result_eur
+            """SELECT je.result_pct AS result_pct
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_time >= ? AND je.exit_price IS NOT NULL
                      AND s.is_practice = 0 AND je.evaluation_id IS NULL AND s.message_id IS NULL""",
             (user_id, since_iso),
         ).fetchall()
-    wins = sum(1 for r in closed if r["result_eur"] is not None and r["result_eur"] > 0)
+    wins = sum(1 for r in closed if r["result_pct"] is not None and r["result_pct"] > 0)
     return {
         "signal_count": signals_row["n"] or 0,
         "closed_count": len(closed),
@@ -2159,12 +2145,12 @@ def period_stats_auto_scan(user_id: int, since_iso: str) -> dict:
 
 
 def coin_stats(user_id: int) -> list[dict]:
-    """Winrate en gemiddeld resultaat per coin, op basis van gesloten trades
-    van deze gebruiker. Laat zien welke coin het goed doet met dit systeem,
-    en welke niet."""
+    """Winrate en gemiddeld resultaatpercentage per coin, op basis van
+    gesloten trades van deze gebruiker. Laat zien welke coin het goed doet
+    met dit systeem, en welke niet."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT s.coin AS coin, je.result_eur AS result_eur
+            """SELECT s.coin AS coin, je.result_pct AS result_pct
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.exit_price IS NOT NULL AND s.is_practice = 0
                      AND je.evaluation_id IS NULL""",
@@ -2173,7 +2159,7 @@ def coin_stats(user_id: int) -> list[dict]:
 
     by_coin: dict[str, list] = {}
     for row in rows:
-        by_coin.setdefault(row["coin"], []).append(row["result_eur"])
+        by_coin.setdefault(row["coin"], []).append(row["result_pct"])
 
     stats = []
     for coin, results in by_coin.items():
@@ -2185,7 +2171,7 @@ def coin_stats(user_id: int) -> list[dict]:
             "total": total,
             "wins": wins,
             "winrate": round(wins / total * 100, 1) if total else 0.0,
-            "avg_result_eur": round(sum(values) / len(values), 2) if values else 0.0,
+            "avg_result_pct": round(sum(values) / len(values), 2) if values else 0.0,
         })
 
     stats.sort(key=lambda s: s["total"], reverse=True)

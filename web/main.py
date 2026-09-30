@@ -762,7 +762,7 @@ async def api_system_status(user: dict = Depends(require_login)):
         "checked_at": db.now_iso(),
         "pending_count": repo.count_pending_signals(user["id"]),
         "unread_notifications": repo.count_unread_notifications(user["id"]),
-        "week_result_pct": repo.week_result_eur(user["id"]),
+        "week_result_pct": repo.week_result_pct(user["id"]),
         "volatility_ratio": repo.largest_open_position_volatility(user["id"]),
         "last_signal": last_signal,
     }
