@@ -200,6 +200,40 @@ def _nearest_level(current_price: float, atr: float, levels: list[dict]) -> Opti
     return min(within_range, key=lambda lvl: abs(current_price - lvl["price_level"]))
 
 
+# Timeframe + terugkijkperiode voor de structuurbevestiging van de
+# betere-entry-zone hieronder: een candle moet de zone geraakt hebben EN
+# aan de gunstige kant weer gesloten zijn voordat de melding afgaat, niet
+# alleen "de live prijs staat er toevallig". Zelfde afwijzingslogica als
+# market_scanner._smc_last_candle_state, hier toegepast op de gewone
+# suggested_entry_low/high van een dagtradingsignaal in plaats van een
+# SMC-zone. Vaste terugkijkperiode, geen bijgehouden status: zelfde
+# aanpak als LEVEL_CHECK_CANDLE_TIMEFRAME/LOOKBACK hierboven, voor
+# dezelfde reden (eenvoud, geen migratie, geen vergeten-reset-risico).
+ENTRY_ZONE_CONFIRM_TIMEFRAME = "15m"
+ENTRY_ZONE_CONFIRM_LOOKBACK_CANDLES = 8  # 2 uur, gesloten candles
+
+
+def _entry_zone_rejection_seen(direction: str, zone_low: float, zone_high: float, candles) -> bool:
+    """True zodra minstens één candle in `candles` de zone raakte (wick of
+    volledige overlap) EN aan de gunstige kant weer sloot (long: close
+    boven zone_high, short: eronder). `candles` moet alleen gesloten
+    candles bevatten — de aanroeper filtert de nog vormende laatste candle
+    er al uit, zie check_pending_signals."""
+    for _, candle in candles.iterrows():
+        touched = (
+            zone_low <= candle["low"] <= zone_high
+            or zone_low <= candle["high"] <= zone_high
+            or (candle["low"] <= zone_low and candle["high"] >= zone_high)
+        )
+        if not touched:
+            continue
+        if direction == "long" and candle["close"] > zone_high:
+            return True
+        if direction == "short" and candle["close"] < zone_low:
+            return True
+    return False
+
+
 async def check_pending_signals() -> None:
     """Signalen die nog niet genomen zijn: als de prijs weer terugkomt naar
     de zelf-gedetecteerde betere-entry-zone (suggested_entry_low/high, zie
