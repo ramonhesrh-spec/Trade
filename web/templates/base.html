@@ -671,10 +671,10 @@
     // meer rood. Subtiel (zie de calc() in style.css), geen fel wisselende
     // kleur, en bij "geen data" (nog niets gesloten deze week) blijft de
     // balans precies zoals hij al was: 0.
-    function portfolioGlow(weekResultEur) {
-      if (weekResultEur === null || weekResultEur === undefined) return 0;
-      if (weekResultEur > 0) return 1;
-      if (weekResultEur < 0) return -1;
+    function portfolioGlow(weekResultPct) {
+      if (weekResultPct === null || weekResultPct === undefined) return 0;
+      if (weekResultPct > 0) return 1;
+      if (weekResultPct < 0) return -1;
       return 0;
     }
 
@@ -729,7 +729,7 @@
           document.getElementById("status-uptime").textContent = timeAgo(s.server_started_at);
           document.documentElement.style.setProperty("--heartbeat-duration", heartbeatDuration(s.last_message_at));
           document.documentElement.style.setProperty("--ambient-scroll-duration", ambientScrollDuration(s.last_message_at));
-          document.documentElement.style.setProperty("--portfolio-glow", portfolioGlow(s.week_result_eur));
+          document.documentElement.style.setProperty("--portfolio-glow", portfolioGlow(s.week_result_pct));
           document.documentElement.style.setProperty("--brand-breathe-duration", brandBreatheDuration(s.volatility_ratio));
           lastKnownMessageAt = s.last_message_at;
 

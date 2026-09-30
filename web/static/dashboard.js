@@ -48,15 +48,15 @@ function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
   }
 
   function updateTitleAndFavicon(positions) {
-    const real = positions.filter((p) => !p.is_practice && p.pnl_eur !== null);
+    const real = positions.filter((p) => !p.is_practice && p.pnl_pct !== null);
     if (!real.length) {
       document.title = defaultTitle;
       setFavicon(null);
       return;
     }
-    const total = real.reduce((sum, p) => sum + p.pnl_eur, 0);
+    const total = real.reduce((sum, p) => sum + p.pnl_pct, 0);
     const sign = total >= 0 ? "+" : "";
-    document.title = `${sign}€${total.toFixed(0)} · HesPulse`;
+    document.title = `${sign}${total.toFixed(1)}% · HesPulse`;
     setFavicon(total > 0 ? "%2333d69f" : total < 0 ? "%23f2685c" : "%2317e5d6");
   }
 
@@ -96,7 +96,6 @@ function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
         positions.forEach((p) => {
           const priceEl = document.querySelector(`[data-price="${p.id}"]`);
           const pnlEl = document.querySelector(`[data-pnl="${p.id}"]`);
-          const pnlPctEl = document.querySelector(`[data-pnl-pct="${p.id}"]`);
 
           if (priceEl && p.current_price !== null) {
             const key = `price-${p.id}`;
@@ -123,18 +122,16 @@ function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
             // de oefentrade-kaart, waar priceEl alleen een tekstnode bevat.
             priceEl.firstChild.textContent = p.current_price.toFixed(4);
           }
-          if (pnlEl && p.pnl_eur !== null) {
+          if (pnlEl && p.pnl_pct !== null) {
             const key = `pnl-${p.id}`;
-            if (previous[key] !== undefined && previous[key] !== p.pnl_eur) {
-              flash(pnlEl, p.pnl_eur > previous[key]);
+            if (previous[key] !== undefined && previous[key] !== p.pnl_pct) {
+              flash(pnlEl, p.pnl_pct > previous[key]);
             }
-            previous[key] = p.pnl_eur;
-            pnlEl.firstChild.textContent = `€${p.pnl_eur.toFixed(2)} `;
-            pnlEl.classList.toggle("pos", p.pnl_eur >= 0);
-            pnlEl.classList.toggle("neg", p.pnl_eur < 0);
-          }
-          if (pnlPctEl) {
-            pnlPctEl.textContent = p.pnl_pct !== null ? `(${p.pnl_pct.toFixed(1)}%)` : "";
+            previous[key] = p.pnl_pct;
+            const sign = p.pnl_pct >= 0 ? "+" : "";
+            pnlEl.firstChild.textContent = `${sign}${p.pnl_pct.toFixed(1)}% `;
+            pnlEl.classList.toggle("pos", p.pnl_pct >= 0);
+            pnlEl.classList.toggle("neg", p.pnl_pct < 0);
           }
           // SL/TP-voortgangsbalk: CSS transition op width doet de vloeiende
           // beweging, hier alleen de nieuwe waarde zetten.

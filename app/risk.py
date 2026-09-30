@@ -141,34 +141,17 @@ def compute_position_size(
     return risk_eur / (distance + entry_price * cost_rate)
 
 
-def compute_unrealized_pnl(
-    direction: str, entry_price: float, current_price: float,
-    stop_loss: Optional[float], risk_eur: Optional[float],
-) -> tuple[Optional[float], Optional[float]]:
-    """Nog niet gerealiseerd resultaat van een open trade tegen de actuele
-    prijs, dezelfde rekenwijze als bij het sluiten van een trade: het
-    risicobedrag geschaald met hoe ver de prijs al bewogen is ten opzichte
-    van de afstand tot de stop loss. Geeft (pnl_eur, pnl_pct), allebei None
-    als er geen bruikbare stop-afstand is.
-
-    pnl_pct is hier het percentage van het risicobedrag, niet de rauwe
-    koersbeweging: naast een risicogewogen eurobedrag is de kale procentuele
-    prijsbeweging een ander getal dat er niets mee te maken heeft, en dus
-    misleidend om ernaast te tonen alsof het bij elkaar hoort."""
+def compute_unrealized_pnl(direction: str, entry_price: float, current_price: float) -> float:
+    """Nog niet gerealiseerd resultaatpercentage van een open trade tegen de
+    actuele prijs: de kale procentuele koersbeweging sinds entry,
+    richting-bewust. Zelfde formule als journal_entries.result_pct bij het
+    sluiten van een trade — geen risicogewogen eurobedrag meer, dat werd
+    toch altijd 0 zodra risk_eur nooit meer gevuld wordt (zie het
+    spec-addendum)."""
     direction = direction.lower()
     if direction == "long":
-        risk_per_unit = entry_price - stop_loss if stop_loss else None
-        move = current_price - entry_price
-    else:
-        risk_per_unit = stop_loss - entry_price if stop_loss else None
-        move = entry_price - current_price
-
-    pnl_eur = None
-    if risk_eur and risk_per_unit and risk_per_unit > 0:
-        pnl_eur = risk_eur * (move / risk_per_unit)
-
-    pnl_pct = (pnl_eur / risk_eur * 100) if pnl_eur is not None and risk_eur else None
-    return pnl_eur, pnl_pct
+        return (current_price - entry_price) / entry_price * 100
+    return (entry_price - current_price) / entry_price * 100
 
 
 def compute_sltp_progress_pct(direction: str, price: float, stop_loss: float, take_profit: float) -> float:

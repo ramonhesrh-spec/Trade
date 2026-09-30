@@ -522,15 +522,14 @@ def _compute_tension(current_price: Optional[float], stop_loss: Optional[float],
 
 async def _enrich_open_positions(entries: list[dict]) -> list[dict]:
     """Vult elke open positie (entry_price al ingevuld) aan met de actuele
-    prijs en het nog niet gerealiseerde resultaat. Eén prijs-opvraag per
-    coin, ook als er meerdere open trades op dezelfde coin staan. De
-    exchange-aanroep loopt via to_thread, anders blokkeert die synchrone
-    netwerkcall de hele server voor iedereen tegelijk."""
+    prijs en het nog niet gerealiseerde resultaatpercentage. Eén
+    prijs-opvraag per coin, ook als er meerdere open trades op dezelfde
+    coin staan. De exchange-aanroep loopt via to_thread, anders blokkeert
+    die synchrone netwerkcall de hele server voor iedereen tegelijk."""
     price_cache: dict[str, Optional[float]] = {}
     for entry in entries:
         entry["position_size"] = _position_size(entry)
         entry["current_price"] = None
-        entry["pnl_eur"] = None
         entry["pnl_pct"] = None
         entry["tension"], entry["tension_color"] = _compute_tension(None, entry["stop_loss"], entry["take_profit"])
         if entry["entry_price"] is None:
@@ -544,10 +543,7 @@ async def _enrich_open_positions(entries: list[dict]) -> list[dict]:
         if current_price is None:
             continue
         entry["current_price"] = current_price
-        entry["pnl_eur"], entry["pnl_pct"] = risk.compute_unrealized_pnl(
-            entry["direction"], entry["entry_price"], current_price,
-            entry["stop_loss"], entry["risk_eur"],
-        )
+        entry["pnl_pct"] = risk.compute_unrealized_pnl(entry["direction"], entry["entry_price"], current_price)
         entry["tension"], entry["tension_color"] = _compute_tension(current_price, entry["stop_loss"], entry["take_profit"])
     return entries
 
@@ -718,13 +714,14 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
 
 @app.get("/api/open_positions")
 async def api_open_positions(user: dict = Depends(require_login)):
-    """Ververst de live prijs en PnL van open posities, gebruikt door het
-    dashboard om zonder volledige herlaad bij te werken."""
+    """Ververst de live prijs en het resultaatpercentage van open posities,
+    gebruikt door het dashboard om zonder volledige herlaad bij te
+    werken."""
     entries = await _enrich_open_positions(repo.list_journal(user["id"], status="open"))
     return [
         {
             "id": e["id"], "current_price": e["current_price"],
-            "pnl_eur": e["pnl_eur"], "pnl_pct": e["pnl_pct"],
+            "pnl_pct": e["pnl_pct"],
             "is_practice": bool(e["is_practice"]),
             "direction": e["direction"], "stop_loss": e["stop_loss"], "take_profit": e["take_profit"],
             "tension": e["tension"], "tension_color": e["tension_color"],

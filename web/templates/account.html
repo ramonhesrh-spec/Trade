@@ -93,9 +93,8 @@
         <div class="cell"><div class="k">SL</div><div class="v neg">{{ "%.4f"|format(e.stop_loss) if e.stop_loss else "-" }}</div></div>
         <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
       </div>
-      <p style="margin: var(--space-4) 0 0; font-size: var(--text-xl); font-weight: 700;" class="mono {{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
-        {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
-        <span style="font-size: var(--text-base); font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
+      <p style="margin: var(--space-4) 0 0; font-size: var(--text-xl); font-weight: 700;" class="mono {{ 'pos' if (e.pnl_pct or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
+        {% if e.pnl_pct is not none %}{{ "%+.1f"|format(e.pnl_pct) }}%{% else %}-{% endif %}
       </p>
       <p class="muted advice-text">{{ e.advice }}</p>
       {% if e.note %}<p class="muted" style="margin: var(--space-2) 0 0; font-size: var(--text-base);">{{ e.note }}</p>{% endif %}
@@ -270,7 +269,7 @@
       <div class="heat-cell heat-empty"></div>
       {% else %}
       <div class="heat-cell heat-level-{{ day.level }}"
-           title="{{ day.date }}{{ ': €%.2f'|format(day.value) if day.value else ': geen trades' }}"></div>
+           title="{{ day.date }}{{ ': %+.2f%%'|format(day.value) if day.value else ': geen trades' }}"></div>
       {% endif %}
       {% endfor %}
     </div>
@@ -515,8 +514,8 @@
         data: {
           labels: cumulativeData.map((p) => p.time.slice(0, 10)),
           datasets: [{
-            label: "Cumulatief resultaat (euro)",
-            data: cumulativeData.map((p) => p.cumulative_eur),
+            label: "Cumulatief resultaat (%)",
+            data: cumulativeData.map((p) => p.cumulative_pct),
             borderColor: "#17e5d6",
             backgroundColor: "rgba(23, 229, 214, 0.12)",
             fill: true,
