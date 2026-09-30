@@ -770,20 +770,9 @@ async def api_system_status(user: dict = Depends(require_login)):
             "received_at": s["created_at"],
         }
 
-    active_eval = repo.get_active_evaluation(user["id"])
-    if active_eval:
-        open_risk_eur = repo.total_open_risk_eur_for_evaluation(active_eval["id"])
-        daily_remaining = risk.compute_eval_daily_budget_remaining(active_eval, open_risk_eur)
-        drawdown_remaining = risk.compute_eval_drawdown_budget_remaining(active_eval, open_risk_eur)
-        daily_budget_total = active_eval["day_start_balance"] * active_eval["max_daily_loss_pct"] / 100
-        drawdown_total = active_eval["tier_amount"] * active_eval["max_drawdown_pct"] / 100
-        daily_used_pct = max(0.0, (1 - daily_remaining / daily_budget_total) * 100) if daily_budget_total else 0.0
-        drawdown_used_pct = max(0.0, (1 - drawdown_remaining / drawdown_total) * 100) if drawdown_total else 0.0
-        risk_pct = max(daily_used_pct, drawdown_used_pct)
-    else:
-        portfolio = user.get("portfolio_eur")
-        open_risk = repo.total_open_risk_eur(user["id"])
-        risk_pct = (open_risk / portfolio * 100) if portfolio else None
+    portfolio = user.get("portfolio_eur")
+    open_risk = repo.total_open_risk_eur(user["id"])
+    risk_pct = (open_risk / portfolio * 100) if portfolio else None
 
     return {
         "exchange_ok": exchange_ok,

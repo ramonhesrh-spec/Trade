@@ -420,7 +420,6 @@ async def _fanout_confirmed_signal(
     de twee zijn expres losse parameters."""
     required_by_user = repo.list_required_factors_all_users()
     for user in repo.list_users():
-        active_eval_for_display = repo.get_active_evaluation(user["id"])
         risk_eur, evaluation_id, cost_rate, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
             user, direction, entry_price, stop_loss, take_profit,
         )
@@ -446,13 +445,6 @@ async def _fanout_confirmed_signal(
         if stop_was_capped:
             repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, None)
 
-        eval_blocked_note = None
-        if active_eval_for_display and evaluation_id is None:
-            eval_blocked_note = (
-                "Dagbudget of drawdown-ruimte van je evaluatie is (bijna) op, "
-                "deze trade telt niet mee voor je evaluatie."
-            )
-
         # Geen telegram_chat_id-gate: push_notify.send_push slaat een
         # gebruiker zonder push-abonnement zelf al stilzwijgend over. Geen
         # is_coin_muted-check: mute geldt bewust alleen voor day-trading
@@ -474,8 +466,6 @@ async def _fanout_confirmed_signal(
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             body = make_body(effective_stop_loss, effective_take_profit, stop_was_capped)
-            if eval_blocked_note:
-                body += f"\n{eval_blocked_note}"
             await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=quiet)
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
@@ -1028,19 +1018,8 @@ async def process_day_trading_signal(
     for user in repo.list_users():
         muted = repo.is_coin_muted(user["id"], interp.coin)
 
-        # Vóór _resolve_signal_risk opgehaald (in plaats van pas bij de
-        # eval_budget_pct/eval_blocked_note-berekening verderop), zodat
-        # max_pct_for_display hieronder dezelfde, al opgehaalde evaluatie
-        # kan hergebruiken zonder repo.get_active_evaluation een tweede
-        # keer aan te roepen.
-        active_eval_for_display = repo.get_active_evaluation(user["id"])
-
         risk_eur, evaluation_id, cost_rate, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
             user, interp.direction, ind.price, stop_take.stop_loss, stop_take.take_profit,
-        )
-        max_pct_for_display = (
-            risk.eval_max_stop_pct(active_eval_for_display["tier_amount"])
-            if active_eval_for_display and evaluation_id is not None else None
         )
         position_size = (
             risk.compute_position_size(risk_eur, ind.price, effective_stop_loss, cost_rate=cost_rate)
@@ -1056,25 +1035,6 @@ async def process_day_trading_signal(
         # op het signaal) blijft voor hen intact.
         if effective_stop_loss != stop_take.stop_loss:
             repo.update_journal_levels(entry_id, user["id"], effective_stop_loss, effective_take_profit, None)
-
-        # Toont welk deel van het resterende dagbudget deze trade gebruikt,
-        # of dat sizing juist geblokkeerd was (dan telt de trade niet mee
-        # voor de evaluatie). _resolve_signal_risk geeft evaluation_id=None
-        # zowel als er geen actieve evaluatie is (a) als wanneer sizing
-        # geblokkeerd was (c) - door hier opnieuw de actieve evaluatie op te
-        # halen kunnen die twee gevallen wél uit elkaar gehouden worden.
-        eval_budget_pct = None
-        eval_blocked_note = None
-        if active_eval_for_display and evaluation_id is not None:
-            open_risk_eur_display = repo.total_open_risk_eur_for_evaluation(evaluation_id)
-            daily_remaining = risk.compute_eval_daily_budget_remaining(active_eval_for_display, open_risk_eur_display)
-            # Percentage van het VOLLEDIGE resterende dagbudget, niet van het
-            # per-trade aandeel (dagbudget / EVAL_BUDGET_TRADE_RESERVE), want
-            # dan toont een trade die precies zijn aandeel gebruikt
-            # alarmerend "100%".
-            eval_budget_pct = (risk_eur / daily_remaining * 100) if daily_remaining else 0.0
-        elif active_eval_for_display and evaluation_id is None:
-            eval_blocked_note = "Dagbudget of drawdown-ruimte van je evaluatie is (bijna) op, deze trade telt niet mee voor je evaluatie."
 
         # Geen telegram_chat_id-gate meer (Taak 11): push_notify.send_push
         # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend
@@ -1117,8 +1077,6 @@ async def process_day_trading_signal(
                 body += f"\n{signal_data['repeated_loss_note']}"
             if signal_data.get("context_note"):
                 body += f"\n{signal_data['context_note']}"
-            if eval_blocked_note:
-                body += f"\n{eval_blocked_note}"
             await push_notify.send_push(
                 user["id"], title, body, f"/coins/{interp.coin}", silent=force_silent,
             )
