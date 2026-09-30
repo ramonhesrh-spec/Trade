@@ -290,11 +290,13 @@ async def _process_one_coin(message_id: int, raw_text: str, interp: Interpretati
                 logger.exception("Live prijs voor lange-termijn analyse %s kon niet vastgelegd worden",
                                   interp.coin)
 
-        # Tot nu toe volledig stil: je zag een lange termijn analyse pas
-        # terug zodra een latere day trading melding voor dezelfde coin
-        # ernaar verwees (_build_context_note). Met de samenvatting hierboven
-        # is een korte, stille melding hierover goedkoop, en voorkomt dat de
-        # inhoud van een net doorgestuurde analyse in de tussentijd onzichtbaar is.
+        # lange_termijn-analyses worden sinds HesPulse-verkleinen
+        # (2026-09-30) alleen nog intern bijgehouden (evaluate_narrative
+        # vult coin_narratives, geen eigen melding meer, zie de docstring
+        # daar) — de samenvatting hierboven (message_summary) is het enige
+        # zichtbare spoor van dit bericht, totdat een latere
+        # dagtradingsignaal voor dezelfde coin ernaar verwijst via
+        # _build_context_note.
         if interp.category == "lange_termijn" and interp.direction in ("long", "short"):
             try:
                 await evaluate_narrative(interp.coin, interp.direction, result_id)
