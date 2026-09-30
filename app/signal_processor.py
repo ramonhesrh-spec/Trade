@@ -147,6 +147,25 @@ def _interpret_with_retry(raw_text: str, image_paths: list[str]) -> list[Interpr
 
 
 async def handle_message(message_id: int, raw_text: str, image_paths: list[str]) -> None:
+    # Kostenfilter (HesPulse-verkleinen, 2026-09-30): een bericht zonder
+    # afbeelding dat geen van de 7 vaste coins noemt, wordt nooit aan
+    # Anthropic voorgelegd — dat is de duurste stap per bericht. Een
+    # bericht MET afbeelding wordt altijd nog geïnterpreteerd: een
+    # screenshot is niet goedkoop op tekst te filteren, en dat is precies
+    # het scenario waarin dit filter een echt signaal zou kunnen missen
+    # als het ook afbeeldingen zou overslaan. Stap 2 van dit filter (ná de
+    # interpretatie, voor het geval Anthropic bij een screenshot toch een
+    # niet-gevolgde coin teruggeeft) staat in _process_one_coin hieronder.
+    if not image_paths and not coinlist.message_mentions_tracked_coin(raw_text):
+        logger.info(
+            "Bericht %s bevat geen gevolgde coin en geen afbeelding, niet geïnterpreteerd", message_id,
+        )
+        repo.mark_message_processed(
+            message_id, None, None, None, True,
+            note="Geen gevolgde coin herkend in tekst en geen afbeelding, niet geïnterpreteerd (kostenfilter)",
+        )
+        return
+
     duplicate = repo.find_recent_duplicate(raw_text, exclude_id=message_id) if raw_text.strip() else None
     if duplicate:
         logger.info("Bericht %s is een duplicaat van bericht %s, niet opnieuw verwerkt",
@@ -198,6 +217,20 @@ async def _process_one_coin(message_id: int, raw_text: str, interp: Interpretati
     repo.insert_message_coin_result: message_id + coin identificeren samen
     deze rij, meerdere coins uit hetzelfde bericht krijgen elk hun eigen
     rij)."""
+    # Vangnet voor stap 1 van het kostenfilter in handle_message: die kan
+    # een bericht MET afbeelding niet goedkoop vooraf filteren, dus hier
+    # (ná de interpretatie, als de coin al bekend is) alsnog negeren als
+    # Anthropic een coin teruggaf die niet op de vaste lijst staat.
+    if interp.coin and interp.coin.upper() not in config.FIXED_COINS:
+        repo.insert_message_coin_result(
+            message_id, interp.coin, interp.direction, interp.category, True,
+            note=f"{interp.coin.upper()} staat niet op de vaste coinlijst, niet verder verwerkt",
+        )
+        logger.info(
+            "Coin %s (bericht %s) staat niet op de vaste lijst, overgeslagen", interp.coin, message_id,
+        )
+        return
+
     result_id = repo.insert_message_coin_result(
         message_id, interp.coin, interp.direction, interp.category, interp.unclear, note=interp.reason,
     )
