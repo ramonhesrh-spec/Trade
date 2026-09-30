@@ -33,19 +33,19 @@ def _period_summary_text(stats: dict, auto_scan_stats: Optional[dict]) -> str:
     parts = [f"{stats['signal_count']} signalen, waarvan {stats['hoog_count']} hoog vertrouwen."]
     if stats["closed_count"]:
         winrate = stats["wins"] / stats["closed_count"] * 100
-        sign = "+" if stats["total_result_eur"] >= 0 else ""
+        sign = "+" if stats["total_result_pct"] >= 0 else ""
         parts.append(
             f"{stats['closed_count']} trades gesloten, {stats['wins']} gewonnen ({winrate:.0f}%), "
-            f"resultaat {sign}€{stats['total_result_eur']:.2f}."
+            f"resultaat {sign}{stats['total_result_pct']:.1f}%."
         )
         if stats["best"]:
             b = stats["best"]
-            b_sign = "+" if b["result_eur"] >= 0 else ""
-            parts.append(f"Beste trade: {b['coin']} {b_sign}€{b['result_eur']:.2f}.")
+            b_sign = "+" if b["result_pct"] >= 0 else ""
+            parts.append(f"Beste trade: {b['coin']} {b_sign}{b['result_pct']:.1f}%.")
         if stats["worst"]:
             w = stats["worst"]
-            w_sign = "+" if w["result_eur"] >= 0 else ""
-            parts.append(f"Zwakste trade: {w['coin']} {w_sign}€{w['result_eur']:.2f}.")
+            w_sign = "+" if w["result_pct"] >= 0 else ""
+            parts.append(f"Zwakste trade: {w['coin']} {w_sign}{w['result_pct']:.1f}%.")
     else:
         parts.append("Geen trades gesloten in deze periode.")
     if auto_scan_stats and auto_scan_stats["signal_count"] > 0:
