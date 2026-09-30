@@ -1026,43 +1026,6 @@ def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def coin_long_term_track_record(coin: str, current_price: float, min_age_days: int = 3) -> Optional[dict]:
-    """Hoe vaak wees de richting van een lange-termijn analyse voor deze
-    coin achteraf de juiste kant op, vergeleken met de huidige koers. Dit
-    is de kern van waarom iemand voor een betaalde community betaalt: is de
-    bron het geld waard, dat werd tot nu toe nergens gemeten.
-
-    Alleen analyses van minstens min_age_days oud tellen mee: een analyse
-    van een paar uur oud "gelijk geven" is toeval, geen trackrecord.
-    Neutrale analyses tellen niet mee, die voorspellen geen kant.
-    None als er nog geen enkele analyse oud genoeg is."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=min_age_days)).isoformat()
-    with db.session() as conn:
-        legacy_rows = conn.execute(
-            """SELECT direction, price_at_receipt FROM messages
-               WHERE coin = ? AND category = 'lange_termijn' AND direction IN ('long', 'short')
-                     AND price_at_receipt IS NOT NULL AND received_at <= ?""",
-            (coin.upper(), cutoff),
-        ).fetchall()
-        per_coin_rows = conn.execute(
-            """SELECT mcr.direction AS direction, mcr.price_at_receipt AS price_at_receipt
-               FROM message_coin_results mcr
-               JOIN messages m ON m.id = mcr.message_id
-               WHERE mcr.coin = ? AND mcr.category = 'lange_termijn' AND mcr.direction IN ('long', 'short')
-                     AND mcr.price_at_receipt IS NOT NULL AND m.received_at <= ?""",
-            (coin.upper(), cutoff),
-        ).fetchall()
-    rows = list(legacy_rows) + list(per_coin_rows)
-    if not rows:
-        return None
-    correct = sum(
-        1 for r in rows
-        if (r["direction"] == "long" and current_price > r["price_at_receipt"])
-        or (r["direction"] == "short" and current_price < r["price_at_receipt"])
-    )
-    return {"correct": correct, "total": len(rows)}
-
-
 def recent_rejected_reasons(coin: str, limit: int = 3) -> list[str]:
     """Reason-teksten (de ✓/✗ per factor breakdown) van de laatste `limit`
     afgekeurde signalen voor deze coin, nieuwste eerst. Gebruikt om te

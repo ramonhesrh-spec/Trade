@@ -1723,23 +1723,17 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
                 "total": len(fanned_out),
             }
 
-    # Trackrecord van de community zelf: klopte de lange-termijn richting
-    # achteraf. Vereist een live koers, mislukt die (exchange down, coin
-    # niet (meer) verhandelbaar) dan blijft dit gewoon leeg in plaats van de
-    # hele pagina te breken.
-    long_term_track_record = None
-    try:
-        current_price = await asyncio.to_thread(exchange.fetch_last_price, symbol)
-        long_term_track_record = repo.coin_long_term_track_record(symbol, current_price)
-    except Exception:
-        logger.exception("Live prijs voor trackrecord van %s kon niet opgehaald worden", symbol)
-
     coin = repo.get_coin(symbol)
     active_swing_watches = repo.active_swing_watches_for_coin(symbol)
     coin_narratives = repo.list_narratives_for_coin(symbol)
     for narrative in coin_narratives:
         narrative["timeline"] = repo.list_narrative_messages(narrative["id"])
 
+    # Alleen de grafiekmarkeringen blijven (wanneer een lange-termijn-
+    # richting veranderde) — het tekstblok/de eigen melding zijn met
+    # HesPulse-verkleinen (2026-09-30) verwijderd, coin_narratives zelf
+    # gaat daarom niet meer de template-context in, alleen deze afgeleide
+    # lijst.
     narrative_updates = [
         {"received_at": entry["received_at"], "direction": narrative["direction"]}
         for narrative in coin_narratives
@@ -1762,11 +1756,9 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "community_stat": community_stat,
         "coins": repo.list_coins(),
         "trendlines": repo.list_trendlines(symbol),
-        "long_term_track_record": long_term_track_record,
         "coin_note": coin["note"] if coin else None,
         "is_muted": repo.is_coin_muted(user["id"], symbol),
         "active_swing_watches": active_swing_watches,
-        "coin_narratives": coin_narratives,
         "narrative_updates": narrative_updates,
     })
 

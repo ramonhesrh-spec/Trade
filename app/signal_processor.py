@@ -278,10 +278,10 @@ async def _process_one_coin(message_id: int, raw_text: str, interp: Interpretati
         logger.info("Bericht %s (coin %s) valt in categorie %s, alleen gelogd, geen melding",
                     message_id, interp.coin, interp.category)
         # Live koers vastleggen op het moment van deze analyse: zonder dit
-        # referentiepunt kan achteraf nooit gemeten worden of de richting
-        # klopte (zie repo.coin_long_term_track_record). Mislukt de
-        # koersophaal, dan telt deze analyse straks gewoon niet mee in het
-        # trackrecord, geen reden om de rest van de verwerking te blokkeren.
+        # referentiepunt (price_at_receipt) is er later geen prijs om een
+        # swing-watch of narrative-tijdlijn tegen af te zetten. Mislukt de
+        # koersophaal, dan blijft dit veld leeg, geen reden om de rest van
+        # de verwerking te blokkeren.
         if interp.direction in ("long", "short"):
             try:
                 live_price = await asyncio.to_thread(exchange.fetch_last_price, interp.coin)
@@ -324,77 +324,32 @@ async def evaluate_narrative(coin: str, direction: str, result_id: int) -> None:
     Tegenspraak sluit het oude narrative expliciet af (status
     'tegengesproken') vóór er een nieuwe wordt aangemaakt: er hoort op elk
     moment hoogstens één actief narrative per coin te zijn, ongeacht welke
-    richting."""
+    richting.
+
+    Puur interne boekhouding sinds HesPulse-verkleinen (2026-09-30): geen
+    eigen melding meer (was _send_narrative_notifications) en geen apart
+    dashboard-blok meer (coin.html). coin_narratives blijft wel gevuld —
+    _build_context_note (elders in dit bestand) leest hier rechtstreeks
+    uit en zet het resultaat sinds deze wijziging weer echt in de
+    pushmelding van een dagtradingsignaal, zie process_day_trading_signal
+    hieronder."""
     if direction not in ("long", "short"):
         return
 
     active = repo.get_active_narrative(coin)
     if active is None:
-        narrative_id = repo.create_narrative(coin, direction, result_id)
-        await _send_narrative_notifications(narrative_id, is_new=True, is_contradiction=False)
+        repo.create_narrative(coin, direction, result_id)
         return
 
     if active["direction"] == direction:
         repo.update_narrative_progress(active["id"], result_id)
-        await _send_narrative_notifications(active["id"], is_new=False, is_contradiction=False)
         return
 
     repo.close_narrative(
         active["id"], "tegengesproken",
         f"tegengesproken door een nieuw {direction}-narrative voor {coin}",
     )
-    new_narrative_id = repo.create_narrative(coin, direction, result_id)
-    await _send_narrative_notifications(
-        new_narrative_id, is_new=True, is_contradiction=True, contradicted=active,
-    )
-
-
-def _narrative_summary_text(narrative: dict, is_new: bool, is_contradiction: bool,
-                             contradicted_since: Optional[str]) -> str:
-    """Kale-tekst samenvatting van een narrative-update voor de
-    notifications-tabel: coin, richting en of dit een nieuw verhaal, een
-    tegenspraak van het vorige, of een update op het lopende verhaal is.
-    Geen Telegram-opmaak/emoji en geen volledige tijdlijn zoals de oude
-    Telegram-versie opbouwde — dat bericht bewerkte één doorlopend
-    Telegram-bericht en moest daarom de hele geschiedenis tonen; hier
-    krijgt elke update sowieso zijn eigen rij, dus de tijdlijn zelf hoeft
-    niet herhaald te worden."""
-    direction_word = "long" if narrative["direction"] == "long" else "short"
-    if is_contradiction:
-        opposite = "short" if narrative["direction"] == "long" else "long"
-        when = f" van {contradicted_since}" if contradicted_since else ""
-        return (
-            f"Nieuw {direction_word}-verhaal voor {narrative['coin']} spreekt de eerdere "
-            f"{opposite}-analyse{when} tegen."
-        )
-    if is_new:
-        return f"Nieuw {direction_word}-verhaal gestart voor {narrative['coin']}."
-    return f"Update op het lopende {direction_word}-verhaal voor {narrative['coin']}."
-
-
-async def _send_narrative_notifications(
-    narrative_id: int, is_new: bool, is_contradiction: bool, contradicted: Optional[dict] = None,
-) -> None:
-    """Slaat de narrative-melding op als een notifications-rij voor elke
-    gebruiker. Anders dan de oude Telegram-versie (die één bestaand bericht
-    probeerde te bewerken zodat een doorlopend verhaal niet als losse
-    berichten aanvoelde) wordt hier elke update gewoon een nieuwe rij: een
-    notifications-rij heeft geen "bewerk het vorige bericht"-concept, en de
-    /meldingen-lijst toont sowieso losse regels met tijdstip."""
-    narrative = repo.get_narrative(narrative_id)
-    contradicted_since = contradicted["opened_at"][:10] if contradicted else None
-
-    for user in repo.list_users():
-        try:
-            repo.create_notification(
-                user["id"], "narrative_update",
-                f"Verhaal-update: {narrative['coin']}",
-                _narrative_summary_text(narrative, is_new, is_contradiction, contradicted_since),
-                f"/coins/{narrative['coin']}",
-            )
-        except Exception:
-            logger.exception("Narrative-melding voor %s naar gebruiker %s is mislukt",
-                              narrative["coin"], user["username"])
+    repo.create_narrative(coin, direction, result_id)
 
 
 def _resolve_signal_risk(
@@ -1179,6 +1134,8 @@ async def process_day_trading_signal(
             )
             if signal_data.get("repeated_loss_note"):
                 body += f"\n{signal_data['repeated_loss_note']}"
+            if signal_data.get("context_note"):
+                body += f"\n{signal_data['context_note']}"
             if eval_blocked_note:
                 body += f"\n{eval_blocked_note}"
             await push_notify.send_push(
