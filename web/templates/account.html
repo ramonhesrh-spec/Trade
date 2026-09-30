@@ -42,11 +42,11 @@
     <span>{{ unclear_messages|length }} bericht{{ "en" if unclear_messages|length != 1 else "" }} niet herkend</span>
     <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
   </summary>
-  <p class="muted" style="margin: 10px 0 12px; font-size: 12.5px;">Niet herkend als duidelijk signaal, daarom geen melding of trade-kans.</p>
+  <p class="muted" style="margin: var(--space-5) 0 var(--space-6); font-size: var(--text-base);">Niet herkend als duidelijk signaal, daarom geen melding of trade-kans.</p>
   <ul class="unclear-list">
     {% for m in unclear_messages %}
     <li>
-      <span class="mono muted" style="font-size: 11px;">{{ m.received_at[:16] | replace("T", " ") }}</span>
+      <span class="mono muted" style="font-size: var(--text-xs);">{{ m.received_at[:16] | replace("T", " ") }}</span>
       {% if m.coin %}<span class="badge badge-status">{{ m.coin }}</span>{% endif %}
       <span class="unclear-text">{{ m.raw_text[:140] if m.raw_text else "(alleen een afbeelding)" }}{{ "…" if m.raw_text and m.raw_text|length > 140 else "" }}</span>
       {% if m.note %}<span class="muted unclear-note">{{ m.note }}</span>{% endif %}
@@ -63,15 +63,15 @@
     <span>Oefentrades</span>
     <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
   </summary>
-  <p class="muted" style="margin: 10px 0 12px;">Handmatig aangemaakt om te oefenen. Telt niet mee in je echte winrate hierboven.</p>
+  <p class="muted" style="margin: var(--space-5) 0 var(--space-6);">Handmatig aangemaakt om te oefenen. Telt niet mee in je echte winrate hierboven.</p>
   {% if practice_open %}
   <div class="open-grid">
     {% for e in practice_open %}
     <div class="card open-card practice-card">
       <div style="display: flex; justify-content: space-between; align-items: flex-start;">
         <div>
-          <a href="/coins/{{ e.coin }}" style="font-weight: 700; color: var(--text); text-decoration: none; font-size: 15px;">{{ e.coin }}</a>
-          <span class="badge badge-{{ e.direction }}" style="margin-left: 6px;">{{ e.direction }}</span>
+          <a href="/coins/{{ e.coin }}" style="font-weight: 700; color: var(--text); text-decoration: none; font-size: var(--text-md);">{{ e.coin }}</a>
+          <span class="badge badge-{{ e.direction }}" style="margin-left: var(--space-3);">{{ e.direction }}</span>
         </div>
         <span class="badge badge-status">oefening</span>
       </div>
@@ -94,12 +94,12 @@
         <div class="cell"><div class="k">TP</div><div class="v pos">{{ "%.4f"|format(e.take_profit) if e.take_profit else "-" }}</div></div>
         <div class="cell"><div class="k">Grootte</div><div class="v">{{ "%.6f"|format(e.position_size) ~ " " ~ e.coin if e.position_size else "-" }}</div></div>
       </div>
-      <p style="margin: 8px 0 0; font-size: 20px; font-weight: 700;" class="mono {{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
+      <p style="margin: var(--space-4) 0 0; font-size: var(--text-xl); font-weight: 700;" class="mono {{ 'pos' if (e.pnl_eur or 0) >= 0 else 'neg' }}" data-pnl="{{ e.id }}">
         {% if e.pnl_eur is not none %}€{{ "%.2f"|format(e.pnl_eur) }}{% else %}-{% endif %}
-        <span style="font-size: 13px; font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
+        <span style="font-size: var(--text-base); font-weight: 500;" data-pnl-pct="{{ e.id }}">({{ "%.1f"|format(e.pnl_pct) if e.pnl_pct is not none else "-" }}%)</span>
       </p>
       <p class="muted advice-text">{{ e.advice }}</p>
-      {% if e.note %}<p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">{{ e.note }}</p>{% endif %}
+      {% if e.note %}<p class="muted" style="margin: var(--space-2) 0 0; font-size: var(--text-base);">{{ e.note }}</p>{% endif %}
       {{ macros.discipline_facts(e) }}
       {% if e.entry_price is none %}
       <form action="/journal/{{ e.id }}/delete-practice" method="post" class="reset-form"
@@ -147,7 +147,7 @@
   </div>
   {% endif %}
   {% if practice_closed %}
-  <div class="table-scroll" style="margin-top: 12px;">
+  <div class="table-scroll" style="margin-top: var(--space-6);">
   <table class="signals">
     <thead><tr><th>Coin</th><th>Richting</th><th class="num">Resultaat</th></tr></thead>
     <tbody>
@@ -225,27 +225,27 @@
       <button type="submit">Opslaan</button>
     </form>
     <p class="muted levels-hint">Binnen dit venster komt ook een bevestigde kans stil binnen, zonder geluid. Beide velden leeg laten zet stille uren weer uit.</p>
-    <div id="push-subscribe-block" style="margin-top: 12px;">
+    <div id="push-subscribe-block" style="margin-top: var(--space-6);">
       <button id="push-subscribe-btn" type="button">Meldingen aanzetten</button>
-      <p id="push-subscribe-status" class="muted" style="margin: 4px 0 0; font-size: 12.5px;" hidden></p>
+      <p id="push-subscribe-status" class="muted" style="margin: var(--space-2) 0 0; font-size: var(--text-base);" hidden></p>
     </div>
     <script src="/static/push-subscribe.js?v=2" defer></script>
     <form action="/push/voorbeeld" method="post" class="inline-form">
       <button type="submit" class="button-link">Stuur mezelf een testpush</button>
     </form>
-    <form action="/settings/market_scan" method="post" style="margin-top: 12px;">
+    <form action="/settings/market_scan" method="post" style="margin-top: var(--space-6);">
       {% if market_scan_enabled %}
       <input type="hidden" name="enabled" value="0">
       <button type="submit" class="button-reset">Autonome marktscan uitzetten</button>
-      <p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">Nu aan: elke 20 minuten zoekt HesPulse zelf naar kansen, ook zonder doorgestuurd bericht.</p>
+      <p class="muted" style="margin: var(--space-2) 0 0; font-size: var(--text-base);">Nu aan: elke 20 minuten zoekt HesPulse zelf naar kansen, ook zonder doorgestuurd bericht.</p>
       {% else %}
       <input type="hidden" name="enabled" value="1">
       <button type="submit">Autonome marktscan aanzetten</button>
-      <p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">Nu uit: HesPulse reageert alleen nog op doorgestuurde berichten.</p>
+      <p class="muted" style="margin: var(--space-2) 0 0; font-size: var(--text-base);">Nu uit: HesPulse reageert alleen nog op doorgestuurde berichten.</p>
       {% endif %}
     </form>
-    <form action="/instellingen/drempel" method="post" class="threshold-form" style="margin-top: 12px;">
-      <p class="muted" style="margin: 0 0 6px;">Vanaf welk percentage geldt een signaal voor jou als bevestigd? Bepaalt de markering en je winrate, en of een signaal een pushmelding krijgt.</p>
+    <form action="/instellingen/drempel" method="post" class="threshold-form" style="margin-top: var(--space-6);">
+      <p class="muted" style="margin: 0 0 var(--space-3);">Vanaf welk percentage geldt een signaal voor jou als bevestigd? Bepaalt de markering en je winrate, en of een signaal een pushmelding krijgt.</p>
       {% for key, pct in {"soepel": 45, "normaal": 60, "streng": 75}.items() %}
       <button type="submit" name="preset" value="{{ key }}"
               class="threshold-option{% if user.confirm_threshold_pct == pct %} is-active{% endif %}">
@@ -253,18 +253,18 @@
       </button>
       {% endfor %}
       {% if not advanced_factors_enabled %}
-      <p class="muted" style="margin: 6px 0 0; font-size: 12px;">Normaal en Streng doen nu hetzelfde: de uitgebreide toetsing staat nog uit, zie /uitleg.</p>
+      <p class="muted" style="margin: var(--space-3) 0 0; font-size: var(--text-sm);">Normaal en Streng doen nu hetzelfde: de uitgebreide toetsing staat nog uit, zie /uitleg.</p>
       {% endif %}
     </form>
-    <details class="stats-collapse js-accordion" style="margin-top: 12px;">
+    <details class="stats-collapse js-accordion" style="margin-top: var(--space-6);">
       <summary class="stats-summary">Belangrijke factoren</summary>
-      <p class="muted" style="margin: 8px 0 10px; font-size: 12.5px;">
+      <p class="muted" style="margin: var(--space-4) 0 var(--space-5); font-size: var(--text-base);">
         Vink een factor aan als die voor jou verplicht is: staat hij ✗ in een
         signaal, dan telt het voor jou nooit als bevestigd, ongeacht het
         percentage. Niet aangevinkt telt gewoon mee in het percentage zoals nu.
       </p>
       {% if not advanced_factors_enabled %}
-      <p class="muted" style="margin: 6px 0 10px; font-size: 12px;">Let op: de uitgebreide toetsing staat nog uit (zie /uitleg) — alleen Trend, Momentum, RSI en Volume worden nu berekend. Een ander factor verplicht stellen betekent dat je nooit meer een bevestigd signaal krijgt.</p>
+      <p class="muted" style="margin: var(--space-3) 0 var(--space-5); font-size: var(--text-sm);">Let op: de uitgebreide toetsing staat nog uit (zie /uitleg) — alleen Trend, Momentum, RSI en Volume worden nu berekend. Een ander factor verplicht stellen betekent dat je nooit meer een bevestigd signaal krijgt.</p>
       {% endif %}
       <form action="/instellingen/factoren" method="post" class="required-factors-form">
         {% for name, uitleg in toggleable_factors %}
@@ -332,14 +332,14 @@
     <span>Historie en trackrecord</span>
     <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
   </summary>
-  <p class="muted" style="margin: 10px 0 16px; font-size: 12.5px;">Cumulatief resultaat, klopt de score met de uitkomst, en resultaat per coin.</p>
+  <p class="muted" style="margin: var(--space-5) 0 var(--space-7); font-size: var(--text-base);">Cumulatief resultaat, klopt de score met de uitkomst, en resultaat per coin.</p>
 
   <h3 class="open-subheading">Cumulatief resultaat</h3>
   <canvas id="cumulative-chart" height="80"></canvas>
 
-  <h3 class="open-subheading" style="margin-top: 22px;">Klopt de score met de uitkomst?</h3>
+  <h3 class="open-subheading" style="margin-top: var(--space-9);">Klopt de score met de uitkomst?</h3>
   {% if ratio_stats %}
-  <p class="muted" style="margin: 0 0 12px;">Winrate per score van je gesloten trades: leidt een hogere score ook echt vaker tot winst?</p>
+  <p class="muted" style="margin: 0 0 var(--space-6);">Winrate per score van je gesloten trades: leidt een hogere score ook echt vaker tot winst?</p>
   <canvas id="ratio-chart" height="80"></canvas>
   {% else %}
   <div class="empty-state">
@@ -349,7 +349,7 @@
   </div>
   {% endif %}
 
-  <h3 class="open-subheading" style="margin-top: 22px;">Resultaat per coin</h3>
+  <h3 class="open-subheading" style="margin-top: var(--space-9);">Resultaat per coin</h3>
   {% if coin_stats %}
   <table class="signals">
     <thead>
