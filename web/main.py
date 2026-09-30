@@ -801,160 +801,12 @@ def _filter_journal(all_entries: list[dict], status: str) -> list[dict]:
 
 
 @app.get("/dashboard")
-async def dashboard(request: Request, status: str = "alle", user: dict = Depends(require_login)):
-    all_entries = repo.list_journal(user["id"], status=None)
-    for entry in all_entries:
-        entry["position_size"] = _position_size(entry)
-        # journal_entries.result_pct is de rauwe koersbeweging van de
-        # onderliggende coin, los van positiegrootte. Naast een risicogewogen
-        # eurobedrag hoort daar de winst/verlies t.o.v. het eigen risicobedrag
-        # van díe trade bij, anders klopt het percentage nooit met het bedrag.
-        entry["result_pct_of_risk"] = (
-            entry["result_eur"] / entry["risk_eur"] * 100
-            if entry["result_eur"] is not None and entry["risk_eur"] else None
-        )
-    # Oefentrades zijn handmatig aangemaakt om te oefenen, geen echt signaal.
-    # Die blijven apart, tellen niet mee in de winrate en staan niet tussen
-    # de echte meldingen, anders lijkt het net of het een echt signaal was.
-    real_entries = [e for e in all_entries if not e["is_practice"]]
-    practice_entries = [e for e in all_entries if e["is_practice"]]
-
-    entries = _filter_journal(real_entries, status)
-    winrate = repo.winrate_stats(user["id"])
-    pattern_winrate = repo.pattern_winrate_stats()
-    forming_patterns = repo.list_forming_patterns()
-    open_entries = _add_signal_context(
-        await _enrich_open_positions(_filter_journal(real_entries, "open")), winrate, pattern_winrate,
-    )
-    # Een pending regel (nog geen eigen entry ingevuld) is geen echte trade,
-    # alleen een melding die op een beslissing wacht. Apart getoond van een
-    # trade die al echt genomen is, anders lijkt het net of die "gebeurd"
-    # is zonder dat de gebruiker er zelf iets voor deed.
-    taken_entries = [e for e in open_entries if e["entry_price"] is not None]
-    pending_entries = [e for e in open_entries if e["entry_price"] is None]
-    _attach_discipline_facts(taken_entries)
-
-    for e in taken_entries:
-        e["sltp_progress_pct"] = (
-            risk.compute_sltp_progress_pct(e["direction"], e["current_price"], e["stop_loss"], e["take_profit"])
-            if e["current_price"] is not None and e["stop_loss"] and e["take_profit"] else None
-        )
-    # Unieke coins uit echte, open trades voor de topbar-ticker (Sectie 1
-    # van de spec) — alleen op het dashboard zelf, waar de 20s-polling van
-    # dashboard.js toch al draait om deze prijzen te verversen.
-    seen_ticker_coins: set[str] = set()
-    ticker_coins = []
-    for e in taken_entries:
-        if e["coin"] not in seen_ticker_coins:
-            seen_ticker_coins.add(e["coin"])
-            ticker_coins.append({"coin": e["coin"], "current_price": e["current_price"]})
-
-    # Server-side gevuld voor de EERSTE render van de laatste-seintje-banner
-    # (Sectie 2 van de spec): zonder dit blijft de banner leeg tot de eerste
-    # /api/system_status-poll na het laden, hetzelfde label-formaat als daar.
-    last_signal_row = repo.list_recent_signals_for_user(user["id"], limit=1)
-    last_signal_text = None
-    if last_signal_row:
-        s = last_signal_row[0]
-        last_signal_text = f"{s['coin']} · {s['direction']} · {s['confidence']}"
-
-    # Correlatie-waarschuwing: het totale open-risicopercentage hieronder
-    # telt euro's bij elkaar op, maar zegt niks over of die posities
-    # onafhankelijk van elkaar bewegen. Meerdere gelijktijdige open longs
-    # (of shorts) bewegen in de praktijk vaak met elkaar mee (bijvoorbeeld
-    # altcoins die BTC volgen), dat voelt als spreiding maar is het niet.
-    direction_counts: dict[str, int] = {}
-    for e in taken_entries:
-        direction_counts[e["direction"]] = direction_counts.get(e["direction"], 0) + 1
-    correlation_warning = next(
-        (
-            {"direction": d, "count": n}
-            for d, n in direction_counts.items() if n > 1
-        ),
-        None,
-    )
-    practice_open = _add_signal_context(
-        await _enrich_open_positions([e for e in practice_entries if e["exit_price"] is None]), winrate, pattern_winrate,
-    )
-    _attach_discipline_facts(practice_open)
-    practice_closed = [e for e in practice_entries if e["exit_price"] is not None]
-    cumulative = repo.cumulative_result_series(user["id"])
-    heatmap_weeks = _build_heatmap_weeks(repo.daily_results(user["id"]))
-    ratio_stats = repo.winrate_by_ratio(user["id"])
-    coin_stats = repo.coin_stats(user["id"])
-    coins = repo.list_coins()
-    # Niet herkende berichten zijn een operator-signaal (is de AI-interpretatie
-    # goed afgesteld?), geen bruikbare informatie voor een gewone gebruiker:
-    # die kan er toch niks mee, en het oogt onbetrouwbaar. Daarom alleen
-    # zichtbaar voor de eigen operator-account (ADMIN_USERNAME).
-    is_admin = bool(config.ADMIN_USERNAME) and user["username"] == config.ADMIN_USERNAME
-    unclear_messages = repo.recent_unclear_messages() if is_admin else None
-
-    eval_ctx = _build_eval_context(user, request)
-
-    # Setup-checklist: alleen zichtbaar zolang niet alle stappen gezet zijn,
-    # verdwijnt vanzelf zodra dat wel zo is. "Eerste melding ontvangen" kijkt
-    # naar telegram_sent (kolomnaam uit de Telegram-tijd, ongewijzigd sinds
-    # Taak 11) op een echt signaal, een voorbeeldmelding (/push/voorbeeld)
-    # telt hier bewust niet in mee.
-    onboarding = {
-        "push_enabled": bool(repo.list_push_subscriptions(user["id"])),
-        "portfolio_set": user["portfolio_eur"] > 0,
-        "first_alert_received": any(e["telegram_sent"] for e in all_entries),
-    }
-    onboarding_complete = all(onboarding.values())
-
-    # Risico dat nu echt in de markt staat: alleen trades die al genomen
-    # zijn (eigen entry ingevuld), niet nog niet bevestigde signalen, die
-    # hebben nog geen kapitaal gekost. Aan een evaluatie gekoppelde trades
-    # blijven eruit (zelfde regel als repo.total_open_risk_eur): die zijn
-    # tegen het virtuele evaluatiesaldo gesized en horen niet in een
-    # percentage van het echte portfolio — hun eigen gauge staat op
-    # /evaluatie (eval_open_risk_pct).
-    open_risk_eur = sum(e["risk_eur"] or 0 for e in taken_entries if e["evaluation_id"] is None)
-    open_risk_pct = (open_risk_eur / user["portfolio_eur"] * 100) if user["portfolio_eur"] else 0
-
-    # Portfolio-omvang schaalt mee met elke gesloten echte trade (zie
-    # repo.close_journal_trade), dus het ingevulde bedrag is altijd het
-    # actuele kapitaal. "Gestart op" wordt er hier van afgeleid in plaats
-    # van apart bijgehouden: startbedrag = huidig bedrag min alles wat er
-    # sindsdien gerealiseerd is.
-    total_realized_eur = cumulative[-1]["cumulative_eur"] if cumulative else 0.0
-    starting_portfolio_eur = user["portfolio_eur"] - total_realized_eur
-    portfolio_change_pct = (
-        (total_realized_eur / starting_portfolio_eur * 100) if starting_portfolio_eur else 0.0
-    )
-
-    return templates.TemplateResponse(request, "dashboard.html", {
-        "user": user,
-        "onboarding": onboarding,
-        "onboarding_complete": onboarding_complete,
-        "market_scan_enabled": repo.is_market_scan_enabled(),
-        "entries": entries,
-        "open_entries": open_entries,
-        "taken_entries": taken_entries,
-        "pending_entries": pending_entries,
-        "ticker_coins": ticker_coins,
-        "last_signal_text": last_signal_text,
-        "open_risk_eur": open_risk_eur,
-        "open_risk_pct": open_risk_pct,
-        "correlation_warning": correlation_warning,
-        "forming_patterns": forming_patterns,
-        "practice_open": practice_open,
-        "practice_closed": practice_closed,
-        "winrate": winrate,
-        "cumulative": cumulative,
-        "heatmap_weeks": heatmap_weeks,
-        "ratio_stats": ratio_stats,
-        "coin_stats": coin_stats,
-        "coins": coins,
-        "status_filter": status,
-        "starting_portfolio_eur": starting_portfolio_eur,
-        "total_realized_eur": total_realized_eur,
-        "portfolio_change_pct": portfolio_change_pct,
-        "unclear_messages": unclear_messages,
-        **eval_ctx,
-    })
+async def dashboard():
+    # Verweesde pagina van vóór de puur-signalen-herziening (2026-09-21):
+    # geen navigatielink wijst hier meer naartoe, maar een oude
+    # PWA-snelkoppeling kan nog steeds deze URL openen. Doorsturen i.p.v.
+    # verwijderen voorkomt een kale 404 op zo'n bestaande snelkoppeling.
+    return RedirectResponse(url="/signalen", status_code=303)
 
 
 @app.get("/account")
@@ -1231,7 +1083,7 @@ async def update_settings(
     if not (start and end):
         start, end = None, None
     repo.update_user_settings(user["id"], portfolio_eur, risk_percent, start, end)
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url="/account", status_code=303)
 
 
 @app.post("/push/voorbeeld")
