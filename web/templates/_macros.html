@@ -57,7 +57,7 @@
 
 {# Volledige body van een genomen, nog open trade: cijferraster met live
    prijs (data-price) en PnL (data-pnl/data-pnl-pct, bijgewerkt door
-   dashboard.js), aanpassen van SL/TP/grootte, sluiten, terugzetten. Zelfde
+   dashboard.js), aanpassen van SL/TP, sluiten, terugzetten. Zelfde
    op het dashboard en op de coinpagina, anders loopt de ene plek uit de
    pas met de andere zodra er iets aan verandert. #}
 {# "waarom ...?"-kop boven de redenering van een journaalregel. Stond los
@@ -93,7 +93,7 @@
 <p class="muted advice-text">{{ e.advice }}</p>
 {% if e.note %}<p class="muted" style="margin: 4px 0 0; font-size: 12.5px;">{{ e.note }}</p>{% endif %}
 <details class="confidence-detail levels-detail js-accordion">
-  <summary class="confidence-why">SL, TP of grootte aanpassen</summary>
+  <summary class="confidence-why">SL of TP aanpassen</summary>
   <form action="/journal/{{ e.id }}/levels" method="post" class="levels-form">
     {% if redirect_to %}<input type="hidden" name="next" value="{{ redirect_to }}">{% endif %}
     <label>Stop loss

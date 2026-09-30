@@ -626,12 +626,6 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
     gebaseerde trackrecord) in plaats van de oude, handmatige-status-
     gebaseerde berekening."""
     all_entries = repo.list_journal(user["id"], status=None)
-    for entry in all_entries:
-        entry["position_size"] = _position_size(entry)
-        entry["result_pct_of_risk"] = (
-            entry["result_eur"] / entry["risk_eur"] * 100
-            if entry["result_eur"] is not None and entry["risk_eur"] else None
-        )
     real_entries = [e for e in all_entries if not e["is_practice"]]
     practice_entries = [e for e in all_entries if e["is_practice"]]
 
