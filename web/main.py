@@ -694,12 +694,6 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
     }
     onboarding_complete = all(onboarding.values())
 
-    total_realized_eur = cumulative[-1]["cumulative_eur"] if cumulative else 0.0
-    starting_portfolio_eur = user["portfolio_eur"] - total_realized_eur
-    portfolio_change_pct = (
-        (total_realized_eur / starting_portfolio_eur * 100) if starting_portfolio_eur else 0.0
-    )
-
     return templates.TemplateResponse(request, "account.html", {
         "user": user,
         "onboarding": onboarding,
@@ -724,9 +718,6 @@ async def account_page(request: Request, status: str = "alle", user: dict = Depe
         "coin_stats": coin_stats,
         "coins": coins,
         "status_filter": status,
-        "starting_portfolio_eur": starting_portfolio_eur,
-        "total_realized_eur": total_realized_eur,
-        "portfolio_change_pct": portfolio_change_pct,
         "unclear_messages": unclear_messages,
     })
 
@@ -854,8 +845,6 @@ async def export_journal_csv(user: dict = Depends(require_login)):
 
 @app.post("/settings/portfolio")
 async def update_settings(
-    portfolio_eur: float = Form(...),
-    risk_percent: float = Form(...),
     quiet_hours_start: str = Form(""),
     quiet_hours_end: str = Form(""),
     user: dict = Depends(require_login),
@@ -866,7 +855,7 @@ async def update_settings(
     end = quiet_hours_end.strip() or None
     if not (start and end):
         start, end = None, None
-    repo.update_user_settings(user["id"], portfolio_eur, risk_percent, start, end)
+    repo.update_user_settings(user["id"], start, end)
     return RedirectResponse(url="/account", status_code=303)
 
 

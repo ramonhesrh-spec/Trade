@@ -921,7 +921,7 @@ def list_users() -> list[dict]:
 
 
 def update_user_settings(
-    user_id: int, portfolio_eur: float, risk_percent: float,
+    user_id: int,
     quiet_hours_start: Optional[str] = None, quiet_hours_end: Optional[str] = None,
 ) -> None:
     """telegram_chat_id zit hier bewust niet meer bij (Taak 11): het veld is
@@ -930,10 +930,9 @@ def update_user_settings(
     naar NULL overschrijven."""
     with db.session() as conn:
         conn.execute(
-            """UPDATE users SET portfolio_eur = ?, risk_percent = ?,
-                      quiet_hours_start = ?, quiet_hours_end = ?
+            """UPDATE users SET quiet_hours_start = ?, quiet_hours_end = ?
                WHERE id = ?""",
-            (portfolio_eur, risk_percent, quiet_hours_start, quiet_hours_end, user_id),
+            (quiet_hours_start, quiet_hours_end, user_id),
         )
 
 
