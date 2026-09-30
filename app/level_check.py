@@ -123,7 +123,7 @@ async def check_open_trades() -> None:
         # ingevuld voor nieuwe gebruikers, dus zou hier iedereen overslaan.
         hit_emoji = "🎯" if hit == "take profit" else "🛑"
         title = f"{hit_emoji} {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
-        body = f"{hit.capitalize()} geraakt · Entry {entry['entry_price']:.4f} · Op {hit_price:.4f}"
+        body = f"{hit.capitalize()} geraakt\nEntry {entry['entry_price']:.4f} · Op {hit_price:.4f}"
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
         try:
             await push_notify.send_push(entry["user_id"], title, body, f"/coins/{coin}", silent=silent)
@@ -448,7 +448,7 @@ async def check_pending_signals() -> None:
         if sniper_hit is not None:
             sniper_price, sniper_reason = sniper_hit
             title = f"🎯 {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()} — sniper-trigger geraakt"
-            body = f"{sniper_price:.4f} · {sniper_reason} · Nu {current_price:.4f}"
+            body = f"{sniper_price:.4f} · {sniper_reason}\nNu {current_price:.4f}"
         else:
             if in_entry_zone:
                 level_line = f"Betere entry: {entry['suggested_entry_low']:.4f}–{entry['suggested_entry_high']:.4f}"
@@ -462,7 +462,7 @@ async def check_pending_signals() -> None:
 
             title = f"🔔 {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
             heading = "Terug in de betere-entry-zone" if in_entry_zone else "Terug bij een interessant niveau"
-            body = f"{heading} ({entry['confidence']}) · {level_line} · Nu {current_price:.4f}"
+            body = f"{heading} ({entry['confidence']})\n{level_line} · Nu {current_price:.4f}"
 
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
         try:
