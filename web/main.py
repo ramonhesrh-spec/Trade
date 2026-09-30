@@ -1450,23 +1450,13 @@ PROP_EVAL_TIERS = (5000.0, 10000.0, 25000.0, 50000.0, 100000.0, 200000.0)
 
 
 @app.post("/evaluatie/start")
-async def start_evaluation(
-    tier_amount: float = Form(...),
-    profit_target_pct: float = Form(...),
-    max_drawdown_pct: float = Form(...),
-    user: dict = Depends(require_login),
-):
-    if (
-        tier_amount not in PROP_EVAL_TIERS
-        or not (0 < profit_target_pct <= 50)
-        or not (0 < max_drawdown_pct <= 50)
-        or repo.get_active_evaluation(user["id"]) is not None
-    ):
-        # Ongeldige input of dubbele start (bv. twee tabbladen tegelijk):
-        # stil negeren, het dashboard toont sowieso alleen het
-        # startformulier als er nog geen actieve run is.
-        return RedirectResponse(url="/evaluatie", status_code=303)
-    repo.create_evaluation(user["id"], tier_amount, profit_target_pct, max_drawdown_pct)
+async def start_evaluation(user: dict = Depends(require_login)):
+    # Nieuwe evaluatie-runs starten kan sinds HesPulse-verkleinen
+    # (2026-09-30) niet meer (zie de spec: ongewenst, prop-evaluatie is
+    # weinig gebruikt en kost onderhoud). De route blijft bestaan zodat een
+    # oude bladwijzer of het startformulier (nu verwijderd, evaluatie.html)
+    # niet op een 404 uitkomt — stil negeren en terug naar /evaluatie, dat
+    # bestaande/afgesloten runs blijft tonen.
     return RedirectResponse(url="/evaluatie", status_code=303)
 
 

@@ -102,25 +102,6 @@
 </section>
 {% endif %}
 
-{% else %}
-<section class="card" style="--i: 1">
-  <p class="muted">Nog geen evaluatie actief.</p>
-  <form method="post" action="/evaluatie/start" class="prop-eval-start">
-    <label>Bedrag
-      <select name="tier_amount">
-        <option value="5000">€5.000</option>
-        <option value="10000" selected>€10.000</option>
-        <option value="25000">€25.000</option>
-        <option value="50000">€50.000</option>
-        <option value="100000">€100.000</option>
-        <option value="200000">€200.000</option>
-      </select>
-    </label>
-    <label>Winstdoel % <input type="number" name="profit_target_pct" value="8" min="1" max="50" step="0.5" required></label>
-    <label>Max drawdown % <input type="number" name="max_drawdown_pct" value="6" min="1" max="50" step="0.5" required></label>
-    <button type="submit">Start evaluatie</button>
-  </form>
-</section>
 {% endif %}
 
 <section style="--i: 3">
