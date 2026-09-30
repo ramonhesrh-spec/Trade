@@ -29,6 +29,14 @@ EXCHANGE_ID = _get("EXCHANGE_ID", "binance")
 QUOTE_CURRENCY = _get("QUOTE_CURRENCY", "USDT")
 TIMEFRAME = "4h"
 
+# Vaste coinlijst (HesPulse-verkleinen, 2026-09-30): geen onbeperkte
+# automatische groei meer zodra een nieuwe coin in Discord voorbijkomt,
+# een handjevol coins waarop de marktscan (elke 20 min, alle detectoren)
+# daadwerkelijk draait. repo.add_coin_if_new is het enige handhavingspunt
+# — een coin hier niet in mag nooit toegevoegd worden, ongeacht wie
+# aanroept (Discord-verwerking, bron-niveaus, dagtradinginterpretatie).
+FIXED_COINS = ["BTC", "ETH", "SOL", "BNB", "AVAX", "DOGE", "SUI"]
+
 # De uitgebreide factoren (ADX, volatiliteit, BTC-trend, 1u bevestiging,
 # divergentie, liquiditeit) staan standaard uit. De drempels zijn
 # leerboek-standaarden, nog niet getoetst aan de eigen signaalgeschiedenis.

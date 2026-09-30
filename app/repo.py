@@ -677,8 +677,13 @@ def coin_is_tracked(symbol: str) -> bool:
 
 
 def add_coin_if_new(symbol: str, market: str) -> bool:
-    """Voegt een coin toe aan de dynamische lijst als die nog niet bestaat.
-    Geeft True terug als de coin nieuw was."""
+    """Voegt een coin toe aan de vaste lijst als die nog niet bestaat EN op
+    config.FIXED_COINS staat. Geeft True terug als de coin nieuw was. Een
+    coin buiten de vaste lijst wordt hier stilzwijgend nooit toegevoegd —
+    zelfde False als "bestaat al", de aanroeper (coinlist.ensure_coin_tracked)
+    behandelt beide identiek (geen "nieuwe coin"-melding)."""
+    if symbol.upper() not in config.FIXED_COINS:
+        return False
     with db.session() as conn:
         existing = conn.execute(
             "SELECT 1 FROM coins WHERE symbol = ?", (symbol.upper(),)

@@ -238,6 +238,30 @@ def _migrate(conn: sqlite3.Connection) -> None:
     if "last_pattern_key" not in existing_coins:
         conn.execute("ALTER TABLE coins ADD COLUMN last_pattern_key TEXT")
 
+    # Vaste coinlijst (HesPulse-verkleinen, 2026-09-30): elke bestaande
+    # coin buiten config.FIXED_COINS gaat op active=0 (geen dataverlies,
+    # de coin verdwijnt alleen uit repo.list_coins()/de marktscan), en de
+    # 7 vaste coins moeten bestaan en actief zijn. Onvoorwaardelijk bij
+    # elke start: idempotent en goedkoop (de coins-tabel is klein), dus
+    # geen aparte guard nodig — een coin die al klopt wordt gewoon
+    # opnieuw hetzelfde gezet.
+    placeholders = ",".join("?" for _ in config.FIXED_COINS)
+    conn.execute(
+        f"UPDATE coins SET active = 0 WHERE symbol NOT IN ({placeholders})",
+        tuple(config.FIXED_COINS),
+    )
+    for symbol in config.FIXED_COINS:
+        existing_coin = conn.execute(
+            "SELECT active FROM coins WHERE symbol = ?", (symbol,)
+        ).fetchone()
+        if existing_coin is None:
+            conn.execute(
+                "INSERT INTO coins (symbol, market, added_at, active) VALUES (?, ?, ?, 1)",
+                (symbol, f"{symbol}/USDT", now_iso()),
+            )
+        elif existing_coin["active"] != 1:
+            conn.execute("UPDATE coins SET active = 1 WHERE symbol = ?", (symbol,))
+
     existing_prop_evaluations = {row["name"] for row in conn.execute("PRAGMA table_info(prop_evaluations)")}
     if "danger_alert_sent" not in existing_prop_evaluations:
         conn.execute("ALTER TABLE prop_evaluations ADD COLUMN danger_alert_sent INTEGER NOT NULL DEFAULT 0")
