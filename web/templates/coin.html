@@ -34,7 +34,7 @@
   {% if coin_stat %}
   <div><span class="k">Winrate {{ symbol }}</span><span class="v">{{ coin_stat.winrate }}%</span></div>
   <div><span class="k">Trades</span><span class="v">{{ coin_stat.wins }}/{{ coin_stat.total }}</span></div>
-  <div><span class="k">Gemiddeld</span><span class="v {{ 'pos' if coin_stat.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(coin_stat.avg_result_eur) }}</span></div>
+  <div><span class="k">Gemiddeld</span><span class="v {{ 'pos' if coin_stat.avg_result_pct >= 0 else 'neg' }}">{{ "%.1f"|format(coin_stat.avg_result_pct) }}%</span></div>
   {% endif %}
   {% if sparkline %}
   <div class="stat-sparkline">

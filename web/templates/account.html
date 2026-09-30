@@ -341,7 +341,7 @@
         <td><a href="/coins/{{ c.coin }}">{{ c.coin }}</a></td>
         <td class="num">{{ c.total }}</td>
         <td class="num">{{ c.winrate }}%</td>
-        <td class="num {{ 'pos' if c.avg_result_eur >= 0 else 'neg' }}">€{{ "%.2f"|format(c.avg_result_eur) }}</td>
+        <td class="num {{ 'pos' if c.avg_result_pct >= 0 else 'neg' }}">{{ "%.1f"|format(c.avg_result_pct) }}%</td>
       </tr>
       {% endfor %}
     </tbody>
