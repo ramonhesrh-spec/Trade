@@ -298,6 +298,23 @@ Een systeembrede noodrem staat op het dashboard (Instellingen): staat die
 uit, doet de scan niets die cyclus. Er is geen noodrem per gebruiker, dit
 is een systeembrede instelling.
 
+### Snelle SMC-check
+
+```bash
+sudo cp deploy/crypto-market-scan-smc.service /etc/systemd/system/
+sudo cp deploy/crypto-market-scan-smc.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-market-scan-smc.timer
+```
+
+Draait los van de marktscan hierboven, elke 5 minuten (op minuten
+03/08/13/.../58, buiten zowel `crypto-level-check.timer`'s als
+`crypto-market-scan.timer`'s eigen grid). Alleen de SMC-structuurbreuk-
+check, niets van de drie 4u-detectoren: SMC reageert op 15m-candles en
+heeft dus veel meer baat bij een korte cyclus dan die 4u-detectoren, die
+toch pas om de 4 uur nieuwe data krijgen. Gebruikt dezelfde
+systeembrede noodrem hierboven.
+
 ### Periodieke factor-drift-check
 
 ```bash
