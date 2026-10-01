@@ -873,6 +873,35 @@ async def process_day_trading_signal(
     sniper = indicators.find_sniper_entry_price(interp.direction, df)
     sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
 
+    # Harde eis: alleen melden bij een duidelijke sweep/stop-hunt-entry, niet
+    # bij de kale live prijs. Zonder dit vuurde elk dagtrading-signaal op
+    # ind.price, ongeacht of de prijs net een stop-hunt had of al een stuk
+    # verder was gelopen dan een scherpe entry nog zou toestaan — bij een
+    # grote positie (zie gesprek) is dat verschil geen rond-getal-ruis meer.
+    # Zelfde vergelijking als market_scanner._complete_smc_setup's
+    # entry_worse_than_sniper: bij long is een hogere prijs dan de sniper
+    # een slechtere entry (je koopt verder boven de swept low), bij short
+    # een lagere prijs een slechtere entry (je verkoopt verder onder de
+    # swept high). Geen sniper gevonden telt ook als een te late/onduidelijke
+    # entry, niet als "geen informatie dus toegestaan". Wie geen sniper-
+    # entry kreeg, krijgt via level_check.py's proactieve sniper-trigger
+    # alsnog een melding zodra er wél een duidelijke stop-hunt verschijnt.
+    entry_worse_than_sniper = (
+        sniper_entry_price is None
+        or (interp.direction.lower() == "short" and ind.price < sniper_entry_price)
+        or (interp.direction.lower() == "long" and ind.price > sniper_entry_price)
+    )
+    if entry_worse_than_sniper:
+        hard_gates_ok = False
+        confirmed = False
+        if sniper_entry_price is None:
+            reason += " | ✗ Sniper-entry: geen duidelijke stop-hunt gevonden binnen bereik"
+        else:
+            reason += (
+                f" | ✗ Sniper-entry: prijs {ind.price:.4f} ligt niet meer aan de juiste kant "
+                f"van de sniper-prijs {sniper_entry_price:.4f}"
+            )
+
     risk_distance = abs(ind.price - stop_take.stop_loss)
     reward_distance = abs(stop_take.take_profit - ind.price)
     risk_reward_ratio = (reward_distance / risk_distance) if risk_distance else 0.0
