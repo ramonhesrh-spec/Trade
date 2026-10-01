@@ -1760,13 +1760,20 @@ def count_pending_signals(user_id: int) -> int:
     Genomen/Aangepast/Genegeerd/weggeklikt). Basis voor het cijfer op het
     app-icoon, en dezelfde bron als "nieuwe kansen" op Mijn account en de
     open-lijst op /signalen — dismissed_at IS NULL houdt die drie tellers
-    in lijn met elkaar: wat je op Signalen wegklikt telt nergens meer mee."""
+    in lijn met elkaar: wat je op Signalen wegklikt telt nergens meer mee.
+
+    s.auto_outcome IS NULL is nodig om dezelfde reden: level_check.py zet
+    auto_outcome (vervallen/take_profit/stop_loss) alleen op de gedeelde
+    signals-rij, nooit op de eigen journal_entries.status van een gebruiker
+    die het signaal nooit oppakte. Zonder deze check bleef zo'n signaal voor
+    altijd als "nieuw" meetellen in deze teller, ook ruim nadat het allang
+    is afgehandeld — de badge liep alleen maar op en liep nooit meer leeg."""
     with db.session() as conn:
         row = conn.execute(
             """SELECT COUNT(*) AS n
                FROM journal_entries je JOIN signals s ON s.id = je.signal_id
                WHERE je.user_id = ? AND je.status = 'nieuw' AND s.is_practice = 0
-                 AND je.dismissed_at IS NULL""",
+                 AND je.dismissed_at IS NULL AND s.auto_outcome IS NULL""",
             (user_id,),
         ).fetchone()
         return row["n"]
