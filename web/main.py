@@ -171,6 +171,12 @@ async def mark_melding_gelezen(notification_id: int, user: dict = Depends(requir
     return {"ok": True}
 
 
+@app.post("/meldingen/alles-gelezen")
+async def mark_all_meldingen_gelezen(user: dict = Depends(require_login)):
+    repo.mark_all_notifications_read(user["id"])
+    return RedirectResponse(url="/meldingen", status_code=303)
+
+
 @app.get("/signalen")
 async def signalen_page(request: Request, alles: bool = False, user: dict = Depends(require_login)):
     """Kale, puur signalen-pagina (geen journaal/portfolio-content, zie

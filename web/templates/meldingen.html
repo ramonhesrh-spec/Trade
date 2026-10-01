@@ -24,6 +24,12 @@
 
 <section class="card" style="--i: 1">
   <h2>Jouw meldingen</h2>
+  {% if notifications and notifications|selectattr("is_read", "equalto", 0)|list %}
+  <form method="post" action="/meldingen/alles-gelezen" class="inline-form"
+        onsubmit="return confirm('Alle meldingen als gelezen markeren?');">
+    <button type="submit" class="button-link">alles gelezen</button>
+  </form>
+  {% endif %}
   <ul class="notification-list">
     {% for n in notifications %}
     <li class="{{ 'unread' if not n.is_read else '' }}" data-notification-id="{{ n.id }}">

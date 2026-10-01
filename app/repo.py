@@ -605,6 +605,18 @@ def mark_notification_read(notification_id: int, user_id: int) -> None:
         )
 
 
+def mark_all_notifications_read(user_id: int) -> int:
+    """Alles in één keer als gelezen markeren, zelfde "alles"-knop-patroon
+    als dismiss_all_open_signals_for_user hierboven. Geeft het aantal
+    geraakte rijen terug."""
+    with db.session() as conn:
+        cursor = conn.execute(
+            "UPDATE notifications SET is_read = 1 WHERE user_id = ? AND is_read = 0",
+            (user_id,),
+        )
+        return cursor.rowcount
+
+
 def create_trendline(
     coin: str, user_id: int, label: str, x1: int, y1: float, x2: int, y2: float,
 ) -> int:
