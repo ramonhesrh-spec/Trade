@@ -651,8 +651,39 @@ async def _find_chart_pattern_candidate(
 
 SMC_ZONE_SEARCH_LOOKBACK_30M = 60  # 30m-candles, ongeveer anderhalve dag
 
-STOP_MARGIN_PCT = 0.1    # procent, marge voorbij de sweep
-TARGET_MARGIN_PCT = 0.5  # procent, marge vóór de liquidity
+# Was een vast percentage (STOP_MARGIN_PCT 0.1%, TARGET_MARGIN_PCT 0.5%) van
+# de prijs. Op een coin die op dat moment flink beweegt is 0.1% vaak maar
+# een fractie van normale ruis binnen één candle — een SUI-trade (zie
+# gesprek) werd zo op de stop gezet door een gewone tegenwiek, terwijl de
+# structuurpremisse zelf klopte en de prijs er later alsnog heen liep. ATR
+# van de 30m-candle op het moment van de structuurbreuk (dezelfde
+# tijdshorizon als de breuk zelf) maakt de marge groter op een drukke coin
+# en kleiner op een rustige, in plaats van overal hetzelfde vaste getal.
+# Zelfde multiple (0.25) als risk.ATR_BUFFER_MULTIPLIER, om dezelfde reden:
+# ruimte tegen een korte wiek, niet tegen een echte trendomkeer.
+STOP_MARGIN_ATR_MULTIPLE = 0.25    # marge voorbij de sweep
+TARGET_MARGIN_ATR_MULTIPLE = 0.25  # marge vóór de liquidity
+
+# Fallback voor een setup die al "bouwend" stond vóór atr een kolom op
+# smc_setups werd (zie _complete_smc_setup) — niet meer gebruikt voor een
+# nieuwe setup, blijft alleen staan zodat zo'n oude rij nog een geldig
+# signaal kan opleveren in plaats van te crashen op een ontbrekende atr.
+LEGACY_STOP_MARGIN_PCT = 0.1
+LEGACY_TARGET_MARGIN_PCT = 0.5
+
+
+def smc_stop_take_margins(setup: dict) -> tuple[float, float]:
+    """(stop_margin, target_margin) in prijseenheden, nog zonder teken —
+    de aanroeper bepaalt zelf aan welke kant van sweep_price/
+    liquidity_target de marge moet. Eén plek voor deze fallback-logica in
+    plaats van 'm drie keer te laten driften (hier, /smc-pagina preview in
+    web/main.py, scripts/cleanup_stale_smc_setups.py)."""
+    if setup["atr"] is not None:
+        return STOP_MARGIN_ATR_MULTIPLE * setup["atr"], TARGET_MARGIN_ATR_MULTIPLE * setup["atr"]
+    return (
+        LEGACY_STOP_MARGIN_PCT / 100 * setup["sweep_price"],
+        LEGACY_TARGET_MARGIN_PCT / 100 * setup["liquidity_target"],
+    )
 
 # Een bouwende setup die dit lang niet is opgelost (geraakt+afgewezen, of
 # doorbroken zonder afwijzing) wordt als vervallen beschouwd. Zonder deze
@@ -790,6 +821,10 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     if structure_break is None:
         return None
     direction = structure_break.direction
+    # Op hetzelfde moment en dezelfde candle-set als de breuk zelf: de
+    # volatiliteit die hier geldt, is die van de 30m-candle waarop de
+    # structuur net brak, niet een latere, mogelijk heel andere ATR.
+    atr = indicators.compute_indicators(closed_30m).atr
 
     # Een nieuwe breuk in de TEGENGESTELDE richting van een bestaande
     # bouwende setup maakt die setup achterhaald (de markt heeft zijn
@@ -852,19 +887,17 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         return None
     liquidity_target_pivot = min(target_pivots, key=lambda p: abs(p.price - untouched_from))
 
-    # STOP_MARGIN_PCT/TARGET_MARGIN_PCT zijn een percentage van de PRIJS,
-    # niet van de afstand tussen zone en sweep/liquidity-doel. Op een coin
-    # met een hoge prijs en een kleine afstand kan die marge groter zijn dan
-    # de hele afstand, of kan de rauwe sweep zelf al binnen de zone liggen
-    # in plaats van eronder/erboven (short/long) — in beide gevallen komt
-    # de stop of het doel dan aan de verkeerde kant van de zone terecht.
-    # _valid_stop_take zou zo'n setup later toch afwijzen zodra de
-    # afwijzing binnenkomt, maar dan is de "bouwt op"-melding al verstuurd
-    # voor een setup die nooit een geldig signaal kon worden. Hier al
-    # overslaan voorkomt die dode melding.
+    # De ATR-marge kan, net als het oude vaste percentage kon, groter zijn
+    # dan de afstand tussen zone en sweep/liquidity-doel, of de rauwe sweep
+    # kan zelf al binnen de zone liggen in plaats van eronder/erboven
+    # (short/long) — in beide gevallen komt de stop of het doel dan aan de
+    # verkeerde kant van de zone terecht. _valid_stop_take zou zo'n setup
+    # later toch afwijzen zodra de afwijzing binnenkomt, maar dan is de
+    # "bouwt op"-melding al verstuurd voor een setup die nooit een geldig
+    # signaal kon worden. Hier al overslaan voorkomt die dode melding.
     sign = 1 if direction == "short" else -1
-    projected_stop_loss = sweep.price * (1 + sign * STOP_MARGIN_PCT / 100)
-    projected_take_profit = liquidity_target_pivot.price * (1 + sign * TARGET_MARGIN_PCT / 100)
+    projected_stop_loss = sweep.price + sign * STOP_MARGIN_ATR_MULTIPLE * atr
+    projected_take_profit = liquidity_target_pivot.price + sign * TARGET_MARGIN_ATR_MULTIPLE * atr
     stop_niet_voorbij_zone = (
         (direction == "short" and projected_stop_loss <= zone_high) or
         (direction == "long" and projected_stop_loss >= zone_low)
@@ -895,6 +928,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         structure_level=structure_break.broken_pivot.price,
         sweep_price=sweep.price,
         liquidity_target=liquidity_target_pivot.price,
+        atr=atr,
         seen_until=(last_candle["timestamp"] + timedelta(minutes=SMC_ENTRY_CANDLE_MINUTES)).isoformat(),
     )
 
@@ -926,18 +960,26 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
 async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     """Bouwt het echte signaal zodra _check_smc_setup een afgewezen zone
     teruggeeft, en geeft de nieuwe signal_id terug (None als er geen
-    geldige trade van te maken was). Geen ATR: stop en doel zijn volledig
-    structuur-gebaseerd, de hele premisse van een smc-setup is dat de
-    sweep de stop en de volgende liquidity het doel bepaalt. sign is voor
-    zowel stop als doel hetzelfde teken, dat is geen typefout: voor short
-    ligt de stop BOVEN de geveegde high (verder van de entry af) en het
-    doel ligt ook BOVEN de liquidity-low (dichter bij de entry, 'net
-    vóór' het niveau) — voor long allebei eronder. Rekenvoorbeeld (short):
-    sweep_price 2820, liquidity_target 2600 -> stop 2823, doel 2613."""
+    geldige trade van te maken was). Stop en doel zijn structuur-gebaseerd
+    (de sweep bepaalt de stop, de volgende liquidity het doel), alleen de
+    marge eromheen gebruikt setup['atr'] (vastgezet bij het bouwen van de
+    setup, zie _check_smc_setup) in plaats van een vast percentage — zie
+    STOP_MARGIN_ATR_MULTIPLE hierboven. sign is voor zowel stop als doel
+    hetzelfde teken, dat is geen typefout: voor short ligt de stop BOVEN de
+    geveegde high (verder van de entry af) en het doel ligt ook BOVEN de
+    liquidity-low (dichter bij de entry, 'net vóór' het niveau) — voor long
+    allebei eronder. Rekenvoorbeeld (short): sweep_price 2820,
+    liquidity_target 2600 -> stop 2823, doel 2613.
+
+    setup['atr'] is None voor een setup die al "bouwend" stond vóór de
+    ATR-marge deze kolom kreeg (zie db._migrate) — valt dan terug op het
+    oude vaste percentage, puur om zo'n al bestaande rij niet alsnog te
+    laten crashen; een nieuwe setup heeft hem altijd gezet."""
     direction = setup["direction"]
     sign = -1 if direction == "long" else 1
-    stop_loss = setup["sweep_price"] + STOP_MARGIN_PCT / 100 * setup["sweep_price"] * sign
-    take_profit = setup["liquidity_target"] + TARGET_MARGIN_PCT / 100 * setup["liquidity_target"] * sign
+    stop_margin, target_margin = smc_stop_take_margins(setup)
+    stop_loss = setup["sweep_price"] + stop_margin * sign
+    take_profit = setup["liquidity_target"] + target_margin * sign
 
     df_15m = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="15m")
     entry_price = float(df_15m["close"].iloc[-1])

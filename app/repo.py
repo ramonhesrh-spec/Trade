@@ -2246,7 +2246,7 @@ ZONE_DEDUP_PCT = 0.3  # procent van de zone-middenprijs, geen ATR (zie de spec)
 def upsert_smc_setup(
     coin: str, direction: str, zone_low: float, zone_high: float,
     structure_level: float, sweep_price: float, liquidity_target: float,
-    seen_until: Optional[str] = None,
+    atr: Optional[float] = None, seen_until: Optional[str] = None,
 ) -> int:
     """Vindt een bestaande bouwende setup (signal_id IS NULL) voor deze
     coin+richting waarvan de zone-middenprijs binnen ZONE_DEDUP_PCT
@@ -2302,16 +2302,16 @@ def upsert_smc_setup(
             if existing_mid and abs(existing_mid - zone_mid) <= ZONE_DEDUP_PCT / 100 * zone_mid:
                 conn.execute(
                     """UPDATE smc_setups SET zone_low = ?, zone_high = ?, structure_level = ?,
-                       sweep_price = ?, liquidity_target = ?, updated_at = ? WHERE id = ?""",
-                    (zone_low, zone_high, structure_level, sweep_price, liquidity_target, seen_until, row["id"]),
+                       sweep_price = ?, liquidity_target = ?, atr = ?, updated_at = ? WHERE id = ?""",
+                    (zone_low, zone_high, structure_level, sweep_price, liquidity_target, atr, seen_until, row["id"]),
                 )
                 return row["id"]
         cur = conn.execute(
             """INSERT INTO smc_setups
                (coin, direction, zone_low, zone_high, structure_level, sweep_price,
-                liquidity_target, alert_sent, created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)""",
-            (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, now, seen_until),
+                liquidity_target, atr, alert_sent, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)""",
+            (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, atr, now, seen_until),
         )
         return cur.lastrowid
 

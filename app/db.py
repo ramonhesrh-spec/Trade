@@ -271,6 +271,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     existing_smc_setups = {row["name"] for row in conn.execute("PRAGMA table_info(smc_setups)")}
     if "invalidated_at" not in existing_smc_setups:
         conn.execute("ALTER TABLE smc_setups ADD COLUMN invalidated_at TEXT")
+    if "atr" not in existing_smc_setups:
+        conn.execute("ALTER TABLE smc_setups ADD COLUMN atr REAL")
 
     # sr_zone_failures zelf heeft geen migratie nodig (CREATE TABLE IF NOT
     # EXISTS in schema.sql dekt zowel verse als bestaande databases, want

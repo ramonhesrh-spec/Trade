@@ -1,6 +1,6 @@
 """Eenmalige opschoning: past de regels uit de SMC-bugfixes (verouderd na
-24 uur, stop/doel die door STOP_MARGIN_PCT/TARGET_MARGIN_PCT niet voorbij
-de zone belanden) met terugwerkende kracht toe op setups die al vóór de
+24 uur, stop/doel die door de marge (zie market_scanner.smc_stop_take_margins)
+niet voorbij de zone belanden) met terugwerkende kracht toe op setups die al vóór de
 fix zijn aangemaakt. market_scanner._check_smc_setup bewaakt dit voortaan
 zelf voor nieuwe setups, maar een rij die al in de database stond wordt
 daar nooit opnieuw tegen getoetst. Puur diagnostisch/opruimend, geen
@@ -13,7 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import db, repo
-from app.market_scanner import SMC_SETUP_MAX_AGE_HOURS, STOP_MARGIN_PCT, TARGET_MARGIN_PCT
+from app.market_scanner import SMC_SETUP_MAX_AGE_HOURS, smc_stop_take_margins
 
 now = datetime.now(timezone.utc)
 forming = repo.list_forming_smc_setups()
@@ -29,8 +29,9 @@ for setup in forming:
         continue
 
     sign = 1 if setup["direction"] == "short" else -1
-    projected_stop_loss = setup["sweep_price"] * (1 + sign * STOP_MARGIN_PCT / 100)
-    projected_take_profit = setup["liquidity_target"] * (1 + sign * TARGET_MARGIN_PCT / 100)
+    stop_margin, target_margin = smc_stop_take_margins(setup)
+    projected_stop_loss = setup["sweep_price"] + sign * stop_margin
+    projected_take_profit = setup["liquidity_target"] + sign * target_margin
     stop_niet_voorbij_zone = (
         (setup["direction"] == "short" and projected_stop_loss <= setup["zone_high"])
         or (setup["direction"] == "long" and projected_stop_loss >= setup["zone_low"])

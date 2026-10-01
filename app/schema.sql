@@ -480,6 +480,14 @@ CREATE TABLE IF NOT EXISTS smc_setups (
     structure_level REAL NOT NULL,
     sweep_price REAL NOT NULL,
     liquidity_target REAL NOT NULL,
+    -- ATR(14) op de 30m-candle op het moment van de structuurbreuk, gezet
+    -- bij het bouwen van de setup en ongewijzigd hergebruikt bij het
+    -- berekenen van de uiteindelijke stop/take (zie STOP_MARGIN_ATR_MULTIPLE
+    -- in market_scanner.py) — zodat de marge meebeweegt met hoe volatiel
+    -- de coin was op het moment van de sweep, in plaats van een vast
+    -- percentage dat op een rustige coin te ruim en op een drukke coin
+    -- veel te krap kan uitpakken.
+    atr REAL,
     alert_sent INTEGER NOT NULL DEFAULT 0,
     signal_id INTEGER REFERENCES signals(id),
     created_at TEXT NOT NULL,
