@@ -162,6 +162,10 @@ async def meldingen_page(request: Request, user: dict = Depends(require_login)):
         "coins": repo.list_coins(),
         "notifications": repo.list_notifications(user["id"]),
         "admin_notifications": repo.list_admin_notifications() if is_admin else None,
+        # Los van de getoonde lijst (die stopt bij limit=50): de "alles
+        # gelezen"-knop moet ook verschijnen als de ongelezen achterstand
+        # verder terugligt dan wat hier zichtbaar is.
+        "unread_count": repo.count_unread_notifications(user["id"]),
     })
 
 

@@ -24,7 +24,7 @@
 
 <section class="card" style="--i: 1">
   <h2>Jouw meldingen</h2>
-  {% if notifications and notifications|selectattr("is_read", "equalto", 0)|list %}
+  {% if unread_count %}
   <form method="post" action="/meldingen/alles-gelezen" class="inline-form"
         onsubmit="return confirm('Alle meldingen als gelezen markeren?');">
     <button type="submit" class="button-link">alles gelezen</button>
