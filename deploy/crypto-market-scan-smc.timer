@@ -1,0 +1,17 @@
+[Unit]
+Description=Draai de snelle HesPulse SMC-check elke 5 minuten
+
+[Timer]
+# SMC reageert op 15m-candles (sluiten op :00/:15/:30/:45). De trage
+# marktscan (crypto-market-scan.timer, elke 20 minuten) liet daar tot
+# bijna een hele candle vertraging tussen zitten voordat een afwijzing
+# tot een daadwerkelijk signaal leidde — zie app/market_scanner.py's
+# entry-vs-sniper-check in _complete_smc_setup, die hiervan profiteert.
+# Minuut 3/8/13/.../58 vermijdt zowel crypto-level-check.timer's
+# *:0/15-grid (:00,:15,:30,:45) als crypto-market-scan.timer's
+# *:07,27,47-grid, zelfde soort overweging als die timer zelf al maakt.
+OnCalendar=*:3/5:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

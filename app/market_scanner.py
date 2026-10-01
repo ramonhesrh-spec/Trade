@@ -14,6 +14,7 @@ docs/superpowers/specs/2026-09-14-autonome-marktscan-design.md.
 """
 import asyncio
 import logging
+import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -941,6 +942,36 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     df_15m = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="15m")
     entry_price = float(df_15m["close"].iloc[-1])
 
+    # entry_price hierboven is de ACTUELE marktprijs op het moment dat dit
+    # signaal gebouwd wordt, niet de prijs van de candle die de afwijzing
+    # triggerde — daar zit altijd wat vertraging tussen (de marktscan draait
+    # periodiek, niet precies op elke 15m-candle-close). Stop en doel liggen
+    # vast op structuurniveaus sinds de setup bouwde, dus als de koers in die
+    # tussentijd verder wegliep dan de sniper-prijs (dezelfde stop-hunt-prijs
+    # die ook getoond wordt), is de entry al slechter dan de setup
+    # veronderstelt — dat eet rechtstreeks in op het rendement zonder dat de
+    # risk_reward_ratio-check hieronder dat per se opvangt (een kleine
+    # verschuiving kan nog ruim boven de ondergrens blijven). Geen sniper
+    # gevonden behandelen we hetzelfde als een te late entry: als het
+    # stop-hunt-moment niet meer zichtbaar is binnen het zoekvenster, is de
+    # kans klein dat dit nog een verse kans is.
+    sniper = indicators.find_sniper_entry_price(direction, df_15m)
+    sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
+    entry_worse_than_sniper = (
+        sniper_entry_price is None
+        or (direction == "short" and entry_price < sniper_entry_price)
+        or (direction == "long" and entry_price > sniper_entry_price)
+    )
+    if entry_worse_than_sniper:
+        logger.info(
+            "SMC-setup %s voor %s niet gemeld: entry %.4f ligt niet meer aan de juiste kant van de sniper-prijs "
+            "(%s, %s), de koers is al verder bewogen dan de setup veronderstelt",
+            setup["id"], coin, entry_price,
+            f"{sniper_entry_price:.4f}" if sniper_entry_price is not None else "geen sniper gevonden",
+            direction,
+        )
+        return None
+
     # Stop en doel liggen vast sinds de setup bouwde, de live prijs niet:
     # een afwijzing die al voorbij het doel sloot, of een prijs die sinds de
     # afwijzing boven de stop (short) uitliep, is geen trade meer. Geen
@@ -1003,9 +1034,6 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
         f"sweep op {setup['sweep_price']:.4f}, zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, "
         f"doel bij liquidity {setup['liquidity_target']:.4f}."
     )
-
-    sniper = indicators.find_sniper_entry_price(direction, df_15m)
-    sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
 
     signal_data = {
         "message_id": None, "coin": coin, "direction": direction,
@@ -1299,6 +1327,39 @@ async def scan_market() -> None:
     logger.info("Marktscan klaar")
 
 
+async def scan_smc_fast() -> None:
+    """Zelfde SMC-check als binnen scan_market() (_run_smc_check), maar
+    los daarvan en op een veel kortere cyclus (zie
+    deploy/crypto-market-scan-smc.timer) — SMC reageert op 15m-candles,
+    scan_market()'s eigen 20-minuten-ritme liet daar tot bijna een hele
+    candle vertraging tussen zitten vóórdat een afwijzing tot een
+    daadwerkelijk signaal leidde (zie de entry-vs-sniper-check in
+    _complete_smc_setup). De drie 4u-detectoren in scan_market() en hun
+    whiplash-rem (WHIPLASH_MIN_CONSECUTIVE_CYCLES, expliciet gekalibreerd
+    op scan_market()'s eigen cyclusduur, niet op verstreken tijd) blijven
+    bewust op hun eigen, langzamere ritme staan: sneller scannen helpt
+    daar niets (hun 4u-candle verandert toch niet vaker), en zou de
+    whiplash-rem ongemerkt verzwakken omdat die in cycli telt, niet in
+    minuten.
+
+    Geen in-cyclus coördinatie met scan_market()'s structurele
+    kandidaten zoals daar wel gebeurt (smc_direction onderdrukt een
+    tegenstrijdige structurele melding in dezelfde cyclus) — dat is hier
+    niet mogelijk, de twee lopen als losse processen. In het zeldzame
+    geval dat dit toch tot een kortstondig tegenstrijdige melding leidt,
+    ruimt repo.auto_ignore_opposite_pending (al aangeroepen door beide
+    paden) dat net zo op als bij elke andere opeenvolgende tegengestelde
+    melding — geen nieuw risico, hetzelfde bestaande opruimmechanisme."""
+    if not repo.is_market_scan_enabled():
+        logger.info("Marktscan staat uit (noodrem), SMC-snelcheck overgeslagen")
+        return
+    for coin_row in repo.list_coins():
+        await _run_smc_check(coin_row["symbol"])
+
+
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    asyncio.run(scan_market())
+    if "--smc-only" in sys.argv:
+        asyncio.run(scan_smc_fast())
+    else:
+        asyncio.run(scan_market())
