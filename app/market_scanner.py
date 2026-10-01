@@ -696,7 +696,22 @@ def smc_stop_take_margins(setup: dict) -> tuple[float, float]:
 SMC_SETUP_MAX_AGE_HOURS = 24
 
 
-def _smc_last_candle_state(candle, zone_low: float, zone_high: float, direction: str) -> tuple[bool, bool, bool]:
+# Hoeveel ATR een candle voorbij de zone moet sluiten voordat een bouwende
+# setup als 'doorbraak zonder afwijzing' ongeldig wordt gemaakt. Uit
+# achteraf-onderzoek (scripts/check_dead_smc_setups.py, 1 okt): van de 25
+# setups die hierdoor stierven, bleek de richting achteraf in 80% van de
+# gevallen toch te kloppen — een candle die net over zone_high/zone_low
+# sluit is meestal een gewone wiek, geen echte trendomkeer. Zelfde multiple
+# en redenering als STOP_MARGIN_ATR_MULTIPLE hierboven. Geldt uitsluitend
+# voor passed_without_rejection (de ongeldig-verklaring) — rejected (de
+# entry-trigger) blijft bewust zonder marge, scherpe entries zijn het hele
+# punt van deze detector.
+ZONE_BREAK_BUFFER_ATR_MULTIPLE = 0.25
+
+
+def _smc_last_candle_state(
+    candle, zone_low: float, zone_high: float, direction: str, atr: Optional[float] = None,
+) -> tuple[bool, bool, bool]:
     """Bepaalt voor één gesloten 15m-candle en één bouwende zone drie
     onafhankelijke toestanden: (in_zone, rejected, passed_without_rejection).
     in_zone: de candle raakte de zone (wick of volledige overlap).
@@ -704,19 +719,21 @@ def _smc_last_candle_state(candle, zone_low: float, zone_high: float, direction:
     kant die de setup ongeldig maakt voor voortzetting maar geldig maakt
     als entry-trigger (short: sluit onder zone_low, long: sluit boven
     zone_high) — dit is het moment waarop _complete_smc_setup het signaal
-    maakt.
+    maakt. Zonder marge: een vroege, scherpe entry is het hele punt.
     passed_without_rejection: het SPIEGELBEELD van rejected, niet
     hetzelfde teken. Een short-zone ligt BOVEN de prijs die er van
     onderaf naartoe beweegt (na de bearish structuurbreuk) — 'voorbij
     zonder afwijzing' betekent dus dat de candle DOOR de top van de zone
-    brak (close boven zone_high) zonder ooit een rejectie-close onder
-    zone_low te laten zien: de supply hield niet stand, de setup is
-    achterhaald. Long is het spiegelbeeld (close onder zone_low, door de
-    bodem heen). Vóórdat de zone ooit bereikt is — bijvoorbeeld een
-    short-setup waarvan de laatste close nog onder zone_low ligt, op weg
-    naar boven — is dit nadrukkelijk GEEN 'passed': met hetzelfde teken
-    als rejected zou elke net aangemaakte, nog nooit geraakte setup de
-    cyclus erna meteen weer weggegooid worden."""
+    brak (close boven zone_high + ZONE_BREAK_BUFFER_ATR_MULTIPLE * atr)
+    zonder ooit een rejectie-close onder zone_low te laten zien: de supply
+    hield niet stand, de setup is achterhaald. Long is het spiegelbeeld
+    (close onder zone_low - marge, door de bodem heen). Vóórdat de zone
+    ooit bereikt is — bijvoorbeeld een short-setup waarvan de laatste close
+    nog onder zone_low ligt, op weg naar boven — is dit nadrukkelijk GEEN
+    'passed': met hetzelfde teken als rejected zou elke net aangemaakte,
+    nog nooit geraakte setup de cyclus erna meteen weer weggegooid worden.
+    atr=None (bv. een bouwende setup van vóór de atr-kolom) valt terug op
+    geen marge, het oude gedrag."""
     in_zone = (
         zone_low <= candle["low"] <= zone_high
         or zone_low <= candle["high"] <= zone_high
@@ -726,9 +743,10 @@ def _smc_last_candle_state(candle, zone_low: float, zone_high: float, direction:
         (direction == "short" and candle["close"] < zone_low) or
         (direction == "long" and candle["close"] > zone_high)
     )
+    buffer = ZONE_BREAK_BUFFER_ATR_MULTIPLE * atr if atr else 0.0
     passed_without_rejection = (
-        (direction == "short" and candle["close"] > zone_high) or
-        (direction == "long" and candle["close"] < zone_low)
+        (direction == "short" and candle["close"] > zone_high + buffer) or
+        (direction == "long" and candle["close"] < zone_low - buffer)
     )
     return in_zone, rejected, passed_without_rejection
 
@@ -801,6 +819,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         for candle in _smc_candles_since(closed_15m, existing_setup["updated_at"]):
             in_zone, rejected, passed_without_rejection = _smc_last_candle_state(
                 candle, existing_setup["zone_low"], existing_setup["zone_high"], existing_setup["direction"],
+                atr=existing_setup["atr"],
             )
             if rejected:
                 return existing_setup
