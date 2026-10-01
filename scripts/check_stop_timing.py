@@ -55,8 +55,31 @@ def main() -> None:
             stopped_out.append(r)
 
     print(f"Daarvan op de stop gesloten (exit binnen {STOPPED_OUT_TOLERANCE_PCT}% van stop_loss): {len(stopped_out)}")
+
+    # Altijd elke verlies-trade tonen, ongeacht of hij als "op de stop"
+    # telt: anders is bij 0 stopped_out niet te zien waar de trade dan wel
+    # sloot (vroeg handmatig? ergens tussen entry en stop?).
+    print("\nAlle verlies-trades in detail:")
+    for r in losses:
+        try:
+            minutes = (_parse(r["exit_time"]) - _parse(r["entry_time"])).total_seconds() / 60
+            minutes_str = f"{minutes:.1f}"
+        except (ValueError, TypeError):
+            minutes_str = "?"
+        risk_distance = abs(r["entry_price"] - r["stop_loss"])
+        traveled_to_stop_pct = (
+            abs(r["exit_price"] - r["entry_price"]) / risk_distance * 100 if risk_distance else None
+        )
+        traveled_str = f"{traveled_to_stop_pct:.0f}% van entry-naar-stop-afstand" if traveled_to_stop_pct is not None else "?"
+        print(
+            f"  {r['coin']:10s} {r['direction']:5s} {r['trade_type']:11s}  "
+            f"entry {r['entry_price']:.4f}  exit {r['exit_price']:.4f}  stop {r['stop_loss']:.4f}  "
+            f"take {r['take_profit']:.4f}  result {r['result_pct']:.2f}%  "
+            f"{minutes_str} min na entry  exit kwam {traveled_str}"
+        )
+
     if not stopped_out:
-        print("Geen van de verlies-trades sloot op de stop zelf (mogelijk vooral handmatig gesloten verlies).")
+        print("\nGeen van de verlies-trades sloot op de stop zelf (mogelijk vooral handmatig gesloten verlies).")
         return
 
     fast = []
