@@ -34,7 +34,7 @@ def main() -> None:
                       s.coin, s.trade_type
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id
-               WHERE je.status = 'gesloten' AND s.is_practice = 0
+               WHERE je.status != 'genegeerd' AND s.is_practice = 0
                  AND s.trade_type IN ('day_trading', 'patroon')
                  AND je.entry_price IS NOT NULL AND je.exit_price IS NOT NULL
                  AND je.entry_time IS NOT NULL AND je.exit_time IS NOT NULL
