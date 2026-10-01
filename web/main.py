@@ -853,9 +853,9 @@ async def send_demo_push_message(user: dict = Depends(require_login)):
     await push_notify.send_push(
         user["id"], "Ξ ETH long, hoog vertrouwen (voorbeeld)",
         "Entry 2340.0000 · Stop 2290.0000 · Take profit 2430.0000",
-        "/dashboard", silent=False,
+        "/account", silent=False,
     )
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url="/account", status_code=303)
 
 
 @app.post("/journal/{entry_id}/status")
@@ -1144,7 +1144,7 @@ async def toggle_market_scan(enabled: str = Form(...), user: dict = Depends(requ
     dit systeem."""
     logger.info("Marktscan-noodrem gewijzigd door %s: %s", user["username"], "aan" if enabled == "1" else "uit")
     repo.set_market_scan_enabled(enabled == "1")
-    return RedirectResponse(url="/dashboard", status_code=303)
+    return RedirectResponse(url="/account", status_code=303)
 
 
 CONFIRM_THRESHOLD_PRESETS = {"soepel": 45.0, "normaal": 60.0, "streng": 75.0}

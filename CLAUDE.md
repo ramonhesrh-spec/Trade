@@ -8,9 +8,10 @@ HesPulse: a crypto day-trading alert system. A user forwards a Discord DM
 (text and/or a chart screenshot) from a paid trading community to their own
 bot's DM. The system interprets it via the Anthropic API, checks it against
 live technical data on Binance, and sends a Telegram alert with a suggested
-stop loss, take profit, and position size. It never places trades itself —
-every trade is a manual decision. Multiple users share the same signal
-stream but each has their own login, portfolio, risk %, and journal. See
+stop loss and take profit. It never places trades itself — every trade is
+a manual decision. Multiple users share the same signal stream but each
+has their own login, own settings (quiet hours, confirmation threshold,
+required factors), and journal. See
 `README.md` for the full product description and VPS deployment steps
 (systemd units, HTTPS, backups); it is kept up to date and is the source of
 truth for setup — don't duplicate it here.
@@ -59,11 +60,10 @@ failure, then logged as unclear rather than silently dropped) → for
 `day_trading` messages, `app/exchange.py` + `app/indicators.py` pull 4h
 candles and compute EMA/MACD/RSI/volume (and optionally ADX/ATR/BTC-trend/
 1h-confirmation/divergence/liquidity, gated by `ENABLE_ADVANCED_FACTORS`)
-→ `app/risk.py` derives stop loss (1.5x ATR), take profit (3x ATR), and a
-per-user position size from each user's `risk_percent` × `portfolio_eur` →
+→ `app/risk.py` derives stop loss (1.5x ATR) and take profit (3x ATR) →
 fans out to `journal_entries`, one row per user, via `app/repo.py` →
-`app/telegram_notify.py` sends each user their own alert with their own
-position size. `lange_termijn` (long-term) messages are stored but never
+`app/telegram_notify.py` sends each user the same entry/stop/take-profit
+alert. `lange_termijn` (long-term) messages are stored but never
 alerted on directly; a later day-trading signal for the same coin is
 compared against the most recent long-term direction
 (`signal_processor._build_context_note`).
@@ -79,14 +79,17 @@ a new alert path, or you'll spam.
 `source_levels` are global — every user sees the same signals, computed
 once. `journal_entries` is per-user (status, own entry/exit price, notes,
 result) and is the only place a user's own decisions live; `users` holds
-`portfolio_eur`, `risk_percent`, `telegram_chat_id` per account.
-`portfolio_eur` is not static — `repo.close_journal_trade` adds/subtracts
-`result_eur` on every real (non-practice) close, so position sizing always
-compounds off current equity, not the original deposit. A practice trade
-(`is_practice=1`, created from the dashboard, not from a Discord signal)
-never touches portfolio or winrate stats — every query that touches those
-filters it out explicitly; a new query that forgets to will quietly
-pollute a user's real numbers.
+`telegram_chat_id` per account. `portfolio_eur`/`risk_percent` remain in
+the schema but are no longer read or written by active code — position
+sizing and portfolio tracking were removed, see the
+`docs/superpowers/plans/2026-09-30-positiegrootte-weghalen.md` spec.
+`repo.close_journal_trade` only computes and stores `result_pct` (the
+plain, direction-aware price move between entry and exit) on close; it no
+longer touches any portfolio balance. A practice trade (`is_practice=1`,
+created from the dashboard, not from a Discord signal) never counts
+toward winrate stats — every query that touches those filters it out
+explicitly; a new query that forgets to will quietly pollute a user's
+real numbers.
 
 **Database access is centralized in `app/repo.py`** — the bot, the
 pipeline, and the web dashboard all go through it, never raw SQL
@@ -120,5 +123,6 @@ comments. Confidence/signal UI text distinguishes what was *measured* (the
 percentages) — don't blur that line when adding new signal metadata.
 Decorative motion (the ambient background, heartbeat pulse, etc. in
 `base.html`/`style.css`) is always tied to a real, live value (time since
-last message, this week's result, open risk %) and always respects
-`prefers-reduced-motion` — never add animation that's purely decorative.
+last message, this week's result, volatility of open positions) and
+always respects `prefers-reduced-motion` — never add animation that's
+purely decorative.

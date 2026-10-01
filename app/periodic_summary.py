@@ -75,7 +75,7 @@ async def run(period: str) -> None:
         try:
             repo.create_notification(
                 user["id"], "period_summary", f"Samenvatting {label}",
-                _period_summary_text(stats, auto_scan_stats), "/dashboard",
+                _period_summary_text(stats, auto_scan_stats), "/account",
             )
         except Exception:
             logger.exception("Periodieke samenvatting voor %s is mislukt", user["username"])

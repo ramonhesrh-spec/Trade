@@ -15,8 +15,8 @@ meldingenlijst op `/meldingen`.
 
 Meerdere mensen kunnen hetzelfde systeem gebruiken. Iedereen ziet dezelfde
 signalen (dezelfde Discord berichten, dezelfde technische toetsing), maar
-elke gebruiker heeft zijn eigen login, eigen portfolio, eigen risico
-instelling, eigen pushmeldingen met zijn eigen risicobedrag, en zijn
+elke gebruiker heeft zijn eigen login, eigen instellingen (stille uren,
+bevestigingsdrempel, verplichte factoren), eigen pushmeldingen, en zijn
 eigen logboek: status, entry, exit en notities. De ene gebruiker kan het
 logboek van de andere niet zien of wijzigen.
 
@@ -33,12 +33,12 @@ blijft voor elke gebruiker apart.
 - `app/anthropic_interpret.py` — interpretatie van tekst en afbeeldingen
 - `app/coinlist.py` — dynamische coinlijst
 - `app/exchange.py`, `app/indicators.py` — live koersdata en indicatoren (4h)
-- `app/risk.py` — stop loss, take profit, risicobedrag op basis van ATR
+- `app/risk.py` — stop loss, take profit op basis van ATR
 - `app/signal_processor.py` — verbindt alle stappen, met een paar
   herhaalpogingen bij een tijdelijke Anthropic storing, herkent dubbele
   berichten, en zet een nieuw signaal af tegen recente lange termijn context
 - `app/push_notify.py` — Web Push meldingen (eigen VAPID-sleutelpaar, geen
-  externe pushdienst), inclusief positiegrootte
+  externe pushdienst)
 - `app/repo.py`, `app/db.py`, `app/schema.sql` — sqlite logging
 - `app/backup.py` — dagelijkse back-up, optioneel ook naar een externe locatie
 - `app/heartbeat.py` — dagelijks levensteken via pushmelding
@@ -290,9 +290,9 @@ Draait elke 20 minuten (op minuten 07/27/47, niet op het `*:0/15`-grid van
 dynamische coinlijst op een day-trading kans, zonder dat er
 eerst een Discord bericht doorgestuurd hoeft te worden. Richting komt uit
 de EMA9/EMA21 trend, de rest van de toetsing (technische factoren, stop
-loss, take profit, positiegrootte, pushmelding per gebruiker) is
-exact dezelfde `process_day_trading_signal`-logica als een normaal, door
-een gebruiker doorgestuurd signaal.
+loss, take profit, pushmelding per gebruiker) is exact dezelfde
+`process_day_trading_signal`-logica als een normaal, door een gebruiker
+doorgestuurd signaal.
 
 Een systeembrede noodrem staat op het dashboard (Instellingen): staat die
 uit, doet de scan niets die cyclus. Er is geen noodrem per gebruiker, dit
@@ -390,17 +390,16 @@ inloggen tijdelijk geblokkeerd.
 
 ### Een tweede gebruiker toevoegen
 
-Wil een vriend hetzelfde systeem gebruiken, met zijn eigen login, eigen
-portfolio en eigen pushmeldingen, maar op basis van dezelfde
-signalen die jij al binnenkrijgt via Discord? Hij gaat zelf naar
+Wil een vriend hetzelfde systeem gebruiken, met zijn eigen login en eigen
+pushmeldingen, maar op basis van dezelfde signalen die jij al
+binnenkrijgt via Discord? Hij gaat zelf naar
 `https://jouw-domein.nl/registreer` en maakt daar zijn eigen account aan
 met een gebruikersnaam en wachtwoord. Jij hoeft niets te doen.
 
-Na het inloggen zet hij zelf, via de portfolio kaart op zijn dashboard,
-zijn eigen portfolio in euro's en risicopercentage in, en klikt op
-"Meldingen aanzetten" om zijn eigen pushmeldingen aan te zetten (zijn
-browser vraagt eenmalig om toestemming, geen bot of chat ID nodig). Hij
-ziet dezelfde signalen als jij, maar zijn eigen risicobedrag, zijn eigen
+Na het inloggen klikt hij zelf, via de instellingenkaart op zijn
+accountpagina, op "Meldingen aanzetten" om zijn eigen pushmeldingen aan
+te zetten (zijn browser vraagt eenmalig om toestemming, geen bot of chat
+ID nodig). Hij ziet dezelfde signalen als jij, maar zijn eigen
 statusknoppen, en zijn eigen winrate en resultaat. Wat jij invult bij een
 melding (genomen, entry, exit, notitie) is niet zichtbaar voor hem, en
 andersom.
@@ -449,13 +448,8 @@ trade blijft een handmatige beslissing.
   ✗-regel op de signaalkaart zodra een van de drie een melding blokkeert.
 - Een melding kan naast de entry op de live prijs ook "Mogelijk betere
   entry" tonen: een steun/weerstand-zone tussen de live prijs en de stop
-  loss. Puur informatief, telt nergens mee in de toetsing, positiegrootte
-  of trackrecord.
-- Elke melding rekent ook een voorgestelde positiegrootte in coin eenheden
-  uit: risicobedrag gedeeld door de afstand tussen entry en stop loss. Dat
-  is de hoeveelheid die bij dat risicobedrag hoort, niet alleen het bedrag
-  zelf. Te zien op het dashboard, de pushmelding zelf blijft kort (coin,
-  richting, prijs, stop loss, take profit).
+  loss. Puur informatief, telt nergens mee in de toetsing of het
+  trackrecord.
 - Mislukt de Anthropic interpretatie door een tijdelijke fout (timeout,
   overbelasting), dan probeert het systeem het tot drie keer, met een
   oplopende pauze ertussen. Lukt het dan nog niet, dan wordt het bericht
@@ -479,9 +473,9 @@ trade blijft een handmatige beslissing.
 - Winrate alleen zegt weinig over hoe goed het systeem werkt, een hoge
   winrate met kleine winsten en een paar grote verliezen kan alsnog
   verlieslatend zijn. Het dashboard toont daarom ook het gemiddelde
-  resultaat in euro's en procenten per vertrouwen-niveau, en een
-  trackrecord per coin, zodat je kan zien welke coin het goed doet met dit
-  systeem en welke niet.
+  resultaat in procenten per vertrouwen-niveau, en een trackrecord per
+  coin, zodat je kan zien welke coin het goed doet met dit systeem en
+  welke niet.
 
 ## Later uitbreidingen (bewust niet in deze versie)
 
