@@ -401,6 +401,14 @@ async def check_pending_signals() -> None:
                     logger.exception("Kon geen candles ophalen voor sniper-check op %s, sla over", coin)
                     coin_sniper[cache_key] = None
             sniper_hit = coin_sniper[cache_key]
+            # Zelfde check als signal_processor.py/market_scanner.py: een
+            # sniper-prijs voorbij de stop loss van dit signaal is geen
+            # bruikbare trigger meer (zie indicators.sniper_beyond_stop).
+            if (
+                sniper_hit is not None and entry["stop_loss"] is not None
+                and indicators.sniper_beyond_stop(entry["direction"], sniper_hit[0], entry["stop_loss"])
+            ):
+                sniper_hit = None
 
         signal_age = datetime.now(timezone.utc) - datetime.fromisoformat(entry["signal_created_at"])
         at_signal_level = (

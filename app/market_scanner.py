@@ -160,6 +160,10 @@ async def _find_breakout_retest_candidate(coin: str, direction: str, df, ind) ->
 
         sniper = indicators.find_sniper_entry_price(direction, df)
         sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
+        if sniper_entry_price is not None and indicators.sniper_beyond_stop(
+            direction, sniper_entry_price, stop_take.stop_loss,
+        ):
+            sniper_entry_price, sniper_reason = None, None
 
         signal_data = {
             "message_id": None, "coin": coin, "direction": direction,
@@ -320,6 +324,10 @@ async def _find_trendline_retest_candidate(coin: str, direction: str, df, ind) -
 
         sniper = indicators.find_sniper_entry_price(direction, df)
         sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
+        if sniper_entry_price is not None and indicators.sniper_beyond_stop(
+            direction, sniper_entry_price, stop_take.stop_loss,
+        ):
+            sniper_entry_price, sniper_reason = None, None
 
         signal_data = {
             "message_id": None, "coin": coin, "direction": direction,
@@ -567,6 +575,10 @@ async def _find_chart_pattern_candidate(
         # "Retest: ..."-regel op de kaart. None zolang er nog geen retest is.
         sniper = indicators.find_sniper_entry_price(match.direction, df)
         sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
+        if sniper_entry_price is not None and indicators.sniper_beyond_stop(
+            match.direction, sniper_entry_price, stop_loss,
+        ):
+            sniper_entry_price, sniper_reason = None, None
 
         signal_data = {
             "message_id": None, "coin": coin, "direction": match.direction,
@@ -1032,6 +1044,15 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
             direction,
         )
         return None
+
+    # De entry_worse_than_sniper-poort hierboven toetst alleen entry_price
+    # tegen de sniper-prijs, niet de sniper-prijs tegen de stop — die twee
+    # kunnen nog steeds los van elkaar liggen (zie
+    # indicators.sniper_beyond_stop). Puur voor de weergave: de melding zelf
+    # blijft ongewijzigd, alleen een inconsistente sniper-regel op de kaart
+    # wordt onderdrukt.
+    if sniper_entry_price is not None and indicators.sniper_beyond_stop(direction, sniper_entry_price, stop_loss):
+        sniper_entry_price, sniper_reason = None, None
 
     # Stop en doel liggen vast sinds de setup bouwde, de live prijs niet:
     # een afwijzing die al voorbij het doel sloot, of een prijs die sinds de

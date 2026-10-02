@@ -1669,6 +1669,7 @@ def list_pending_entries_with_price() -> list[dict]:
                       s.suggested_entry_low AS suggested_entry_low,
                       s.suggested_entry_high AS suggested_entry_high,
                       s.sniper_entry_price AS sniper_entry_price,
+                      s.stop_loss AS stop_loss,
                       s.auto_outcome AS auto_outcome,
                       s.trade_type AS trade_type, s.pattern_name AS pattern_name,
                       s.pass_pct AS pass_pct, s.hard_gates_ok AS hard_gates_ok,

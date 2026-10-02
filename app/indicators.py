@@ -1039,6 +1039,23 @@ def find_sniper_entry_price(direction: str, df: pd.DataFrame) -> Optional[tuple[
     return (hit.price, reason)
 
 
+def sniper_beyond_stop(direction: str, sniper_price: float, stop_loss: float) -> bool:
+    """True als de sniper-prijs al voorbij de stop loss ligt. find_sniper_entry_price
+    zoekt zijn eigen stop-hunt-wick onafhankelijk van de zone/swing die de
+    stop loss bepaalt (andere bron, soms een ouder punt in hetzelfde
+    venster) — die twee kunnen dus botsen. Stap je op de sniper-prijs in
+    terwijl die al voorbij de stop ligt, dan is de trade bij instappen al
+    ongeldig: je stop ligt dan niet meer tussen entry en risico in, maar
+    aan de verkeerde kant. Bij long moet de sniper-prijs boven de stop
+    blijven, bij short eronder — precies zoals elke andere entry-suggestie
+    in dit systeem al begrensd wordt door de stop (zie bv.
+    signal_processor.process_day_trading_signal's suggested_entry_low/high)."""
+    direction = direction.lower()
+    if direction == "long":
+        return sniper_price <= stop_loss
+    return sniper_price >= stop_loss
+
+
 # Hoe ver de prijs nog voorbij een doorbroken zone mag zitten om "nu aan
 # het terugtesten" te tellen (in ATR): zelfde soort ATR-genormaliseerde
 # marge als BTC_FLAT_EMA_GAP_ATR_MULTIPLE.

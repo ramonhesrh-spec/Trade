@@ -872,6 +872,13 @@ async def process_day_trading_signal(
 
     sniper = indicators.find_sniper_entry_price(interp.direction, df)
     sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
+    # Een sniper-prijs voorbij de stop loss is geen bruikbare entry-suggestie
+    # meer (zie indicators.sniper_beyond_stop): instappen daar zou de trade
+    # al ongeldig maken. Telt verderop hetzelfde als "geen sniper gevonden".
+    if sniper_entry_price is not None and indicators.sniper_beyond_stop(
+        interp.direction, sniper_entry_price, stop_take.stop_loss,
+    ):
+        sniper_entry_price, sniper_reason = None, None
 
     # Harde eis: alleen melden bij een duidelijke sweep/stop-hunt-entry, niet
     # bij de kale live prijs. Zonder dit vuurde elk dagtrading-signaal op
