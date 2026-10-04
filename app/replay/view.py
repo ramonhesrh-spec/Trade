@@ -45,6 +45,8 @@ class ReplayData:
                 .reset_index()
             )
         out = out.tail(limit)
+        # Anders dan op de beurs wordt `since` hier NA tail(limit) toegepast; de
+        # sync-kernen gebruiken het niet.
         if since is not None:
             out = out[out["timestamp"] >= pd.Timestamp(since, unit="ms", tz="UTC")]
         return out.reset_index(drop=True)

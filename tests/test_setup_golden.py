@@ -1,6 +1,10 @@
 """Golden-test: process_day_trading_signal schrijft na de extractie exact
 dezelfde signaalrij weg als ervoor. Opnemen met:
 python3 -m tests.test_setup_golden --record (alleen op ongewijzigde code).
+Faalt de golden op een andere machine alleen door float-ruis? Neem hem dan NOOIT
+opnieuw op op HEAD (dat maakt de bewaking waardeloos), maar op de commit van
+vóór de extractie: 0ed4f0f (voor 797252d), bijvoorbeeld in een `git worktree`
+van die commit; of vergelijk HEAD met een verse opname uit die commit.
 TIMES wijken af van het plan: de geplande tijden gaven nul bevestigde gevallen
 (de golden heeft er nu 2 bevestigd, 18 afgewezen)."""
 import asyncio

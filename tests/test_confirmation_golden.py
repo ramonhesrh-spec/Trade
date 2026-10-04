@@ -1,6 +1,10 @@
 """Golden-test: de factorentoetsing geeft na de refactor exact dezelfde
 uitkomst als ervoor. Opnemen met: python3 -m tests.test_confirmation_golden --record
-(alleen draaien op code die nog NIET is aangepast)."""
+(alleen draaien op code die nog NIET is aangepast).
+Faalt de golden op een andere machine alleen door float-ruis? Neem hem dan NOOIT
+opnieuw op op HEAD (dat maakt de bewaking waardeloos), maar op de commit van
+vóór de refactor: 018eb3d (voor cfeabb0), bijvoorbeeld in een `git worktree`
+van die commit; of vergelijk HEAD met een verse opname uit die commit."""
 import asyncio
 import json
 import sys

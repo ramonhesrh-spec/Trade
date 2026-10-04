@@ -816,7 +816,6 @@ async def process_day_trading_signal(
     nearest_sr_zone_price = evaluation.nearest_sr_zone_price
     suggested_entry_low, suggested_entry_high = evaluation.suggested_entry_low, evaluation.suggested_entry_high
     sniper_entry_price, sniper_reason = evaluation.sniper_entry_price, evaluation.sniper_reason
-    risk_distance = abs(ind.price - stop_take.stop_loss)
     context_note = _build_context_note(interp.coin, interp.direction)
 
     confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"

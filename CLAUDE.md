@@ -28,7 +28,7 @@ python3 main.py                       # Discord bot + Telegram /start listener +
 uvicorn web.main:app --reload         # dashboard at http://127.0.0.1:8000
 ```
 
-There is no pytest suite and no linter config. Verification is done with
+Apart from the small `tests/` folder described below, verification is done with
 throwaway scripts run against a scratch database, e.g.:
 
 ```bash
@@ -42,11 +42,12 @@ turning them on. For UI changes, start `uvicorn` against a scratch DB and
 drive it with Playwright — there's no existing template for this in-repo,
 build the check from scratch each time.
 
-Er is een stdlib-testmap `tests/` (`python3 -m unittest discover -s tests -t . -v`),
-voor het meetraam (`app/replay/`), de gedeelde `setup_eval`-tests
-(`tests/test_setup_eval.py`) en twee golden-tests die de live
-dagtrading-pijplijn bewaken. `app/setup_eval.py` bevat de beslislogica die
-live en het meetraam delen: wijzig die niet zonder de golden-tests te draaien.
+There is still no pytest and no linter, but a small stdlib `unittest` folder
+`tests/` exists (`python3 -m unittest discover -s tests -t . -v`). It covers
+the replay engine (`app/replay/`), the shared `app/setup_eval.py` logic
+(`tests/test_setup_eval.py`) and two golden tests that guard the live
+day-trading pipeline. `app/setup_eval.py` holds the decision logic that live
+and the replay share: don't change it without running the golden tests.
 
 ## Architecture
 
