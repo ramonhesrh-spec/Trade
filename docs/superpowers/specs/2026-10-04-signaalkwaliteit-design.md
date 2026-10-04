@@ -69,6 +69,10 @@ Nieuwe module (werknaam `app/replay.py`) plus een runner in `scripts/`.
   nagebootst op de gesimuleerde uitkomsten. De pre-checks van
   `market_scanner.scan_market` (cooldown, whiplash-rem, maximum meldingen per
   cyclus) zijn niet af te spelen. Het raam laat ze weg en elk rapport zegt dat.
+  Ook niet nagebootst: de regel dat een structureel kandidaat een generiek
+  dagtrading-signaal onderdrukt (tot de patroon- en smc-replay bestaan). Live
+  ververst een open signaal elke cyclus en overschrijft stop, take en
+  bevestiging; het raam bevriest het signaal bij de eerste bevestiging.
 - **Opdeling in plannen.** Het eerste plan (`docs/superpowers/plans/2026-10-04-meetraam.md`)
   bouwt de engine voor het type day_trading. Patroon, swing en smc krijgen elk
   een eigen vervolgplan, zodra de engine de controle tegen de live signalen

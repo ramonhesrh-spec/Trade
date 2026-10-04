@@ -392,7 +392,7 @@ regel weer op `false` te zetten of te verwijderen.
 `scripts/replay_report.py` speelt de dagtrading-beslislogica af over historische
 Binance-candles en toont winrate en verwachting in R (na kosten) per coin,
 kwartaal en train/test. `scripts/replay_compare_live.py` controleert het raam
-tegen de echte signalen uit de database. Candles staan in `data/candles/`
+tegen de echte signalen uit de database (op de VPS met `DATABASE_PATH=/opt/crypto-alerts/data/trading.db /opt/crypto-alerts/.venv/bin/python3 scripts/replay_compare_live.py --since 2026-10-01 --until 2026-10-05`; `--until` is exclusief en alleen `day_trading` telt). Candles staan in `data/candles/`
 (niet in git). Zie `docs/superpowers/specs/2026-10-04-signaalkwaliteit-design.md`.
 Tests: `python3 -m unittest discover -s tests -t . -v`.
 
