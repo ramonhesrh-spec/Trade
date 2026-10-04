@@ -604,7 +604,19 @@ def _build_context_note(coin: str, direction: str) -> str:
 
 async def compute_advanced_extra_factors(
     coin: str, direction: str, df, entry_price: float, atr: float, zones: list[indicators.SRZone],
-    daily_df=None, daily_ind: indicators.Indicators | None = None,
+    daily_df=None, daily_ind: indicators.Indicators | None = None, data=None,
+) -> list[tuple[str, bool, str]]:
+    """Async wrapper rond advanced_extra_factors_sync (zie daar voor de
+    volledige uitleg); data=None betekent de live exchange."""
+    return await asyncio.to_thread(
+        advanced_extra_factors_sync, coin, direction, df, entry_price, atr, zones,
+        daily_df, daily_ind, data or exchange,
+    )
+
+
+def advanced_extra_factors_sync(
+    coin: str, direction: str, df, entry_price: float, atr: float, zones: list[indicators.SRZone],
+    daily_df=None, daily_ind: indicators.Indicators | None = None, data=None,
 ) -> list[tuple[str, bool, str]]:
     """Berekent de losse checks voor de uitgebreide factorenset (BTC-trend,
     1u bevestiging, divergentie, liquiditeit). Elke check faalt individueel
@@ -619,11 +631,12 @@ async def compute_advanced_extra_factors(
     Premium/discount (dag), Liquidity sweep (dag)) die hem ook nodig
     hebben. Ontbreken ze (bv. de eerdere fetch faalde), dan valt deze
     functie terug op zijn eigen fetch hieronder."""
+    data = data or exchange
     factors: list[tuple[str, bool, str]] = []
 
     if coin.upper() != "BTC":
         try:
-            btc_df = await asyncio.to_thread(exchange.fetch_ohlcv, "BTC")
+            btc_df = data.fetch_ohlcv("BTC")
             btc_ind = indicators.compute_indicators(btc_df)
             # BTC-trend is nu een harde eis in confirms_direction (zie
             # daar). Bij een vlakke BTC is er geen "tegen de trade in"
@@ -640,7 +653,7 @@ async def compute_advanced_extra_factors(
 
     try:
         if daily_df is None or daily_ind is None:
-            daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
+            daily_df = data.fetch_ohlcv(coin, "1d")
             daily_ind = indicators.compute_indicators(daily_df)
         # Daily-trend zelf wordt niet meer hier berekend: die is nu een
         # altijd-actieve harde eis in confirms_direction, opgehaald in
@@ -661,7 +674,7 @@ async def compute_advanced_extra_factors(
         factors.append(("Liquidity sweep (dag)", False, "kon niet opgehaald worden, telt als niet bevestigd"))
 
     try:
-        df_1h = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1h")
+        df_1h = data.fetch_ohlcv(coin, "1h")
         ind_1h = indicators.compute_indicators(df_1h)
         factors.append(indicators.check_1h_trend(direction, ind_1h))
         factors.append(indicators.check_1h_rsi(direction, ind_1h))
@@ -684,7 +697,7 @@ async def compute_advanced_extra_factors(
         factors.append(("Candlepatroon", False, "kon niet berekend worden, telt als niet bevestigd"))
 
     try:
-        quote_volume = await asyncio.to_thread(exchange.fetch_24h_quote_volume, coin)
+        quote_volume = data.fetch_24h_quote_volume(coin)
         factors.append(indicators.check_liquidity(quote_volume))
     except Exception:
         logger.exception("Liquiditeitscheck voor %s kon niet berekend worden", coin)
@@ -714,7 +727,18 @@ async def compute_advanced_extra_factors(
 
 async def compute_full_confirmation(
     coin: str, direction: str, df, ind: indicators.Indicators, zones: list[indicators.SRZone],
-    daily_trend_hard_gate: bool = True,
+    daily_trend_hard_gate: bool = True, data=None,
+) -> tuple[bool, str, float, bool]:
+    """Async wrapper rond full_confirmation_sync (zie daar voor de
+    volledige uitleg); data=None betekent de live exchange."""
+    return await asyncio.to_thread(
+        full_confirmation_sync, coin, direction, df, ind, zones, daily_trend_hard_gate, data or exchange,
+    )
+
+
+def full_confirmation_sync(
+    coin: str, direction: str, df, ind: indicators.Indicators, zones: list[indicators.SRZone],
+    daily_trend_hard_gate: bool = True, data=None,
 ) -> tuple[bool, str, float, bool]:
     """Volledige factor-toetsing: dagtrend (met vlakke-markt-uitzondering)
     plus, bij config.ENABLE_ADVANCED_FACTORS, de uitgebreide factoren, dan
@@ -728,11 +752,12 @@ async def compute_full_confirmation(
     voor een omkeerpatroon) zet Daily-trend om naar puur informatief in
     plaats van blokkerend, zie indicators.confirms_direction's docstring
     voor de volledige redenering."""
+    data = data or exchange
     daily_trend_factor = None
     daily_df = None
     daily_ind = None
     try:
-        daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
+        daily_df = data.fetch_ohlcv(coin, "1d")
         daily_ind = indicators.compute_indicators(daily_df)
         # Net als BTC-trend (indicators.btc_is_flat): een coin zonder
         # duidelijke eigen dagtrend mag niet hard geblokkeerd worden, dat
@@ -747,9 +772,8 @@ async def compute_full_confirmation(
 
     extra_factors = None
     if config.ENABLE_ADVANCED_FACTORS:
-        extra_factors = await compute_advanced_extra_factors(
-            coin, direction, df, ind.price, ind.atr, zones,
-            daily_df=daily_df, daily_ind=daily_ind,
+        extra_factors = advanced_extra_factors_sync(
+            coin, direction, df, ind.price, ind.atr, zones, daily_df, daily_ind, data,
         )
 
     return indicators.confirms_direction(
