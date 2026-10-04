@@ -109,3 +109,17 @@ def format_smc_report(signals: list[SmcSignal], setups: list[dict], events: list
     for note in notes:
         out.append(f"\nBeperking: {note}")
     return "\n".join(out)
+
+
+def first_step(start: pd.Timestamp, step_minutes: int, offset_minutes: int) -> pd.Timestamp:
+    """Eerste scanmoment op of na `start`, met minuten = offset (mod stap). Live scant
+    SMC op een kwartiersgrens niet, dus de stappen mogen er geen raken (zie replay_smc)."""
+    if step_minutes < 1 or 60 % step_minutes:
+        raise ValueError(f"--step-minutes moet een deler van 60 zijn (kreeg {step_minutes}).")
+    t = start.ceil("min")
+    while t.minute % step_minutes != offset_minutes % step_minutes:
+        t += pd.Timedelta(minutes=1)
+    if any((t + pd.Timedelta(minutes=step_minutes * i)).minute % 15 == 0 for i in range(60 // step_minutes)):
+        raise ValueError(f"Stappen van {step_minutes} minuten vanaf offset {offset_minutes} raken een kwartiersgrens; "
+                         "kies een andere --offset-minutes (bijvoorbeeld 3).")
+    return t

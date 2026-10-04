@@ -68,5 +68,17 @@ class FormatTest(unittest.TestCase):
             self.assertIn(needle, text)
 
 
+class FirstStepTest(unittest.TestCase):
+    def test_aligns_up_to_offset(self):
+        t = smc_report.first_step(pd.Timestamp("2026-01-01 10:00", tz="UTC"), 5, 3)
+        self.assertEqual(t, pd.Timestamp("2026-01-01 10:03", tz="UTC"))
+        t = smc_report.first_step(pd.Timestamp("2026-01-01 10:04", tz="UTC"), 5, 3)
+        self.assertEqual(t, pd.Timestamp("2026-01-01 10:08", tz="UTC"))
+
+    def test_rejects_quarter_hour_offsets(self):
+        with self.assertRaises(ValueError):
+            smc_report.first_step(pd.Timestamp("2026-01-01 10:00", tz="UTC"), 5, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
