@@ -387,6 +387,15 @@ ENABLE_ADVANCED_FACTORS=true
 en herstart `crypto-bot`. Terug naar de basisversie kan altijd door de
 regel weer op `false` te zetten of te verwijderen.
 
+### Meetraam (replay)
+
+`scripts/replay_report.py` speelt de dagtrading-beslislogica af over historische
+Binance-candles en toont winrate en verwachting in R (na kosten) per coin,
+kwartaal en train/test. `scripts/replay_compare_live.py` controleert het raam
+tegen de echte signalen uit de database. Candles staan in `data/candles/`
+(niet in git). Zie `docs/superpowers/specs/2026-10-04-signaalkwaliteit-design.md`.
+Tests: `python3 -m unittest discover -s tests -t . -v`.
+
 ### HTTPS met Let's Encrypt
 
 ```bash

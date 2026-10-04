@@ -42,6 +42,11 @@ turning them on. For UI changes, start `uvicorn` against a scratch DB and
 drive it with Playwright — there's no existing template for this in-repo,
 build the check from scratch each time.
 
+Er is een stdlib-testmap `tests/` (`python3 -m unittest discover -s tests -t . -v`),
+alleen voor het meetraam (`app/replay/`) en twee golden-tests die de live
+dagtrading-pijplijn bewaken. `app/setup_eval.py` bevat de beslislogica die
+live en het meetraam delen: wijzig die niet zonder de golden-tests te draaien.
+
 ## Architecture
 
 **Two independent long-running processes, one shared SQLite database.**
