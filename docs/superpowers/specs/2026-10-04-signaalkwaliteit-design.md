@@ -65,9 +65,15 @@ Nieuwe module (werknaam `app/replay.py`) plus een runner in `scripts/`.
   verwachting in R, langste reeks verliezen.
 - **Train en test.** Afstellen op de eerste 70% van de data, toetsen op de
   laatste 30%.
-- **Beperking.** Eisen die databasegeschiedenis vragen (zone-cooldown via
-  `sr_zone_failures`, whiplash-rem in de marktscan) zijn niet af te spelen.
-  Het raam laat ze weg en elk rapport zegt dat.
+- **Beperking.** De zone-cooldown (`sr_zone_failures`) wordt in het raam
+  nagebootst op de gesimuleerde uitkomsten. De pre-checks van
+  `market_scanner.scan_market` (cooldown, whiplash-rem, maximum meldingen per
+  cyclus) zijn niet af te spelen. Het raam laat ze weg en elk rapport zegt dat.
+- **Opdeling in plannen.** Het eerste plan (`docs/superpowers/plans/2026-10-04-meetraam.md`)
+  bouwt de engine voor het type day_trading. Patroon, swing en smc krijgen elk
+  een eigen vervolgplan, zodra de engine de controle tegen de live signalen
+  doorstaat. Deel 2 (verbeteringen testen) en deel 3 (nieuwe coins) volgen als
+  eigen plannen op de resultaten van het raam.
 
 ### Controle van het raam
 
