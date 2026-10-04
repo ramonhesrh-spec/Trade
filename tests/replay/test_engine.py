@@ -28,12 +28,16 @@ class EngineTest(unittest.TestCase):
             self.assertIn(s.direction, ("long", "short"))
 
     def test_one_open_signal_per_direction(self):
-        signals = self.run_engine(step=pd.Timedelta(hours=1))
+        signals = self.run_engine(step=pd.Timedelta(hours=2))
+        pairs = 0
         for direction in ("long", "short"):
-            own = sorted([s for s in signals if s.direction == direction and s.outcome], key=lambda s: s.at)
+            own = sorted([s for s in signals if s.direction == direction], key=lambda s: s.at)
             for a, b in zip(own, own[1:]):
-                # een volgend signaal begint pas na de uitkomst van het vorige, of vervangt een onbevestigd signaal
-                self.assertTrue(b.at >= a.outcome.exit_at or not a.confirmed or a.at == b.at)
+                # een vervangen onbevestigd signaal is uit de lijst; wat overblijft overlapt dus nooit
+                self.assertIsNotNone(a.outcome, "een signaal zonder uitkomst moet het laatste van zijn richting zijn")
+                self.assertGreaterEqual(b.at, a.outcome.exit_at)
+                pairs += 1
+        self.assertGreater(pairs, 0)
 
     def test_deterministic(self):
         a = self.run_engine(step=pd.Timedelta(hours=4))

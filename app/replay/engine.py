@@ -50,7 +50,10 @@ def replay_day_trading(
     fee_pct: float = 0.1, slippage_pct: float = 0.05,
 ) -> list[ReplaySignal]:
     signals: list[ReplaySignal] = []
-    failures: list[tuple[str, float, pd.Timestamp]] = []
+    # Per signaal (op identiteit) de stop-zone die het veroorzaakte: wordt een
+    # signaal vervangen, dan is dat live een update van dezelfde rij en
+    # bestaat zijn mislukking niet meer.
+    failures: dict[int, tuple[str, float, pd.Timestamp]] = {}
     open_signal: dict[str, ReplaySignal] = {}
     coin_candles = base[coin.upper()]
 
@@ -69,7 +72,7 @@ def replay_day_trading(
                 confirmation = full_confirmation_sync(coin, direction, df, ind, zones, True, data)
                 evaluation = setup_eval.evaluate_day_trading_setup(
                     direction, df, ind, zones, confirmation,
-                    lambda zone_price, d=direction, a=ind.atr, now=t: _zone_recently_failed(failures, d, zone_price, a, now),
+                    lambda zone_price, d=direction, a=ind.atr, now=t: _zone_recently_failed(failures.values(), d, zone_price, a, now),
                     [],
                 )
                 if existing is None or evaluation.confirmed:
@@ -82,9 +85,10 @@ def replay_day_trading(
                     )
                     if (signal.outcome is not None and signal.outcome.result == "stop_loss"
                             and evaluation.nearest_sr_zone_price is not None):
-                        failures.append((direction, evaluation.nearest_sr_zone_price, signal.outcome.exit_at))
+                        failures[id(signal)] = (direction, evaluation.nearest_sr_zone_price, signal.outcome.exit_at)
                     if existing is not None:
-                        signals.remove(existing)
+                        failures.pop(id(existing), None)
+                        signals[:] = [s for s in signals if s is not existing]
                     signals.append(signal)
                     open_signal[direction] = signal
         t += step
