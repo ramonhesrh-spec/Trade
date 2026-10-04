@@ -797,8 +797,9 @@ async def process_day_trading_signal(
 
     # Geen bericht (autonoom marktscan-signaal, zie app/market_scanner.py)
     # betekent geen bron-niveaus om mee te wegen — die komen altijd uit een
-    # gedeeld screenshot. De SR-zone-niveaus blijven wel meetellen, die
-    # komen niet uit een bericht.
+    # gedeeld screenshot. De SR-zone-niveaus (zone_levels, in
+    # setup_eval.evaluate_day_trading_setup) blijven wel gewoon meetellen,
+    # die komen niet uit een bericht.
     message_levels = (
         [lvl["price_level"] for lvl in repo.list_source_levels_for_message(message_id, interp.coin)]
         if message_id is not None else []

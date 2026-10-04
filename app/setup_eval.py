@@ -57,6 +57,12 @@ def evaluate_day_trading_setup(
     confirmed, reason, pass_pct, hard_gates_ok = confirmation
     swing_low, swing_high = indicators.swing_levels(df)
 
+    # Dezelfde edges/kant-bepaling-logica als indicators.check_sr_zone gebruikt
+    # intern, hier apart herhaald in plaats van check_sr_zone's eigen
+    # (name, ok, detail)-vorm uit te breiden — dat zou die vorm inconsistent
+    # maken met elke andere factor-functie, en de twee aanroepers van
+    # check_sr_zone (signal_processor.py, scripts/backtest_factors.py) zouden dan
+    # allebei aangepast moeten worden voor een waarde die alleen hier nodig is.
     edges = [edge for zone in zones for edge in (zone.price_low, zone.price_high)]
     if direction.lower() == "long":
         zone_candidates = [
@@ -94,10 +100,18 @@ def evaluate_day_trading_setup(
             direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high,
         )
 
-    # Geclampt op ind.price: de favorable-filters toetsen alleen de rand die
-    # het VERST van de live prijs af ligt, dus een zone die de prijs zelf
-    # overlapt sluiten ze niet uit. Zonder de clamp zou de getoonde range
-    # deels een "betere entry" adverteren die slechter is dan de huidige prijs.
+    # Een bruikbare entry-zone ligt tussen de huidige prijs en de stop
+    # loss (in het voordeel van de trade: dichter bij de stop dan de
+    # huidige prijs bij long is een BETERE, niet slechtere, entry — bij
+    # short andersom), en is dus nooit voorbij de stop loss zelf. PUUR
+    # informatief (product owner): telt nergens mee in sizing/journaal/
+    # trackrecord, de live prijs (ind.price) blijft de echte entry overal
+    # elders in de aanroeper.
+    # Geclampt op ind.price: de favorable-filters hierboven toetsen alleen
+    # de rand die het VERST van de live prijs af ligt, dus een zone die de
+    # prijs zelf overlapt sluiten ze niet uit. Zonder de clamp zou de
+    # getoonde range dan deels een "betere entry" adverteren die feitelijk
+    # slechter is dan de huidige prijs.
     if direction.lower() == "long":
         favorable = [z for z in zones if stop_take.stop_loss < z.price_low < ind.price]
         best_zone = max(favorable, key=lambda z: z.price_high) if favorable else None
@@ -112,16 +126,26 @@ def evaluate_day_trading_setup(
     sniper = indicators.find_sniper_entry_price(direction, df)
     sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
     # Een sniper-prijs voorbij de stop loss is geen bruikbare entry-suggestie
-    # meer (zie indicators.sniper_beyond_stop): telt als "geen sniper gevonden".
+    # meer (zie indicators.sniper_beyond_stop): instappen daar zou de trade
+    # al ongeldig maken. Telt verderop hetzelfde als "geen sniper gevonden".
     if sniper_entry_price is not None and indicators.sniper_beyond_stop(
         direction, sniper_entry_price, stop_take.stop_loss,
     ):
         sniper_entry_price, sniper_reason = None, None
 
     # Harde eis: alleen melden bij een duidelijke sweep/stop-hunt-entry, niet
-    # bij de kale live prijs. Bij long is een hogere prijs dan de sniper een
-    # slechtere entry, bij short een lagere prijs. Geen sniper gevonden telt
-    # ook als te late/onduidelijke entry.
+    # bij de kale live prijs. Zonder dit vuurde elk dagtrading-signaal op
+    # ind.price, ongeacht of de prijs net een stop-hunt had of al een stuk
+    # verder was gelopen dan een scherpe entry nog zou toestaan — bij een
+    # grote positie (zie gesprek) is dat verschil geen rond-getal-ruis meer.
+    # Zelfde vergelijking als market_scanner._complete_smc_setup's
+    # entry_worse_than_sniper: bij long is een hogere prijs dan de sniper
+    # een slechtere entry (je koopt verder boven de swept low), bij short
+    # een lagere prijs een slechtere entry (je verkoopt verder onder de
+    # swept high). Geen sniper gevonden telt ook als een te late/onduidelijke
+    # entry, niet als "geen informatie dus toegestaan". Wie geen sniper-
+    # entry kreeg, krijgt via level_check.py's proactieve sniper-trigger
+    # alsnog een melding zodra er wél een duidelijke stop-hunt verschijnt.
     entry_worse_than_sniper = (
         sniper_entry_price is None
         or (direction.lower() == "short" and ind.price < sniper_entry_price)
