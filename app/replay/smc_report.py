@@ -123,3 +123,17 @@ def first_step(start: pd.Timestamp, step_minutes: int, offset_minutes: int) -> p
         raise ValueError(f"Stappen van {step_minutes} minuten vanaf offset {offset_minutes} raken een kwartiersgrens; "
                          "kies een andere --offset-minutes (bijvoorbeeld 3).")
     return t
+
+
+SMC_NOTES = (
+    "niet nagebootst: de scan_market-pre-checks voor de 4u-detectoren (die draaien niet in de SMC-snelcheck, dus ze beinvloeden SMC niet; vermeld voor volledigheid).",
+    "niet nagebootst: de structurele tegenstrijdigheid-onderdrukking van scan_market.",
+    "niet nagebootst: pushmeldingen en het journal (dubbele signalen, cooldowns en limieten per gebruiker).",
+    "benaderd: entry is de laatste 1m-close op het scanmoment; uitkomsten zijn op 1m-candles gemeten, stop gaat voor bij gelijke candle; kosten, slippage en maximale looptijd volgens de opties van deze run.",
+    "de laatste 24 uur van de run hebben een afgekapt uitkomstvenster (de run eindigt 1 dag voor de laatste candle, het venster is 48 uur); signalen daar kunnen als verlopen verschijnen.",
+)
+
+
+def cache_covers_until(cache_end: pd.Timestamp, until: pd.Timestamp) -> bool:
+    """cache_end is de OPEN-tijd van de laatste candle; die candle dekt nog een minuut, en --until is exclusief."""
+    return cache_end + pd.Timedelta(minutes=1) >= until

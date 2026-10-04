@@ -405,6 +405,7 @@ op ongeveer 1 uur voor 7 coins met `--workers 2`. Draai het op de VPS met
 na een vijfminutengrens (`--offset-minutes`), zodat ze nooit op een kwartiersgrens
 vallen. Controle tegen de echte SMC-signalen (minstens 70% moet terugkomen; `--until` is exclusief):
 `DATABASE_PATH=/opt/crypto-alerts/data/trading.db /opt/crypto-alerts/.venv/bin/python3 scripts/replay_smc_compare_live.py --since 2026-09-01 --until 2026-10-04T10:00`.
+De trage equivalentietest (`tests/test_smc_equivalence.py`, enkele minuten) sla je over met `SKIP_SLOW_TESTS=1 python3 -m unittest discover -s tests -t .`.
 
 ### HTTPS met Let's Encrypt
 

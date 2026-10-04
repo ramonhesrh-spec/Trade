@@ -60,12 +60,29 @@ class FunnelTest(unittest.TestCase):
 class FormatTest(unittest.TestCase):
     def test_report_mentions_sections(self):
         signals = [sig("2026-01-01 10:00", "take_profit", 1.7, 2.0, 20), sig("2026-06-01 10:00", "stop_loss", -1.3, -1.0, 30)]
-        text = smc_report.format_smc_report(signals, [], [], notes=("pushmeldingen niet nagebootst",))
         events = [SmcFunnelEvent(signals[0].at, "ETH", None, "te_weinig_historie")]
         text = smc_report.format_smc_report(signals, [], events, notes=("pushmeldingen niet nagebootst",))
-        self.assertIn("te weinig 30m-historie", text)
-        for needle in ("Trechter", "Prestaties", "snelheid", "train", "test", "ETH", "pushmeldingen niet nagebootst"):
+        for needle in ("te weinig 30m-historie", "Trechter", "Prestaties", "Tempo: snelheid en kosten", "break-even",
+                       "train", "test", "ETH", "pushmeldingen niet nagebootst"):
             self.assertIn(needle, text)
+
+    def test_no_signals_path(self):
+        text = smc_report.format_smc_report([], [], [], notes=("een beperking",))
+        self.assertIn("Geen signalen", text)
+        self.assertIn("een beperking", text)
+
+    def test_smc_notes_all_appear(self):
+        text = smc_report.format_smc_report([], [], [], notes=smc_report.SMC_NOTES)
+        for needle in ("4u-detectoren", "tegenstrijdigheid-onderdrukking", "pushmeldingen en het journal",
+                       "entry is de laatste 1m-close", "afgekapt uitkomstvenster"):
+            self.assertIn(needle, text)
+
+
+class CacheBoundaryTest(unittest.TestCase):
+    def test_cache_ending_one_minute_before_until_is_fresh(self):
+        until = pd.Timestamp("2026-01-12 10:00", tz="UTC")
+        self.assertTrue(smc_report.cache_covers_until(pd.Timestamp("2026-01-12 09:59", tz="UTC"), until))
+        self.assertFalse(smc_report.cache_covers_until(pd.Timestamp("2026-01-12 09:58", tz="UTC"), until))
 
 
 class FirstStepTest(unittest.TestCase):

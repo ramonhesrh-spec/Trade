@@ -21,14 +21,6 @@ import pandas as pd  # noqa: E402
 from app import config  # noqa: E402
 from app.replay import candles, smc_engine, smc_report  # noqa: E402
 
-NOTES = (
-    "niet nagebootst: pushmeldingen en het journal (dubbele signalen, cooldowns en limieten per gebruiker).",
-    "niet nagebootst: de structurele tegenstrijdigheid-onderdrukking van scan_market.",
-    "benaderd: entry is de laatste 1m-close op het scanmoment; uitkomsten zijn op 1m-candles gemeten, stop gaat voor bij gelijke candle.",
-    "kosten: fee, slippage en maximale looptijd volgens de opties van deze run.",
-)
-
-
 def _run_one(args):
     coin, frame, start, end, step, max_age, fee_pct, slippage_pct = args
     book = smc_engine.SmcBook()
@@ -79,11 +71,11 @@ def main() -> None:
             events += evs
             print(f"{coin} klaar: {len(sigs)} signalen, {len(sets)} setups", flush=True)
 
-    print(smc_report.format_smc_report(signals, setups, events, notes=NOTES), flush=True)
+    print(smc_report.format_smc_report(signals, setups, events, notes=smc_report.SMC_NOTES), flush=True)
 
     out_dir = Path(config.BASE_DIR) / "data" / "replay"
     out_dir.mkdir(parents=True, exist_ok=True)
-    out = out_dir / f"smc_{datetime.now():%Y-%m-%d_%H%M}_{a.months:g}m.csv"
+    out = out_dir / f"smc_{datetime.now():%Y-%m-%d_%H%M%S}_{len(coins)}coins_{a.months:g}m.csv"
     rows = [{
         "coin": s.coin, "direction": s.direction, "at": s.at, "entry": s.entry, "stop": s.stop, "take": s.take,
         "result": s.outcome.result if s.outcome else None,

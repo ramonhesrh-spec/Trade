@@ -83,7 +83,7 @@ def main() -> None:
         print(f"{c}: 1m-candles laden...", flush=True)
         base[c] = candles.ensure_candles(c, 1.1, refresh=a.refresh, timeframe="1m")
     cache_end = min(df["timestamp"].iloc[-1] for df in base.values())
-    if cache_end < end:
+    if not smc_report.cache_covers_until(cache_end, end):
         sys.exit(f"De 1m-candle-cache eindigt op {cache_end:%Y-%m-%d %H:%M}, dat is vóór --until ({end:%Y-%m-%d %H:%M}). "
                  "Draai opnieuw met --refresh (of kies een eerdere --until); er is geen oordeel gegeven.")
 
@@ -111,7 +111,11 @@ def main() -> None:
     for r in live_rows:
         if r not in found:
             print(f"  #{r['id']} {r['coin']} {r['direction']} {r['at']:%Y-%m-%d %H:%M}")
-    print("\nRESULTAAT:", "GESLAAGD" if ratio >= PASS_RATIO else "NIET GESLAAGD, het raam klopt nog niet")
+    if ratio >= PASS_RATIO:
+        print("\nRESULTAAT: GESLAAGD")
+    else:
+        print("\nRESULTAAT: NIET GESLAAGD, het raam klopt nog niet")
+        sys.exit(1)
 
 
 if __name__ == "__main__":
