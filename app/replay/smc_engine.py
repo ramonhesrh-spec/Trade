@@ -103,7 +103,11 @@ def _emit(events, t, coin, direction, kind, detail=""):
 
 
 def _check_cycle(coin, data, book, t, events):
-    """Spiegel van market_scanner._check_smc_setup. Geeft de afgewezen setup (dict) of None."""
+    """Spiegel van market_scanner._check_smc_setup. Geeft de afgewezen setup (dict) of None.
+
+    t mag niet exact op een 15-minutengrens liggen: de afgeleide vormende 15m-candle
+    zou dan de laatste gesloten candle zijn en iloc[:-1] laat een gesloten candle
+    vallen, anders dan live (replay_smc weigert zulke tijdstippen)."""
     df_15m = data.fetch_ohlcv(coin, timeframe="15m")
     closed_15m = df_15m.iloc[:-1]
     last_candle = closed_15m.iloc[-1]
@@ -166,11 +170,17 @@ def replay_smc(
     if book is None:
         book = SmcBook()
     signals: list[SmcSignal] = []
+    if any(x.minute % 15 == 0 and x.second == 0 for x in pd.date_range(start, end, freq=step)):
+        raise ValueError("start/step leveren een tijdstip op een 15-minutengrens op (zie _check_cycle)")
     t = start
     while t <= end:
         data = ReplayData(base, t, base_delta=ONE_MINUTE)
-        if len(data.fetch_ohlcv(coin, timeframe="30m", limit=smc_eval.SMC_ZONE_SEARCH_LOOKBACK_30M + 1)) >= \
+        # Live bestaat dit probleem niet; hier is er aan het begin van de data of bij gaten in de
+        # 1m-basis te weinig 30m-historie voor de structuurscan.
+        if len(data.fetch_ohlcv(coin, timeframe="30m", limit=smc_eval.SMC_ZONE_SEARCH_LOOKBACK_30M + 1)) < \
                 smc_eval.SMC_ZONE_SEARCH_LOOKBACK_30M + 1:
+            _emit(events, t, coin, None, "te_weinig_historie")
+        else:
             setup = _check_cycle(coin, data, book, t, events)
             if setup is not None:
                 df_15m = data.fetch_ohlcv(coin, timeframe="15m")

@@ -168,5 +168,43 @@ class ScriptedEngineTest(unittest.TestCase):
         self.assertEqual([r["id"] for r in book.forming("ETH")], [1])
 
 
+    def test_g_passed_first_setup_does_not_stop_judging_the_next(self):
+        a, b = candidate(), candidate(2000.0, 2002.0, 2100.0, 2110.0)
+        judged = []
+
+        def judge(setup, closed):
+            judged.append(setup["id"])
+            # cyclus 3: eerst de recentst bijgewerkte (2) "passed", dan setup 1 "rejected"
+            return {2: "passed", 3: "rejected"}.get(len(judged), "open")
+
+        signals, kinds, _, book, finds = self.run_engine(
+            [scan_with(a), scan_with(b)], judge, GOOD_SIGNAL, cycles=3)
+        self.assertEqual(judged, [1, 2, 1])
+        self.assertEqual(finds, 2)
+        self.assertEqual(kinds["setup_doorbroken"], 1)
+        first, second = book.all_setups()
+        self.assertEqual((second["ended_because"], first["ended_because"]), ("doorbraak", None))
+        self.assertEqual([(s.setup_id, s.at) for s in signals], [(1, T0 + STEP15 * 2)])
+        self.assertEqual(first["signal_id"], 1)
+
+
+class ReplayGuardsTest(unittest.TestCase):
+    def test_too_little_history_emits_funnel_event_and_does_nothing_else(self):
+        base = {"ETH": make_smc_prone_1m(days=2, seed=3, start_price=100.0)}
+        events = []
+        with mock.patch.object(smc_engine.smc_eval, "find_candidate") as find:
+            signals = smc_engine.replay_smc("ETH", base, base["ETH"], pd.Timestamp("2026-01-01 03:03", tz="UTC"),
+                                            pd.Timestamp("2026-01-01 03:33", tz="UTC"), step=STEP15, events=events)
+        self.assertEqual(signals, [])
+        self.assertEqual([e.kind for e in events], ["te_weinig_historie"] * 3)
+        find.assert_not_called()
+
+    def test_time_on_a_15_minute_boundary_is_refused(self):
+        base = {"ETH": make_smc_prone_1m(days=2, seed=3, start_price=100.0)}
+        with self.assertRaises(ValueError):
+            smc_engine.replay_smc("ETH", base, base["ETH"], pd.Timestamp("2026-01-02 12:00", tz="UTC"),
+                                  pd.Timestamp("2026-01-02 12:30", tz="UTC"), step=STEP15)
+
+
 if __name__ == "__main__":
     unittest.main()
