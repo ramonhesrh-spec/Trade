@@ -396,6 +396,16 @@ tegen de echte signalen uit de database (op de VPS met `DATABASE_PATH=/opt/crypt
 (niet in git). Zie `docs/superpowers/specs/2026-10-04-signaalkwaliteit-design.md`.
 Tests: `python3 -m unittest discover -s tests -t . -v`.
 
+Het SMC-raam draai je met `scripts/replay_smc_report.py --months 12`. Het
+rapport toont de trechter (waarom setups doodlopen), de uitkomst in R, de
+snelheid en de break-even kosten. De eerste keer downloadt hij 1m-candles; reken
+op ongeveer 1 uur voor 7 coins met `--workers 2`. Draai het op de VPS met
+`nohup python3 -u scripts/replay_smc_report.py --months 12 --workers 2 > /tmp/smc12.txt 2>&1 &`
+(de voortgangsregels worden direct geflusht). De scanmomenten staan 3 minuten
+na een vijfminutengrens (`--offset-minutes`), zodat ze nooit op een kwartiersgrens
+vallen. Controle tegen de echte SMC-signalen (minstens 70% moet terugkomen; `--until` is exclusief):
+`DATABASE_PATH=/opt/crypto-alerts/data/trading.db /opt/crypto-alerts/.venv/bin/python3 scripts/replay_smc_compare_live.py --since 2026-09-01 --until 2026-10-04T10:00`.
+
 ### HTTPS met Let's Encrypt
 
 ```bash

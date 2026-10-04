@@ -48,6 +48,7 @@ the replay engine (`app/replay/`), the shared `app/setup_eval.py` logic
 (`tests/test_setup_eval.py`) and two golden tests that guard the live
 day-trading pipeline. `app/setup_eval.py` holds the decision logic that live
 and the replay share: don't change it without running the golden tests.
+Likewise `app/smc_eval.py` holds the SMC decision logic that live and the replay share, guarded by `tests/test_smc_golden.py` and `tests/test_smc_equivalence.py`.
 
 ## Architecture
 
