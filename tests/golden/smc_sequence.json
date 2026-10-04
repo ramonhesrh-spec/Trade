@@ -1,0 +1,96 @@
+{
+ "setups": [
+  {
+   "id": 1,
+   "coin": "ETH",
+   "direction": "short",
+   "zone_low": 2071.66421,
+   "zone_high": 2095.466203,
+   "structure_level": 2178.084643,
+   "sweep_price": 2083.805577,
+   "liquidity_target": 1777.946508,
+   "atr": 144.256938,
+   "alert_sent": 1,
+   "signal_id": null,
+   "created_at": "2026-01-06T15:48:00+00:00",
+   "updated_at": "2026-01-06T16:45:00+00:00",
+   "invalidated_at": "2026-01-07T07:03:00+00:00"
+  },
+  {
+   "id": 2,
+   "coin": "ETH",
+   "direction": "long",
+   "zone_low": 1598.409193,
+   "zone_high": 1600.199575,
+   "structure_level": 1761.132302,
+   "sweep_price": 1611.049284,
+   "liquidity_target": 1809.236285,
+   "atr": 82.124183,
+   "alert_sent": 1,
+   "signal_id": 1,
+   "created_at": "2026-01-07T07:03:00+00:00",
+   "updated_at": "2026-01-07T07:15:00+00:00",
+   "invalidated_at": null
+  },
+  {
+   "id": 3,
+   "coin": "ETH",
+   "direction": "long",
+   "zone_low": 1608.323011,
+   "zone_high": 1631.92504,
+   "structure_level": 1661.218207,
+   "sweep_price": 1611.049284,
+   "liquidity_target": 1854.839321,
+   "atr": 66.656981,
+   "alert_sent": 1,
+   "signal_id": null,
+   "created_at": "2026-01-07T19:03:00+00:00",
+   "updated_at": "2026-01-07T19:45:00+00:00",
+   "invalidated_at": "2026-01-08T11:03:00+00:00"
+  },
+  {
+   "id": 4,
+   "coin": "ETH",
+   "direction": "short",
+   "zone_low": 1005.608026,
+   "zone_high": 1018.134679,
+   "structure_level": 964.008446,
+   "sweep_price": 1088.965224,
+   "liquidity_target": 895.807858,
+   "atr": 67.802978,
+   "alert_sent": 1,
+   "signal_id": null,
+   "created_at": "2026-01-09T06:03:00+00:00",
+   "updated_at": "2026-01-09T06:15:00+00:00",
+   "invalidated_at": "2026-01-09T08:03:00+00:00"
+  },
+  {
+   "id": 5,
+   "coin": "ETH",
+   "direction": "short",
+   "zone_low": 667.819957,
+   "zone_high": 683.584497,
+   "structure_level": 663.159293,
+   "sweep_price": 691.521735,
+   "liquidity_target": 620.302242,
+   "atr": 35.702887,
+   "alert_sent": 1,
+   "signal_id": null,
+   "created_at": "2026-01-11T06:48:00+00:00",
+   "updated_at": "2026-01-11T07:00:00+00:00",
+   "invalidated_at": null
+  }
+ ],
+ "signals": [
+  {
+   "id": 1,
+   "coin": "ETH",
+   "direction": "long",
+   "price": 1609.854625,
+   "stop_loss": 1590.518238,
+   "take_profit": 1788.705239,
+   "created_at": "2026-01-07T12:48:00+00:00",
+   "sniper_entry_price": 1611.049284
+  }
+ ]
+}
