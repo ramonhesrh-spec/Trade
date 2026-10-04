@@ -204,7 +204,7 @@ def _nearest_level(current_price: float, atr: float, levels: list[dict]) -> Opti
 # betere-entry-zone hieronder: een candle moet de zone geraakt hebben EN
 # aan de gunstige kant weer gesloten zijn voordat de melding afgaat, niet
 # alleen "de live prijs staat er toevallig". Zelfde afwijzingslogica als
-# market_scanner._smc_last_candle_state, hier toegepast op de gewone
+# smc_eval.last_candle_state, hier toegepast op de gewone
 # suggested_entry_low/high van een dagtradingsignaal in plaats van een
 # SMC-zone. Vaste terugkijkperiode, geen bijgehouden status: zelfde
 # aanpak als LEVEL_CHECK_CANDLE_TIMEFRAME/LOOKBACK hierboven, voor
@@ -339,7 +339,7 @@ async def check_pending_signals() -> None:
             if candles is not None:
                 # Alleen candles die sloten NA het ontstaan van dit signaal
                 # tellen mee als bevestiging — zelfde reden als
-                # market_scanner._smc_candles_since: een candle die al sloot
+                # smc_eval.candles_since: een candle die al sloot
                 # vóór het signaal (en daarmee de zone) bestond, heeft de
                 # zone nooit 'gezien' en mag hem dus ook niet afwijzen.
                 # Zonder deze filter kan ruis van vóór het signaal de zone

@@ -492,7 +492,7 @@ CREATE TABLE IF NOT EXISTS smc_setups (
     signal_id INTEGER REFERENCES signals(id),
     created_at TEXT NOT NULL,
     -- Sluittijd van de laatste 15m-candle die tegen deze zone beoordeeld
-    -- is, geen wandklok-tijd: zie market_scanner._smc_candles_since.
+    -- is, geen wandklok-tijd: zie smc_eval.candles_since.
     updated_at TEXT NOT NULL,
     -- Gezet i.p.v. de rij te verwijderen zodra de setup vervalt: dezelfde
     -- breuk + sweep wordt vaak later nog eens gezien en mag dan niet als

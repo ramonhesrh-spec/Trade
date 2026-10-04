@@ -1,0 +1,131 @@
+import unittest
+from datetime import datetime, timezone
+from unittest import mock
+
+import pandas as pd
+
+from app import smc_eval
+
+
+def candle(low, high, close, ts="2026-01-01 10:00"):
+    return {"timestamp": pd.Timestamp(ts, tz="UTC"), "open": close, "high": high, "low": low, "close": close, "volume": 1.0}
+
+
+class CandleStateTest(unittest.TestCase):
+    def test_short_rejection_closes_below_zone_after_touch(self):
+        in_zone, rejected, passed = smc_eval.last_candle_state(candle(99, 101, 98.5), 100.0, 102.0, "short")
+        self.assertEqual((in_zone, rejected, passed), (True, True, False))
+
+    def test_short_passed_needs_close_above_zone_plus_buffer(self):
+        _, rejected, passed = smc_eval.last_candle_state(candle(101, 104, 103.5), 100.0, 102.0, "short", atr=2.0)
+        self.assertEqual((rejected, passed), (False, True))
+        _, _, passed_small = smc_eval.last_candle_state(candle(101, 102.4, 102.3), 100.0, 102.0, "short", atr=2.0)
+        self.assertFalse(passed_small)
+
+    def test_long_mirror(self):
+        in_zone, rejected, passed = smc_eval.last_candle_state(candle(99.5, 101, 102.5), 100.0, 102.0, "long")
+        self.assertEqual((in_zone, rejected, passed), (True, True, False))
+
+
+class MarginsTest(unittest.TestCase):
+    def test_atr_margins(self):
+        setup = {"atr": 8.0, "sweep_price": 2820.0, "liquidity_target": 2600.0}
+        self.assertEqual(smc_eval.smc_stop_take_margins(setup), (2.0, 2.0))
+
+    def test_legacy_pct_margins_when_atr_missing(self):
+        setup = {"atr": None, "sweep_price": 2000.0, "liquidity_target": 1000.0}
+        self.assertEqual(smc_eval.smc_stop_take_margins(setup), (2.0, 5.0))
+
+
+class ExpiryTest(unittest.TestCase):
+    def test_expired_after_max_age(self):
+        setup = {"created_at": "2026-01-01T00:00:00+00:00"}
+        self.assertFalse(smc_eval.setup_expired(setup, datetime(2026, 1, 1, 23, 0, tzinfo=timezone.utc)))
+        self.assertTrue(smc_eval.setup_expired(setup, datetime(2026, 1, 2, 1, 0, tzinfo=timezone.utc)))
+
+
+class JudgeTest(unittest.TestCase):
+    def frame(self, rows):
+        ts = pd.date_range("2026-01-01 10:00", periods=len(rows), freq="15min", tz="UTC")
+        return pd.DataFrame({"timestamp": ts, "open": [r[2] for r in rows], "high": [r[1] for r in rows],
+                             "low": [r[0] for r in rows], "close": [r[2] for r in rows], "volume": [1.0] * len(rows)})
+
+    def setup(self, **kw):
+        base = {"zone_low": 100.0, "zone_high": 102.0, "direction": "short", "atr": None,
+                "updated_at": "2026-01-01T10:00:00+00:00"}
+        base.update(kw)
+        return base
+
+    def test_rejected_candle_after_updated_at(self):
+        closed = self.frame([(95, 96, 95.5), (99, 101, 98.5)])  # tweede candle sluit 10:30, na updated_at
+        self.assertEqual(smc_eval.judge_forming_setup(self.setup(), closed), "rejected")
+
+    def test_candle_before_updated_at_is_ignored(self):
+        closed = self.frame([(99, 101, 98.5)])  # sloot 10:15
+        self.assertEqual(smc_eval.judge_forming_setup(self.setup(updated_at="2026-01-01T10:30:00+00:00"), closed), "open")
+
+    def test_passed_candle(self):
+        closed = self.frame([(101, 104, 103.5)])
+        self.assertEqual(smc_eval.judge_forming_setup(self.setup(), closed), "passed")
+
+
+class EvaluateCompletionTest(unittest.TestCase):
+    def short_setup(self):
+        # atr 8 -> marges 2.0: stop = 2820 + 2 = 2822, doel = 2600 + 2 = 2602
+        return {"direction": "short", "atr": 8.0, "sweep_price": 2820.0, "liquidity_target": 2600.0}
+
+    def flat_frame(self, last_close):
+        n = 40
+        ts = pd.date_range("2026-01-01 00:00", periods=n, freq="15min", tz="UTC")
+        closes = [2700.0] * (n - 1) + [last_close]
+        return pd.DataFrame({"timestamp": ts, "open": closes, "high": [c + 1 for c in closes],
+                             "low": [c - 1 for c in closes], "close": closes, "volume": [1.0] * n})
+
+    def test_no_sniper_found_rejects_entry(self):
+        result = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2700.0))
+        self.assertIsNone(result.signal)
+        self.assertEqual(result.reject_reason, "entry_slechter_dan_sniper")
+        self.assertIn("geen sniper gevonden", result.detail)
+
+    def test_entry_below_sniper_for_short_is_rejected(self):
+        with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2710.0, "reden")):
+            result = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2700.0))
+        self.assertEqual(result.reject_reason, "entry_slechter_dan_sniper")
+
+    def test_risk_reward_gate_then_success(self):
+        setup = self.short_setup()
+        with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2690.0, "reden")):
+            low = smc_eval.evaluate_completion(setup, self.flat_frame(2700.0))
+            # entry 2700: risico 122, rendement 98 -> 0.80 tegen 1
+            self.assertIsNone(low.signal)
+            self.assertEqual(low.reject_reason, "risico_rendement_te_laag")
+            self.assertIn("0.80", low.detail)
+
+            ok = smc_eval.evaluate_completion(setup, self.flat_frame(2750.0))
+        # entry 2750: risico 72, rendement 148 -> 2.06 tegen 1
+        self.assertIsNone(ok.reject_reason)
+        draft = ok.signal
+        self.assertEqual(draft.entry_price, 2750.0)
+        self.assertEqual(draft.stop_loss, 2822.0)
+        self.assertEqual(draft.take_profit, 2602.0)
+        self.assertEqual(draft.sniper_entry_price, 2690.0)
+        self.assertEqual(draft.sniper_reason, "reden")
+        self.assertAlmostEqual(draft.risk_reward_ratio, 148.0 / 72.0)
+
+    def test_stop_on_wrong_side_is_rejected(self):
+        with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2690.0, "reden")):
+            result = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2850.0))
+        self.assertEqual(result.reject_reason, "stop_take_verkeerde_kant")
+
+    def test_sniper_beyond_stop_is_suppressed_not_rejected(self):
+        # sniper voorbij de stop (gemockt): alleen de sniper-weergave verdwijnt, het signaal blijft
+        with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2680.0, "reden")), \
+                mock.patch.object(smc_eval.indicators, "sniper_beyond_stop", return_value=True):
+            result = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2750.0))
+        self.assertIsNotNone(result.signal)
+        self.assertIsNone(result.signal.sniper_entry_price)
+        self.assertIsNone(result.signal.sniper_reason)
+
+
+if __name__ == "__main__":
+    unittest.main()

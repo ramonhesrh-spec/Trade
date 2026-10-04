@@ -20,8 +20,13 @@ from typing import Optional
 
 from app import exchange, indicators, patterns, push_notify, repo, risk
 from app.anthropic_interpret import Interpretation
+from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
+    LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
+    SMC_SETUP_MAX_AGE_HOURS, SMC_ZONE_SEARCH_LOOKBACK_30M, STOP_MARGIN_ATR_MULTIPLE, TARGET_MARGIN_ATR_MULTIPLE,
+    ZONE_BREAK_BUFFER_ATR_MULTIPLE, candles_since, evaluate_completion, find_candidate, judge_forming_setup,
+    last_candle_state, setup_expired, smc_stop_take_margins, valid_stop_take,
+)
 from app.signal_processor import (
-    MIN_RISK_REWARD_RATIO,
     compute_full_confirmation,
     fanout_confirmed_signal,
     process_day_trading_signal,
@@ -409,15 +414,7 @@ def _same_pattern(existing_key: Optional[str], direction: str, match, atr: float
     return abs(prev_neckline - match.neckline) <= PATTERN_DEDUP_ATR_MULTIPLE * atr
 
 
-def _valid_stop_take(direction: str, entry_price: float, stop_loss: float, take_profit: float) -> bool:
-    """Ligt de stop aan de verliezende en de take aan de winnende kant van de
-    prijs waarop we melden? Patroongeometrie (of een prijs die sinds de
-    doorbraak flink is doorgelopen) kan anders een omgekeerde stop/take
-    opleveren, en die gaat ongecontroleerd de positiegrootte en de
-    automatische trackrecord in."""
-    if direction == "long":
-        return stop_loss < entry_price < take_profit
-    return take_profit < entry_price < stop_loss
+_valid_stop_take = valid_stop_take  # alias: ook de andere detectoren (patroon e.d.) gebruiken hem
 
 
 def _correlated_with_btc_divergence(coin: str, match, btc_divergence_direction: Optional[str]) -> bool:
@@ -661,135 +658,6 @@ async def _find_chart_pattern_candidate(
     }
 
 
-SMC_ZONE_SEARCH_LOOKBACK_30M = 60  # 30m-candles, ongeveer anderhalve dag
-
-# Was een vast percentage (STOP_MARGIN_PCT 0.1%, TARGET_MARGIN_PCT 0.5%) van
-# de prijs. Op een coin die op dat moment flink beweegt is 0.1% vaak maar
-# een fractie van normale ruis binnen één candle — een SUI-trade (zie
-# gesprek) werd zo op de stop gezet door een gewone tegenwiek, terwijl de
-# structuurpremisse zelf klopte en de prijs er later alsnog heen liep. ATR
-# van de 30m-candle op het moment van de structuurbreuk (dezelfde
-# tijdshorizon als de breuk zelf) maakt de marge groter op een drukke coin
-# en kleiner op een rustige, in plaats van overal hetzelfde vaste getal.
-# Zelfde multiple (0.25) als risk.ATR_BUFFER_MULTIPLIER, om dezelfde reden:
-# ruimte tegen een korte wiek, niet tegen een echte trendomkeer.
-STOP_MARGIN_ATR_MULTIPLE = 0.25    # marge voorbij de sweep
-TARGET_MARGIN_ATR_MULTIPLE = 0.25  # marge vóór de liquidity
-
-# Fallback voor een setup die al "bouwend" stond vóór atr een kolom op
-# smc_setups werd (zie _complete_smc_setup) — niet meer gebruikt voor een
-# nieuwe setup, blijft alleen staan zodat zo'n oude rij nog een geldig
-# signaal kan opleveren in plaats van te crashen op een ontbrekende atr.
-LEGACY_STOP_MARGIN_PCT = 0.1
-LEGACY_TARGET_MARGIN_PCT = 0.5
-
-
-def smc_stop_take_margins(setup: dict) -> tuple[float, float]:
-    """(stop_margin, target_margin) in prijseenheden, nog zonder teken —
-    de aanroeper bepaalt zelf aan welke kant van sweep_price/
-    liquidity_target de marge moet. Eén plek voor deze fallback-logica in
-    plaats van 'm drie keer te laten driften (hier, /smc-pagina preview in
-    web/main.py, scripts/cleanup_stale_smc_setups.py)."""
-    if setup["atr"] is not None:
-        return STOP_MARGIN_ATR_MULTIPLE * setup["atr"], TARGET_MARGIN_ATR_MULTIPLE * setup["atr"]
-    return (
-        LEGACY_STOP_MARGIN_PCT / 100 * setup["sweep_price"],
-        LEGACY_TARGET_MARGIN_PCT / 100 * setup["liquidity_target"],
-    )
-
-# Een bouwende setup die dit lang niet is opgelost (geraakt+afgewezen, of
-# doorbroken zonder afwijzing) wordt als vervallen beschouwd. Zonder deze
-# grens bleef een zone voor altijd "bouwend" staan zodra de prijs simpelweg
-# wegliep in de gunstige richting zonder ooit terug te keren: het bestaande
-# passed_without_rejection-oordeel signaleert alleen een mislukte kant
-# (short: close boven de zone, long: eronder), niet "de koers is te ver weg
-# om nog terug te keren". Zelfde 1-dag-grens als SIGNAL_MAX_AGE_DAYS in
-# level_check.py voor een gewoon signaal.
-SMC_SETUP_MAX_AGE_HOURS = 24
-
-
-# Hoeveel ATR een candle voorbij de zone moet sluiten voordat een bouwende
-# setup als 'doorbraak zonder afwijzing' ongeldig wordt gemaakt. Uit
-# achteraf-onderzoek (scripts/check_dead_smc_setups.py, 1 okt): van de 25
-# setups die hierdoor stierven, bleek de richting achteraf in 80% van de
-# gevallen toch te kloppen — een candle die net over zone_high/zone_low
-# sluit is meestal een gewone wiek, geen echte trendomkeer. Zelfde multiple
-# en redenering als STOP_MARGIN_ATR_MULTIPLE hierboven. Geldt uitsluitend
-# voor passed_without_rejection (de ongeldig-verklaring) — rejected (de
-# entry-trigger) blijft bewust zonder marge, scherpe entries zijn het hele
-# punt van deze detector.
-ZONE_BREAK_BUFFER_ATR_MULTIPLE = 0.25
-
-
-def _smc_last_candle_state(
-    candle, zone_low: float, zone_high: float, direction: str, atr: Optional[float] = None,
-) -> tuple[bool, bool, bool]:
-    """Bepaalt voor één gesloten 15m-candle en één bouwende zone drie
-    onafhankelijke toestanden: (in_zone, rejected, passed_without_rejection).
-    in_zone: de candle raakte de zone (wick of volledige overlap).
-    rejected: de candle raakte de zone EN sloot er weer buiten aan de
-    kant die de setup ongeldig maakt voor voortzetting maar geldig maakt
-    als entry-trigger (short: sluit onder zone_low, long: sluit boven
-    zone_high) — dit is het moment waarop _complete_smc_setup het signaal
-    maakt. Zonder marge: een vroege, scherpe entry is het hele punt.
-    passed_without_rejection: het SPIEGELBEELD van rejected, niet
-    hetzelfde teken. Een short-zone ligt BOVEN de prijs die er van
-    onderaf naartoe beweegt (na de bearish structuurbreuk) — 'voorbij
-    zonder afwijzing' betekent dus dat de candle DOOR de top van de zone
-    brak (close boven zone_high + ZONE_BREAK_BUFFER_ATR_MULTIPLE * atr)
-    zonder ooit een rejectie-close onder zone_low te laten zien: de supply
-    hield niet stand, de setup is achterhaald. Long is het spiegelbeeld
-    (close onder zone_low - marge, door de bodem heen). Vóórdat de zone
-    ooit bereikt is — bijvoorbeeld een short-setup waarvan de laatste close
-    nog onder zone_low ligt, op weg naar boven — is dit nadrukkelijk GEEN
-    'passed': met hetzelfde teken als rejected zou elke net aangemaakte,
-    nog nooit geraakte setup de cyclus erna meteen weer weggegooid worden.
-    atr=None (bv. een bouwende setup van vóór de atr-kolom) valt terug op
-    geen marge, het oude gedrag."""
-    in_zone = (
-        zone_low <= candle["low"] <= zone_high
-        or zone_low <= candle["high"] <= zone_high
-        or (candle["low"] <= zone_low and candle["high"] >= zone_high)
-    )
-    rejected = in_zone and (
-        (direction == "short" and candle["close"] < zone_low) or
-        (direction == "long" and candle["close"] > zone_high)
-    )
-    buffer = ZONE_BREAK_BUFFER_ATR_MULTIPLE * atr if atr else 0.0
-    passed_without_rejection = (
-        (direction == "short" and candle["close"] > zone_high + buffer) or
-        (direction == "long" and candle["close"] < zone_low - buffer)
-    )
-    return in_zone, rejected, passed_without_rejection
-
-
-SMC_ENTRY_CANDLE_MINUTES = 15
-
-# Hoeveel 15m-candles fase 1 hoogstens per bouwende setup beoordeelt: alle
-# candles die sinds de vorige scan gesloten zijn. De scan draait elke 20
-# minuten (deploy/crypto-market-scan.timer), dus er kunnen er twee sluiten
-# tussen twee runs — alleen de allerlaatste bekijken sloeg zo één op de
-# vier 15m-candles over, inclusief een afwijzing of doorbraak die precies
-# daarop gebeurde. Begrensd (geen onbeperkte inhaalslag) zodat een
-# afwijzing waar _complete_smc_setup geen geldige trade van kon maken niet
-# elke volgende cyclus opnieuw als trigger terugkomt.
-SMC_MAX_CANDLES_PER_CHECK = 2
-
-
-def _smc_candles_since(closed_15m, since_iso: str) -> list:
-    """Gesloten 15m-candles die NA since_iso sloten (updated_at: de
-    sluittijd van de laatste candle waartegen de setup al beoordeeld is),
-    oudste eerst, hoogstens
-    SMC_MAX_CANDLES_PER_CHECK. Een candle die al sloot vóór de setup
-    (opnieuw) gedefinieerd werd, heeft die zone nooit 'gezien' en mag hem
-    dus ook niet afwijzen of ongeldig maken — dat werd bij het aanmaken al
-    tegen de laatste gesloten candle getoetst."""
-    since = datetime.fromisoformat(since_iso)
-    close_times = closed_15m["timestamp"] + timedelta(minutes=SMC_ENTRY_CANDLE_MINUTES)
-    fresh = closed_15m[close_times > since].tail(SMC_MAX_CANDLES_PER_CHECK)
-    return [candle for _, candle in fresh.iterrows()]
-
-
 async def _check_smc_setup(coin: str) -> Optional[dict]:
     """SMC/ICT-liquidity-setup: structuurbreuk + sweep op 30m, terugtrek
     naar een FVG/order-block-overlap op 15m. Volledig autonoom, los van
@@ -819,147 +687,48 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
 
     existing = [s for s in repo.list_forming_smc_setups() if s["coin"] == coin]
     for existing_setup in existing:
-        created_at = datetime.fromisoformat(existing_setup["created_at"])
-        age_hours = (datetime.now(timezone.utc) - created_at).total_seconds() / 3600
-        if age_hours > SMC_SETUP_MAX_AGE_HOURS:
+        if setup_expired(existing_setup, datetime.now(timezone.utc)):
+            age_hours = (datetime.now(timezone.utc) - datetime.fromisoformat(existing_setup["created_at"])).total_seconds() / 3600
             repo.invalidate_smc_setup(existing_setup["id"])
             logger.info(
                 "%s %s SMC-setup vervallen na %.0f uur zonder afwijzing of doorbraak",
                 coin, existing_setup["direction"], age_hours,
             )
             continue
-        for candle in _smc_candles_since(closed_15m, existing_setup["updated_at"]):
-            in_zone, rejected, passed_without_rejection = _smc_last_candle_state(
-                candle, existing_setup["zone_low"], existing_setup["zone_high"], existing_setup["direction"],
-                atr=existing_setup["atr"],
-            )
-            if rejected:
-                return existing_setup
-            # Geen extra in_zone-eis: de candle die door de zone heen sluit
-            # heeft vrijwel altijd zelf een staart in de zone, en rejected en
-            # passed_without_rejection sluiten elkaar al uit (close aan
-            # tegenovergestelde kanten van de zone).
-            if passed_without_rejection:
-                repo.invalidate_smc_setup(existing_setup["id"])
-                break
+        verdict = judge_forming_setup(existing_setup, closed_15m)
+        if verdict == "rejected":
+            return existing_setup
+        if verdict == "passed":
+            repo.invalidate_smc_setup(existing_setup["id"])
+            continue
 
     # +1: de nog vormende candle valt hieronder weg voor de breuk-toets.
     df_30m = await asyncio.to_thread(
         exchange.fetch_ohlcv, coin, timeframe="30m", limit=SMC_ZONE_SEARCH_LOOKBACK_30M + 1,
     )
     closed_30m = df_30m.iloc[:-1]
-    structure_break = indicators.find_structure_break(closed_30m)
-    if structure_break is None:
+    scan = find_candidate(closed_30m, df_30m, closed_15m, last_candle)
+    if scan.break_direction is None:
         return None
-    direction = structure_break.direction
-    # Op hetzelfde moment en dezelfde candle-set als de breuk zelf: de
-    # volatiliteit die hier geldt, is die van de 30m-candle waarop de
-    # structuur net brak, niet een latere, mogelijk heel andere ATR.
-    atr = indicators.compute_indicators(closed_30m).atr
-
     # Een nieuwe breuk in de TEGENGESTELDE richting van een bestaande
     # bouwende setup maakt die setup achterhaald (de markt heeft zijn
     # structuur omgedraaid voordat de oude zone geraakt werd).
     for existing_setup in existing:
-        if existing_setup["direction"] != direction:
+        if existing_setup["direction"] != scan.break_direction:
             repo.invalidate_smc_setup(existing_setup["id"])
-
-    sweep = indicators.find_liquidity_sweep_before_break(closed_30m, structure_break)
-    if sweep is None:
+    if scan.candidate is None:
+        if scan.skip_reason == "stop_of_doel_binnen_zone":
+            logger.info("%s %s SMC-setup overgeslagen: %s", coin, scan.break_direction, scan.detail)
         return None
-
-    # Zonder deze afbakening zochten find_fair_value_gaps/find_order_blocks
-    # los in de laatste ZONE_SEARCH_LOOKBACK (10 uur) 15m-candles, zonder
-    # koppeling aan DEZE structuurbreuk. In een coin met meerdere bewegingen
-    # in dezelfde richting binnen die 10 uur pakte find_confluence_zone dan
-    # de eerste overlap die hij tegenkwam, ook als die uit een andere,
-    # oudere beweging kwam dan de displacement die de structuur brak — een
-    # afwijzing op zo'n zone bevestigt dan niets over de eigenlijke
-    # sweep+breuk-premisse van deze setup. sweep.index wijst terug in
-    # closed_30m (zelfde 0-based positie, zie find_liquidity_sweep_before_break),
-    # dus de sweep-candle zijn eigen tijdstip is de ondergrens: de
-    # displacement die de structuur brak begint per definitie niet vóór de
-    # sweep die hem voedde.
-    sweep_time = closed_30m["timestamp"].iloc[sweep.index]
-    displacement_15m = closed_15m[closed_15m["timestamp"] >= sweep_time]
-
-    fvgs = indicators.find_fair_value_gaps(displacement_15m, direction)
-    order_blocks = indicators.find_order_blocks(displacement_15m, direction)
-    zone = indicators.find_confluence_zone(fvgs, order_blocks)
-    if zone is None:
-        return None
-    zone_low, zone_high = zone
-
-    # Liquidity-doel: de dichtstbijzijnde tegengestelde pivot die de prijs
-    # sinds de breuk nog NIET geraakt heeft, op hetzelfde 30m-venster als
-    # de structuurbreuk zelf (dezelfde bron als structure_level en
-    # sweep_price, geen extra candle-fetch). Alleen "voorbij de zone" was
-    # niet genoeg: de net gebroken pivot zelf, en elke oudere pivot waar de
-    # doorbraak-beweging al doorheen liep, ligt ook voorbij de zone maar
-    # die liquidity is al opgehaald — zo'n doel gaf een take profit aan de
-    # verkeerde kant van de entry zodra de afwijzing eronder sloot. Hier
-    # WEL inclusief de nog vormende 30m-candle (df_30m, niet closed_30m):
-    # een niveau waar de prijs al doorheen handelde is opgehaald, of die
-    # candle nu al gesloten is of niet.
-    since_break = df_30m.iloc[structure_break.break_index:]
-    if direction == "long":
-        untouched_from = max(zone_high, float(since_break["high"].max()))
-    else:
-        untouched_from = min(zone_low, float(since_break["low"].min()))
-    target_kind = "high" if direction == "long" else "low"
-    target_pivots = [
-        p for p in indicators._find_pivots(closed_30m)
-        if p.kind == target_kind and (
-            (direction == "long" and p.price > untouched_from) or
-            (direction == "short" and p.price < untouched_from)
-        )
-    ]
-    if not target_pivots:
-        return None
-    liquidity_target_pivot = min(target_pivots, key=lambda p: abs(p.price - untouched_from))
-
-    # De ATR-marge kan, net als het oude vaste percentage kon, groter zijn
-    # dan de afstand tussen zone en sweep/liquidity-doel, of de rauwe sweep
-    # kan zelf al binnen de zone liggen in plaats van eronder/erboven
-    # (short/long) — in beide gevallen komt de stop of het doel dan aan de
-    # verkeerde kant van de zone terecht. _valid_stop_take zou zo'n setup
-    # later toch afwijzen zodra de afwijzing binnenkomt, maar dan is de
-    # "bouwt op"-melding al verstuurd voor een setup die nooit een geldig
-    # signaal kon worden. Hier al overslaan voorkomt die dode melding.
-    sign = 1 if direction == "short" else -1
-    projected_stop_loss = sweep.price + sign * STOP_MARGIN_ATR_MULTIPLE * atr
-    projected_take_profit = liquidity_target_pivot.price + sign * TARGET_MARGIN_ATR_MULTIPLE * atr
-    stop_niet_voorbij_zone = (
-        (direction == "short" and projected_stop_loss <= zone_high) or
-        (direction == "long" and projected_stop_loss >= zone_low)
-    )
-    doel_niet_voorbij_zone = (
-        (direction == "short" and projected_take_profit >= zone_low) or
-        (direction == "long" and projected_take_profit <= zone_high)
-    )
-    if stop_niet_voorbij_zone or doel_niet_voorbij_zone:
-        logger.info(
-            "%s %s SMC-setup overgeslagen: stop %.4f / doel %.4f (na marge) liggen niet voorbij de zone %.4f-%.4f",
-            coin, direction, projected_stop_loss, projected_take_profit, zone_low, zone_high,
-        )
-        return None
-
-    # Een bouwende setup is pas zinvol zolang de koers nog naar de zone
-    # moet terugtrekken (short: nog eronder, long: nog erboven). Zonder
-    # deze eis kon fase 1 hierboven een setup opruimen omdat de koers door
-    # de zone heen sloot, en maakte deze fase dezelfde zone in dezelfde
-    # cyclus meteen weer aan met alert_sent=0 — een tweede 'bouwt op'-push
-    # voor een zone die net ongeldig was geworden.
-    last_close = float(last_candle["close"])
-    if (direction == "short" and last_close >= zone_low) or (direction == "long" and last_close <= zone_high):
-        return None
+    candidate = scan.candidate
+    direction, zone_low, zone_high = candidate.direction, candidate.zone_low, candidate.zone_high
 
     setup_id = repo.upsert_smc_setup(
         coin, direction, zone_low, zone_high,
-        structure_level=structure_break.broken_pivot.price,
-        sweep_price=sweep.price,
-        liquidity_target=liquidity_target_pivot.price,
-        atr=atr,
+        structure_level=candidate.structure_level,
+        sweep_price=candidate.sweep_price,
+        liquidity_target=candidate.liquidity_target,
+        atr=candidate.atr,
         seen_until=(last_candle["timestamp"] + timedelta(minutes=SMC_ENTRY_CANDLE_MINUTES)).isoformat(),
     )
 
@@ -968,7 +737,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     if setup is None:
         return None  # deze breuk + sweep leverde al een signaal op of is vervallen (zie upsert_smc_setup)
 
-    _, rejected, _ = _smc_last_candle_state(last_candle, zone_low, zone_high, direction)
+    _, rejected, _ = last_candle_state(last_candle, zone_low, zone_high, direction)
     if rejected:
         return setup
 
@@ -995,7 +764,7 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     (de sweep bepaalt de stop, de volgende liquidity het doel), alleen de
     marge eromheen gebruikt setup['atr'] (vastgezet bij het bouwen van de
     setup, zie _check_smc_setup) in plaats van een vast percentage — zie
-    STOP_MARGIN_ATR_MULTIPLE hierboven. sign is voor zowel stop als doel
+    smc_eval.STOP_MARGIN_ATR_MULTIPLE. sign is voor zowel stop als doel
     hetzelfde teken, dat is geen typefout: voor short ligt de stop BOVEN de
     geveegde high (verder van de entry af) en het doel ligt ook BOVEN de
     liquidity-low (dichter bij de entry, 'net vóór' het niveau) — voor long
@@ -1007,91 +776,14 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     oude vaste percentage, puur om zo'n al bestaande rij niet alsnog te
     laten crashen; een nieuwe setup heeft hem altijd gezet."""
     direction = setup["direction"]
-    sign = -1 if direction == "long" else 1
-    stop_margin, target_margin = smc_stop_take_margins(setup)
-    stop_loss = setup["sweep_price"] + stop_margin * sign
-    take_profit = setup["liquidity_target"] + target_margin * sign
-
     df_15m = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="15m")
-    entry_price = float(df_15m["close"].iloc[-1])
-
-    # entry_price hierboven is de ACTUELE marktprijs op het moment dat dit
-    # signaal gebouwd wordt, niet de prijs van de candle die de afwijzing
-    # triggerde — daar zit altijd wat vertraging tussen (de marktscan draait
-    # periodiek, niet precies op elke 15m-candle-close). Stop en doel liggen
-    # vast op structuurniveaus sinds de setup bouwde, dus als de koers in die
-    # tussentijd verder wegliep dan de sniper-prijs (dezelfde stop-hunt-prijs
-    # die ook getoond wordt), is de entry al slechter dan de setup
-    # veronderstelt — dat eet rechtstreeks in op het rendement zonder dat de
-    # risk_reward_ratio-check hieronder dat per se opvangt (een kleine
-    # verschuiving kan nog ruim boven de ondergrens blijven). Geen sniper
-    # gevonden behandelen we hetzelfde als een te late entry: als het
-    # stop-hunt-moment niet meer zichtbaar is binnen het zoekvenster, is de
-    # kans klein dat dit nog een verse kans is.
-    sniper = indicators.find_sniper_entry_price(direction, df_15m)
-    sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
-    entry_worse_than_sniper = (
-        sniper_entry_price is None
-        or (direction == "short" and entry_price < sniper_entry_price)
-        or (direction == "long" and entry_price > sniper_entry_price)
-    )
-    if entry_worse_than_sniper:
-        logger.info(
-            "SMC-setup %s voor %s niet gemeld: entry %.4f ligt niet meer aan de juiste kant van de sniper-prijs "
-            "(%s, %s), de koers is al verder bewogen dan de setup veronderstelt",
-            setup["id"], coin, entry_price,
-            f"{sniper_entry_price:.4f}" if sniper_entry_price is not None else "geen sniper gevonden",
-            direction,
-        )
+    completion = evaluate_completion(setup, df_15m)
+    if completion.signal is None:
+        logger.info("SMC-setup %s voor %s niet gemeld: %s", setup["id"], coin, completion.detail)
         return None
-
-    # De entry_worse_than_sniper-poort hierboven toetst alleen entry_price
-    # tegen de sniper-prijs, niet de sniper-prijs tegen de stop — die twee
-    # kunnen nog steeds los van elkaar liggen (zie
-    # indicators.sniper_beyond_stop). Puur voor de weergave: de melding zelf
-    # blijft ongewijzigd, alleen een inconsistente sniper-regel op de kaart
-    # wordt onderdrukt.
-    if sniper_entry_price is not None and indicators.sniper_beyond_stop(direction, sniper_entry_price, stop_loss):
-        sniper_entry_price, sniper_reason = None, None
-
-    # Stop en doel liggen vast sinds de setup bouwde, de live prijs niet:
-    # een afwijzing die al voorbij het doel sloot, of een prijs die sinds de
-    # afwijzing boven de stop (short) uitliep, is geen trade meer. Geen
-    # ATR-terugval zoals bij patroon — smc's hele premisse is structuur-
-    # gebaseerde stop/doel, dan liever geen signaal.
-    if not _valid_stop_take(direction, entry_price, stop_loss, take_profit):
-        logger.info(
-            "SMC-setup %s voor %s niet gemeld: stop %.4f / doel %.4f liggen niet aan de juiste kant van entry %.4f (%s)",
-            setup["id"], coin, stop_loss, take_profit, entry_price, direction,
-        )
-        return None
-
-    # Geen stop_within_max_distance-toets hier, bewust anders dan de andere
-    # drie detectoren: die grens (1,5%) is gebouwd voor ATR-gebaseerde
-    # stops, waar een strakke stop een teken van precisie is. SMC's stop
-    # ligt vast op de sweep-prijs (structuur, geen ATR) — die sweep zit op
-    # veel coins verder dan 1,5% van de entry af, zonder dat de setup zelf
-    # minder geldig is. De hergebruikte grens hield hierdoor structureel
-    # goede SMC-setups tegen. De kwaliteitsborging zit al in de eigen
-    # stappen hierboven (structuurbreuk, sweep vóór de breuk, confluence-
-    # zone, stop/doel aan de juiste kant) en in de R:R-eis hieronder.
-
-    # Zelfde ondergrens als het dagtrading-pad (signal_processor.py), zelfde
-    # "geen signaal" in plaats van "signaal met lagere confidence" als
-    # hierboven bij _valid_stop_take: smc heeft geen pass_pct/hard_gates_ok
-    # confidence-schaal om een zwakke verhouding in te laten wegen, dus een
-    # setup die er niet aan voldoet mag geen signaal worden.
-    risk_distance = abs(entry_price - stop_loss)
-    reward_distance = abs(take_profit - entry_price)
-    risk_reward_ratio = (reward_distance / risk_distance) if risk_distance else 0.0
-    if risk_reward_ratio < MIN_RISK_REWARD_RATIO:
-        logger.info(
-            "SMC-setup %s voor %s niet gemeld: risico/rendement %.2f tegen 1 ligt onder de ondergrens van %s "
-            "(stop %.4f / doel %.4f / entry %.4f, %s)",
-            setup["id"], coin, risk_reward_ratio, MIN_RISK_REWARD_RATIO,
-            stop_loss, take_profit, entry_price, direction,
-        )
-        return None
+    draft = completion.signal
+    entry_price, stop_loss, take_profit = draft.entry_price, draft.stop_loss, draft.take_profit
+    sniper_entry_price, sniper_reason = draft.sniper_entry_price, draft.sniper_reason
 
     # Zelfde opruiming als de andere detectoren vóór hun insert_signal: een
     # nog niet genomen melding voor de andere richting op deze coin is
