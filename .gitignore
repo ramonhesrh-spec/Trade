@@ -5,6 +5,8 @@ data/*.db
 data/*.db-journal
 data/backups/
 data/images/
+data/candles/
+data/replay/
 .venv/
 venv/
 *.log
