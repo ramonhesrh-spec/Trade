@@ -399,8 +399,8 @@ Tests: `python3 -m unittest discover -s tests -t . -v`.
 Het SMC-raam draai je met `scripts/replay_smc_report.py --months 12`. Het
 rapport toont de trechter (waarom setups doodlopen), de uitkomst in R, de
 snelheid en de break-even kosten. De eerste keer downloadt hij 1m-candles; reken
-op ongeveer 1 uur voor 7 coins met `--workers 2`. Draai het op de VPS met
-`nohup python3 -u scripts/replay_smc_report.py --months 12 --workers 2 > /tmp/smc12.txt 2>&1 &`
+op enkele uren voor 7 coins met `--workers 2` (ongeveer 45 tot 60 minuten rekentijd per coin). Draai het op de VPS met
+`nohup nice -n 10 python3 -u scripts/replay_smc_report.py --months 12 --workers 2 > /tmp/smc12.txt 2>&1 &`
 (de voortgangsregels worden direct geflusht). De scanmomenten staan 3 minuten
 na een vijfminutengrens (`--offset-minutes`), zodat ze nooit op een kwartiersgrens
 vallen. Controle tegen de echte SMC-signalen (minstens 70% moet terugkomen; `--until` is exclusief):

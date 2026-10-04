@@ -1,4 +1,4 @@
-"""Uitkomst van één signaal op de 15m-basis: eerst stop of eerst take profit,
+"""Uitkomst van één signaal op de basisframe (15m of 1m): eerst stop of eerst take profit,
 of verlopen. Zelfde stop-eerst-keuze als level_check._level_hit_in_candles
 als beide niveaus in dezelfde candle geraakt worden."""
 from dataclasses import dataclass

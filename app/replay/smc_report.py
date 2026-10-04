@@ -128,6 +128,7 @@ def first_step(start: pd.Timestamp, step_minutes: int, offset_minutes: int) -> p
 SMC_NOTES = (
     "niet nagebootst: de scan_market-pre-checks voor de 4u-detectoren (die draaien niet in de SMC-snelcheck, dus ze beinvloeden SMC niet; vermeld voor volledigheid).",
     "niet nagebootst: de structurele tegenstrijdigheid-onderdrukking van scan_market.",
+    "niet nagebootst: live draait ook scan_market (minuut 7, 27 en 47) als SMC-controle, de noodstop en uitvaltijd van de bot; het raam scant alleen in het vijfminutenraster.",
     "niet nagebootst: pushmeldingen en het journal (dubbele signalen, cooldowns en limieten per gebruiker).",
     "benaderd: entry is de laatste 1m-close op het scanmoment; uitkomsten zijn op 1m-candles gemeten, stop gaat voor bij gelijke candle; kosten, slippage en maximale looptijd volgens de opties van deze run.",
     "de laatste 24 uur van de run hebben een afgekapt uitkomstvenster (de run eindigt 1 dag voor de laatste candle, het venster is 48 uur); signalen daar kunnen als verlopen verschijnen.",

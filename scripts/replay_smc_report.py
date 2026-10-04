@@ -6,8 +6,8 @@ Draai met: python3 -u scripts/replay_smc_report.py --coins ETH,SOL --months 12
 Opties: --step-minutes 5 --offset-minutes 3 --years-download 1.1 --refresh
         --workers 2 --fee-pct 0.1 --slippage-pct 0.05 --max-age-hours 48
 
-Eerste keer downloadt hij 1m-candles (enkele minuten per coin). Reken op ongeveer
-1 uur voor 7 coins met --workers 2. Bij nohup: de voortgang wordt direct geflusht."""
+Eerste keer downloadt hij 1m-candles (enkele minuten per coin). Reken op enkele uren
+voor 7 coins met --workers 2 (ongeveer 45 tot 60 minuten rekentijd per coin; start met nice -n 10). Bij nohup: de voortgang wordt direct geflusht."""
 import argparse
 import sys
 from concurrent.futures import ProcessPoolExecutor

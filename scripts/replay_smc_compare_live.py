@@ -105,6 +105,8 @@ def main() -> None:
         r["coin"] == s.coin and r["direction"] == s.direction and abs(s.at - r["at"]) <= MATCH_WINDOW for r in live_rows)]
     ratio = len(found) / len(live_rows)
     print(f"\nLive SMC-signalen: {len(live_rows)}, terug in replay: {len(found)}")
+    if len(live) != len(live_rows):
+        print(f"Buiten de gekozen coins gelaten: {len(live) - len(live_rows)} live signalen")
     print(f"Replay-signalen zonder live signaal: {len(replay_only)}")
     print(f"Dekking live in replay: {ratio:.0%} (criterium {PASS_RATIO:.0%})")
     print("\nLive en NIET teruggevonden:")
