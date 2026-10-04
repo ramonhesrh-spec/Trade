@@ -1,5 +1,6 @@
 import unittest
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest import mock
 
 import pandas as pd
@@ -125,6 +126,55 @@ class EvaluateCompletionTest(unittest.TestCase):
         self.assertIsNotNone(result.signal)
         self.assertIsNone(result.signal.sniper_entry_price)
         self.assertIsNone(result.signal.sniper_reason)
+
+
+class FindCandidateSkipTest(unittest.TestCase):
+    """find_candidate met gemockte indicatoren: alleen de beslisvolgorde en de skip-redenen."""
+
+    def frames(self):
+        ts30 = pd.date_range("2026-01-01 00:00", periods=5, freq="30min", tz="UTC")
+        df_30m = pd.DataFrame({"timestamp": ts30, "open": 100.0, "high": 106.0, "low": 95.0, "close": 100.0, "volume": 1.0})
+        ts15 = pd.date_range("2026-01-01 00:00", periods=8, freq="15min", tz="UTC")
+        closed_15m = pd.DataFrame({"timestamp": ts15, "open": 98.0, "high": 99.0, "low": 97.0, "close": 98.0, "volume": 1.0})
+        return df_30m.iloc[:-1], df_30m, closed_15m
+
+    def run_scan(self, sweep, last_close=98.0):
+        closed_30m, df_30m, closed_15m = self.frames()
+        last_candle = {"close": last_close}
+        ind = smc_eval.indicators
+        with mock.patch.object(ind, "find_structure_break", return_value=SimpleNamespace(
+                direction="short", break_index=1, broken_pivot=SimpleNamespace(price=110.0))), \
+                mock.patch.object(ind, "compute_indicators", return_value=SimpleNamespace(atr=2.0)), \
+                mock.patch.object(ind, "find_liquidity_sweep_before_break", return_value=sweep), \
+                mock.patch.object(ind, "find_fair_value_gaps", return_value=[]), \
+                mock.patch.object(ind, "find_order_blocks", return_value=[]), \
+                mock.patch.object(ind, "find_confluence_zone", return_value=(100.0, 102.0)), \
+                mock.patch.object(ind, "_find_pivots", return_value=[SimpleNamespace(kind="low", price=90.0)]):
+            return smc_eval.find_candidate(closed_30m, df_30m, closed_15m, last_candle)
+
+    def test_geen_sweep_keeps_break_direction(self):
+        scan = self.run_scan(sweep=None)
+        self.assertEqual((scan.break_direction, scan.candidate, scan.skip_reason), ("short", None, "geen_sweep"))
+
+    def test_stop_of_doel_binnen_zone(self):
+        # sweep 101 + 0.25*2 = 101.5 ligt nog onder zone_high 102: stop niet voorbij de zone
+        scan = self.run_scan(sweep=SimpleNamespace(index=0, price=101.0))
+        self.assertEqual((scan.break_direction, scan.candidate, scan.skip_reason),
+                         ("short", None, "stop_of_doel_binnen_zone"))
+        self.assertIn("101.5000", scan.detail)
+        self.assertIn("100.0000-102.0000", scan.detail)
+
+    def test_koers_al_in_zone(self):
+        # stop 105.5 en doel 90.5 liggen goed, maar de laatste close (101) zit al in/boven zone_low voor een short
+        scan = self.run_scan(sweep=SimpleNamespace(index=0, price=105.0), last_close=101.0)
+        self.assertEqual((scan.break_direction, scan.candidate, scan.skip_reason), ("short", None, "koers_al_in_zone"))
+
+    def test_valid_candidate_when_price_below_zone(self):
+        scan = self.run_scan(sweep=SimpleNamespace(index=0, price=105.0), last_close=98.0)
+        self.assertIsNone(scan.skip_reason)
+        c = scan.candidate
+        self.assertEqual((c.direction, c.zone_low, c.zone_high, c.sweep_price, c.liquidity_target, c.atr),
+                         ("short", 100.0, 102.0, 105.0, 90.0, 2.0))
 
 
 if __name__ == "__main__":
