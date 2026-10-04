@@ -1,0 +1,74 @@
+{
+ "ETH|long|2026-02-10 00:00": [
+  false,
+  "✓ Trend: EMA9 boven EMA21 | ✗ Momentum: MACD onder signaallijn, geen opwaarts momentum | ✓ RSI: RSI 59 | ✗ Volume: volume 0.90x gemiddeld, onder gemiddeld | ✓ Uitgerektheid: 0.7x ATR van EMA21 | ✓ Trendsterkte: ADX 38 | ✓ Volatiliteit: ATR 0.5180 (stijgend) | ✗ Volume-percentiel: volume in 20e percentiel van de laatste 20 candles, onder de 50e percentiel grens | ✗ BTC-trend: BTC beweegt omlaag, tegen deze trade in | ✓ RSI daily: RSI 66 op daily | ✗ Premium/discount (dag): entry in premium-zone op daily (equilibrium 43.0891) | ✗ Liquidity sweep (dag): geen recente stop-hunt op daily gevonden | ✗ 1u bevestiging: EMA9 onder EMA21 op 1u, nog geen bevestiging op de snellere timeframe | ✓ RSI 1u: RSI 55 op 1u | ✓ Divergentie: geen waarschuwende divergentie | ✗ Candlepatroon: geen candlestick-patroon (engulfing, hamer, ster, doji) in de juiste richting op de signaal-candle | ✗ Liquiditeit: 24u volume €673.031, onder de grens van €2.000.000 | ✓ Steun/weerstand: zone op 2.1x ATR afstand, terugveer bevestigd | ✗ Premium/discount: entry in premium-zone (equilibrium 45.9493) | ✗ Liquidity sweep: geen recente stop-hunt gevonden | ✓ Daily-trend: EMA9 boven EMA21 op daily",
+  44.444444,
+  false
+ ],
+ "ETH|long|2026-02-12 13:30": [
+  true,
+  "✗ Trend: EMA9 onder EMA21, geen opwaartse trend | ✗ Momentum: MACD onder signaallijn, geen opwaarts momentum | ✓ RSI: RSI 52 | ✓ Volume: volume 1.10x gemiddeld | ✓ Uitgerektheid: 0.2x ATR van EMA21 | ✗ Trendsterkte: ADX 19, trend sterk maar in de verkeerde richting | ✓ Volatiliteit: ATR 0.5044 (stijgend) | ✓ Volume-percentiel: volume in 85e percentiel van de laatste 20 candles | ✓ RSI daily: RSI 59 op daily | ✗ Premium/discount (dag): entry in premium-zone op daily (equilibrium 43.1605) | ✗ Liquidity sweep (dag): geen recente stop-hunt op daily gevonden | ✓ 1u bevestiging: EMA9 boven EMA21 op 1u | ✓ RSI 1u: RSI 59 op 1u | ✓ Divergentie: geen waarschuwende divergentie | ✓ Candlepatroon: Doji op de signaal-candle | ✗ Liquiditeit: 24u volume €688.677, onder de grens van €2.000.000 | ✓ Steun/weerstand: zone op 0.7x ATR afstand, terugveer bevestigd | ✓ Premium/discount: entry in discount-zone (equilibrium 45.5359) | ✓ Liquidity sweep: stop-hunt van 45.4147, candle sloot terug aan de goede kant | ✓ Daily-trend: EMA9 boven EMA21 op daily",
+  66.666667,
+  true
+ ],
+ "ETH|long|2026-02-15 21:00": [
+  true,
+  "✓ Trend: EMA9 boven EMA21 | ✗ Momentum: MACD onder signaallijn, geen opwaarts momentum | ✓ RSI: RSI 59 | ✓ Volume: volume 1.09x gemiddeld | ✓ Uitgerektheid: 0.7x ATR van EMA21 | ✓ Trendsterkte: ADX 30 | ✓ Volatiliteit: ATR 0.5245 (stijgend) | ✓ Volume-percentiel: volume in 85e percentiel van de laatste 20 candles | ✓ RSI daily: RSI 67 op daily | ✗ Premium/discount (dag): entry in premium-zone op daily (equilibrium 44.2265) | ✗ Liquidity sweep (dag): geen recente stop-hunt op daily gevonden | ✓ 1u bevestiging: EMA9 boven EMA21 op 1u | ✓ RSI 1u: RSI 46 op 1u | ✓ Divergentie: geen waarschuwende divergentie | ✗ Candlepatroon: geen candlestick-patroon (engulfing, hamer, ster, doji) in de juiste richting op de signaal-candle | ✗ Liquiditeit: 24u volume €707.592, onder de grens van €2.000.000 | ✓ Steun/weerstand: zone op 1.5x ATR afstand, terugveer bevestigd | ✗ Premium/discount: entry in premium-zone (equilibrium 46.9418) | ✗ Liquidity sweep: geen recente stop-hunt gevonden | ✓ Daily-trend: EMA9 boven EMA21 op daily",
+  61.111111,
+  true
+ ],
+ "ETH|short|2026-02-10 00:00": [
+  false,
+  "✗ Trend: EMA9 boven EMA21, geen neerwaartse trend | ✓ Momentum: MACD onder signaallijn | ✓ RSI: RSI 59 | ✗ Volume: volume 0.90x gemiddeld, onder gemiddeld | ✓ Uitgerektheid: -0.7x ATR van EMA21 | ✗ Trendsterkte: ADX 38, trend sterk maar in de verkeerde richting | ✓ Volatiliteit: ATR 0.5180 (stijgend) | ✗ Volume-percentiel: volume in 20e percentiel van de laatste 20 candles, onder de 50e percentiel grens | ✓ BTC-trend: BTC beweegt omlaag | ✓ RSI daily: RSI 66 op daily | ✓ Premium/discount (dag): entry in premium-zone op daily (equilibrium 43.0891) | ✗ Liquidity sweep (dag): geen recente stop-hunt op daily gevonden | ✓ 1u bevestiging: EMA9 onder EMA21 op 1u | ✓ RSI 1u: RSI 55 op 1u | ✓ Divergentie: geen waarschuwende divergentie | ✓ Candlepatroon: bearish engulfing op de signaal-candle | ✗ Liquiditeit: 24u volume €673.031, onder de grens van €2.000.000 | ✓ Steun/weerstand: zone op 0.8x ATR afstand, terugveer bevestigd | ✓ Premium/discount: entry in premium-zone (equilibrium 45.9493) | ✓ Liquidity sweep: stop-hunt van 45.9607, candle sloot terug aan de goede kant | ✗ Daily-trend: EMA9 boven EMA21 op daily, geen bevestiging op de dagcandle",
+  66.666667,
+  false
+ ],
+ "ETH|short|2026-02-12 13:30": [
+  false,
+  "✓ Trend: EMA9 onder EMA21 | ✓ Momentum: MACD onder signaallijn | ✓ RSI: RSI 52 | ✓ Volume: volume 1.10x gemiddeld | ✓ Uitgerektheid: -0.2x ATR van EMA21 | ✓ Trendsterkte: ADX 19 | ✓ Volatiliteit: ATR 0.5044 (stijgend) | ✓ Volume-percentiel: volume in 85e percentiel van de laatste 20 candles | ✓ RSI daily: RSI 59 op daily | ✓ Premium/discount (dag): entry in premium-zone op daily (equilibrium 43.1605) | ✗ Liquidity sweep (dag): geen recente stop-hunt op daily gevonden | ✗ 1u bevestiging: EMA9 boven EMA21 op 1u, nog geen bevestiging op de snellere timeframe | ✓ RSI 1u: RSI 59 op 1u | ✗ Divergentie: prijs zet een lagere bodem neer terwijl RSI juist stijgt, momentum zwakt af | ✗ Candlepatroon: geen candlestick-patroon (engulfing, hamer, ster, doji) in de juiste richting op de signaal-candle | ✗ Liquiditeit: 24u volume €688.677, onder de grens van €2.000.000 | ✓ Steun/weerstand: zone op 2.2x ATR afstand, terugveer bevestigd | ✗ Premium/discount: entry in discount-zone (equilibrium 45.5359) | ✗ Liquidity sweep: geen recente stop-hunt gevonden | ✗ Daily-trend: EMA9 boven EMA21 op daily, geen bevestiging op de dagcandle",
+  61.111111,
+  false
+ ],
+ "ETH|short|2026-02-15 21:00": [
+  false,
+  "✗ Trend: EMA9 boven EMA21, geen neerwaartse trend | ✓ Momentum: MACD onder signaallijn | ✓ RSI: RSI 59 | ✓ Volume: volume 1.09x gemiddeld | ✓ Uitgerektheid: -0.7x ATR van EMA21 | ✗ Trendsterkte: ADX 30, trend sterk maar in de verkeerde richting | ✓ Volatiliteit: ATR 0.5245 (stijgend) | ✓ Volume-percentiel: volume in 85e percentiel van de laatste 20 candles | ✓ RSI daily: RSI 67 op daily | ✓ Premium/discount (dag): entry in premium-zone op daily (equilibrium 44.2265) | ✓ Liquidity sweep (dag): stop-hunt op daily van 48.2061, candle sloot terug aan de goede kant | ✗ 1u bevestiging: EMA9 boven EMA21 op 1u, nog geen bevestiging op de snellere timeframe | ✓ RSI 1u: RSI 46 op 1u | ✓ Divergentie: geen waarschuwende divergentie | ✓ Candlepatroon: Doji op de signaal-candle | ✗ Liquiditeit: 24u volume €707.592, onder de grens van €2.000.000 | ✗ Steun/weerstand: geen zone dichtbij genoeg voor een bruikbaar niveau | ✓ Premium/discount: entry in premium-zone (equilibrium 46.9418) | ✗ Liquidity sweep: geen recente stop-hunt gevonden | ✗ Daily-trend: EMA9 boven EMA21 op daily, geen bevestiging op de dagcandle",
+  66.666667,
+  false
+ ],
+ "BTC|long|2026-02-10 00:00": [
+  false,
+  "✗ Trend: EMA9 onder EMA21, geen opwaartse trend | ✗ Momentum: MACD onder signaallijn, geen opwaarts momentum | ✓ RSI: RSI 38 | ✓ Volume: volume 1.04x gemiddeld | ✓ Uitgerektheid: -1.5x ATR van EMA21 | ✗ Trendsterkte: ADX 33, trend sterk maar in de verkeerde richting | ✓ Volatiliteit: ATR 1.2405 (stijgend) | ✓ Volume-percentiel: volume in 70e percentiel van de laatste 20 candles | ✓ RSI daily: RSI 45 op daily | ✓ Premium/discount (dag): entry in discount-zone op daily (equilibrium 97.6059) | ✓ Liquidity sweep (dag): stop-hunt op daily van 92.3627, candle sloot terug aan de goede kant | ✗ 1u bevestiging: EMA9 onder EMA21 op 1u, nog geen bevestiging op de snellere timeframe | ✓ RSI 1u: RSI 49 op 1u | ✓ Divergentie: geen waarschuwende divergentie | ✗ Candlepatroon: geen candlestick-patroon (engulfing, hamer, ster, doji) in de juiste richting op de signaal-candle | ✗ Liquiditeit: 24u volume €1.454.687, onder de grens van €2.000.000 | ✗ Steun/weerstand: geen zone dichtbij genoeg voor een bruikbaar niveau | ✓ Premium/discount: entry in discount-zone (equilibrium 95.9419) | ✗ Liquidity sweep: geen recente stop-hunt gevonden",
+  55.555556,
+  true
+ ],
+ "BTC|long|2026-02-12 13:30": [
+  true,
+  "✗ Trend: EMA9 onder EMA21, geen opwaartse trend | ✓ Momentum: MACD boven signaallijn | ✓ RSI: RSI 51 | ✗ Volume: volume 0.95x gemiddeld, onder gemiddeld | ✓ Uitgerektheid: 0.4x ATR van EMA21 | ✗ Trendsterkte: ADX 26, trend sterk maar in de verkeerde richting | ✓ Volatiliteit: ATR 1.2262 (stijgend) | ✗ Volume-percentiel: volume in 25e percentiel van de laatste 20 candles, onder de 50e percentiel grens | ✓ RSI daily: RSI 47 op daily | ✓ Premium/discount (dag): entry in discount-zone op daily (equilibrium 97.5633) | ✓ Liquidity sweep (dag): stop-hunt op daily van 94.1550, candle sloot terug aan de goede kant | ✓ 1u bevestiging: EMA9 boven EMA21 op 1u | ✓ RSI 1u: RSI 61 op 1u | ✓ Divergentie: geen waarschuwende divergentie | ✗ Candlepatroon: geen candlestick-patroon (engulfing, hamer, ster, doji) in de juiste richting op de signaal-candle | ✗ Liquiditeit: 24u volume €1.363.033, onder de grens van €2.000.000 | ✓ Steun/weerstand: zone op 2.1x ATR afstand, terugveer bevestigd | ✗ Premium/discount: entry in premium-zone (equilibrium 93.6550) | ✓ Liquidity sweep: stop-hunt van 94.1550, candle sloot terug aan de goede kant",
+  61.111111,
+  true
+ ],
+ "BTC|long|2026-02-15 21:00": [
+  true,
+  "✗ Trend: EMA9 onder EMA21, geen opwaartse trend | ✗ Momentum: MACD onder signaallijn, geen opwaarts momentum | ✓ RSI: RSI 49 | ✗ Volume: volume 0.99x gemiddeld, onder gemiddeld | ✓ Uitgerektheid: -0.2x ATR van EMA21 | ✗ Trendsterkte: ADX 15, trend sterk maar in de verkeerde richting | ✓ Volatiliteit: ATR 1.1337 (stijgend) | ✓ Volume-percentiel: volume in 60e percentiel van de laatste 20 candles | ✓ RSI daily: RSI 47 op daily | ✓ Premium/discount (dag): entry in discount-zone op daily (equilibrium 97.5633) | ✓ Liquidity sweep (dag): stop-hunt op daily van 94.1550, candle sloot terug aan de goede kant | ✗ 1u bevestiging: EMA9 onder EMA21 op 1u, nog geen bevestiging op de snellere timeframe | ✓ RSI 1u: RSI 50 op 1u | ✓ Divergentie: geen waarschuwende divergentie | ✗ Candlepatroon: geen candlestick-patroon (engulfing, hamer, ster, doji) in de juiste richting op de signaal-candle | ✗ Liquiditeit: 24u volume €1.402.446, onder de grens van €2.000.000 | ✓ Steun/weerstand: zone op 2.2x ATR afstand, terugveer bevestigd | ✓ Premium/discount: entry in discount-zone (equilibrium 94.9636) | ✓ Liquidity sweep: stop-hunt van 94.1550, candle sloot terug aan de goede kant",
+  61.111111,
+  true
+ ],
+ "BTC|short|2026-02-10 00:00": [
+  true,
+  "✓ Trend: EMA9 onder EMA21 | ✓ Momentum: MACD onder signaallijn | ✓ RSI: RSI 38 | ✓ Volume: volume 1.04x gemiddeld | ✓ Uitgerektheid: 1.5x ATR van EMA21 | ✓ Trendsterkte: ADX 33 | ✓ Volatiliteit: ATR 1.2405 (stijgend) | ✓ Volume-percentiel: volume in 70e percentiel van de laatste 20 candles | ✓ RSI daily: RSI 45 op daily | ✗ Premium/discount (dag): entry in discount-zone op daily (equilibrium 97.6059) | ✓ Liquidity sweep (dag): stop-hunt op daily van 97.9936, candle sloot terug aan de goede kant | ✓ 1u bevestiging: EMA9 onder EMA21 op 1u | ✓ RSI 1u: RSI 49 op 1u | ✓ Divergentie: geen waarschuwende divergentie | ✗ Candlepatroon: geen candlestick-patroon (engulfing, hamer, ster, doji) in de juiste richting op de signaal-candle | ✗ Liquiditeit: 24u volume €1.454.687, onder de grens van €2.000.000 | ✓ Steun/weerstand: zone op 2.2x ATR afstand, terugveer bevestigd | ✗ Premium/discount: entry in discount-zone (equilibrium 95.9419) | ✗ Liquidity sweep: geen recente stop-hunt gevonden",
+  72.222222,
+  true
+ ],
+ "BTC|short|2026-02-12 13:30": [
+  false,
+  "✓ Trend: EMA9 onder EMA21 | ✗ Momentum: MACD boven signaallijn, geen neerwaarts momentum | ✓ RSI: RSI 51 | ✗ Volume: volume 0.95x gemiddeld, onder gemiddeld | ✓ Uitgerektheid: -0.4x ATR van EMA21 | ✓ Trendsterkte: ADX 26 | ✓ Volatiliteit: ATR 1.2262 (stijgend) | ✗ Volume-percentiel: volume in 25e percentiel van de laatste 20 candles, onder de 50e percentiel grens | ✓ RSI daily: RSI 47 op daily | ✗ Premium/discount (dag): entry in discount-zone op daily (equilibrium 97.5633) | ✗ Liquidity sweep (dag): geen recente stop-hunt op daily gevonden | ✗ 1u bevestiging: EMA9 boven EMA21 op 1u, nog geen bevestiging op de snellere timeframe | ✓ RSI 1u: RSI 61 op 1u | ✗ Divergentie: prijs zet een lagere bodem neer terwijl RSI juist stijgt, momentum zwakt af | ✗ Candlepatroon: geen candlestick-patroon (engulfing, hamer, ster, doji) in de juiste richting op de signaal-candle | ✗ Liquiditeit: 24u volume €1.363.033, onder de grens van €2.000.000 | ✗ Steun/weerstand: zone op 0.2x ATR afstand, maar nog geen bevestigde terugveer | ✓ Premium/discount: entry in premium-zone (equilibrium 93.6550) | ✗ Liquidity sweep: geen recente stop-hunt gevonden",
+  38.888889,
+  true
+ ],
+ "BTC|short|2026-02-15 21:00": [
+  true,
+  "✓ Trend: EMA9 onder EMA21 | ✓ Momentum: MACD onder signaallijn | ✓ RSI: RSI 49 | ✗ Volume: volume 0.99x gemiddeld, onder gemiddeld | ✓ Uitgerektheid: 0.2x ATR van EMA21 | ✓ Trendsterkte: ADX 15 | ✓ Volatiliteit: ATR 1.1337 (stijgend) | ✓ Volume-percentiel: volume in 60e percentiel van de laatste 20 candles | ✓ RSI daily: RSI 47 op daily | ✗ Premium/discount (dag): entry in discount-zone op daily (equilibrium 97.5633) | ✗ Liquidity sweep (dag): geen recente stop-hunt op daily gevonden | ✓ 1u bevestiging: EMA9 onder EMA21 op 1u | ✓ RSI 1u: RSI 50 op 1u | ✓ Divergentie: geen waarschuwende divergentie | ✗ Candlepatroon: geen candlestick-patroon (engulfing, hamer, ster, doji) in de juiste richting op de signaal-candle | ✗ Liquiditeit: 24u volume €1.402.446, onder de grens van €2.000.000 | ✓ Steun/weerstand: zone op 0.4x ATR afstand, terugveer bevestigd | ✗ Premium/discount: entry in discount-zone (equilibrium 94.9636) | ✓ Liquidity sweep: stop-hunt van 95.0140, candle sloot terug aan de goede kant",
+  66.666667,
+  true
+ ]
+}
