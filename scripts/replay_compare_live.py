@@ -4,6 +4,7 @@ bevestigde live signalen grotendeels terug (zelfde coin, richting, binnen 2
 uur). Alleen lezen.
 
 Draai met: python3 scripts/replay_compare_live.py --since 2026-10-01 --until 2026-10-04
+Optioneel: --refresh haalt de candles opnieuw op (nodig als de cache vóór --until eindigt).
 Slagingscriterium: minstens 70% van de bevestigde live signalen komt terug.
 Replay-only signalen worden gerapporteerd maar tellen niet mee: de pre-checks
 van scan_market zijn niet nagebootst."""
@@ -27,6 +28,7 @@ def main() -> None:
     p.add_argument("--since", required=True)
     p.add_argument("--until", required=True)
     p.add_argument("--coins", default=",".join(config.FIXED_COINS))
+    p.add_argument("--refresh", action="store_true")
     a = p.parse_args()
     start, end = pd.Timestamp(a.since, tz="UTC"), pd.Timestamp(a.until, tz="UTC")
     coins = [c.strip().upper() for c in a.coins.split(",")]
@@ -39,7 +41,11 @@ def main() -> None:
         ).fetchall()
     live = [dict(r, at=pd.Timestamp(r["created_at"]).tz_convert("UTC")) for r in live if r["coin"] in coins]
 
-    base = {c: candles.ensure_candles(c, 2) for c in sorted(set(coins) | {"BTC"})}
+    base = {c: candles.ensure_candles(c, 2, refresh=a.refresh) for c in sorted(set(coins) | {"BTC"})}
+    cache_end = min(df["timestamp"].iloc[-1] for df in base.values())
+    if cache_end < end:
+        sys.exit(f"De candle-cache eindigt op {cache_end:%Y-%m-%d %H:%M}, dat is vóór --until ({end:%Y-%m-%d}). "
+                 "Draai opnieuw met --refresh (of kies een eerdere --until); er is geen oordeel gegeven.")
     replayed = [s for coin in coins for s in engine.replay_day_trading(coin, base, start, end)]
 
     def match(item_coin, item_dir, item_at, others, confirmed_only):
@@ -67,7 +73,10 @@ def main() -> None:
     for r in replay_confirmed:
         if r not in replay_in_live:
             print(f"  {r['coin']} {r['direction']} {r['at']:%Y-%m-%d %H:%M}")
-    print("\nRESULTAAT:", "GESLAAGD" if ratio >= PASS_RATIO else "NIET GESLAAGD, het raam klopt nog niet")
+    if not live_confirmed:
+        print("\nGEEN LIVE SIGNALEN, niet te beoordelen")
+    else:
+        print("\nRESULTAAT:", "GESLAAGD" if ratio >= PASS_RATIO else "NIET GESLAAGD, het raam klopt nog niet")
 
 
 if __name__ == "__main__":

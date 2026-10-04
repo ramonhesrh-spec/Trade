@@ -43,7 +43,8 @@ drive it with Playwright — there's no existing template for this in-repo,
 build the check from scratch each time.
 
 Er is een stdlib-testmap `tests/` (`python3 -m unittest discover -s tests -t . -v`),
-alleen voor het meetraam (`app/replay/`) en twee golden-tests die de live
+voor het meetraam (`app/replay/`), de gedeelde `setup_eval`-tests
+(`tests/test_setup_eval.py`) en twee golden-tests die de live
 dagtrading-pijplijn bewaken. `app/setup_eval.py` bevat de beslislogica die
 live en het meetraam delen: wijzig die niet zonder de golden-tests te draaien.
 
