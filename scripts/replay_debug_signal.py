@@ -58,13 +58,13 @@ def main() -> None:
         sys.exit(f"Database niet gevonden op {db_file}. Zet DATABASE_PATH naar de productiedatabase.")
     with db.session() as conn:
         live = conn.execute(
-            """SELECT id, coin, direction, created_at, technical_confirmed, price, stop_loss, take_profit, reason
+            """SELECT id, coin, direction, trade_type, created_at, technical_confirmed, price, stop_loss, take_profit, reason
                FROM signals WHERE id = ?""", (a.id,)).fetchone()
     if live is None:
         sys.exit(f"Geen signaal met id {a.id}.")
 
     created = pd.Timestamp(live["created_at"]).tz_convert("UTC")
-    print(f"LIVE #{live['id']} {live['coin']} {live['direction']} aangemaakt {created:%Y-%m-%d %H:%M}")
+    print(f"LIVE #{live['id']} {live['coin']} {live['direction']} type={live['trade_type']} aangemaakt {created:%Y-%m-%d %H:%M}")
     print(f"  bevestigd (laatste stand): {bool(live['technical_confirmed'])}  prijs {live['price']:.4f}  "
           f"stop {live['stop_loss']:.4f}  take {live['take_profit']:.4f}")
     print(f"  falende factoren: {failing_factors(live['reason'])}\n")
