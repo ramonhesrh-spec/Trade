@@ -102,3 +102,14 @@ ADMIN_USERNAME = _get("ADMIN_USERNAME")
 # Kraken Pro referral, getoond op de openbare landingspagina.
 KRAKEN_REFERRAL_URL = "https://proinvite.kraken.com/9f1e/4zto3wcm"
 KRAKEN_REFERRAL_CODE = "dc992yg8"
+
+
+# Soorten die wel gemeten en getoond worden maar geen pushmelding meer geven (komma-gescheiden uit smc, patroon,
+# swing, day_trading). Standaard leeg: niets gaat uit tenzij jij het kiest, zie Bewijs voor de cijfers per soort.
+SIGNAL_TYPE_INFO_ONLY = {t.strip() for t in _get("SIGNAL_TYPE_INFO_ONLY", "").split(",") if t.strip()}
+
+# Samenval: SMC-signaal en community-call op dezelfde coin en kant binnen dit aantal uren. Ongetest: gaat vanzelf
+# uit zodra er SAMENVAL_MAX_NEGATIVE afgeronde samenvallen zijn met een negatieve som in R.
+SAMENVAL_ENABLED = _get("SAMENVAL_ENABLED", "true").lower() == "true"
+SAMENVAL_WINDOW_HOURS = float(_get("SAMENVAL_WINDOW_HOURS", "6"))
+SAMENVAL_MAX_NEGATIVE = int(_get("SAMENVAL_MAX_NEGATIVE", "30"))

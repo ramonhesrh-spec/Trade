@@ -349,6 +349,17 @@ sudo systemctl start crypto-derivs.service   # eerste keer: haalt 29 dagen terug
 `data/derivs/<COIN>.csv`. Candle-kenmerken zijn uitgeput, dit is nieuwe informatie om SMC en day trading mee te
 toetsen. Binance geeft maar ~30 dagen history; elke dag zonder verzamelaar is voorgoed kwijt.
 
+### Samenval en alleen-informatie per soort
+
+Samenval (`app/samenval.py`): een SMC-signaal en een community-call (day_trading) op dezelfde coin en kant binnen
+`SAMENVAL_WINDOW_HOURS` (6) geven één extra pushmelding met het label ongetest. `/bewijs` en het weekrapport tonen de
+uitkomst apart. De detector gaat vanzelf uit zodra de laatste `SAMENVAL_MAX_NEGATIVE` (30) afgeronde samenvallen samen
+negatief zijn in R. De check draait mee in de SMC-snelcyclus.
+
+`SIGNAL_TYPE_INFO_ONLY` in `.env` (bijvoorbeeld `patroon,day_trading`) zet de push voor die soorten uit. Het signaal blijft
+bestaan, in het journaal en op Bewijs, dus het meten gaat door. De timers en de bot lezen `.env` opnieuw bij de volgende
+start; herstart `crypto-bot` na een wijziging.
+
 ### Trade Radar en Bewijs (dashboard)
 
 `/smc` heet in de navigatie **Radar**: elke bouwende SMC-setup en elk open SMC-signaal staat als handelsplan met een

@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import exchange, indicators, patterns, push_notify, repo, risk, trade_plan
+from app import exchange, indicators, patterns, push_notify, repo, risk, samenval, trade_plan
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
@@ -217,7 +217,7 @@ async def _find_breakout_retest_candidate(coin: str, direction: str, df, ind) ->
         premise_level = zone.price_high if direction == "long" else zone.price_low
         await fanout_confirmed_signal(
             signal_id, coin, direction, ind.price, stop_take.stop_loss, stop_take.take_profit, premise_level,
-            title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, {pattern_label}",
+            title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, {pattern_label}", signal_type="patroon",
             make_body=_breakout_body,
             kansberekening=kansberekening,
             hard_gates_ok=bool(factor_hard_gates_ok),
@@ -379,7 +379,7 @@ async def _find_trendline_retest_candidate(coin: str, direction: str, df, ind) -
         # match.neckline bij een chart-patroon.
         await fanout_confirmed_signal(
             signal_id, coin, direction, ind.price, stop_take.stop_loss, stop_take.take_profit, current_value,
-            title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, {pattern_label}",
+            title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, {pattern_label}", signal_type="patroon",
             make_body=_trendline_body,
             kansberekening=kansberekening,
             hard_gates_ok=bool(factor_hard_gates_ok),
@@ -643,7 +643,7 @@ async def _find_chart_pattern_candidate(
         # van detectie, die intussen al verder kan zijn doorgelopen).
         await fanout_confirmed_signal(
             signal_id, coin, match.direction, ind.price, stop_loss, take_profit, match.neckline,
-            title=f"{push_notify.coin_symbol(coin)} {coin} {match.direction}, {match.name}",
+            title=f"{push_notify.coin_symbol(coin)} {coin} {match.direction}, {match.name}", signal_type="patroon",
             make_body=_pattern_body,
             kansberekening=kansberekening,
             hard_gates_ok=bool(factor_hard_gates_ok),
@@ -884,7 +884,7 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     premise_level = setup["zone_high"] if direction == "short" else setup["zone_low"]
     await fanout_confirmed_signal(
         signal_id, coin, direction, entry_price, stop_loss, take_profit, premise_level,
-        title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, SMC liquidity sweep",
+        title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, SMC liquidity sweep", signal_type="smc",
         make_body=_smc_body,
         reason=reason,
     )
@@ -1175,6 +1175,10 @@ async def scan_smc_fast() -> None:
         return
     for coin_row in repo.list_coins():
         await _run_smc_check(coin_row["symbol"])
+    try:
+        await samenval.run()
+    except Exception:
+        logger.exception("Samenval-check is mislukt")
 
 
 if __name__ == "__main__":

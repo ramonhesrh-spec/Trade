@@ -18,6 +18,7 @@ TYPE_LABELS = {
     "patroon": "Chart-patroon",
     "day_trading": "Day trading (4u)",
     "swing": "Swing",
+    "samenval": "Samenval SMC en community (ongetest)",
 }
 SOURCE_LABELS = {"scan": "Door HesPulse gevonden", "community": "Via de community"}
 STATUS_LABELS = {
@@ -70,6 +71,8 @@ def summarize(rows: list[dict], round_trip_cost_pct: float, now: Optional[dateti
         source = "community" if r["message_id"] is not None else "scan"
         groups[(source, r["trade_type"])].append(r)
         groups[("alles", "alles")].append(r)
+        if r.get("samenval"):
+            groups[("scan", "samenval")].append(r)    # ook los zichtbaar, zonder het totaal dubbel te tellen
 
     out = []
     for (source, trade_type), items in groups.items():

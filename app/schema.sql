@@ -504,6 +504,17 @@ CREATE TABLE IF NOT EXISTS smc_setups (
 );
 CREATE INDEX IF NOT EXISTS idx_smc_setups_coin ON smc_setups(coin);
 
+-- Samenval: een SMC-signaal en een community-call op dezelfde coin en kant binnen het venster. Eén rij per
+-- SMC-signaal (UNIQUE) zodat er nooit twee keer gemeld wordt; de uitkomst staat op het signaal zelf.
+CREATE TABLE IF NOT EXISTS samenvallen (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    smc_signal_id INTEGER NOT NULL UNIQUE REFERENCES signals(id),
+    message_id INTEGER,
+    created_at TEXT NOT NULL
+);
+
 -- Indexen op kolommen waar steeds op gefilterd of gesorteerd wordt. Zonder
 -- deze doorzoekt SQLite bij elke dashboard- of coinpagina de volledige
 -- tabel, dat wordt merkbaar trager naarmate er meer berichten en trades

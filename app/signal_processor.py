@@ -354,6 +354,7 @@ async def _fanout_confirmed_signal(
     skip_push: bool = False,
     kansberekening=_KANSBEREKENING_NOT_APPLICABLE, hard_gates_ok: bool = True,
     reason: str = "",
+    signal_type: Optional[str] = None,
 ) -> None:
     """Deelt een al-bevestigd signaal (geen gepoold percentage, altijd
     gemeld) met alle gebruikers: journaalregel + pushmelding per gebruiker,
@@ -396,6 +397,9 @@ async def _fanout_confirmed_signal(
     chart-patroon) — dat kan inmiddels van entry_price afwijken (prijs
     beweegt tussen het zetten van het niveau en de latere bevestiging), dus
     de twee zijn expres losse parameters."""
+    # Zie config.SIGNAL_TYPE_INFO_ONLY: de journaalregel blijft, alleen de push vervalt.
+    if signal_type in config.SIGNAL_TYPE_INFO_ONLY:
+        skip_push, kansberekening = True, _KANSBEREKENING_NOT_APPLICABLE
     required_by_user = repo.list_required_factors_all_users()
     for user in repo.list_users():
         risk_eur, evaluation_id, cost_rate, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
@@ -533,7 +537,7 @@ async def run_swing_check(watch_id: int) -> None:
         signal_id, coin, direction, ind_4h.price, stop_take.stop_loss, stop_take.take_profit,
         premise_level=watch["price_level"],
         title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, swing-kans",
-        make_body=_swing_body,
+        make_body=_swing_body, signal_type="swing",
     )
 
 
@@ -978,6 +982,10 @@ async def process_day_trading_signal(
             # zelf wordt overgeslagen, dat is precies wat "uitzetten" betekent.
             logger.info("Coin %s is gemute voor gebruiker %s, geen pushmelding verstuurd",
                         interp.coin, user["username"])
+            continue
+
+        if "day_trading" in config.SIGNAL_TYPE_INFO_ONLY:
+            logger.info("day_trading staat op alleen-informatie, geen pushmelding voor %s", interp.coin)
             continue
 
         if not confirmed:

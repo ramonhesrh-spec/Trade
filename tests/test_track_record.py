@@ -78,3 +78,14 @@ class SparklineTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SamenvalGroupTest(unittest.TestCase):
+    def test_samenval_rows_get_own_entry_without_double_counting_total(self):
+        base = {"message_id": None, "trade_type": "smc", "auto_outcome": "take_profit", "auto_outcome_at": "2026-10-01T10:00:00+00:00",
+                "price": 100.0, "stop_loss": 99.0, "take_profit": 102.0, "created_at": "2026-10-01T09:00:00+00:00"}
+        rows = [{**base, "samenval": 1}, {**base, "samenval": 0}]
+        out = {(e["source"], e["trade_type"]): e for e in tr.summarize(rows, 0.06, now=datetime(2026, 10, 5, tzinfo=timezone.utc))}
+        self.assertEqual(out[("scan", "samenval")]["resolved"], 1)
+        self.assertEqual(out[("scan", "smc")]["resolved"], 2)
+        self.assertEqual(out[("alles", "alles")]["resolved"], 2)

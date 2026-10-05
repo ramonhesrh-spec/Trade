@@ -24,7 +24,7 @@ MIN_T_FOR_EDGE = 2.0
 MIN_CALLS_PER_COIN = 8
 FEE_PCT = 0.02
 SLIPPAGE_PCT = 0.01
-TYPE_ORDER = ("smc", "patroon", "day_trading", "swing")
+TYPE_ORDER = ("smc", "patroon", "day_trading", "swing", "samenval")
 
 
 def _r_of(row: dict) -> Optional[float]:
@@ -44,13 +44,15 @@ def scan_stats(rows: list[dict]) -> dict:
     for r in rows:
         if r["message_id"] is not None:
             continue
-        s = stats.setdefault(r["trade_type"], {"tp": 0, "sl": 0, "other": 0, "r": []})
         value = _r_of(r)
-        if value is None:
-            s["other"] += 1
-        else:
-            s["tp" if value > 0 else "sl"] += 1
-            s["r"].append(value)
+        # Samenval-signalen tellen ook mee onder hun eigen soort (smc) en staan daarnaast apart.
+        for name in (r["trade_type"], "samenval") if r.get("samenval") else (r["trade_type"],):
+            s = stats.setdefault(name, {"tp": 0, "sl": 0, "other": 0, "r": []})
+            if value is None:
+                s["other"] += 1
+            else:
+                s["tp" if value > 0 else "sl"] += 1
+                s["r"].append(value)
     return stats
 
 

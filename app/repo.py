@@ -2469,8 +2469,10 @@ def list_signals_for_quality_report(since_iso: Optional[str] = None) -> list[dic
     message_id is leeg voor signalen die de scan zelf vond."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT message_id, trade_type, auto_outcome, auto_outcome_at, price, stop_loss, take_profit, created_at
-               FROM signals WHERE is_practice = 0 AND (? IS NULL OR created_at >= ?) ORDER BY created_at""",
+            """SELECT s.message_id, s.trade_type, s.auto_outcome, s.auto_outcome_at, s.price, s.stop_loss, s.take_profit,
+                      s.created_at, (sv.id IS NOT NULL) AS samenval
+               FROM signals s LEFT JOIN samenvallen sv ON sv.smc_signal_id = s.id
+               WHERE s.is_practice = 0 AND (? IS NULL OR s.created_at >= ?) ORDER BY s.created_at""",
             (since_iso, since_iso),
         ).fetchall()
         return [dict(r) for r in rows]
@@ -2499,5 +2501,42 @@ def list_open_smc_signals(limit: int = 30) -> list[dict]:
             """SELECT id, coin, direction, price, stop_loss, take_profit, created_at FROM signals
                WHERE trade_type = 'smc' AND is_practice = 0 AND auto_outcome IS NULL
                ORDER BY created_at DESC LIMIT ?""", (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_smc_signals_since(since_iso: str) -> list[dict]:
+    """SMC-signalen sinds een tijdstip, voor de samenval-detector."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, coin, direction, price, stop_loss, take_profit, created_at FROM signals
+               WHERE trade_type = 'smc' AND is_practice = 0 AND created_at >= ? ORDER BY created_at""", (since_iso,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def samenval_signal_ids() -> set[int]:
+    with db.session() as conn:
+        return {r["smc_signal_id"] for r in conn.execute("SELECT smc_signal_id FROM samenvallen")}
+
+
+def create_samenval(coin: str, direction: str, smc_signal_id: int, message_id: Optional[int]) -> bool:
+    """Legt een samenval vast. False als dit SMC-signaal er al een heeft: dan geen tweede melding."""
+    with db.session() as conn:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO samenvallen (coin, direction, smc_signal_id, message_id, created_at) VALUES (?, ?, ?, ?, ?)",
+            (coin, direction, smc_signal_id, message_id, db.now_iso()),
+        )
+        return cur.rowcount == 1
+
+
+def list_samenval_results(limit: int = 30) -> list[dict]:
+    """De laatste afgeronde samenvallen (take of stop geraakt) met de prijzen om R uit te rekenen."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT s.price, s.stop_loss, s.take_profit, s.auto_outcome FROM samenvallen sv
+               JOIN signals s ON s.id = sv.smc_signal_id
+               WHERE s.auto_outcome IN ('take_profit', 'stop_loss')
+               ORDER BY s.auto_outcome_at DESC LIMIT ?""", (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
