@@ -113,5 +113,45 @@ class LabTests(unittest.TestCase):
         self.assertTrue((df["at"] >= start).all() and (df["at"] < end).all())
 
 
+def ramp(n=3000, start="2026-03-01", slope=0.01, base=100.0):
+    ts = pd.date_range(start, periods=n, freq="1min", tz="UTC")
+    close = base + slope * np.arange(n)
+    open_ = np.concatenate([[base], close[:-1]])
+    return pd.DataFrame({"timestamp": ts, "open": open_, "high": np.maximum(open_, close) + 0.01,
+                         "low": np.minimum(open_, close) - 0.01, "close": close, "volume": 1.0})
+
+
+class CallTests(unittest.TestCase):
+    def test_richting_en_vertraging_in_forward_returns(self):
+        f = ramp()
+        at = f["timestamp"].iloc[1000]
+        calls = pd.DataFrame({"at": [at, at], "direction": ["long", "short"]})
+        fr = lab.forward_returns(calls, f, delay_minutes=0, horizons=(60,))
+        self.assertGreater(fr.loc[0, "pct_60"], 0)
+        self.assertAlmostEqual(fr.loc[0, "pct_60"], -fr.loc[1, "pct_60"])
+        self.assertAlmostEqual(fr.loc[0, "raw_60"], fr.loc[1, "raw_60"])
+        self.assertAlmostEqual(fr.loc[0, "pct_60"], (0.01 * 60) / (100 + 0.01 * 999) * 100, places=2)
+        late = lab.forward_returns(calls.iloc[:1], f, delay_minutes=30, horizons=(60,))
+        self.assertNotAlmostEqual(late.loc[0, "pct_60"], fr.loc[0, "pct_60"], places=4)
+
+    def test_call_zonder_candle_op_dat_moment_wordt_overgeslagen(self):
+        f = ramp()
+        calls = pd.DataFrame({"at": [f["timestamp"].iloc[-1] + pd.Timedelta(days=3)], "direction": ["long"]})
+        self.assertTrue(lab.forward_returns(calls, f).empty)
+        self.assertEqual(lab.trades_from_calls("BTC", calls, f, 0, 0.02, 0.01), [])
+
+    def test_trades_from_calls_long_wint_in_stijgende_markt_short_verliest(self):
+        f = ramp(n=6000, slope=0.02)
+        at = f["timestamp"].iloc[2000]
+        calls = pd.DataFrame({"at": [at, at], "direction": ["long", "short"], "category": ["day_trading", "day_trading"]})
+        rows = pd.DataFrame(lab.trades_from_calls("BTC", calls, f, 0, 0.0, 0.0))
+        self.assertEqual(len(rows), 6)
+        longs = rows[rows["direction"] == "long"]
+        shorts = rows[rows["direction"] == "short"]
+        self.assertTrue((longs["result"] == "take_profit").all())
+        self.assertTrue((shorts["result"] == "stop_loss").all())
+        self.assertAlmostEqual(float(longs[longs["rr"] == 1.5]["r_gross"].iloc[0]), 1.5)
+
+
 if __name__ == "__main__":
     unittest.main()

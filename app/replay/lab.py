@@ -259,3 +259,67 @@ def summarize(trades: pd.DataFrame, start: pd.Timestamp, end: pd.Timestamp, trai
             "coins_positief": f"{coins_pos}/{coins_all}", "kandidaat": bool(ok),
         })
     return pd.DataFrame(out)
+
+
+FORWARD_HORIZONS = (15, 60, 240, 1440)
+
+
+def forward_returns(calls: pd.DataFrame, frame_1m: pd.DataFrame, delay_minutes: int = 0, horizons=FORWARD_HORIZONS) -> pd.DataFrame:
+    """Per call (kolommen `at` en `direction`): koersverandering in de richting van de call, in procenten en in
+    ATR-eenheden (15m-ATR), na `horizons` minuten, gemeten vanaf de open van de eerste 1m-candle op of na at + delay.
+    Ook `raw_*`: dezelfde verandering zonder richting (de drift in die periode), als controle."""
+    a = Arrays.from_frame(frame_1m.assign(timestamp=frame_1m["timestamp"].dt.tz_convert("UTC").dt.tz_localize(None)))
+    bars = add_indicators(make_bars(frame_1m, 15))
+    close_times = bars["close_time"].dt.tz_convert("UTC").dt.tz_localize(None).to_numpy()
+    rows = []
+    for call in calls.itertuples():
+        t = _naive(call.at + pd.Timedelta(minutes=delay_minutes))
+        s = int(np.searchsorted(a.ts, t, side="left"))
+        if s >= len(a.ts) or a.ts[s] - t > ENTRY_GAP.to_timedelta64():
+            continue
+        k = int(np.searchsorted(close_times, t, side="right")) - 1
+        if k < 0 or np.isnan(bars["atr"].iloc[k]):
+            continue
+        entry = float(a.open[s])
+        sign = 1 if call.direction == "long" else -1
+        row = {"at": call.at, "direction": call.direction, "atr_pct": float(bars["atr"].iloc[k]) / entry * 100}
+        for h in horizons:
+            e = int(np.searchsorted(a.ts, t + np.timedelta64(h, "m"), side="left")) - 1
+            if e <= s or e >= len(a.ts):
+                row[f"raw_{h}"] = np.nan
+                continue
+            raw = (a.close[e] - entry) / entry * 100
+            row[f"raw_{h}"] = raw
+            row[f"pct_{h}"] = sign * raw
+            row[f"atr_{h}"] = sign * raw / row["atr_pct"]
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def trades_from_calls(coin: str, calls: pd.DataFrame, frame_1m: pd.DataFrame, delay_minutes: int,
+                      fee_pct: float, slippage_pct: float) -> list[dict]:
+    """Elke call als trade: entry op de open van de eerste 1m-candle op of na at + delay, stop STOP_ATR x ATR,
+    take 1R, 1,5R en 2R, maximaal MAX_HOLD, kosten per kant. Zelfde uitstap als de testbank."""
+    a = Arrays.from_frame(frame_1m.assign(timestamp=frame_1m["timestamp"].dt.tz_convert("UTC").dt.tz_localize(None)))
+    bars = add_indicators(make_bars(frame_1m, 15))
+    close_times = bars["close_time"].dt.tz_convert("UTC").dt.tz_localize(None).to_numpy()
+    rows = []
+    for call in calls.itertuples():
+        t = _naive(call.at + pd.Timedelta(minutes=delay_minutes))
+        s = int(np.searchsorted(a.ts, t, side="left"))
+        e = int(np.searchsorted(a.ts, t + MAX_HOLD.to_timedelta64(), side="left"))
+        if s >= len(a.ts) or e - s < 2 or a.ts[s] - t > ENTRY_GAP.to_timedelta64():
+            continue
+        k = int(np.searchsorted(close_times, t, side="right")) - 1
+        if k < 0 or np.isnan(bars["atr"].iloc[k]):
+            continue
+        entry = float(a.open[s])
+        risk = STOP_ATR * float(bars["atr"].iloc[k])
+        if risk <= 0 or risk >= entry:
+            continue
+        stop = entry - risk if call.direction == "long" else entry + risk
+        for rr, (result, gross, net) in zip(RR_LIST, resolve_many(call.direction, entry, stop, RR_LIST, a, s, e, fee_pct, slippage_pct)):
+            rows.append({"coin": coin, "at": call.at, "direction": call.direction, "category": getattr(call, "category", None),
+                         "delay": delay_minutes, "risk_pct": risk / entry * 100, "rr": rr, "result": result,
+                         "r_gross": gross, "r_net": net})
+    return rows
