@@ -134,6 +134,23 @@ class CallTests(unittest.TestCase):
         late = lab.forward_returns(calls.iloc[:1], f, delay_minutes=30, horizons=(60,))
         self.assertNotAlmostEqual(late.loc[0, "pct_60"], fr.loc[0, "pct_60"], places=4)
 
+    def test_placebo_is_de_drift_in_de_richting_van_de_call(self):
+        f = ramp(n=6000, slope=0.01)
+        t = f["timestamp"]
+        calls = pd.DataFrame({"at": [t.iloc[500], t.iloc[3000]], "direction": ["long", "short"]})
+        ctl = lab.placebo_forward(calls, f, 0, horizons=(60,), n_random=20)
+        self.assertGreater(ctl.loc[0, "ctl_60"], 0)   # long in stijgende markt
+        self.assertLess(ctl.loc[1, "ctl_60"], 0)      # short in stijgende markt
+        self.assertAlmostEqual(ctl.loc[0, "ctl_60"], -ctl.loc[1, "ctl_60"], places=1)
+
+    def test_tijdstop_met_brede_stop_sluit_op_slotprijs(self):
+        f = ramp(n=6000, slope=0.01)
+        calls = pd.DataFrame({"at": [f["timestamp"].iloc[2000]], "direction": ["long"], "category": ["x"]})
+        rows = lab.trades_from_calls("BTC", calls, f, 0, 0.0, 0.0, rr_list=(1e6,), hold=pd.Timedelta(minutes=120), stop_atr=50.0)
+        self.assertEqual(rows[0]["result"], "expired")
+        self.assertEqual(rows[0]["hold"], 120)
+        self.assertGreater(rows[0]["r_gross"], 0)
+
     def test_call_zonder_candle_op_dat_moment_wordt_overgeslagen(self):
         f = ramp()
         calls = pd.DataFrame({"at": [f["timestamp"].iloc[-1] + pd.Timedelta(days=3)], "direction": ["long"]})

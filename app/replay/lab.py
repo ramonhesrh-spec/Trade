@@ -296,8 +296,30 @@ def forward_returns(calls: pd.DataFrame, frame_1m: pd.DataFrame, delay_minutes: 
     return pd.DataFrame(rows)
 
 
+def placebo_forward(calls: pd.DataFrame, frame_1m: pd.DataFrame, delay_minutes: int = 0, horizons=FORWARD_HORIZONS,
+                    n_random: int = 30, seed: int = 7) -> pd.DataFrame:
+    """Controle per call: dezelfde coin en richting op `n_random` willekeurige momenten binnen het
+    bereik van de calls. Geeft per call (zelfde volgorde als forward_returns, op `at` en `direction`) het
+    gemiddelde gerichte rendement `ctl_<h>`, zodat de gemeten voorsprong tegen de drift van de periode staat."""
+    rng = np.random.default_rng(seed)
+    lo, hi = calls["at"].min(), calls["at"].max()
+    span = (hi - lo).total_seconds()
+    rows = []
+    for idx, call in enumerate(calls.itertuples()):
+        fake = pd.DataFrame({"at": [lo + pd.Timedelta(seconds=float(x)) for x in rng.random(n_random) * span],
+                             "direction": call.direction})
+        fr = forward_returns(fake, frame_1m, delay_minutes, horizons)
+        row = {"idx": idx}
+        for h in horizons:
+            if f"pct_{h}" in fr:
+                row[f"ctl_{h}"] = fr[f"pct_{h}"].mean()
+        rows.append(row)
+    return pd.DataFrame(rows).set_index("idx")
+
+
 def trades_from_calls(coin: str, calls: pd.DataFrame, frame_1m: pd.DataFrame, delay_minutes: int,
-                      fee_pct: float, slippage_pct: float) -> list[dict]:
+                      fee_pct: float, slippage_pct: float, rr_list=RR_LIST, hold: pd.Timedelta = MAX_HOLD,
+                      stop_atr: float = STOP_ATR) -> list[dict]:
     """Elke call als trade: entry op de open van de eerste 1m-candle op of na at + delay, stop STOP_ATR x ATR,
     take 1R, 1,5R en 2R, maximaal MAX_HOLD, kosten per kant. Zelfde uitstap als de testbank."""
     a = Arrays.from_frame(frame_1m.assign(timestamp=frame_1m["timestamp"].dt.tz_convert("UTC").dt.tz_localize(None)))
@@ -307,19 +329,19 @@ def trades_from_calls(coin: str, calls: pd.DataFrame, frame_1m: pd.DataFrame, de
     for call in calls.itertuples():
         t = _naive(call.at + pd.Timedelta(minutes=delay_minutes))
         s = int(np.searchsorted(a.ts, t, side="left"))
-        e = int(np.searchsorted(a.ts, t + MAX_HOLD.to_timedelta64(), side="left"))
+        e = int(np.searchsorted(a.ts, t + hold.to_timedelta64(), side="left"))
         if s >= len(a.ts) or e - s < 2 or a.ts[s] - t > ENTRY_GAP.to_timedelta64():
             continue
         k = int(np.searchsorted(close_times, t, side="right")) - 1
         if k < 0 or np.isnan(bars["atr"].iloc[k]):
             continue
         entry = float(a.open[s])
-        risk = STOP_ATR * float(bars["atr"].iloc[k])
+        risk = stop_atr * float(bars["atr"].iloc[k])
         if risk <= 0 or risk >= entry:
             continue
         stop = entry - risk if call.direction == "long" else entry + risk
-        for rr, (result, gross, net) in zip(RR_LIST, resolve_many(call.direction, entry, stop, RR_LIST, a, s, e, fee_pct, slippage_pct)):
+        for rr, (result, gross, net) in zip(rr_list, resolve_many(call.direction, entry, stop, rr_list, a, s, e, fee_pct, slippage_pct)):
             rows.append({"coin": coin, "at": call.at, "direction": call.direction, "category": getattr(call, "category", None),
-                         "delay": delay_minutes, "risk_pct": risk / entry * 100, "rr": rr, "result": result,
+                         "delay": delay_minutes, "hold": int(hold.total_seconds() // 60), "risk_pct": risk / entry * 100, "rr": rr, "result": result,
                          "r_gross": gross, "r_net": net})
     return rows

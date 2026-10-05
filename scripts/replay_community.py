@@ -90,24 +90,53 @@ def main() -> None:
     if calls.empty:
         sys.exit("Geen calls binnen het bereik van de candles.")
 
-    for label, subset in (("alle calls", calls), *[(f"categorie {c}", g) for c, g in calls.groupby("category")]):
-        print(f"1. Koersrichting na een call, {label} (n={len(subset)})")
+    control_cat = "oefening"
+    real = calls[calls["category"] != control_cat]
+    groups = [("echte calls (zonder oefening)", real), *[(f"categorie {c}", g) for c, g in real.groupby("category")],
+              (f"controlegroep: categorie {control_cat}", calls[calls["category"] == control_cat])]
+    print("1. Koersrichting na een call. 'verschil' = de call min het gemiddelde van dezelfde coin en richting op 30 willekeurige momenten.")
+    print("   Een call telt maximaal één keer per coin en richting per 4 uur (opeenvolgende berichten zijn geen onafhankelijke metingen).\n")
+    for label, subset in groups:
+        subset = subset.sort_values("at")
+        subset = subset[~(subset.groupby(["coin", "direction"])["at"].diff() < pd.Timedelta(hours=4))]
+        if subset.empty:
+            continue
+        print(f"{label} (n={len(subset)}, {int((subset['direction'] == 'long').sum())} long, {int((subset['direction'] == 'short').sum())} short)")
         for delay in delays:
-            frs = [lab.forward_returns(g, frames[coin], delay) for coin, g in subset.groupby("coin")]
-            fr = pd.concat([f for f in frs if not f.empty], ignore_index=True) if any(not f.empty for f in frs) else pd.DataFrame()
-            if fr.empty:
+            frames_out = []
+            for coin, g in subset.groupby("coin"):
+                g = g.reset_index(drop=True)
+                fr = lab.forward_returns(g, frames[coin], delay)
+                if fr.empty:
+                    continue
+                ctl = lab.placebo_forward(g, frames[coin], delay)
+                keyed = g.reset_index().rename(columns={"index": "idx"})[["idx", "at"]]
+                fr = fr.merge(keyed, on="at", how="left").drop_duplicates("at").set_index("idx").join(ctl)
+                frames_out.append(fr)
+            if not frames_out:
                 continue
+            fr = pd.concat(frames_out, ignore_index=True)
             print(f"  vertraging {delay} min")
             for h in lab.FORWARD_HORIZONS:
-                if f"atr_{h}" in fr:
-                    print(mean_line(f"{h} min %", fr[f"pct_{h}"]) + f"   | in ATR: {fr[f'atr_{h}'].mean():+.2f}   drift (ongericht): {fr[f'raw_{h}'].mean():+.3f}%")
+                if f"pct_{h}" not in fr or f"ctl_{h}" not in fr:
+                    continue
+                diff = (fr[f"pct_{h}"] - fr[f"ctl_{h}"]).dropna()
+                if len(diff) < 2:
+                    continue
+                se = diff.std(ddof=1) / math.sqrt(len(diff))
+                half = len(diff) // 2
+                order = fr.loc[diff.index].sort_values("at").index
+                first, second = diff.loc[order[:half]].mean(), diff.loc[order[half:]].mean()
+                print(f"   {h:>4} min  n={len(diff):<3} call {fr.loc[diff.index, f'pct_{h}'].mean():+.3f}%  controle {fr.loc[diff.index, f'ctl_{h}'].mean():+.3f}%  "
+                      f"verschil {diff.mean():+.3f}% (t={diff.mean() / se if se else 0:+.1f}, {(diff > 0).mean() * 100:.0f}% positief)  "
+                      f"eerste helft {first:+.3f}%, tweede helft {second:+.3f}%")
         print()
 
     fee, slip = a.fee_pct, a.slippage_pct
-    print(f"2. Elke call als vaste trade (stop {lab.STOP_ATR} x ATR), kosten {2 * (fee + slip):.2f}% per rondreis")
+    print(f"2. Elke echte call als vaste trade (stop {lab.STOP_ATR} x ATR), kosten {2 * (fee + slip):.2f}% per rondreis")
     rows = []
     for delay in delays:
-        for coin, g in calls.groupby("coin"):
+        for coin, g in real.groupby("coin"):
             rows += lab.trades_from_calls(coin, g, frames[coin], delay, fee, slip)
     trades = pd.DataFrame(rows)
     if trades.empty:
@@ -124,6 +153,22 @@ def main() -> None:
         for coin, g in trades[(trades["delay"] == delays[0]) & (trades["rr"] == 1.5)].groupby("coin"):
             print(f"   {coin:<14} n={len(g):<4} bruto {g['r_gross'].mean():+.2f}R  netto {g['r_net'].mean():+.2f}R")
 
+    print("\n2b. Tijdstop: geen take, uitstap na een vaste tijd. De stop schaalt mee met de houdtijd: 1,5 x ATR x wortel(minuten / 15),")
+    print("    zodat 1R telkens een gewone beweging over die houdtijd is. Een kleinere stop zou bij lange houdtijd bijna altijd raken.")
+    hold_rows = []
+    for delay in (delays[0], delays[min(2, len(delays) - 1)]):
+        for hold in (60, 120, 240, 480, 1440):
+            for coin, g in real.groupby("coin"):
+                hold_rows += lab.trades_from_calls(coin, g, frames[coin], delay, fee, slip, rr_list=(1_000_000.0,), hold=pd.Timedelta(minutes=hold),
+                                                   stop_atr=lab.STOP_ATR * math.sqrt(hold / 15))
+    holds = pd.DataFrame(hold_rows)
+    if not holds.empty:
+        for cat in (None, "day_trading"):
+            sub = holds if cat is None else holds[holds["category"] == cat]
+            print(f"   {'alle echte calls' if cat is None else 'categorie ' + cat}")
+            for (delay, hold), g in sub.groupby(["delay", "hold"]):
+                print(f"     vertraging {delay:>2} min, uitstap na {hold:>4} min: n={len(g):<4} deel positief {(g['r_gross'] > 0).mean() * 100:>3.0f}%  "
+                      f"bruto {g['r_gross'].mean():+.2f}R  netto {g['r_net'].mean():+.2f}R  mediaan netto {g['r_net'].median():+.2f}R")
     print("\n3. Jouw keuzes: genomen tegenover weggelaten signalen (zelfde automatische uitkomst per signaal)")
     if journal.empty:
         print("   geen journaalregels")
