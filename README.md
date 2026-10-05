@@ -349,6 +349,14 @@ sudo systemctl start crypto-derivs.service   # eerste keer: haalt 29 dagen terug
 `data/derivs/<COIN>.csv`. Candle-kenmerken zijn uitgeput, dit is nieuwe informatie om SMC en day trading mee te
 toetsen. Binance geeft maar ~30 dagen history; elke dag zonder verzamelaar is voorgoed kwijt.
 
+### Extra coins
+
+`EXTRA_COINS=XRP,HBAR` in `.env` voegt coins toe aan de vaste zeven. Daarop draait alleen de SMC-check, niet de 4u-detectoren
+(patroon, uitbraak, trendlijn). Community-berichten over die coins worden wel herkend. Toets eerst met
+`scripts/replay_smc_report.py --coins XRP,HBAR` en `scripts/replay_smc_setup_analysis.py` of SMC er na kosten positief is.
+Herstart `crypto-bot` en `crypto-web` na een wijziging. De derivatenverzamelaar pakt de nieuwe coins vanzelf mee. Een coin
+weghalen kan door hem uit `EXTRA_COINS` te halen: de coin gaat op inactief, er gaat niets verloren.
+
 ### Samenval en alleen-informatie per soort
 
 Samenval (`app/samenval.py`): een SMC-signaal en een community-call (day_trading) op dezelfde coin en kant binnen

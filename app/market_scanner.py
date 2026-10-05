@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import exchange, indicators, patterns, push_notify, repo, risk, samenval, trade_plan
+from app import config, exchange, indicators, patterns, push_notify, repo, risk, samenval, trade_plan
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
@@ -947,6 +947,8 @@ async def scan_market() -> None:
         # sweep+zone werkt lokaal per coin op 30m/15m, een 4u-fout voor deze
         # coin mag de smc-check niet overslaan.
         smc_direction = await _run_smc_check(coin)
+        if coin in config.EXTRA_COINS:
+            continue    # extra coins: alleen SMC, zie config.EXTRA_COINS
         try:
             df = await asyncio.to_thread(exchange.fetch_ohlcv, coin)
             ind = indicators.compute_indicators(df)

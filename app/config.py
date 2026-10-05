@@ -35,7 +35,11 @@ TIMEFRAME = "4h"
 # daadwerkelijk draait. repo.add_coin_if_new is het enige handhavingspunt
 # — een coin hier niet in mag nooit toegevoegd worden, ongeacht wie
 # aanroept (Discord-verwerking, bron-niveaus, dagtradinginterpretatie).
-FIXED_COINS = ["BTC", "ETH", "SOL", "BNB", "AVAX", "DOGE", "SUI"]
+BASE_COINS = ["BTC", "ETH", "SOL", "BNB", "AVAX", "DOGE", "SUI"]
+# Extra coins (komma-gescheiden in .env, bijvoorbeeld XRP,HBAR): alleen de SMC-check draait erop, niet de 4u-detectoren
+# (patroon, uitbraak, trendlijn), want die verliezen op de basiscoins. Eerst met scripts/replay_smc_report.py toetsen.
+EXTRA_COINS = [c.strip().upper() for c in _get("EXTRA_COINS", "").split(",") if c.strip() and c.strip().upper() not in BASE_COINS]
+FIXED_COINS = BASE_COINS + EXTRA_COINS
 
 # De uitgebreide factoren (ADX, volatiliteit, BTC-trend, 1u bevestiging,
 # divergentie, liquiditeit) staan standaard uit. De drempels zijn
