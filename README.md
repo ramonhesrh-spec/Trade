@@ -336,6 +336,19 @@ komt als rustige melding op `/meldingen` bij `ADMIN_USERNAME` (of `--user`). Een
 pas bij 60 onafhankelijke calls. Het script haalt 1m-candles op voor coins met minstens 8 calls en houdt die bij.
 Direct proberen: `sudo -u crypto /opt/crypto-alerts/.venv/bin/python3 -m app.quality_report` in `/opt/crypto-alerts`.
 
+### Derivatendata verzamelen
+
+```bash
+sudo cp deploy/crypto-derivs.service deploy/crypto-derivs.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-derivs.timer
+sudo systemctl start crypto-derivs.service   # eerste keer: haalt 29 dagen terug op
+```
+
+`app/derivs.py` bewaart per coin funding, open interest, taker-verhouding en long/short (5 minuten) in
+`data/derivs/<COIN>.csv`. Candle-kenmerken zijn uitgeput, dit is nieuwe informatie om SMC en day trading mee te
+toetsen. Binance geeft maar ~30 dagen history; elke dag zonder verzamelaar is voorgoed kwijt.
+
 ### Trade Radar en Bewijs (dashboard)
 
 `/smc` heet in de navigatie **Radar**: elke bouwende SMC-setup en elk open SMC-signaal staat als handelsplan met een
