@@ -127,6 +127,80 @@ def _rule_session(b, trend):
     return long_mask, short_mask
 
 
+SAMPLE_LAG = pd.Timedelta(minutes=5)
+POS_Z = 2.0
+OI_MOVE_PCT = 1.0
+PRICE_MOVE_PCT = 0.5
+
+
+def _zscore(series: pd.Series, window: int) -> pd.Series:
+    mean, std = series.rolling(window, min_periods=window // 2).mean(), series.rolling(window, min_periods=window // 2).std()
+    return (series - mean) / std.replace(0, np.nan)
+
+
+def attach_positioning(bars: pd.DataFrame, metrics: pd.DataFrame, funding: pd.DataFrame) -> pd.DataFrame:
+    """Voegt per tf-candle de positionering toe zoals die bij de sluiting bekend was: een 5-minuten-meting
+    geldt pas SAMPLE_LAG na zijn tijdstempel (de meting beschrijft de afgelopen 5 minuten), een funding-stand
+    vanaf zijn tijdstempel. Kolommen: oi_chg_1h, oi_chg_4h (procent), taker_z, global_z, top_z (z-score over 7
+    dagen) en funding_z (z-score over 30 dagen aan fundingmomenten)."""
+    b = bars.copy()
+    m = metrics.sort_values("timestamp").reset_index(drop=True)
+    d = pd.DataFrame({"avail": m["timestamp"] + SAMPLE_LAG})
+    d["oi_chg_1h"] = (m["oi"] / m["oi"].shift(12) - 1) * 100
+    d["oi_chg_4h"] = (m["oi"] / m["oi"].shift(48) - 1) * 100
+    d["taker_z"] = _zscore(m["taker_ratio"], 2016)
+    d["global_z"] = _zscore(m["global_ratio"], 2016)
+    d["top_z"] = _zscore(m["top_ratio"], 2016)
+    b = pd.merge_asof(b.sort_values("close_time"), d, left_on="close_time", right_on="avail", direction="backward").drop(columns="avail")
+    if len(funding):
+        f = funding.sort_values("timestamp").reset_index(drop=True)
+        fz = pd.DataFrame({"avail": f["timestamp"], "funding_z": _zscore(f["funding"], 90)})
+        b = pd.merge_asof(b, fz, left_on="close_time", right_on="avail", direction="backward").drop(columns="avail")
+    else:
+        b["funding_z"] = np.nan
+    return b
+
+
+def _pos_masks(b, build):
+    needed = {"oi_chg_1h", "taker_z", "global_z", "funding_z"}
+    if not needed <= set(b.columns):
+        zero = np.zeros(len(b), dtype=bool)
+        return zero, zero.copy()
+    up, down = build(b)
+    return up.fillna(False).to_numpy(dtype=bool), down.fillna(False).to_numpy(dtype=bool)
+
+
+def _price_change_1h(b):
+    step = max(1, 60 // int((b["close_time"].iloc[1] - b["close_time"].iloc[0]).total_seconds() // 60)) if len(b) > 1 else 1
+    return (b["close"] / b["close"].shift(step) - 1) * 100
+
+
+def _rule_pos_oi_trend(b, trend):
+    return _pos_masks(b, lambda x: ((x["oi_chg_1h"] > OI_MOVE_PCT) & (_price_change_1h(x) > PRICE_MOVE_PCT),
+                                    (x["oi_chg_1h"] > OI_MOVE_PCT) & (_price_change_1h(x) < -PRICE_MOVE_PCT)))
+
+
+def _rule_pos_oi_flush(b, trend):
+    return _pos_masks(b, lambda x: ((x["oi_chg_1h"] < -OI_MOVE_PCT) & (_price_change_1h(x) < -PRICE_MOVE_PCT),
+                                    (x["oi_chg_1h"] < -OI_MOVE_PCT) & (_price_change_1h(x) > PRICE_MOVE_PCT)))
+
+
+def _rule_pos_taker_flow(b, trend):
+    return _pos_masks(b, lambda x: (x["taker_z"] > POS_Z, x["taker_z"] < -POS_Z))
+
+
+def _rule_pos_taker_fade(b, trend):
+    return _pos_masks(b, lambda x: (x["taker_z"] < -POS_Z, x["taker_z"] > POS_Z))
+
+
+def _rule_pos_crowd_fade(b, trend):
+    return _pos_masks(b, lambda x: (x["global_z"] < -POS_Z, x["global_z"] > POS_Z))
+
+
+def _rule_pos_funding_fade(b, trend):
+    return _pos_masks(b, lambda x: (x["funding_z"] < -POS_Z, x["funding_z"] > POS_Z))
+
+
 def _rule_random(b, trend):
     """Controle: willekeurige instap (2% van de candles), afgeleid van het tijdstip zodat het
     resultaat niet afhangt van hoeveel data er is. Hoort netto ongeveer minus de kosten te scoren."""
@@ -145,7 +219,14 @@ RULES: dict[str, Callable] = {
     "rsi_uitersten": _rule_rsi,
     "sessie_opening": _rule_session,
     "controle_willekeurig": _rule_random,
+    "pos_oi_trend": _rule_pos_oi_trend,
+    "pos_oi_flush": _rule_pos_oi_flush,
+    "pos_taker_flow": _rule_pos_taker_flow,
+    "pos_taker_fade": _rule_pos_taker_fade,
+    "pos_crowd_fade": _rule_pos_crowd_fade,
+    "pos_funding_fade": _rule_pos_funding_fade,
 }
+POSITIONING_RULES = tuple(r for r in RULES if r.startswith("pos_"))
 
 
 def signal_bars(b: pd.DataFrame, trend: np.ndarray, rule: str) -> list[tuple[int, str]]:
@@ -222,12 +303,15 @@ def run_rule(coin: str, rule: str, tf_minutes: int, bars: pd.DataFrame, trend: n
     return rows
 
 
-def evaluate_coin(coin: str, frame_1m: pd.DataFrame, tfs, rules, start, end, fee_pct, slippage_pct) -> list[dict]:
+def evaluate_coin(coin: str, frame_1m: pd.DataFrame, tfs, rules, start, end, fee_pct, slippage_pct,
+                  positioning: tuple | None = None) -> list[dict]:
     a = Arrays.from_frame(frame_1m.assign(timestamp=frame_1m["timestamp"].dt.tz_convert("UTC").dt.tz_localize(None)))
     bars_4h = make_bars(frame_1m, 240)
     rows = []
     for tf in tfs:
         bars = add_indicators(make_bars(frame_1m, tf))
+        if positioning is not None:
+            bars = attach_positioning(bars, *positioning)
         trend = trend_on(bars, bars_4h)
         for rule in rules:
             rows += run_rule(coin, rule, tf, bars, trend, a, start, end, fee_pct, slippage_pct)
