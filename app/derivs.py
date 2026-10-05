@@ -44,18 +44,18 @@ def _http_get(path: str, params: dict) -> list:
         return json.loads(resp.read())
 
 
-def _fetch_series(coin: str, column: str, since_ms: int, get: Callable) -> pd.Series:
+def _fetch_series(coin: str, column: str, since_ms: int, until_ms: int, get: Callable) -> pd.Series:
+    """Per venster van PAGE candles met een eindtijd erbij: met alleen een starttijd geeft Binance
+    de laatste 500 rijen terug en niet de eerste na die start (zo kwam er eerst maar 41 uur binnen)."""
     path, value_key, time_key = _SERIES[column]
+    window_ms = PAGE * 5 * 60 * 1000
     rows, start = [], since_ms
-    while True:
-        page = get(path, {"symbol": f"{coin}USDT", "period": PERIOD, "limit": PAGE, "startTime": start})
-        if not page:
-            break
+    while start < until_ms:
+        end = min(start + window_ms - 1, until_ms)
+        page = get(path, {"symbol": f"{coin}USDT", "period": PERIOD, "limit": PAGE,
+                          "startTime": start, "endTime": end})
         rows += [(int(r[time_key]), float(r[value_key])) for r in page]
-        last = int(page[-1][time_key])
-        if len(page) < PAGE or last < start:
-            break
-        start = last + 1
+        start = end + 1
     if not rows:
         return pd.Series(dtype=float, name=column)
     s = pd.Series({pd.Timestamp(t, unit="ms", tz="UTC"): v for t, v in rows}, name=column)
@@ -82,8 +82,9 @@ def collect(coin: str, now: Optional[pd.Timestamp] = None, get: Optional[Callabl
     else:
         since = now - pd.Timedelta(days=BACKFILL_DAYS)
     since_ms = int(since.timestamp() * 1000)
-    parts = [_fetch_series(coin, c, since_ms, get) for c in _SERIES]
-    new = pd.concat(parts, axis=1)
+    until_ms = int(now.timestamp() * 1000)
+    parts = [_fetch_series(coin, c, since_ms, until_ms, get) for c in _SERIES]
+    new = pd.concat(parts, axis=1, sort=True)
     if new.empty:
         return old
     funding = _fetch_funding(coin, since_ms - 9 * 3600 * 1000, get)
