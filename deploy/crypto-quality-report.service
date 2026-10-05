@@ -1,0 +1,11 @@
+[Unit]
+Description=HesPulse - wekelijks kwaliteitsrapport (wat werkt en wat niet, in R na kosten)
+
+[Service]
+Type=oneshot
+User=crypto
+WorkingDirectory=/opt/crypto-alerts
+EnvironmentFile=/opt/crypto-alerts/.env
+ExecStart=/opt/crypto-alerts/.venv/bin/python3 -m app.quality_report
+TimeoutStartSec=1800
+Nice=10

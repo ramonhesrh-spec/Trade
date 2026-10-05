@@ -320,6 +320,22 @@ gemeld. Uit het meetraam: stops onder 0,1% wonnen 6% en verloren gemiddeld -0,73
 minuutcandle liggen. Zet de waarde op 0 in `.env` om de toets uit te zetten. De timers starten elke keer een nieuw
 proces en lezen `.env` opnieuw, dus daarvoor is geen herstart nodig.
 
+### Wekelijks kwaliteitsrapport
+
+```bash
+sudo cp deploy/crypto-quality-report.service /etc/systemd/system/
+sudo cp deploy/crypto-quality-report.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-quality-report.timer
+```
+
+Elke zondag om 19:47 meet `app/quality_report.py` zelf wat werkt: de uitkomst per type scan-signaal (smc, patroon,
+day_trading, swing) in R, en de community-calls (gaat de koers na een bericht de kant van het bericht op, tegen een
+controle van dezelfde coin en richting op willekeurige momenten, en wat levert elke call als vaste trade). Het rapport
+komt als rustige melding op `/meldingen` bij `ADMIN_USERNAME` (of `--user`). Een oordeel over de community staat er
+pas bij 60 onafhankelijke calls. Het script haalt 1m-candles op voor coins met minstens 8 calls en houdt die bij.
+Direct proberen: `sudo -u crypto /opt/crypto-alerts/.venv/bin/python3 -m app.quality_report` in `/opt/crypto-alerts`.
+
 ### Periodieke factor-drift-check
 
 ```bash

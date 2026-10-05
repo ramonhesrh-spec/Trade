@@ -13,7 +13,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import repo
+from app import config, repo
 from app.replay import candles, community
 
 logger = logging.getLogger("quality_report")
@@ -154,6 +154,6 @@ def run(username: Optional[str] = None) -> None:
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     parser = argparse.ArgumentParser()
-    parser.add_argument("--user", default=None, help="gebruikersnaam die het rapport op /meldingen krijgt")
+    parser.add_argument("--user", default=config.ADMIN_USERNAME or None, help="gebruikersnaam die het rapport op /meldingen krijgt (standaard ADMIN_USERNAME)")
     args = parser.parse_args()
     run(args.user)
