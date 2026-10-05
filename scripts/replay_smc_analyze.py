@@ -19,9 +19,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import pandas as pd  # noqa: E402
 
 from app import config  # noqa: E402
+from app.replay import candles as candle_cache  # noqa: E402
+from app.replay.outcome import resolve  # noqa: E402
 
 RISK_BUCKETS = [0, 0.1, 0.2, 0.3, 0.5, 1.0, 100]
 MIN_RISK_THRESHOLDS = (0.1, 0.2, 0.3, 0.5)
+GRID_RR = (1.0, 1.5, 2.0, 3.0)
+GRID_MIN_RISK = (0.0, 0.2)
+MAX_AGE = pd.Timedelta(hours=48)
 
 
 def with_costs(df: pd.DataFrame, fee: float, slip: float) -> pd.DataFrame:
@@ -42,11 +47,26 @@ def line(label: str, g: pd.DataFrame) -> str:
             f"netto mediaan={g['r_net2'].median():+.2f}R")
 
 
+def remeasure(df: pd.DataFrame, cache: dict, rr: float, fee: float, slip: float) -> pd.DataFrame:
+    """Meet elk signaal opnieuw met dezelfde stop en entry, maar take = rr x de stopafstand."""
+    out = []
+    for row in df.itertuples():
+        sign = 1 if row.direction == "long" else -1
+        take = row.entry + sign * abs(row.entry - row.stop) * rr
+        o = resolve(row.direction, row.entry, row.stop, take, cache[row.coin], row.at, MAX_AGE, fee, slip)
+        if o is not None:
+            out.append({"risk_pct": row.risk_pct, "win": o.result == "take_profit",
+                        "r_gross": o.r_gross, "r_net2": o.r_net})
+    return pd.DataFrame(out, columns=["risk_pct", "win", "r_gross", "r_net2"])
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("csv", nargs="?")
     p.add_argument("--fee-pct", type=float, default=0.1)
     p.add_argument("--slippage-pct", type=float, default=0.05)
+    p.add_argument("--grid", action="store_true",
+                   help="meet ook opnieuw met vaste take-verhoudingen (leest de 1m-candles uit data/candles)")
     a = p.parse_args()
     path = Path(a.csv) if a.csv else None
     if path is None:
@@ -88,9 +108,22 @@ def main() -> None:
 
     print("\n6. Per kwartaal, alleen stop >= 0,2%")
     big = df[df["risk_pct"] >= 0.2].copy()
-    big["q"] = big["at"].dt.to_period("Q").astype(str)
+    big["q"] = big["at"].dt.tz_localize(None).dt.to_period("Q").astype(str)
     for q, g in big.groupby("q"):
         print("   " + line(q, g))
+
+    if a.grid:
+        print("\n7. Take vast op een veelvoud van de stop (zelfde entry en stop), 48 uur venster")
+        cache = {c: candle_cache.load_candles(c, "1m") for c in df["coin"].unique()}
+        for lo in GRID_MIN_RISK:
+            subset = df[df["risk_pct"] >= lo]
+            print(f"   stop >= {lo}% (n={len(subset)})")
+            current = subset.assign(win=subset["result"] == "take_profit")
+            print("      " + line("take = liquiditeitsdoel", current))
+            for rr in GRID_RR:
+                m = remeasure(subset, cache, rr, a.fee_pct, a.slippage_pct)
+                m["cost_r"] = m["r_gross"] - m["r_net2"]
+                print("      " + line(f"take = {rr}R", m))
 
 
 if __name__ == "__main__":
