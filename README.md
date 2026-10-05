@@ -406,6 +406,7 @@ na een vijfminutengrens (`--offset-minutes`), zodat ze nooit op een kwartiersgre
 vallen. Controle tegen de echte SMC-signalen (minstens 70% moet terugkomen; `--until` is exclusief):
 `DATABASE_PATH=/opt/crypto-alerts/data/trading.db /opt/crypto-alerts/.venv/bin/python3 scripts/replay_smc_compare_live.py --since 2026-09-01 --until 2026-10-04T10:00`.
 Het rapport schrijft naast de signalen-CSV ook `data/replay/smc_setups_*.csv` met alle setups. `scripts/replay_smc_analyze.py` (kosten, stopafstand, vaste take met `--grid`) werkt op de signalen. `scripts/replay_smc_setup_analysis.py` speelt elke setup na als vaste limietorder op de zonerand en toetst kenmerken (4u- en dagtrend, sweepdiepte, zonegrootte, tijdblok) op train en test.
+`scripts/replay_lab.py` is een testbank voor eenvoudige instap-regels op 15m en 30m (pullback naar de EMA in de 4u-trend, uitbraak met volume, sweep en terugkeer, RSI-uitersten, sessie-opening, plus een willekeurige controle). Per regel en take toont het trades per jaar, winrate en R bruto en netto op train en test, en markeert kandidaten. Het raakt het live systeem niet aan.
 De trage equivalentietest (`tests/test_smc_equivalence.py`, enkele minuten) sla je over met `SKIP_SLOW_TESTS=1 python3 -m unittest discover -s tests -t .`.
 
 ### HTTPS met Let's Encrypt
