@@ -22,15 +22,16 @@ def cache_path(coin: str, timeframe: str = BASE_TIMEFRAME) -> Path:
 
 def download_candles(
     coin: str, years: float, fetch: Optional[Callable] = None, now: Optional[pd.Timestamp] = None,
-    timeframe: str = BASE_TIMEFRAME,
+    timeframe: str = BASE_TIMEFRAME, since_ts: Optional[pd.Timestamp] = None,
 ) -> pd.DataFrame:
-    """Haalt `years` jaar candles op, pagina voor pagina. Een nog vormende
+    """Haalt `years` jaar candles op (of vanaf `since_ts` als die gezet is), pagina voor pagina. Een nog vormende
     candle (nu nog niet gesloten) blijft er bewust uit: het raam bepaalt zelf
     per tijdstip welke candle nog in wording is."""
     fetch = fetch or exchange.fetch_ohlcv
     delta = BASE_DELTAS[timeframe]
     now = now or pd.Timestamp.now(tz="UTC")
-    since = int((now - pd.Timedelta(days=365 * years)).timestamp() * 1000)
+    start = since_ts if since_ts is not None else now - pd.Timedelta(days=365 * years)
+    since = int(start.timestamp() * 1000)
     pages = []
     while True:
         page = fetch(coin, timeframe=timeframe, limit=PAGE_LIMIT, since=since)
@@ -67,4 +68,22 @@ def ensure_candles(coin: str, years: float, refresh: bool = False, timeframe: st
         return load_candles(coin, timeframe)
     df = download_candles(coin, years, timeframe=timeframe)
     save_candles(coin, df, timeframe)
+    return df
+
+
+def update_candles(coin: str, first_needed: pd.Timestamp, timeframe: str = "1m") -> pd.DataFrame:
+    """Houdt een cache klein en actueel: bestaat er nog geen cache, dan vanaf `first_needed` (min twee dagen
+    voor de ATR); anders worden alleen de candles na de laatste opgeslagen candle toegevoegd. Een cache die
+    later begint dan first_needed wordt niet aangevuld naar achteren."""
+    path = cache_path(coin, timeframe)
+    delta = BASE_DELTAS[timeframe]
+    if not path.exists():
+        df = download_candles(coin, 0, timeframe=timeframe, since_ts=first_needed - pd.Timedelta(days=2))
+        save_candles(coin, df, timeframe)
+        return df
+    df = load_candles(coin, timeframe)
+    new = download_candles(coin, 0, timeframe=timeframe, since_ts=df["timestamp"].iloc[-1] + delta)
+    if not new.empty:
+        df = pd.concat([df, new]).drop_duplicates("timestamp").sort_values("timestamp").reset_index(drop=True)
+        save_candles(coin, df, timeframe)
     return df

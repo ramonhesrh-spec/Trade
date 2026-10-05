@@ -2457,3 +2457,30 @@ def winrate_for_user(user_id: int) -> dict:
     resolved = wins + losses
     winrate_pct = (wins / resolved * 100) if resolved else None
     return {"total": total, "wins": wins, "losses": losses, "open": open_count, "winrate_pct": winrate_pct}
+
+
+def list_signals_for_quality_report(since_iso: Optional[str] = None) -> list[dict]:
+    """Alle echte signalen (geen oefentrades) met hun automatische uitkomst, voor het wekelijkse kwaliteitsrapport.
+    message_id is leeg voor signalen die de scan zelf vond."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT message_id, trade_type, auto_outcome, price, stop_loss, take_profit, created_at
+               FROM signals WHERE is_practice = 0 AND (? IS NULL OR created_at >= ?) ORDER BY created_at""",
+            (since_iso, since_iso),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_community_calls() -> list[dict]:
+    """Per (bericht, coin): coin, richting en categorie zoals de AI ze las, met het ontvangsttijdstip. Alleen
+    duidelijke berichten met richting long of short."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT m.id AS message_id, m.received_at AS at, COALESCE(r.coin, m.coin) AS coin,
+                      COALESCE(r.direction, m.direction) AS direction, COALESCE(r.category, m.category) AS category
+               FROM messages m LEFT JOIN message_coin_results r ON r.message_id = m.id
+               WHERE COALESCE(r.direction, m.direction) IN ('long', 'short') AND COALESCE(r.coin, m.coin) IS NOT NULL
+                 AND COALESCE(r.unclear, m.unclear) = 0
+               ORDER BY m.received_at"""
+        ).fetchall()
+        return [dict(r) for r in rows]
