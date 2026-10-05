@@ -70,7 +70,8 @@ def main() -> None:
     a = p.parse_args()
     path = Path(a.csv) if a.csv else None
     if path is None:
-        found = sorted((Path(config.BASE_DIR) / "data" / "replay").glob("smc_*_12m.csv"))
+        found = sorted(f for f in (Path(config.BASE_DIR) / "data" / "replay").glob("smc_*_12m.csv")
+                       if not f.name.startswith("smc_setups_"))
         if not found:
             sys.exit("Geen CSV in data/replay. Draai eerst scripts/replay_smc_report.py --months 12.")
         path = found[-1]

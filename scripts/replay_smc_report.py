@@ -85,6 +85,12 @@ def main() -> None:
     pd.DataFrame(rows, columns=["coin", "direction", "at", "entry", "stop", "take", "result", "minutes", "r_net", "r_gross"]).to_csv(out, index=False)
     print(f"\nSignalen opgeslagen in {out}", flush=True)
 
+    setups_out = out.with_name(out.name.replace("smc_", "smc_setups_", 1))
+    setup_cols = ["id", "coin", "direction", "zone_low", "zone_high", "structure_level", "sweep_price",
+                  "liquidity_target", "atr", "created_at", "updated_at", "signal_id", "invalidated_at", "ended_because"]
+    pd.DataFrame(setups, columns=setup_cols).to_csv(setups_out, index=False)
+    print(f"Setups opgeslagen in {setups_out}", flush=True)
+
 
 if __name__ == "__main__":
     main()
