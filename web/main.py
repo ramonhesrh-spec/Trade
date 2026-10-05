@@ -9,6 +9,7 @@ import io
 import logging
 import re
 import sys
+import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -22,10 +23,11 @@ from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 
 from app import advice as advice_module
 from app import patterns as chart_patterns
-from app import config, db, exchange, indicators, push_notify, repo, risk, security
+from app import config, db, exchange, indicators, push_notify, radar, repo, risk, security, track_record
 from app.market_scanner import smc_stop_take_margins
 
 logger = logging.getLogger("web")
@@ -222,24 +224,65 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     })
 
 
+PRICE_TTL_SECONDS = 10
+_price_cache: dict[str, tuple[float, Optional[float]]] = {}
+
+
+async def _cached_prices(coins) -> dict[str, Optional[float]]:
+    """Live koersen met een korte cache: elke ingelogde gebruiker die de radar open heeft ververst elke paar seconden,
+    en dat mag niet voor elke gebruiker en elke kaart een eigen Binance-aanroep worden."""
+    now = time.monotonic()
+    prices: dict[str, Optional[float]] = {}
+    stale = []
+    for coin in set(coins):
+        hit = _price_cache.get(coin)
+        if hit and now - hit[0] < PRICE_TTL_SECONDS:
+            prices[coin] = hit[1]
+        else:
+            stale.append(coin)
+
+    async def fetch(coin: str) -> Optional[float]:
+        try:
+            return await asyncio.to_thread(exchange.fetch_last_price, coin)
+        except Exception:
+            return None
+
+    for coin, price in zip(stale, await asyncio.gather(*[fetch(c) for c in stale])):
+        # Een mislukte ophaal (None) vervangt een eerdere goede koers niet: liever een koers van een minuut
+        # geleden dan een kaart zonder koers.
+        if price is None and coin in _price_cache:
+            price = _price_cache[coin][1]
+        _price_cache[coin] = (now, price)
+        prices[coin] = price
+    return prices
+
+
+def _with_preview(setup: dict) -> dict:
+    """Stop en doel van een bouwende setup, zelfde formule als market_scanner._complete_smc_setup: ze hangen alleen af
+    van sweep_price/liquidity_target, niet van de (nog onbekende) entry-prijs, dus dit is geen schatting maar het exacte
+    cijfer dat straks ook echt gebruikt wordt, tenzij de setup intussen vervalt of vervangen wordt."""
+    sign = -1 if setup["direction"] == "long" else 1
+    stop_margin, target_margin = smc_stop_take_margins(setup)
+    setup["preview_stop_loss"] = setup["sweep_price"] + stop_margin * sign
+    setup["preview_take_profit"] = setup["liquidity_target"] + target_margin * sign
+    return setup
+
+
+async def _radar_cards() -> list[dict]:
+    forming = [_with_preview(s) for s in repo.list_forming_smc_setups()]
+    open_signals = repo.list_open_smc_signals()
+    prices = await _cached_prices([s["coin"] for s in forming] + [s["coin"] for s in open_signals])
+    cards = [c for s in forming if (c := radar.setup_card(s, prices.get(s["coin"])))]
+    cards += [c for s in open_signals if (c := radar.signal_card(s, prices.get(s["coin"])))]
+    return cards
+
+
 @app.get("/smc")
 async def smc_page(request: Request, user: dict = Depends(require_login)):
-    """SMC liquidity-setups: bouwende setups bovenaan (de zone om een
-    limit order op te zetten), afgeronde signalen daaronder in dezelfde
-    stijl als /signalen. Afgeronde signalen verschijnen ook gewoon op de
-    bestaande /signalen en het dashboard (zie de spec, Component 6) —
-    deze pagina is een extra, gerichte weergave, geen aparte wereld."""
-    forming = repo.list_forming_smc_setups()
-    # Zelfde formule als market_scanner._complete_smc_setup: stop en doel
-    # hangen alleen af van sweep_price/liquidity_target, niet van de
-    # (nog onbekende) entry-prijs, dus dit is geen schatting maar het
-    # exacte cijfer dat straks ook echt gebruikt wordt — tenzij de setup
-    # intussen vervalt of vervangen wordt door een nieuwe structuurbreuk.
-    for setup in forming:
-        sign = -1 if setup["direction"] == "long" else 1
-        stop_margin, target_margin = smc_stop_take_margins(setup)
-        setup["preview_stop_loss"] = setup["sweep_price"] + stop_margin * sign
-        setup["preview_take_profit"] = setup["liquidity_target"] + target_margin * sign
+    """Trade Radar: bouwende setups en open SMC-signalen als handelsplan met prijsladder en live status (de limietorder
+    staat op de zone-rand, zie app/trade_plan.py), daaronder de afgeronde signalen in dezelfde stijl als /signalen.
+    Afgeronde signalen verschijnen ook op /signalen en het dashboard: deze pagina is een extra, gerichte weergave."""
+    cards = await _radar_cards()
     entries = [e for e in repo.list_signalen_for_user(user["id"]) if e["trade_type"] == "smc"]
     winrate = repo.winrate_stats(user["id"])
     pattern_winrate = repo.pattern_winrate_stats()
@@ -253,8 +296,29 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     entries.sort(key=lambda e: e["created_at"], reverse=True)
     return templates.TemplateResponse(request, "smc.html", {
         "user": user,
-        "forming": forming,
+        "setup_cards": [c for c in cards if c["kind"] == "setup"],
+        "signal_cards": [c for c in cards if c["kind"] == "signal"],
         "entries": entries,
+    })
+
+
+@app.get("/api/radar")
+async def api_radar(user: dict = Depends(require_login)):
+    """Live status per radar-kaart, voor radar.js: nieuwe koers, afstand tot de limietorder, live R en de bijgewerkte ladder."""
+    return radar.live_payload(await _radar_cards())
+
+
+@app.get("/bewijs")
+async def bewijs_page(request: Request, user: dict = Depends(require_login)):
+    """Eerlijk, automatisch gemeten trackrecord per soort melding in R na kosten (zie app/track_record.py)."""
+    summary = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
+    summary.sort(key=lambda e: e["source"] != "alles")      # het totaal bovenaan, de rest in vaste volgorde
+    for entry in summary:
+        entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
+    return templates.TemplateResponse(request, "bewijs.html", {
+        "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS,
+        "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,
+        "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,
     })
 
 

@@ -49,6 +49,10 @@ ENABLE_ADVANCED_FACTORS = _get("ENABLE_ADVANCED_FACTORS", "false").lower() == "t
 # stop binnen de ruis van een minuutcandle ligt. Vanaf 0,2% was het +0,12R bruto. 0 zet de toets uit.
 SMC_MIN_STOP_PCT = float(_get("SMC_MIN_STOP_PCT", "0.2"))
 
+# Kosten per rondreis (fee plus slippage, beide kanten samen) in procenten van de entry, voor de netto-cijfers op
+# /bewijs en in het weekrapport. Een aanname: wat iemand echt betaalt hangt van de beurs af.
+TRACK_RECORD_COST_PCT = float(_get("TRACK_RECORD_COST_PCT", "0.06"))
+
 # Dashboard accounts staan in de database (tabel users). Open registratie
 # staat aan op /registreer, daarnaast kan een account ook via
 # scripts/create_user.py worden aangemaakt of bijgewerkt.

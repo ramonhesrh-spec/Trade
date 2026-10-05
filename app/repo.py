@@ -2327,6 +2327,11 @@ def list_forming_smc_setups() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def mark_smc_zone_alert_sent(setup_id: int) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE smc_setups SET zone_alert_sent = 1 WHERE id = ?", (setup_id,))
+
+
 def mark_smc_alert_sent(setup_id: int) -> None:
     with db.session() as conn:
         conn.execute("UPDATE smc_setups SET alert_sent = 1 WHERE id = ?", (setup_id,))
@@ -2464,7 +2469,7 @@ def list_signals_for_quality_report(since_iso: Optional[str] = None) -> list[dic
     message_id is leeg voor signalen die de scan zelf vond."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT message_id, trade_type, auto_outcome, price, stop_loss, take_profit, created_at
+            """SELECT message_id, trade_type, auto_outcome, auto_outcome_at, price, stop_loss, take_profit, created_at
                FROM signals WHERE is_practice = 0 AND (? IS NULL OR created_at >= ?) ORDER BY created_at""",
             (since_iso, since_iso),
         ).fetchall()
@@ -2482,5 +2487,17 @@ def list_community_calls() -> list[dict]:
                WHERE COALESCE(r.direction, m.direction) IN ('long', 'short') AND COALESCE(r.coin, m.coin) IS NOT NULL
                  AND COALESCE(r.unclear, m.unclear) = 0
                ORDER BY m.received_at"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_open_smc_signals(limit: int = 30) -> list[dict]:
+    """Open SMC-signalen (nog geen take, stop of verloop), nieuwste eerst, voor de Trade Radar. Gedeeld over gebruikers:
+    signalen zijn globaal, alleen het journaal is per gebruiker."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, coin, direction, price, stop_loss, take_profit, created_at FROM signals
+               WHERE trade_type = 'smc' AND is_practice = 0 AND auto_outcome IS NULL
+               ORDER BY created_at DESC LIMIT ?""", (limit,),
         ).fetchall()
         return [dict(r) for r in rows]

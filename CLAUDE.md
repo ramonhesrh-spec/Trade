@@ -126,6 +126,8 @@ drawing tool) rather than the pages being a client-rendered SPA. Session
 auth is a JWT in a cookie (`app/security.py`), checked via the
 `require_login` FastAPI dependency on every protected route.
 
+**Radar and Bewijs.** `/smc` (nav label "Radar") and `/bewijs` render from pure functions in `app/trade_plan.py`, `app/radar.py` and `app/track_record.py`; keep the maths there, not in templates or `web/main.py`. `/bewijs` must stay honest: only `take_profit`/`stop_loss` outcomes count in winrate and R, expired/open are shown beside them, never dropped silently. SMC alert text comes from `market_scanner.format_smc_body`.
+
 **Conventions to preserve**: comments explain non-obvious *why* (a past
 bug, a deliberate tradeoff, a constraint that isn't visible from the code
 itself) — not what the code does; keep that ratio, don't add narration

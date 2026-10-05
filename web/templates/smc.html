@@ -1,45 +1,77 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
-{% block title %}SMC — HesPulse{% endblock %}
+{% block title %}Radar — HesPulse{% endblock %}
 {% block content %}
 
 <div class="page-head">
-  <h2>SMC liquidity setups</h2>
+  <h2>Trade Radar</h2>
 </div>
-<p class="page-intro">Structuurbreuk, liquidity sweep, terugtrek in een fair value gap of order block, afwijzing.</p>
+<p class="page-intro">SMC-setups die zich opbouwen, als handelsplan: de limietorder staat op de rand van de zone, met stop, doel en R:R vanaf die prijs. De status loopt live mee met de koers.</p>
 
 <section class="card" style="--i: 0">
-  <h3>Bouwende setups</h3>
-  {% if not forming %}
+  <h3>Wachten op de zone</h3>
+  {% if not setup_cards %}
   <p class="muted empty">Nog geen bouwende setup gevonden.</p>
   {% else %}
-  {% for setup in forming %}
-  <div class="smc-setup-card">
-    <div class="smc-setup-head">
-      <strong>{{ setup.coin }}</strong>
-      <span class="muted">{{ setup.direction }}</span>
-    </div>
-    <div class="smc-setup-zone">Entry-zone {{ "%.4f"|format(setup.zone_low) }} - {{ "%.4f"|format(setup.zone_high) }}</div>
-    <div class="smc-setup-levels muted">
-      Stop {{ "%.4f"|format(setup.preview_stop_loss) }} · Doel {{ "%.4f"|format(setup.preview_take_profit) }}
-    </div>
-    <details class="confidence-detail js-accordion">
-      <summary>Waarom</summary>
-      <p class="muted">
-        Structuur brak op {{ "%.4f"|format(setup.structure_level) }},
-        sweep op {{ "%.4f"|format(setup.sweep_price) }},
-        doel bij liquidity {{ "%.4f"|format(setup.liquidity_target) }}.
-        Stop en doel liggen al vast, dit wordt pas een melding als de zone
-        een afwijzende candle geeft en risico/rendement boven de ondergrens ligt.
-      </p>
-    </details>
-    <div class="smc-setup-meta muted">{{ setup.created_at | age }}</div>
+  <div class="radar-grid">
+    {% for c in setup_cards %}
+    <article class="radar-card" data-radar-key="{{ c.key }}">
+      <header class="radar-head">
+        <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
+        <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
+      </header>
+      <div class="radar-state radar-state-{{ c.state or 'laden' }}" data-radar="state">{{ c.state_label }}</div>
+      <div class="radar-ladder" data-radar="ladder">{{ c.ladder }}</div>
+      <dl class="radar-facts">
+        <div><dt>Limietorder</dt><dd>{{ "%.4f"|format(c.plan.limit) }}</dd></div>
+        <div><dt>R:R vanaf limiet</dt><dd>{{ "%.1f"|format(c.plan.rr) }}</dd></div>
+        <div><dt>Risico</dt><dd>{{ "%.2f"|format(c.plan.risk_pct) }}%</dd></div>
+        <div><dt>Afstand tot limiet</dt><dd data-radar="distance">{% if c.distance_pct is not none %}{{ "%+.2f"|format(c.distance_pct) }}%{% else %}-{% endif %}</dd></div>
+      </dl>
+      <details class="confidence-detail js-accordion">
+        <summary>Waarom</summary>
+        <p class="muted">
+          Structuur brak op {{ "%.4f"|format(c.setup.structure_level) }},
+          sweep op {{ "%.4f"|format(c.setup.sweep_price) }},
+          doel bij liquidity {{ "%.4f"|format(c.setup.liquidity_target) }}.
+          Stop en doel liggen al vast. Dit wordt pas een melding als de zone een afwijzende candle geeft
+          en risico/rendement boven de ondergrens ligt. Raakt de koers de zone en keert niet om, dan kan je order wel gevuld zijn zonder dat er een melding komt.
+        </p>
+      </details>
+      <div class="radar-meta muted">{{ c.created_at | age }}</div>
+    </article>
+    {% endfor %}
   </div>
-  {% endfor %}
   {% endif %}
 </section>
 
 <section class="card" style="--i: 1">
+  <h3>Open trades</h3>
+  {% if not signal_cards %}
+  <p class="muted empty">Geen open SMC-trades.</p>
+  {% else %}
+  <div class="radar-grid">
+    {% for c in signal_cards %}
+    <article class="radar-card" data-radar-key="{{ c.key }}">
+      <header class="radar-head">
+        <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
+        <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
+      </header>
+      <div class="radar-state radar-state-open" data-radar="state">{{ c.state_label }}</div>
+      <div class="radar-ladder" data-radar="ladder">{{ c.ladder }}</div>
+      <dl class="radar-facts">
+        <div><dt>Entry</dt><dd>{{ "%.4f"|format(c.signal.price) }}</dd></div>
+        <div><dt>R:R bij entry</dt><dd>{{ "%.1f"|format(c.rr) }}</dd></div>
+        <div><dt>Nu</dt><dd class="radar-r {{ 'pos' if c.live_r is not none and c.live_r > 0 else 'neg' if c.live_r is not none and c.live_r < 0 }}" data-radar="live_r">{% if c.live_r is not none %}{{ "%+.2f"|format(c.live_r) }}R{% else %}-{% endif %}</dd></div>
+      </dl>
+      <div class="radar-meta muted">{{ c.created_at | age }}</div>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+<section class="card" style="--i: 2">
   <h3>Afgeronde signalen</h3>
   {% if not entries %}
   <p class="muted empty">Nog geen afgeronde SMC-signalen.</p>
@@ -51,4 +83,5 @@
   </div>
   {% endif %}
 </section>
+<script defer src="/static/radar.js"></script>
 {% endblock %}

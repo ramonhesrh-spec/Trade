@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Bewijs — HesPulse{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h2>Bewijs</h2>
+</div>
+<p class="page-intro">Wat elke soort melding echt opleverde, automatisch gemeten uit de uitkomsten van alle signalen. Geen selectie, geen beste maanden: wat hier staat, staat er voor iedereen.</p>
+
+{% if not summary %}
+<section class="card" style="--i: 0"><p class="muted empty">Nog geen signalen om te meten.</p></section>
+{% else %}
+<section class="proof-grid" style="--i: 0">
+  {% for e in summary %}
+  <article class="proof-card proof-{{ e.status }}{% if e.source == 'alles' %} proof-total{% endif %}">
+    <header class="proof-head">
+      <div>
+        <h3>{{ e.label }}</h3>
+        {% if e.source_label %}<span class="muted proof-source">{{ e.source_label }}</span>{% endif %}
+      </div>
+      <span class="proof-chip proof-chip-{{ e.status }}">{{ status_labels[e.status] }}</span>
+    </header>
+    {% if e.avg_net is not none %}
+    <div class="proof-number {{ 'pos' if e.avg_net > 0 else 'neg' }}">{{ "%+.2f"|format(e.avg_net) }}<span class="proof-unit">R per trade, na kosten</span></div>
+    {% else %}
+    <div class="proof-number">-<span class="proof-unit">nog niets afgerond</span></div>
+    {% endif %}
+    {{ e.spark }}
+    <div class="proof-caption muted">Cumulatief resultaat in R, laatste {{ weeks }} weken</div>
+    <dl class="proof-facts">
+      <div><dt>Afgeronde trades</dt><dd>{{ e.resolved }}</dd></div>
+      <div><dt>Winrate</dt><dd>{% if e.winrate is not none %}{{ "%.0f"|format(e.winrate * 100) }}%{% else %}-{% endif %}</dd></div>
+      <div><dt>Zonder kosten</dt><dd>{% if e.avg_gross is not none %}{{ "%+.2f"|format(e.avg_gross) }}R{% else %}-{% endif %}</dd></div>
+      <div><dt>Laatste {{ recent_days }} dagen</dt><dd>{% if e.recent_avg_net is not none %}{{ "%+.2f"|format(e.recent_avg_net) }}R ({{ e.recent_resolved }})</dd>{% else %}-</dd>{% endif %}</div>
+    </dl>
+    <p class="proof-footnote muted">{{ e.wins }} winst, {{ e.losses }} verlies. {{ e.open_or_expired }} nog open of vervallen, die tellen niet mee in winrate en R.</p>
+  </article>
+  {% endfor %}
+</section>
+
+<section class="card" style="--i: 1">
+  <h3>Zo lees je dit</h3>
+  <div class="proof-notes">
+    <p><strong>R</strong> is de winst als veelvoud van het risico. Een take van 2 keer de stop is +2R, een stop is -1R. Een gemiddelde van +0,20R betekent dat een trade gemiddeld een vijfde van het risico opleverde.</p>
+    <p><strong>Na kosten:</strong> per trade gaan de kosten ({{ "%.2f"|format(cost_pct) }}% per rondreis, een aanname) af, gedeeld door de stopafstand. Een strakke stop maakt de kosten zwaarder.</p>
+    <p><strong>De status</strong> is een vaste regel, geen oordeel: onder {{ min_status }} afgeronde trades staat er "Nog te weinig data". Daarboven telt het gemiddelde na kosten: positief of negatief. Pas bij {{ min_proven }} afgeronde trades en een positief gemiddelde staat er "Voordeel gemeten". Dat is gemeten, niet beloofd.</p>
+    <p><strong>Wat ontbreekt bewust niet:</strong> vervallen en open signalen staan er per soort bij, zodat je ziet hoeveel er buiten de winrate valt.</p>
+  </div>
+</section>
+{% endif %}
+{% endblock %}

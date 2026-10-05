@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import exchange, indicators, patterns, push_notify, repo, risk
+from app import exchange, indicators, patterns, push_notify, repo, risk, trade_plan
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
@@ -757,6 +757,58 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     return None
 
 
+def format_smc_body(setup: dict, entry_price: float, stop_loss: float, take_profit: float,
+                    sniper_entry_price: Optional[float], sniper_reason: Optional[str]) -> str:
+    """Meldingstekst van een SMC-signaal. De limietorder op de zone-rand staat voorop met de R:R vanaf die prijs: wie met een
+    limietorder op de zone instapt, krijgt zo de prijs en de verhouding die voor hem gelden, niet alleen die van de marktprijs."""
+    base = (
+        f"Entry {entry_price:.4f}\n"
+        f"Stop {stop_loss:.4f} · Take profit {take_profit:.4f}\n"
+        f"Zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, doel bij liquidity {setup['liquidity_target']:.4f}"
+    )
+    plan = trade_plan.limit_plan(setup["direction"], setup["zone_low"], setup["zone_high"], stop_loss, take_profit)
+    if plan is not None:
+        base = f"Limietorder {plan.limit:.4f} op de zone-rand, R:R {plan.rr:.1f} vanaf die prijs\n" + base
+    if sniper_entry_price is not None:
+        base += f"\n🎯 Sniper: {sniper_entry_price:.4f} — {sniper_reason}"
+    return base
+
+
+async def _notify_zone_touches(coin: str) -> None:
+    """Eén melding per bouwende setup zodra de koers in de zone staat: een limietorder op de zone-rand is dan waarschijnlijk
+    geraakt. Los van het signaal zelf: dat komt pas bij een afwijzende candle en een geldige R:R, en soms nooit."""
+    setups = [s for s in repo.list_forming_smc_setups() if s["coin"] == coin and not s["zone_alert_sent"]]
+    if not setups:
+        return
+    try:
+        price = await asyncio.to_thread(exchange.fetch_last_price, coin)
+    except Exception:
+        logger.exception("Koers voor %s niet op te halen, zone-check overgeslagen", coin)
+        return
+    for setup in setups:
+        direction = setup["direction"]
+        sign = -1 if direction == "long" else 1
+        stop_margin, target_margin = smc_stop_take_margins(setup)
+        stop_loss = setup["sweep_price"] + stop_margin * sign
+        take_profit = setup["liquidity_target"] + target_margin * sign
+        plan = trade_plan.limit_plan(direction, setup["zone_low"], setup["zone_high"], stop_loss, take_profit)
+        if plan is None or trade_plan.plan_state(direction, setup["zone_low"], setup["zone_high"], stop_loss, price) != "in_zone":
+            continue
+        repo.mark_smc_zone_alert_sent(setup["id"])
+        title = f"{push_notify.coin_symbol(coin)} {coin} {direction}: koers in de zone"
+        body = (
+            f"Je limietorder op {plan.limit:.4f} is waarschijnlijk geraakt.\n"
+            f"Stop {stop_loss:.4f} · Doel {take_profit:.4f} · R:R {plan.rr:.1f}\n"
+            "Een signaal volgt pas bij een afwijzende candle: keert de koers niet om, dan blijft je order open of loopt hij door de zone."
+        )
+        for user in repo.list_users():
+            quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+            try:
+                await push_notify.send_push(user["id"], title, body, "/smc", silent=quiet)
+            except Exception:
+                logger.exception("Zone-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
+
 async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     """Bouwt het echte signaal zodra _check_smc_setup een afgewezen zone
     teruggeeft, en geeft de nieuwe signal_id terug (None als er geen
@@ -827,14 +879,7 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     repo.complete_smc_setup(setup["id"], signal_id)
 
     def _smc_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
-        base = (
-            f"Entry {entry_price:.4f}\n"
-            f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}\n"
-            f"Zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, doel bij liquidity {setup['liquidity_target']:.4f}"
-        )
-        if sniper_entry_price is not None:
-            base += f"\n🎯 Sniper: {sniper_entry_price:.4f} — {sniper_reason}"
-        return base
+        return format_smc_body(setup, entry_price, effective_stop_loss, effective_take_profit, sniper_entry_price, sniper_reason)
 
     premise_level = setup["zone_high"] if direction == "short" else setup["zone_low"]
     await fanout_confirmed_signal(
@@ -857,6 +902,7 @@ async def _run_smc_check(coin: str) -> Optional[str]:
         setup = await _check_smc_setup(coin)
         if setup and await _complete_smc_setup(coin, setup) is not None:
             return setup["direction"]
+        await _notify_zone_touches(coin)
     except Exception:
         logger.exception("SMC-check voor %s is mislukt, ga door met de rest van de cyclus", coin)
     return None

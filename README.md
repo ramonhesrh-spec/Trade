@@ -336,6 +336,20 @@ komt als rustige melding op `/meldingen` bij `ADMIN_USERNAME` (of `--user`). Een
 pas bij 60 onafhankelijke calls. Het script haalt 1m-candles op voor coins met minstens 8 calls en houdt die bij.
 Direct proberen: `sudo -u crypto /opt/crypto-alerts/.venv/bin/python3 -m app.quality_report` in `/opt/crypto-alerts`.
 
+### Trade Radar en Bewijs (dashboard)
+
+`/smc` heet in de navigatie **Radar**: elke bouwende SMC-setup en elk open SMC-signaal staat als handelsplan met een
+prijsladder (zone, limietorder op de zone-rand, stop, doel, koers nu), de R:R vanaf de limietprijs, de afstand tot de order en
+een live status die elke 15 seconden meebeweegt (`/api/radar`, `web/static/radar.js`; koersen staan 10 seconden in een cache).
+De rekenlaag zit in `app/trade_plan.py` en `app/radar.py`. Zodra de koers in de zone komt stuurt de SMC-check eenmalig een
+melding "koers in de zone" (`market_scanner._notify_zone_touches`, kolom `smc_setups.zone_alert_sent`), en de SMC-melding zelf
+begint met de limietorder en de R:R vanaf die prijs.
+
+`/bewijs` toont per soort melding de automatisch gemeten uitkomst in R na kosten (`app/track_record.py`, kosten uit
+`TRACK_RECORD_COST_PCT`): aantal afgeronde trades, winrate, gemiddelde R met en zonder kosten, een curve per week en een status
+die een vaste regel volgt (onder 30 afgeronde trades "nog te weinig data", daarboven positief of negatief na kosten, "voordeel
+gemeten" pas bij 100 trades en een positief gemiddelde). Vervallen en open signalen staan er bewust bij maar tellen niet mee.
+
 ### Periodieke factor-drift-check
 
 ```bash

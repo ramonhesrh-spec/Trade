@@ -497,7 +497,10 @@ CREATE TABLE IF NOT EXISTS smc_setups (
     -- Gezet i.p.v. de rij te verwijderen zodra de setup vervalt: dezelfde
     -- breuk + sweep wordt vaak later nog eens gezien en mag dan niet als
     -- nieuwe bouwende setup (met nieuwe push) terugkomen.
-    invalidated_at TEXT
+    invalidated_at TEXT,
+    -- Eén keer een melding als de koers in de zone komt (de limietorder is dan waarschijnlijk geraakt), zie
+    -- market_scanner._notify_zone_touches.
+    zone_alert_sent INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_smc_setups_coin ON smc_setups(coin);
 
