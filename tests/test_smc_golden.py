@@ -58,7 +58,9 @@ def run_live_sequence() -> dict:
                 asyncio.run(market_scanner._run_smc_check(COIN))
             t += STEP
         with db.session() as conn:
-            setups = [dict(r) for r in conn.execute("SELECT * FROM smc_setups ORDER BY id")]
+            # zone_alert_sent is notification state, not pipeline output: keeps the golden valid
+            setups = [{k: v for k, v in dict(r).items() if k != "zone_alert_sent"}
+                      for r in conn.execute("SELECT * FROM smc_setups ORDER BY id")]
             signals = [dict(r) for r in conn.execute(
                 "SELECT id, coin, direction, price, stop_loss, take_profit, created_at, sniper_entry_price "
                 "FROM signals ORDER BY id")]
