@@ -44,6 +44,11 @@ FIXED_COINS = ["BTC", "ETH", "SOL", "BNB", "AVAX", "DOGE", "SUI"]
 # overzicht laat zien dat de drempels niet bijna alles wegfilteren.
 ENABLE_ADVANCED_FACTORS = _get("ENABLE_ADVANCED_FACTORS", "false").lower() == "true"
 
+# Minimale stopafstand van een SMC-signaal, in procenten van de entry. Uit het meetraam (12 maanden, 7 coins,
+# 122 signalen): signalen met een stop onder 0,1% wonnen 6% en verloren gemiddeld -0,73R bruto, omdat zo'n
+# stop binnen de ruis van een minuutcandle ligt. Vanaf 0,2% was het +0,12R bruto. 0 zet de toets uit.
+SMC_MIN_STOP_PCT = float(_get("SMC_MIN_STOP_PCT", "0.2"))
+
 # Dashboard accounts staan in de database (tabel users). Open registratie
 # staat aan op /registreer, daarnaast kan een account ook via
 # scripts/create_user.py worden aangemaakt of bijgewerkt.

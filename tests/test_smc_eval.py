@@ -113,6 +113,29 @@ class EvaluateCompletionTest(unittest.TestCase):
         self.assertEqual(draft.sniper_reason, "reden")
         self.assertAlmostEqual(draft.risk_reward_ratio, 148.0 / 72.0)
 
+    def test_min_stop_distance_rejects_tight_stops(self):
+        # entry 2750, stop 2822: stopafstand 72 / 2750 = 2.62%
+        with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2690.0, "reden")):
+            tight = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2750.0), min_stop_pct=3.0)
+            exact = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2750.0), min_stop_pct=2.6)
+            off = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2750.0), min_stop_pct=0)
+        self.assertIsNone(tight.signal)
+        self.assertEqual(tight.reject_reason, "stop_te_dichtbij")
+        self.assertIn("2.618%", tight.detail)
+        self.assertIsNotNone(exact.signal)
+        self.assertIsNotNone(off.signal)
+
+    def test_min_stop_distance_defaults_to_config_and_is_checked_before_risk_reward(self):
+        with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2690.0, "reden")), \
+                mock.patch.object(smc_eval.config, "SMC_MIN_STOP_PCT", 5.0):
+            # entry 2700: stop 4.5% en R:R 0.80, de stopafstand gaat voor
+            result = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2700.0))
+        self.assertEqual(result.reject_reason, "stop_te_dichtbij")
+        with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2690.0, "reden")), \
+                mock.patch.object(smc_eval.config, "SMC_MIN_STOP_PCT", 0.0):
+            result = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2700.0))
+        self.assertEqual(result.reject_reason, "risico_rendement_te_laag")
+
     def test_stop_on_wrong_side_is_rejected(self):
         with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2690.0, "reden")):
             result = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2850.0))

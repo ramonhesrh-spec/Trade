@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
 
-from app import indicators
+from app import config, indicators
 from app.setup_eval import MIN_RISK_REWARD_RATIO
 
 
@@ -323,7 +323,7 @@ class SmcCompletion:
     detail: str = ""
 
 
-def evaluate_completion(setup: dict, df_15m) -> SmcCompletion:
+def evaluate_completion(setup: dict, df_15m, min_stop_pct: Optional[float] = None) -> SmcCompletion:
     """Stop en doel zijn structuur-gebaseerd (de sweep bepaalt de stop, de
     volgende liquidity het doel), alleen de marge eromheen gebruikt
     setup['atr'] (vastgezet bij het bouwen van de setup) in plaats van een
@@ -389,6 +389,16 @@ def evaluate_completion(setup: dict, df_15m) -> SmcCompletion:
     if not valid_stop_take(direction, entry_price, stop_loss, take_profit):
         return SmcCompletion(None, "stop_take_verkeerde_kant", detail=(
             f"stop {stop_loss:.4f} / doel {take_profit:.4f} liggen niet aan de juiste kant van entry {entry_price:.4f} ({direction})"
+        ))
+
+    # Een stop binnen de ruis van een minuutcandle is geen trade maar een muntworp met kosten: in het meetraam
+    # won die groep 6% en verloor -0,73R bruto (zie config.SMC_MIN_STOP_PCT).
+    min_stop = config.SMC_MIN_STOP_PCT if min_stop_pct is None else min_stop_pct
+    stop_pct = abs(entry_price - stop_loss) / entry_price * 100
+    if min_stop > 0 and stop_pct < min_stop:
+        return SmcCompletion(None, "stop_te_dichtbij", detail=(
+            f"stopafstand {stop_pct:.3f}% ligt onder de ondergrens van {min_stop}% "
+            f"(stop {stop_loss:.4f} / entry {entry_price:.4f}, {direction})"
         ))
 
     # Geen stop_within_max_distance-toets hier, bewust anders dan de andere
