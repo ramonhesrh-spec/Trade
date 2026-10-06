@@ -60,6 +60,7 @@ class BreakRetestTest(unittest.TestCase):
         self.assertFalse(t.empty)
         self.assertTrue({"mode", "ladder", "r_net", "risk_pct"} <= set(t.columns))
         self.assertTrue((t["risk_pct"] >= br.MIN_STOP_PCT).all())
+        self.assertIn("RETEST", set(t["mode"]))     # eerder ontbrak elke retest door een omgekeerd teken bij de reclaim-controle
 
     def test_random_walk_does_not_pass(self):
         trades, plac = [], []

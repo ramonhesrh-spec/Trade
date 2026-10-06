@@ -164,7 +164,7 @@ def _plan_retest(ev, b: pd.DataFrame, m: Minutes) -> Optional[tuple[int, float, 
     sign = 1 if direction == "long" else -1
     for j in range(i + 1, min(i + 1 + RETEST_BARS, n)):
         prev_level = level_at(ev, j - 1)
-        if sign * (b.at[j - 1, "close"] - prev_level) > BREAK_ATR * ev.atr:        # terug voorbij het niveau: breuk mislukt
+        if -sign * (b.at[j - 1, "close"] - prev_level) > BREAK_ATR * ev.atr:        # terug voorbij het niveau: breuk mislukt
             return None
         level = level_at(ev, j)
         start = m.index(b.at[j, "timestamp"])
