@@ -29,7 +29,7 @@ MIN_N = 30
 def build_table(setups: pd.DataFrame, base: dict, fee: float, slip: float, rr_main: float) -> tuple[pd.DataFrame, dict]:
     rows, counts = [], {"setups": len(setups), "onbruikbaar": 0, "niet_gevuld": 0, "gevuld": 0}
     for s in setups.to_dict("records"):
-        sim = smc_setups.simulate_setup(s, base[s["coin"]], rr_list=(1.0, 1.5, 2.0), fee_pct=fee, slippage_pct=slip)
+        sim = smc_setups.simulate_setup(s, base[s["coin"]], rr_list=tuple(sorted({1.0, 1.5, 2.0, rr_main})), fee_pct=fee, slippage_pct=slip)
         if sim is None:
             counts["onbruikbaar"] += 1
             continue
@@ -97,7 +97,7 @@ def main() -> None:
           f"Splitsing train/test op {cut:%Y-%m-%d}\n")
 
     print("1. Alle gevulde setups, per take")
-    for k in (1.0, 1.5, 2.0, smc_setups.TARGET):
+    for k in sorted({1.0, 1.5, 2.0, a.rr}) + [smc_setups.TARGET]:
         if f"gross_{k}" in table:
             print(f"   take {k!s:<10} {summarize(table, k)}")
     print(f"\n   Mediaan stopafstand {table['risk_pct'].median():.2f}%, mediaan tijd tot fill {table['minuten_tot_fill'].median():.0f} min")
