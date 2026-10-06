@@ -75,5 +75,28 @@ class WebVandaagTests(unittest.TestCase):
         self.assertEqual(r.headers["location"], "/vandaag")
 
 
+    def test_public_landing_shows_live_vandaag_without_scenarios_and_manifest_opens_on_vandaag(self):
+        now = datetime.now(timezone.utc)
+        repo.insert_market_script("BTC", "Geheime samenvatting", "long", "m", [scenario_row()], 0, (now + timedelta(hours=10)).isoformat())
+        anon = TestClient(self.main.app)
+        page = anon.get("/").text
+        self.assertIn("Vandaag, live", page)
+        self.assertIn("vd-timeline", page)
+        self.assertIn("1 long", page)
+        self.assertNotIn("Geheime samenvatting", page)           # scenario's en duiding blijven achter het inloggen
+        self.assertNotIn("Limietorder", page)
+        self.assertEqual(anon.get("/static/manifest.json").json()["start_url"], "/vandaag")
+        self.assertEqual(self.client.get("/dashboard", follow_redirects=False).headers["location"], "/vandaag")
+
+
+    def test_meldingen_page_groups_by_day_with_chip_and_keeps_line_breaks(self):
+        uid = repo.get_user_by_username("tester")["id"]
+        repo.create_notification(uid, "update", "Nieuw in HesPulse", "Regel een\nRegel twee", "/vandaag")
+        r = self.client.get("/meldingen")
+        self.assertEqual(r.status_code, 200)
+        for text in ("Vandaag", "Nieuw in HesPulse", "nf-chip chip-new", "Regel een\nRegel twee", "alles gelezen (1)", "zojuist"):
+            self.assertIn(text, r.text, text)
+
+
 if __name__ == "__main__":
     unittest.main()

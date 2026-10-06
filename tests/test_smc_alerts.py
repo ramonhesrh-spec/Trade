@@ -13,18 +13,19 @@ class SmcBodyTests(unittest.TestCase):
     def test_limietorder_staat_voorop_met_rr_vanaf_die_prijs(self):
         body = market_scanner.format_smc_body(SETUP, 101.0, 97.0, 106.0, None, None)
         first = body.splitlines()[0]
-        self.assertTrue(first.startswith("Limietorder 100.0000 op de zone-rand"))
+        self.assertTrue(first.startswith("Limietorder 100.00"))
         self.assertIn("R:R 2.0", first)               # risico 3, winst 6 vanaf 100
-        self.assertIn("Entry 101.0000", body)
-        self.assertIn("Zone 99.0000-100.0000", body)
+        self.assertEqual(body.splitlines()[1], "Stop 97.0000 · Take 106.00")
+        self.assertIn("Nu 101.00", body)
+        self.assertIn("Zone 99.0000 tot 100.00", body)
         self.assertNotIn("Sniper", body)
 
     def test_sniper_regel_blijft_en_ongeldig_plan_geeft_geen_limietregel(self):
         body = market_scanner.format_smc_body(SETUP, 101.0, 97.0, 106.0, 98.5, "stop-hunt")
-        self.assertIn("🎯 Sniper: 98.5000 — stop-hunt", body)
+        self.assertIn("🎯 Sniper 98.5000: stop-hunt", body)
         bad = market_scanner.format_smc_body(SETUP, 101.0, 100.5, 106.0, None, None)   # stop boven de limiet
         self.assertNotIn("Limietorder", bad)
-        self.assertIn("Entry 101.0000", bad)
+        self.assertIn("Entry 101.00", bad)
 
 
 class ZoneTouchTests(unittest.TestCase):
@@ -64,8 +65,8 @@ class ZoneTouchTests(unittest.TestCase):
         self.run_touch("XRP", 99.5)
         self.assertEqual(self.send.await_count, 2)                     # twee gebruikers
         title, body = self.send.await_args_list[0].args[1], self.send.await_args_list[0].args[2]
-        self.assertIn("XRP long: koers in de zone", title)
-        self.assertIn("limietorder op 100.0000", body)
+        self.assertEqual(title, "▲ XRP long · in de zone")
+        self.assertIn("Limietorder 100.00", body)
         self.assertIn("R:R", body)
         self.assertEqual(self.flag("XRP"), 1)
         self.assertEqual(self.flag("ETH"), 0)                           # andere coin ongemoeid

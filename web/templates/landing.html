@@ -7,7 +7,7 @@
 <meta name="color-scheme" content="dark">
 <style>html{background:#0a0e0f}</style>
 <title>HesPulse</title>
-<meta name="description" content="HesPulse toetst signalen tegen live technische data. Regels, geen garantie. Jij beslist zelf.">
+<meta name="description" content="HesPulse schrijft elke 4 uur een markt-script, toetst het tegen live data en laat zien wat het zelf voorspelde. Regels, geen garantie. Jij beslist zelf.">
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <link rel="manifest" href="/static/manifest.json">
@@ -29,6 +29,7 @@
     <span>HesPulse</span>
   </a>
   <nav>
+    <a href="#vandaag">Vandaag</a>
     <a href="#over-ons">Over ons</a>
     <a href="#hoe-het-werkt">Hoe het werkt</a>
     <a href="#meldingen-aanzetten">Meldingen aanzetten</a>
@@ -53,9 +54,10 @@
 <main>
 <section class="hero" style="--i: 0">
   <h1>Regels in plaats van giswerk</h1>
-  <p>HesPulse leest een signaal, toetst het tegen live koersdata, en stuurt
-  een pushmelding naar je telefoon. Geen automatische trades, geen
-  garanties. Jij beslist zelf.</p>
+  <p>HesPulse volgt de markt, schrijft elke 4 uur een script met scenario's en
+  toetst elke melding tegen live data. Je krijgt een pushmelding met een plan,
+  en je ziet wat HesPulse zelf voorspelde, ook als dat tegenvalt. Geen
+  automatische trades, geen garanties. Jij beslist zelf.</p>
   <a href="/registreer" class="button-primary">Registreren</a>
   <a href="/login" class="hero-secondary">Al een account? Inloggen</a>
 
@@ -87,12 +89,41 @@
   </svg>
 </section>
 
-<section class="landing-section" id="over-ons" style="--i: 1">
+<section class="landing-section vd-public" id="vandaag" style="--i: 1">
+  <h2>Vandaag, live</h2>
+  <p>Dit is wat je na het inloggen als eerste ziet. Hieronder de agenda van de komende 24 uur en de stemming van het
+  markt-script. De scenario's zelf, met limietorder, stop en take, staan achter het inloggen.</p>
+  <div class="vd-public-grid">
+    <div class="card vd-card vd-public-card">
+      <h3>Stemming van het markt-script</h3>
+      {% if mood.total %}
+      <div class="vd-mood-bar" role="img" aria-label="{{ mood.long }} long, {{ mood.neutraal }} neutraal, {{ mood.short }} short">
+        <span class="vd-mood-long" style="width: {{ mood.long_pct }}%"></span>
+        <span class="vd-mood-flat" style="width: {{ mood.neutraal_pct }}%"></span>
+        <span class="vd-mood-short" style="width: {{ mood.short_pct }}%"></span>
+      </div>
+      <div class="vd-mood-legend"><span class="pos">{{ mood.long }} long</span><span class="muted">{{ mood.neutraal }} neutraal</span><span class="neg">{{ mood.short }} short</span></div>
+      <p class="muted vd-fine">{{ n_scripts }} coins, bijgewerkt elke 4 uur. Wachtende scenario's: {{ mood.wait_long }} long en {{ mood.wait_short }} short.</p>
+      {% else %}
+      <p class="muted vd-empty">Het eerste markt-script verschijnt binnenkort.</p>
+      {% endif %}
+    </div>
+    <div class="card vd-card vd-public-card">
+      <h3>Agenda, komende 24 uur</h3>
+      <div class="vd-timeline-wrap">{{ timeline }}</div>
+      <p class="muted vd-fine">Nederlandse tijd, nu: {{ now }}. De zwaarte bij een moment is gemeten op een jaar candles.</p>
+    </div>
+  </div>
+  <p><a href="/registreer" class="button-primary">Registreren</a> <a href="/login" class="hero-secondary">Al een account? Inloggen</a></p>
+</section>
+
+<section class="landing-section" id="over-ons" style="--i: 2">
   <h2>Over ons</h2>
   <p>HesPulse is een persoonlijk project, gebouwd om structuur te brengen in
-  het volgen van crypto signalen. Geen los overzicht van berichten meer,
-  maar één plek waar tekst, techniek en risico samenkomen voordat er een
-  melding uitgaat.</p>
+  het volgen van crypto. Geen los overzicht van berichten meer, maar één plek
+  waar markt, nieuws, techniek en risico samenkomen voordat er een melding
+  uitgaat. Elke soort melding heeft een status die de uitkomsten bepalen, en
+  die uitkomsten staan open op de pagina Bewijs.</p>
   <p>Op dit moment is HesPulse een besloten tool, voor eigen gebruik en een
   klein aantal genodigden. Er wordt nog geen dienst verkocht.</p>
 </section>
@@ -103,15 +134,15 @@
     <div class="steps">
       <div class="step">
         <div class="num">1</div>
-        <p><strong>Signaal binnenkomt</strong> Een tekst met een coin en een richting, eventueel met een afbeelding, komt binnen bij het systeem.</p>
+        <p><strong>Waarnemen</strong> Koersen, funding, liquidaties, nieuws, de agenda en wat je community deelt komen binnen, ook buiten kantooruren.</p>
       </div>
       <div class="step">
         <div class="num">2</div>
-        <p><strong>Interpretatie en toetsing</strong> De tekst wordt gelezen, de coin en richting gehaald eruit, en getoetst tegen live indicatoren op de 4 uur candle.</p>
+        <p><strong>Scenario's en toetsing</strong> Claude schrijft elke 4 uur scenario's met een voorwaarde. De code toetst stop, risico en rendement. Wat niet klopt, valt af.</p>
       </div>
       <div class="step">
         <div class="num">3</div>
-        <p><strong>Pushmelding naar je telefoon</strong> Coin, richting, prijs, stop loss en take profit, met een label hoog of laag vertrouwen. De trade blijft een eigen beslissing.</p>
+        <p><strong>Melding en bewijs</strong> Klopt een voorwaarde, dan krijg je een pushmelding met limietorder, stop en take profit. De uitkomst telt mee op Bewijs. De trade blijft een eigen beslissing.</p>
       </div>
     </div>
     <div class="phone-mockup" aria-hidden="true">

@@ -55,7 +55,7 @@ def _send_one(subscription: dict, payload: dict) -> None:
     )
 
 
-async def send_push(user_id: int, title: str, body: str, url: str, silent: bool = False) -> None:
+async def send_push(user_id: int, title: str, body: str, url: str, silent: bool = False, tag: Optional[str] = None) -> None:
     """Stuurt naar elk geregistreerd apparaat van deze gebruiker. Een
     apparaat dat de browser/OS niet meer kent (404/410 terug) wordt
     meteen verwijderd, anders blijft push_subscriptions vervuild raken
@@ -71,7 +71,7 @@ async def send_push(user_id: int, title: str, body: str, url: str, silent: bool 
     if not subscriptions:
         return
 
-    payload = {"title": title, "body": body, "url": url, "icon": "/static/icon-192.png", "silent": silent}
+    payload = {"title": title, "body": body, "url": url, "icon": "/static/icon-192.png", "silent": silent, "tag": tag}
     for sub in subscriptions:
         try:
             await asyncio.to_thread(_send_one, sub, payload)
@@ -91,3 +91,19 @@ _COIN_SYMBOLS = {"BTC": "₿", "ETH": "Ξ"}
 
 def coin_symbol(coin: str) -> str:
     return _COIN_SYMBOLS.get(coin.upper(), "")
+
+
+def fmt_price(value: float) -> str:
+    """Vier decimalen onder de 100, twee erboven: 0,1632 en 67350,00 blijven allebei leesbaar op een vergrendeld scherm."""
+    return f"{value:.4f}" if abs(value) < 100 else f"{value:.2f}"
+
+
+def alert_title(coin: str, direction: str, label: str) -> str:
+    """Eén vorm voor elke melding, kort genoeg voor één regel: pijl, coin, kant en soort. Bijvoorbeeld '▲ BTC long · SMC'."""
+    return f"{'▲' if direction == 'long' else '▼'} {coin} {direction} · {label}"
+
+
+def trade_body(entry_label: str, entry: float, stop: float, take: float, rr: Optional[float] = None, *extra: str) -> str:
+    """Eerste regel de order, tweede regel stop en take, daarna toelichting. Zo staat het belangrijkste altijd bovenaan."""
+    first = f"{entry_label} {fmt_price(entry)}" + (f" · R:R {rr:.1f}" if rr else "")
+    return "\n".join([first, f"Stop {fmt_price(stop)} · Take {fmt_price(take)}", *[line for line in extra if line]])

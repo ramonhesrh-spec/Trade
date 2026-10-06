@@ -62,10 +62,9 @@ async def run(now: Optional[datetime] = None) -> int:
         if not repo.create_samenval(s["coin"], s["direction"], s["id"], m["message_id"]):
             continue
         sent += 1
-        title = f"{push_notify.coin_symbol(s['coin'])} {s['coin']} {s['direction']}, samenval (ongetest)"
-        body = ("SMC-setup en community-call wijzen dezelfde kant op.\n"
-                f"Stop {s['stop_loss']:.4f} · Take profit {s['take_profit']:.4f}\n"
-                "Ongetest: Bewijs toont de uitkomst apart.")
+        title = push_notify.alert_title(s["coin"], s["direction"], "Samenval (ongetest)")
+        body = push_notify.trade_body("Entry", s["price"], s["stop_loss"], s["take_profit"], None,
+                                      "SMC en community wijzen dezelfde kant op.", "Ongetest, zie Bewijs.")
         for user in repo.list_users():
             quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
             try:

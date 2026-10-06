@@ -1756,3 +1756,30 @@ main + .footer { border-top: 1px solid var(--border); }
 }
 .vd-mood-legend .pos, .vd-liq-legend .pos, .vd-score-number.pos { color: var(--green); }
 .vd-mood-legend .neg, .vd-liq-legend .neg, .vd-score-number.neg { color: var(--red); }
+
+/* Openbare Vandaag-sectie op de landingspagina: zelfde kaarten als de cockpit, naast elkaar op een breed scherm. */
+.vd-public-grid { display: grid; grid-template-columns: 1fr; gap: var(--space-7); margin: var(--space-7) 0; }
+.vd-public-card { margin-top: 0; }
+
+/* Meldingen: per dag gegroepeerd, met een label per soort en een gelezen-streepje. */
+.nf-day { margin: var(--space-10) 0 var(--space-5); font-size: var(--text-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.nf-day:first-child { margin-top: 0; }
+.nf-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.nf-item { border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-elevated); border-left: 3px solid transparent; }
+.nf-unread { border-left-color: var(--accent); background: linear-gradient(90deg, var(--accent-bg), transparent 40%), var(--bg-elevated); }
+.nf-link { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-6); align-items: start; padding: var(--space-6) var(--space-7); color: inherit; text-decoration: none; }
+a.nf-link:hover { background: var(--panel-hover); border-radius: var(--radius-sm); }
+.nf-chip { padding: 2px 10px; border-radius: 999px; font-size: var(--text-2xs); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; margin-top: 2px; }
+.chip-new { background: var(--accent-bg); color: var(--accent); }
+.chip-report { background: var(--green-bg); color: var(--green); }
+.chip-muted { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
+.nf-title { display: block; font-size: var(--text-md); color: var(--text); }
+.nf-unread .nf-title { font-weight: 700; }
+.nf-body { margin: var(--space-3) 0 0; font-size: var(--text-base); line-height: 1.5; color: var(--text-dim); white-space: pre-line; }
+.nf-time { font-size: var(--text-xs); white-space: nowrap; margin-top: 3px; }
+@media (max-width: 560px) {
+  .nf-link { grid-template-columns: 1fr auto; }
+  .nf-chip { grid-column: 1; justify-self: start; }
+  .nf-main { grid-column: 1 / -1; }
+  .nf-time { grid-column: 2; grid-row: 1; }
+}

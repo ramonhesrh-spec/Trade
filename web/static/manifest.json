@@ -1,8 +1,8 @@
 {
   "name": "HesPulse",
   "short_name": "HesPulse",
-  "description": "Crypto day-trading meldingen en logboek",
-  "start_url": "/signalen",
+  "description": "Marktbrein, scenario's en meldingen voor crypto day-trading",
+  "start_url": "/vandaag",
   "display": "standalone",
   "background_color": "#0a0e0f",
   "theme_color": "#0a0e0f",

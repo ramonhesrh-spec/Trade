@@ -62,6 +62,9 @@ self.addEventListener("push", (event) => {
       body: data.body,
       icon: data.icon,
       silent: !!data.silent,
+      // Een nieuwere melding voor dezelfde coin en soort vervangt de vorige in plaats van te stapelen.
+      tag: data.tag || undefined,
+      renotify: !!data.tag && !data.silent,
       data: { url: data.url },
     })
   );

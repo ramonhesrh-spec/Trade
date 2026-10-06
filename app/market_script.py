@@ -283,11 +283,11 @@ def generate_all() -> None:
 
 
 def format_body(s: dict) -> str:
+    from app import push_notify
     rr = rr_of(s["direction"], s["entry"], s["stop_loss"], s["take_profit"])
-    return (f"Limietorder {s['entry']:.4f}, R:R {rr:.1f}\n"
-            f"Stop {s['stop_loss']:.4f} · Take profit {s['take_profit']:.4f}\n"
-            f"Voorwaarde: {trigger_text(s['trigger_type'], s['direction'], s['trigger_level'])}\n"
-            f"{s['reason']}\nOngetest: Bewijs toont de score van het markt-script.")
+    return push_notify.trade_body("Limietorder", s["entry"], s["stop_loss"], s["take_profit"], rr,
+                                  f"Als: {trigger_text(s['trigger_type'], s['direction'], s['trigger_level'])}", s["reason"],
+                                  "Ongetest, zie Bewijs.")
 
 
 async def _fire(s: dict) -> None:
@@ -307,7 +307,7 @@ async def _fire(s: dict) -> None:
     repo.set_scenario_state(s["id"], "fired", signal_id)
     await fanout_confirmed_signal(
         signal_id, coin, direction, s["entry"], s["stop_loss"], s["take_profit"], s["trigger_level"],
-        title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, markt-script (ongetest)",
+        title=push_notify.alert_title(coin, direction, "Script (ongetest)"),
         make_body=lambda *_: format_body(s), reason=reason, signal_type="script",
     )
 

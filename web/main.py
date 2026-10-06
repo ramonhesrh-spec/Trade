@@ -27,7 +27,7 @@ from markupsafe import Markup
 
 from app import advice as advice_module
 from app import patterns as chart_patterns
-from app import config, db, exchange, indicators, market_calendar, push_notify, radar, repo, risk, security, today, track_record
+from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, radar, repo, risk, security, today, track_record
 from app.market_scanner import smc_stop_take_margins
 
 logger = logging.getLogger("web")
@@ -109,7 +109,11 @@ async def landing(request: Request):
     if user_id and repo.get_user(user_id):
         return RedirectResponse(url="/vandaag", status_code=303)
 
+    now = datetime.now(timezone.utc)
+    scripts = repo.latest_scripts()
     return templates.TemplateResponse(request, "landing.html", {
+        "timeline": Markup(today.timeline_svg(now, market_calendar.upcoming(now, 24))), "mood": today.mood(scripts),
+        "n_scripts": len(scripts), "now": today.nl_stamp(today.local(now)),
         "kraken_referral_url": config.KRAKEN_REFERRAL_URL,
         "kraken_referral_code": config.KRAKEN_REFERRAL_CODE,
     })
@@ -162,8 +166,8 @@ async def meldingen_page(request: Request, user: dict = Depends(require_login)):
     return templates.TemplateResponse(request, "meldingen.html", {
         "user": user,
         "coins": repo.list_coins(),
-        "notifications": repo.list_notifications(user["id"]),
-        "admin_notifications": repo.list_admin_notifications() if is_admin else None,
+        "notification_groups": notifications_view.group_notifications(repo.list_notifications(user["id"])),
+        "admin_groups": notifications_view.group_notifications(repo.list_admin_notifications()) if is_admin else None,
         # Los van de getoonde lijst (die stopt bij limit=50): de "alles
         # gelezen"-knop moet ook verschijnen als de ongelezen achterstand
         # verder terugligt dan wat hier zichtbaar is.
@@ -726,7 +730,7 @@ async def dashboard():
     # geen navigatielink wijst hier meer naartoe, maar een oude
     # PWA-snelkoppeling kan nog steeds deze URL openen. Doorsturen i.p.v.
     # verwijderen voorkomt een kale 404 op zo'n bestaande snelkoppeling.
-    return RedirectResponse(url="/signalen", status_code=303)
+    return RedirectResponse(url="/vandaag", status_code=303)
 
 
 @app.get("/account")

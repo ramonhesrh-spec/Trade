@@ -106,10 +106,15 @@ def script_view(script: dict, price: Optional[float], now: datetime) -> dict:
 def mood(scripts: list[dict]) -> dict:
     """Marktstemming uit de scripts: hoeveel coins long, short of neutraal. Geen eigen oordeel, alleen optellen."""
     counts = {"long": 0, "short": 0, "neutraal": 0}
+    waiting = {"long": 0, "short": 0}
     for s in scripts:
         counts[s["bias"] if s["bias"] in counts else "neutraal"] += 1
+        for sc in s.get("scenarios", []):
+            if sc["state"] == "waiting" and sc["direction"] in waiting:
+                waiting[sc["direction"]] += 1
     total = sum(counts.values())
-    return {**counts, "total": total, **{f"{k}_pct": (v / total * 100 if total else 0) for k, v in counts.items()}}
+    return {**counts, "total": total, **{f"{k}_pct": (v / total * 100 if total else 0) for k, v in counts.items()},
+            "wait_long": waiting["long"], "wait_short": waiting["short"]}
 
 
 def liquidation_rows(by_coin: dict[str, list[dict]]) -> list[dict]:

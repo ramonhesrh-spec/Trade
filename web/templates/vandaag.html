@@ -21,6 +21,7 @@
       <span class="vd-mood-short" style="width: {{ mood.short_pct }}%"></span>
     </div>
     <div class="vd-mood-legend"><span class="pos">{{ mood.long }} long</span><span class="muted">{{ mood.neutraal }} neutraal</span><span class="neg">{{ mood.short }} short</span></div>
+    <p class="muted vd-fine">Wachtende scenario's: <span class="pos">{{ mood.wait_long }} long</span>, <span class="neg">{{ mood.wait_short }} short</span>. Een coin kan neutraal zijn en toch een scenario hebben dat bij een doorbraak afgaat.</p>
     {% else %}
     <p class="muted vd-empty">Het eerste markt-script verschijnt na de volgende ronde van 4 uur.</p>
     {% endif %}

@@ -536,7 +536,7 @@ async def run_swing_check(watch_id: int) -> None:
     await _fanout_confirmed_signal(
         signal_id, coin, direction, ind_4h.price, stop_take.stop_loss, stop_take.take_profit,
         premise_level=watch["price_level"],
-        title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, swing-kans",
+        title=push_notify.alert_title(coin, direction, "Swing"),
         make_body=_swing_body, signal_type="swing",
     )
 
@@ -1003,7 +1003,7 @@ async def process_day_trading_signal(
 
         force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            title = f"{push_notify.coin_symbol(interp.coin)} {interp.coin} {interp.direction}, {signal_data['confidence']}"
+            title = push_notify.alert_title(interp.coin, interp.direction, f"Community, {signal_data['confidence']}")
             body = (
                 f"Entry {signal_data['price']:.4f}\n"
                 f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"

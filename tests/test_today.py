@@ -65,6 +65,11 @@ class MoodAndLiquidationTest(unittest.TestCase):
         self.assertAlmostEqual(m["long_pct"], 50.0)
         self.assertEqual(today.mood([])["total"], 0)
 
+    def test_mood_counts_waiting_scenarios_by_direction(self):
+        m = today.mood([{"bias": "neutraal", "scenarios": [{"state": "waiting", "direction": "long"}, {"state": "fired", "direction": "short"}]},
+                        {"bias": "neutraal", "scenarios": [{"state": "waiting", "direction": "short"}]}])
+        self.assertEqual((m["wait_long"], m["wait_short"], m["neutraal"]), (1, 1, 2))
+
     def test_liquidation_rows_sorted_scaled_and_empty_coins_dropped(self):
         rows = today.liquidation_rows({
             "BTC": [{"long_usd": 3e6, "short_usd": 1e6}], "ETH": [{"long_usd": 0, "short_usd": 2e6}], "SOL": []})
