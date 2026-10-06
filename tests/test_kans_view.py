@@ -35,6 +35,8 @@ class KansViewTests(unittest.TestCase):
         signal = {"created_at": candle(5)[0], "auto_outcome": "take_profit", "auto_outcome_at": candle(9)[0]}
         texts = [e["text"] for e in kans_view.timeline(signal, None)]
         self.assertEqual(texts, ["Gemeld", "Doel geraakt"])
+        first = kans_view.timeline({"created_at": "2026-10-06T16:47:00+00:00", "auto_outcome": None}, None)[0]["at"]
+        self.assertEqual(first.strftime("%H:%M"), "18:47")                  # 16:47 UTC is 18:47 in Nederland (zomertijd)
 
     def test_trade_svg_labels_entry_and_goal(self):
         svg = setup_chart.trade_svg([candle(i) for i in range(30)], "long", "ETH", 100.0, 99.0, 102.0, 100.4)
