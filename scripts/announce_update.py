@@ -10,14 +10,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import db, push_notify, repo  # noqa: E402
 
-TITLE = "Nieuw in HesPulse: Radar en Bewijs"
+TITLE = "Nieuw in HesPulse: Vandaag, markt-script, Radar en Bewijs"
 BODY = (
-    "Radar: elke SMC-kans als handelsplan met limietorder op de zone-rand, stop, take profit, R:R en een live prijsladder.\n"
-    "Bewijs: wat elk soort melding echt opleverde in R na kosten. Ook de soorten die nog niets bewezen hebben.\n"
-    "Zone-melding: je krijgt een bericht zodra de koers in de zone komt.\n"
-    "Samenval (ongetest): SMC-setup en community-call wijzen dezelfde kant op."
+    "Vandaag: jouw nieuwe startpagina met het markt-script per coin, de agenda van de komende 24 uur, gedwongen sluitingen en nieuws.\n"
+    "Markt-script (ongetest): Claude schrijft elke 4 uur scenario's met een voorwaarde. Klopt die, dan krijg je een melding met limietorder, stop en take.\n"
+    "Radar: elke SMC-kans als handelsplan met een live prijsladder en een melding zodra de koers in de zone komt.\n"
+    "Bewijs: wat elk soort melding echt opleverde in R na kosten, ook de soorten die nog niets bewezen hebben."
 )
-URL = "/smc"
+URL = "/vandaag"
 
 
 def already_sent(user_id: int) -> bool:
