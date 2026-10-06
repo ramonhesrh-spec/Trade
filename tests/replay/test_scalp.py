@@ -87,5 +87,18 @@ class ScalpTest(unittest.TestCase):
         self.assertEqual(list(scalp._decluster(np.array([1, 3, 12, 14, 30]))), [1, 12, 30])
 
 
+class UniverseTest(unittest.TestCase):
+    def test_screen_sees_lag_for_follower_and_not_for_independent_alt(self):
+        from app.replay import scalp_universe as su
+        lagged = frames(follow=True)
+        indep = frames(follow=False)
+        a = su.screen(lagged["BTC"], lagged["ETH"])
+        b = su.screen(indep["BTC"], indep["ETH"])
+        self.assertGreater(a["achterstand_bp"], 20)
+        self.assertGreater(a["t_lag"], 10)
+        self.assertLess(abs(b["achterstand_bp"]), 5)
+        self.assertLess(abs(b["t_lag"]), 4)
+
+
 if __name__ == "__main__":
     unittest.main()
