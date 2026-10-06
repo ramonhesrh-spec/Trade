@@ -24,6 +24,27 @@ def fmt(v) -> str:
     return f"{v:+.2f}" if v is not None else "-"
 
 
+def cost_leverage(trades: pd.DataFrame, cut: pd.Timestamp) -> None:
+    """ORB-mee in basispunten per trade: wat levert de doorbraak bruto op, en wat blijft er over bij andere kosten? Daarna per stopgrootte,
+    per coin en per kwartaal: is het voordeel stabiel, en loont een ruimere stop omdat de kosten dan in R kleiner worden?"""
+    follow = trades[(trades["variant"] == "ORB mee") & (trades["rr"] == 2.0)].copy()
+    if follow.empty:
+        return
+    follow["gross_bp"] = follow["r_gross"] * follow["risk_pct"] * 100
+    print("\nKostenhefboom, ORB mee met doel 2R, in basispunten per trade:")
+    print(f"  bruto gemiddeld {follow['gross_bp'].mean():+.1f} bp over {len(follow)} trades (train {follow[follow['at'] < cut]['gross_bp'].mean():+.1f}, test {follow[follow['at'] >= cut]['gross_bp'].mean():+.1f})")
+    for cost in (2.0, 3.0, 4.0, 6.0):
+        net = follow["gross_bp"] - cost
+        print(f"  kosten {cost:.0f} bp: netto {net.mean():+.1f} bp, train {net[follow['at'] < cut].mean():+.1f}, test {net[follow['at'] >= cut].mean():+.1f}")
+    follow["stop"] = pd.qcut(follow["risk_pct"].rank(method="first"), 3, labels=["krappe stop", "middel", "ruime stop"])
+    print("  Per stopgrootte (kosten 6 bp):")
+    for name, g in follow.groupby("stop", observed=True):
+        print(f"    {name:<12} stop {g['risk_pct'].median():.2f}%  n {len(g):>4}  bruto {g['gross_bp'].mean():+6.1f} bp  netto {g['gross_bp'].mean() - 6:+6.1f} bp  netto R {g['r_net'].mean():+.2f}")
+    print("  Per coin (bruto bp):", ", ".join(f"{c} {g['gross_bp'].mean():+.1f}" for c, g in follow.groupby("coin")))
+    q = follow.groupby(follow["at"].dt.to_period("Q"))["gross_bp"].agg(["mean", "count"])
+    print("  Per kwartaal (bruto bp):", ", ".join(f"{k} {v['mean']:+.1f} (n {int(v['count'])})" for k, v in q.iterrows()))
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--coins", default=",".join(config.BASE_COINS))
@@ -60,6 +81,8 @@ def main() -> None:
             for r in sorted(sessions.summarize(tmp, cut), key=lambda r: r["rr"]):
                 print(f"{label:<18}{r['rr']:>5.1f}{r['n']:>6}{r['winrate'] * 100:>8.0f}%{r['gross']:>+9.2f}{r['net']:>+9.2f}{fmt(r['train']):>8}{fmt(r['test']):>8}"
                       f"{fmt(r['t_days']):>7}  {'JA' if sessions.passes(r) else ''}")
+
+    cost_leverage(trades, cut)
 
     lon = pd.concat(ln, ignore_index=True)
     print("\nLondon-richting tegenover New York (bp na 6 bp kosten, over coins en dagen):")

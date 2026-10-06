@@ -58,7 +58,7 @@ def _row(coin: str, variant: str, direction: str, entry: float, stop: float, at:
     for rr in RR_LIST:
         o = resolve(direction, entry, stop, entry + sign * abs(entry - stop) * rr, after, at, MAX_AGE, FEE_PCT, SLIP_PCT)
         if o is not None:
-            out.append({"at": at, "coin": coin, "variant": variant, "rr": rr, "win": o.result == "take_profit", "r_gross": o.r_gross, "r_net": o.r_net, **(extra or {})})
+            out.append({"at": at, "coin": coin, "variant": variant, "rr": rr, "win": o.result == "take_profit", "r_gross": o.r_gross, "r_net": o.r_net, "risk_pct": risk_pct, **(extra or {})})
     return out
 
 
@@ -262,7 +262,7 @@ def orb_trailing(coin: str, frame: pd.DataFrame) -> list[dict]:
                 break
             for mult in TRAIL_ATR:
                 gross, net = trail_exit(direction, float(b.close), stop, mult * float(b.atr), after["high"].to_numpy(), after["low"].to_numpy(), after["close"].to_numpy())
-                rows.append({"at": b.close_time, "coin": coin, "variant": f"ORB trail {mult:g}xATR", "rr": 0.0, "win": net > 0, "r_gross": gross, "r_net": net,
+                rows.append({"at": b.close_time, "coin": coin, "variant": f"ORB trail {mult:g}xATR", "rr": 0.0, "win": net > 0, "r_gross": gross, "r_net": net, "risk_pct": risk_pct,
                              "or_pct": (hi - lo) / b.close * 100, "aligned": london_sign * (1 if direction == "long" else -1)})
             break
     return rows
