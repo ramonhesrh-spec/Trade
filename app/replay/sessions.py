@@ -19,7 +19,7 @@ from app.replay.lab import add_indicators, make_bars
 from app.replay.outcome import resolve
 
 LONDON_TZ, NEW_YORK_TZ = ZoneInfo("Europe/London"), ZoneInfo("America/New_York")
-RR_LIST = (1.0, 1.5, 2.0)
+RR_LIST = (1.0, 1.5, 2.0, 3.0, 4.0, 6.0)
 OR_MINUTES = 30
 ENTRY_WINDOW_MIN = 120
 MAX_AGE = pd.Timedelta(hours=3)
@@ -210,3 +210,59 @@ def amd_days(coin: str, frame: pd.DataFrame) -> pd.DataFrame:
         rows.append({"at": ny_open, "coin": coin, "sweep": sweep, "pd_pos": "boven midden" if last > mid else "onder midden",
                      "ret120_bp": (float(seg120["close"].iloc[-1]) / entry - 1) * 1e4, "retclose_bp": (float(ny["close"].iloc[-1]) / entry - 1) * 1e4})
     return pd.DataFrame(rows)
+
+
+TRAIL_ATR = (2.0, 3.0)
+COST_FRAC = (FEE_PCT + SLIP_PCT) * 2 / 100
+
+
+def trail_exit(direction: str, entry: float, stop: float, trail_dist: float, highs: np.ndarray, lows: np.ndarray, closes: np.ndarray) -> tuple[float, float]:
+    """Meelopende stop: begint op `stop` en volgt het uiterste sinds de instap op `trail_dist`, nooit terug. Stop eerst: een candle die de stop
+    van het begin van die candle raakt, sluit de trade. Geeft (bruto R, netto R); aan het einde van het venster tegen de slotkoers."""
+    risk = abs(entry - stop)
+    long = direction == "long"
+    live, extreme = stop, entry
+    for k in range(len(closes)):
+        if (lows[k] <= live) if long else (highs[k] >= live):
+            gross = ((live - entry) if long else (entry - live)) / risk
+            return gross, gross - COST_FRAC * entry / risk
+        extreme = max(extreme, highs[k]) if long else min(extreme, lows[k])
+        live = max(live, extreme - trail_dist) if long else min(live, extreme + trail_dist)
+    gross = ((closes[-1] - entry) if long else (entry - closes[-1])) / risk
+    return gross, gross - COST_FRAC * entry / risk
+
+
+def orb_trailing(coin: str, frame: pd.DataFrame) -> list[dict]:
+    """Dezelfde ORB-instap als orb_trades, maar zonder vast doel: een meelopende stop op TRAIL_ATR keer de 5m-ATR, uiterlijk tot de New York-slot.
+    Grote winnaars blijven lopen, dat is wat een ladder met een laatste ruim doel ook doet."""
+    rows = []
+    for day in weekdays(frame):
+        t = session_times(day)
+        t0, close = t["ny"]
+        opening = window(frame, t0, t0 + pd.Timedelta(minutes=OR_MINUTES))
+        if len(opening) < OR_MINUTES - 3:
+            continue
+        hi, lo = float(opening["high"].max()), float(opening["low"].min())
+        london = window(frame, t["london"][0], t0)
+        london_sign = float(np.sign(float(london["close"].iloc[-1]) - float(london["open"].iloc[0]))) if len(london) > 100 else 0.0
+        day_bars = add_indicators(make_bars(window(frame, t0 - pd.Timedelta(hours=6), close), 5))
+        bars = day_bars[(day_bars["timestamp"] >= t0 + pd.Timedelta(minutes=OR_MINUTES)) & (day_bars["timestamp"] < t0 + pd.Timedelta(minutes=OR_MINUTES + ENTRY_WINDOW_MIN))]
+        for b in bars.itertuples():
+            if b.close > hi:
+                direction, stop = "long", lo
+            elif b.close < lo:
+                direction, stop = "short", hi
+            else:
+                continue
+            risk_pct = abs(b.close - stop) / b.close * 100
+            if not (MIN_STOP_PCT <= risk_pct <= MAX_STOP_PCT) or not np.isfinite(b.atr):
+                break
+            after = window(frame, b.close_time, close)
+            if len(after) < 5:
+                break
+            for mult in TRAIL_ATR:
+                gross, net = trail_exit(direction, float(b.close), stop, mult * float(b.atr), after["high"].to_numpy(), after["low"].to_numpy(), after["close"].to_numpy())
+                rows.append({"at": b.close_time, "coin": coin, "variant": f"ORB trail {mult:g}xATR", "rr": 0.0, "win": net > 0, "r_gross": gross, "r_net": net,
+                             "or_pct": (hi - lo) / b.close * 100, "aligned": london_sign * (1 if direction == "long" else -1)})
+            break
+    return rows

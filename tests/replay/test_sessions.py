@@ -111,6 +111,21 @@ class SessionsTest(unittest.TestCase):
         self.assertAlmostEqual(mee, -tegen)
         self.assertNotEqual(round(row, 3), round(mee, 3))      # de uitkomst veranderde wel, de voorspelling niet
 
+    def test_trail_exit_lets_winners_run_and_stops_losers(self):
+        # long: instap 100, stop 99 (risico 1), meelopende stop op 1 onder het hoogste punt
+        highs = np.array([100.5, 101.0, 103.0, 104.0, 104.0]); lows = np.array([99.8, 100.4, 101.8, 103.2, 102.9]); closes = np.array([100.4, 100.9, 102.9, 103.9, 103.0])
+        gross, net = ss.trail_exit("long", 100.0, 99.0, 1.0, highs, lows, closes)
+        self.assertAlmostEqual(gross, 3.0)                          # stop meegelopen naar 103 en daar geraakt
+        self.assertLess(net, gross)
+        g2, _ = ss.trail_exit("long", 100.0, 99.0, 1.0, np.array([100.2, 100.1]), np.array([98.9, 99.5]), np.array([99.0, 99.8]))
+        self.assertAlmostEqual(g2, -1.0)                            # meteen de beginstop
+
+    def test_orb_trailing_rows_exist_on_planted_trend(self):
+        f = frame(plant="orb_up")
+        t = pd.DataFrame(ss.orb_trailing("BTC", f))
+        self.assertGreater(len(t), 10)
+        self.assertGreater(t[t["variant"] == "ORB trail 2xATR"]["r_net"].mean(), 0.5)
+
     def test_sweep_and_london_and_hours_run(self):
         f = frame(days=40)
         ss.sweep_trades("BTC", f)
