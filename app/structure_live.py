@@ -20,7 +20,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from app import chance_checks, config, repo
+from app import chance_checks, config, repo, smc_eval
 from app.replay import breakretest as br
 from app.replay.lab import add_indicators
 from app.track_record import signal_r
@@ -97,13 +97,21 @@ def fresh_breaks(bars: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, np.nda
     return b, events.loc[keep].reset_index(drop=True), p_high, p_low
 
 
+def stop_with_room(direction: str, level: float, extreme: float, atr: float) -> float:
+    """Stop net voorbij de terugkeer (kwart ATR), minstens SMC_MIN_STOP_PCT van het niveau: een stop vlak achter het niveau wordt door een wick geraakt
+    waarna de koers alsnog de goede kant op gaat."""
+    short = direction == br.SHORT
+    stop = max(level, extreme) + br.STOP_ATR * atr if short else min(level, extreme) - br.STOP_ATR * atr
+    return smc_eval.floor_stop(direction, level, stop)
+
+
 def plan_for(ev, b: pd.DataFrame, levels: list[float], level: float, extreme: float) -> Optional[dict]:
     """Stop en doelen uit code. None als de stopafstand buiten het toegestane bereik valt of er geen doel ligt."""
     short = ev.direction == br.SHORT
-    stop = max(level, extreme) + br.STOP_ATR * ev.atr if short else min(level, extreme) - br.STOP_ATR * ev.atr
+    stop = stop_with_room(ev.direction, level, extreme, ev.atr)
     risk = abs(level - stop)
     risk_pct = risk / level * 100
-    if not (br.MIN_STOP_PCT <= risk_pct <= br.MAX_STOP_PCT) or (short and level >= stop) or (not short and level <= stop):
+    if risk_pct > br.MAX_STOP_PCT or (short and level >= stop) or (not short and level <= stop):
         return None
     # Doelen op zwaaipunten als die ruim genoeg liggen, anders een vaste ladder van 1, 2 en 3R. De eis dat het tweede doel op een zwaaipunt minstens
     # MIN_RR ver ligt hield in een stijging naar nieuwe hoogtes bijna elke breuk tegen, en het onderzoek liet zien dat zulke filters de kwaliteit niet verbeteren.
@@ -118,12 +126,11 @@ def plan_for(ev, b: pd.DataFrame, levels: list[float], level: float, extreme: fl
 
 def explain_no_plan(ev, levels: list[float], level: float, extreme: float) -> str:
     """Waarom er geen plan kwam, met de getallen: de stopafstand, en de ruimte tot de eerstvolgende doelen op zwaaipunten."""
-    short = ev.direction == br.SHORT
-    stop = max(level, extreme) + br.STOP_ATR * ev.atr if short else min(level, extreme) - br.STOP_ATR * ev.atr
+    stop = stop_with_room(ev.direction, level, extreme, ev.atr)
     risk = abs(level - stop)
     risk_pct = risk / level * 100 if level else 0.0
-    if not (br.MIN_STOP_PCT <= risk_pct <= br.MAX_STOP_PCT):
-        return (f"Stop {risk_pct:.2f}% van het niveau, toegestaan is {br.MIN_STOP_PCT:g} tot {br.MAX_STOP_PCT:g}%. "
+    if risk_pct > br.MAX_STOP_PCT:
+        return (f"Stop {risk_pct:.2f}% van het niveau, toegestaan is maximaal {br.MAX_STOP_PCT:g}%. "
                 f"Niveau {_r(level)}, stop {_r(stop)}.")
     return "Stop in orde, geen plan om een andere reden."
 
@@ -308,9 +315,9 @@ async def _track(now: datetime) -> None:
                 # aparte "teruggewonnen"-tak. Een mislukte breuk eindigt zo meteen in de stop, zoals de toets het ook meet.
                 reach = c.high >= level if s["direction"] == br.SHORT else c.low <= level
                 if reach:
-                    stop = max(level, extreme) + br.STOP_ATR * s["atr"] if s["direction"] == br.SHORT else min(level, extreme) - br.STOP_ATR * s["atr"]
+                    stop = stop_with_room(s["direction"], level, extreme, s["atr"])
                     risk_pct = abs(level - stop) / level * 100
-                    if br.MIN_STOP_PCT <= risk_pct <= br.MAX_STOP_PCT:
+                    if risk_pct <= br.MAX_STOP_PCT:
                         try:
                             await (_fire(s, plan, level, stop, c.timestamp) if s["state"] == "waiting" else _fire_shadow(s, plan, level, stop))
                         except Exception:

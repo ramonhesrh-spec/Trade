@@ -50,8 +50,10 @@ ENABLE_ADVANCED_FACTORS = _get("ENABLE_ADVANCED_FACTORS", "false").lower() == "t
 
 # Minimale stopafstand van een SMC-signaal, in procenten van de entry. Uit het meetraam (12 maanden, 7 coins,
 # 122 signalen): signalen met een stop onder 0,1% wonnen 6% en verloren gemiddeld -0,73R bruto, omdat zo'n
-# stop binnen de ruis van een minuutcandle ligt. Vanaf 0,2% was het +0,12R bruto. 0 zet de toets uit.
-SMC_MIN_STOP_PCT = float(_get("SMC_MIN_STOP_PCT", "0.2"))
+# stop binnen de ruis van een minuutcandle ligt. Vanaf 0,2% was het +0,12R bruto. Een krappere stop wordt verbreed tot deze afstand, nooit geweigerd.
+# Staat op 0,4% omdat een stop van 0,2% (24 cent op SOL) al door een prijsverschil tussen twee beurzen geraakt wordt. Geldt voor SMC, Structuur,
+# Trend en het markt-script. 0 zet het uit.
+SMC_MIN_STOP_PCT = float(_get("SMC_MIN_STOP_PCT", "0.4"))
 # Meld een SMC-kans met een waarschuwing (late entry of lage verhouding) in plaats van hem te weigeren. Standaard uit zodat de golden-tests van de
 # gedeelde SMC-logica ongewijzigd blijven; zet op true in .env om elke kans te zien.
 SMC_WARNING_ALERTS = _get("SMC_WARNING_ALERTS", "false").lower() == "true"

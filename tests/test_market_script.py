@@ -38,7 +38,6 @@ class ValidateTest(unittest.TestCase):
 
     def test_each_rule_drops(self):
         self.check(raw(stop_loss=101.0), "volgorde")
-        self.check(raw(entry=100.8, stop_loss=100.7, take_profit=103.0), "stop te dichtbij")
         self.check(raw(take_profit=101.5), "R:R")
         self.check(raw(trigger={"type": "close_above", "level": 110.0}, entry=100.8), "te ver")
         self.check(raw(trigger={"type": "close_above", "level": 99.0}), "klopt al")
@@ -47,6 +46,15 @@ class ValidateTest(unittest.TestCase):
         self.check(raw(reason=""), "geen reden")
         self.check(raw(direction="omhoog"), "onbekende")
         self.check({"direction": "long"}, "onvolledig")
+
+    def test_tight_stop_is_widened_not_dropped(self):
+        tight = raw(entry=100.8, stop_loss=100.7, take_profit=103.0)         # stop 0,1%: te krap, de kans blijft met een ruimere stop
+        good, dropped = ms.validate_scenarios([tight], PRICE, ATR, min_stop_pct=0.4)
+        self.assertEqual(dropped, [])
+        self.assertAlmostEqual(good[0].stop_loss, 100.8 * (1 - 0.004))
+        poor, dropped = ms.validate_scenarios([raw(entry=100.8, stop_loss=100.7, take_profit=101.4)], PRICE, ATR, min_stop_pct=0.4)
+        self.assertEqual(poor, [])                                            # na verbreden zakt de R:R onder 2: dan valt hij af
+        self.assertIn("R:R", dropped[0])
 
     def test_short_and_sweep_variants_and_cap_at_two(self):
         short = raw(direction="short", trigger={"type": "sweep_reclaim", "level": 101.0}, entry=100.6, stop_loss=101.6, take_profit=98.4)

@@ -14,7 +14,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import chance_checks, config, repo
+from app import chance_checks, config, repo, smc_eval
 from app.track_record import signal_r
 
 logger = logging.getLogger("market_script")
@@ -83,8 +83,8 @@ def validate_scenarios(raw: list, price: float, atr: float, min_stop_pct: Option
             dropped.append(f"{i}: geen reden")
         elif not ((direction == "long" and stop < entry < take) or (direction == "short" and take < entry < stop)):
             dropped.append(f"{i}: stop, entry en take staan niet in de juiste volgorde ({info})")
-        elif abs(entry - stop) / entry * 100 < min_stop_pct:
-            dropped.append(f"{i}: stop te dichtbij ({info})")
+        elif rr_of(direction, entry, smc_eval.floor_stop(direction, entry, stop, min_stop_pct), take) < MIN_RR:
+            dropped.append(f"{i}: R:R onder {MIN_RR} na een stop van minstens {min_stop_pct:g}% ({info})")
         elif rr_of(direction, entry, stop, take) < MIN_RR:
             dropped.append(f"{i}: R:R onder {MIN_RR} ({info})")
         elif atr <= 0 or abs(level - price) > MAX_LEVEL_DISTANCE_ATR * atr or abs(entry - price) > MAX_ENTRY_DISTANCE_ATR * atr:
@@ -96,7 +96,7 @@ def validate_scenarios(raw: list, price: float, atr: float, min_stop_pct: Option
         elif ttype == "sweep_reclaim" and not ((direction == "long" and level < price) or (direction == "short" and level > price)):
             dropped.append(f"{i}: sweep ligt aan de verkeerde kant van de prijs ({info})")
         else:
-            good.append(Scenario(direction, ttype, level, entry, stop, take, reason[:REASON_MAX]))
+            good.append(Scenario(direction, ttype, level, entry, smc_eval.floor_stop(direction, entry, stop, min_stop_pct), take, reason[:REASON_MAX]))
     if len(good) > MAX_SCENARIOS:
         dropped += [f"{i}: meer dan {MAX_SCENARIOS} scenario's" for i in range(MAX_SCENARIOS, len(good))]
         good = good[:MAX_SCENARIOS]

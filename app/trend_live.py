@@ -10,7 +10,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import chance_checks, config, push_notify, repo
+from app import chance_checks, config, push_notify, repo, smc_eval
 from app.replay import trendpullback as tp
 from app.replay.lab import add_indicators
 
@@ -38,8 +38,9 @@ def recent_entries(b5: pd.DataFrame, b15: pd.DataFrame, b1h: pd.DataFrame, b4h: 
 
 
 def levels(direction: str, entry: float, stop: float) -> Optional[tuple[float, float]]:
+    stop = smc_eval.floor_stop(direction, entry, stop)
     risk_pct = abs(entry - stop) / entry * 100
-    if not (tp.MIN_STOP_PCT <= risk_pct <= tp.MAX_STOP_PCT):
+    if risk_pct > tp.MAX_STOP_PCT:
         return None
     sign = 1 if direction == "long" else -1
     return stop, entry + sign * abs(entry - stop) * config.TREND_RR

@@ -184,6 +184,11 @@ class LiveTest(DbCase):
         self.assertEqual([r["trade_type"] for r in rows], ["structuur_c"])
         self.assertTrue(self.pushed and all(p[3] for p in self.pushed))   # wel gemeld, maar stil
 
+    def test_stop_with_room_widens_a_tight_stop_to_the_floor(self):
+        self.assertAlmostEqual(sl.stop_with_room("short", 100.0, 100.0, 0.05), 100.4)      # kwart ATR gaf 100,0125: te krap
+        self.assertAlmostEqual(sl.stop_with_room("long", 100.0, 100.0, 0.05), 99.6)
+        self.assertAlmostEqual(sl.stop_with_room("short", 100.0, 101.0, 0.4), 101.1)       # ruim genoeg: ongemoeid
+
     def test_off_switch(self):
         with mock.patch.object(config, "STRUCTURE_ENABLED", False):
             self.run_live(BREAK_BAR + 4)

@@ -315,9 +315,10 @@ heeft dus veel meer baat bij een korte cyclus dan die 4u-detectoren, die
 toch pas om de 4 uur nieuwe data krijgen. Gebruikt dezelfde
 systeembrede noodrem hierboven.
 
-Een SMC-signaal met een stop dichter dan `SMC_MIN_STOP_PCT` (standaard 0,2% van de entry) wordt niet
-gemeld. Uit het meetraam: stops onder 0,1% wonnen 6% en verloren gemiddeld -0,73R, omdat ze binnen de ruis van een
-minuutcandle liggen. Zet de waarde op 0 in `.env` om de toets uit te zetten. De timers starten elke keer een nieuw
+Een stop dichter dan `SMC_MIN_STOP_PCT` (standaard 0,4% van de entry) wordt verbreed tot die afstand, niet geweigerd. Dit geldt voor
+SMC, Structuur, Trend en het markt-script. Uit het meetraam: stops onder 0,1% wonnen 6% en verloren gemiddeld -0,73R, omdat ze binnen de
+ruis van een minuutcandle liggen, en een stop van 0,2% wordt al geraakt door een prijsverschil tussen twee beurzen. De R:R zakt mee en
+de kans valt af als die onder 2 komt. Zet de waarde op 0 in `.env` om het uit te zetten. De timers starten elke keer een nieuw
 proces en lezen `.env` opnieuw, dus daarvoor is geen herstart nodig.
 
 ### Wekelijks kwaliteitsrapport

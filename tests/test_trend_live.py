@@ -55,9 +55,11 @@ class TrendLiveTest(DbCase):
         self.run_live(enabled=False)
         self.assertEqual(self.pushed, [])
 
-    def test_levels_reject_stops_outside_the_range(self):
-        self.assertIsNone(tl.levels("long", 100.0, 99.95))
-        self.assertIsNone(tl.levels("long", 100.0, 95.0))
+    def test_levels_widen_tight_stops_and_reject_only_too_wide_ones(self):
+        stop, take = tl.levels("long", 100.0, 99.95)                          # stop 0,05%: verbreed tot de ondergrens, het doel schuift mee
+        self.assertAlmostEqual(stop, 100.0 * (1 - 0.004))
+        self.assertAlmostEqual(take, 100.0 + 0.4 * 2.0)
+        self.assertIsNone(tl.levels("long", 100.0, 95.0))                     # 5% is te ruim
         stop, take = tl.levels("long", 100.0, 99.0)
         self.assertAlmostEqual(take, 102.0)
 
