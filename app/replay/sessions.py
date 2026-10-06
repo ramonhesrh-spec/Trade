@@ -172,3 +172,36 @@ def hour_map(frames: dict[str, pd.DataFrame], cut: pd.Timestamp) -> pd.DataFrame
             row[f"{label}_t"] = float(part.mean() / (part.std(ddof=1) / np.sqrt(len(part)))) if len(part) > 5 and part.std(ddof=1) > 0 else None
         out.append(row)
     return pd.DataFrame(out)
+
+
+ASIA_END_UTC = time(7, 0)
+
+
+def amd_days(coin: str, frame: pd.DataFrame) -> pd.DataFrame:
+    """Het dagverhaal van een sessie-indicator: Azië bouwt een range, London prikt er één kant van weg (manipulatie), New York laat de echte
+    beweging zien. Per werkdag, bekend op het moment dat New York opent:
+      sweep    'bullish' (London prikte onder de Azië-laag en sloot terug erboven), 'bearish' (boven de Azië-hoog en terug eronder) of 'geen'
+      pd_pos   slot staat boven of onder het midden van de range van gisteren
+    Uitkomst vanaf de New York-opening: rendement na 120 minuten en tot de New York-slotkoers (bp)."""
+    rows = []
+    for day in weekdays(frame):
+        t = session_times(day)
+        asia = window(frame, pd.Timestamp(datetime.combine(day, time(0, 0), tzinfo=ZoneInfo("UTC"))), pd.Timestamp(datetime.combine(day, ASIA_END_UTC, tzinfo=ZoneInfo("UTC"))))
+        prev = window(frame, pd.Timestamp(datetime.combine(day - timedelta(days=1), time(0, 0), tzinfo=ZoneInfo("UTC"))), pd.Timestamp(datetime.combine(day, time(0, 0), tzinfo=ZoneInfo("UTC"))))
+        ny_open = t["ny"][0]
+        london = window(frame, t["london"][0], ny_open)
+        ny = window(frame, ny_open, t["ny"][1])
+        if len(asia) < 400 or len(prev) < 1000 or len(london) < 200 or len(ny) < 300:
+            continue
+        a_hi, a_lo = float(asia["high"].max()), float(asia["low"].min())
+        bars = make_bars(london, 5)
+        up = bool(((bars["high"] > a_hi) & (bars["close"] < a_hi)).any())
+        down = bool(((bars["low"] < a_lo) & (bars["close"] > a_lo)).any())
+        sweep = "bearish" if up and not down else "bullish" if down and not up else "geen"
+        mid = (float(prev["high"].max()) + float(prev["low"].min())) / 2
+        last = float(london["close"].iloc[-1])
+        entry = float(ny["open"].iloc[0])
+        seg120 = ny.iloc[:120]
+        rows.append({"at": ny_open, "coin": coin, "sweep": sweep, "pd_pos": "boven midden" if last > mid else "onder midden",
+                     "ret120_bp": (float(seg120["close"].iloc[-1]) / entry - 1) * 1e4, "retclose_bp": (float(ny["close"].iloc[-1]) / entry - 1) * 1e4})
+    return pd.DataFrame(rows)

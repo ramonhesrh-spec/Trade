@@ -77,6 +77,22 @@ class SessionsTest(unittest.TestCase):
         self.assertGreaterEqual(len(fade), 1)
         self.assertTrue(fade["win"].any())
 
+    def test_amd_days_flags_bullish_sweep_of_asia_low(self):
+        f = frame(days=10)
+        day = pd.Timestamp("2026-06-03", tz="UTC")
+        t = session_times = ss.session_times(day.date())
+        asia = (f["timestamp"] >= day) & (f["timestamp"] < day + pd.Timedelta(hours=7))
+        f.loc[asia, ["open", "close"]] = 100.0
+        f.loc[asia, "high"] = 100.3
+        f.loc[asia, "low"] = 99.8
+        i = f.index[f["timestamp"] == t["london"][0] + pd.Timedelta(minutes=60)][0]
+        f.loc[i:i + 4, ["open", "close", "high", "low"]] = 100.0
+        f.loc[i + 4, "low"] = 99.4                                        # prik onder de Azië-laag
+        f.loc[i + 4, "close"] = 100.1                                     # en terug erboven
+        amd = ss.amd_days("BTC", f)
+        row = amd[amd["at"] == t["ny"][0]]
+        self.assertEqual(list(row["sweep"]), ["bullish"])
+
     def test_sweep_and_london_and_hours_run(self):
         f = frame(days=40)
         ss.sweep_trades("BTC", f)
