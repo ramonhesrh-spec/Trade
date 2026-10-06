@@ -36,14 +36,15 @@ class TrendLiveTest(DbCase):
                 mock.patch.multiple(config, TREND_ENABLED=cfg.get("enabled", True), TREND_MAX_PER_DAY=cfg.get("cap", 6)):
             asyncio.run(tl.run(self.now.to_pydatetime()))
 
-    def test_recent_entry_becomes_a_silent_signal_once(self):
+    def test_recent_entry_becomes_a_loud_signal_once(self):
         self.run_live()
         rows = repo.list_signals_for_quality_report(None)
         self.assertEqual([r["trade_type"] for r in rows], ["trend"])
         title, body, silent = self.pushed[0]
-        self.assertIn("Trend-pullback (ongetest)", title)
+        self.assertIn("Trend-pullback", title)
+        self.assertNotIn("ngetest", title + body)
         self.assertIn("-0,06R", body)
-        self.assertTrue(silent)
+        self.assertFalse(silent)
         self.run_live()
         self.assertEqual(len(repo.list_signals_for_quality_report(None)), 1)       # zelfde instap, tweede scan: niets
 

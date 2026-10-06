@@ -364,7 +364,7 @@ async def _vandaag_context() -> dict:
         events.append({**e, "time": today.local(at if at.tzinfo else at.replace(tzinfo=timezone.utc)).strftime("%H:%M")})
     structure_cards = await _structure_cards()
     summary = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
-    score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend") or e["source"] == "alles"]
+    score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "smc_waarschuwing") or e["source"] == "alles"]
     for e in score:
         e["spark"] = Markup(track_record.sparkline_svg(e["cumulative"], width=180, height=36))
     return {

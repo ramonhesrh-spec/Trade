@@ -806,6 +806,48 @@ async def _notify_zone_touches(coin: str) -> None:
                 logger.exception("Zone-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
 
+SMC_WARNING_TEXT = {
+    "entry_slechter_dan_sniper": "Let op: de koers liep al verder dan de sniper prijs, de entry is slechter dan de setup veronderstelt.",
+    "risico_rendement_te_laag": "Let op: lage verhouding tussen risico en rendement.",
+}
+
+
+async def _fire_smc_warning(coin: str, setup: dict, df_15m, completion) -> Optional[int]:
+    """SMC-kans die de code normaal weigert, met een waarschuwing gemeld. Geen melding als stop of doel aan de verkeerde kant
+    van de prijs liggen of de stop onder de ruisgrens zit: dan is er geen trade om te wegen."""
+    direction = setup["direction"]
+    sign = -1 if direction == "long" else 1
+    stop_margin, target_margin = smc_stop_take_margins(setup)
+    stop_loss = setup["sweep_price"] + stop_margin * sign
+    take_profit = setup["liquidity_target"] + target_margin * sign
+    entry_price = float(df_15m["close"].iloc[-1])
+    if not valid_stop_take(direction, entry_price, stop_loss, take_profit):
+        return None
+    if config.SMC_MIN_STOP_PCT > 0 and abs(entry_price - stop_loss) / entry_price * 100 < config.SMC_MIN_STOP_PCT:
+        return None
+    warning = SMC_WARNING_TEXT[completion.reject_reason]
+    reason = (f"SMC-liquidity-setup met waarschuwing: structuur brak op {setup['structure_level']:.4f}, sweep op {setup['sweep_price']:.4f}, "
+              f"zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, doel bij liquidity {setup['liquidity_target']:.4f}. {warning}")
+    signal_id = repo.insert_signal({
+        "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "smc_waarschuwing",
+        "pattern_name": "SMC liquidity sweep", "price": entry_price, "rsi": None, "macd": None, "macd_signal": None,
+        "volume_ratio": None, "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None,
+        "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "SMC met waarschuwing",
+        "reason": reason, "stop_loss": stop_loss, "take_profit": take_profit, "context_note": None,
+        "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None, "suggested_entry_high": None,
+        "sniper_entry_price": None, "sniper_reason": None,
+    })
+    repo.complete_smc_setup(setup["id"], signal_id)
+    premise_level = setup["zone_high"] if direction == "short" else setup["zone_low"]
+    await fanout_confirmed_signal(
+        signal_id, coin, direction, entry_price, stop_loss, take_profit, premise_level,
+        title=push_notify.alert_title(coin, direction, "SMC waarschuwing"), signal_type="smc_waarschuwing",
+        make_body=lambda sl, tp, _capped: format_smc_body(setup, entry_price, sl, tp, None, None) + f"\n{warning}",
+        reason=reason, force_silent=True,
+    )
+    return signal_id
+
+
 async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     """Bouwt het echte signaal zodra _check_smc_setup een afgewezen zone
     teruggeeft, en geeft de nieuwe signal_id terug (None als er geen
@@ -829,6 +871,10 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     completion = evaluate_completion(setup, df_15m)
     if completion.signal is None:
         logger.info("SMC-setup %s voor %s niet gemeld: %s", setup["id"], coin, completion.detail)
+        # Een late entry of een lage verhouding blijft een kans die jij zelf mag wegen: gemeld met een waarschuwing en apart op
+        # Bewijs (trade_type 'smc_waarschuwing'). Een stop onder de ruisgrens blijft dicht, die is gemeten als verlies.
+        if config.SMC_WARNING_ALERTS and completion.reject_reason in ("entry_slechter_dan_sniper", "risico_rendement_te_laag"):
+            return await _fire_smc_warning(coin, setup, df_15m, completion)
         return None
     draft = completion.signal
     entry_price, stop_loss, take_profit = draft.entry_price, draft.stop_loss, draft.take_profit

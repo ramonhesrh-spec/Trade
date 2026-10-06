@@ -2702,7 +2702,7 @@ def set_structure_state(setup_id: int, state: str, signal_id: Optional[int] = No
 
 def count_structure_alerts_since(since_iso: str) -> int:
     with db.session() as conn:
-        return conn.execute("SELECT COUNT(*) FROM structure_setups WHERE grade IN ('A', 'B') AND created_at >= ?",
+        return conn.execute("SELECT COUNT(*) FROM structure_setups WHERE state NOT IN ('geen_plan', 'niet_gemeld', 'geen_oordeel', 'schaduw', 'oordeel') AND created_at >= ?",
                             (since_iso,)).fetchone()[0]
 
 

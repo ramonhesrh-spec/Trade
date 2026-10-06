@@ -83,7 +83,7 @@ class RunTest(DbCase):
             second = asyncio.run(samenval.run())
         self.assertEqual((first, second), (1, 0))
         self.assertEqual(len(sent), 1)
-        self.assertIn("ongetest", sent[0])
+        self.assertNotIn("ngetest", sent[0])
         self.assertEqual(repo.samenval_signal_ids(), {sid})
         rows = repo.list_signals_for_quality_report(None)
         self.assertTrue(rows[0]["samenval"])

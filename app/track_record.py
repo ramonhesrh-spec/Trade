@@ -21,7 +21,8 @@ TYPE_LABELS = {
     "samenval": "Samenval SMC en community (ongetest)",
     "script": "Markt-script (ongetest)",
     "structuur": "Structuur-breuk (ongetest)",
-    "structuur_c": "Structuur oordeel C, stil gevolgd",
+    "structuur_c": "Structuur oordeel C",
+    "smc_waarschuwing": "SMC met waarschuwing",
     "trend": "Trend-pullback (ongetest)",
 }
 SOURCE_LABELS = {"scan": "Door HesPulse gevonden", "community": "Via de community"}

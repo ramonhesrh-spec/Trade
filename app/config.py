@@ -52,6 +52,9 @@ ENABLE_ADVANCED_FACTORS = _get("ENABLE_ADVANCED_FACTORS", "false").lower() == "t
 # 122 signalen): signalen met een stop onder 0,1% wonnen 6% en verloren gemiddeld -0,73R bruto, omdat zo'n
 # stop binnen de ruis van een minuutcandle ligt. Vanaf 0,2% was het +0,12R bruto. 0 zet de toets uit.
 SMC_MIN_STOP_PCT = float(_get("SMC_MIN_STOP_PCT", "0.2"))
+# Meld een SMC-kans met een waarschuwing (late entry of lage verhouding) in plaats van hem te weigeren. Standaard uit zodat de golden-tests van de
+# gedeelde SMC-logica ongewijzigd blijven; zet op true in .env om elke kans te zien.
+SMC_WARNING_ALERTS = _get("SMC_WARNING_ALERTS", "false").lower() == "true"
 
 # Kosten per rondreis (fee plus slippage, beide kanten samen) in procenten van de entry, voor de netto-cijfers op
 # /bewijs en in het weekrapport. Een aanname: wat iemand echt betaalt hangt van de beurs af.
@@ -131,7 +134,7 @@ SCRIPT_MAX_NEGATIVE = int(_get("SCRIPT_MAX_NEGATIVE", "30"))
 # signalen samen negatief zijn.
 STRUCTURE_ENABLED = _get("STRUCTURE_ENABLED", "true").lower() == "true"
 STRUCTURE_MODEL = _get("STRUCTURE_MODEL", ANTHROPIC_MODEL)
-STRUCTURE_MAX_ALERTS_PER_DAY = int(_get("STRUCTURE_MAX_ALERTS_PER_DAY", "8"))
+STRUCTURE_MAX_ALERTS_PER_DAY = int(_get("STRUCTURE_MAX_ALERTS_PER_DAY", "30"))
 STRUCTURE_MAX_NEGATIVE = int(_get("STRUCTURE_MAX_NEGATIVE", "30"))
 
 # Trend plus pullback (app/trend_live.py): 4u en 1u trend, impuls op 15m, zone, bevestiging op 5m. Gemeten op een jaar: -0,06R netto, dus altijd ongetest en alleen als stille

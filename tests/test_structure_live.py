@@ -90,7 +90,8 @@ class LiveTest(DbCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual((rows[0]["direction"], rows[0]["grade"]), ("short", "A"))
         title, body, url, silent = self.pushed[0]
-        self.assertIn("Structuur A (ongetest)", title)
+        self.assertIn("Structuur A", title)
+        self.assertNotIn("ngetest", title + body)
         self.assertIn("Limietorder", body)
         self.assertIn("Doelen", body)
         self.assertTrue(url.startswith("/structuur#structuur-"))
@@ -99,11 +100,12 @@ class LiveTest(DbCase):
         self.run_live(BREAK_BAR + 4)
         self.assertEqual(len(self.graded), 1)                 # dezelfde breuk wordt niet opnieuw beoordeeld
 
-    def test_grade_c_is_stored_but_not_alerted(self):
+    def test_grade_c_is_alerted_silently_with_its_grade_in_the_title(self):
         self.run_live(BREAK_BAR + 4, grade="C")
-        self.assertEqual(self.pushed, [])
-        self.assertEqual(repo.list_structure_setups(("waiting",)), [])
-        self.assertEqual(len(repo.list_structure_setups(("schaduw",))), 1)
+        self.assertEqual(len(self.pushed), 1)
+        self.assertIn("Structuur C", self.pushed[0][0])
+        self.assertTrue(self.pushed[0][3])
+        self.assertEqual(len(repo.list_structure_setups(("waiting",))), 1)
 
     def test_grade_b_is_silent(self):
         self.run_live(BREAK_BAR + 4, grade="B")
@@ -165,15 +167,13 @@ class LiveTest(DbCase):
         self.assertEqual(plan["targets_r"], [1.0, 2.0, 3.0])
         self.assertFalse(plan["from_levels"])
 
-    def test_grade_c_is_followed_silently_as_its_own_signal_type(self):
+    def test_grade_c_fill_is_its_own_signal_type_and_silent(self):
         self.run_live(BREAK_BAR + 4, grade="C")
-        self.assertEqual(self.pushed, [])
-        self.assertEqual(len(repo.list_structure_setups(("schaduw",))), 1)
         self.pushed.clear()
         self.run_live(BREAK_BAR + 9)                               # de koers komt terug bij het niveau
         rows = repo.list_signals_for_quality_report(None)
         self.assertEqual([r["trade_type"] for r in rows], ["structuur_c"])
-        self.assertEqual(self.pushed, [])                          # geen melding en geen journaalregels
+        self.assertTrue(self.pushed and all(p[3] for p in self.pushed))   # wel gemeld, maar stil
 
     def test_off_switch(self):
         with mock.patch.object(config, "STRUCTURE_ENABLED", False):

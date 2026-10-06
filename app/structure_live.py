@@ -4,7 +4,7 @@ gebroken niveau, limietorder, stop net achter de terugkeer, ladder van doelen), 
 Drie stappen, elke 5 minuten in de SMC-snelcyclus:
   1. Ontdekken: de detector uit app/replay/breakretest.py (zelfde code als de toets, alleen gesloten candles) vindt een verse
      breuk. Claude geeft een oordeel A, B of C op de kwaliteit. Claude verzint geen prijzen: niveau, stop en doelen komen uit code.
-  2. Melden: A is een gewone melding, B een stille. Het plan staat erin: limietniveau, stop en doelen. C wordt bewaard en niet gemeld.
+  2. Melden: elke breuk met een plan. A klinkt luid, B, C en een breuk zonder oordeel zijn stil. Het plan staat erin: limietniveau, stop en doelen.
   3. Volgen: raakt de koers het niveau, dan wordt het een gewoon signaal (trade_type 'structuur'), zodat journaal, uitkomst en Bewijs
      werken zonder extra code. Keert de koers terug voorbij het niveau, dan vervalt de setup.
 
@@ -123,7 +123,8 @@ def explain_no_plan(ev, levels: list[float], level: float, extreme: float) -> st
     risk = abs(level - stop)
     risk_pct = risk / level * 100 if level else 0.0
     if not (br.MIN_STOP_PCT <= risk_pct <= br.MAX_STOP_PCT):
-        return f"Stop {risk_pct:.2f}% van het niveau, toegestaan is {br.MIN_STOP_PCT:g} tot {br.MAX_STOP_PCT:g}%."
+        return (f"Stop {risk_pct:.2f}% van het niveau, toegestaan is {br.MIN_STOP_PCT:g} tot {br.MAX_STOP_PCT:g}%. "
+                f"Niveau {_r(level)}, stop {_r(stop)}.")
     return "Stop in orde, geen plan om een andere reden."
 
 
@@ -223,17 +224,15 @@ async def _discover(coin: str, now: datetime) -> None:
         except Exception:
             logger.exception("Oordeel van Claude voor %s is mislukt", coin)
             grade, reason = None, ""
-        if grade is None:
-            repo.update_structure_judgement(setup_id, None, reason, "geen_oordeel")
-            continue
         capped = repo.count_structure_alerts_since((now - timedelta(hours=24)).isoformat()) >= config.STRUCTURE_MAX_ALERTS_PER_DAY
-        # Oordeel C wordt niet gemeld maar wel stil gevolgd (schaduw): zo meet Bewijs of Claude's oordeel iets toevoegt.
-        state = "waiting" if grade in ("A", "B") and not capped else "schaduw" if grade == "C" else "niet_gemeld"
+        # Elke breuk met een plan wordt gemeld, ook C en een breuk zonder oordeel: jij beslist, het oordeel staat erbij. Alleen A klinkt luid.
+        # Bewijs houdt C apart (trade_type 'structuur_c'), zodat zichtbaar blijft of het oordeel iets toevoegt.
+        state = "niet_gemeld" if capped else "waiting"
         repo.update_structure_judgement(setup_id, grade, reason, state)
         logger.info("Structuur %s %s %s: oordeel %s (%s)", coin, ev.direction, ev.kind, grade, state)
         if state == "waiting":
             setup = {**row, "id": setup_id, "reason": reason}
-            await _push_all(push_notify.alert_title(coin, ev.direction, f"Structuur {grade}"), alert_body(setup, plan),
+            await _push_all(push_notify.alert_title(coin, ev.direction, f"Structuur {grade or 'zonder oordeel'}"), alert_body(setup, plan),
                             f"/structuur#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A")
 
 
@@ -246,12 +245,13 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
     sign = -1 if direction == br.SHORT else 1
     fired["targets"] = [entry + sign * risk * r for r in plan["targets_r"]]
     take = take_profit_of(fired)
-    reason = f"Structuur {setup['grade']}: {setup['kind'].lower()} gebroken op 30m, terugkeer naar {push_notify.fmt_price(entry)}. {setup['reason'] or ''}".strip()
+    grade = setup["grade"] or "zonder oordeel"
+    reason = f"Structuur {grade}: {setup['kind'].lower()} gebroken op 30m, terugkeer naar {push_notify.fmt_price(entry)}. {setup['reason'] or ''}".strip()
     signal_id = repo.insert_signal({
-        "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "structuur",
+        "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "structuur_c" if setup["grade"] == "C" else "structuur",
         "pattern_name": "Structuur", "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None,
         "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None,
-        "hard_gates_ok": 1, "confidence": f"Structuur {setup['grade']}", "reason": reason, "stop_loss": stop,
+        "hard_gates_ok": 1, "confidence": f"Structuur {grade}", "reason": reason, "stop_loss": stop,
         "take_profit": take, "context_note": None, "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None,
         "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
     })
@@ -261,9 +261,9 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
     targets = " · ".join(f"{push_notify.fmt_price(t)} ({r:g}R)" for t, r in zip(fired["targets"], plan["targets_r"]))
     await fanout_confirmed_signal(
         signal_id, coin, direction, entry, stop, take, entry,
-        title=push_notify.alert_title(coin, direction, f"Structuur {setup['grade']} gevuld"),
+        title=push_notify.alert_title(coin, direction, f"Structuur {grade} gevuld"),
         make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, f"Doelen {targets}", "Limiet geraakt, de trade loopt."),
-        reason=reason, signal_type="structuur",
+        reason=reason, signal_type="structuur_c" if setup["grade"] == "C" else "structuur", force_silent=setup["grade"] == "C",
     )
 
 

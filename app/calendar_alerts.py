@@ -25,7 +25,7 @@ def message(m: dict, now: datetime) -> tuple[str, str]:
     if m["kind"] == "macro":
         body = f"Over {minutes} min. Een uitslag beweegt snel. Check je open limietorders en stops."
     else:
-        body = f"Over {minutes} min." + (f" De markt {note} (gemeten op een jaar candles)." if note else "")
+        body = f"Over {minutes} min." + (f" De markt {note}." if note else "")
     return title, body
 
 

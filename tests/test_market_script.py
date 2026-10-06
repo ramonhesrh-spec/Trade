@@ -110,9 +110,9 @@ class EngineTest(DbCase):
         df = candles([[100, 101, 99, 100], [100, 102, 100, 101.5], [101.5, 101.6, 101.2, 101.4]])  # laatste = vormend
         fired, pushed = self.run_engine(df)
         self.assertEqual(fired, 1)
-        self.assertIn("ongetest", pushed[0][0])
+        self.assertNotIn("ngetest", pushed[0][0] + pushed[0][1])
         self.assertIn("Limietorder 100.80 · R:R 2.2", pushed[0][1])
-        self.assertEqual(pushed[0][0], "▲ BTC long · Script (ongetest)")
+        self.assertEqual(pushed[0][0], "▲ BTC long · Script")
         rows = repo.list_signals_for_quality_report(None)
         self.assertEqual([r["trade_type"] for r in rows], ["script"])
         self.assertEqual(self.run_engine(df)[0], 0)           # tweede keer niets: scenario is al afgegaan

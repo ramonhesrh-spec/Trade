@@ -236,7 +236,7 @@
   <header class="setup-head">
     <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
     <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
-    <span class="setup-grade setup-grade-{{ c.grade|lower }}" title="Oordeel van Claude">{{ c.grade }}</span>
+    <span class="setup-grade setup-grade-{{ (c.grade or 'c')|lower }}" title="Oordeel van Claude">{{ c.grade or "-" }}</span>
     <span class="muted setup-age">{{ c.created_at | age }}</span>
   </header>
   {{ c.chart }}
