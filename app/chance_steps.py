@@ -6,6 +6,9 @@ DIST_KEYS = {"vandaag": "data-vd", "radar": "data-radar"}
 
 
 def fmt(value: float) -> str:
+    """0,0957 en 2717,08: vijf cijfers onder de 1 (ook voor kleine munten), vier decimalen onder 100, twee erboven."""
+    if abs(value) < 1:
+        return f"{value:.5g}"
     return f"{value:.4f}" if abs(value) < 100 else f"{value:.2f}"
 
 
@@ -30,7 +33,7 @@ def structure_steps(plan: dict, targets: list[tuple[float, float]], price: Optio
     rr = targets[1][1] if len(targets) > 1 else targets[0][1]
     wait = f"Wacht tot de koers terugkeert naar {fmt(level)}"
     dist = (level - price) / price * 100 if price else None
-    texts = ", ".join(f"{fmt(t)} ({r:g}R)" for t, r in targets)
+    texts = ", ".join(f"{fmt(t)} ({r:.1f}R)" for t, r in targets)
     return plan_steps(wait, level, plan["stop"], f"doelen {texts}", risk_pct, rr, distance_pct=dist, page="vandaag")
 
 

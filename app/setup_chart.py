@@ -6,7 +6,7 @@ from html import escape
 from typing import Optional
 
 W, H = 560, 320
-PAD_L, PAD_R, PAD_T, PAD_B = 6, 128, 14, 14
+PAD_L, PAD_R, PAD_T, PAD_B = 6, 132, 14, 14
 LABEL_GAP = 16            # minimale afstand tussen twee labels, zodat dicht bij elkaar liggende doelen leesbaar blijven
 SHOWN_BARS = 44           # genoeg om de structuur te zien, weinig genoeg om leesbaar te blijven op een telefoon
 FUTURE_BARS = 9          # lege ruimte rechts voor stopzone en doelen
@@ -14,7 +14,8 @@ BAR_SECONDS = 30 * 60
 
 
 def _fmt(x: float) -> str:
-    return f"{x:.6g}" if abs(x) < 1000 else f"{x:,.1f}".replace(",", "")
+    """Vijf cijfers is genoeg om een niveau te lezen en past op een telefoon: 0.09572, 2717.1."""
+    return f"{x:.5g}" if abs(x) < 1000 else f"{x:,.1f}".replace(",", "")
 
 
 def _ts(value: str) -> float:
