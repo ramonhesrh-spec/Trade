@@ -72,3 +72,13 @@ class CalendarScanTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HolidayTest(unittest.TestCase):
+    def test_no_us_open_on_thanksgiving_but_on_the_day_before(self):
+        from datetime import datetime, timezone
+        from app import market_calendar as mc
+        def opens(day):
+            return [m for m in mc.moments(datetime(2026, 11, day, 0, tzinfo=timezone.utc), datetime(2026, 11, day, 23, tzinfo=timezone.utc)) if m["kind"] == "vs_open"]
+        self.assertEqual(len(opens(25)), 1)
+        self.assertEqual(opens(26), [])

@@ -13,6 +13,10 @@ from app import config
 NEW_YORK = ZoneInfo("America/New_York")
 MACRO_FILE = Path(config.BASE_DIR) / "data" / "macro_events.csv"
 FUNDING_HOURS = (0, 8, 16)
+# Dagen waarop de Amerikaanse beurs dicht is: dan is er geen opening. Alleen 2026, de lijst van NYSE; zie nyse.com/markets/hours-calendars.
+US_MARKET_HOLIDAYS = {
+    "2026-01-01", "2026-01-19", "2026-02-16", "2026-04-03", "2026-05-25", "2026-06-19", "2026-07-03", "2026-09-07", "2026-11-26", "2026-12-25",
+}
 
 LABELS = {
     "funding": "Funding-reset",
@@ -50,7 +54,7 @@ def moments(start: datetime, end: datetime) -> list[dict]:
     while day <= end:
         for h in FUNDING_HOURS:
             out.append({"at": day + timedelta(hours=h), "kind": "funding", "label": LABELS["funding"]})
-        if day.weekday() < 5:
+        if day.weekday() < 5 and day.strftime("%Y-%m-%d") not in US_MARKET_HOLIDAYS:
             ny = datetime(day.year, day.month, day.day, 9, 30, tzinfo=NEW_YORK)
             out.append({"at": ny.astimezone(timezone.utc), "kind": "vs_open", "label": LABELS["vs_open"]})
         expiry = _last_friday(day.year, day.month).replace(hour=8)
