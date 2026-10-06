@@ -302,17 +302,17 @@
       // waarde staat in de lijst onder de grafiek.
       zoneGroups.forEach((group) => {
         candleSeries.createPriceLine({
-          price: group.high, color: "#17e5d6", lineWidth: 1,
+          price: group.high, color: "rgba(23, 229, 214, 0.38)", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
         candleSeries.createPriceLine({
-          price: group.low, color: "#17e5d6", lineWidth: 1,
+          price: group.low, color: "rgba(23, 229, 214, 0.38)", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
       });
       singleLevels(chartableLevels, zoneGroups).forEach((lvl) => {
         candleSeries.createPriceLine({
-          price: lvl.price_level, color: "#17e5d6", lineWidth: 1,
+          price: lvl.price_level, color: "rgba(23, 229, 214, 0.38)", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
       });

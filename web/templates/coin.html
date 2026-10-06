@@ -3,8 +3,11 @@
 {% block title %}{{ symbol }} — HesPulse{% endblock %}
 {% block content %}
 
-<div class="coin-head">
-  <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>{{ symbol }}</h2>
+<div class="coin-head coin-masthead">
+  <div class="coin-masthead-top">
+    <h2>{{ symbol }}</h2>
+    <div class="coin-price" aria-live="off"><span class="coin-price-label">Koers</span><span class="coin-price-number" id="coin-price" data-symbol="{{ symbol }}">{% if price %}{{ "%.4f"|format(price) if price < 100 else "{:,.2f}".format(price).replace(",", " ") }}{% else %}-{% endif %}</span></div>
+  </div>
   <div class="coin-head-meta">
     {% if recent_activity %}
     <span class="muted">
@@ -28,6 +31,13 @@
   <p class="coin-note-banner">📌 {{ coin_note }}</p>
   {% endif %}
 </div>
+
+{% if structure_card %}
+<section class="coin-structure">
+  <h3 class="vd-section-title">Plan voor {{ symbol }} <a class="vd-more" href="/structuur#structuur-{{ structure_card.id }}">op Setups</a></h3>
+  {{ macros.setup_card(structure_card) }}
+</section>
+{% endif %}
 
 {% if coin_stat or sparkline %}
 <div class="coin-stat-strip">
@@ -243,4 +253,18 @@
 </script>
 <script src="/static/coin.js"></script>
 <script defer src="/static/dashboard.js"></script>
+<script>
+  // Live koers in de kop: elke 10 seconden, zelfde bron als de ticker. Mislukt het ophalen, dan blijft de laatste waarde staan.
+  (function () {
+    var el = document.getElementById("coin-price");
+    if (!el) return;
+    function fmt(v) { return v < 100 ? v.toFixed(4) : v.toLocaleString("nl-NL", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+    function tick() {
+      fetch("/api/price/" + encodeURIComponent(el.dataset.symbol)).then(function (r) { return r.json(); }).then(function (d) {
+        if (d && d.price) el.textContent = fmt(d.price);
+      }).catch(function () {});
+    }
+    setInterval(tick, 10000);
+  })();
+</script>
 {% endblock %}

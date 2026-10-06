@@ -50,6 +50,22 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("sc-limit", r.text)
         self.assertIn("Schone range.", r.text)
 
+    def test_coin_page_shows_masthead_price_and_waiting_structure_plan(self):
+        import json
+        candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
+        plan = {"level": 100.0, "stop": 101.0, "risk_pct": 1.0, "targets": [98.0, 97.0], "targets_r": [2.0, 3.0], "candles": candles}
+        repo.insert_structure_setup({
+            "coin": "BTC", "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
+            "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "Schone range.", "features": "{}", "state": "waiting",
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
+        r = self.client.get("/coins/BTC")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn('id="coin-price"', r.text)
+        self.assertIn("100.0000", r.text)
+        self.assertIn("Plan voor BTC", r.text)
+        self.assertEqual(self.client.get("/api/price/BTC").json(), {"price": 100.0})
+        self.assertNotIn("Plan voor ETH", self.client.get("/coins/ETH").text)
+
     def test_empty_state_is_honest_and_page_works(self):
         r = self.client.get("/vandaag")
         self.assertEqual(r.status_code, 200)

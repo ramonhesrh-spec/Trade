@@ -1266,7 +1266,16 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "is_muted": repo.is_coin_muted(user["id"], symbol),
         "active_swing_watches": active_swing_watches,
         "narrative_updates": narrative_updates,
+        "price": (await _cached_prices({symbol})).get(symbol),
+        "structure_card": next((c for c in await _structure_cards() if c["coin"] == symbol), None),
     })
+
+
+@app.get("/api/price/{symbol}")
+async def api_price(symbol: str, user: dict = Depends(require_login)):
+    """Live koers voor de kop van de coinpagina."""
+    symbol = symbol.upper()
+    return {"price": (await _cached_prices({symbol})).get(symbol)}
 
 
 @app.post("/coins/{symbol}/note")
