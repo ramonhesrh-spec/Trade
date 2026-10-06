@@ -46,12 +46,20 @@ def main() -> None:
     plac = scalp.placebo(frames, trades)
     rows = scalp.summarize(trades, plac, cut)
     print(f"\n{index[0]:%Y-%m-%d} tot {index[-1]:%Y-%m-%d}, splitsing op {cut:%Y-%m-%d}. Kosten {scalp.COST_TAKER_BP:g} bp (marktorders) en {scalp.COST_MAKER_BP:g} bp (limietorders).")
-    print("Slaagt = netto positief (6 bp) in train en test, minstens 30 per helft, brutorendement boven placebo, t per dag boven 2\n")
+    print("Per maand en per coin: zie onderaan.\nSlaagt = netto positief (6 bp) in train en test, minstens 30 per helft, brutorendement boven placebo, t per dag boven 2\n")
     print(f"{'test':<26}{'min':>4}{'n':>7}{'bruto bp':>10}{'netto6':>8}{'netto4':>8}{'train':>8}{'test':>8}{'t/dag':>7}{'placebo':>9}  slaagt")
     for r in sorted(rows, key=lambda r: (r.test, r.h)):
         print(f"{r.test:<26}{r.h:>4}{r.n:>7}{r.gross:>+10.1f}{r.net_taker:>+8.1f}{r.net_maker:>+8.1f}{fmt(r.train_net):>8}{fmt(r.test_net):>8}"
               f"{fmt(r.t_days):>7}{r.placebo_gross:>+9.1f}  {'JA' if scalp.passes(r) else ''}")
     print(f"\n{sum(scalp.passes(r) for r in rows)} van {len(rows)} combinaties slagen. Bij zoveel combinaties zijn een paar toevallige treffers normaal.")
+    promising = [r for r in rows if r.gross > 3 and r.n >= 300]
+    print("\nPer maand en per coin (brutorendement in bp) voor varianten met bruto boven 3 bp en minstens 300 gebeurtenissen:")
+    for r in sorted(promising, key=lambda r: -r.gross)[:4]:
+        print(f"\n== {r.test}, {r.h} min (bruto {r.gross:+.1f}, n {r.n}) ==")
+        print("Per maand:")
+        print(scalp.monthly(trades, r.test, r.h).round(1).to_string())
+        print(f"Per coin (splitsing {cut:%Y-%m-%d}):")
+        print(scalp.by_coin(trades, r.test, r.h, cut).round(1).to_string())
 
 
 if __name__ == "__main__":

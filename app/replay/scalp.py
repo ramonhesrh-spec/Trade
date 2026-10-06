@@ -183,6 +183,22 @@ def summarize(trades: pd.DataFrame, placebos: pd.DataFrame, cut: pd.Timestamp) -
     return out
 
 
+def monthly(trades: pd.DataFrame, test: str, h: int) -> pd.DataFrame:
+    """Gemiddeld brutorendement (bp) en aantal per maand voor één variant: toont of een voordeel wegzakt of door één maand komt."""
+    g = trades[(trades["test"] == test) & (trades["h"] == h)]
+    m = g.groupby(g["at"].dt.strftime("%Y-%m"))["gross_bp"].agg(["mean", "count"])
+    return m.rename(columns={"mean": "gross_bp", "count": "n"})
+
+
+def by_coin(trades: pd.DataFrame, test: str, h: int, cut: pd.Timestamp) -> pd.DataFrame:
+    """Per coin: aantal, bruto bp in train en in test."""
+    g = trades[(trades["test"] == test) & (trades["h"] == h)]
+    rows = {}
+    for coin, c in g.groupby("coin"):
+        rows[coin] = {"n": len(c), "train": c[c["at"] < cut]["gross_bp"].mean(), "test": c[c["at"] >= cut]["gross_bp"].mean()}
+    return pd.DataFrame(rows).T
+
+
 def passes(r: Row, min_n: int = 30) -> bool:
     return (r.n_train >= min_n and r.n_test >= min_n and r.train_net is not None and r.test_net is not None
             and r.train_net > 0 and r.test_net > 0 and r.gross > r.placebo_gross and (r.t_days or 0) > 2)
