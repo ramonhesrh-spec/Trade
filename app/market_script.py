@@ -133,7 +133,7 @@ SYSTEM_PROMPT = """Je bent de marktanalist van HesPulse en schrijft voor één c
 Je krijgt alleen feiten uit een JSON-pakket. Verzin geen niveaus, nieuws of cijfers die er niet in staan.
 
 Geef:
-- summary: twee korte zinnen Nederlands. Wat gebeurt er nu en waarom (gebruik funding, liquidaties, nieuws, agenda alleen als ze in het pakket staan).
+- summary: twee korte zinnen Nederlands, samen maximaal 220 tekens, zonder opsomming van alle cijfers. Wat gebeurt er nu en waarom (gebruik funding, liquidaties, nieuws, agenda alleen als ze in het pakket staan).
 - bias: long, short of neutraal.
 - scenarios: maximaal twee. Elk scenario is een voorwaarde met een plan. Een goed scenario heeft een niveau uit het pakket (dag-, week- of swinghoog en -laag, een SMC-zone), een voorwaarde die nu NOG NIET klopt, een limietorder, een stop achter een logisch niveau en een take bij het volgende niveau met minstens 2R.
 - Voorwaarden: close_above (een 5m-candle sluit boven het niveau), close_below, of sweep_reclaim (de prijs steekt door het niveau en sluit terug). Bij sweep_reclaim long ligt het niveau onder de prijs, bij short erboven.
@@ -197,7 +197,7 @@ def call_claude(context: dict) -> dict:
 
 def process_response(payload: dict, price: float, atr: float) -> tuple[str, str, list[Scenario], list[str]]:
     scenarios, dropped = validate_scenarios(payload.get("scenarios"), price, atr)
-    return str(payload.get("summary", "")).strip()[:400], payload.get("bias", "neutraal"), scenarios, dropped
+    return str(payload.get("summary", "")).strip()[:260], payload.get("bias", "neutraal"), scenarios, dropped
 
 
 def gather_context(coin: str, now: datetime) -> tuple[dict, float, float]:
