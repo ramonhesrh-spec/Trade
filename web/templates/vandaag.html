@@ -74,8 +74,8 @@
           <dl class="vd-facts">
             <div><dt>Limietorder</dt><dd>{{ fmt(sc.entry) }}</dd></div>
             <div><dt>R:R</dt><dd>{{ "%.1f"|format(sc.rr) }}</dd></div>
-            <div><dt>Risico</dt><dd>{{ "%.2f"|format(sc.risk_pct) }}%</dd></div>
-            <div><dt>Tot voorwaarde</dt><dd data-vd="distance">{% if sc.to_trigger_pct is not none %}{{ "%+.2f"|format(sc.to_trigger_pct) }}%{% else %}-{% endif %}</dd></div>
+            <div><dt title="Afstand van de instap tot je stop. Raakt de stop, dan verlies je zoveel procent van de koers.">Stopafstand</dt><dd>{{ "%.2f"|format(sc.risk_pct) }}%</dd></div>
+            <div><dt title="Hoeveel de koers nog moet bewegen voor de voorwaarde klopt.">Nog te gaan</dt><dd data-vd="distance">{% if sc.to_trigger_pct is not none %}{{ "%+.2f"|format(sc.to_trigger_pct) }}%{% else %}-{% endif %}</dd></div>
           </dl>
           <p class="muted vd-fine">{{ sc.reason }}</p>
           <p class="muted vd-fine">Vervalt over <span data-vd="left">{{ "%.0f"|format(sc.hours_left) }}</span> uur</p>

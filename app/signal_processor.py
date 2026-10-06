@@ -449,7 +449,7 @@ async def _fanout_confirmed_signal(
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             body = make_body(effective_stop_loss, effective_take_profit, stop_was_capped)
-            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}#signal-{signal_id}", silent=quiet or force_silent)
+            await push_notify.send_push(user["id"], title, body, push_notify.signal_url(coin, signal_id), silent=quiet or force_silent)
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
             logger.exception("Melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
@@ -1019,7 +1019,7 @@ async def process_day_trading_signal(
                 body += f"\n{signal_data['context_note']}"
             body += f"\n{push_notify.OPEN_PLAN_LINE}"
             await push_notify.send_push(
-                user["id"], title, body, f"/coins/{interp.coin}#signal-{signal_id}", silent=force_silent,
+                user["id"], title, body, push_notify.signal_url(interp.coin, signal_id), silent=force_silent,
             )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
@@ -1106,7 +1106,7 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
                 body += f"\n{message_data['repeated_loss_note']}"
             if confirmed:
                 body += f"\n{push_notify.OPEN_PLAN_LINE}"
-            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}#signal-{signal_id}", silent=force_silent)
+            await push_notify.send_push(user["id"], title, body, push_notify.signal_url(coin, signal_id), silent=force_silent)
         except Exception:
             logger.exception("Pushmelding (update) voor gebruiker %s, signaal %s is mislukt",
                               user["username"], signal_id)

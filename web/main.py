@@ -1180,7 +1180,7 @@ PROP_EVAL_TIERS = (5000.0, 10000.0, 25000.0, 50000.0, 100000.0, 200000.0)
 # ---------------------------------------------------------------------------
 
 @app.get("/coins/{symbol}")
-async def coin_page(request: Request, symbol: str, user: dict = Depends(require_login)):
+async def coin_page(request: Request, symbol: str, signal: Optional[int] = None, user: dict = Depends(require_login)):
     symbol = symbol.upper()
     source_levels = repo.list_source_levels(symbol)
     await _annotate_level_outcomes(symbol, source_levels)
@@ -1217,6 +1217,13 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         if s["id"] not in open_signal_ids and s["id"] not in ignored_signal_ids
         and (s["stop_loss"] or s["take_profit"])
     ]
+    # Een melding linkt hierheen met ?signal=: de pagina toont maar de laatste paar signalen, dus een oudere kans (of een stille Trend-melding
+    # tussen nieuwere) zou anders ontbreken en de tik landde op een pagina zonder zijn kans.
+    if signal and signal not in open_signal_ids and all(s["id"] != signal for s in recent_signals):
+        wanted = repo.get_signal(signal)
+        if wanted and wanted["coin"] == symbol and not wanted["is_practice"]:
+            wanted.setdefault("message_summary", "Zelf gedetecteerd door HesPulse")
+            recent_signals.insert(0, wanted)
     for s in recent_signals:
         s.setdefault("entry_price", None)  # signalen zijn geen journal-rijen, dat veld bestaat niet
         pending_entry = pending_by_signal_id.get(s["id"])

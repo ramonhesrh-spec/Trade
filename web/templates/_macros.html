@@ -243,7 +243,7 @@
   <dl class="setup-plan">
     <div><dt>Limiet</dt><dd>{{ "%.4f"|format(c.plan.level) }}</dd></div>
     <div><dt>Stop</dt><dd>{{ "%.4f"|format(c.plan.stop) }}</dd></div>
-    <div><dt>Risico</dt><dd>{{ "%.2f"|format(c.plan.risk_pct) }}%</dd></div>
+    <div><dt title="Afstand van de instap tot je stop. Raakt de stop, dan verlies je zoveel procent van de koers.">Stopafstand</dt><dd>{{ "%.2f"|format(c.plan.risk_pct) }}%</dd></div>
     <div><dt>Eerste doel</dt><dd>{{ "%g"|format(c.targets[0][1]) }}R</dd></div>
   </dl>
   <p class="setup-reason">{{ c.reason }}</p>

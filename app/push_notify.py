@@ -106,6 +106,12 @@ def alert_title(coin: str, direction: str, label: str) -> str:
 OPEN_PLAN_LINE = "Tik voor de grafiek en het plan."
 
 
+def signal_url(coin: str, signal_id: int) -> str:
+    """Link van een melding naar zijn kans. ?signal= zorgt dat de coinpagina dit signaal altijd toont, ook als er sindsdien nieuwere
+    signalen voor dezelfde coin bijkwamen: de pagina laat er maar een paar zien en het anker bleef dan leeg."""
+    return f"/coins/{coin}?signal={signal_id}#signal-{signal_id}"
+
+
 def trade_body(entry_label: str, entry: float, stop: float, take: float, rr: Optional[float] = None, *extra: str) -> str:
     """Eerste regel de order, tweede regel stop en take, daarna toelichting en als laatste een uitnodiging om te openen. Zo staat het
     belangrijkste altijd bovenaan en weet je wat een tik oplevert: de grafiek met het plan, niet alleen dezelfde cijfers."""

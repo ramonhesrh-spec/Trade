@@ -94,6 +94,20 @@ class WebVandaagTests(unittest.TestCase):
         self.assertNotIn("Er staat niets open", text)
         self.assertNotIn("jaar candles", text)
 
+    def test_coin_page_shows_the_signal_a_notification_links_to_even_when_it_is_old(self):
+        base = {"message_id": None, "coin": "BTC", "direction": "long", "category": "day_trading", "trade_type": "trend", "pattern_name": "Trend-pullback",
+                "price": 100.0, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None, "atr": None,
+                "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Trend-pullback",
+                "reason": "test", "stop_loss": 99.0, "take_profit": 102.0, "context_note": None, "is_practice": 0, "plain_explanation": None,
+                "suggested_entry_low": None, "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None}
+        ids = [repo.insert_signal(dict(base)) for _ in range(5)]
+        plain = self.client.get("/coins/BTC").text
+        self.assertNotIn(f'id="signal-{ids[0]}"', plain)               # de pagina toont maar de laatste paar
+        linked = self.client.get(f"/coins/BTC?signal={ids[0]}").text
+        self.assertIn(f'id="signal-{ids[0]}"', linked)
+        from app import push_notify
+        self.assertEqual(push_notify.signal_url("BTC", ids[0]), f"/coins/BTC?signal={ids[0]}#signal-{ids[0]}")
+
     def test_page_shows_script_scenario_liquidations_events_and_score(self):
         now = datetime.now(timezone.utc)
         repo.insert_market_script("BTC", "BTC test onder gisteren hoog.", "long", "m", [scenario_row()], 1,

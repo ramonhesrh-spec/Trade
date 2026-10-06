@@ -336,7 +336,7 @@ def _target_message(setup: dict, plan: dict, fired: dict, n: int) -> tuple[str, 
 async def _follow(now: datetime) -> None:
     """Volgt gevulde setups: meldt elk doel dat raakt (bij het eerste hoort 'stop naar de instap') en sluit de setup bij
     stop, terugkeer naar de instap of het laatste doel. Het signaal zelf meet alleen het tweede doel, deze ladder is voor jou."""
-    from app import exchange
+    from app import exchange, push_notify
     rows = [s for s in repo.list_structure_setups(("fired",), 30) if (json.loads(s["plan"]).get("fired") or {}).get("closed") is False]
     for coin in sorted({s["coin"] for s in rows}):
         try:
@@ -375,7 +375,7 @@ async def _follow(now: datetime) -> None:
                 fired["hits"] = hits
                 repo.update_structure_plan(s["id"], json.dumps(plan))
             for title, body in messages:
-                await _push_all(title, body, f"/coins/{coin}#signal-{s['signal_id']}", f"structuur-{coin}-t", loud=True)
+                await _push_all(title, body, push_notify.signal_url(coin, s["signal_id"]), f"structuur-{coin}-t", loud=True)
 
 
 async def run(now: Optional[datetime] = None) -> None:
