@@ -69,6 +69,7 @@ class MoodAndLiquidationTest(unittest.TestCase):
         m = today.mood([{"bias": "neutraal", "scenarios": [{"state": "waiting", "direction": "long"}, {"state": "fired", "direction": "short"}]},
                         {"bias": "neutraal", "scenarios": [{"state": "waiting", "direction": "short"}]}])
         self.assertEqual((m["wait_long"], m["wait_short"], m["neutraal"]), (1, 1, 2))
+        self.assertEqual((m["wait_total"], m["wait_long_pct"]), (2, 50.0))
 
     def test_liquidation_rows_sorted_scaled_and_empty_coins_dropped(self):
         rows = today.liquidation_rows({

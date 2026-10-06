@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% import "_macros.html" as macros %}
 {% block title %}Vandaag — HesPulse{% endblock %}
 {% block content %}
 
@@ -15,13 +16,7 @@
   <div class="vd-hero-mood">
     <div class="vd-hero-label">Stemming van het markt-script</div>
     {% if mood.total %}
-    <div class="vd-mood-bar" role="img" aria-label="{{ mood.long }} long, {{ mood.neutraal }} neutraal, {{ mood.short }} short">
-      <span class="vd-mood-long" style="width: {{ mood.long_pct }}%"></span>
-      <span class="vd-mood-flat" style="width: {{ mood.neutraal_pct }}%"></span>
-      <span class="vd-mood-short" style="width: {{ mood.short_pct }}%"></span>
-    </div>
-    <div class="vd-mood-legend"><span class="pos">{{ mood.long }} long</span><span class="muted">{{ mood.neutraal }} neutraal</span><span class="neg">{{ mood.short }} short</span></div>
-    <p class="muted vd-fine">Wachtende scenario's: <span class="pos">{{ mood.wait_long }} long</span>, <span class="neg">{{ mood.wait_short }} short</span>. Een coin kan neutraal zijn en toch een scenario hebben dat bij een doorbraak afgaat.</p>
+    {{ macros.mood_bar(mood) }}
     {% else %}
     <p class="muted vd-empty">Het eerste markt-script verschijnt na de volgende ronde van 4 uur.</p>
     {% endif %}

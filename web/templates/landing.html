@@ -1,4 +1,4 @@
-<!doctype html>
+{% import "_macros.html" as macros %}<!doctype html>
 <html lang="nl">
 <head>
 <meta charset="utf-8">
@@ -97,13 +97,8 @@
     <div class="card vd-card vd-public-card">
       <h3>Stemming van het markt-script</h3>
       {% if mood.total %}
-      <div class="vd-mood-bar" role="img" aria-label="{{ mood.long }} long, {{ mood.neutraal }} neutraal, {{ mood.short }} short">
-        <span class="vd-mood-long" style="width: {{ mood.long_pct }}%"></span>
-        <span class="vd-mood-flat" style="width: {{ mood.neutraal_pct }}%"></span>
-        <span class="vd-mood-short" style="width: {{ mood.short_pct }}%"></span>
-      </div>
-      <div class="vd-mood-legend"><span class="pos">{{ mood.long }} long</span><span class="muted">{{ mood.neutraal }} neutraal</span><span class="neg">{{ mood.short }} short</span></div>
-      <p class="muted vd-fine">{{ n_scripts }} coins, bijgewerkt elke 4 uur. Wachtende scenario's: {{ mood.wait_long }} long en {{ mood.wait_short }} short.</p>
+      {{ macros.mood_bar(mood) }}
+      <p class="muted vd-fine">{{ n_scripts }} coins, bijgewerkt elke 4 uur.</p>
       {% else %}
       <p class="muted vd-empty">Het eerste markt-script verschijnt binnenkort.</p>
       {% endif %}

@@ -114,7 +114,8 @@ def mood(scripts: list[dict]) -> dict:
                 waiting[sc["direction"]] += 1
     total = sum(counts.values())
     return {**counts, "total": total, **{f"{k}_pct": (v / total * 100 if total else 0) for k, v in counts.items()},
-            "wait_long": waiting["long"], "wait_short": waiting["short"]}
+            "wait_long": waiting["long"], "wait_short": waiting["short"], "wait_total": waiting["long"] + waiting["short"],
+            "wait_long_pct": waiting["long"] / (waiting["long"] + waiting["short"]) * 100 if waiting["long"] + waiting["short"] else 0}
 
 
 def liquidation_rows(by_coin: dict[str, list[dict]]) -> list[dict]:

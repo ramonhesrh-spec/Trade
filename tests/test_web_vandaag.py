@@ -53,7 +53,7 @@ class WebVandaagTests(unittest.TestCase):
         r = self.client.get("/vandaag")
         self.assertEqual(r.status_code, 200)
         for text in ("BTC test onder gisteren hoog.", "5m-candle sluit boven 101", "Wacht op de voorwaarde", "Limietorder",
-                     "4,0M", "Binance lijst SOL.", "1 long", "Score: wat HesPulse zelf voorspelde",
+                     "4,0M", "Binance lijst SOL.", "1 long-scenario's", "Score: wat HesPulse zelf voorspelde",
                      "Break boven gisteren hoog."):
             self.assertIn(text, r.text, text)
 
@@ -82,7 +82,7 @@ class WebVandaagTests(unittest.TestCase):
         page = anon.get("/").text
         self.assertIn("Vandaag, live", page)
         self.assertIn("vd-timeline", page)
-        self.assertIn("1 long", page)
+        self.assertIn("1 long-scenario", page)
         self.assertNotIn("Geheime samenvatting", page)           # scenario's en duiding blijven achter het inloggen
         self.assertNotIn("Limietorder", page)
         self.assertEqual(anon.get("/static/manifest.json").json()["start_url"], "/vandaag")

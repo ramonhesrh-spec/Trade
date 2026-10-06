@@ -207,3 +207,24 @@
   </div>
 </div>
 {% endmacro %}
+
+
+{% macro mood_bar(mood) %}
+{# Met wachtende scenario's toont de balk die (de echte kansen), anders de bias per coin: Claude noemt vaak alles neutraal. #}
+{% if mood.wait_total %}
+<div class="vd-mood-bar" role="img" aria-label="{{ mood.wait_long }} long en {{ mood.wait_short }} short scenario's wachten">
+  <span class="vd-mood-long" style="width: {{ mood.wait_long_pct }}%"></span>
+  <span class="vd-mood-short" style="width: {{ 100 - mood.wait_long_pct }}%"></span>
+</div>
+<div class="vd-mood-legend"><span class="pos">{{ mood.wait_long }} long-scenario's</span><span class="neg">{{ mood.wait_short }} short-scenario's</span></div>
+<p class="muted vd-fine">Bias per coin: {{ mood.long }} long, {{ mood.neutraal }} neutraal, {{ mood.short }} short.</p>
+{% else %}
+<div class="vd-mood-bar" role="img" aria-label="{{ mood.long }} long, {{ mood.neutraal }} neutraal, {{ mood.short }} short">
+  <span class="vd-mood-long" style="width: {{ mood.long_pct }}%"></span>
+  <span class="vd-mood-flat" style="width: {{ mood.neutraal_pct }}%"></span>
+  <span class="vd-mood-short" style="width: {{ mood.short_pct }}%"></span>
+</div>
+<div class="vd-mood-legend"><span class="pos">{{ mood.long }} long</span><span class="muted">{{ mood.neutraal }} neutraal</span><span class="neg">{{ mood.short }} short</span></div>
+<p class="muted vd-fine">Geen scenario dat nu wacht op een voorwaarde.</p>
+{% endif %}
+{% endmacro %}
