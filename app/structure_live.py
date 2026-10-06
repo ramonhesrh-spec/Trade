@@ -257,7 +257,8 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
         "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
     })
     repo.set_structure_state(setup["id"], "fired", signal_id)
-    repo.update_structure_plan(setup["id"], json.dumps({**plan, "fired": {"entry": entry, "stop": stop, "targets": fired["targets"], "hits": 0, "closed": False, "at": filled_at.isoformat()}}))
+    repo.update_structure_plan(setup["id"], json.dumps({**plan, "fired": {"entry": entry, "stop": stop, "targets": fired["targets"], "hits": 0, "closed": False, "at": filled_at.isoformat(),
+                                                                       "events": [{"at": filled_at.isoformat(), "text": "Limiet geraakt, de trade loopt"}]}}))
     rr = abs(take - entry) / risk
     targets = " · ".join(f"{push_notify.fmt_price(t)} ({r:g}R)" for t, r in zip(fired["targets"], plan["targets_r"]))
     await fanout_confirmed_signal(
@@ -362,10 +363,12 @@ async def _follow(now: datetime) -> None:
                 changed = True
                 if (c.high >= live_stop) if short else (c.low <= live_stop):
                     fired["closed"], changed = True, True
+                    fired.setdefault("events", []).append({"at": c.timestamp.isoformat(), "text": "Stop op de instap geraakt, break-even" if hits >= 1 else "Stop geraakt"})
                     break
                 while hits < len(targets) and ((c.low <= targets[hits]) if short else (c.high >= targets[hits])):
                     hits += 1
                     messages.append(_target_message(s, plan, fired, hits))
+                    fired.setdefault("events", []).append({"at": c.timestamp.isoformat(), "text": f"T{hits} geraakt ({plan['targets_r'][hits - 1]:.1f}R)"})
                     if hits == 1:
                         live_stop = fired["entry"]
                     changed = True

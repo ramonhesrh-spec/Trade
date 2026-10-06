@@ -79,7 +79,7 @@
   document.addEventListener("click", function (e) {
     var btn = e.target.closest("[data-share-card]");
     if (!btn) return;
-    var card = btn.closest(".setup-card, .radar-card, .vd-scenario");
+    var card = btn.closest(".setup-card, .radar-card, .vd-scenario, .kans-card");
     if (!card) return;
     var data;
     try { data = JSON.parse(btn.getAttribute("data-share-card")); } catch (err) { return; }

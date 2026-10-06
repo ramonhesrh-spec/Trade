@@ -29,7 +29,7 @@ from markupsafe import Markup
 from app import advice as advice_module
 from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, radar, repo, risk, security, setup_chart, today, track_record
-from app import chance_steps
+from app import chance_steps, kans_view
 from app.market_scanner import floor_stop, smc_stop_take_margins
 
 logger = logging.getLogger("web")
@@ -43,6 +43,7 @@ def _nav_context(request: Request) -> dict:
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context])
 templates.env.globals["disclaimer"] = config.DISCLAIMER
+templates.env.globals["fmt_price"] = today.fmt_price
 
 
 def _age_label(iso: str | None) -> str:
@@ -418,6 +419,29 @@ async def api_vandaag(user: dict = Depends(require_login)):
                                        "hours_left": sc["hours_left"], "ladder": sc["ladder"]}
                       for s in ctx["scripts"] for sc in s["scenarios"]},
     }
+
+
+@app.get("/kans/{signal_id}")
+async def kans_page(request: Request, signal_id: int, user: dict = Depends(require_login)):
+    """Eén kans op één scherm: grafiek, feiten, gemeten kenmerken en wat er sinds de melding gebeurde. Hier landt een tik op een melding."""
+    signal = repo.get_signal(signal_id)
+    if not signal or signal["is_practice"]:
+        raise HTTPException(status_code=404)
+    setup = repo.get_structure_setup_by_signal(signal_id)
+    candles, price = None, None
+    if not setup:
+        try:
+            df = await asyncio.to_thread(exchange.fetch_ohlcv, signal["coin"], timeframe="30m", limit=60)
+            candles = [[row.timestamp.isoformat(), row.open, row.high, row.low, row.close] for row in df.itertuples()]
+        except Exception:
+            candles = None
+    prices = await _cached_prices({signal["coin"]})
+    price = prices.get(signal["coin"])
+    signal.setdefault("message_summary", None)
+    return templates.TemplateResponse(request, "kans.html", {
+        "user": user, "signal": signal, "facts": kans_view.facts(signal), "events": kans_view.timeline(signal, setup),
+        "chart": Markup(kans_view.chart(signal, setup, candles, price)), "price": price, "setup": setup,
+    })
 
 
 @app.get("/api/kansen")

@@ -258,6 +258,16 @@
 {% endmacro %}
 
 
+{# Tijdlijn van een kans: wat er gebeurde en wanneer, oud naar nieuw. #}
+{% macro timeline_list(events) %}
+<ol class="kans-timeline">
+  {% for e in events %}
+  <li><span class="kans-time">{{ e.at.strftime("%d-%m %H:%M") }}</span><span>{{ e.text }}</span></li>
+  {% endfor %}
+</ol>
+{% endmacro %}
+
+
 {# Een structuur-setup als getekende trade (app/setup_chart.py), met het plan eronder. Gebruikt op Setups en op Vandaag. #}
 {% macro setup_card(c, risk_eur=none) %}
 <article class="setup-card{% if c.grade is none or c.grade == 'C' %} is-weak{% endif %}" id="structuur-{{ c.id }}">

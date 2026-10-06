@@ -160,6 +160,9 @@ class LiveTest(DbCase):
         follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0), (98.0, 98.1, 96.9, 97.0), (97.0, 100.2, 96.9, 100.0)]))  # terug op de instap
         fired = json.loads(repo.list_structure_setups(("fired",))[0]["plan"])["fired"]
         self.assertTrue(fired["closed"])
+        texts = [e["text"] for e in fired["events"]]                       # tijdlijn voor de pagina van de kans
+        self.assertTrue(any(t.startswith("T1 geraakt") for t in texts) and any(t.startswith("T2 geraakt") for t in texts))
+        self.assertIn("Stop op de instap geraakt, break-even", texts)
         self.assertEqual(fired["hits"], 2)
 
     def test_close_liquidity_falls_back_to_a_fixed_ladder_instead_of_dropping_the_setup(self):

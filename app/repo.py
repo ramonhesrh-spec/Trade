@@ -2697,6 +2697,12 @@ def list_structure_setups(states: tuple = ("waiting",), limit: int = 50) -> list
         return [dict(r) for r in rows]
 
 
+def get_structure_setup_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM structure_setups WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
 def set_structure_state(setup_id: int, state: str, signal_id: Optional[int] = None) -> None:
     with db.session() as conn:
         conn.execute(

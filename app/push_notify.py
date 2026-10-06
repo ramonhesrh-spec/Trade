@@ -107,9 +107,9 @@ OPEN_PLAN_LINE = "Tik voor de grafiek en het plan."
 
 
 def signal_url(coin: str, signal_id: int) -> str:
-    """Link van een melding naar zijn kans. ?signal= zorgt dat de coinpagina dit signaal altijd toont, ook als er sindsdien nieuwere
-    signalen voor dezelfde coin bijkwamen: de pagina laat er maar een paar zien en het anker bleef dan leeg."""
-    return f"/coins/{coin}?signal={signal_id}#signal-{signal_id}"
+    """Link van een melding naar zijn kans: een eigen scherm per kans (/kans/<id>) met grafiek, feiten en tijdlijn. De coinpagina toont maar
+    de laatste paar signalen, dus een anker daar bleef soms leeg."""
+    return f"/kans/{signal_id}"
 
 
 def trade_body(entry_label: str, entry: float, stop: float, take: float, rr: Optional[float] = None, *extra: str) -> str:

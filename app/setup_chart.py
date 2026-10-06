@@ -51,18 +51,20 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
     out = [f'<svg class="sc" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(setup["coin"])} {escape(setup["direction"])} structuur-setup">']
     right = PAD_L + plot_w
 
-    break_i = max(0.0, min(n - 1, bar_index(_ts(setup["break_at"])) - 1))
+    has_structure = setup.get("line_a") is not None
+    break_i = max(0.0, min(n - 1, bar_index(_ts(setup["break_at"])) - 1)) if has_structure else float(max(0, n - 10))
     zone_top, zone_bottom = sorted((plan["level"], plan["stop"]))
     out.append(f'<rect class="sc-stopzone" x="{x(break_i):.1f}" y="{y(zone_bottom):.1f}" width="{right - x(break_i):.1f}" '
                f'height="{max(1.0, y(zone_top) - y(zone_bottom)):.1f}"/>')
 
-    p1 = bar_index(_ts(setup["p1_at"]))
-    x0 = max(0.0, p1)
-    pts = []
-    for i in (x0, n - 1 + FUTURE_BARS):
-        v = setup["line_a"] + setup["line_slope"] * (i - p1)
-        pts.append(f"{x(i):.1f},{y(v):.1f}")
-    out.append(f'<polyline class="sc-structure" points="{" ".join(pts)}"/>')
+    if has_structure:
+        p1 = bar_index(_ts(setup["p1_at"]))
+        x0 = max(0.0, p1)
+        pts = []
+        for i in (x0, n - 1 + FUTURE_BARS):
+            v = setup["line_a"] + setup["line_slope"] * (i - p1)
+            pts.append(f"{x(i):.1f},{y(v):.1f}")
+        out.append(f'<polyline class="sc-structure" points="{" ".join(pts)}"/>')
 
     for i, (_, o, h, low, c) in enumerate(candles):
         cls = "sc-up" if c >= o else "sc-down"
@@ -70,12 +72,14 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
         out.append(f'<line class="sc-wick {cls}" x1="{x(i):.1f}" x2="{x(i):.1f}" y1="{y(h):.1f}" y2="{y(low):.1f}"/>'
                    f'<rect class="sc-body {cls}" x="{x(i) - step * 0.34:.1f}" y="{body_top:.1f}" width="{step * 0.68:.1f}" height="{body_h:.1f}"/>')
 
-    bx = x(break_i)
-    arrow_y = y(candles[int(break_i)][2]) - 8 if setup["direction"] == "short" else y(candles[int(break_i)][3]) + 8
-    out.append(f'<text class="sc-break" x="{bx:.1f}" y="{arrow_y:.1f}" text-anchor="middle">{"▼" if setup["direction"] == "short" else "▲"}</text>')
+    if has_structure:
+        bx = x(break_i)
+        arrow_y = y(candles[int(break_i)][2]) - 8 if setup["direction"] == "short" else y(candles[int(break_i)][3]) + 8
+        out.append(f'<text class="sc-break" x="{bx:.1f}" y="{arrow_y:.1f}" text-anchor="middle">{"▼" if setup["direction"] == "short" else "▲"}</text>')
 
-    marks = [(plan["level"], "sc-limit", f"Limiet {_fmt(plan['level'])}"), (plan["stop"], "sc-stop", f"Stop {_fmt(plan['stop'])}")]
-    marks += [(t, "sc-target", f"T{k} {_fmt(t)} · {r:.1f}R") for k, (t, r) in enumerate(zip(plan["targets"], plan["targets_r"]), 1)]
+    marks = [(plan["level"], "sc-limit", f"{plan.get('level_label', 'Limiet')} {_fmt(plan['level'])}"), (plan["stop"], "sc-stop", f"Stop {_fmt(plan['stop'])}")]
+    target_name = (lambda k: "Doel") if plan.get("level_label") else (lambda k: f"T{k}")
+    marks += [(t, "sc-target", f"{target_name(k)} {_fmt(t)} · {r:.1f}R") for k, (t, r) in enumerate(zip(plan["targets"], plan["targets_r"]), 1)]
     if price:
         marks.append((price, "sc-price", f"Nu {_fmt(price)}"))
     placed, last_y = [], -1e9
@@ -89,6 +93,14 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
 
     out.append("</svg>")
     return "".join(out)
+
+
+def trade_svg(candles: list[list], direction: str, coin: str, entry: float, stop: float, take: float, price: Optional[float] = None) -> str:
+    """Dezelfde grafiek voor elke soort kans zonder gebroken lijn (Trend, SMC, markt-script): candles, instap, stop en doel."""
+    risk = abs(entry - stop)
+    r = abs(take - entry) / risk if risk else 0.0
+    plan = {"level": entry, "stop": stop, "targets": [take], "targets_r": [r], "level_label": "Instap"}
+    return setup_svg(candles, {"coin": coin, "direction": direction}, plan, price)
 
 
 def demo_svg() -> str:

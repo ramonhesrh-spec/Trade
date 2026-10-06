@@ -128,7 +128,12 @@ class WebVandaagTests(unittest.TestCase):
         linked = self.client.get(f"/coins/BTC?signal={ids[0]}").text
         self.assertIn(f'id="signal-{ids[0]}"', linked)
         from app import push_notify
-        self.assertEqual(push_notify.signal_url("BTC", ids[0]), f"/coins/BTC?signal={ids[0]}#signal-{ids[0]}")
+        self.assertEqual(push_notify.signal_url("BTC", ids[0]), f"/kans/{ids[0]}")
+        page = self.client.get(f"/kans/{ids[0]}")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Wat er gebeurde", page.text)
+        self.assertIn("Gemeld", page.text)
+        self.assertEqual(self.client.get("/kans/999999").status_code, 404)
 
     def test_page_shows_script_scenario_liquidations_events_and_score(self):
         now = datetime.now(timezone.utc)

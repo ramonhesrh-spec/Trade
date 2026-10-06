@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}{{ signal.coin }} {{ signal.direction }} — HesPulse{% endblock %}
+{% block content %}
+{% set fmt = fmt_price %}
+<article class="kans-card">
+  <header class="setup-head">
+    <a class="radar-coin" href="/coins/{{ signal.coin }}">{{ signal.coin }}</a>
+    <span class="radar-dir radar-dir-{{ signal.direction }}">{{ signal.direction }}</span>
+    <span class="muted">{{ facts.label }}</span>
+    {% if signal.pass_pct is not none and signal.reason and signal.reason.startswith(("✓", "✗")) %}<span class="signal-pct" title="Aantal gemeten kenmerken dat klopt. Geen slagingskans.">{{ signal.reason.count("✓") }}/{{ signal.reason.split(" | ")|length }} kenmerken</span>{% endif %}
+    <span class="muted setup-age">{{ signal.created_at | age }}</span>
+  </header>
+
+  {% if signal.auto_outcome == "take_profit" %}<p class="kans-outcome is-win">✓ Doel geraakt</p>
+  {% elif signal.auto_outcome == "stop_loss" %}<p class="kans-outcome is-loss">✗ Stop geraakt</p>
+  {% elif signal.auto_outcome == "vervallen" %}<p class="kans-outcome">Vervallen zonder uitkomst</p>
+  {% else %}<p class="kans-outcome is-open">Loopt nog{% if price %} · nu {{ fmt(price) }}{% endif %}</p>{% endif %}
+
+  {{ chart }}
+
+  <dl class="kans-facts">
+    <div><dt>Instap</dt><dd>{{ fmt(facts.entry) }}</dd></div>
+    <div><dt>Stop</dt><dd>{{ fmt(facts.stop) if facts.stop else "-" }}</dd></div>
+    <div><dt>Doel</dt><dd>{{ fmt(facts.take) if facts.take else "-" }}</dd></div>
+    <div><dt>R:R</dt><dd>{{ "%.1f"|format(facts.rr) if facts.rr else "-" }}</dd></div>
+  </dl>
+  {% if facts.risk_pct is not none %}<p class="muted">De stop ligt {{ "%.2f"|format(facts.risk_pct) }}% van de instap.{% if user.risk_per_trade_eur and facts.rr %} Raakt de stop, dan verlies je ongeveer € {{ "%.0f"|format(user.risk_per_trade_eur) }}. Het doel levert ongeveer € {{ "%.0f"|format(user.risk_per_trade_eur * facts.rr) }}.{% endif %}</p>{% endif %}
+
+  {% set share_steps = [{"title": "Instap " ~ fmt(facts.entry)}, {"title": "Stop " ~ (fmt(facts.stop) if facts.stop else "-")}, {"title": "Doel " ~ (fmt(facts.take) if facts.take else "-")}] %}
+  {{ macros.share_button(signal.coin, signal.direction, share_steps) }}
+
+  <h3 class="vd-section-title">Wat er gebeurde</h3>
+  {{ macros.timeline_list(events) }}
+
+  {% if signal.plain_explanation or signal.reason %}
+  <h3 class="vd-section-title">Waarom</h3>
+  {{ macros.reason_popup(signal) }}
+  {% endif %}
+
+  <p><a href="/coins/{{ signal.coin }}">Alle kansen op {{ signal.coin }}</a></p>
+</article>
+{% endblock %}
