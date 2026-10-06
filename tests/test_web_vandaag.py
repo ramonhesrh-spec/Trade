@@ -80,6 +80,20 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("Geen nieuws van de laatste 12 uur", r.text)
         self.assertIn("vd-timeline", r.text)
 
+    def test_board_counts_open_chances_of_every_kind_not_only_structure_plans(self):
+        r = self.client.get("/vandaag")
+        self.assertIn("Er staat niets open", r.text)
+        signal = {"message_id": None, "coin": "BTC", "direction": "long", "category": "day_trading", "trade_type": "trend", "pattern_name": "Trend-pullback",
+                  "price": 100.0, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None, "atr": None,
+                  "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Trend-pullback",
+                  "reason": "test", "stop_loss": 99.0, "take_profit": 102.0, "context_note": None, "is_practice": 0, "plain_explanation": None,
+                  "suggested_entry_low": None, "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None}
+        repo.insert_signal(signal)
+        text = self.client.get("/vandaag").text
+        self.assertIn("1 Trend, laatste 6 uur", text)
+        self.assertNotIn("Er staat niets open", text)
+        self.assertNotIn("jaar candles", text)
+
     def test_page_shows_script_scenario_liquidations_events_and_score(self):
         now = datetime.now(timezone.utc)
         repo.insert_market_script("BTC", "BTC test onder gisteren hoog.", "long", "m", [scenario_row()], 1,

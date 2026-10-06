@@ -349,6 +349,22 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     })
 
 
+OPEN_SIGNAL_HOURS = 6
+OPEN_SIGNAL_LABELS = (("structuur", "Structuur gevuld"), ("structuur_c", "Structuur C gevuld"), ("trend", "Trend"), ("smc", "SMC"),
+                      ("smc_waarschuwing", "SMC met waarschuwing"), ("script", "Markt-script"))
+
+
+def _open_chances(now: datetime, waiting_plans: int) -> list[tuple[int, str]]:
+    """Alle kansen die nu open staan, per soort: wachtende Structuur-plannen, bouwende SMC-zones en signalen van de laatste uren
+    zonder uitkomst. Het bord op Vandaag telde eerst alleen de Structuur-plannen en liet zo meldingen van andere soorten onzichtbaar."""
+    since = (now - timedelta(hours=OPEN_SIGNAL_HOURS)).isoformat()
+    parts = [(waiting_plans, "Structuur wacht op de terugkeer"), (len(repo.list_forming_smc_setups()), "SMC-zone bouwt")]
+    for trade_type, label in OPEN_SIGNAL_LABELS:
+        open_now = [s for s in repo.list_recent_signals_of_type(trade_type, since) if not s["auto_outcome"]]
+        parts.append((len(open_now), f"{label}, laatste {OPEN_SIGNAL_HOURS} uur"))
+    return [(n, label) for n, label in parts if n]
+
+
 async def _vandaag_context() -> dict:
     now = datetime.now(timezone.utc)
     scripts_raw = repo.latest_scripts()
@@ -363,6 +379,7 @@ async def _vandaag_context() -> dict:
         at = datetime.fromisoformat(e["at"])
         events.append({**e, "time": today.local(at if at.tzinfo else at.replace(tzinfo=timezone.utc)).strftime("%H:%M")})
     structure_cards = await _structure_cards()
+    open_parts = _open_chances(now, len(structure_cards))
     summary = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
     score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "smc_waarschuwing") or e["source"] == "alles"]
     for e in score:
@@ -373,7 +390,7 @@ async def _vandaag_context() -> dict:
         "liq_last": repo.latest_liquidation_bucket(), "events": events, "score": score, "money": today.money,
         "status_labels": track_record.STATUS_LABELS, "script_enabled": config.SCRIPT_ENABLED,
         "structure_cards": structure_cards,
-        "plans_ready": len(structure_cards),
+        "plans_ready": sum(n for n, _ in open_parts), "open_parts": open_parts,
         "scenarios_waiting": sum(1 for sc in scripts for x in sc["scenarios"] if x["state"] == "waiting"),
     }
 

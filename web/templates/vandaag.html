@@ -11,7 +11,7 @@
 <section class="vd-board" style="--i: 0">
   <div class="vd-board-count">
     <span class="vd-board-number{% if not plans_ready %} is-zero{% endif %}">{{ plans_ready }}</span>
-    <span class="vd-board-label">{% if plans_ready == 1 %}plan klaar{% elif plans_ready %}plannen klaar{% else %}plan klaar{% endif %}<br>{% if plans_ready %}wacht op de terugkeer{% else %}Nog niets gebroken dat de toets haalt.{% endif %}</span>
+    <span class="vd-board-label">{% if plans_ready == 1 %}kans open{% elif plans_ready %}kansen open{% else %}kansen open{% endif %}<br>{% if open_parts %}{% for n, label in open_parts %}{{ n }} {{ label }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% else %}Er staat niets open. Een melding volgt zodra er een breuk of voorwaarde klopt.{% endif %}</span>
   </div>
   <div class="vd-board-side">
     {% if scenarios_waiting %}<p class="vd-board-sub">Daarnaast wachten {{ scenarios_waiting }} scenario's van het markt-script op een voorwaarde. Dat zijn hypotheses, geen getekende plannen.</p>{% endif %}
@@ -43,7 +43,7 @@
   <h3>Agenda, komende 24 uur</h3>
   <div class="vd-timeline-wrap">{{ timeline }}</div>
   {% if not moments %}<p class="muted vd-fine">Geen moment in de komende 24 uur waarop de markt meetbaar anders beweegt.</p>{% endif %}
-  <p class="muted vd-fine">Tijden in Nederlandse tijd. De zwaarte bij een moment is gemeten op een jaar candles, niet geschat.</p>
+  <p class="muted vd-fine">Tijden in Nederlandse tijd. De zwaarte bij een moment is gemeten, niet geschat.</p>
 </section>
 
 <section class="vd-section" style="--i: 2">
