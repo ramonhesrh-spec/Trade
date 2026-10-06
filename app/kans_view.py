@@ -38,14 +38,38 @@ def facts(signal: dict) -> dict:
             "rr": abs(take - entry) / risk if risk and take else None, "label": TYPE_LABELS.get(signal["trade_type"], signal["trade_type"]).replace(" (ongetest)", "")}
 
 
+def _event_levels(fired: dict) -> list[dict]:
+    """Elke tijdlijngebeurtenis van Structuur met het prijsniveau waar ze gebeurde: de limiet, het doel of de stop."""
+    out = []
+    for e in fired.get("events", []):
+        text = e["text"]
+        if text.startswith("Limiet"):
+            level = fired["entry"]
+        elif text.startswith("T") and text[1:2].isdigit():
+            level = fired["targets"][int(text[1]) - 1]
+        elif "instap" in text:
+            level = fired["entry"]
+        else:
+            level = fired["stop"]
+        out.append({"at": e["at"], "text": text, "level": level})
+    return out
+
+
 def chart(signal: dict, setup: Optional[dict], candles: Optional[list[list]], price: Optional[float]) -> str:
-    """Structuur tekent zijn eigen momentopname (met de gebroken lijn), alle andere soorten de candles van nu met instap, stop en doel."""
+    """Structuur tekent zijn momentopname (met de gebroken lijn) verlengd met de candles sindsdien en met stippen voor wat er gebeurde.
+    Alle andere soorten krijgen de candles van nu met instap, stop en doel."""
     if setup:
         plan = json.loads(setup["plan"])
         fired = plan.get("fired")
+        snapshot = plan.get("candles", [])
+        if snapshot and candles:
+            last = _parse(snapshot[-1][0]).timestamp()
+            snapshot = snapshot + [c for c in candles if _parse(c[0]).timestamp() > last]
+        events = None
         if fired:
+            events = _event_levels(fired)
             plan = {**plan, "level": fired["entry"], "stop": fired["stop"], "targets": fired["targets"]}
-        return setup_chart.setup_svg(plan.get("candles", []), setup, plan, price)
+        return setup_chart.setup_svg(snapshot, setup, plan, price, events)
     if not candles or not signal["stop_loss"] or not signal["take_profit"]:
         return ""
     return setup_chart.trade_svg(candles, signal["direction"], signal["coin"], signal["price"], signal["stop_loss"], signal["take_profit"], price)

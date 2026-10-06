@@ -2003,3 +2003,8 @@ html.reveal-done main > section, html.reveal-done main > .stats-collapse { anima
 .kans-timeline li { display: flex; gap: var(--space-4); position: relative; }
 .kans-timeline li::before { content: ""; position: absolute; left: calc(-1 * var(--space-4) - 6px); top: 0.45em; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
 .kans-time { font-family: var(--mono); font-size: var(--text-sm, 0.875rem); color: var(--muted); white-space: nowrap; }
+
+.sc-event { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
+.filter-chips { display: flex; gap: var(--space-3); margin: 0 0 var(--space-4); }
+.chip { padding: var(--space-2) var(--space-4); border: 1px solid var(--border-interactive); border-radius: 999px; color: var(--text-dim); text-decoration: none; font-size: var(--text-sm, 0.875rem); }
+.chip.is-active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }

@@ -18,6 +18,7 @@
 
 <section style="--i: 0">
   <h3 class="vd-section-title">Wachten op de terugkeer</h3>
+  <p class="filter-chips"><a class="chip{% if not only_ab %} is-active{% endif %}" href="/structuur">Alles</a><a class="chip{% if only_ab %} is-active{% endif %}" href="/structuur?alleen=ab">Alleen A en B</a></p>
   {% if not structure_cards %}
   <p class="muted empty">Geen plan klaar. Een melding volgt zodra een lijn of range breekt, het plan genoeg ruimte heeft en Claude de breuk goedkeurt.</p>
   {% else %}

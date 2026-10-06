@@ -144,7 +144,7 @@ class LiveTest(DbCase):
 
         def follow(df):
             async def fake_push(user_id, title, body, url, silent=False, tag=None):
-                self.pushed.append((title, body))
+                self.pushed.append((title, body, silent))
             with mock.patch("app.exchange.fetch_ohlcv", lambda *a, **k: df), mock.patch("app.push_notify.send_push", fake_push):
                 asyncio.run(sl._follow(datetime(2026, 3, 6, tzinfo=timezone.utc)))
 
@@ -157,6 +157,8 @@ class LiveTest(DbCase):
         follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0), (98.0, 98.1, 96.9, 97.0)]))   # T2 erbij
         self.assertEqual(len(self.pushed), 2)
         self.assertIn("T2 geraakt", self.pushed[1][0])
+        self.assertFalse(self.pushed[0][2])                                 # T1 is luid: je stop moet naar de instap
+        self.assertTrue(self.pushed[1][2])                                  # T2 is stil als er nog een doel volgt
         follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0), (98.0, 98.1, 96.9, 97.0), (97.0, 100.2, 96.9, 100.0)]))  # terug op de instap
         fired = json.loads(repo.list_structure_setups(("fired",))[0]["plan"])["fired"]
         self.assertTrue(fired["closed"])

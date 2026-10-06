@@ -54,6 +54,22 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("sc-limit", r.text)
         self.assertIn("Schone range.", r.text)
 
+    def test_setups_filter_shows_only_a_and_b_on_request(self):
+        import json
+        candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
+        plan = {"level": 100.0, "stop": 101.0, "risk_pct": 1.0, "targets": [98.0, 97.0], "targets_r": [2.0, 3.0], "candles": candles}
+        for coin, grade in (("BTC", "A"), ("ETH", "C")):
+            repo.insert_structure_setup({
+                "coin": coin, "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
+                "line_slope": 0.0, "atr": 0.5, "grade": grade, "reason": f"Reden {grade}.", "features": "{}", "state": "waiting",
+                "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
+        both = self.client.get("/structuur").text
+        self.assertIn("Reden A.", both)
+        self.assertIn("Reden C.", both)
+        only = self.client.get("/structuur?alleen=ab").text
+        self.assertIn("Reden A.", only)
+        self.assertNotIn("Reden C.", only)
+
     def test_grade_c_card_is_muted_and_shows_claudes_doubt_on_top(self):
         import json
         candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]

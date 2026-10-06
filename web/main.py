@@ -311,7 +311,7 @@ STRUCTURE_STATE_LABELS = {"schaduw": "Oordeel C: stil gevolgd, wacht op de terug
 
 
 @app.get("/structuur")
-async def structuur_page(request: Request, user: dict = Depends(require_login)):
+async def structuur_page(request: Request, alleen: str = "", user: dict = Depends(require_login)):
     """De nieuwe methode: breuk van een lijn of range op 30m met het plan getekend (app/structure_live.py)."""
     since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     history = [{**h, "state_label": STRUCTURE_STATE_LABELS.get(h["state"], h["state"])}
@@ -325,7 +325,8 @@ async def structuur_page(request: Request, user: dict = Depends(require_login)):
     trend_beat = repo.get_beat("trend")
     trend_minutes = int((datetime.now(timezone.utc) - datetime.fromisoformat(trend_beat["at"])).total_seconds() // 60) if trend_beat else None
     return templates.TemplateResponse(request, "structuur.html", {"trend_minutes": trend_minutes,
-        "user": user, "structure_cards": await _structure_cards(), "history": history,
+        "user": user, "structure_cards": [c for c in await _structure_cards() if alleen != "ab" or c["grade"] in ("A", "B")],
+        "only_ab": alleen == "ab", "history": history,
         "engine_minutes": minutes, "counts": repo.structure_counts(since24), "engine_on": config.STRUCTURE_ENABLED,
         "trend_signals": repo.list_recent_signals_of_type("trend", since24), "trend_on": config.TREND_ENABLED})
 
@@ -429,12 +430,11 @@ async def kans_page(request: Request, signal_id: int, user: dict = Depends(requi
         raise HTTPException(status_code=404)
     setup = repo.get_structure_setup_by_signal(signal_id)
     candles, price = None, None
-    if not setup:
-        try:
-            df = await asyncio.to_thread(exchange.fetch_ohlcv, signal["coin"], timeframe="30m", limit=60)
-            candles = [[row.timestamp.isoformat(), row.open, row.high, row.low, row.close] for row in df.itertuples()]
-        except Exception:
-            candles = None
+    try:
+        df = await asyncio.to_thread(exchange.fetch_ohlcv, signal["coin"], timeframe="30m", limit=60)
+        candles = [[row.timestamp.isoformat(), row.open, row.high, row.low, row.close] for row in df.itertuples()]
+    except Exception:
+        candles = None
     prices = await _cached_prices({signal["coin"]})
     price = prices.get(signal["coin"])
     signal.setdefault("message_summary", None)

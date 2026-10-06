@@ -367,7 +367,8 @@ async def _follow(now: datetime) -> None:
                     break
                 while hits < len(targets) and ((c.low <= targets[hits]) if short else (c.high >= targets[hits])):
                     hits += 1
-                    messages.append(_target_message(s, plan, fired, hits))
+                    # T1 en het laatste doel zijn luid (er moet iets gebeuren: stop naar de instap, of de trade is klaar), de doelen ertussen stil.
+                    messages.append((*_target_message(s, plan, fired, hits), hits == 1 or hits == len(targets)))
                     fired.setdefault("events", []).append({"at": c.timestamp.isoformat(), "text": f"T{hits} geraakt ({plan['targets_r'][hits - 1]:.1f}R)"})
                     if hits == 1:
                         live_stop = fired["entry"]
@@ -378,8 +379,8 @@ async def _follow(now: datetime) -> None:
             if changed:
                 fired["hits"] = hits
                 repo.update_structure_plan(s["id"], json.dumps(plan))
-            for title, body in messages:
-                await _push_all(title, body, push_notify.signal_url(coin, s["signal_id"]), f"structuur-{coin}-t", loud=True)
+            for title, body, loud in messages:
+                await _push_all(title, body, push_notify.signal_url(coin, s["signal_id"]), f"structuur-{coin}-t", loud=loud)
 
 
 async def run(now: Optional[datetime] = None) -> None:

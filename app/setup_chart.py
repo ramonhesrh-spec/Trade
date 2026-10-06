@@ -22,7 +22,7 @@ def _ts(value: str) -> float:
     return datetime.fromisoformat(value).timestamp()
 
 
-def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[float] = None) -> str:
+def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[float] = None, events: Optional[list[dict]] = None) -> str:
     """candles: [[iso_tijd, open, hoog, laag, slot], ...] oud naar nieuw. setup: coin, direction, kind, line_a, line_slope,
     p1_at, break_at. plan: level, stop, targets, targets_r. Geeft '' als er geen candles zijn."""
     if not candles:
@@ -90,6 +90,11 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
     for v, cls, text, label_y in placed:
         out.append(f'<line class="sc-line {cls}" x1="{x(n - 1):.1f}" x2="{right:.1f}" y1="{y(v):.1f}" y2="{y(v):.1f}"/>'
                    f'<text class="sc-label {cls}" x="{right + 6:.1f}" y="{label_y + 4:.1f}">{escape(text)}</text>')
+
+    # Gebeurtenissen (limiet geraakt, doelen, stop) als stippen op het moment en het niveau waar ze gebeurden.
+    for ev in events or []:
+        i = min(slots - 1, max(0.0, bar_index(_ts(ev["at"]))))
+        out.append(f'<circle class="sc-event" cx="{x(i):.1f}" cy="{y(ev["level"]):.1f}" r="4.5"><title>{escape(ev["text"])}</title></circle>')
 
     out.append("</svg>")
     return "".join(out)
