@@ -114,7 +114,7 @@ async def landing(request: Request):
     scripts = repo.latest_scripts()
     return templates.TemplateResponse(request, "landing.html", {
         "timeline": Markup(today.timeline_svg(now, market_calendar.upcoming(now, 24))), "mood": today.mood(scripts),
-        "n_scripts": len(scripts), "now": today.nl_stamp(today.local(now)),
+        "n_scripts": len(scripts), "now": today.nl_stamp(today.local(now)), "demo_chart": Markup(setup_chart.demo_svg()),
         "kraken_referral_url": config.KRAKEN_REFERRAL_URL,
         "kraken_referral_code": config.KRAKEN_REFERRAL_CODE,
     })

@@ -7,7 +7,7 @@
 <meta name="color-scheme" content="dark">
 <style>html{background:#0c0d0f}</style>
 <title>HesPulse</title>
-<meta name="description" content="HesPulse schrijft elke 4 uur een markt-script, toetst het tegen live data en laat zien wat het zelf voorspelde. Regels, geen garantie. Jij beslist zelf.">
+<meta name="description" content="HesPulse tekent het plan voordat de koers terugkomt: breuk, limietorder, stop en doelen. Elke melding telt mee op een openbare score. Geen orders, geen garantie.">
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <link rel="manifest" href="/static/manifest.json">
@@ -29,12 +29,9 @@
     <span>HesPulse</span>
   </a>
   <nav>
+    <a href="#wat-je-krijgt">Wat je krijgt</a>
     <a href="#vandaag">Vandaag</a>
-    <a href="#over-ons">Over ons</a>
-    <a href="#hoe-het-werkt">Hoe het werkt</a>
-    <a href="#meldingen-aanzetten">Meldingen aanzetten</a>
-    <a href="#hoog-vertrouwen">Hoog vertrouwen</a>
-    <a href="#journaal">Journaal</a>
+    <a href="#eerlijk">Eerlijk</a>
     <a href="/login">Inloggen</a>
     <a href="/registreer" class="button">Registreren</a>
   </nav>
@@ -51,48 +48,45 @@
   </div>
 </div>
 
-<main>
-<section class="hero" style="--i: 0">
-  <h1>Regels in plaats van giswerk</h1>
-  <p>HesPulse volgt de markt, schrijft elke 4 uur een script met scenario's en
-  toetst elke melding tegen live data. Je krijgt een pushmelding met een plan,
-  en je ziet wat HesPulse zelf voorspelde, ook als dat tegenvalt. Geen
-  automatische trades, geen garanties. Jij beslist zelf.</p>
-  <a href="/registreer" class="button-primary">Registreren</a>
-  <a href="/login" class="hero-secondary">Al een account? Inloggen</a>
-
-  <svg class="hero-chart" viewBox="0 0 555 170" aria-hidden="true">
-    <polyline class="hero-trendline" pathLength="1" points="30,133 85,118 140,107 195,112 250,92 305,78 360,83 415,59 470,45 525,32"
-      fill="none" stroke="#ffb224" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" opacity="0.55"/>
-    <g stroke-width="2">
-      <g class="hero-candle" style="--i: 0"><line x1="30" y1="118" x2="30" y2="150" stroke="#f2685c"/>
-      <rect x="21" y="122" width="18" height="22" fill="#f2685c"/></g>
-      <g class="hero-candle" style="--i: 1"><line x1="85" y1="100" x2="85" y2="140" stroke="#33d69f"/>
-      <rect x="76" y="104" width="18" height="28" fill="#33d69f"/></g>
-      <g class="hero-candle" style="--i: 2"><line x1="140" y1="90" x2="140" y2="128" stroke="#33d69f"/>
-      <rect x="131" y="96" width="18" height="22" fill="#33d69f"/></g>
-      <g class="hero-candle" style="--i: 3"><line x1="195" y1="96" x2="195" y2="132" stroke="#f2685c"/>
-      <rect x="186" y="100" width="18" height="24" fill="#f2685c"/></g>
-      <g class="hero-candle" style="--i: 4"><line x1="250" y1="70" x2="250" y2="116" stroke="#33d69f"/>
-      <rect x="241" y="76" width="18" height="32" fill="#33d69f"/></g>
-      <g class="hero-candle" style="--i: 5"><line x1="305" y1="60" x2="305" y2="100" stroke="#33d69f"/>
-      <rect x="296" y="64" width="18" height="28" fill="#33d69f"/></g>
-      <g class="hero-candle" style="--i: 6"><line x1="360" y1="66" x2="360" y2="104" stroke="#f2685c"/>
-      <rect x="351" y="70" width="18" height="26" fill="#f2685c"/></g>
-      <g class="hero-candle" style="--i: 7"><line x1="415" y1="40" x2="415" y2="86" stroke="#33d69f"/>
-      <rect x="406" y="44" width="18" height="30" fill="#33d69f"/></g>
-      <g class="hero-candle" style="--i: 8"><line x1="470" y1="28" x2="470" y2="70" stroke="#33d69f"/>
-      <rect x="461" y="32" width="18" height="26" fill="#33d69f"/></g>
-      <g class="hero-candle" style="--i: 9"><line x1="525" y1="16" x2="525" y2="56" stroke="#33d69f"/>
-      <rect x="516" y="20" width="18" height="24" fill="#33d69f"/></g>
-    </g>
-  </svg>
+<main class="lp">
+<section class="lp-hero" style="--i: 0">
+  <div class="lp-hero-text">
+    <p class="lp-eyebrow">Voor wie zelf handelt</p>
+    <h1>Het plan staat klaar voordat de koers terugkomt.</h1>
+    <p class="lp-lead">HesPulse tekent de breuk, de terugkeer, de limietorder, de stop en de doelen. Jij zet de order. Elke melding telt mee op een score die niemand kan aanpassen, ook wij niet.</p>
+    <p class="lp-cta"><a href="/registreer" class="button-primary">Registreren</a> <a href="/login" class="hero-secondary">Al een account? Inloggen</a></p>
+  </div>
+  <figure class="lp-demo">
+    <div class="setup-card lp-demo-card">
+      <header class="setup-head"><span class="radar-coin">VOORBEELD</span><span class="radar-dir radar-dir-short">short</span><span class="setup-grade setup-grade-a">A</span></header>
+      {{ demo_chart }}
+      <p class="setup-reason">Lijn gebroken op 30 minuten. Limietorder op het gebroken niveau, stop erachter, doelen op zwaaipunten.</p>
+    </div>
+    <figcaption class="muted">Voorbeeld met verzonnen koersen, geen echt signaal.</figcaption>
+  </figure>
 </section>
 
-<section class="landing-section vd-public" id="vandaag" style="--i: 1">
+<section class="landing-section lp-three" id="wat-je-krijgt" style="--i: 1">
+  <h2>Wat je krijgt</h2>
+  <div class="lp-three-grid">
+    <article class="lp-point">
+      <h3>Een getekend plan</h3>
+      <p>Bij een breuk van een lijn of range krijg je een melding met limiet, stop en doelen, vóórdat de trade uitspeelt. Op de pagina Setups staat het plan op de grafiek.</p>
+    </article>
+    <article class="lp-point">
+      <h3>Een markt-script</h3>
+      <p>Elke 4 uur schrijft Claude per coin scenario's met een voorwaarde. De code toetst stop, risico en rendement. Wat niet klopt, valt af.</p>
+    </article>
+    <article class="lp-point">
+      <h3>Een score die klopt</h3>
+      <p>Elk signaal telt mee op Bewijs, in R na kosten, ook de verliezers. Een nieuwe methode heet ongetest tot er genoeg afgeronde trades zijn.</p>
+    </article>
+  </div>
+</section>
+
+<section class="landing-section vd-public" id="vandaag" style="--i: 2">
   <h2>Vandaag, live</h2>
-  <p>Dit is wat je na het inloggen als eerste ziet. Hieronder de agenda van de komende 24 uur en de stemming van het
-  markt-script. De scenario's zelf, met limietorder, stop en take, staan achter het inloggen.</p>
+  <p>Dit is wat je na het inloggen als eerste ziet. Hieronder de agenda van de komende 24 uur en de stemming van het markt-script. De plannen zelf staan achter het inloggen.</p>
   <div class="vd-public-grid">
     <div class="card vd-card vd-public-card">
       <h3>Stemming van het markt-script</h3>
@@ -109,115 +103,23 @@
       <p class="muted vd-fine">Nederlandse tijd, nu: {{ now }}. De zwaarte bij een moment is gemeten op een jaar candles.</p>
     </div>
   </div>
-  <p><a href="/registreer" class="button-primary">Registreren</a> <a href="/login" class="hero-secondary">Al een account? Inloggen</a></p>
 </section>
 
-<section class="landing-section" id="over-ons" style="--i: 2">
-  <h2>Over ons</h2>
-  <p>HesPulse is een persoonlijk project, gebouwd om structuur te brengen in
-  het volgen van crypto. Geen los overzicht van berichten meer, maar één plek
-  waar markt, nieuws, techniek en risico samenkomen voordat er een melding
-  uitgaat. Elke soort melding heeft een status die de uitkomsten bepalen, en
-  die uitkomsten staan open op de pagina Bewijs.</p>
-  <p>Op dit moment is HesPulse een besloten tool, voor eigen gebruik en een
-  klein aantal genodigden. Er wordt nog geen dienst verkocht.</p>
+<section class="landing-section" id="eerlijk" style="--i: 3">
+  <h2>Wat we niet beloven</h2>
+  <ul class="lp-honest">
+    <li><strong>Geen orders.</strong> HesPulse plaatst nooit een trade. Elke trade is jouw beslissing.</li>
+    <li><strong>Geen garantie.</strong> Een plan is een hypothese. Een methode die na kosten verliest, zie je terug op Bewijs.</li>
+    <li><strong>Besloten.</strong> HesPulse is een persoonlijk project voor eigen gebruik en een klein aantal genodigden. Er wordt geen dienst verkocht.</li>
+  </ul>
 </section>
 
-<section class="landing-section" id="hoe-het-werkt" style="--i: 2">
-  <h2>Hoe het werkt</h2>
-  <div class="how-it-works-layout">
-    <div class="steps">
-      <div class="step">
-        <div class="num">1</div>
-        <p><strong>Waarnemen</strong> Koersen, funding, liquidaties, nieuws, de agenda en wat je community deelt komen binnen, ook buiten kantooruren.</p>
-      </div>
-      <div class="step">
-        <div class="num">2</div>
-        <p><strong>Scenario's en toetsing</strong> Claude schrijft elke 4 uur scenario's met een voorwaarde. De code toetst stop, risico en rendement. Wat niet klopt, valt af.</p>
-      </div>
-      <div class="step">
-        <div class="num">3</div>
-        <p><strong>Melding en bewijs</strong> Klopt een voorwaarde, dan krijg je een pushmelding met limietorder, stop en take profit. De uitkomst telt mee op Bewijs. De trade blijft een eigen beslissing.</p>
-      </div>
-    </div>
-    <div class="phone-mockup" aria-hidden="true">
-      <div class="phone-frame">
-        <div class="phone-screen">
-          <div class="phone-message">
-            <div class="phone-message-head">📈 ₿ BTC — LONG</div>
-            <div class="phone-message-body">
-              Vertrouwen: hoog<br>
-              Prijs: 61.240<br>
-              Stop loss: 59.800<br>
-              Take profit: 64.500
-            </div>
-          </div>
-        </div>
-      </div>
-      <p class="phone-caption muted">Voorbeeld van een melding, geen echt signaal</p>
-    </div>
-  </div>
-</section>
-
-<section class="landing-section" id="meldingen-aanzetten" style="--i: 3">
+<section class="landing-section" id="meldingen-aanzetten" style="--i: 4">
   <h2>Meldingen aanzetten</h2>
-  <p>Geen aparte app nodig. Na het registreren zet je in twee stappen
-  pushmeldingen aan vanuit je browser.</p>
-  <div class="steps">
-    <div class="step">
-      <div class="num">1</div>
-      <p><strong>Meldingen aanzetten</strong> Log in en klik op de knop op de instellingenkaart van je accountpagina. Je browser of telefoon vraagt eenmalig om toestemming.</p>
-    </div>
-    <div class="step">
-      <div class="num">2</div>
-      <p><strong>Actief</strong> Melding, levensteken en seintje bij een geraakte stop loss of take profit komen vanaf dan bij je binnen, ook buiten HesPulse om. Alles staat terug te lezen op de meldingenpagina.</p>
-    </div>
-  </div>
+  <p>Geen aparte app nodig. Log in en zet pushmeldingen aan op je accountpagina. Je browser of telefoon vraagt eenmalig om toestemming. Een tik op een melding opent het plan zelf.</p>
 </section>
 
-<section class="landing-section" id="hoog-vertrouwen" style="--i: 4">
-  <h2>Wanneer is een signaal hoog vertrouwen?</h2>
-  <p>Elke melding wordt getoetst tegen een vaste set technische factoren:
-  trend, momentum, koopkracht en volume, onder andere. Kloppen de meeste,
-  dan is het hoog vertrouwen. Mist er te veel, dan is het laag vertrouwen,
-  met de reden erbij in de melding.</p>
-  <div class="factor-grid">
-    <div class="factor">
-      <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="3,17 9,11 13,15 21,5"/><polyline points="15,5 21,5 21,11"/></svg>Trend</h3>
-      <p>Volgt de prijs de richting van het signaal, of gaat hij er juist
-      tegenin?</p>
-    </div>
-    <div class="factor">
-      <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 12h4l2.5-7 4 14 2.5-7H20"/></svg>Momentum</h3>
-      <p>Trend alleen is niet genoeg: het momentum moet meebewegen.</p>
-    </div>
-    <div class="factor">
-      <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 15c2.5-8 5.5-8 8 0s5.5 8 8 0"/></svg>RSI</h3>
-      <p>Is de coin al oververhit? Instappen op een uitgeput niveau
-      verhoogt het risico op een snelle omkeer.</p>
-    </div>
-    <div class="factor">
-      <h3><svg class="factor-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="19" x2="5" y2="10"/><line x1="12" y1="19" x2="12" y2="5"/><line x1="19" y1="19" x2="19" y2="13"/></svg>Volume</h3>
-      <p>Een beweging zonder handelsvolume erachter is minder
-      overtuigend.</p>
-    </div>
-  </div>
-  <p>Beide niveaus worden gemeld, met stop loss en take profit erbij.
-  Ook hoog vertrouwen is geen garantie, het is een optelsom van regels,
-  geen voorspelling.</p>
-</section>
-
-<section class="landing-section" id="journaal" style="--i: 5">
-  <h2>Journaal</h2>
-  <p>Elke melding die je opvolgt komt in een journaal terecht: coin,
-  richting, entry, exit, en het resultaat in procent. Niets hoef je zelf
-  bij te houden.</p>
-  <p>Je winrate staat altijd zichtbaar, uitgesplitst naar hoog en laag
-  vertrouwen. Zo zie je met cijfers of het systeem voor jou werkt, in
-  plaats van op gevoel te vertrouwen na een paar goede of slechte trades.</p>
-</section>
-
-<section class="landing-section" style="--i: 6">
+<section class="landing-section" style="--i: 5">
   <h2>Zelf handelen op Kraken</h2>
   <div class="kraken-card">
     <p>Handel je zelf crypto, of wil je een account openen? Via onderstaande
@@ -227,7 +129,6 @@
     <p class="fine-print muted">Referral link. Geen onderdeel van HesPulse zelf, en geen advies om te gaan handelen.</p>
   </div>
 </section>
-
 </main>
 
 <footer class="footer">{{ disclaimer }}</footer>

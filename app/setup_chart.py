@@ -88,3 +88,19 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
 
     out.append("</svg>")
     return "".join(out)
+
+
+def demo_svg() -> str:
+    """Voorbeeld voor de openbare pagina: een verzonnen koersverloop rond 100, bewust zonder echte coin. De pagina zegt dat."""
+    from datetime import timedelta
+    base = datetime(2026, 1, 5, 8, 0)
+    closes = [101.0, 101.8, 102.4, 101.9, 101.1, 100.4, 100.0, 100.6, 101.3, 101.9, 102.3, 101.7, 100.9, 100.2, 99.9, 100.5, 101.0, 101.5,
+              101.9, 101.2, 100.5, 100.0, 99.4, 98.6, 98.9, 99.4, 99.9]
+    candles = []
+    for i, c in enumerate(closes):
+        o = closes[i - 1] if i else 100.8
+        candles.append([(base + timedelta(minutes=30 * i)).isoformat() + "+00:00", o, max(o, c) + 0.25, min(o, c) - 0.25, c])
+    setup = {"coin": "VOORBEELD", "direction": "short", "kind": "RANGE", "line_a": 100.0, "line_slope": 0.0,
+             "p1_at": candles[6][0], "break_at": candles[22][0]}
+    plan = {"level": 100.0, "stop": 100.9, "targets": [97.6, 95.9], "targets_r": [2.7, 4.6]}
+    return setup_svg(candles, setup, plan, price=99.9)
