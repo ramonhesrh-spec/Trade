@@ -101,6 +101,15 @@ def find_breaks(bars: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out, columns=["bar", "direction", "kind", "p1", "p2", "a", "slope", "atr", "vol_ratio", "span", "touches", "with_trend"])
 
 
+def known_levels(b: pd.DataFrame, p_high: np.ndarray, p_low: np.ndarray, direction: str, bar: int) -> list[float]:
+    """Zwaaipunten die op candle `bar` al bevestigd zijn en als doel (liquiditeit) kunnen dienen: lage punten bij een short."""
+    known = bar - PIVOT_K
+    lo = max(0, known - LEVEL_LOOKBACK)
+    mask = (p_low if direction == SHORT else p_high)[lo:known + 1]
+    series = b["low" if direction == SHORT else "high"].to_numpy()[lo:known + 1]
+    return [float(v) for v in series[mask]]
+
+
 def level_at(ev, j: int) -> float:
     return ev.a + ev.slope * (j - ev.p1)
 
@@ -212,11 +221,7 @@ def run(frame_1m: pd.DataFrame, cost_pct: float = 0.06) -> pd.DataFrame:
                 continue
             if (ev.direction == SHORT and entry >= stop) or (ev.direction == "long" and entry <= stop):
                 continue
-            known = (ev.bar - PIVOT_K)
-            lo = max(0, known - LEVEL_LOOKBACK)
-            mask = (p_low if ev.direction == SHORT else p_high)[lo:known + 1]
-            series = b["low" if ev.direction == SHORT else "high"].to_numpy()[lo:known + 1]
-            levels = [float(v) for v in series[mask]]
+            levels = known_levels(b, p_high, p_low, ev.direction, ev.bar)
             w = m.window(k)
             for name in LADDERS:
                 tg = ladder_targets(ev.direction, entry, risk, name, levels)

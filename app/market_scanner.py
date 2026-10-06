@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import config, exchange, indicators, market_script, patterns, push_notify, repo, risk, samenval, trade_plan
+from app import config, exchange, indicators, market_script, patterns, push_notify, repo, risk, samenval, structure_live, trade_plan
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
@@ -1182,6 +1182,10 @@ async def scan_smc_fast() -> None:
         await market_script.run_triggers()
     except Exception:
         logger.exception("Markt-script-motor is mislukt")
+    try:
+        await structure_live.run()
+    except Exception:
+        logger.exception("Structuur-motor is mislukt")
 
 
 if __name__ == "__main__":

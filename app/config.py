@@ -125,3 +125,11 @@ SCRIPT_ENABLED = _get("SCRIPT_ENABLED", "true").lower() == "true"
 SCRIPT_MODEL = _get("SCRIPT_MODEL", ANTHROPIC_MODEL)
 SCRIPT_MAX_ALERTS_PER_DAY = int(_get("SCRIPT_MAX_ALERTS_PER_DAY", "6"))
 SCRIPT_MAX_NEGATIVE = int(_get("SCRIPT_MAX_NEGATIVE", "30"))
+
+# Structuur-setups (app/structure_live.py): breuk van een lijn of range op 30m, een oordeel van Claude en een melding vóórdat
+# de limiet gevuld wordt. Altijd met het label ongetest. Gaat vanzelf uit als de laatste STRUCTURE_MAX_NEGATIVE afgeronde
+# signalen samen negatief zijn.
+STRUCTURE_ENABLED = _get("STRUCTURE_ENABLED", "true").lower() == "true"
+STRUCTURE_MODEL = _get("STRUCTURE_MODEL", ANTHROPIC_MODEL)
+STRUCTURE_MAX_ALERTS_PER_DAY = int(_get("STRUCTURE_MAX_ALERTS_PER_DAY", "8"))
+STRUCTURE_MAX_NEGATIVE = int(_get("STRUCTURE_MAX_NEGATIVE", "30"))

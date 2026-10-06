@@ -2668,3 +2668,60 @@ def latest_liquidation_bucket() -> Optional[str]:
     with db.session() as conn:
         row = conn.execute("SELECT MAX(bucket) AS b FROM liquidations_5m").fetchone()
         return row["b"]
+
+
+def insert_structure_setup(row: dict) -> Optional[int]:
+    """None als dezelfde breuk al bestaat."""
+    with db.session() as conn:
+        cur = conn.execute(
+            """INSERT OR IGNORE INTO structure_setups (coin, direction, kind, break_at, p1_at, line_a, line_slope, atr, grade,
+                   reason, features, state, created_at, expires_at, plan)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (row["coin"], row["direction"], row["kind"], row["break_at"], row["p1_at"], row["line_a"], row["line_slope"],
+             row["atr"], row["grade"], row["reason"], row["features"], row["state"], db.now_iso(), row["expires_at"], row.get("plan")),
+        )
+        return cur.lastrowid if cur.rowcount else None
+
+
+def list_structure_setups(states: tuple = ("waiting",), limit: int = 50) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        rows = conn.execute(f"SELECT * FROM structure_setups WHERE state IN ({marks}) ORDER BY id DESC LIMIT ?",
+                            (*states, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_structure_state(setup_id: int, state: str, signal_id: Optional[int] = None) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE structure_setups SET state = ?, signal_id = COALESCE(?, signal_id), "
+            "fired_at = CASE WHEN ? = 'fired' THEN ? ELSE fired_at END WHERE id = ?",
+            (state, signal_id, state, db.now_iso(), setup_id),
+        )
+
+
+def count_structure_alerts_since(since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM structure_setups WHERE grade IN ('A', 'B') AND created_at >= ?",
+                            (since_iso,)).fetchone()[0]
+
+
+def list_type_results(trade_type: str, limit: int = 30) -> list[dict]:
+    """De laatste afgeronde signalen van één soort (take of stop geraakt), voor een zelfuitschakeling."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT price, stop_loss, take_profit, auto_outcome FROM signals
+               WHERE trade_type = ? AND auto_outcome IN ('take_profit', 'stop_loss')
+               ORDER BY auto_outcome_at DESC LIMIT ?""", (trade_type, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_structure_judgement(setup_id: int, grade: Optional[str], reason: str, state: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE structure_setups SET grade = ?, reason = ?, state = ? WHERE id = ?", (grade, reason, state, setup_id))
+
+
+def expire_structure_setups(now_iso: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE structure_setups SET state = 'expired' WHERE state = 'waiting' AND expires_at < ?", (now_iso,))

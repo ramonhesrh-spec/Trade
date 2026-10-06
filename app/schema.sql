@@ -586,3 +586,28 @@ CREATE INDEX IF NOT EXISTS idx_journal_signal_id ON journal_entries(signal_id);
 CREATE INDEX IF NOT EXISTS idx_journal_open ON journal_entries(entry_price, exit_price);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_username_time ON login_attempts(username, attempted_at);
 CREATE INDEX IF NOT EXISTS idx_registration_attempts_ip_time ON registration_attempts(ip_address, attempted_at);
+
+-- Structuur-setups (app/structure_live.py): breuk van een lijn of range op 30m, met een oordeel van Claude (A, B of C) en de
+-- levensloop tot de limiet gevuld wordt. UNIQUE zodat dezelfde breuk nooit twee keer gemeld wordt.
+CREATE TABLE IF NOT EXISTS structure_setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    break_at TEXT NOT NULL,
+    p1_at TEXT NOT NULL,
+    line_a REAL NOT NULL,
+    line_slope REAL NOT NULL,
+    atr REAL NOT NULL,
+    grade TEXT,
+    reason TEXT,
+    features TEXT,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    fired_at TEXT,
+    signal_id INTEGER,
+    plan TEXT,
+    UNIQUE(coin, direction, kind, break_at)
+);
+CREATE INDEX IF NOT EXISTS idx_structure_setups_state ON structure_setups(state, coin);

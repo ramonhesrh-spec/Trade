@@ -7,7 +7,7 @@ from app.replay import breakretest as br
 from app.replay.lab import make_bars
 
 
-def frame(minutes=60 * 24 * 6, seed=1, plant=False):
+def frame(minutes=60 * 24 * 6, seed=1, plant=False, cut=2400):
     rng = np.random.default_rng(seed)
     idx = pd.date_range("2026-03-02", periods=minutes, freq="1min", tz="UTC")
     p = 100 * np.exp(np.cumsum(rng.normal(0, 0.0003, len(idx))))
@@ -16,7 +16,6 @@ def frame(minutes=60 * 24 * 6, seed=1, plant=False):
         base = 100 + 0.0004 * t
         saw = 1.0 * np.sin(t / 60 * 2 * np.pi / 6)        # golf met periode 6 uur: zwaaipunten
         p = base + saw
-        cut = 2400
         p[cut:cut + 120] = p[cut - 1] - np.linspace(0, 2.5, 120)           # breuk
         p[cut + 120:cut + 240] = p[cut + 119] + np.linspace(0, 2.2, 120)    # terugkeer
         p[cut + 240:] = p[cut + 239] - np.linspace(0, 6, len(p) - cut - 240)  # val

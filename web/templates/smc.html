@@ -8,6 +8,32 @@
 </div>
 <p class="page-intro">SMC-setups die zich opbouwen, als handelsplan: de limietorder staat op de rand van de zone, met stop, doel en R:R vanaf die prijs. De status loopt live mee met de koers.</p>
 
+{% if structure_cards %}
+<section class="card" style="--i: 0">
+  <h3>Structuur-breuken (ongetest)</h3>
+  <p class="muted">Breuk van een lijn of range op 30m. Zet de limietorder op het niveau, de stop staat vast. Raakt de koers het niveau, dan volgt een signaal.</p>
+  <div class="radar-grid">
+    {% for c in structure_cards %}
+    <article class="radar-card" id="structuur-{{ c.id }}">
+      <header class="radar-head">
+        <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
+        <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
+        <span class="radar-state radar-state-open">Oordeel {{ c.grade }}</span>
+      </header>
+      <dl class="radar-facts">
+        <div><dt>Limietorder</dt><dd>{{ "%.4f"|format(c.plan.level) }}</dd></div>
+        <div><dt>Stop</dt><dd>{{ "%.4f"|format(c.plan.stop) }}</dd></div>
+        <div><dt>Risico</dt><dd>{{ "%.2f"|format(c.plan.risk_pct) }}%</dd></div>
+        {% for price, r in c.targets %}<div><dt>Doel {{ loop.index }}</dt><dd>{{ "%.4f"|format(price) }} ({{ "%g"|format(r) }}R)</dd></div>{% endfor %}
+      </dl>
+      <p class="muted">{{ c.reason }}</p>
+      <div class="radar-meta muted">{{ c.created_at | age }}</div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <section class="card" style="--i: 0">
   <h3>Wachten op de zone</h3>
   {% if not setup_cards %}

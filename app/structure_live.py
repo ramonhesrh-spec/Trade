@@ -1,0 +1,300 @@
+"""Structuur-setups live: het recept achter de handgetekende trades (breuk van een lijn of range op 30m, terugkeer naar het
+gebroken niveau, limietorder, stop net achter de terugkeer, ladder van doelen), gemeld vóórdat de trade uitspeelt.
+
+Drie stappen, elke 5 minuten in de SMC-snelcyclus:
+  1. Ontdekken: de detector uit app/replay/breakretest.py (zelfde code als de toets, alleen gesloten candles) vindt een verse
+     breuk. Claude geeft een oordeel A, B of C op de kwaliteit. Claude verzint geen prijzen: niveau, stop en doelen komen uit code.
+  2. Melden: A is een gewone melding, B een stille. Het plan staat erin: limietniveau, stop en doelen. C wordt bewaard en niet gemeld.
+  3. Volgen: raakt de koers het niveau, dan wordt het een gewoon signaal (trade_type 'structuur'), zodat journaal, uitkomst en Bewijs
+     werken zonder extra code. Keert de koers terug voorbij het niveau, dan vervalt de setup.
+
+Eerlijk over wat dit is: op een jaar candles scoorde de mechanische versie van dit recept -0,16R netto (zie scripts/breakretest_scan.py).
+Het oordeel van Claude moet dat verschil maken en dat is een hypothese. Alles gaat live met het label ongetest, Bewijs toont de
+score, en de motor gaat vanzelf uit als de laatste STRUCTURE_MAX_NEGATIVE afgeronde signalen samen negatief zijn."""
+import asyncio
+import json
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+import numpy as np
+import pandas as pd
+
+from app import config, repo
+from app.replay import breakretest as br
+from app.replay.lab import add_indicators
+from app.track_record import signal_r
+
+logger = logging.getLogger("structure_live")
+
+BAR = pd.Timedelta(minutes=br.BAR_MINUTES)
+CANDLES_SHOWN = 48
+REASON_MAX = 240
+GRADES = ("A", "B", "C")
+
+SYSTEM_PROMPT = (
+    "Je bent een ervaren daytrader die breuken van een lijn of range op de 30-minutengrafiek beoordeelt voor een eigen "
+    "handelsplan: breuk, terugkeer naar het gebroken niveau, limietorder daar, stop net erachter, doelen op liquiditeit. "
+    "De code heeft de cijfers al gecontroleerd en berekend: jij verzint of wijzigt geen prijs. Jij beoordeelt alleen de kwaliteit. "
+    "A: schone structuur (meerdere aanrakingen, duidelijke lijn of range), breuk met overtuiging, een logisch doel op minstens 3R, "
+    "en een terugkeer die waarschijnlijk is. B: bruikbaar maar met een zwak punt. C: overslaan (rommelig, te weinig ruimte tot het "
+    "doel, breuk zonder volume in een trage markt, of de breuk loopt tegen een sterke hogere trend in). Twijfel je, geef dan C. "
+    "Schrijf de reden in het Nederlands, in één of twee korte zinnen, zonder opsmuk."
+)
+TOOL = {
+    "name": "record_grade",
+    "description": "Leg het oordeel over deze structuur-setup vast.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"grade": {"type": "string", "enum": list(GRADES)},
+                       "reason": {"type": "string", "description": "Eén of twee korte zinnen, maximaal 240 tekens."}},
+        "required": ["grade", "reason"],
+    },
+}
+
+
+def _r(x: float) -> float:
+    return float(f"{x:.6g}")
+
+
+def line_value(setup: dict, at: pd.Timestamp) -> float:
+    """Waarde van de gebroken lijn op een tijdstip: de lijn loopt per 30m-candle door vanaf het eerste zwaaipunt."""
+    p1 = pd.Timestamp(setup["p1_at"])
+    return setup["line_a"] + setup["line_slope"] * ((at - p1) / BAR)
+
+
+def should_disable(results: list[dict], max_negative: int) -> bool:
+    """Zelfde regel als het markt-script: na genoeg afgeronde signalen die samen negatief zijn gaat de motor uit."""
+    if len(results) < max_negative:
+        return False
+    return sum(signal_r(r) or 0.0 for r in results) < 0
+
+
+def fresh_breaks(bars: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, np.ndarray, np.ndarray]:
+    """(bars met indicatoren, verse breuken, pivot-hoog, pivot-laag). Vers is een breuk die nog binnen het retest-venster ligt
+    en waarvan de koers het niveau sindsdien niet raakte of terug veroverde: dan staat de limietorder nog open."""
+    b = add_indicators(bars).reset_index(drop=True)
+    events = br.find_breaks(bars)
+    n = len(b)
+    keep = []
+    for ev in events.itertuples():
+        if ev.bar < n - 1 - br.RETEST_BARS or ev.bar >= n:
+            continue
+        sign = 1 if ev.direction == "long" else -1
+        alive = True
+        for j in range(ev.bar + 1, n):
+            level = br.level_at(ev, j)
+            touched = b.at[j, "high"] >= level if ev.direction == br.SHORT else b.at[j, "low"] <= level
+            reclaimed = -sign * (b.at[j, "close"] - level) > br.BREAK_ATR * ev.atr
+            if touched or reclaimed:
+                alive = False
+                break
+        if alive:
+            keep.append(ev.Index)
+    p_high, p_low = br._pivots(b)
+    return b, events.loc[keep].reset_index(drop=True), p_high, p_low
+
+
+def plan_for(ev, b: pd.DataFrame, levels: list[float], level: float, extreme: float) -> Optional[dict]:
+    """Stop en doelen uit code. None als de stopafstand buiten het toegestane bereik valt of er geen doel ligt."""
+    short = ev.direction == br.SHORT
+    stop = max(level, extreme) + br.STOP_ATR * ev.atr if short else min(level, extreme) - br.STOP_ATR * ev.atr
+    risk = abs(level - stop)
+    risk_pct = risk / level * 100
+    if not (br.MIN_STOP_PCT <= risk_pct <= br.MAX_STOP_PCT) or (short and level >= stop) or (not short and level <= stop):
+        return None
+    ladder = br.ladder_targets(ev.direction, level, risk, "niveaus", levels) or br.ladder_targets(ev.direction, level, risk, "ladder 1-2-3R", levels)
+    r_list = ladder[0]
+    sign = -1 if short else 1
+    return {"level": level, "stop": stop, "risk_pct": risk_pct, "targets_r": list(r_list),
+            "targets": [level + sign * risk * r for r in r_list], "from_levels": r_list != (1.0, 2.0, 3.0)}
+
+
+def take_profit_of(plan: dict) -> float:
+    """Het signaal meet één doel: het tweede van de ladder (of het eerste als er maar één is). De ladder staat in de melding."""
+    targets = plan["targets"]
+    return targets[1] if len(targets) > 1 else targets[0]
+
+
+def judge_context(coin: str, ev, b: pd.DataFrame, plan: dict) -> dict:
+    tail = b.tail(CANDLES_SHOWN)
+    median_vol = float(b["volume"].tail(100).median()) or 1.0
+    return {
+        "coin": coin, "kant": ev.direction, "soort": "horizontale range" if ev.kind == "RANGE" else "schuine lijn",
+        "aanrakingen": int(ev.touches), "lengte_candles": int(ev.span), "breukvolume_x_gemiddeld": _r(ev.vol_ratio),
+        "met_trend_ema21_200": bool(ev.with_trend), "atr_30m_pct": _r(ev.atr / float(b["close"].iloc[-1]) * 100),
+        "plan": {"limiet": _r(plan["level"]), "stop": _r(plan["stop"]), "risico_pct": _r(plan["risk_pct"]),
+                 "doelen": [_r(t) for t in plan["targets"]], "doelen_in_R": [_r(r) for r in plan["targets_r"]],
+                 "doelen_zijn_zwaaipunten": bool(plan["from_levels"])},
+        "laatste_candles_30m": [[c.timestamp.strftime("%d %H:%M"), _r(c.open), _r(c.high), _r(c.low), _r(c.close),
+                                 _r(c.volume / median_vol)] for c in tail.itertuples()],
+        "kolommen": "tijd UTC, open, hoog, laag, slot, volume relatief aan de mediaan",
+    }
+
+
+def call_claude(context: dict) -> dict:
+    import anthropic
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    response = client.messages.create(
+        model=config.STRUCTURE_MODEL, max_tokens=400, system=SYSTEM_PROMPT, tools=[TOOL],
+        tool_choice={"type": "tool", "name": "record_grade"},
+        messages=[{"role": "user", "content": json.dumps(context, ensure_ascii=False)}],
+    )
+    return next(blk for blk in response.content if blk.type == "tool_use").input
+
+
+def parse_grade(payload: dict) -> tuple[Optional[str], str]:
+    grade = str(payload.get("grade", "")).strip().upper()
+    return (grade if grade in GRADES else None), str(payload.get("reason", "")).strip()[:REASON_MAX]
+
+
+def alert_body(setup: dict, plan: dict) -> str:
+    from app import push_notify
+    rr = abs(plan["targets"][0] - plan["level"]) / abs(plan["level"] - plan["stop"])
+    targets = " · ".join(f"{push_notify.fmt_price(t)} ({r:g}R)" for t, r in zip(plan["targets"], plan["targets_r"]))
+    kind = "Range" if setup["kind"] == "RANGE" else "Lijn"
+    return push_notify.trade_body("Limietorder", plan["level"], plan["stop"], take_profit_of(plan), None,
+                                  f"Doelen {targets}", f"{kind} gebroken op 30m. {setup['reason'] or ''}".strip(),
+                                  "Ongetest, zie Bewijs.")
+
+
+async def _push_all(title: str, body: str, url: str, tag: str, loud: bool) -> None:
+    from app import push_notify
+    for user in repo.list_users():
+        quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        try:
+            await push_notify.send_push(user["id"], title, body, url, silent=quiet or not loud, tag=tag)
+        except Exception:
+            logger.exception("Structuur-melding voor %s naar gebruiker %s is mislukt", tag, user["username"])
+
+
+async def _discover(coin: str, now: datetime) -> None:
+    from app import exchange, push_notify
+    df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="30m", limit=300)
+    closed = df[df["timestamp"] + BAR <= pd.Timestamp(now)].reset_index(drop=True)
+    if len(closed) < br.LOOKBACK + 20:
+        return
+    b, events, p_high, p_low = fresh_breaks(closed)
+    n = len(b)
+    for ev in events.itertuples():
+        break_at = (b.at[ev.bar, "timestamp"] + BAR).isoformat()
+        next_start = b.at[n - 1, "timestamp"] + BAR
+        level = br.level_at(ev, n)
+        extreme = float(b["high" if ev.direction == br.SHORT else "low"].iloc[ev.bar:n].agg("max" if ev.direction == br.SHORT else "min"))
+        levels = br.known_levels(b, p_high, p_low, ev.direction, ev.bar)
+        plan = plan_for(ev, b, levels, level, extreme)
+        if plan is None:
+            continue
+        row = {"coin": coin, "direction": ev.direction, "kind": ev.kind, "break_at": break_at,
+               "p1_at": b.at[ev.p1, "timestamp"].isoformat(), "line_a": ev.a, "line_slope": ev.slope, "atr": ev.atr,
+               "grade": None, "reason": None, "state": "oordeel",
+               "features": json.dumps({"vol_ratio": ev.vol_ratio, "span": int(ev.span), "touches": int(ev.touches),
+                                       "with_trend": bool(ev.with_trend)}),
+               "expires_at": (next_start + br.RETEST_BARS * BAR).isoformat(),
+               "plan": json.dumps({**plan, "levels": levels, "break_extreme": extreme})}
+        setup_id = repo.insert_structure_setup(row)
+        if setup_id is None:
+            continue
+        try:
+            grade, reason = parse_grade(await asyncio.to_thread(call_claude, judge_context(coin, ev, b, plan)))
+        except Exception:
+            logger.exception("Oordeel van Claude voor %s is mislukt", coin)
+            grade, reason = None, ""
+        if grade is None:
+            repo.update_structure_judgement(setup_id, None, reason, "geen_oordeel")
+            continue
+        capped = repo.count_structure_alerts_since((now - timedelta(hours=24)).isoformat()) >= config.STRUCTURE_MAX_ALERTS_PER_DAY
+        state = "waiting" if grade in ("A", "B") and not capped else "niet_gemeld"
+        repo.update_structure_judgement(setup_id, grade, reason, state)
+        logger.info("Structuur %s %s %s: oordeel %s (%s)", coin, ev.direction, ev.kind, grade, state)
+        if state == "waiting":
+            setup = {**row, "id": setup_id, "reason": reason}
+            await _push_all(push_notify.alert_title(coin, ev.direction, f"Structuur {grade} (ongetest)"), alert_body(setup, plan),
+                            f"/smc#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A")
+
+
+async def _fire(setup: dict, plan: dict, entry: float, stop: float) -> None:
+    from app import push_notify
+    from app.signal_processor import fanout_confirmed_signal
+    coin, direction = setup["coin"], setup["direction"]
+    fired = {**plan, "level": entry, "stop": stop}
+    risk = abs(entry - stop)
+    sign = -1 if direction == br.SHORT else 1
+    fired["targets"] = [entry + sign * risk * r for r in plan["targets_r"]]
+    take = take_profit_of(fired)
+    reason = f"Structuur {setup['grade']}: {setup['kind'].lower()} gebroken op 30m, terugkeer naar {push_notify.fmt_price(entry)}. {setup['reason'] or ''}".strip()
+    signal_id = repo.insert_signal({
+        "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "structuur",
+        "pattern_name": "Structuur", "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None,
+        "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None,
+        "hard_gates_ok": 1, "confidence": f"Structuur {setup['grade']} (ongetest)", "reason": reason, "stop_loss": stop,
+        "take_profit": take, "context_note": None, "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None,
+        "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
+    })
+    repo.set_structure_state(setup["id"], "fired", signal_id)
+    rr = abs(take - entry) / risk
+    targets = " · ".join(f"{push_notify.fmt_price(t)} ({r:g}R)" for t, r in zip(fired["targets"], plan["targets_r"]))
+    await fanout_confirmed_signal(
+        signal_id, coin, direction, entry, stop, take, entry,
+        title=push_notify.alert_title(coin, direction, f"Structuur {setup['grade']} gevuld"),
+        make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, f"Doelen {targets}", "Limiet geraakt, de trade loopt.",
+                                                    "Ongetest, zie Bewijs."),
+        reason=reason, signal_type="structuur",
+    )
+
+
+async def _track(now: datetime) -> None:
+    from app import exchange
+    waiting = repo.list_structure_setups(("waiting",))
+    for coin in sorted({s["coin"] for s in waiting}):
+        try:
+            df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="5m", limit=80)
+        except Exception:
+            logger.exception("5m-candles voor %s niet op te halen, setups blijven wachten", coin)
+            continue
+        for s in (x for x in waiting if x["coin"] == coin):
+            plan = json.loads(s["plan"])
+            after = df[df["timestamp"] >= pd.Timestamp(s["break_at"])]
+            extreme = plan["break_extreme"]
+            for c in after.itertuples():
+                level = line_value(s, c.timestamp)
+                # Een koers die voorbij het niveau gaat raakt het niveau ook: een limietorder daar vult dan, dus er is geen
+                # aparte "teruggewonnen"-tak. Een mislukte breuk eindigt zo meteen in de stop, zoals de toets het ook meet.
+                reach = c.high >= level if s["direction"] == br.SHORT else c.low <= level
+                if reach:
+                    stop = max(level, extreme) + br.STOP_ATR * s["atr"] if s["direction"] == br.SHORT else min(level, extreme) - br.STOP_ATR * s["atr"]
+                    risk_pct = abs(level - stop) / level * 100
+                    if br.MIN_STOP_PCT <= risk_pct <= br.MAX_STOP_PCT:
+                        try:
+                            await _fire(s, plan, level, stop)
+                        except Exception:
+                            logger.exception("Structuur-setup %s voor %s is niet gemeld", s["id"], coin)
+                    else:
+                        repo.set_structure_state(s["id"], "overgeslagen")
+                    break
+                extreme = max(extreme, c.high) if s["direction"] == br.SHORT else min(extreme, c.low)
+
+
+async def run(now: Optional[datetime] = None) -> None:
+    """Draait in de SMC-snelcyclus."""
+    now = now or datetime.now(timezone.utc)
+    repo.expire_structure_setups(now.isoformat())
+    if not config.STRUCTURE_ENABLED or should_disable(repo.list_type_results("structuur", config.STRUCTURE_MAX_NEGATIVE),
+                                                      config.STRUCTURE_MAX_NEGATIVE):
+        return
+    symbols = {c["symbol"] for c in repo.list_coins()}
+    for coin in config.BASE_COINS:
+        if coin not in symbols:
+            continue
+        try:
+            await _discover(coin, now)
+        except Exception:
+            logger.exception("Structuur-check voor %s is mislukt", coin)
+    await _track(now)
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    from app import db
+    db.init_db()
+    asyncio.run(run())

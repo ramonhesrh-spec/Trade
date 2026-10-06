@@ -6,6 +6,7 @@ uvicorn web.main:app --host 0.0.0.0 --port 8000
 import asyncio
 import csv
 import io
+import json
 import logging
 import re
 import sys
@@ -281,6 +282,15 @@ async def _radar_cards() -> list[dict]:
     return cards
 
 
+def _structure_cards() -> list[dict]:
+    """Wachtende structuur-setups met hun plan, voor de Radar (app/structure_live.py)."""
+    cards = []
+    for s in repo.list_structure_setups(("waiting",), 12):
+        plan = json.loads(s["plan"])
+        cards.append({**s, "plan": plan, "targets": list(zip(plan["targets"], plan["targets_r"]))})
+    return cards
+
+
 @app.get("/smc")
 async def smc_page(request: Request, user: dict = Depends(require_login)):
     """Trade Radar: bouwende setups en open SMC-signalen als handelsplan met prijsladder en live status (de limietorder
@@ -301,6 +311,7 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     return templates.TemplateResponse(request, "smc.html", {
         "user": user,
         "setup_cards": [c for c in cards if c["kind"] == "setup"],
+        "structure_cards": _structure_cards(),
         "signal_cards": [c for c in cards if c["kind"] == "signal"],
         "entries": entries,
     })
@@ -320,7 +331,7 @@ async def _vandaag_context() -> dict:
         at = datetime.fromisoformat(e["at"])
         events.append({**e, "time": today.local(at if at.tzinfo else at.replace(tzinfo=timezone.utc)).strftime("%H:%M")})
     summary = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
-    score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc") or e["source"] == "alles"]
+    score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur") or e["source"] == "alles"]
     for e in score:
         e["spark"] = Markup(track_record.sparkline_svg(e["cumulative"], width=180, height=36))
     return {

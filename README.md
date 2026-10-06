@@ -384,6 +384,13 @@ sudo systemctl start crypto-news.service crypto-script.service
   SMC-snelcyclus: een voorwaarde die klopt wordt een gewoon signaal met `trade_type = 'script'` en het label ongetest. Max
   `SCRIPT_MAX_ALERTS_PER_DAY` (6) meldingen per dag. Gaat vanzelf uit als de laatste `SCRIPT_MAX_NEGATIVE` (30) afgeronde
   scenario's samen negatief zijn. `SCRIPT_ENABLED=false` zet het uit. Model: `SCRIPT_MODEL` (standaard `ANTHROPIC_MODEL`).
+- `app/structure_live.py`: breuk van een lijn of range op 30m (detector uit `app/replay/breakretest.py`, alleen gesloten candles).
+  Claude geeft een oordeel A, B of C; de code berekent niveau, stop en doelen. A is een melding, B een stille melding, C wordt
+  bewaard. Het plan staat in de melding en op Radar (`/smc#structuur-<id>`), vóórdat de limiet vult. Raakt de koers het niveau,
+  dan volgt een signaal met `trade_type = 'structuur'` (label ongetest, score op Bewijs). Max `STRUCTURE_MAX_ALERTS_PER_DAY` (8)
+  per dag. Gaat vanzelf uit na `STRUCTURE_MAX_NEGATIVE` (30) afgeronde signalen die samen negatief zijn. `STRUCTURE_ENABLED=false`
+  zet het uit. De mechanische versie scoorde -0,16R netto op een jaar candles (`scripts/breakretest_scan.py`): het oordeel van
+  Claude moet dat verschil maken, en dat is een hypothese die Bewijs toetst.
 - `app/news.py`: RSS (CoinDesk, Cointelegraph, The Block) en Binance-aankondigingen, elke 10 minuten, gesorteerd door
   `ANTHROPIC_EXPLAIN_MODEL`. Een bron die niet antwoordt wordt overgeslagen.
 - `/vandaag` is de nieuwe startpagina: scripts, agenda van 24 uur, liquidaties van het laatste uur, nieuws en de score van
