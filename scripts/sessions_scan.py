@@ -36,12 +36,24 @@ def cost_leverage(trades: pd.DataFrame, cut: pd.Timestamp) -> None:
     for cost in (2.0, 3.0, 4.0, 6.0):
         net = follow["gross_bp"] - cost
         print(f"  kosten {cost:.0f} bp: netto {net.mean():+.1f} bp, train {net[follow['at'] < cut].mean():+.1f}, test {net[follow['at'] >= cut].mean():+.1f}")
+    print("  Met de echte Kraken-tarieven per type uitgang (instap met een stop-order is een taker, het doel een limiet, de stop weer een taker, 1 bp slippage op elke taker):")
+    scenarios = {
+        "basis (maker 2, taker 5)": (6.0, 2.0, 6.0),
+        "10 miljoen per maand (1,5 en 4)": (5.0, 1.5, 5.0),
+        "25 miljoen per maand (1 en 3)": (4.0, 1.0, 4.0),
+        "100 miljoen per maand (0 en 2)": (3.0, 0.0, 3.0),
+    }
+    won = follow["win"].to_numpy()
+    for name, (entry_bp, tp_bp, stop_bp) in scenarios.items():
+        cost = entry_bp + np.where(won, tp_bp, stop_bp)
+        net = follow["gross_bp"].to_numpy() - cost
+        print(f"    {name:<34} gemiddelde kosten {cost.mean():>5.1f} bp  netto {net.mean():+6.1f} bp  train {net[(follow['at'] < cut).to_numpy()].mean():+6.1f}  test {net[(follow['at'] >= cut).to_numpy()].mean():+6.1f}")
     follow["stop"] = pd.qcut(follow["risk_pct"].rank(method="first"), 3, labels=["krappe stop", "middel", "ruime stop"])
     print("  Per stopgrootte (kosten 6 bp):")
     for name, g in follow.groupby("stop", observed=True):
         print(f"    {name:<12} stop {g['risk_pct'].median():.2f}%  n {len(g):>4}  bruto {g['gross_bp'].mean():+6.1f} bp  netto {g['gross_bp'].mean() - 6:+6.1f} bp  netto R {g['r_net'].mean():+.2f}")
     print("  Per coin (bruto bp):", ", ".join(f"{c} {g['gross_bp'].mean():+.1f}" for c, g in follow.groupby("coin")))
-    q = follow.groupby(follow["at"].dt.to_period("Q"))["gross_bp"].agg(["mean", "count"])
+    q = follow.groupby(follow["at"].dt.tz_localize(None).dt.to_period("Q"))["gross_bp"].agg(["mean", "count"])
     print("  Per kwartaal (bruto bp):", ", ".join(f"{k} {v['mean']:+.1f} (n {int(v['count'])})" for k, v in q.iterrows()))
 
 
