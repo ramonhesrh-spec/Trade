@@ -1,0 +1,16 @@
+[Unit]
+Description=HesPulse - liquidaties verzamelen (Binance futures-stroom)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=crypto
+WorkingDirectory=/opt/crypto-alerts
+EnvironmentFile=/opt/crypto-alerts/.env
+ExecStart=/opt/crypto-alerts/.venv/bin/python3 -m app.liquidations
+Restart=always
+RestartSec=10
+Nice=10
+
+[Install]
+WantedBy=multi-user.target

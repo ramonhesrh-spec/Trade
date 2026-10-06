@@ -2540,3 +2540,24 @@ def list_samenval_results(limit: int = 30) -> list[dict]:
                ORDER BY s.auto_outcome_at DESC LIMIT ?""", (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def add_liquidations(rows: list[tuple]) -> None:
+    """Telt (coin, bucket, long_usd, short_usd, n) op bij wat er al staat voor die coin en dat 5-minutenblok."""
+    if not rows:
+        return
+    with db.session() as conn:
+        conn.executemany(
+            """INSERT INTO liquidations_5m (coin, bucket, long_usd, short_usd, n) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(coin, bucket) DO UPDATE SET long_usd = long_usd + excluded.long_usd,
+               short_usd = short_usd + excluded.short_usd, n = n + excluded.n""", rows,
+        )
+
+
+def list_liquidations(coin: str, since_iso: str) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT bucket, long_usd, short_usd, n FROM liquidations_5m WHERE coin = ? AND bucket >= ? ORDER BY bucket",
+            (coin, since_iso),
+        ).fetchall()
+        return [dict(r) for r in rows]

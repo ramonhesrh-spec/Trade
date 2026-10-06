@@ -357,6 +357,19 @@ toetsen. Binance geeft maar ~30 dagen history; elke dag zonder verzamelaar is vo
 Herstart `crypto-bot` en `crypto-web` na een wijziging. De derivatenverzamelaar pakt de nieuwe coins vanzelf mee. Een coin
 weghalen kan door hem uit `EXTRA_COINS` te halen: de coin gaat op inactief, er gaat niets verloren.
 
+### Marktbrein, deel A: liquidaties en kalender
+
+```bash
+sudo cp deploy/crypto-liq.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-liq.service
+```
+
+`app/liquidations.py` bewaart gedwongen sluitingen op Binance futures per coin per 5 minuten in `liquidations_5m`. De stroom
+bestaat alleen live, dus laat dit proces altijd draaien. `app/market_calendar.py` levert voorspelbare momenten (funding,
+opening VS-beurs, opties-expiry); CPI en FOMC zet je zelf in `data/macro_events.csv` (kolommen `at`, `label`). Toets de
+momenten met `python3 scripts/calendar_scan.py`. Zie `docs/superpowers/specs/2026-10-06-marktbrein-design.md`.
+
 ### Samenval en alleen-informatie per soort
 
 Samenval (`app/samenval.py`): een SMC-signaal en een community-call (day_trading) op dezelfde coin en kant binnen

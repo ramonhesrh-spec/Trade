@@ -105,9 +105,10 @@ def _stats(x: np.ndarray) -> tuple[float, float]:
     return float(x.mean()), float(x.mean() / (sd / np.sqrt(len(x)))) if sd > 0 else 0.0
 
 
-def evaluate(closes: pd.DataFrame, cost_bps: float, seed: int = 0) -> list[Row]:
-    """cost_bps is de rondreis in basispunten (0,06% = 6). Volgen en tegenhandelen delen dezelfde signalen."""
-    ev = events(closes)
+def evaluate(closes: pd.DataFrame, cost_bps: float, seed: int = 0, ev: Optional[pd.DataFrame] = None) -> list[Row]:
+    """cost_bps is de rondreis in basispunten (0,06% = 6). Volgen en tegenhandelen delen dezelfde signalen.
+    `ev` mag eigen signalen bevatten (zie calendar_events), anders worden de drie standaardideeën gebruikt."""
+    ev = events(closes) if ev is None else ev
     if ev.empty:
         return []
     cut = closes.index[int(len(closes) * 0.7)]
@@ -145,3 +146,43 @@ def evaluate(closes: pd.DataFrame, cost_bps: float, seed: int = 0) -> list[Row]:
 def passes(r: Row, min_n: int = 30) -> bool:
     return (r.n_train >= min_n and r.n_test >= min_n and r.train_net is not None and r.test_net is not None
             and r.train_net > 0 and r.test_net > 0 and r.t > 2.0)
+
+
+PRE_BARS = 6        # de 30 minuten voor een moment bepalen de richting
+
+
+def calendar_events(closes: pd.DataFrame, moments: list[dict]) -> pd.DataFrame:
+    """Per moment en coin een signaal op de eerste gesloten candle op of na het moment. Richting is de kant van de
+    beweging in de 30 minuten ervoor: volgen betekent doorgaan met die kant, tegenhandelen is de omkering."""
+    rows = []
+    pre = closes.pct_change(PRE_BARS)
+    for m in moments:
+        at = pd.Timestamp(m["at"])
+        i = closes.index.searchsorted(at)
+        if i >= len(closes) or closes.index[i] - at > pd.Timedelta(minutes=5):
+            continue
+        bar = closes.index[i]
+        for coin in closes.columns:
+            r = pre.at[bar, coin]
+            if pd.notna(r) and r != 0:
+                rows.append((bar, coin, m["kind"], int(np.sign(r))))
+    return pd.DataFrame(rows, columns=["at", "coin", "idee", "richting"])
+
+
+def vol_multiple(closes: pd.DataFrame, moments: list[dict], bars: int = 12) -> dict:
+    """Hoeveel groter de beweging in het uur na een soort moment is dan in een gewoon uur (gemiddelde absolute move)."""
+    base = closes.pct_change(bars).shift(-bars).abs()
+    typical = float(np.nanmean(base.to_numpy()))
+    out = {}
+    for kind in {m["kind"] for m in moments}:
+        vals = []
+        for m in moments:
+            if m["kind"] != kind:
+                continue
+            i = closes.index.searchsorted(pd.Timestamp(m["at"]))
+            if i < len(closes):
+                v = base.iloc[i].mean()
+                if pd.notna(v):
+                    vals.append(float(v))
+        out[kind] = float(np.mean(vals) / typical) if vals and typical else float("nan")
+    return out

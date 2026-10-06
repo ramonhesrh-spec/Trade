@@ -504,6 +504,17 @@ CREATE TABLE IF NOT EXISTS smc_setups (
 );
 CREATE INDEX IF NOT EXISTS idx_smc_setups_coin ON smc_setups(coin);
 
+-- Gedwongen sluitingen (liquidaties) op Binance futures, per coin opgeteld per 5 minuten. long_usd is de waarde aan
+-- longs die geliquideerd werd, short_usd die aan shorts. Gevuld door app/liquidations.py (live stream, geen history).
+CREATE TABLE IF NOT EXISTS liquidations_5m (
+    coin TEXT NOT NULL,
+    bucket TEXT NOT NULL,
+    long_usd REAL NOT NULL DEFAULT 0,
+    short_usd REAL NOT NULL DEFAULT 0,
+    n INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (coin, bucket)
+);
+
 -- Samenval: een SMC-signaal en een community-call op dezelfde coin en kant binnen het venster. Eén rij per
 -- SMC-signaal (UNIQUE) zodat er nooit twee keer gemeld wordt; de uitkomst staat op het signaal zelf.
 CREATE TABLE IF NOT EXISTS samenvallen (
