@@ -1,0 +1,90 @@
+import unittest
+from datetime import date
+
+import numpy as np
+import pandas as pd
+
+from app.replay import sessions as ss
+
+
+def frame(days=30, plant=None, seed=4):
+    rng = np.random.default_rng(seed)
+    idx = pd.date_range("2026-06-01", periods=days * 1440, freq="1min", tz="UTC")       # begint op een maandag
+    p = 100 + np.cumsum(rng.normal(0, 0.01, len(idx)))
+    df = pd.DataFrame({"timestamp": idx, "open": p, "high": p + 0.02, "low": p - 0.02, "close": p, "volume": 1.0})
+    if plant == "orb_up":       # elke werkdag: rustige opening range, daarna een stijging
+        for d in range(1, days - 1):
+            day = idx[0].normalize() + pd.Timedelta(days=d)
+            if day.weekday() >= 5:
+                continue
+            t0 = ss.session_times(day.date())["ny"][0]
+            i = df.index[df["timestamp"] == t0][0]
+            df.loc[i:i + 29, ["open", "high", "low", "close"]] = 100.0
+            df.loc[i:i + 29, "high"] = 100.2
+            df.loc[i:i + 29, "low"] = 99.8
+            ramp = 100.0 + np.linspace(0.05, 2.5, 150)
+            df.loc[i + 30:i + 179, "close"] = ramp
+            df.loc[i + 30:i + 179, "open"] = np.concatenate([[100.0], ramp[:-1]])
+            df.loc[i + 30:i + 179, "high"] = ramp + 0.02
+            df.loc[i + 30:i + 179, "low"] = np.concatenate([[100.0], ramp[:-1]]) - 0.02
+    return df
+
+
+class SessionsTest(unittest.TestCase):
+    def test_session_times_follow_daylight_saving(self):
+        summer = ss.session_times(date(2026, 6, 3))
+        winter = ss.session_times(date(2026, 1, 14))
+        self.assertEqual(summer["ny"][0], pd.Timestamp("2026-06-03 13:30", tz="UTC"))
+        self.assertEqual(winter["ny"][0], pd.Timestamp("2026-01-14 14:30", tz="UTC"))
+        self.assertEqual(summer["london"][0], pd.Timestamp("2026-06-03 07:00", tz="UTC"))
+        self.assertEqual(winter["london"][0], pd.Timestamp("2026-01-14 08:00", tz="UTC"))
+
+    def test_orb_follow_wins_on_planted_breakouts_and_mirror_loses(self):
+        f = frame(plant="orb_up")
+        t = pd.DataFrame(ss.orb_trades("BTC", f))
+        self.assertGreater(len(t), 10)
+        follow = t[(t["variant"] == "ORB mee") & (t["rr"] == 1.0)]
+        mirror = t[(t["variant"] == "ORB spiegel") & (t["rr"] == 1.0)]
+        self.assertGreater(follow["r_net"].mean(), 0.5)
+        self.assertLess(mirror["r_net"].mean(), -0.5)
+
+    def test_random_walk_has_no_orb_edge(self):
+        t = pd.DataFrame(ss.orb_trades("BTC", frame(days=120)))
+        if t.empty:
+            return
+        rows = ss.summarize(t, t["at"].quantile(0.7))
+        self.assertFalse([r for r in rows if r["variant"] == "ORB mee" and ss.passes(r)])
+
+    def test_sweep_of_london_high_is_found_and_faded(self):
+        f = frame(days=10)
+        day = pd.Timestamp("2026-06-03", tz="UTC")                      # woensdag
+        t = ss.session_times(day.date())
+        f.loc[(f["timestamp"] >= t["london"][0]) & (f["timestamp"] < t["london"][1]), ["open", "high", "low", "close"]] = 100.0
+        f.loc[(f["timestamp"] >= t["london"][0]) & (f["timestamp"] < t["london"][1]), "high"] = 100.5
+        f.loc[(f["timestamp"] >= t["london"][0]) & (f["timestamp"] < t["london"][1]), "low"] = 99.9
+        i = f.index[f["timestamp"] == t["london"][1] + pd.Timedelta(minutes=20)][0]       # 20 minuten na het einde van London
+        f.loc[i:i + 4, ["open", "close"]] = 100.2
+        f.loc[i:i + 4, "high"] = 100.2
+        f.loc[i + 4, "high"] = 101.0                                      # prik door 100,5, slot terug eronder
+        f.loc[i + 4, "close"] = 100.2
+        fall = 100.2 - np.linspace(0.05, 2.0, 120)
+        f.loc[i + 5:i + 124, "close"] = fall
+        f.loc[i + 5:i + 124, "open"] = np.concatenate([[100.2], fall[:-1]])
+        f.loc[i + 5:i + 124, "high"] = np.concatenate([[100.2], fall[:-1]]) + 0.02
+        f.loc[i + 5:i + 124, "low"] = fall - 0.02
+        trades = pd.DataFrame(ss.sweep_trades("BTC", f))
+        fade = trades[(trades["variant"] == "SWEEP fade") & (trades["rr"] == 1.0)]
+        self.assertGreaterEqual(len(fade), 1)
+        self.assertTrue(fade["win"].any())
+
+    def test_sweep_and_london_and_hours_run(self):
+        f = frame(days=40)
+        ss.sweep_trades("BTC", f)
+        lon = ss.london_to_ny("BTC", f)
+        self.assertEqual(set(lon["variant"]), {"LONDON mee 60m", "LONDON tegen 60m", "LONDON mee 120m", "LONDON tegen 120m"})
+        hm = ss.hour_map({"BTC": f}, f["timestamp"].iloc[len(f) // 2])
+        self.assertEqual(len(hm), 24)
+
+
+if __name__ == "__main__":
+    unittest.main()
