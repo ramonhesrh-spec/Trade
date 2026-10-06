@@ -20,6 +20,8 @@ CREATE TABLE IF NOT EXISTS users (
     -- uren, altijd geluid bij een bevestigde kans (het bestaande gedrag).
     quiet_hours_start TEXT,
     quiet_hours_end TEXT,
+    -- Eigen bedrag in euro dat jij per trade riskeert (de waarde van 1R). Alleen voor weergave op de kaarten, nooit voor orders. NULL = niet ingevuld.
+    risk_per_trade_eur REAL,
     -- Drempel (percentage) waarboven de gepoolde factoren voor DEZE
     -- gebruiker als "bevestigd" tellen. De twee harde eisen (Uitgerektheid,
     -- BTC-trend) blijven voor iedereen hard, dit percentage geldt alleen

@@ -128,6 +128,8 @@ auth is a JWT in a cookie (`app/security.py`), checked via the
 
 **Radar and Bewijs.** `/smc` (nav label "Radar") and `/bewijs` render from pure functions in `app/trade_plan.py`, `app/radar.py` and `app/track_record.py`; keep the maths there, not in templates or `web/main.py`. `/bewijs` must stay honest: only `take_profit`/`stop_loss` outcomes count in winrate and R, expired/open are shown beside them, never dropped silently. SMC alert text comes from `market_scanner.format_smc_body`.
 
+**Kansen en kaarten.** Elke kans die nog niet gevuld is toont dezelfde drie stappen (`app/chance_steps.py`, macro `steps_list`): wacht, zet de limietorder, stop en doel. Gemeten kenmerken per kans (✓/✗ en een score in `pass_pct`) komen uit `app/chance_checks.py`; ze beschrijven de kans en Bewijs toont per soort of een hoge score vaker wint (`track_record.score_split`), neem ze dus nooit als bewezen voorspeller op. Een stop onder `SMC_MIN_STOP_PCT` wordt verbreed met `smc_eval.floor_stop`, nooit geweigerd.
+
 **Marktbrein.** `/vandaag` (startpagina) komt uit `app/today.py` (pure weergavefuncties), `app/market_script.py` (scenario's van Claude met harde toets en
 een motor die ze tot gewone signalen maakt, `trade_type = 'script'`), `app/news.py`, `app/liquidations.py` en `app/market_calendar.py`. Alles wat Claude
 levert is een hypothese: valideer in code, label ongetest, laat Bewijs de score tonen. Voeg geen getal toe aan Vandaag dat niet gemeten is (zie

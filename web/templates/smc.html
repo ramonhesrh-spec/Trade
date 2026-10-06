@@ -24,12 +24,8 @@
       </header>
       <div class="radar-state radar-state-{{ c.state or 'laden' }}" data-radar="state">{{ c.state_label }}</div>
       <div class="radar-ladder" data-radar="ladder">{{ c.ladder }}</div>
-      <dl class="radar-facts">
-        <div><dt>Limietorder</dt><dd>{{ "%.4f"|format(c.plan.limit) }}</dd></div>
-        <div><dt>R:R vanaf limiet</dt><dd>{{ "%.1f"|format(c.plan.rr) }}</dd></div>
-        <div><dt title="Afstand van de instap tot je stop. Raakt de stop, dan verlies je zoveel procent van de koers.">Stopafstand</dt><dd>{{ "%.2f"|format(c.plan.risk_pct) }}%</dd></div>
-        <div><dt>Afstand tot limiet</dt><dd data-radar="distance">{% if c.distance_pct is not none %}{{ "%+.2f"|format(c.distance_pct) }}%{% else %}-{% endif %}</dd></div>
-      </dl>
+      {{ macros.steps_list(c.steps, user.risk_per_trade_eur) }}
+      {{ macros.share_button(c.coin, c.direction, c.steps) }}
       <details class="confidence-detail js-accordion">
         <summary>Waarom</summary>
         <p class="muted">
@@ -61,6 +57,11 @@
       </header>
       <div class="radar-state radar-state-open" data-radar="state">{{ c.state_label }}</div>
       <div class="radar-ladder" data-radar="ladder">{{ c.ladder }}</div>
+      {% set pos = [[((c.live_r if c.live_r is not none else 0) + 1) / (c.rr + 1) * 100, 0]|max, 100]|min %}
+      <div class="r-progress" data-rr="{{ c.rr }}" role="img" aria-label="Voortgang tussen stop en doel">
+        <span class="r-progress-mark{% if c.live_r is not none and c.live_r < 0 %} neg{% elif c.live_r is not none and c.live_r > 0 %} pos{% endif %}" data-radar="progress" style="left: {{ "%.1f"|format(pos) }}%"></span>
+        <span class="r-progress-end start">Stop −1R</span><span class="r-progress-zero" style="left: {{ "%.1f"|format(100 / (c.rr + 1)) }}%"></span><span class="r-progress-end end">Doel +{{ "%.1f"|format(c.rr) }}R</span>
+      </div>
       <dl class="radar-facts">
         <div><dt>Entry</dt><dd>{{ "%.4f"|format(c.signal.price) }}</dd></div>
         <div><dt>R:R bij entry</dt><dd>{{ "%.1f"|format(c.rr) }}</dd></div>

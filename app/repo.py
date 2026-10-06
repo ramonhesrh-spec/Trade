@@ -948,6 +948,12 @@ def update_user_settings(
         )
 
 
+def set_risk_per_trade_eur(user_id: int, amount: Optional[float]) -> None:
+    """Het bedrag dat de gebruiker per trade riskeert, alleen om op de kaarten 'verlies bij de stop' in euro te tonen."""
+    with db.session() as conn:
+        conn.execute("UPDATE users SET risk_per_trade_eur = ? WHERE id = ?", (amount, user_id))
+
+
 def update_confirm_threshold(user_id: int, threshold_pct: float) -> None:
     """Zet confirm_threshold_set_at mee op het huidige moment: Task 9's
     onboarding-check leest dit veld om te weten of een gebruiker de drempel

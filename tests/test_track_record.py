@@ -100,3 +100,15 @@ class SamenvalGroupTest(unittest.TestCase):
         self.assertEqual(out[("scan", "samenval")]["resolved"], 1)
         self.assertEqual(out[("scan", "smc")]["resolved"], 2)
         self.assertEqual(out[("alles", "alles")]["resolved"], 2)
+
+
+class DaySummaryTests(unittest.TestCase):
+    def test_telt_gemeld_afgerond_en_netto_r_sinds_een_moment(self):
+        since = datetime(2026, 10, 5, 0, tzinfo=timezone.utc)
+        rows = [row(created="2026-10-05T09:00:00+00:00"),                              # winst +2R
+                row(outcome="stop_loss", created="2026-10-05T10:00:00+00:00"),         # -1R
+                row(outcome=None, created="2026-10-05T11:00:00+00:00"),                # nog open
+                row(created="2026-10-01T09:00:00+00:00")]                              # te oud
+        d = tr.day_summary(rows, 0.0, since)
+        self.assertEqual((d["signals"], d["resolved"], d["wins"]), (3, 2, 1))
+        self.assertAlmostEqual(d["net_r"], 1.0)

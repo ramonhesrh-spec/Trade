@@ -28,6 +28,13 @@
         r.textContent = (data.live_r >= 0 ? "+" : "") + data.live_r.toFixed(2) + "R";
         r.className = "radar-r " + (data.live_r > 0 ? "pos" : data.live_r < 0 ? "neg" : "");
       }
+      var bar = card.querySelector(".r-progress");
+      var mark = card.querySelector('[data-radar="progress"]');
+      if (bar && mark && data.live_r !== null && data.live_r !== undefined) {
+        var rr = parseFloat(bar.getAttribute("data-rr"));
+        mark.style.left = Math.max(0, Math.min(100, (data.live_r + 1) / (rr + 1) * 100)).toFixed(1) + "%";
+        mark.className = "r-progress-mark" + (data.live_r > 0 ? " pos" : data.live_r < 0 ? " neg" : "");
+      }
       var ladder = card.querySelector('[data-radar="ladder"]');
       if (ladder && data.ladder) ladder.innerHTML = data.ladder;
     });

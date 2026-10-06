@@ -199,6 +199,13 @@
       <button type="submit">Opslaan</button>
     </form>
     <p class="muted levels-hint">Binnen dit venster komt ook een bevestigde kans stil binnen, zonder geluid. Beide velden leeg laten zet stille uren weer uit.</p>
+    <form action="/settings/risico" method="post" class="inline-form" style="margin-top: var(--space-6);">
+      <label>Bedrag per trade (1R), in euro
+        <input type="text" inputmode="decimal" name="risk_eur" placeholder="bijvoorbeeld 25" value="{{ user.risk_per_trade_eur if user.risk_per_trade_eur is not none else '' }}">
+      </label>
+      <button type="submit">Opslaan</button>
+    </form>
+    <p class="muted levels-hint">Alleen voor de weergave: op elke kaart staat dan wat je verliest als de stop raakt en wat het doel oplevert. HesPulse plaatst nooit zelf een order. Leeg laten zet het uit.</p>
     <div id="push-subscribe-block" style="margin-top: var(--space-6);">
       <button id="push-subscribe-btn" type="button">Meldingen aanzetten</button>
       <p id="push-subscribe-status" class="muted" style="margin: var(--space-2) 0 0; font-size: var(--text-base);" hidden></p>

@@ -29,6 +29,7 @@ from markupsafe import Markup
 from app import advice as advice_module
 from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, radar, repo, risk, security, setup_chart, today, track_record
+from app import chance_steps
 from app.market_scanner import floor_stop, smc_stop_take_margins
 
 logger = logging.getLogger("web")
@@ -297,7 +298,9 @@ async def _structure_cards() -> list[dict]:
     cards = []
     for s in setups:
         plan = json.loads(s["plan"])
-        cards.append({**s, "plan": plan, "targets": list(zip(plan["targets"], plan["targets_r"])),
+        targets = list(zip(plan["targets"], plan["targets_r"]))
+        cards.append({**s, "plan": plan, "targets": targets,
+                      "steps": chance_steps.structure_steps(plan, targets, prices.get(s["coin"]), s["direction"]),
                       "chart": Markup(setup_chart.setup_svg(plan.get("candles", []), s, plan, prices.get(s["coin"])))})
     return cards
 
@@ -382,6 +385,7 @@ async def _vandaag_context() -> dict:
         events.append({**e, "time": today.local(at if at.tzinfo else at.replace(tzinfo=timezone.utc)).strftime("%H:%M")})
     structure_cards = await _structure_cards()
     open_parts = _open_chances(now, len(structure_cards))
+    nearest = today.nearest_chance(structure_cards, scripts, await _radar_cards())
     summary = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
     score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "smc_waarschuwing") or e["source"] == "alles"]
     for e in score:
@@ -392,7 +396,7 @@ async def _vandaag_context() -> dict:
         "liq_last": repo.latest_liquidation_bucket(), "events": events, "score": score, "money": today.money,
         "status_labels": track_record.STATUS_LABELS, "script_enabled": config.SCRIPT_ENABLED,
         "structure_cards": structure_cards,
-        "plans_ready": sum(n for n, _ in open_parts), "open_parts": open_parts,
+        "plans_ready": sum(n for n, _ in open_parts), "open_parts": open_parts, "nearest": nearest,
         "scenarios_waiting": sum(1 for sc in scripts for x in sc["scenarios"] if x["state"] == "waiting"),
     }
 
@@ -1035,6 +1039,19 @@ async def update_settings(
     if not (start and end):
         start, end = None, None
     repo.update_user_settings(user["id"], start, end)
+    return RedirectResponse(url="/account", status_code=303)
+
+
+@app.post("/settings/risico")
+async def update_risk_per_trade(risk_eur: str = Form(""), user: dict = Depends(require_login)):
+    """Eigen bedrag per trade (1R) in euro, alleen voor de weergave op de kaarten. Leeg of ongeldig zet het weer uit."""
+    try:
+        amount = float(risk_eur.strip().replace(",", ".")) if risk_eur.strip() else None
+    except ValueError:
+        amount = None
+    if amount is not None and not (0 < amount <= 1_000_000):
+        amount = None
+    repo.set_risk_per_trade_eur(user["id"], amount)
     return RedirectResponse(url="/account", status_code=303)
 
 

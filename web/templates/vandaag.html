@@ -14,6 +14,7 @@
     <span class="vd-board-label">{% if plans_ready == 1 %}kans open{% elif plans_ready %}kansen open{% else %}kansen open{% endif %}<br>{% if open_parts %}{% for n, label in open_parts %}{{ n }} {{ label }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% else %}Er staat niets open. Een melding volgt zodra er een breuk of voorwaarde klopt.{% endif %}</span>
   </div>
   <div class="vd-board-side">
+    {% if nearest %}<p class="vd-nearest"><a href="{{ nearest.url }}"><span class="muted">Het eerst aan de beurt</span><strong>{{ nearest.name }}</strong> nog {{ nearest.dist }} {{ nearest.what }}</a></p>{% endif %}
     {% if scenarios_waiting %}<p class="vd-board-sub">Daarnaast wachten {{ scenarios_waiting }} scenario's van het markt-script op een voorwaarde. Dat zijn hypotheses, geen getekende plannen.</p>{% endif %}
     <div class="vd-hero-price">
       <span class="vd-hero-label">BTC</span>
@@ -34,7 +35,7 @@
 <section style="--i: 1">
   <h3 class="vd-section-title">Getekende plannen <a class="vd-more" href="/structuur">alle setups</a></h3>
   <div class="setup-grid">
-    {% for c in structure_cards[:2] %}{{ macros.setup_card(c) }}{% endfor %}
+    {% for c in structure_cards[:2] %}{{ macros.setup_card(c, user.risk_per_trade_eur) }}{% endfor %}
   </div>
 </section>
 {% endif %}
@@ -70,22 +71,8 @@
             <span class="radar-dir radar-dir-{{ sc.direction }}">{{ sc.direction }}</span>
             <span class="vd-state" data-vd="state">{{ sc.state_label }}</span>
           </div>
-          <ol class="vd-steps">
-            <li class="vd-step{% if sc.state == 'waiting' %} is-now{% else %} is-done{% endif %}">
-              <span class="vd-step-n">1</span>
-              <span class="vd-step-text"><strong>Wacht tot: {{ sc.trigger }}</strong>
-                <span class="muted">Nog <span data-vd="distance">{% if sc.to_trigger_pct is not none %}{{ "%+.2f"|format(sc.to_trigger_pct) }}%{% else %}-{% endif %}</span> te gaan.</span></span>
-            </li>
-            <li class="vd-step{% if sc.state == 'fired' %} is-now{% endif %}">
-              <span class="vd-step-n">2</span>
-              <span class="vd-step-text"><strong>Zet een limietorder op {{ fmt(sc.entry) }}</strong></span>
-            </li>
-            <li class="vd-step">
-              <span class="vd-step-n">3</span>
-              <span class="vd-step-text"><strong>Stop {{ fmt(sc.stop) }}, doel {{ fmt(sc.take) }}</strong>
-                <span class="muted">De stop ligt {{ "%.2f"|format(sc.risk_pct) }}% van je instap. Het doel levert {{ "%.1f"|format(sc.rr) }} keer wat je riskeert.</span></span>
-            </li>
-          </ol>
+          {{ macros.steps_list(sc.steps, user.risk_per_trade_eur) }}
+          {{ macros.share_button(s.coin, sc.direction, sc.steps) }}
           <p class="muted vd-fine">{{ sc.reason }}</p>
           <p class="muted vd-fine">Vervalt over <span data-vd="left">{{ "%.0f"|format(sc.hours_left) }}</span> uur</p>
         </div>

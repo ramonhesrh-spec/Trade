@@ -62,10 +62,16 @@ class WebVandaagTests(unittest.TestCase):
         r = self.client.get("/coins/BTC")
         self.assertEqual(r.status_code, 200)
         self.assertIn('id="coin-price"', r.text)
-        self.assertIn("100.0000", r.text)
+        self.assertIn("100.00", r.text)
         self.assertIn("Plan voor BTC", r.text)
+        self.assertIn("Zet een limietorder op", r.text)
         self.assertEqual(self.client.get("/api/price/BTC").json(), {"price": 100.0})
         self.assertNotIn("Plan voor ETH", self.client.get("/coins/ETH").text)
+        self.assertNotIn("verlies je ongeveer", r.text)                   # zonder ingevuld bedrag geen eurobedrag
+        self.client.post("/settings/risico", data={"risk_eur": "25"}, follow_redirects=False)
+        self.assertIn("verlies je ongeveer € 25", self.client.get("/coins/BTC").text)
+        self.client.post("/settings/risico", data={"risk_eur": "abc"}, follow_redirects=False)
+        self.assertNotIn("verlies je ongeveer", self.client.get("/coins/BTC").text)
 
     def test_coin_menu_lists_coins_on_every_page(self):
         repo.add_coin_if_new("BTC", "crypto")

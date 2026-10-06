@@ -1952,3 +1952,28 @@ html.reveal-done main > section, html.reveal-done main > .stats-collapse { anima
 .vd-step-text { display: flex; flex-direction: column; gap: 2px; }
 .vd-step-text strong { font-weight: 600; }
 
+.steps-money { color: var(--text); font-family: var(--mono); font-size: var(--text-sm, 0.875rem); }
+
+.hint-pop { position: absolute; z-index: 600; max-width: min(320px, calc(100vw - 24px)); padding: var(--space-3) var(--space-4); background: var(--panel); border: 1px solid var(--accent); border-radius: var(--radius-sm, 4px); font-size: var(--text-sm, 0.875rem); line-height: 1.4; }
+.share-btn { background: none; border: 1px solid var(--accent); color: var(--accent); border-radius: var(--radius-sm, 4px); padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-sm, 0.875rem); cursor: pointer; }
+
+.vd-nearest { margin: 0 0 var(--space-4); }
+.vd-nearest a { display: flex; flex-direction: column; gap: 2px; color: var(--text); text-decoration: none; padding: var(--space-3) var(--space-4); border: 1px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent-bg); }
+.vd-nearest strong { font-family: var(--display); font-size: var(--text-lg, 1.25rem); letter-spacing: 0.04em; text-transform: uppercase; }
+
+/* Stoplicht naast de status: grijs = te weinig data, oranje = positief maar nog niet bewezen, groen = voordeel gemeten, rood = verlies. */
+.proof-chip::before, .vd-score-label::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--muted); vertical-align: baseline; }
+.proof-chip-positief::before, .proof-positief .vd-score-label::before { background: #f2b24c; }
+.proof-chip-voordeel::before, .proof-voordeel .vd-score-label::before { background: var(--green); }
+.proof-chip-verlies::before, .proof-verlies .vd-score-label::before { background: var(--red); }
+
+/* Voortgang van een open trade: links de stop (-1R), rechts het doel, de streep is break-even, het blokje is waar de koers nu staat. */
+.r-progress { position: relative; height: 34px; margin: var(--space-4) 0; border-bottom: 3px solid var(--border-strong); }
+.r-progress-mark { position: absolute; bottom: -7px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: var(--text); transition: left 0.6s ease; }
+.r-progress-mark.pos { background: var(--green); }
+.r-progress-mark.neg { background: var(--red); }
+.r-progress-zero { position: absolute; bottom: -3px; width: 2px; height: 14px; background: var(--muted); }
+.r-progress-end { position: absolute; top: 0; font-size: var(--text-2xs); color: var(--muted); }
+.r-progress-end.start { left: 0; }
+.r-progress-end.end { right: 0; }
+@media (prefers-reduced-motion: reduce) { .r-progress-mark { transition: none; } }

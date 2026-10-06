@@ -5,6 +5,7 @@ from html import escape
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from app import chance_steps
 from app import market_script as ms
 from app import trade_plan as tp
 
@@ -92,13 +93,36 @@ def scenario_view(s: dict, price: Optional[float], now: datetime) -> dict:
     if price and s["state"] == "waiting":
         to_trigger = (s["trigger_level"] - price) / price * 100
     state = s["state"] if s["state"] != "waiting" or hours_left > 0 else "expired"
-    return {
+    view = {
         "id": s["id"], "direction": s["direction"], "state": state, "state_label": STATE_LABELS.get(state, state),
         "trigger": ms.trigger_text(s["trigger_type"], s["direction"], s["trigger_level"]), "reason": s["reason"],
         "entry": s["entry"], "stop": s["stop_loss"], "take": s["take_profit"], "rr": rr,
         "risk_pct": abs(s["entry"] - s["stop_loss"]) / s["entry"] * 100, "hours_left": hours_left, "to_trigger_pct": to_trigger,
         "ladder": tp.ladder_svg(s["direction"], s["stop_loss"], s["take_profit"], s["entry"], price, entry=s["entry"], width=280, height=150),
     }
+    view["steps"] = chance_steps.script_steps(view)
+    return view
+
+
+def nearest_chance(structure_cards: list[dict], scripts: list[dict], smc_cards: list[dict]) -> Optional[dict]:
+    """De kans die het eerst aan de beurt is: de kleinste afstand in procent van de koers tot stap 1, over alle soorten heen.
+    Alleen kansen met een bekende koers doen mee."""
+    found = []
+    for c in structure_cards:
+        step = c["steps"][0]
+        if step["dist"] != "-":
+            found.append((abs(float(step["dist"].rstrip("%"))), f"{c['coin']} {c['direction']}", step["dist"], "tot het niveau", "/structuur"))
+    for s in scripts:
+        for sc in s["scenarios"]:
+            if sc["state"] == "waiting" and sc["to_trigger_pct"] is not None:
+                found.append((abs(sc["to_trigger_pct"]), f"{s['coin']} {sc['direction']}", f"{sc['to_trigger_pct']:+.2f}%", "tot de voorwaarde", "/vandaag"))
+    for c in smc_cards:
+        if c["kind"] == "setup" and c["distance_pct"] is not None:
+            found.append((abs(c["distance_pct"]), f"{c['coin']} {c['direction']}", f"{c['distance_pct']:+.2f}%", "tot de zone", "/smc"))
+    if not found:
+        return None
+    _, name, dist, what, url = min(found, key=lambda f: f[0])
+    return {"name": name, "dist": dist, "what": what, "url": url}
 
 
 def script_view(script: dict, price: Optional[float], now: datetime) -> dict:

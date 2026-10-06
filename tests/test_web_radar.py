@@ -48,10 +48,12 @@ class WebRadarTests(unittest.TestCase):
         self.assertIn("SMC-radar", r.text)
         self.assertIn("XRP", r.text)
         self.assertIn("Wacht op de zone", r.text)
-        self.assertIn("Limietorder", r.text)
-        self.assertIn("100.0000", r.text)              # limietprijs = bovenrand van de long-zone
+        self.assertIn("Zet een limietorder op 100.00", r.text)   # limietprijs = bovenrand van de long-zone, in de drie stappen
+        self.assertIn("Wacht tot de koers in de zone", r.text)
         self.assertIn("+1.00R", r.text)                # ETH long entry 100, stop 97, koers 103
         self.assertIn("trade-ladder", r.text)
+        self.assertIn("r-progress", r.text)                # voortgang tussen stop en doel bij de open trade
+        self.assertIn("Doel +", r.text)
 
     def test_api_radar_levert_live_data_per_kaart(self):
         r = self.client.get("/api/radar")

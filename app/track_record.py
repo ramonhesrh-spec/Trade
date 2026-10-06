@@ -66,6 +66,15 @@ def _parse(value: str) -> datetime:
     return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
 
 
+def day_summary(rows: list[dict], round_trip_cost_pct: float, since: datetime) -> dict:
+    """Wat er sinds een moment gemeld en afgerond werd, in R na kosten: voor de dagafsluiting. Open en vervallen tellen niet mee in R."""
+    recent = [r for r in rows if _parse(r["created_at"]) >= since]
+    resolved = [(r, signal_r(r)) for r in recent]
+    resolved = [(r, g) for r, g in resolved if g is not None]
+    net = sum(g - _cost_r(r, round_trip_cost_pct) for r, g in resolved)
+    return {"signals": len(recent), "resolved": len(resolved), "wins": sum(1 for _, g in resolved if g > 0), "net_r": net}
+
+
 SCORE_CUT_PCT = 70.0
 
 

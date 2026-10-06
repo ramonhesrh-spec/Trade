@@ -91,3 +91,17 @@ class AgendaTest(unittest.TestCase):
     def test_agenda_drops_unmeasured_noise_but_keeps_us_open_and_macro(self):
         kinds = [m["kind"] for m in today.agenda([moment(1, "funding"), moment(2, "opties_expiry"), moment(3, "vs_open"), moment(4, "macro")])]
         self.assertEqual(kinds, ["vs_open", "macro"])
+
+
+class NearestChanceTest(unittest.TestCase):
+    def test_picks_the_smallest_distance_over_all_kinds(self):
+        structure = [{"coin": "BTC", "direction": "short", "steps": [{"dist": "+1.50%"}]}]
+        scripts = [{"coin": "DOGE", "scenarios": [{"state": "waiting", "direction": "short", "to_trigger_pct": 0.9},
+                                                   {"state": "fired", "direction": "long", "to_trigger_pct": 0.1}]}]
+        smc = [{"kind": "setup", "coin": "SOL", "direction": "long", "distance_pct": -2.0}]
+        best = today.nearest_chance(structure, scripts, smc)
+        self.assertEqual((best["name"], best["dist"], best["what"]), ("DOGE short", "+0.90%", "tot de voorwaarde"))
+
+    def test_no_price_or_nothing_open_gives_none(self):
+        self.assertIsNone(today.nearest_chance([{"coin": "BTC", "direction": "long", "steps": [{"dist": "-"}]}], [], []))
+        self.assertIsNone(today.nearest_chance([], [], []))

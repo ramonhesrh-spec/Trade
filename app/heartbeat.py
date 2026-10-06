@@ -6,9 +6,9 @@ systemd timer, zie deploy/crypto-heartbeat.service en .timer.
 import asyncio
 import logging
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from app import db, market_calendar, push_notify, repo, today
+from app import config, db, market_calendar, push_notify, repo, today, track_record
 
 logger = logging.getLogger("heartbeat")
 
@@ -18,7 +18,10 @@ async def send_heartbeats() -> None:
     title = "HesPulse draait"
     plans = len(repo.list_structure_setups(("waiting",)))
     next_moment = today.agenda(market_calendar.upcoming(datetime.now(timezone.utc), 24))
-    lines = [f"{plans} {'plan' if plans == 1 else 'plannen'} klaar."]
+    day = track_record.day_summary(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT, datetime.now(timezone.utc) - timedelta(hours=24))
+    lines = [f"Laatste 24 uur: {day['signals']} {'kans' if day['signals'] == 1 else 'kansen'} gemeld, {day['resolved']} afgerond"
+             + (f", {day['net_r']:+.1f}R na kosten." if day["resolved"] else ".")]
+    lines.append(f"{plans} {'plan' if plans == 1 else 'plannen'} klaar.")
     if next_moment:
         m = next_moment[0]
         lines.append(f"Straks: {m['label']} om {today.local(m['at']).strftime('%H:%M')}.")

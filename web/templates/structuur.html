@@ -22,14 +22,14 @@
   <p class="muted empty">Geen plan klaar. Een melding volgt zodra een lijn of range breekt, het plan genoeg ruimte heeft en Claude de breuk goedkeurt.</p>
   {% else %}
   <div class="setup-grid">
-    {% for c in structure_cards %}{{ macros.setup_card(c) }}{% endfor %}
+    {% for c in structure_cards %}{{ macros.setup_card(c, user.risk_per_trade_eur) }}{% endfor %}
   </div>
   {% endif %}
 </section>
 
 <section style="--i: 1">
   <h3 class="vd-section-title">Trend-pullback</h3>
-  <p class="muted">Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten. Gemeten op een jaar: −0,06R netto na kosten.</p>
+  <p class="muted">Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten.</p>
   <p class="engine-status {% if trend_minutes is none or trend_minutes > 15 %}is-stale{% endif %}">
     {% if trend_minutes is none %}De trend-motor heeft nog niet gedraaid. Hij start in de eerstvolgende scan van 5 minuten.
     {% elif trend_minutes > 15 %}Let op: de trend-motor draaide {{ trend_minutes }} minuten geleden voor het laatst.
