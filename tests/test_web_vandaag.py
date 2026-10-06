@@ -66,6 +66,11 @@ class WebVandaagTests(unittest.TestCase):
         self.assertEqual(self.client.get("/api/price/BTC").json(), {"price": 100.0})
         self.assertNotIn("Plan voor ETH", self.client.get("/coins/ETH").text)
 
+    def test_coin_menu_lists_coins_on_every_page(self):
+        repo.add_coin_if_new("BTC", "crypto")
+        for path in ("/vandaag", "/structuur", "/bewijs", "/smc", "/meldingen"):
+            self.assertIn('href="/coins/BTC"', self.client.get(path).text, path)
+
     def test_empty_state_is_honest_and_page_works(self):
         r = self.client.get("/vandaag")
         self.assertEqual(r.status_code, 200)

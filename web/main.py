@@ -34,7 +34,13 @@ from app.market_scanner import smc_stop_take_margins
 logger = logging.getLogger("web")
 
 BASE_DIR = Path(__file__).resolve().parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+def _nav_context(request: Request) -> dict:
+    """De coinlijst in het menu staat in elke pagina. Zonder dit moest elke route `coins` zelf meegeven, en de nieuwere
+    pagina's (Vandaag, Setups, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
+    return {"coins": repo.list_coins()}
+
+
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context])
 templates.env.globals["disclaimer"] = config.DISCLAIMER
 
 
