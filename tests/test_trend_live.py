@@ -43,7 +43,8 @@ class TrendLiveTest(DbCase):
         title, body, silent = self.pushed[0]
         self.assertIn("Trend-pullback", title)
         self.assertNotIn("ngetest", title + body)
-        self.assertIn("-0,06R", body)
+        self.assertNotIn("-0,06R", body)                       # geen afschrikkende regel in de melding, de score staat op Bewijs
+        self.assertIn("Tik voor de grafiek en het plan.", body)
         self.assertFalse(silent)
         self.run_live()
         self.assertEqual(len(repo.list_signals_for_quality_report(None)), 1)       # zelfde instap, tweede scan: niets

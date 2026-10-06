@@ -745,7 +745,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         title = push_notify.alert_title(coin, direction, "zone gezet")
         body = (
             f"Structuur en sweep gezien.\nZone {push_notify.fmt_price(zone_low)} tot {push_notify.fmt_price(zone_high)}.\n"
-            "Zet je limietorder klaar."
+            "Zet je limietorder klaar.\nTik voor de zone op de grafiek."
         )
         for user in repo.list_users():
             quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])

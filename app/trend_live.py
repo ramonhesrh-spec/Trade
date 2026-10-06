@@ -17,7 +17,6 @@ from app.replay.lab import add_indicators
 logger = logging.getLogger("trend_live")
 TIMEFRAMES = {"5m": (pd.Timedelta(minutes=5), 400), "15m": (pd.Timedelta(minutes=15), 300), "1h": (pd.Timedelta(hours=1), 200), "4h": (pd.Timedelta(hours=4), 150)}
 RECENT = pd.Timedelta(minutes=15)
-MEASURED_NOTE = "Gemeten op een jaar: -0,06R netto."
 
 
 def closed_bars(df: pd.DataFrame, delta: pd.Timedelta, now: pd.Timestamp) -> pd.DataFrame:
@@ -49,7 +48,7 @@ def levels(direction: str, entry: float, stop: float) -> Optional[tuple[float, f
 async def _fire(coin: str, e: dict, stop: float, take: float) -> None:
     from app.signal_processor import fanout_confirmed_signal
     direction, entry = e["direction"], e["entry"]
-    reason = ("Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten. " + MEASURED_NOTE)
+    reason = ("Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten.")
     signal_id = repo.insert_signal({
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "trend", "pattern_name": "Trend-pullback",
         "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None, "atr": None, "atr_avg20": None,
@@ -62,7 +61,7 @@ async def _fire(coin: str, e: dict, stop: float, take: float) -> None:
     await fanout_confirmed_signal(
         signal_id, coin, direction, entry, stop, take, entry,
         title=push_notify.alert_title(coin, direction, "Trend-pullback"),
-        make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, "Pullback in de trend, bevestigd op 5m.", MEASURED_NOTE),
+        make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, "Trend op 4u en 1u, pullback bevestigd op 5m."),
         reason=reason, signal_type="trend",
     )
 

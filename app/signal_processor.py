@@ -1017,6 +1017,7 @@ async def process_day_trading_signal(
                 body += f"\n{signal_data['repeated_loss_note']}"
             if signal_data.get("context_note"):
                 body += f"\n{signal_data['context_note']}"
+            body += f"\n{push_notify.OPEN_PLAN_LINE}"
             await push_notify.send_push(
                 user["id"], title, body, f"/coins/{interp.coin}#signal-{signal_id}", silent=force_silent,
             )
@@ -1103,6 +1104,8 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
                 body = f"Nieuwe prijs {message_data['price']:.4f} · nog geen sterke kans"
             if message_data.get("repeated_loss_note"):
                 body += f"\n{message_data['repeated_loss_note']}"
+            if confirmed:
+                body += f"\n{push_notify.OPEN_PLAN_LINE}"
             await push_notify.send_push(user["id"], title, body, f"/coins/{coin}#signal-{signal_id}", silent=force_silent)
         except Exception:
             logger.exception("Pushmelding (update) voor gebruiker %s, signaal %s is mislukt",

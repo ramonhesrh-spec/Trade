@@ -103,7 +103,11 @@ def alert_title(coin: str, direction: str, label: str) -> str:
     return f"{'▲' if direction == 'long' else '▼'} {coin} {direction} · {label}"
 
 
+OPEN_PLAN_LINE = "Tik voor de grafiek en het plan."
+
+
 def trade_body(entry_label: str, entry: float, stop: float, take: float, rr: Optional[float] = None, *extra: str) -> str:
-    """Eerste regel de order, tweede regel stop en take, daarna toelichting. Zo staat het belangrijkste altijd bovenaan."""
+    """Eerste regel de order, tweede regel stop en take, daarna toelichting en als laatste een uitnodiging om te openen. Zo staat het
+    belangrijkste altijd bovenaan en weet je wat een tik oplevert: de grafiek met het plan, niet alleen dezelfde cijfers."""
     first = f"{entry_label} {fmt_price(entry)}" + (f" · R:R {rr:.1f}" if rr else "")
-    return "\n".join([first, f"Stop {fmt_price(stop)} · Take {fmt_price(take)}", *[line for line in extra if line]])
+    return "\n".join([first, f"Stop {fmt_price(stop)} · Take {fmt_price(take)}", *[line for line in extra if line], OPEN_PLAN_LINE])
