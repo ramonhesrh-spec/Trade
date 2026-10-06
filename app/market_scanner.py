@@ -717,7 +717,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         if existing_setup["direction"] != scan.break_direction:
             repo.invalidate_smc_setup(existing_setup["id"])
     if scan.candidate is None:
-        if scan.skip_reason == "stop_of_doel_binnen_zone":
+        if scan.skip_reason in ("stop_of_doel_binnen_zone", "stop_te_dichtbij"):
             logger.info("%s %s SMC-setup overgeslagen: %s", coin, scan.break_direction, scan.detail)
         return None
     candidate = scan.candidate

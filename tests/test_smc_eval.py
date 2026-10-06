@@ -161,7 +161,7 @@ class FindCandidateSkipTest(unittest.TestCase):
         closed_15m = pd.DataFrame({"timestamp": ts15, "open": 98.0, "high": 99.0, "low": 97.0, "close": 98.0, "volume": 1.0})
         return df_30m.iloc[:-1], df_30m, closed_15m
 
-    def run_scan(self, sweep, last_close=98.0):
+    def run_scan(self, sweep, last_close=98.0, zone=(100.0, 102.0)):
         closed_30m, df_30m, closed_15m = self.frames()
         last_candle = {"close": last_close}
         ind = smc_eval.indicators
@@ -171,7 +171,7 @@ class FindCandidateSkipTest(unittest.TestCase):
                 mock.patch.object(ind, "find_liquidity_sweep_before_break", return_value=sweep), \
                 mock.patch.object(ind, "find_fair_value_gaps", return_value=[]), \
                 mock.patch.object(ind, "find_order_blocks", return_value=[]), \
-                mock.patch.object(ind, "find_confluence_zone", return_value=(100.0, 102.0)), \
+                mock.patch.object(ind, "find_confluence_zone", return_value=zone), \
                 mock.patch.object(ind, "_find_pivots", return_value=[SimpleNamespace(kind="low", price=90.0)]):
             return smc_eval.find_candidate(closed_30m, df_30m, closed_15m, last_candle)
 
@@ -186,6 +186,12 @@ class FindCandidateSkipTest(unittest.TestCase):
                          ("short", None, "stop_of_doel_binnen_zone"))
         self.assertIn("101.5000", scan.detail)
         self.assertIn("100.0000-102.0000", scan.detail)
+
+    def test_stop_vlak_achter_de_limiet_is_geen_kans(self):
+        # short: limiet op zone_low 1000, stop 1000,6 + 0,5 = 1001,1 ligt 0,11% weg, onder de ondergrens van 0,2%
+        scan = self.run_scan(sweep=SimpleNamespace(index=0, price=1000.6), zone=(1000.0, 1000.5))
+        self.assertEqual((scan.break_direction, scan.candidate, scan.skip_reason), ("short", None, "stop_te_dichtbij"))
+        self.assertIn("ondergrens", scan.detail)
 
     def test_koers_al_in_zone(self):
         # stop 105.5 en doel 90.5 liggen goed, maar de laatste close (101) zit al in/boven zone_low voor een short

@@ -289,6 +289,16 @@ def find_candidate(closed_30m, df_30m, closed_15m, last_candle) -> SmcScan:
             detail=f"stop {projected_stop_loss:.4f} / doel {projected_take_profit:.4f} (na marge) liggen niet voorbij de zone {zone_low:.4f}-{zone_high:.4f}",
         )
 
+    # De limietorder staat op de zonerand. Ligt de stop daar minder dan de ondergrens vandaan, dan is het plan geen kans: de stop is kleiner dan
+    # de kosten van een rondreis en de R:R (18 op SOL, stop 0,05%) is schijn. Hier al overslaan, zodat zo'n setup niet op de radar komt.
+    limit = zone_high if direction == "long" else zone_low
+    limit_stop_pct = abs(limit - projected_stop_loss) / limit * 100
+    if config.SMC_MIN_STOP_PCT > 0 and limit_stop_pct < config.SMC_MIN_STOP_PCT:
+        return SmcScan(
+            direction, None, "stop_te_dichtbij",
+            detail=f"stop {projected_stop_loss:.4f} ligt {limit_stop_pct:.3f}% van de limiet {limit:.4f}, ondergrens {config.SMC_MIN_STOP_PCT}%",
+        )
+
     # Een bouwende setup is pas zinvol zolang de koers nog naar de zone
     # moet terugtrekken (short: nog eronder, long: nog erboven). Zonder
     # deze eis kon fase 1 hierboven een setup opruimen omdat de koers door
