@@ -63,7 +63,25 @@ class ScalpTest(unittest.TestCase):
         flow = pd.DataFrame({"timestamp": idx, "volume": vol, "buy_volume": vol * rng.uniform(0.3, 0.7, len(idx)), "trades": 10})
         t = scalp.run_coin("ETH", f, cut, {"ETH": flow})
         self.assertTrue({"FLOW k=1 mee", "FLOW k=3 tegen"} <= set(t["test"]))
-        self.assertIn("FADE uitputting", set(t["test"]))
+
+    def test_exhaustion_minute_is_found_and_faded(self):
+        rng = np.random.default_rng(2)
+        n = 6000
+        idx = pd.date_range("2026-03-02", periods=n, freq="1min", tz="UTC")
+        c = 100 + np.cumsum(rng.normal(0, 0.02, n))
+        df = pd.DataFrame({"open": np.concatenate([[c[0]], c[:-1]]), "close": c, "volume": rng.gamma(2.0, 1.0, n)}, index=idx)
+        df["high"] = np.maximum(df["open"], df["close"]) + 0.01
+        df["low"] = np.minimum(df["open"], df["close"]) - 0.01
+        i = 5000                                              # omhoog-minuut met enorme range, enorm volume en een lange bovenlont
+        df.iloc[i, df.columns.get_loc("close")] = df["open"].iloc[i] + 0.3
+        df.iloc[i, df.columns.get_loc("high")] = df["open"].iloc[i] + 3.0
+        df.iloc[i, df.columns.get_loc("volume")] = 400.0
+        cut = idx[4000]
+        fade_idx, fade_dir = scalp.spike_events(df, cut, fade=True)
+        follow_idx, follow_dir = scalp.spike_events(df, cut, fade=False)
+        self.assertIn(i, list(fade_idx))
+        self.assertEqual(fade_dir[list(fade_idx).index(i)], -1.0)
+        self.assertEqual(follow_dir[list(follow_idx).index(i)], 1.0)
 
     def test_decluster_keeps_events_apart(self):
         self.assertEqual(list(scalp._decluster(np.array([1, 3, 12, 14, 30]))), [1, 12, 30])
