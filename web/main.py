@@ -316,7 +316,9 @@ async def structuur_page(request: Request, user: dict = Depends(require_login)):
     if beat:
         minutes = int((datetime.now(timezone.utc) - datetime.fromisoformat(beat["at"])).total_seconds() // 60)
     since24 = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-    return templates.TemplateResponse(request, "structuur.html", {
+    trend_beat = repo.get_beat("trend")
+    trend_minutes = int((datetime.now(timezone.utc) - datetime.fromisoformat(trend_beat["at"])).total_seconds() // 60) if trend_beat else None
+    return templates.TemplateResponse(request, "structuur.html", {"trend_minutes": trend_minutes,
         "user": user, "structure_cards": await _structure_cards(), "history": history,
         "engine_minutes": minutes, "counts": repo.structure_counts(since24), "engine_on": config.STRUCTURE_ENABLED,
         "trend_signals": repo.list_recent_signals_of_type("trend", since24), "trend_on": config.TREND_ENABLED})

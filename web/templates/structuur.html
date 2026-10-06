@@ -31,6 +31,12 @@
 <section style="--i: 1">
   <h3 class="vd-section-title">Trend-pullback <span class="tag-untested">ongetest</span></h3>
   <p class="muted">Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten. Gemeten op een jaar: −0,06R netto na kosten. Je ontvangt alleen stille meldingen.</p>
+  <p class="engine-status {% if trend_minutes is none or trend_minutes > 15 %}is-stale{% endif %}">
+    {% if trend_minutes is none %}De trend-motor heeft nog niet gedraaid. Hij start in de eerstvolgende scan van 5 minuten.
+    {% elif trend_minutes > 15 %}Let op: de trend-motor draaide {{ trend_minutes }} minuten geleden voor het laatst.
+    {% else %}Trend-motor actief, laatste controle {{ trend_minutes }} min geleden.{% endif %}
+    Op een jaar candles zijn er ongeveer 2 instappen per coin per dag, dus verwacht er binnen een paar uur een paar.
+  </p>
   {% if not trend_on %}
   <p class="muted empty">Staat uit (TREND_ENABLED=false).</p>
   {% elif not trend_signals %}
@@ -60,7 +66,7 @@
       <span class="radar-coin">{{ h.coin }}</span>
       <span class="radar-dir radar-dir-{{ h.direction }}">{{ h.direction }}</span>
       <span class="setup-grade setup-grade-{{ (h.grade or 'c')|lower }}">{{ h.grade or "-" }}</span>
-      <span class="setup-history-state">{{ h.state_label }}</span>
+      <span class="setup-history-state">{{ h.state_label }}{% if h.state == "geen_plan" and h.reason %}<br><span class="muted">{{ h.reason }}</span>{% endif %}</span>
       <span class="muted setup-age">{{ h.created_at | age }}</span>
     </li>
     {% endfor %}

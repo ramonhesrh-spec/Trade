@@ -114,6 +114,21 @@ def plan_for(ev, b: pd.DataFrame, levels: list[float], level: float, extreme: fl
             "targets": [level + sign * risk * r for r in r_list], "from_levels": r_list != (1.0, 2.0, 3.0)}
 
 
+def explain_no_plan(ev, levels: list[float], level: float, extreme: float) -> str:
+    """Waarom er geen plan kwam, met de getallen: de stopafstand, en de ruimte tot de eerstvolgende doelen op zwaaipunten."""
+    short = ev.direction == br.SHORT
+    stop = max(level, extreme) + br.STOP_ATR * ev.atr if short else min(level, extreme) - br.STOP_ATR * ev.atr
+    risk = abs(level - stop)
+    risk_pct = risk / level * 100 if level else 0.0
+    if not (br.MIN_STOP_PCT <= risk_pct <= br.MAX_STOP_PCT):
+        return f"Stop {risk_pct:.2f}% van het niveau, toegestaan is {br.MIN_STOP_PCT:g} tot {br.MAX_STOP_PCT:g}%."
+    ladder = br.ladder_targets(ev.direction, level, risk, "niveaus", levels)
+    if ladder is None:
+        return "Stop in orde, geen plan om een andere reden."
+    second = ladder[0][1] if len(ladder[0]) > 1 else ladder[0][0]
+    return f"Stop {risk_pct:.2f}%, maar het tweede doel op een zwaaipunt ligt maar {second:.1f}R ver (minimaal {MIN_RR:g}R)."
+
+
 def take_profit_of(plan: dict) -> float:
     """Het signaal meet één doel: het tweede van de ladder (of het eerste als er maar één is). De ladder staat in de melding."""
     targets = plan["targets"]
@@ -192,7 +207,7 @@ async def _discover(coin: str, now: datetime) -> None:
             repo.insert_structure_setup({
                 "coin": coin, "direction": ev.direction, "kind": ev.kind, "break_at": break_at, "p1_at": b.at[ev.p1, "timestamp"].isoformat(),
                 "line_a": ev.a, "line_slope": ev.slope, "atr": ev.atr, "grade": None,
-                "reason": "Stop buiten 0,2 tot 2% of minder dan 2R ruimte tot het eerstvolgende doel.", "features": "{}", "state": "geen_plan",
+                "reason": explain_no_plan(ev, levels, level, extreme), "features": "{}", "state": "geen_plan",
                 "expires_at": break_at, "plan": None})
             continue
         row = {"coin": coin, "direction": ev.direction, "kind": ev.kind, "break_at": break_at,

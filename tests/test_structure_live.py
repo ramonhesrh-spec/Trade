@@ -167,6 +167,8 @@ class LiveTest(DbCase):
             self.run_live(BREAK_BAR + 4)
         counts = repo.structure_counts("2000-01-01")
         self.assertGreaterEqual(counts["geen_plan"], 1)
+        reason = repo.list_structure_setups(("geen_plan",))[0]["reason"]
+        self.assertRegex(reason, r"\d+[.,]\d+")                    # de reden noemt het getal: stopafstand of ruimte in R
         self.assertEqual(counts["goedgekeurd"], 0)
         self.assertIsNotNone(repo.get_beat("structuur"))
         with mock.patch.object(sl, "MIN_RR", 50.0):
