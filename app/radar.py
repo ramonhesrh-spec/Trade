@@ -5,7 +5,7 @@ from typing import Optional
 
 from markupsafe import Markup
 
-from app import trade_plan as tp
+from app import config, trade_plan as tp
 
 
 def setup_card(setup: dict, price: Optional[float]) -> Optional[dict]:
@@ -21,6 +21,7 @@ def setup_card(setup: dict, price: Optional[float]) -> Optional[dict]:
         "distance_pct": tp.distance_to_limit_pct(plan, price) if price else None, "live_r": None,
         "ladder": Markup(tp.ladder_svg(setup["direction"], plan.stop, plan.take, plan.limit, price, setup["zone_low"], setup["zone_high"])),
         "created_at": setup["created_at"], "setup": setup,
+        "too_tight": config.SMC_MIN_STOP_PCT > 0 and plan.risk_pct < config.SMC_MIN_STOP_PCT,
     }
 
 

@@ -24,6 +24,7 @@
       </header>
       <div class="radar-state radar-state-{{ c.state or 'laden' }}" data-radar="state">{{ c.state_label }}</div>
       <div class="radar-ladder" data-radar="ladder">{{ c.ladder }}</div>
+      {% if c.too_tight %}<p class="radar-warn">Stop te klein: {{ "%.2f"|format(c.plan.risk_pct) }}% is minder dan de kosten van een rondreis. Hier komt geen melding voor. Sla over.</p>{% endif %}
       <dl class="radar-facts">
         <div><dt>Limietorder</dt><dd>{{ "%.4f"|format(c.plan.limit) }}</dd></div>
         <div><dt>R:R vanaf limiet</dt><dd>{{ "%.1f"|format(c.plan.rr) }}</dd></div>

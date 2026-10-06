@@ -26,6 +26,11 @@ class RadarTests(unittest.TestCase):
         self.assertEqual(no_price["state_label"], "Koers wordt opgehaald")
         self.assertNotIn("Nu ", str(no_price["ladder"]))
 
+    def test_stop_onder_de_ruisgrens_wordt_gemarkeerd_als_te_klein(self):
+        self.assertFalse(radar.setup_card(SETUP, 102.0)["too_tight"])            # stop 3% van de limiet
+        tight = dict(SETUP, preview_stop_loss=99.95)                               # stop 0,05% van de limiet
+        self.assertTrue(radar.setup_card(tight, 102.0)["too_tight"])
+
     def test_setup_met_onmogelijk_plan_krijgt_geen_kaart(self):
         bad = dict(SETUP, preview_stop_loss=100.5)
         self.assertIsNone(radar.setup_card(bad, 102.0))

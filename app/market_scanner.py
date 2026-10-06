@@ -741,7 +741,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     if rejected:
         return setup
 
-    if not setup["alert_sent"]:
+    if not setup["alert_sent"] and not _stop_too_tight(setup):
         title = push_notify.alert_title(coin, direction, "zone gezet")
         body = (
             f"Structuur en sweep gezien.\nZone {push_notify.fmt_price(zone_low)} tot {push_notify.fmt_price(zone_high)}.\n"
@@ -792,6 +792,8 @@ async def _notify_zone_touches(coin: str) -> None:
         stop_loss = setup["sweep_price"] + stop_margin * sign
         take_profit = setup["liquidity_target"] + target_margin * sign
         plan = trade_plan.limit_plan(direction, setup["zone_low"], setup["zone_high"], stop_loss, take_profit)
+        if plan is not None and plan.risk_pct < config.SMC_MIN_STOP_PCT:
+            continue
         if plan is None or trade_plan.plan_state(direction, setup["zone_low"], setup["zone_high"], stop_loss, price) != "in_zone":
             continue
         repo.mark_smc_zone_alert_sent(setup["id"])
@@ -804,6 +806,16 @@ async def _notify_zone_touches(coin: str) -> None:
                 await push_notify.send_push(user["id"], title, body, f"/smc#radar-setup-{setup['id']}", silent=quiet, tag=f"smc-zone-{coin}")
             except Exception:
                 logger.exception("Zone-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
+
+def _stop_too_tight(setup: dict) -> bool:
+    """Een limietorder op de zonerand met een stop binnen de ruis (onder SMC_MIN_STOP_PCT) is geen kans om te melden: de stop is dan kleiner
+    dan de kosten van een rondreis. De radar toont zo'n plan wel, met een waarschuwing."""
+    sign = -1 if setup["direction"] == "long" else 1
+    stop_margin, target_margin = smc_stop_take_margins(setup)
+    plan = trade_plan.limit_plan(setup["direction"], setup["zone_low"], setup["zone_high"], setup["sweep_price"] + stop_margin * sign,
+                                 setup["liquidity_target"] + target_margin * sign)
+    return plan is not None and config.SMC_MIN_STOP_PCT > 0 and plan.risk_pct < config.SMC_MIN_STOP_PCT
 
 
 SMC_WARNING_TEXT = {
