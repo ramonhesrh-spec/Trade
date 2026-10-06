@@ -24,7 +24,7 @@
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
   function build(card, data) {
-    var chart = card.querySelector("svg.sc, svg.trade-ladder");
+    var chart = card.querySelector("svg.sc, svg.trade-ladder, svg[data-share-chart]");
     var rootStyle = window.getComputedStyle(document.documentElement);
     var bg = rootStyle.getPropertyValue("--bg").trim() || "#0a0e0f";
     var text = rootStyle.getPropertyValue("--text").trim() || "#e8eeee";
@@ -79,7 +79,7 @@
   document.addEventListener("click", function (e) {
     var btn = e.target.closest("[data-share-card]");
     if (!btn) return;
-    var card = btn.closest(".setup-card, .radar-card, .vd-scenario, .kans-card");
+    var card = btn.closest(".setup-card, .radar-card, .vd-scenario, .kans-card, .week-card");
     if (!card) return;
     var data;
     try { data = JSON.parse(btn.getAttribute("data-share-card")); } catch (err) { return; }

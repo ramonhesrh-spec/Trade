@@ -75,6 +75,35 @@ def day_summary(rows: list[dict], round_trip_cost_pct: float, since: datetime) -
     return {"signals": len(recent), "resolved": len(resolved), "wins": sum(1 for _, g in resolved if g > 0), "net_r": net}
 
 
+def week_summary(rows: list[dict], round_trip_cost_pct: float, now: Optional[datetime] = None, days: int = 7) -> dict:
+    """De laatste dagen in één blik, voor de weekafbeelding: aantallen, R na kosten per dag (oud naar nieuw), de beste en de slechtste afgeronde kans."""
+    now = now or datetime.now(timezone.utc)
+    since = now - timedelta(days=days)
+    recent = [r for r in rows if _parse(r["created_at"]) >= since]
+    resolved = []
+    for r in recent:
+        g = signal_r(r)
+        if g is not None:
+            resolved.append((r, g - _cost_r(r, round_trip_cost_pct)))
+    per_day: dict = {}
+    for offset in range(days - 1, -1, -1):
+        per_day[(now - timedelta(days=offset)).date()] = 0.0
+    for r, net in resolved:
+        day = _parse(r["auto_outcome_at"] or r["created_at"]).date()
+        if day in per_day:
+            per_day[day] += net
+    cumulative, running = [], 0.0
+    for v in per_day.values():
+        running += v
+        cumulative.append(running)
+    best = max(resolved, key=lambda x: x[1], default=None)
+    worst = min(resolved, key=lambda x: x[1], default=None)
+    pick = lambda item: None if item is None else {"id": item[0].get("id"), "coin": item[0].get("coin"), "direction": item[0].get("direction"), "net_r": item[1]}
+    return {"signals": len(recent), "resolved": len(resolved), "wins": sum(1 for _, n in resolved if n > 0),
+            "net_r": sum(n for _, n in resolved), "days": list(per_day.items()), "cumulative": cumulative,
+            "best": pick(best), "worst": pick(worst) if worst is not best else None}
+
+
 SCORE_CUT_PCT = 70.0
 
 

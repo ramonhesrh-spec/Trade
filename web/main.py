@@ -444,6 +444,14 @@ async def kans_page(request: Request, signal_id: int, user: dict = Depends(requi
     })
 
 
+@app.get("/week")
+async def week_page(request: Request, user: dict = Depends(require_login)):
+    """Jouw week in één plaatje, om te delen: kansen, resultaat in R na kosten, beste en slechtste kans."""
+    week = track_record.week_summary(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
+    spark = track_record.sparkline_svg(week["cumulative"], width=320, height=80).replace("<svg", "<svg data-share-chart", 1)
+    return templates.TemplateResponse(request, "week.html", {"user": user, "week": week, "spark": Markup(spark)})
+
+
 @app.get("/api/kansen")
 async def api_kansen(user: dict = Depends(require_login)):
     """Live afstand tot stap 1 per wachtend Structuur-plan, voor kansen.js."""

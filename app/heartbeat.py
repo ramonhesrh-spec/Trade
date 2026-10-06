@@ -32,9 +32,12 @@ async def send_heartbeats() -> None:
     # gebruiker zonder push-abonnement zelf al stilzwijgend over, en
     # telegram_chat_id wordt sinds de overstap naar push nooit meer
     # ingevuld voor nieuwe gebruikers.
+    sunday = datetime.now(timezone.utc).weekday() == 6
+    if sunday:
+        title, body = "Jouw week staat klaar", body + "\nTik voor je week als plaatje."
     for user in repo.list_users():
         try:
-            await push_notify.send_push(user["id"], title, body, "/", silent=True)
+            await push_notify.send_push(user["id"], title, body, "/week" if sunday else "/", silent=True)
             logger.info("Levensteken verstuurd naar %s", user["username"])
         except Exception:
             logger.exception("Levensteken naar %s is mislukt", user["username"])

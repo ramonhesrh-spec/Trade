@@ -135,6 +135,14 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("Gemeld", page.text)
         self.assertEqual(self.client.get("/kans/999999").status_code, 404)
 
+    def test_week_page_shows_totals_and_share_button(self):
+        r = self.client.get("/week")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("Jouw week", r.text)
+        self.assertIn("Nog geen afgeronde kansen deze week", r.text)
+        self.assertIn("data-share-chart", r.text)
+        self.assertIn("share-btn", r.text)
+
     def test_page_shows_script_scenario_liquidations_events_and_score(self):
         now = datetime.now(timezone.utc)
         repo.insert_market_script("BTC", "BTC test onder gisteren hoog.", "long", "m", [scenario_row()], 1,

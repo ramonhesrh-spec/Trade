@@ -112,3 +112,17 @@ class DaySummaryTests(unittest.TestCase):
         d = tr.day_summary(rows, 0.0, since)
         self.assertEqual((d["signals"], d["resolved"], d["wins"]), (3, 2, 1))
         self.assertAlmostEqual(d["net_r"], 1.0)
+
+
+class WeekSummaryTests(unittest.TestCase):
+    def test_week_telt_per_dag_en_kiest_beste_en_slechtste(self):
+        rows = [dict(row(created="2026-10-04T09:00:00+00:00", done="2026-10-04T10:00:00+00:00"), id=1, coin="BTC", direction="long"),            # +2R
+                dict(row(outcome="stop_loss", created="2026-10-05T09:00:00+00:00", done="2026-10-05T10:00:00+00:00"), id=2, coin="ETH", direction="short"),   # -1R
+                dict(row(outcome=None, created="2026-10-05T11:00:00+00:00"), id=3, coin="SOL", direction="long"),                                          # open
+                dict(row(created="2026-09-01T09:00:00+00:00"), id=4, coin="OLD", direction="long")]                                                        # te oud
+        w = tr.week_summary(rows, 0.0, NOW)
+        self.assertEqual((w["signals"], w["resolved"], w["wins"]), (3, 2, 1))
+        self.assertAlmostEqual(w["net_r"], 1.0)
+        self.assertEqual(len(w["days"]), 7)
+        self.assertAlmostEqual(w["cumulative"][-1], 1.0)
+        self.assertEqual((w["best"]["coin"], w["worst"]["coin"]), ("BTC", "ETH"))
