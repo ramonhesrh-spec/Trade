@@ -24,6 +24,12 @@ STATE_LABELS = {
 }
 
 
+def agenda(moments: list[dict]) -> list[dict]:
+    """Alleen momenten die iets te zeggen hebben: macro-uitslagen altijd, de rest alleen als de toets een duidelijk grotere
+    beweging mat. Funding-resets (1,01x) en opties-expiry (1,06x) bewegen de markt niet meetbaar en vulden de agenda met ruis."""
+    return [m for m in moments if m["kind"] == "macro" or MEASURED_VOLATILITY.get(m["kind"], 0) >= VOL_NOTE_MIN]
+
+
 def vol_note(kind: str) -> Optional[str]:
     x = MEASURED_VOLATILITY.get(kind)
     return f"beweegt {x:.1f}x harder dan normaal".replace(".", ",") if x and x >= VOL_NOTE_MIN else None

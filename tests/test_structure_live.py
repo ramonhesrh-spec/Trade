@@ -1,7 +1,7 @@
 import asyncio
 import json
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 import pandas as pd
@@ -120,6 +120,41 @@ class LiveTest(DbCase):
         self.assertGreater(sig["stop_loss"], sig["price"])     # short: stop boven de instap
         self.assertLess(sig["take_profit"], sig["price"])
         self.assertTrue(any("gevuld" in t for t, *_ in self.pushed))
+
+    def test_follow_reports_each_target_and_moves_stop_to_entry_at_t1(self):
+        t0 = pd.Timestamp("2026-03-05T10:00:00+00:00")
+        plan = {"level": 100.0, "stop": 101.0, "risk_pct": 1.0, "targets": [98.0, 97.0, 96.0], "targets_r": [2.0, 3.0, 4.0],
+                "fired": {"entry": 100.0, "stop": 101.0, "targets": [98.0, 97.0, 96.0], "hits": 0, "closed": False, "at": t0.isoformat()}}
+        sid = repo.insert_structure_setup({
+            "coin": "BTC", "direction": "short", "kind": "RANGE", "break_at": t0.isoformat(), "p1_at": t0.isoformat(), "line_a": 100.0,
+            "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "x", "features": "{}", "state": "waiting",
+            "expires_at": (t0 + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
+        sig = self.insert_signal(trade_type="structuur", direction="short", price=100.0, stop_loss=101.0, take_profit=97.0)
+        repo.set_structure_state(sid, "fired", sig)
+
+        def candles(rows):
+            return pd.DataFrame([{"timestamp": t0 + timedelta(minutes=5 * i), "open": o, "high": h, "low": l, "close": c, "volume": 1.0}
+                                 for i, (o, h, l, c) in enumerate(rows)])
+
+        def follow(df):
+            async def fake_push(user_id, title, body, url, silent=False, tag=None):
+                self.pushed.append((title, body))
+            with mock.patch("app.exchange.fetch_ohlcv", lambda *a, **k: df), mock.patch("app.push_notify.send_push", fake_push):
+                asyncio.run(sl._follow(datetime(2026, 3, 6, tzinfo=timezone.utc)))
+
+        follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0)]))               # T1 geraakt, stop blijft onder de instap
+        self.assertEqual(len(self.pushed), 1)
+        self.assertIn("T1 geraakt", self.pushed[0][0])
+        self.assertIn("Zet je stop op de instap", self.pushed[0][1])
+        follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0)]))               # zelfde candles: niet nog een keer
+        self.assertEqual(len(self.pushed), 1)
+        follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0), (98.0, 98.1, 96.9, 97.0)]))   # T2 erbij
+        self.assertEqual(len(self.pushed), 2)
+        self.assertIn("T2 geraakt", self.pushed[1][0])
+        follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0), (98.0, 98.1, 96.9, 97.0), (97.0, 100.2, 96.9, 100.0)]))  # terug op de instap
+        fired = json.loads(repo.list_structure_setups(("fired",))[0]["plan"])["fired"]
+        self.assertTrue(fired["closed"])
+        self.assertEqual(fired["hits"], 2)
 
     def test_no_alert_when_nearest_liquidity_leaves_less_than_min_rr(self):
         with mock.patch.object(sl, "MIN_RR", 50.0):

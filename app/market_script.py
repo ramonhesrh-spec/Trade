@@ -317,7 +317,10 @@ async def run_triggers(now: Optional[datetime] = None) -> int:
     from app import exchange
     now = now or datetime.now(timezone.utc)
     repo.expire_scenarios(now.isoformat())
-    if not config.SCRIPT_ENABLED or should_disable(repo.list_script_results(config.SCRIPT_MAX_NEGATIVE), config.SCRIPT_MAX_NEGATIVE):
+    if not config.SCRIPT_ENABLED:
+        return 0
+    if should_disable(repo.list_script_results(config.SCRIPT_MAX_NEGATIVE), config.SCRIPT_MAX_NEGATIVE):
+        repo.notify_engine_disabled("Markt-script", f"De laatste {config.SCRIPT_MAX_NEGATIVE} afgeronde scenario's zijn samen negatief. Zie Bewijs.")
         return 0
     waiting = repo.list_waiting_scenarios()
     fired = 0

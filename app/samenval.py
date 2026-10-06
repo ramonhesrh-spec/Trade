@@ -51,6 +51,7 @@ async def run(now: Optional[datetime] = None) -> int:
         return 0
     if should_disable(repo.list_samenval_results(config.SAMENVAL_MAX_NEGATIVE), config.SAMENVAL_MAX_NEGATIVE):
         logger.info("Samenval staat uit: de laatste %s afgeronde samenvallen zijn netto negatief", config.SAMENVAL_MAX_NEGATIVE)
+        repo.notify_engine_disabled("Samenval", f"De laatste {config.SAMENVAL_MAX_NEGATIVE} afgeronde samenvallen zijn netto negatief. Zie Bewijs.")
         return 0
     now = now or datetime.now(timezone.utc)
     since = (now - timedelta(hours=config.SAMENVAL_WINDOW_HOURS * 2)).isoformat()

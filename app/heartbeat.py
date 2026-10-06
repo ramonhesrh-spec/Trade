@@ -6,7 +6,9 @@ systemd timer, zie deploy/crypto-heartbeat.service en .timer.
 import asyncio
 import logging
 
-from app import db, push_notify, repo
+from datetime import datetime, timezone
+
+from app import db, market_calendar, push_notify, repo, today
 
 logger = logging.getLogger("heartbeat")
 
@@ -14,7 +16,14 @@ logger = logging.getLogger("heartbeat")
 async def send_heartbeats() -> None:
     timestamp = db.now_iso()[:16].replace("T", " ")
     title = "HesPulse draait"
-    body = f"Goedemorgen trader. Nieuwe dag, nieuwe kansen. Laatste controle: {timestamp}."
+    plans = len(repo.list_structure_setups(("waiting",)))
+    next_moment = today.agenda(market_calendar.upcoming(datetime.now(timezone.utc), 24))
+    lines = [f"{plans} {'plan' if plans == 1 else 'plannen'} klaar."]
+    if next_moment:
+        m = next_moment[0]
+        lines.append(f"Straks: {m['label']} om {today.local(m['at']).strftime('%H:%M')}.")
+    lines.append(f"Laatste controle: {timestamp}.")
+    body = "\n".join(lines)
 
     # Geen telegram_chat_id-gate (Taak 11): push_notify.send_push slaat een
     # gebruiker zonder push-abonnement zelf al stilzwijgend over, en

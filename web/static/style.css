@@ -1938,3 +1938,4 @@ main > section + section { margin-top: var(--space-10); }
 
 .coin-menu summary { font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: 0.1em; text-transform: uppercase; }
 .coin-menu-list a { font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; }
+.vd-board-sub { margin: 0; font-size: var(--text-sm); color: var(--text-dim); max-width: 52ch; }

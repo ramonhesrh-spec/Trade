@@ -218,7 +218,7 @@ async def _discover(coin: str, now: datetime) -> None:
                             f"/structuur#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A")
 
 
-async def _fire(setup: dict, plan: dict, entry: float, stop: float) -> None:
+async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: pd.Timestamp) -> None:
     from app import push_notify
     from app.signal_processor import fanout_confirmed_signal
     coin, direction = setup["coin"], setup["direction"]
@@ -237,6 +237,7 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float) -> None:
         "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
     })
     repo.set_structure_state(setup["id"], "fired", signal_id)
+    repo.update_structure_plan(setup["id"], json.dumps({**plan, "fired": {"entry": entry, "stop": stop, "targets": fired["targets"], "hits": 0, "closed": False, "at": filled_at.isoformat()}}))
     rr = abs(take - entry) / risk
     targets = " · ".join(f"{push_notify.fmt_price(t)} ({r:g}R)" for t, r in zip(fired["targets"], plan["targets_r"]))
     await fanout_confirmed_signal(
@@ -271,7 +272,7 @@ async def _track(now: datetime) -> None:
                     risk_pct = abs(level - stop) / level * 100
                     if br.MIN_STOP_PCT <= risk_pct <= br.MAX_STOP_PCT:
                         try:
-                            await _fire(s, plan, level, stop)
+                            await _fire(s, plan, level, stop, c.timestamp)
                         except Exception:
                             logger.exception("Structuur-setup %s voor %s is niet gemeld", s["id"], coin)
                     else:
@@ -280,12 +281,73 @@ async def _track(now: datetime) -> None:
                 extreme = max(extreme, c.high) if s["direction"] == br.SHORT else min(extreme, c.low)
 
 
+def _target_message(setup: dict, plan: dict, fired: dict, n: int) -> tuple[str, str]:
+    """Melding bij het n-de doel (1-based). Bij het eerste doel hoort de instructie uit het recept: stop naar de instap."""
+    from app import push_notify
+    targets, r_list = fired["targets"], plan["targets_r"]
+    title = push_notify.alert_title(setup["coin"], setup["direction"], f"T{n} geraakt")
+    first = f"T{n} {push_notify.fmt_price(targets[n - 1])} ({r_list[n - 1]:g}R) geraakt."
+    if n == len(targets):
+        return title, f"{first} Laatste doel: de trade is klaar."
+    nxt = f"Volgend doel T{n + 1} {push_notify.fmt_price(targets[n])} ({r_list[n]:g}R)."
+    if n == 1:
+        return title, f"{first}\nZet je stop op de instap {push_notify.fmt_price(fired['entry'])}.\n{nxt}"
+    return title, f"{first}\n{nxt}"
+
+
+async def _follow(now: datetime) -> None:
+    """Volgt gevulde setups: meldt elk doel dat raakt (bij het eerste hoort 'stop naar de instap') en sluit de setup bij
+    stop, terugkeer naar de instap of het laatste doel. Het signaal zelf meet alleen het tweede doel, deze ladder is voor jou."""
+    from app import exchange
+    rows = [s for s in repo.list_structure_setups(("fired",), 30) if (json.loads(s["plan"]).get("fired") or {}).get("closed") is False]
+    for coin in sorted({s["coin"] for s in rows}):
+        try:
+            df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="5m", limit=300)
+        except Exception:
+            logger.exception("5m-candles voor %s niet op te halen, ladder wordt later gevolgd", coin)
+            continue
+        for s in (x for x in rows if x["coin"] == coin):
+            plan = json.loads(s["plan"])
+            fired = plan["fired"]
+            short = s["direction"] == br.SHORT
+            hits, targets = fired["hits"], fired["targets"]
+            live_stop = fired["entry"] if hits >= 1 else fired["stop"]
+            changed, messages = False, []
+            # Alleen gesloten 5m-candles, en elke candle maar één keer: anders zou een stop op de instap (na T1) terugwerkend
+            # op candles van vóór T1 worden toegepast.
+            closed = df[df["timestamp"] + pd.Timedelta(minutes=5) <= pd.Timestamp(now)]
+            seen = fired.get("seen")
+            new = closed[closed["timestamp"] > pd.Timestamp(seen)] if seen else closed[closed["timestamp"] >= pd.Timestamp(fired["at"])]
+            for c in new.itertuples():
+                fired["seen"] = c.timestamp.isoformat()
+                changed = True
+                if (c.high >= live_stop) if short else (c.low <= live_stop):
+                    fired["closed"], changed = True, True
+                    break
+                while hits < len(targets) and ((c.low <= targets[hits]) if short else (c.high >= targets[hits])):
+                    hits += 1
+                    messages.append(_target_message(s, plan, fired, hits))
+                    if hits == 1:
+                        live_stop = fired["entry"]
+                    changed = True
+                if hits == len(targets):
+                    fired["closed"] = True
+                    break
+            if changed:
+                fired["hits"] = hits
+                repo.update_structure_plan(s["id"], json.dumps(plan))
+            for title, body in messages:
+                await _push_all(title, body, f"/coins/{coin}#signal-{s['signal_id']}", f"structuur-{coin}-t", loud=True)
+
+
 async def run(now: Optional[datetime] = None) -> None:
     """Draait in de SMC-snelcyclus."""
     now = now or datetime.now(timezone.utc)
     repo.expire_structure_setups(now.isoformat())
-    if not config.STRUCTURE_ENABLED or should_disable(repo.list_type_results("structuur", config.STRUCTURE_MAX_NEGATIVE),
-                                                      config.STRUCTURE_MAX_NEGATIVE):
+    if not config.STRUCTURE_ENABLED:
+        return
+    if should_disable(repo.list_type_results("structuur", config.STRUCTURE_MAX_NEGATIVE), config.STRUCTURE_MAX_NEGATIVE):
+        repo.notify_engine_disabled("Structuur-breuken", f"De laatste {config.STRUCTURE_MAX_NEGATIVE} afgeronde signalen zijn samen negatief. Zie Bewijs.")
         return
     symbols = {c["symbol"] for c in repo.list_coins()}
     for coin in config.BASE_COINS:
@@ -296,6 +358,7 @@ async def run(now: Optional[datetime] = None) -> None:
         except Exception:
             logger.exception("Structuur-check voor %s is mislukt", coin)
     await _track(now)
+    await _follow(now)
 
 
 if __name__ == "__main__":

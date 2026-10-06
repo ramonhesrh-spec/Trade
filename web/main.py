@@ -119,7 +119,7 @@ async def landing(request: Request):
     now = datetime.now(timezone.utc)
     scripts = repo.latest_scripts()
     return templates.TemplateResponse(request, "landing.html", {
-        "timeline": Markup(today.timeline_svg(now, market_calendar.upcoming(now, 24))), "mood": today.mood(scripts),
+        "timeline": Markup(today.timeline_svg(now, today.agenda(market_calendar.upcoming(now, 24)))), "mood": today.mood(scripts),
         "n_scripts": len(scripts), "now": today.nl_stamp(today.local(now)), "demo_chart": Markup(setup_chart.demo_svg()),
         "kraken_referral_url": config.KRAKEN_REFERRAL_URL,
         "kraken_referral_code": config.KRAKEN_REFERRAL_CODE,
@@ -345,7 +345,7 @@ async def _vandaag_context() -> dict:
     coins = [c["symbol"] for c in repo.list_coins()]
     prices = await _cached_prices(set(coins) | {"BTC"})
     scripts = [today.script_view(s, prices.get(s["coin"]), now) for s in scripts_raw]
-    moments = market_calendar.upcoming(now, 24)
+    moments = today.agenda(market_calendar.upcoming(now, 24))
     liq_since = (now - timedelta(hours=1)).isoformat()
     liquidations = today.liquidation_rows({c: repo.list_liquidations(c, liq_since) for c in coins})
     events = []
@@ -363,7 +363,8 @@ async def _vandaag_context() -> dict:
         "liq_last": repo.latest_liquidation_bucket(), "events": events, "score": score, "money": today.money,
         "status_labels": track_record.STATUS_LABELS, "script_enabled": config.SCRIPT_ENABLED,
         "structure_cards": structure_cards,
-        "plans_ready": len(structure_cards) + sum(1 for sc in scripts for x in sc["scenarios"] if x["state"] == "waiting"),
+        "plans_ready": len(structure_cards),
+        "scenarios_waiting": sum(1 for sc in scripts for x in sc["scenarios"] if x["state"] == "waiting"),
     }
 
 

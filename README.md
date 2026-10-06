@@ -391,6 +391,12 @@ sudo systemctl start crypto-news.service crypto-script.service
   per dag. Gaat vanzelf uit na `STRUCTURE_MAX_NEGATIVE` (30) afgeronde signalen die samen negatief zijn. `STRUCTURE_ENABLED=false`
   zet het uit. De mechanische versie scoorde -0,16R netto op een jaar candles (`scripts/breakretest_scan.py`): het oordeel van
   Claude moet dat verschil maken, en dat is een hypothese die Bewijs toetst.
+- `app/calendar_alerts.py`: herinnering 30 minuten vóór de opening van de VS-beurs (stil) en vóór een macro-uitslag uit
+  `data/macro_events.csv` (met geluid). De agenda toont alleen momenten die de toets als duidelijk anders mat, plus macro;
+  funding-resets en opties-expiry stonden er eerst bij maar bewegen de markt niet meetbaar. De agenda is niet volledig
+  automatisch: CPI en FOMC komen uit het csv-bestand dat jij vult.
+- Structuur-setups sturen na de vulling een melding bij elk doel dat raakt. Bij T1 hoort de instructie: stop naar de instap.
+  Een motor die zichzelf uitzet na een negatieve score meldt dat aan de beheerder (tabel `sent_alerts` voorkomt dubbele meldingen).
 - `app/news.py`: RSS (CoinDesk, Cointelegraph, The Block) en Binance-aankondigingen, elke 10 minuten, gesorteerd door
   `ANTHROPIC_EXPLAIN_MODEL`. Een bron die niet antwoordt wordt overgeslagen.
 - `/vandaag` is de nieuwe startpagina: scripts, agenda van 24 uur, liquidaties van het laatste uur, nieuws en de score van

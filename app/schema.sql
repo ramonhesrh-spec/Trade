@@ -611,3 +611,10 @@ CREATE TABLE IF NOT EXISTS structure_setups (
     UNIQUE(coin, direction, kind, break_at)
 );
 CREATE INDEX IF NOT EXISTS idx_structure_setups_state ON structure_setups(state, coin);
+
+-- Eenmalige meldingen (agenda-herinneringen, motor uitgeschakeld): de sleutel voorkomt dat dezelfde melding twee keer gaat,
+-- ook als de scan als losse oneshot-process opnieuw draait.
+CREATE TABLE IF NOT EXISTS sent_alerts (
+    key TEXT PRIMARY KEY,
+    at TEXT NOT NULL
+);

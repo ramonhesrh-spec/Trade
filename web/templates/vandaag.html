@@ -11,9 +11,10 @@
 <section class="vd-board" style="--i: 0">
   <div class="vd-board-count">
     <span class="vd-board-number{% if not plans_ready %} is-zero{% endif %}">{{ plans_ready }}</span>
-    <span class="vd-board-label">{% if plans_ready == 1 %}plan wacht{% elif plans_ready %}plannen wachten{% else %}plan klaar{% endif %}<br>{% if plans_ready %}op een limiet{% else %}Nog niets gebroken dat de toets haalt.{% endif %}</span>
+    <span class="vd-board-label">{% if plans_ready == 1 %}plan klaar{% elif plans_ready %}plannen klaar{% else %}plan klaar{% endif %}<br>{% if plans_ready %}wacht op de terugkeer{% else %}Nog niets gebroken dat de toets haalt.{% endif %}</span>
   </div>
   <div class="vd-board-side">
+    {% if scenarios_waiting %}<p class="vd-board-sub">Daarnaast wachten {{ scenarios_waiting }} scenario's van het markt-script op een voorwaarde. Dat zijn hypotheses, geen getekende plannen.</p>{% endif %}
     <div class="vd-hero-price">
       <span class="vd-hero-label">BTC</span>
       <span class="vd-hero-number" data-vd-price="BTC">{% if prices.get("BTC") %}{{ "{:,.0f}".format(prices["BTC"]).replace(",", ".") }}{% else %}-{% endif %}</span>
@@ -41,6 +42,7 @@
 <section class="card vd-card" style="--i: 1">
   <h3>Agenda, komende 24 uur</h3>
   <div class="vd-timeline-wrap">{{ timeline }}</div>
+  {% if not moments %}<p class="muted vd-fine">Geen moment in de komende 24 uur waarop de markt meetbaar anders beweegt.</p>{% endif %}
   <p class="muted vd-fine">Tijden in Nederlandse tijd. De zwaarte bij een moment is gemeten op een jaar candles, niet geschat.</p>
 </section>
 

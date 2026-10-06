@@ -2725,3 +2725,22 @@ def update_structure_judgement(setup_id: int, grade: Optional[str], reason: str,
 def expire_structure_setups(now_iso: str) -> None:
     with db.session() as conn:
         conn.execute("UPDATE structure_setups SET state = 'expired' WHERE state = 'waiting' AND expires_at < ?", (now_iso,))
+
+
+def alert_once(key: str) -> bool:
+    """True als deze sleutel nieuw was en nu is vastgelegd: de aanroeper mag dan melden."""
+    with db.session() as conn:
+        cur = conn.execute("INSERT OR IGNORE INTO sent_alerts (key, at) VALUES (?, ?)", (key, db.now_iso()))
+        return cur.rowcount > 0
+
+
+def notify_engine_disabled(name: str, detail: str) -> None:
+    """Een motor die zichzelf uitzet na een negatieve score mag dat niet stil doen: de beheerder ziet het op Meldingen."""
+    day = db.now_iso()[:10]
+    if alert_once(f"engine-off:{name}:{day}"):
+        create_notification(None, "engine", f"{name} staat uit", detail, "/bewijs")
+
+
+def update_structure_plan(setup_id: int, plan_json: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE structure_setups SET plan = ? WHERE id = ?", (plan_json, setup_id))

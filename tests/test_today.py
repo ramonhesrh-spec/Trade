@@ -85,3 +85,9 @@ class MoodAndLiquidationTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class AgendaTest(unittest.TestCase):
+    def test_agenda_drops_unmeasured_noise_but_keeps_us_open_and_macro(self):
+        kinds = [m["kind"] for m in today.agenda([moment(1, "funding"), moment(2, "opties_expiry"), moment(3, "vs_open"), moment(4, "macro")])]
+        self.assertEqual(kinds, ["vs_open", "macro"])
