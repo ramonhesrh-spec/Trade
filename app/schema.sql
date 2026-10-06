@@ -515,6 +515,51 @@ CREATE TABLE IF NOT EXISTS liquidations_5m (
     PRIMARY KEY (coin, bucket)
 );
 
+-- Markt-script (app/market_script.py): elke 4 uur per coin een korte duiding en maximaal twee scenario's met een
+-- voorwaarde. Een scenario dat afgaat wordt een gewoon signaal (trade_type 'script') zodat uitkomst en Bewijs vanzelf werken.
+CREATE TABLE IF NOT EXISTS market_scripts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    summary TEXT,
+    bias TEXT,
+    model TEXT,
+    n_dropped INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_market_scripts_coin ON market_scripts(coin, created_at);
+CREATE TABLE IF NOT EXISTS script_scenarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    script_id INTEGER NOT NULL REFERENCES market_scripts(id),
+    coin TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    trigger_type TEXT NOT NULL,
+    trigger_level REAL NOT NULL,
+    entry REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL NOT NULL,
+    reason TEXT,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    fired_at TEXT,
+    signal_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_script_scenarios_state ON script_scenarios(state, coin);
+
+-- Nieuws en events (app/news.py): koppen met de duiding van een goedkoop Claude-model.
+CREATE TABLE IF NOT EXISTS market_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at TEXT NOT NULL,
+    source TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT UNIQUE,
+    coins TEXT,
+    direction TEXT,
+    impact TEXT,
+    summary TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_market_events_at ON market_events(at);
+
 -- Samenval: een SMC-signaal en een community-call op dezelfde coin en kant binnen het venster. Eén rij per
 -- SMC-signaal (UNIQUE) zodat er nooit twee keer gemeld wordt; de uitkomst staat op het signaal zelf.
 CREATE TABLE IF NOT EXISTS samenvallen (

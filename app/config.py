@@ -117,3 +117,11 @@ SIGNAL_TYPE_INFO_ONLY = {t.strip() for t in _get("SIGNAL_TYPE_INFO_ONLY", "").sp
 SAMENVAL_ENABLED = _get("SAMENVAL_ENABLED", "true").lower() == "true"
 SAMENVAL_WINDOW_HOURS = float(_get("SAMENVAL_WINDOW_HOURS", "6"))
 SAMENVAL_MAX_NEGATIVE = int(_get("SAMENVAL_MAX_NEGATIVE", "30"))
+
+
+# Markt-script (app/market_script.py): elke 4 uur per coin een duiding met twee scenario's. Een scenario dat afgaat geeft
+# een melding met het label ongetest. Gaat vanzelf uit als de laatste SCRIPT_MAX_NEGATIVE afgeronde scenario's negatief zijn.
+SCRIPT_ENABLED = _get("SCRIPT_ENABLED", "true").lower() == "true"
+SCRIPT_MODEL = _get("SCRIPT_MODEL", ANTHROPIC_MODEL)
+SCRIPT_MAX_ALERTS_PER_DAY = int(_get("SCRIPT_MAX_ALERTS_PER_DAY", "6"))
+SCRIPT_MAX_NEGATIVE = int(_get("SCRIPT_MAX_NEGATIVE", "30"))

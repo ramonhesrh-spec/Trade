@@ -1,0 +1,9 @@
+[Unit]
+Description=Haal elke 10 minuten nieuws op voor HesPulse
+
+[Timer]
+OnCalendar=*:0/10
+Persistent=true
+
+[Install]
+WantedBy=timers.target

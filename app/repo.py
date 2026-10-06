@@ -2561,3 +2561,103 @@ def list_liquidations(coin: str, since_iso: str) -> list[dict]:
             (coin, since_iso),
         ).fetchall()
         return [dict(r) for r in rows]
+
+
+def insert_market_script(coin: str, summary: str, bias: str, model: str, scenarios: list[dict], n_dropped: int,
+                         expires_at: str) -> int:
+    with db.session() as conn:
+        cur = conn.execute(
+            "INSERT INTO market_scripts (coin, created_at, summary, bias, model, n_dropped) VALUES (?, ?, ?, ?, ?, ?)",
+            (coin, db.now_iso(), summary, bias, model, n_dropped),
+        )
+        script_id = cur.lastrowid
+        for sc in scenarios:
+            conn.execute(
+                """INSERT INTO script_scenarios (script_id, coin, created_at, expires_at, direction, trigger_type,
+                   trigger_level, entry, stop_loss, take_profit, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (script_id, coin, db.now_iso(), expires_at, sc["direction"], sc["trigger_type"], sc["trigger_level"],
+                 sc["entry"], sc["stop_loss"], sc["take_profit"], sc["reason"]),
+            )
+        # Een nieuw script vervangt de scenario's die nog wachten: ze zijn gebaseerd op een oudere stand van de markt.
+        conn.execute("UPDATE script_scenarios SET state = 'expired' WHERE coin = ? AND state = 'waiting' AND script_id < ?",
+                     (coin, script_id))
+        return script_id
+
+
+def list_waiting_scenarios() -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM script_scenarios WHERE state = 'waiting' ORDER BY id")]
+
+
+def expire_scenarios(now_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("UPDATE script_scenarios SET state = 'expired' WHERE state = 'waiting' AND expires_at < ?",
+                            (now_iso,)).rowcount
+
+
+def set_scenario_state(scenario_id: int, state: str, signal_id: Optional[int] = None) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE script_scenarios SET state = ?, signal_id = COALESCE(?, signal_id), "
+            "fired_at = CASE WHEN ? = 'fired' THEN ? ELSE fired_at END WHERE id = ?",
+            (state, signal_id, state, db.now_iso(), scenario_id),
+        )
+
+
+def count_script_alerts_since(since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM script_scenarios WHERE state = 'fired' AND fired_at >= ?",
+                            (since_iso,)).fetchone()[0]
+
+
+def list_script_results(limit: int = 30) -> list[dict]:
+    """De laatste afgeronde script-signalen (take of stop geraakt), voor de zelfuitschakeling."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT price, stop_loss, take_profit, auto_outcome FROM signals
+               WHERE trade_type = 'script' AND auto_outcome IN ('take_profit', 'stop_loss')
+               ORDER BY auto_outcome_at DESC LIMIT ?""", (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def latest_scripts() -> list[dict]:
+    """Per coin het laatste script met zijn scenario's, voor de pagina Vandaag."""
+    with db.session() as conn:
+        scripts = conn.execute(
+            """SELECT * FROM market_scripts WHERE id IN (SELECT MAX(id) FROM market_scripts GROUP BY coin)
+               ORDER BY coin"""
+        ).fetchall()
+        out = []
+        for sc in scripts:
+            item = dict(sc)
+            item["scenarios"] = [dict(r) for r in conn.execute(
+                "SELECT * FROM script_scenarios WHERE script_id = ? ORDER BY id", (sc["id"],))]
+            out.append(item)
+        return out
+
+
+def list_recent_events(coin: Optional[str], since_iso: str, limit: int = 8) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT at, source, title, coins, direction, impact, summary FROM market_events
+               WHERE at >= ? AND (? IS NULL OR coins LIKE ? OR coins = 'ALLES') ORDER BY at DESC LIMIT ?""",
+            (since_iso, coin, f"%{coin}%" if coin else None, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def known_event_urls(urls: list[str]) -> set[str]:
+    if not urls:
+        return set()
+    with db.session() as conn:
+        marks = ",".join("?" for _ in urls)
+        return {r["url"] for r in conn.execute(f"SELECT url FROM market_events WHERE url IN ({marks})", urls)}
+
+
+def insert_market_event(at: str, source: str, title: str, url: str, coins: str, direction: str, impact: str, summary: str) -> bool:
+    with db.session() as conn:
+        return conn.execute(
+            """INSERT OR IGNORE INTO market_events (at, source, title, url, coins, direction, impact, summary)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (at, source, title, url, coins, direction, impact, summary),
+        ).rowcount == 1
