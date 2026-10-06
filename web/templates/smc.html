@@ -1,39 +1,14 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
-{% block title %}Radar — HesPulse{% endblock %}
+{% block title %}SMC-radar — HesPulse{% endblock %}
 {% block content %}
 
 <div class="page-head">
-  <h2>Trade Radar</h2>
+  <h2>SMC-radar</h2>
 </div>
 <p class="page-intro">SMC-setups die zich opbouwen, als handelsplan: de limietorder staat op de rand van de zone, met stop, doel en R:R vanaf die prijs. De status loopt live mee met de koers.</p>
 
-{% if structure_cards %}
-<section class="card" style="--i: 0">
-  <h3>Structuur-breuken <span class="tag-untested">ongetest</span></h3>
-  <p class="muted">Breuk van een lijn of range op 30m. Zet de limietorder op het niveau: de stop staat vast, de doelen liggen op zwaaipunten. Raakt de koers het niveau, dan volgt een signaal.</p>
-  <div class="setup-grid">
-    {% for c in structure_cards %}
-    <article class="setup-card" id="structuur-{{ c.id }}">
-      <header class="setup-head">
-        <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
-        <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
-        <span class="setup-grade setup-grade-{{ c.grade|lower }}">{{ c.grade }}</span>
-        <span class="muted setup-age">{{ c.created_at | age }}</span>
-      </header>
-      {{ c.chart }}
-      <dl class="setup-plan">
-        <div><dt>Limiet</dt><dd>{{ "%.4f"|format(c.plan.level) }}</dd></div>
-        <div><dt>Stop</dt><dd>{{ "%.4f"|format(c.plan.stop) }}</dd></div>
-        <div><dt>Risico</dt><dd>{{ "%.2f"|format(c.plan.risk_pct) }}%</dd></div>
-        <div><dt>Eerste doel</dt><dd>{{ "%g"|format(c.targets[0][1]) }}R</dd></div>
-      </dl>
-      <p class="setup-reason">{{ c.reason }}</p>
-    </article>
-    {% endfor %}
-  </div>
-</section>
-{% endif %}
+
 
 <section class="card" style="--i: 0">
   <h3>Wachten op de zone</h3>

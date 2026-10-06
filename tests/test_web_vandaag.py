@@ -36,7 +36,7 @@ class WebVandaagTests(unittest.TestCase):
         self.patch.stop()
         self.tmp.cleanup()
 
-    def test_radar_shows_waiting_structure_setup_with_chart(self):
+    def test_setups_page_shows_waiting_structure_setup_with_chart(self):
         import json
         candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
         plan = {"level": 100.0, "stop": 101.0, "risk_pct": 1.0, "targets": [98.0, 97.0], "targets_r": [2.0, 3.0], "candles": candles}
@@ -44,7 +44,7 @@ class WebVandaagTests(unittest.TestCase):
             "coin": "BTC", "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
             "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "Schone range.", "features": "{}", "state": "waiting",
             "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
-        r = self.client.get("/smc")
+        r = self.client.get("/structuur")
         self.assertEqual(r.status_code, 200)
         self.assertIn(f'id="structuur-{sid}"', r.text)
         self.assertIn("sc-limit", r.text)

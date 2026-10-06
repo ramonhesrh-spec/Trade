@@ -215,7 +215,7 @@ async def _discover(coin: str, now: datetime) -> None:
         if state == "waiting":
             setup = {**row, "id": setup_id, "reason": reason}
             await _push_all(push_notify.alert_title(coin, ev.direction, f"Structuur {grade} (ongetest)"), alert_body(setup, plan),
-                            f"/smc#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A")
+                            f"/structuur#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A")
 
 
 async def _fire(setup: dict, plan: dict, entry: float, stop: float) -> None:

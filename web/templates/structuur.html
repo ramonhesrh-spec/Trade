@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}Setups — HesPulse{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h2>Setups</h2>
+  <span class="tag-untested">ongetest</span>
+</div>
+<p class="page-intro">Breuk van een lijn of range op 30 minuten. Claude beoordeelt de kwaliteit, de code rekent het plan uit: de limietorder staat op het gebroken niveau, de stop vlak erachter, de doelen op zwaaipunten. Zet de order klaar voordat de koers terugkomt. De score van deze methode staat op <a href="/bewijs">Bewijs</a>.</p>
+
+<section style="--i: 0">
+  <h3 class="vd-section-title">Wachten op de terugkeer</h3>
+  {% if not structure_cards %}
+  <p class="muted empty">Geen plan klaar. Een melding volgt zodra een lijn of range breekt en Claude de breuk goedkeurt.</p>
+  {% else %}
+  <div class="setup-grid">
+    {% for c in structure_cards %}{{ macros.setup_card(c) }}{% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+<section style="--i: 1">
+  <h3 class="vd-section-title">Eerder, laatste 7 dagen</h3>
+  {% if not history %}
+  <p class="muted empty">Nog geen afgeronde setups.</p>
+  {% else %}
+  <ul class="setup-history">
+    {% for h in history %}
+    <li class="setup-history-row">
+      <span class="radar-coin">{{ h.coin }}</span>
+      <span class="radar-dir radar-dir-{{ h.direction }}">{{ h.direction }}</span>
+      <span class="setup-grade setup-grade-{{ (h.grade or 'c')|lower }}">{{ h.grade or "-" }}</span>
+      <span class="setup-history-state">{{ h.state_label }}</span>
+      <span class="muted setup-age">{{ h.created_at | age }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+{% endblock %}

@@ -45,7 +45,7 @@ class WebRadarTests(unittest.TestCase):
     def test_radar_pagina_toont_plan_status_en_live_r(self):
         r = self.client.get("/smc")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("Trade Radar", r.text)
+        self.assertIn("SMC-radar", r.text)
         self.assertIn("XRP", r.text)
         self.assertIn("Wacht op de zone", r.text)
         self.assertIn("Limietorder", r.text)
@@ -92,8 +92,8 @@ class WebRadarTests(unittest.TestCase):
 
     def test_navigatie_heeft_radar_en_bewijs(self):
         r = self.client.get("/bewijs")
-        self.assertIn('href="/smc">Radar<', r.text)
-        self.assertIn('href="/bewijs">Bewijs<', r.text)
+        self.assertIn('>SMC</a>', r.text)
+        self.assertIn('>Bewijs</a>', r.text)
 
 
 if __name__ == "__main__":

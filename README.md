@@ -386,7 +386,7 @@ sudo systemctl start crypto-news.service crypto-script.service
   scenario's samen negatief zijn. `SCRIPT_ENABLED=false` zet het uit. Model: `SCRIPT_MODEL` (standaard `ANTHROPIC_MODEL`).
 - `app/structure_live.py`: breuk van een lijn of range op 30m (detector uit `app/replay/breakretest.py`, alleen gesloten candles).
   Claude geeft een oordeel A, B of C; de code berekent niveau, stop en doelen. A is een melding, B een stille melding, C wordt
-  bewaard. Het plan staat in de melding en op Radar (`/smc#structuur-<id>`), vóórdat de limiet vult. Raakt de koers het niveau,
+  bewaard. Het plan staat in de melding en op de pagina Setups (`/structuur#structuur-<id>`), vóórdat de limiet vult. Raakt de koers het niveau,
   dan volgt een signaal met `trade_type = 'structuur'` (label ongetest, score op Bewijs). Max `STRUCTURE_MAX_ALERTS_PER_DAY` (8)
   per dag. Gaat vanzelf uit na `STRUCTURE_MAX_NEGATIVE` (30) afgeronde signalen die samen negatief zijn. `STRUCTURE_ENABLED=false`
   zet het uit. De mechanische versie scoorde -0,16R netto op een jaar candles (`scripts/breakretest_scan.py`): het oordeel van
@@ -410,7 +410,7 @@ start; herstart `crypto-bot` na een wijziging.
 
 ### Trade Radar en Bewijs (dashboard)
 
-`/smc` heet in de navigatie **Radar**: elke bouwende SMC-setup en elk open SMC-signaal staat als handelsplan met een
+`/smc` heet in de navigatie **SMC** (de structuur-breuken staan apart op **Setups**, `/structuur`): elke bouwende SMC-setup en elk open SMC-signaal staat als handelsplan met een
 prijsladder (zone, limietorder op de zone-rand, stop, doel, koers nu), de R:R vanaf de limietprijs, de afstand tot de order en
 een live status die elke 15 seconden meebeweegt (`/api/radar`, `web/static/radar.js`; koersen staan 10 seconden in een cache).
 De rekenlaag zit in `app/trade_plan.py` en `app/radar.py`. Zodra de koers in de zone komt stuurt de SMC-check eenmalig een

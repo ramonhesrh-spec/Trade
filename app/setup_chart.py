@@ -5,10 +5,11 @@ from datetime import datetime
 from html import escape
 from typing import Optional
 
-W, H = 720, 330
-PAD_L, PAD_R, PAD_T, PAD_B = 8, 150, 14, 22
-LABEL_GAP = 13            # minimale afstand tussen twee labels, zodat dicht bij elkaar liggende doelen leesbaar blijven
-FUTURE_BARS = 14          # lege ruimte rechts voor stopzone en doelen
+W, H = 560, 320
+PAD_L, PAD_R, PAD_T, PAD_B = 6, 128, 14, 14
+LABEL_GAP = 16            # minimale afstand tussen twee labels, zodat dicht bij elkaar liggende doelen leesbaar blijven
+SHOWN_BARS = 44           # genoeg om de structuur te zien, weinig genoeg om leesbaar te blijven op een telefoon
+FUTURE_BARS = 9          # lege ruimte rechts voor stopzone en doelen
 BAR_SECONDS = 30 * 60
 
 
@@ -25,6 +26,7 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
     p1_at, break_at. plan: level, stop, targets, targets_r. Geeft '' als er geen candles zijn."""
     if not candles:
         return ""
+    candles = candles[-SHOWN_BARS:]
     n = len(candles)
     times = [_ts(c[0]) for c in candles]
     slots = n + FUTURE_BARS

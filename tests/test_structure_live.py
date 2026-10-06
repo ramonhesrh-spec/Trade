@@ -93,7 +93,7 @@ class LiveTest(DbCase):
         self.assertIn("Structuur A (ongetest)", title)
         self.assertIn("Limietorder", body)
         self.assertIn("Doelen", body)
-        self.assertTrue(url.startswith("/smc#structuur-"))
+        self.assertTrue(url.startswith("/structuur#structuur-"))
         self.assertEqual(len(self.graded), 1)
         self.assertIn("laatste_candles_30m", self.graded[0])
         self.run_live(BREAK_BAR + 4)

@@ -8,21 +8,35 @@
   <span class="muted vd-clock">{{ now }}</span>
 </div>
 
-<section class="vd-hero" style="--i: 0">
-  <div class="vd-hero-price">
-    <span class="vd-hero-label">BTC</span>
-    <span class="vd-hero-number" data-vd-price="BTC">{% if prices.get("BTC") %}{{ "{:,.0f}".format(prices["BTC"]).replace(",", ".") }}{% else %}-{% endif %}</span>
+<section class="vd-board" style="--i: 0">
+  <div class="vd-board-count">
+    <span class="vd-board-number{% if not plans_ready %} is-zero{% endif %}">{{ plans_ready }}</span>
+    <span class="vd-board-label">{% if plans_ready == 1 %}plan wacht{% elif plans_ready %}plannen wachten{% else %}plan klaar{% endif %}<br>{% if plans_ready %}op een limiet{% else %}Nog niets gebroken dat de toets haalt.{% endif %}</span>
   </div>
-  <div class="vd-hero-mood">
-    <div class="vd-hero-label">Stemming van het markt-script</div>
-    {% if mood.total %}
-    {{ macros.mood_bar(mood) }}
-    {% else %}
-    <p class="muted vd-empty">Het eerste markt-script verschijnt na de volgende ronde van 4 uur.</p>
-    {% endif %}
+  <div class="vd-board-side">
+    <div class="vd-hero-price">
+      <span class="vd-hero-label">BTC</span>
+      <span class="vd-hero-number" data-vd-price="BTC">{% if prices.get("BTC") %}{{ "{:,.0f}".format(prices["BTC"]).replace(",", ".") }}{% else %}-{% endif %}</span>
+    </div>
+    <div class="vd-hero-mood">
+      <div class="vd-hero-label">Stemming van het markt-script</div>
+      {% if mood.total %}
+      {{ macros.mood_bar(mood) }}
+      {% else %}
+      <p class="muted vd-empty">Het eerste markt-script verschijnt na de volgende ronde van 4 uur.</p>
+      {% endif %}
+    </div>
   </div>
-  <p class="vd-hero-note muted">Een scenario is een hypothese van Claude, geen belofte. Onderaan staat de score van wat tot nu toe is voorspeld.</p>
 </section>
+
+{% if structure_cards %}
+<section style="--i: 1">
+  <h3 class="vd-section-title">Getekende plannen <a class="vd-more" href="/structuur">alle setups</a></h3>
+  <div class="setup-grid">
+    {% for c in structure_cards[:2] %}{{ macros.setup_card(c) }}{% endfor %}
+  </div>
+</section>
+{% endif %}
 
 <section class="card vd-card" style="--i: 1">
   <h3>Agenda, komende 24 uur</h3>

@@ -294,6 +294,20 @@ async def _structure_cards() -> list[dict]:
     return cards
 
 
+STRUCTURE_STATE_LABELS = {"fired": "Limiet geraakt, signaal gemeld", "expired": "Verlopen, koers kwam niet terug", "niet_gemeld": "Claude keurde af (C)",
+                          "overgeslagen": "Stop buiten het toegestane bereik", "geen_oordeel": "Geen oordeel van Claude"}
+
+
+@app.get("/structuur")
+async def structuur_page(request: Request, user: dict = Depends(require_login)):
+    """De nieuwe methode: breuk van een lijn of range op 30m met het plan getekend (app/structure_live.py)."""
+    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+    history = [{**h, "state_label": STRUCTURE_STATE_LABELS.get(h["state"], h["state"])}
+               for h in repo.list_structure_setups(("fired", "expired", "niet_gemeld", "overgeslagen", "geen_oordeel"), 40)
+               if h["created_at"] >= since]
+    return templates.TemplateResponse(request, "structuur.html", {"user": user, "structure_cards": await _structure_cards(), "history": history})
+
+
 @app.get("/smc")
 async def smc_page(request: Request, user: dict = Depends(require_login)):
     """Trade Radar: bouwende setups en open SMC-signalen als handelsplan met prijsladder en live status (de limietorder
@@ -314,7 +328,6 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     return templates.TemplateResponse(request, "smc.html", {
         "user": user,
         "setup_cards": [c for c in cards if c["kind"] == "setup"],
-        "structure_cards": await _structure_cards(),
         "signal_cards": [c for c in cards if c["kind"] == "signal"],
         "entries": entries,
     })
@@ -333,6 +346,7 @@ async def _vandaag_context() -> dict:
     for e in repo.list_recent_events(None, (now - timedelta(hours=12)).isoformat(), limit=8):
         at = datetime.fromisoformat(e["at"])
         events.append({**e, "time": today.local(at if at.tzinfo else at.replace(tzinfo=timezone.utc)).strftime("%H:%M")})
+    structure_cards = await _structure_cards()
     summary = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
     score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur") or e["source"] == "alles"]
     for e in score:
@@ -342,6 +356,8 @@ async def _vandaag_context() -> dict:
         "timeline": Markup(today.timeline_svg(now, moments)), "moments": moments, "liquidations": liquidations,
         "liq_last": repo.latest_liquidation_bucket(), "events": events, "score": score, "money": today.money,
         "status_labels": track_record.STATUS_LABELS, "script_enabled": config.SCRIPT_ENABLED,
+        "structure_cards": structure_cards,
+        "plans_ready": len(structure_cards) + sum(1 for sc in scripts for x in sc["scenarios"] if x["state"] == "waiting"),
     }
 
 
@@ -647,7 +663,7 @@ def _compute_tension(current_price: Optional[float], stop_loss: Optional[float],
     dichtst is, groen als de take profit het dichtst is. Puur visueel,
     geen nieuw getal dat nergens anders al stond."""
     if current_price is None or not stop_loss or not take_profit:
-        return 0.0, "23, 229, 214"
+        return 0.0, "255, 178, 36"
     dist_to_sl = abs(current_price - stop_loss)
     dist_to_tp = abs(current_price - take_profit)
     total_range = abs(take_profit - stop_loss) or 1.0

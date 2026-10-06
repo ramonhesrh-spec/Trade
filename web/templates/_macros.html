@@ -228,3 +228,38 @@
 <p class="muted vd-fine">Geen scenario dat nu wacht op een voorwaarde.</p>
 {% endif %}
 {% endmacro %}
+
+
+{# Een structuur-setup als getekende trade (app/setup_chart.py), met het plan eronder. Gebruikt op Setups en op Vandaag. #}
+{% macro setup_card(c) %}
+<article class="setup-card" id="structuur-{{ c.id }}">
+  <header class="setup-head">
+    <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
+    <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
+    <span class="setup-grade setup-grade-{{ c.grade|lower }}" title="Oordeel van Claude">{{ c.grade }}</span>
+    <span class="muted setup-age">{{ c.created_at | age }}</span>
+  </header>
+  {{ c.chart }}
+  <dl class="setup-plan">
+    <div><dt>Limiet</dt><dd>{{ "%.4f"|format(c.plan.level) }}</dd></div>
+    <div><dt>Stop</dt><dd>{{ "%.4f"|format(c.plan.stop) }}</dd></div>
+    <div><dt>Risico</dt><dd>{{ "%.2f"|format(c.plan.risk_pct) }}%</dd></div>
+    <div><dt>Eerste doel</dt><dd>{{ "%g"|format(c.targets[0][1]) }}R</dd></div>
+  </dl>
+  <p class="setup-reason">{{ c.reason }}</p>
+</article>
+{% endmacro %}
+
+
+{# R-liniaal: waar een gemiddeld resultaat op de schaal van -1R (stop) tot +2R valt. De streep bij 0 is break-even. #}
+{% macro r_ruler(value) %}
+{% set clamped = [[value, -1.0]|max, 2.0]|min %}
+<div class="r-ruler" role="img" aria-label="Gemiddeld {{ '%+.2f'|format(value) }} R per trade op een schaal van min 1 tot plus 2 R">
+  <span class="r-ruler-fill {{ 'pos' if value > 0 else 'neg' }}" style="left: {{ (33.333 if value > 0 else (clamped + 1) / 3 * 100) }}%; width: {{ ((clamped|abs) / 3 * 100) }}%"></span>
+  <span class="r-ruler-tick" style="left: 0%"><i>-1R</i></span>
+  <span class="r-ruler-tick is-zero" style="left: 33.333%"><i>0</i></span>
+  <span class="r-ruler-tick" style="left: 66.667%"><i>+1R</i></span>
+  <span class="r-ruler-tick" style="left: 100%"><i>+2R</i></span>
+  <span class="r-ruler-mark" style="left: {{ (clamped + 1) / 3 * 100 }}%"></span>
+</div>
+{% endmacro %}
