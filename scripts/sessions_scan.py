@@ -34,7 +34,7 @@ def main() -> None:
         rows += sessions.orb_trades(c, f) + sessions.sweep_trades(c, f)
         ln.append(sessions.london_to_ny(c, f))
         print(f"{c}: klaar", flush=True)
-    trades = pd.DataFrame(rows, columns=["at", "coin", "variant", "rr", "win", "r_gross", "r_net"])
+    trades = pd.DataFrame(rows) if rows else pd.DataFrame(columns=["at", "coin", "variant", "rr", "win", "r_gross", "r_net", "or_pct", "aligned"])
     starts = [f["timestamp"].iloc[0] for f in frames.values()]
     ends = [f["timestamp"].iloc[-1] for f in frames.values()]
     cut = min(starts) + (max(ends) - min(starts)) * 0.7
@@ -46,6 +46,20 @@ def main() -> None:
         print(f"{r['variant']:<16}{r['rr']:>5.1f}{r['n']:>6}{r['winrate'] * 100:>8.0f}%{r['gross']:>+9.2f}{r['net']:>+9.2f}{fmt(r['train']):>8}{fmt(r['test']):>8}"
               f"{fmt(r['t_days']):>7}  {'JA' if sessions.passes(r) else ''}")
     print(f"\n{sum(sessions.passes(r) for r in res)} van {len(res)} combinaties slagen.")
+
+    follow = trades[trades["variant"] == "ORB mee"]
+    if not follow.empty:
+        narrow = follow[follow["at"] < cut]["or_pct"].median()
+        print(f"\nORB mee met vooraf vastgelegde filters (smal = opening range onder de mediaan van de trainhelft, {narrow:.2f}%; mee = New York breekt in de richting van London):")
+        subsets = {"alle": follow, "mee met London": follow[follow["aligned"] > 0], "tegen London": follow[follow["aligned"] < 0],
+                   "smalle range": follow[follow["or_pct"] <= narrow], "brede range": follow[follow["or_pct"] > narrow],
+                   "smal en mee": follow[(follow["or_pct"] <= narrow) & (follow["aligned"] > 0)]}
+        print(f"{'filter':<18}{'RR':>5}{'n':>6}{'winrate':>9}{'bruto R':>9}{'netto R':>9}{'train':>8}{'test':>8}{'t/dag':>7}  slaagt")
+        for label, sub in subsets.items():
+            tmp = sub.assign(variant=label)
+            for r in sorted(sessions.summarize(tmp, cut), key=lambda r: r["rr"]):
+                print(f"{label:<18}{r['rr']:>5.1f}{r['n']:>6}{r['winrate'] * 100:>8.0f}%{r['gross']:>+9.2f}{r['net']:>+9.2f}{fmt(r['train']):>8}{fmt(r['test']):>8}"
+                      f"{fmt(r['t_days']):>7}  {'JA' if sessions.passes(r) else ''}")
 
     lon = pd.concat(ln, ignore_index=True)
     print("\nLondon-richting tegenover New York (bp na 6 bp kosten, over coins en dagen):")

@@ -48,7 +48,7 @@ def weekdays(frame: pd.DataFrame) -> list[date]:
     return [d.date() for d in days if d.weekday() < 5]
 
 
-def _row(coin: str, variant: str, direction: str, entry: float, stop: float, at: pd.Timestamp, frame: pd.DataFrame) -> list[dict]:
+def _row(coin: str, variant: str, direction: str, entry: float, stop: float, at: pd.Timestamp, frame: pd.DataFrame, extra: Optional[dict] = None) -> list[dict]:
     risk_pct = abs(entry - stop) / entry * 100
     if not (MIN_STOP_PCT <= risk_pct <= MAX_STOP_PCT) or (direction == "long" and stop >= entry) or (direction == "short" and stop <= entry):
         return []
@@ -58,7 +58,7 @@ def _row(coin: str, variant: str, direction: str, entry: float, stop: float, at:
     for rr in RR_LIST:
         o = resolve(direction, entry, stop, entry + sign * abs(entry - stop) * rr, after, at, MAX_AGE, FEE_PCT, SLIP_PCT)
         if o is not None:
-            out.append({"at": at, "coin": coin, "variant": variant, "rr": rr, "win": o.result == "take_profit", "r_gross": o.r_gross, "r_net": o.r_net})
+            out.append({"at": at, "coin": coin, "variant": variant, "rr": rr, "win": o.result == "take_profit", "r_gross": o.r_gross, "r_net": o.r_net, **(extra or {})})
     return out
 
 
@@ -74,6 +74,8 @@ def orb_trades(coin: str, frame: pd.DataFrame) -> list[dict]:
         if len(opening) < OR_MINUTES - 3:
             continue
         hi, lo = float(opening["high"].max()), float(opening["low"].min())
+        london = window(frame, session_times(day)["london"][0], t0)
+        london_sign = float(np.sign(float(london["close"].iloc[-1]) - float(london["open"].iloc[0]))) if len(london) > 100 else 0.0
         bars = make_bars(window(frame, t0 + pd.Timedelta(minutes=OR_MINUTES), t0 + pd.Timedelta(minutes=OR_MINUTES + ENTRY_WINDOW_MIN)), 5)
         for b in bars.itertuples():
             if b.close > hi:
@@ -82,9 +84,10 @@ def orb_trades(coin: str, frame: pd.DataFrame) -> list[dict]:
                 direction, stop = "short", hi
             else:
                 continue
-            rows += _row(coin, "ORB mee", direction, b.close, stop, b.close_time, frame)
+            extra = {"or_pct": (hi - lo) / b.close * 100, "aligned": london_sign * (1 if direction == "long" else -1)}
+            rows += _row(coin, "ORB mee", direction, b.close, stop, b.close_time, frame, extra)
             m_dir, m_stop = _mirror(direction, b.close, stop)
-            rows += _row(coin, "ORB spiegel", m_dir, b.close, m_stop, b.close_time, frame)
+            rows += _row(coin, "ORB spiegel", m_dir, b.close, m_stop, b.close_time, frame, extra)
             break
     return rows
 
@@ -135,12 +138,14 @@ def passes(r: dict, min_n: int = 30) -> bool:
 
 
 def london_to_ny(coin: str, frame: pd.DataFrame, horizons=(60, 120), cost_bp: float = 6.0) -> pd.DataFrame:
-    """Richting van London tegenover het rendement van New York na de opening. Eén rij per dag, horizon en kant (mee of tegen)."""
+    """Richting van London tot de opening van New York tegenover het rendement van New York daarna. Eén rij per dag, horizon en kant.
+    London loopt tot 16:30 Londense tijd en New York opent om 14:30: de richting mag alleen tot de opening tellen, anders zit de
+    uitkomst al in de voorspelling (dat lek gaf eerder +86 bp)."""
     rows = []
     for day in weekdays(frame):
         t = session_times(day)
-        london = window(frame, *t["london"])
-        if len(london) < 400:
+        london = window(frame, t["london"][0], t["ny"][0])
+        if len(london) < 300:
             continue
         sign = np.sign(float(london["close"].iloc[-1]) - float(london["open"].iloc[0]))
         if sign == 0:

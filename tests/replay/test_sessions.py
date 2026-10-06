@@ -93,6 +93,24 @@ class SessionsTest(unittest.TestCase):
         row = amd[amd["at"] == t["ny"][0]]
         self.assertEqual(list(row["sweep"]), ["bullish"])
 
+    def test_london_direction_ignores_everything_after_new_york_opens(self):
+        f = frame(days=20)
+        day = pd.Timestamp("2026-06-03", tz="UTC")
+        t = ss.session_times(day.date())
+        base = ss.london_to_ny("BTC", f)
+        row = base[(base["at"] == t["ny"][0]) & (base["variant"] == "LONDON mee 60m")]["gross_bp"].iloc[0]
+        g = f.copy()
+        late = g["timestamp"] >= t["ny"][0] + pd.Timedelta(minutes=1)          # na de opening mag de richting van London niet meer veranderen
+        g.loc[late & (g["timestamp"] < t["london"][1]), ["open", "high", "low", "close"]] += 50.0
+        moved = ss.london_to_ny("BTC", g)
+        sign_before = np.sign(f[(f["timestamp"] >= t["london"][0]) & (f["timestamp"] < t["ny"][0])]["close"].iloc[-1] - f[(f["timestamp"] >= t["london"][0]) & (f["timestamp"] < t["ny"][0])]["open"].iloc[0])
+        sign_after = np.sign(g[(g["timestamp"] >= t["london"][0]) & (g["timestamp"] < t["ny"][0])]["close"].iloc[-1] - g[(g["timestamp"] >= t["london"][0]) & (g["timestamp"] < t["ny"][0])]["open"].iloc[0])
+        self.assertEqual(sign_before, sign_after)
+        mee = moved[(moved["at"] == t["ny"][0]) & (moved["variant"] == "LONDON mee 60m")]["gross_bp"].iloc[0]
+        tegen = moved[(moved["at"] == t["ny"][0]) & (moved["variant"] == "LONDON tegen 60m")]["gross_bp"].iloc[0]
+        self.assertAlmostEqual(mee, -tegen)
+        self.assertNotEqual(round(row, 3), round(mee, 3))      # de uitkomst veranderde wel, de voorspelling niet
+
     def test_sweep_and_london_and_hours_run(self):
         f = frame(days=40)
         ss.sweep_trades("BTC", f)
