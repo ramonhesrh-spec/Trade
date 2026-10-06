@@ -5,7 +5,6 @@
 
 <div class="page-head">
   <h2>Setups</h2>
-  <span class="tag-untested">ongetest</span>
 </div>
 <p class="page-intro">Breuk van een lijn of range op 30 minuten. Claude beoordeelt de kwaliteit, de code rekent het plan uit: de limietorder staat op het gebroken niveau, de stop vlak erachter, de doelen op zwaaipunten. Zet de order klaar voordat de koers terugkomt. De score van deze methode staat op <a href="/bewijs">Bewijs</a>.</p>
 
@@ -29,8 +28,8 @@
 </section>
 
 <section style="--i: 1">
-  <h3 class="vd-section-title">Trend-pullback <span class="tag-untested">ongetest</span></h3>
-  <p class="muted">Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten. Gemeten op een jaar: −0,06R netto na kosten. Je ontvangt alleen stille meldingen.</p>
+  <h3 class="vd-section-title">Trend-pullback</h3>
+  <p class="muted">Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten. Gemeten op een jaar: −0,06R netto na kosten.</p>
   <p class="engine-status {% if trend_minutes is none or trend_minutes > 15 %}is-stale{% endif %}">
     {% if trend_minutes is none %}De trend-motor heeft nog niet gedraaid. Hij start in de eerstvolgende scan van 5 minuten.
     {% elif trend_minutes > 15 %}Let op: de trend-motor draaide {{ trend_minutes }} minuten geleden voor het laatst.

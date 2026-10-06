@@ -171,8 +171,7 @@ def alert_body(setup: dict, plan: dict) -> str:
     targets = " · ".join(f"{push_notify.fmt_price(t)} ({r:g}R)" for t, r in zip(plan["targets"], plan["targets_r"]))
     kind = "Range" if setup["kind"] == "RANGE" else "Lijn"
     return push_notify.trade_body("Limietorder", plan["level"], plan["stop"], take_profit_of(plan), None,
-                                  f"Doelen {targets}", f"{kind} gebroken op 30m. {setup['reason'] or ''}".strip(),
-                                  "Ongetest, zie Bewijs.")
+                                  f"Doelen {targets}", f"{kind} gebroken op 30m. {setup['reason'] or ''}".strip())
 
 
 async def _push_all(title: str, body: str, url: str, tag: str, loud: bool) -> None:
@@ -234,7 +233,7 @@ async def _discover(coin: str, now: datetime) -> None:
         logger.info("Structuur %s %s %s: oordeel %s (%s)", coin, ev.direction, ev.kind, grade, state)
         if state == "waiting":
             setup = {**row, "id": setup_id, "reason": reason}
-            await _push_all(push_notify.alert_title(coin, ev.direction, f"Structuur {grade} (ongetest)"), alert_body(setup, plan),
+            await _push_all(push_notify.alert_title(coin, ev.direction, f"Structuur {grade}"), alert_body(setup, plan),
                             f"/structuur#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A")
 
 
@@ -252,7 +251,7 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "structuur",
         "pattern_name": "Structuur", "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None,
         "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None,
-        "hard_gates_ok": 1, "confidence": f"Structuur {setup['grade']} (ongetest)", "reason": reason, "stop_loss": stop,
+        "hard_gates_ok": 1, "confidence": f"Structuur {setup['grade']}", "reason": reason, "stop_loss": stop,
         "take_profit": take, "context_note": None, "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None,
         "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
     })
@@ -263,8 +262,7 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
     await fanout_confirmed_signal(
         signal_id, coin, direction, entry, stop, take, entry,
         title=push_notify.alert_title(coin, direction, f"Structuur {setup['grade']} gevuld"),
-        make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, f"Doelen {targets}", "Limiet geraakt, de trade loopt.",
-                                                    "Ongetest, zie Bewijs."),
+        make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, f"Doelen {targets}", "Limiet geraakt, de trade loopt."),
         reason=reason, signal_type="structuur",
     )
 

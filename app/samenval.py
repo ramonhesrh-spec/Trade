@@ -63,9 +63,9 @@ async def run(now: Optional[datetime] = None) -> int:
         if not repo.create_samenval(s["coin"], s["direction"], s["id"], m["message_id"]):
             continue
         sent += 1
-        title = push_notify.alert_title(s["coin"], s["direction"], "Samenval (ongetest)")
+        title = push_notify.alert_title(s["coin"], s["direction"], "Samenval")
         body = push_notify.trade_body("Entry", s["price"], s["stop_loss"], s["take_profit"], None,
-                                      "SMC en community wijzen dezelfde kant op.", "Ongetest, zie Bewijs.")
+                                      "SMC en community wijzen dezelfde kant op.")
         for user in repo.list_users():
             quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
             try:

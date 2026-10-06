@@ -17,7 +17,7 @@ from app.replay.lab import add_indicators
 logger = logging.getLogger("trend_live")
 TIMEFRAMES = {"5m": (pd.Timedelta(minutes=5), 400), "15m": (pd.Timedelta(minutes=15), 300), "1h": (pd.Timedelta(hours=1), 200), "4h": (pd.Timedelta(hours=4), 150)}
 RECENT = pd.Timedelta(minutes=15)
-MEASURED_NOTE = "Gemeten op een jaar: -0,06R netto. Ongetest."
+MEASURED_NOTE = "Gemeten op een jaar: -0,06R netto."
 
 
 def closed_bars(df: pd.DataFrame, delta: pd.Timedelta, now: pd.Timestamp) -> pd.DataFrame:
@@ -53,7 +53,7 @@ async def _fire(coin: str, e: dict, stop: float, take: float) -> None:
     signal_id = repo.insert_signal({
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "trend", "pattern_name": "Trend-pullback",
         "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None, "atr": None, "atr_avg20": None,
-        "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Trend-pullback (ongetest)", "reason": reason,
+        "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Trend-pullback", "reason": reason,
         "stop_loss": stop, "take_profit": take, "context_note": None, "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None,
         "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
     })
@@ -61,9 +61,9 @@ async def _fire(coin: str, e: dict, stop: float, take: float) -> None:
     rr = abs(take - entry) / abs(entry - stop)
     await fanout_confirmed_signal(
         signal_id, coin, direction, entry, stop, take, entry,
-        title=push_notify.alert_title(coin, direction, "Trend-pullback (ongetest)"),
+        title=push_notify.alert_title(coin, direction, "Trend-pullback"),
         make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, "Pullback in de trend, bevestigd op 5m.", MEASURED_NOTE),
-        reason=reason, signal_type="trend", force_silent=True,
+        reason=reason, signal_type="trend",
     )
 
 

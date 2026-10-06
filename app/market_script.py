@@ -286,8 +286,7 @@ def format_body(s: dict) -> str:
     from app import push_notify
     rr = rr_of(s["direction"], s["entry"], s["stop_loss"], s["take_profit"])
     return push_notify.trade_body("Limietorder", s["entry"], s["stop_loss"], s["take_profit"], rr,
-                                  f"Als: {trigger_text(s['trigger_type'], s['direction'], s['trigger_level'])}", s["reason"],
-                                  "Ongetest, zie Bewijs.")
+                                  f"Als: {trigger_text(s['trigger_type'], s['direction'], s['trigger_level'])}", s["reason"])
 
 
 async def _fire(s: dict) -> None:
@@ -299,7 +298,7 @@ async def _fire(s: dict) -> None:
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "script",
         "pattern_name": "Markt-script", "price": s["entry"], "rsi": None, "macd": None, "macd_signal": None,
         "volume_ratio": None, "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None,
-        "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Markt-script (ongetest)",
+        "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Markt-script",
         "reason": reason, "stop_loss": s["stop_loss"], "take_profit": s["take_profit"], "context_note": None,
         "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None, "suggested_entry_high": None,
         "sniper_entry_price": None, "sniper_reason": None,
@@ -307,7 +306,7 @@ async def _fire(s: dict) -> None:
     repo.set_scenario_state(s["id"], "fired", signal_id)
     await fanout_confirmed_signal(
         signal_id, coin, direction, s["entry"], s["stop_loss"], s["take_profit"], s["trigger_level"],
-        title=push_notify.alert_title(coin, direction, "Script (ongetest)"),
+        title=push_notify.alert_title(coin, direction, "Script"),
         make_body=lambda *_: format_body(s), reason=reason, signal_type="script",
     )
 
