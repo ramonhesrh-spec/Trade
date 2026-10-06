@@ -14,6 +14,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
+from app.replay import flow
 from app.replay import liquidity_levels as ll
 from app.replay.lab import add_indicators, make_bars, trend_on
 from app.replay.outcome import resolve
@@ -32,6 +33,12 @@ KILLZONE_HOURS = (7, 8, 9, 13, 14, 15)
 # (naam, wat 'goed' is). Alle richtingen zijn 'hoog is goed' behalve killzone en trend, die waar/onwaar zijn.
 HYPOTHESES = ["depth_atr", "rejection", "vol_ratio", "killzone", "trend_aligned", "vol_regime", "prior_run_atr", "touches",
               "discount", "target_r"]
+# Orderflow-kenmerken (taker-volume, zie flow.py), alle 'hoog is goed' en in de richting van de trade genormaliseerd:
+#  flow_absorb: tegen de sweep in geduwd (verkopers bij een long) maar de candle sloot terug, dus geabsorbeerd.
+#  flow_cvd: kopers bij een long ondanks een dalende koers in de 2 uur ervoor (divergentie).
+#  flow_exhaust: zware agressie tegen de kant van de trade in de 3 candles voor de sweep (uitputting).
+#  flow_trades: drukte (aantal trades) tegenover het gemiddelde, een paniekcandle.
+FLOW_HYPOTHESES = ["flow_absorb", "flow_cvd", "flow_exhaust", "flow_trades"]
 
 
 def swing_sweeps(bars5: pd.DataFrame) -> pd.DataFrame:
@@ -52,13 +59,17 @@ def swing_sweeps(bars5: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(rows, columns=["at", "bar", "kind", "direction", "level", "extreme", "close", "atr"])
 
 
-def _features(events: pd.DataFrame, bars5: pd.DataFrame, trend: np.ndarray, levels: pd.DataFrame) -> pd.DataFrame:
+def _features(events: pd.DataFrame, bars5: pd.DataFrame, trend: np.ndarray, levels: pd.DataFrame, flow5: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     close, high, low = bars5["close"].to_numpy(), bars5["high"].to_numpy(), bars5["low"].to_numpy()
     logret = np.log(bars5["close"]).diff()
     rv = logret.rolling(288).std()
     base = rv.rolling(8640, min_periods=2000).median()
     vol_regime = (rv / base).to_numpy()
     day = bars5["timestamp"].dt.floor("D")
+    if flow5 is not None:
+        vol5, buy5, trades5 = flow5["volume"].to_numpy(), flow5["buy_volume"].to_numpy(), flow5["trades"].to_numpy()
+        d5 = flow.delta(buy5, vol5)
+        trades_avg = pd.Series(trades5).shift(1).rolling(20).mean().to_numpy()
     rows = []
     for e in events.itertuples():
         i, long = int(e.bar), e.direction == "long"
@@ -81,7 +92,18 @@ def _features(events: pd.DataFrame, bars5: pd.DataFrame, trend: np.ndarray, leve
             targets = [lv[n] for n in names if n in lv and pd.notna(lv[n]) and ((lv[n] > plan[0]) if long else (lv[n] < plan[0]))]
             if targets:
                 target_r = abs((min(targets) if long else max(targets)) - plan[0]) / risk
+        flow_row = {}
+        if flow5 is not None:
+            sgn = 1 if long else -1
+            lo24, vol24 = max(i - 24, 0), vol5[max(i - 24, 0):i].sum()
+            flow_row = {
+                "flow_absorb": -sgn * d5[i],
+                "flow_cvd": sgn * ((2 * buy5[lo24:i].sum() - vol24) / vol24) if vol24 > 0 else np.nan,
+                "flow_exhaust": -sgn * flow.delta(buy5[max(i - 3, 0):i].sum(), vol5[max(i - 3, 0):i].sum()),
+                "flow_trades": trades5[i] / trades_avg[i] if trades_avg[i] and not np.isnan(trades_avg[i]) else np.nan,
+            }
         rows.append({
+            **flow_row,
             "depth_atr": abs(e.level - e.extreme) / e.atr if e.atr else np.nan,
             "rejection": ((b_close - b_low) if long else (b_high - b_close)) / span if span > 0 else np.nan,
             "vol_ratio": bars5.at[i, "volume"] / bars5.at[i, "vol_avg"] if bars5.at[i, "vol_avg"] else np.nan,
@@ -109,14 +131,15 @@ def _confirm(bars5: pd.DataFrame, e) -> Optional[tuple[float, pd.Timestamp]]:
     return None
 
 
-def build_dataset(frame_1m: pd.DataFrame, fee_pct: float = 0.02, slippage_pct: float = 0.01) -> pd.DataFrame:
+def build_dataset(frame_1m: pd.DataFrame, fee_pct: float = 0.02, slippage_pct: float = 0.01, flow_1m: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     bars5 = add_indicators(make_bars(frame_1m, 5))
     bars4h = make_bars(frame_1m, 240)
     trend = trend_on(bars5, bars4h)
     levels = ll.day_levels(bars5)
     events = pd.concat([ll.find_sweeps(bars5), swing_sweeps(bars5)], ignore_index=True)
     events = events[events["at"].notna()].sort_values("at").reset_index(drop=True)
-    data = _features(events, bars5, trend, levels)
+    flow5 = flow.flow_5m(flow_1m, bars5["timestamp"]) if flow_1m is not None else None
+    data = _features(events, bars5, trend, levels, flow5)
     out = {f"r{rr}": [] for rr in RR_LIST}
     out["conf_r2.0"] = []
     out["risk_pct"] = []
@@ -149,9 +172,9 @@ def build_dataset(frame_1m: pd.DataFrame, fee_pct: float = 0.02, slippage_pct: f
     return data.dropna(subset=["r2.0"]).reset_index(drop=True)
 
 
-def good_flags(df: pd.DataFrame, thresholds: dict) -> pd.DataFrame:
+def good_flags(df: pd.DataFrame, thresholds: dict, hyps: Optional[list] = None) -> pd.DataFrame:
     flags = pd.DataFrame(index=df.index)
-    for name in HYPOTHESES:
+    for name in hyps or HYPOTHESES:
         if name in ("killzone", "trend_aligned"):
             flags[name] = df[name].astype(bool)
         else:
@@ -159,8 +182,8 @@ def good_flags(df: pd.DataFrame, thresholds: dict) -> pd.DataFrame:
     return flags
 
 
-def train_thresholds(train: pd.DataFrame) -> dict:
-    return {n: float(train[n].median()) for n in HYPOTHESES if n not in ("killzone", "trend_aligned")}
+def train_thresholds(train: pd.DataFrame, hyps: Optional[list] = None) -> dict:
+    return {n: float(train[n].median()) for n in (hyps or HYPOTHESES) if n not in ("killzone", "trend_aligned")}
 
 
 @dataclass
@@ -173,14 +196,15 @@ class Result:
     test_r: float
 
 
-def run_pipeline(df: pd.DataFrame, rr_col: str, cut: pd.Timestamp, outcome: Optional[pd.Series] = None) -> Result:
+def run_pipeline(df: pd.DataFrame, rr_col: str, cut: pd.Timestamp, outcome: Optional[pd.Series] = None, hyps: Optional[list] = None) -> Result:
     y = df[rr_col] if outcome is None else outcome
     train_mask = (df["at"] < cut).to_numpy()
     train, test = df[train_mask], df[~train_mask]
-    thr = train_thresholds(train)
-    flags = good_flags(df, thr)
+    hyps = hyps or HYPOTHESES
+    thr = train_thresholds(train, hyps)
+    flags = good_flags(df, thr, hyps)
     chosen = []
-    for n in HYPOTHESES:
+    for n in hyps:
         good, bad = y[train_mask & flags[n].to_numpy()], y[train_mask & ~flags[n].to_numpy()]
         if len(good) >= 30 and len(bad) >= 30 and good.mean() - bad.mean() >= MIN_GAIN:
             chosen.append(n)
@@ -199,26 +223,27 @@ def run_pipeline(df: pd.DataFrame, rr_col: str, cut: pd.Timestamp, outcome: Opti
                   float(y[sel_te].mean()) if sel_te.any() else 0.0)
 
 
-def permutation_p(df: pd.DataFrame, rr_col: str, cut: pd.Timestamp, real: Result, n: int = 200, seed: int = 0) -> float:
+def permutation_p(df: pd.DataFrame, rr_col: str, cut: pd.Timestamp, real: Result, n: int = 200, seed: int = 0, hyps: Optional[list] = None) -> float:
     """Aandeel husselruns waarvan het testresultaat minstens zo goed is als het echte."""
     rng = np.random.default_rng(seed)
     values = df[rr_col].to_numpy()
     better = 0
     for _ in range(n):
         shuffled = pd.Series(rng.permutation(values), index=df.index)
-        r = run_pipeline(df, rr_col, cut, shuffled)
+        r = run_pipeline(df, rr_col, cut, shuffled, hyps)
         if r.n_test >= max(30, real.n_test // 2) and r.test_r >= real.test_r:
             better += 1
     return better / n
 
 
-def feature_table(df: pd.DataFrame, rr_col: str, cut: pd.Timestamp) -> list[dict]:
+def feature_table(df: pd.DataFrame, rr_col: str, cut: pd.Timestamp, hyps: Optional[list] = None) -> list[dict]:
+    hyps = hyps or HYPOTHESES
     train_mask = (df["at"] < cut).to_numpy()
-    thr = train_thresholds(df[train_mask])
-    flags = good_flags(df, thr)
+    thr = train_thresholds(df[train_mask], hyps)
+    flags = good_flags(df, thr, hyps)
     y = df[rr_col]
     rows = []
-    for n in HYPOTHESES:
+    for n in hyps:
         row = {"feature": n, "threshold": thr.get(n)}
         for label, mask in (("train", train_mask), ("test", ~train_mask)):
             g, b = y[mask & flags[n].to_numpy()], y[mask & ~flags[n].to_numpy()]
