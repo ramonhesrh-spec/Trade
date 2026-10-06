@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% block title %}Vandaag — HesPulse{% endblock %}
+{% block content %}
+
+<div class="page-head">
+  <h2>Vandaag</h2>
+  <span class="muted vd-clock">{{ now }}</span>
+</div>
+
+<section class="vd-hero" style="--i: 0">
+  <div class="vd-hero-price">
+    <span class="vd-hero-label">BTC</span>
+    <span class="vd-hero-number" data-vd-price="BTC">{% if prices.get("BTC") %}{{ "{:,.0f}".format(prices["BTC"]).replace(",", ".") }}{% else %}-{% endif %}</span>
+  </div>
+  <div class="vd-hero-mood">
+    <div class="vd-hero-label">Stemming van het markt-script</div>
+    {% if mood.total %}
+    <div class="vd-mood-bar" role="img" aria-label="{{ mood.long }} long, {{ mood.neutraal }} neutraal, {{ mood.short }} short">
+      <span class="vd-mood-long" style="width: {{ mood.long_pct }}%"></span>
+      <span class="vd-mood-flat" style="width: {{ mood.neutraal_pct }}%"></span>
+      <span class="vd-mood-short" style="width: {{ mood.short_pct }}%"></span>
+    </div>
+    <div class="vd-mood-legend"><span class="pos">{{ mood.long }} long</span><span class="muted">{{ mood.neutraal }} neutraal</span><span class="neg">{{ mood.short }} short</span></div>
+    {% else %}
+    <p class="muted vd-empty">Het eerste markt-script verschijnt na de volgende ronde van 4 uur.</p>
+    {% endif %}
+  </div>
+  <p class="vd-hero-note muted">Een scenario is een hypothese van Claude, geen belofte. Onderaan staat de score van wat tot nu toe is voorspeld.</p>
+</section>
+
+<section class="card vd-card" style="--i: 1">
+  <h3>Agenda, komende 24 uur</h3>
+  <div class="vd-timeline-wrap">{{ timeline }}</div>
+  <p class="muted vd-fine">Tijden in Nederlandse tijd. De zwaarte bij een moment is gemeten op een jaar candles, niet geschat.</p>
+</section>
+
+<section class="vd-section" style="--i: 2">
+  <h3 class="vd-section-title">Markt-script per coin</h3>
+  {% if not scripts %}
+  <p class="muted empty">Nog geen script geschreven.{% if not script_enabled %} Het markt-script staat uit.{% endif %}</p>
+  {% else %}
+  <div class="vd-script-grid">
+    {% for s in scripts %}
+    <article class="vd-script vd-bias-{{ s.bias }}">
+      <header class="vd-script-head">
+        <a class="vd-coin" href="/coins/{{ s.coin }}">{{ s.coin }}</a>
+        <span class="vd-price" data-vd-price="{{ s.coin }}">{% if s.price %}{{ fmt(s.price) }}{% endif %}</span>
+        <span class="vd-bias-chip vd-bias-chip-{{ s.bias }}">{{ s.bias }}</span>
+      </header>
+      <p class="vd-summary">{{ s.summary or "Geen duiding." }}</p>
+      {% if not s.scenarios %}
+      <p class="muted vd-fine">Geen scenario dat de toets haalt.{% if s.n_dropped %} {{ s.n_dropped }} afgevallen op stop, R:R of afstand.{% endif %}</p>
+      {% endif %}
+      {% for sc in s.scenarios %}
+      <div class="vd-scenario vd-scenario-{{ sc.state }}" data-vd-scenario="{{ sc.id }}">
+        <div class="vd-scenario-main">
+          <div class="vd-scenario-top">
+            <span class="radar-dir radar-dir-{{ sc.direction }}">{{ sc.direction }}</span>
+            <span class="vd-state" data-vd="state">{{ sc.state_label }}</span>
+          </div>
+          <p class="vd-trigger">Als: {{ sc.trigger }}</p>
+          <dl class="vd-facts">
+            <div><dt>Limietorder</dt><dd>{{ fmt(sc.entry) }}</dd></div>
+            <div><dt>R:R</dt><dd>{{ "%.1f"|format(sc.rr) }}</dd></div>
+            <div><dt>Risico</dt><dd>{{ "%.2f"|format(sc.risk_pct) }}%</dd></div>
+            <div><dt>Tot voorwaarde</dt><dd data-vd="distance">{% if sc.to_trigger_pct is not none %}{{ "%+.2f"|format(sc.to_trigger_pct) }}%{% else %}-{% endif %}</dd></div>
+          </dl>
+          <p class="muted vd-fine">{{ sc.reason }}</p>
+          <p class="muted vd-fine">Vervalt over <span data-vd="left">{{ "%.0f"|format(sc.hours_left) }}</span> uur</p>
+        </div>
+        <div class="vd-ladder" data-vd="ladder">{{ sc.ladder|safe }}</div>
+      </div>
+      {% endfor %}
+      <footer class="vd-script-foot muted">Geschreven om {{ s.written.strftime("%H:%M") }}</footer>
+    </article>
+    {% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+<section class="vd-two" style="--i: 3">
+  <div class="card vd-card">
+    <h3>Gedwongen sluitingen, laatste uur</h3>
+    {% if not liq_last %}
+    <p class="muted vd-empty">De verzamelaar is net gestart. Hier verschijnen straks de liquidaties per coin.</p>
+    {% elif not liquidations %}
+    <p class="muted vd-empty">Rustig: geen liquidaties in het laatste uur.</p>
+    {% else %}
+    <div class="vd-liq-legend"><span class="neg">longs geliquideerd</span><span class="pos">shorts geliquideerd</span></div>
+    <ul class="vd-liq">
+      {% for r in liquidations %}
+      <li>
+        <span class="vd-liq-coin">{{ r.coin }}</span>
+        <span class="vd-liq-track"><span class="vd-liq-bar" style="width: {{ r.width_pct }}%">
+          <span class="vd-liq-long" style="width: {{ r.long_share }}%"></span><span class="vd-liq-short"></span>
+        </span></span>
+        <span class="vd-liq-sum">{{ money(r.total) }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+  <div class="card vd-card">
+    <h3>Nieuws dat beweegt</h3>
+    {% if not events %}
+    <p class="muted vd-empty">Geen nieuws van de laatste 12 uur dat een gevolgde coin raakt.</p>
+    {% else %}
+    <ul class="vd-events">
+      {% for e in events %}
+      <li>
+        <span class="vd-event-time">{{ e.time }}</span>
+        <div>
+          <p class="vd-event-title">{{ e.summary or e.title }}</p>
+          <p class="muted vd-fine">{{ e.source }} · {{ e.coins }} · <span class="vd-impact vd-impact-{{ e.impact }}">{{ e.impact }}</span>{% if e.direction and e.direction != "neutraal" %} · {{ e.direction }}{% endif %}</p>
+        </div>
+      </li>
+      {% endfor %}
+    </ul>
+    {% endif %}
+  </div>
+</section>
+
+<section class="vd-section" style="--i: 4">
+  <h3 class="vd-section-title">Score: wat HesPulse zelf voorspelde</h3>
+  <div class="vd-score-grid">
+    {% for e in score %}
+    <a class="vd-score proof-{{ e.status }}" href="/bewijs">
+      <span class="vd-score-label">{{ e.label }}</span>
+      {% if e.avg_net is not none %}
+      <span class="vd-score-number {{ 'pos' if e.avg_net > 0 else 'neg' }}">{{ "%+.2f"|format(e.avg_net) }}R</span>
+      {% else %}<span class="vd-score-number">-</span>{% endif %}
+      {{ e.spark }}
+      <span class="muted vd-fine">{{ e.resolved }} afgerond · {{ status_labels[e.status] }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+
+<script src="/static/vandaag.js" defer></script>
+{% endblock %}

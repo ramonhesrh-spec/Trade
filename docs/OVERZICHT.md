@@ -23,6 +23,9 @@ en jij ziet wat elk soort melding echt opleverde, in R na kosten.
 | Patroon, day trading, swing | Draaien nog. Push uitzetten per soort met `SIGNAL_TYPE_INFO_ONLY` | push, Bewijs |
 | Weekrapport | Zondag 19:47, wat werkt en wat niet | `/meldingen` |
 | Derivatenverzamelaar | Funding, open interest, taker, long/short, elk uur | `data/derivs` |
+| Vandaag | Startpagina: markt-script per coin, agenda, liquidaties, nieuws, eigen score | `/vandaag` |
+| Markt-script | Claude schrijft elke 4 uur scenario's met voorwaarde, de motor meldt ze (ongetest) | push, `/vandaag` |
+| Nieuws en liquidaties | Koppen gesorteerd door Haiku, gedwongen sluitingen live bewaard | `/vandaag` |
 | Extra coins | `EXTRA_COINS=...`, alleen SMC. Staat standaard leeg | `.env` |
 
 ## Wat gemeten is
@@ -32,6 +35,7 @@ en jij ziet wat elk soort melding echt opleverde, in R na kosten.
 - SMC, laatste 29 dagen: +0,32R bruto, +0,04R netto op 57 setups. Eén marktfase, geen bewijs.
 - Day trading -0,23R bruto. Patroon live 31% winst en -0,34R op 117 trades.
 - Derivatenkenmerken: geen verschil op 57 setups.
+- Kalendermomenten (funding, VS-opening, expiry): geen voordeel. De VS-opening beweegt wel 1,9x harder dan een gewoon uur.
 - Community-calls: richtingshint op 4 uur, n=28, niet bewezen.
 
 Een soort krijgt de status positief vanaf 30 afgeronde trades met winst na kosten, en bewezen vanaf 100.

@@ -2661,3 +2661,10 @@ def insert_market_event(at: str, source: str, title: str, url: str, coins: str, 
             """INSERT OR IGNORE INTO market_events (at, source, title, url, coins, direction, impact, summary)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (at, source, title, url, coins, direction, impact, summary),
         ).rowcount == 1
+
+
+def latest_liquidation_bucket() -> Optional[str]:
+    """Het laatste 5-minutenblok met een gemeten liquidatie, of None als de verzamelaar nog niets heeft opgeleverd."""
+    with db.session() as conn:
+        row = conn.execute("SELECT MAX(bucket) AS b FROM liquidations_5m").fetchone()
+        return row["b"]

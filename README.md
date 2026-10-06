@@ -370,6 +370,26 @@ bestaat alleen live, dus laat dit proces altijd draaien. `app/market_calendar.py
 opening VS-beurs, opties-expiry); CPI en FOMC zet je zelf in `data/macro_events.csv` (kolommen `at`, `label`). Toets de
 momenten met `python3 scripts/calendar_scan.py`. Zie `docs/superpowers/specs/2026-10-06-marktbrein-design.md`.
 
+### Marktbrein, deel B: markt-script, nieuws en Vandaag
+
+```bash
+sudo cp deploy/crypto-script.service deploy/crypto-script.timer deploy/crypto-news.service deploy/crypto-news.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-script.timer crypto-news.timer
+sudo systemctl start crypto-news.service crypto-script.service
+```
+
+- `app/market_script.py`: elke 4 uur schrijft Claude per coin een duiding en maximaal twee scenario's met een voorwaarde. De code
+  toetst elk scenario (stop minimaal `SMC_MIN_STOP_PCT`, R:R minimaal 2, niveaus dicht bij de prijs). De motor draait mee in de
+  SMC-snelcyclus: een voorwaarde die klopt wordt een gewoon signaal met `trade_type = 'script'` en het label ongetest. Max
+  `SCRIPT_MAX_ALERTS_PER_DAY` (6) meldingen per dag. Gaat vanzelf uit als de laatste `SCRIPT_MAX_NEGATIVE` (30) afgeronde
+  scenario's samen negatief zijn. `SCRIPT_ENABLED=false` zet het uit. Model: `SCRIPT_MODEL` (standaard `ANTHROPIC_MODEL`).
+- `app/news.py`: RSS (CoinDesk, Cointelegraph, The Block) en Binance-aankondigingen, elke 10 minuten, gesorteerd door
+  `ANTHROPIC_EXPLAIN_MODEL`. Een bron die niet antwoordt wordt overgeslagen.
+- `/vandaag` is de nieuwe startpagina: scripts, agenda van 24 uur, liquidaties van het laatste uur, nieuws en de score van
+  de eigen voorspellingen. `/api/vandaag` ververst koersen en scenario's elke 15 seconden (`web/static/vandaag.js`).
+- Bewijs en het weekrapport tonen de soort `script` apart.
+
 ### Samenval en alleen-informatie per soort
 
 Samenval (`app/samenval.py`): een SMC-signaal en een community-call (day_trading) op dezelfde coin en kant binnen

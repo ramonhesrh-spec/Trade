@@ -27,7 +27,7 @@ from markupsafe import Markup
 
 from app import advice as advice_module
 from app import patterns as chart_patterns
-from app import config, db, exchange, indicators, push_notify, radar, repo, risk, security, track_record
+from app import config, db, exchange, indicators, market_calendar, push_notify, radar, repo, risk, security, today, track_record
 from app.market_scanner import smc_stop_take_margins
 
 logger = logging.getLogger("web")
@@ -107,7 +107,7 @@ async def landing(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     user_id = security.verify_session_token(token) if token else None
     if user_id and repo.get_user(user_id):
-        return RedirectResponse(url="/signalen", status_code=303)
+        return RedirectResponse(url="/vandaag", status_code=303)
 
     return templates.TemplateResponse(request, "landing.html", {
         "kraken_referral_url": config.KRAKEN_REFERRAL_URL,
@@ -302,6 +302,50 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     })
 
 
+async def _vandaag_context() -> dict:
+    now = datetime.now(timezone.utc)
+    scripts_raw = repo.latest_scripts()
+    coins = [c["symbol"] for c in repo.list_coins()]
+    prices = await _cached_prices(set(coins) | {"BTC"})
+    scripts = [today.script_view(s, prices.get(s["coin"]), now) for s in scripts_raw]
+    moments = market_calendar.upcoming(now, 24)
+    liq_since = (now - timedelta(hours=1)).isoformat()
+    liquidations = today.liquidation_rows({c: repo.list_liquidations(c, liq_since) for c in coins})
+    events = []
+    for e in repo.list_recent_events(None, (now - timedelta(hours=12)).isoformat(), limit=8):
+        at = datetime.fromisoformat(e["at"])
+        events.append({**e, "time": today.local(at if at.tzinfo else at.replace(tzinfo=timezone.utc)).strftime("%H:%M")})
+    summary = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
+    score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc") or e["source"] == "alles"]
+    for e in score:
+        e["spark"] = Markup(track_record.sparkline_svg(e["cumulative"], width=180, height=36))
+    return {
+        "now": today.nl_stamp(today.local(now)), "fmt": today.fmt_price, "prices": prices, "scripts": scripts, "mood": today.mood(scripts_raw),
+        "timeline": Markup(today.timeline_svg(now, moments)), "moments": moments, "liquidations": liquidations,
+        "liq_last": repo.latest_liquidation_bucket(), "events": events, "score": score, "money": today.money,
+        "status_labels": track_record.STATUS_LABELS, "script_enabled": config.SCRIPT_ENABLED,
+    }
+
+
+@app.get("/vandaag")
+async def vandaag_page(request: Request, user: dict = Depends(require_login)):
+    """Cockpit: het markt-script van nu, de agenda van de komende 24 uur, wat beweegt (liquidaties en nieuws) en de score van
+    wat HesPulse zelf voorspelde. Alles komt uit app/today.py en de verzamelaars; er staat niets op wat niet gemeten is."""
+    return templates.TemplateResponse(request, "vandaag.html", {"user": user, **await _vandaag_context()})
+
+
+@app.get("/api/vandaag")
+async def api_vandaag(user: dict = Depends(require_login)):
+    """Live koersen en afstand tot de voorwaarde per scenario, voor vandaag.js."""
+    ctx = await _vandaag_context()
+    return {
+        "prices": ctx["prices"],
+        "scenarios": {str(sc["id"]): {"state": sc["state"], "label": sc["state_label"], "to_trigger_pct": sc["to_trigger_pct"],
+                                       "hours_left": sc["hours_left"], "ladder": sc["ladder"]}
+                      for s in ctx["scripts"] for sc in s["scenarios"]},
+    }
+
+
 @app.get("/api/radar")
 async def api_radar(user: dict = Depends(require_login)):
     """Live status per radar-kaart, voor radar.js: nieuwe koers, afstand tot de limietorder, live R en de bijgewerkte ladder."""
@@ -375,7 +419,7 @@ async def login_submit(request: Request, username: str = Form(...), password: st
         )
 
     token = security.create_session_token(user["id"])
-    response = RedirectResponse(url="/signalen", status_code=303)
+    response = RedirectResponse(url="/vandaag", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 
@@ -430,7 +474,7 @@ async def register_submit(
         return error("Deze gebruikersnaam is al in gebruik.")
 
     token = security.create_session_token(user_id)
-    response = RedirectResponse(url="/signalen", status_code=303)
+    response = RedirectResponse(url="/vandaag", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 

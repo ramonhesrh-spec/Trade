@@ -128,6 +128,11 @@ auth is a JWT in a cookie (`app/security.py`), checked via the
 
 **Radar and Bewijs.** `/smc` (nav label "Radar") and `/bewijs` render from pure functions in `app/trade_plan.py`, `app/radar.py` and `app/track_record.py`; keep the maths there, not in templates or `web/main.py`. `/bewijs` must stay honest: only `take_profit`/`stop_loss` outcomes count in winrate and R, expired/open are shown beside them, never dropped silently. SMC alert text comes from `market_scanner.format_smc_body`.
 
+**Marktbrein.** `/vandaag` (startpagina) komt uit `app/today.py` (pure weergavefuncties), `app/market_script.py` (scenario's van Claude met harde toets en
+een motor die ze tot gewone signalen maakt, `trade_type = 'script'`), `app/news.py`, `app/liquidations.py` en `app/market_calendar.py`. Alles wat Claude
+levert is een hypothese: valideer in code, label ongetest, laat Bewijs de score tonen. Voeg geen getal toe aan Vandaag dat niet gemeten is (zie
+`today.MEASURED_VOLATILITY` met de bron in de comment).
+
 **Conventions to preserve**: comments explain non-obvious *why* (a past
 bug, a deliberate tradeoff, a constraint that isn't visible from the code
 itself) — not what the code does; keep that ratio, don't add narration
