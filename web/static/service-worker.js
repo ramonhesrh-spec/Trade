@@ -7,7 +7,7 @@
 // altijd netwerk-eerst. Alle paginabezoeken en API-calls gaan gewoon naar
 // het netwerk; alleen een mislukte paginabezoeken krijgt de offline-
 // fallback.
-const CACHE_NAME = "hespulse-shell-v1";
+const CACHE_NAME = "hespulse-shell-v2";
 const PRECACHE_URLS = [
   "/static/offline.html",
   "/static/manifest.json",
@@ -89,8 +89,9 @@ self.addEventListener("notificationclick", (event) => {
       for (const client of windowClients) {
         if ("focus" in client) {
           client.focus();
-          if ("navigate" in client) return client.navigate(targetUrl);
-          return undefined;
+          // Lukt navigeren niet (iOS weigert het soms), open dan een venster in plaats van op de oude pagina te blijven.
+          if ("navigate" in client) return client.navigate(targetUrl).catch(() => clients.openWindow(targetUrl));
+          return clients.openWindow(targetUrl);
         }
       }
       return clients.openWindow(targetUrl);

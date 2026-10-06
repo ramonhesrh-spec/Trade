@@ -210,7 +210,6 @@ a { color: var(--accent); }
    meer als één samenhangende app aanvoelt dan als losse serverpagina's.
    Klasse wordt gezet/verwijderd door base.html, hier alleen het effect. */
 body { transition: opacity .18s ease, transform .18s ease; }
-html.page-transition-in body { opacity: 0; transform: translateY(6px); }
 html.page-transition-out body { opacity: 0; transform: translateY(-4px); }
 
 .page-ambient { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
@@ -1941,3 +1940,4 @@ main > section + section { margin-top: var(--space-10); }
 .vd-board-sub { margin: 0; font-size: var(--text-sm); color: var(--text-dim); max-width: 52ch; }
 .engine-status { margin: var(--space-6) 0 var(--space-9); padding: var(--space-5) var(--space-7); font-size: var(--text-sm); color: var(--text-dim); background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: var(--radius-sm); }
 .engine-status.is-stale, .engine-status.is-off { border-left-color: var(--red); color: var(--text); }
+html.reveal-done main > section, html.reveal-done main > .stats-collapse { animation: none; opacity: 1; transform: none; }

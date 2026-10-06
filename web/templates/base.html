@@ -84,6 +84,8 @@
       // de nieuwe pagina laadt, geen tweede losse click-listener nodig
       // met dezelfde origin/target-checks als hieronder.
       document.documentElement.classList.add("page-transition-out");
+      // Een navigatie die niet doorgaat (download, geannuleerd) mag de pagina niet onzichtbaar laten.
+      setTimeout(function () { document.documentElement.classList.remove("page-transition-out"); }, 4000);
       if (bar.classList.contains("is-active")) return;
       width = 0;
       bar.style.width = "0%";
@@ -449,11 +451,17 @@
   // (dezelfde click/submit-detectie als de voortgangsbalk, geen tweede
   // losse listener met dezelfde origin-checks).
   (function () {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    document.documentElement.classList.add("page-transition-in");
-    requestAnimationFrame(function () {
-      document.documentElement.classList.remove("page-transition-in");
-    });
+    // Het binnenkomen is geschrapt: een class die in requestAnimationFrame werd weggehaald liet de pagina zwart staan als de
+    // pagina verborgen laadde, zoals bij een tik op een melding. Wat blijft is de veiligheidsklep voor het verlaten: elke
+    // keer dat de pagina zichtbaar wordt (ook uit de terug-cache) gaat een eventuele rest van de uitfade eraf.
+    function clearTransition() {
+      document.documentElement.classList.remove("page-transition-out", "page-transition-in");
+    }
+    window.addEventListener("pageshow", clearTransition);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) clearTransition(); });
+    clearTransition();
+    // Tweede klep: blijven de binnenkomst-animaties van de secties steken (pagina laadde verborgen), dan zet dit alles zichtbaar.
+    setTimeout(function () { document.documentElement.classList.add("reveal-done"); }, 1500);
   })();
 
   // Sneltoetsen, alleen voor navigatie. Bewust geen sneltoets voor iets
