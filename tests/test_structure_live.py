@@ -103,7 +103,7 @@ class LiveTest(DbCase):
         self.run_live(BREAK_BAR + 4, grade="C")
         self.assertEqual(self.pushed, [])
         self.assertEqual(repo.list_structure_setups(("waiting",)), [])
-        self.assertEqual(len(repo.list_structure_setups(("niet_gemeld",))), 1)
+        self.assertEqual(len(repo.list_structure_setups(("schaduw",))), 1)
 
     def test_grade_b_is_silent(self):
         self.run_live(BREAK_BAR + 4, grade="B")
@@ -156,24 +156,24 @@ class LiveTest(DbCase):
         self.assertTrue(fired["closed"])
         self.assertEqual(fired["hits"], 2)
 
-    def test_no_alert_when_nearest_liquidity_leaves_less_than_min_rr(self):
-        with mock.patch.object(sl, "MIN_RR", 50.0):
+    def test_close_liquidity_falls_back_to_a_fixed_ladder_instead_of_dropping_the_setup(self):
+        with mock.patch.object(sl, "MIN_RR", 50.0):                # geen zwaaipunt ligt ver genoeg
             self.run_live(BREAK_BAR + 4)
-        self.assertEqual(self.pushed, [])
-        self.assertEqual(self.graded, [])
+        rows = repo.list_structure_setups(("waiting",))
+        self.assertEqual(len(rows), 1)
+        plan = json.loads(rows[0]["plan"])
+        self.assertEqual(plan["targets_r"], [1.0, 2.0, 3.0])
+        self.assertFalse(plan["from_levels"])
 
-    def test_unplanned_breaks_are_counted_and_heartbeat_is_written(self):
-        with mock.patch.object(sl, "MIN_RR", 50.0):
-            self.run_live(BREAK_BAR + 4)
-        counts = repo.structure_counts("2000-01-01")
-        self.assertGreaterEqual(counts["geen_plan"], 1)
-        reason = repo.list_structure_setups(("geen_plan",))[0]["reason"]
-        self.assertRegex(reason, r"\d+[.,]\d+")                    # de reden noemt het getal: stopafstand of ruimte in R
-        self.assertEqual(counts["goedgekeurd"], 0)
-        self.assertIsNotNone(repo.get_beat("structuur"))
-        with mock.patch.object(sl, "MIN_RR", 50.0):
-            self.run_live(BREAK_BAR + 4)
-        self.assertEqual(repo.structure_counts("2000-01-01")["geen_plan"], counts["geen_plan"])      # niet dubbel geteld
+    def test_grade_c_is_followed_silently_as_its_own_signal_type(self):
+        self.run_live(BREAK_BAR + 4, grade="C")
+        self.assertEqual(self.pushed, [])
+        self.assertEqual(len(repo.list_structure_setups(("schaduw",))), 1)
+        self.pushed.clear()
+        self.run_live(BREAK_BAR + 9)                               # de koers komt terug bij het niveau
+        rows = repo.list_signals_for_quality_report(None)
+        self.assertEqual([r["trade_type"] for r in rows], ["structuur_c"])
+        self.assertEqual(self.pushed, [])                          # geen melding en geen journaalregels
 
     def test_off_switch(self):
         with mock.patch.object(config, "STRUCTURE_ENABLED", False):

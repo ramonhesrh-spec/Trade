@@ -2724,7 +2724,7 @@ def update_structure_judgement(setup_id: int, grade: Optional[str], reason: str,
 
 def expire_structure_setups(now_iso: str) -> None:
     with db.session() as conn:
-        conn.execute("UPDATE structure_setups SET state = 'expired' WHERE state = 'waiting' AND expires_at < ?", (now_iso,))
+        conn.execute("UPDATE structure_setups SET state = 'expired' WHERE state IN ('waiting', 'schaduw') AND expires_at < ?", (now_iso,))
 
 
 def alert_once(key: str) -> bool:

@@ -105,13 +105,15 @@ def plan_for(ev, b: pd.DataFrame, levels: list[float], level: float, extreme: fl
     risk_pct = risk / level * 100
     if not (br.MIN_STOP_PCT <= risk_pct <= br.MAX_STOP_PCT) or (short and level >= stop) or (not short and level <= stop):
         return None
-    ladder = br.ladder_targets(ev.direction, level, risk, "niveaus", levels) or br.ladder_targets(ev.direction, level, risk, "ladder 1-2-3R", levels)
+    # Doelen op zwaaipunten als die ruim genoeg liggen, anders een vaste ladder van 1, 2 en 3R. De eis dat het tweede doel op een zwaaipunt minstens
+    # MIN_RR ver ligt hield in een stijging naar nieuwe hoogtes bijna elke breuk tegen, en het onderzoek liet zien dat zulke filters de kwaliteit niet verbeteren.
+    nearest = br.ladder_targets(ev.direction, level, risk, "niveaus", levels)
+    on_levels = nearest is not None and (nearest[0][1] if len(nearest[0]) > 1 else nearest[0][0]) >= MIN_RR
+    ladder = nearest if on_levels else br.ladder_targets(ev.direction, level, risk, "ladder 1-2-3R", levels)
     r_list = ladder[0]
-    if (r_list[1] if len(r_list) > 1 else r_list[0]) < MIN_RR:      # het signaal meet het tweede doel: dat moet de moeite waard zijn
-        return None
     sign = -1 if short else 1
     return {"level": level, "stop": stop, "risk_pct": risk_pct, "targets_r": list(r_list),
-            "targets": [level + sign * risk * r for r in r_list], "from_levels": r_list != (1.0, 2.0, 3.0)}
+            "targets": [level + sign * risk * r for r in r_list], "from_levels": on_levels}
 
 
 def explain_no_plan(ev, levels: list[float], level: float, extreme: float) -> str:
@@ -122,11 +124,7 @@ def explain_no_plan(ev, levels: list[float], level: float, extreme: float) -> st
     risk_pct = risk / level * 100 if level else 0.0
     if not (br.MIN_STOP_PCT <= risk_pct <= br.MAX_STOP_PCT):
         return f"Stop {risk_pct:.2f}% van het niveau, toegestaan is {br.MIN_STOP_PCT:g} tot {br.MAX_STOP_PCT:g}%."
-    ladder = br.ladder_targets(ev.direction, level, risk, "niveaus", levels)
-    if ladder is None:
-        return "Stop in orde, geen plan om een andere reden."
-    second = ladder[0][1] if len(ladder[0]) > 1 else ladder[0][0]
-    return f"Stop {risk_pct:.2f}%, maar het tweede doel op een zwaaipunt ligt maar {second:.1f}R ver (minimaal {MIN_RR:g}R)."
+    return "Stop in orde, geen plan om een andere reden."
 
 
 def take_profit_of(plan: dict) -> float:
@@ -230,7 +228,8 @@ async def _discover(coin: str, now: datetime) -> None:
             repo.update_structure_judgement(setup_id, None, reason, "geen_oordeel")
             continue
         capped = repo.count_structure_alerts_since((now - timedelta(hours=24)).isoformat()) >= config.STRUCTURE_MAX_ALERTS_PER_DAY
-        state = "waiting" if grade in ("A", "B") and not capped else "niet_gemeld"
+        # Oordeel C wordt niet gemeld maar wel stil gevolgd (schaduw): zo meet Bewijs of Claude's oordeel iets toevoegt.
+        state = "waiting" if grade in ("A", "B") and not capped else "schaduw" if grade == "C" else "niet_gemeld"
         repo.update_structure_judgement(setup_id, grade, reason, state)
         logger.info("Structuur %s %s %s: oordeel %s (%s)", coin, ev.direction, ev.kind, grade, state)
         if state == "waiting":
@@ -270,9 +269,29 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
     )
 
 
+def _shadow_levels(setup: dict, plan: dict, entry: float, stop: float) -> tuple[float, float]:
+    risk = abs(entry - stop)
+    sign = -1 if setup["direction"] == br.SHORT else 1
+    targets_r = plan["targets_r"]
+    return stop, entry + sign * risk * (targets_r[1] if len(targets_r) > 1 else targets_r[0])
+
+
+async def _fire_shadow(setup: dict, plan: dict, entry: float, stop: float) -> None:
+    """Een setup met oordeel C die toch vult: alleen een signaal voor Bewijs (trade_type 'structuur_c'), geen melding en geen journaalregels."""
+    stop, take = _shadow_levels(setup, plan, entry, stop)
+    signal_id = repo.insert_signal({
+        "message_id": None, "coin": setup["coin"], "direction": setup["direction"], "category": "day_trading", "trade_type": "structuur_c",
+        "pattern_name": "Structuur C", "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None,
+        "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Structuur C (schaduw)",
+        "reason": f"Oordeel C van Claude, stil gevolgd. {setup['reason'] or ''}".strip(), "stop_loss": stop, "take_profit": take, "context_note": None,
+        "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None, "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
+    })
+    repo.set_structure_state(setup["id"], "fired", signal_id)
+
+
 async def _track(now: datetime) -> None:
     from app import exchange
-    waiting = repo.list_structure_setups(("waiting",))
+    waiting = repo.list_structure_setups(("waiting", "schaduw"))
     for coin in sorted({s["coin"] for s in waiting}):
         try:
             df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="5m", limit=80)
@@ -293,7 +312,7 @@ async def _track(now: datetime) -> None:
                     risk_pct = abs(level - stop) / level * 100
                     if br.MIN_STOP_PCT <= risk_pct <= br.MAX_STOP_PCT:
                         try:
-                            await _fire(s, plan, level, stop, c.timestamp)
+                            await (_fire(s, plan, level, stop, c.timestamp) if s["state"] == "waiting" else _fire_shadow(s, plan, level, stop))
                         except Exception:
                             logger.exception("Structuur-setup %s voor %s is niet gemeld", s["id"], coin)
                     else:
