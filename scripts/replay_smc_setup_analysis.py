@@ -74,6 +74,8 @@ def main() -> None:
     p.add_argument("--fee-pct", type=float, default=0.02)
     p.add_argument("--slippage-pct", type=float, default=0.01)
     p.add_argument("--rr", type=float, default=1.5, help="take-verhouding voor de kenmerkentabellen")
+    p.add_argument("--min-risk-pct", type=float, default=0.0, help="alleen setups met minstens deze stopafstand (in procenten)")
+    p.add_argument("--min-zone-pct", type=float, default=0.0, help="alleen setups met minstens deze zonegrootte (in procenten)")
     a = p.parse_args()
     path = Path(a.csv) if a.csv else None
     if path is None:
@@ -84,6 +86,10 @@ def main() -> None:
     setups = pd.read_csv(path)
     base = {c: candle_cache.load_candles(c, "1m") for c in setups["coin"].unique()}
     table, counts = build_table(setups, base, a.fee_pct, a.slippage_pct, a.rr)
+    if a.min_risk_pct or a.min_zone_pct:
+        before = len(table)
+        table = table[(table["risk_pct"] >= a.min_risk_pct) & (table["zone_pct"] >= a.min_zone_pct)].reset_index(drop=True)
+        print(f"Filter: stopafstand minstens {a.min_risk_pct}% en zone minstens {a.min_zone_pct}%: {len(table)} van {before} gevulde setups over.")
     key = a.rr
     cut = table["at"].quantile(0.7)
     print(f"{path.name}: {counts['setups']} setups, gevuld {counts['gevuld']}, niet gevuld {counts['niet_gevuld']}, "
