@@ -1783,3 +1783,7 @@ a.nf-link:hover { background: var(--panel-hover); border-radius: var(--radius-sm
   .nf-main { grid-column: 1 / -1; }
   .nf-time { grid-column: 2; grid-row: 1; }
 }
+
+/* Een melding opent de pagina op de kans zelf: scroll weg van de vaste kop en markeer de kaart. */
+.signal-card, .radar-card { scroll-margin-top: 80px; }
+.signal-card:target, .radar-card:target { outline: 2px solid var(--accent, #4ade80); outline-offset: 3px; }

@@ -1635,7 +1635,7 @@ def list_open_entries_with_levels() -> list[dict]:
     niet echt, daar hoort geen Telegram seintje bij."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT je.id AS id, je.user_id AS user_id, je.entry_price AS entry_price,
+            """SELECT je.id AS id, je.user_id AS user_id, je.entry_price AS entry_price, je.signal_id AS signal_id,
                       s.coin AS coin, s.direction AS direction,
                       COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss,
                       COALESCE(je.take_profit_override, s.take_profit) AS take_profit,
@@ -1662,7 +1662,7 @@ def list_pending_entries_with_price() -> list[dict]:
     check, die voorrang krijgt op de andere twee triggers."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT je.id AS id, je.user_id AS user_id,
+            """SELECT je.id AS id, je.user_id AS user_id, je.signal_id AS signal_id,
                       s.coin AS coin, s.direction AS direction, s.price AS signal_price,
                       s.atr AS atr, s.confidence AS confidence, s.created_at AS signal_created_at,
                       s.message_id AS message_id,

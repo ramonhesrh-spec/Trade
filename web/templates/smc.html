@@ -15,7 +15,7 @@
   {% else %}
   <div class="radar-grid">
     {% for c in setup_cards %}
-    <article class="radar-card" data-radar-key="{{ c.key }}">
+    <article class="radar-card" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
       <header class="radar-head">
         <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
         <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
@@ -52,7 +52,7 @@
   {% else %}
   <div class="radar-grid">
     {% for c in signal_cards %}
-    <article class="radar-card" data-radar-key="{{ c.key }}">
+    <article class="radar-card" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
       <header class="radar-head">
         <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
         <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
