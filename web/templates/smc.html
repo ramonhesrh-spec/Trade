@@ -10,24 +10,25 @@
 
 {% if structure_cards %}
 <section class="card" style="--i: 0">
-  <h3>Structuur-breuken (ongetest)</h3>
-  <p class="muted">Breuk van een lijn of range op 30m. Zet de limietorder op het niveau, de stop staat vast. Raakt de koers het niveau, dan volgt een signaal.</p>
-  <div class="radar-grid">
+  <h3>Structuur-breuken <span class="tag-untested">ongetest</span></h3>
+  <p class="muted">Breuk van een lijn of range op 30m. Zet de limietorder op het niveau: de stop staat vast, de doelen liggen op zwaaipunten. Raakt de koers het niveau, dan volgt een signaal.</p>
+  <div class="setup-grid">
     {% for c in structure_cards %}
-    <article class="radar-card" id="structuur-{{ c.id }}">
-      <header class="radar-head">
+    <article class="setup-card" id="structuur-{{ c.id }}">
+      <header class="setup-head">
         <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
         <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
-        <span class="radar-state radar-state-open">Oordeel {{ c.grade }}</span>
+        <span class="setup-grade setup-grade-{{ c.grade|lower }}">{{ c.grade }}</span>
+        <span class="muted setup-age">{{ c.created_at | age }}</span>
       </header>
-      <dl class="radar-facts">
-        <div><dt>Limietorder</dt><dd>{{ "%.4f"|format(c.plan.level) }}</dd></div>
+      {{ c.chart }}
+      <dl class="setup-plan">
+        <div><dt>Limiet</dt><dd>{{ "%.4f"|format(c.plan.level) }}</dd></div>
         <div><dt>Stop</dt><dd>{{ "%.4f"|format(c.plan.stop) }}</dd></div>
         <div><dt>Risico</dt><dd>{{ "%.2f"|format(c.plan.risk_pct) }}%</dd></div>
-        {% for price, r in c.targets %}<div><dt>Doel {{ loop.index }}</dt><dd>{{ "%.4f"|format(price) }} ({{ "%g"|format(r) }}R)</dd></div>{% endfor %}
+        <div><dt>Eerste doel</dt><dd>{{ "%g"|format(c.targets[0][1]) }}R</dd></div>
       </dl>
-      <p class="muted">{{ c.reason }}</p>
-      <div class="radar-meta muted">{{ c.created_at | age }}</div>
+      <p class="setup-reason">{{ c.reason }}</p>
     </article>
     {% endfor %}
   </div>

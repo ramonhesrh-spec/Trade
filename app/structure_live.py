@@ -29,6 +29,8 @@ logger = logging.getLogger("structure_live")
 
 BAR = pd.Timedelta(minutes=br.BAR_MINUTES)
 CANDLES_SHOWN = 48
+CHART_BARS = 60
+MIN_RR = 2.0
 REASON_MAX = 240
 GRADES = ("A", "B", "C")
 
@@ -105,6 +107,8 @@ def plan_for(ev, b: pd.DataFrame, levels: list[float], level: float, extreme: fl
         return None
     ladder = br.ladder_targets(ev.direction, level, risk, "niveaus", levels) or br.ladder_targets(ev.direction, level, risk, "ladder 1-2-3R", levels)
     r_list = ladder[0]
+    if (r_list[1] if len(r_list) > 1 else r_list[0]) < MIN_RR:      # het signaal meet het tweede doel: dat moet de moeite waard zijn
+        return None
     sign = -1 if short else 1
     return {"level": level, "stop": stop, "risk_pct": risk_pct, "targets_r": list(r_list),
             "targets": [level + sign * risk * r for r in r_list], "from_levels": r_list != (1.0, 2.0, 3.0)}
@@ -191,7 +195,8 @@ async def _discover(coin: str, now: datetime) -> None:
                "features": json.dumps({"vol_ratio": ev.vol_ratio, "span": int(ev.span), "touches": int(ev.touches),
                                        "with_trend": bool(ev.with_trend)}),
                "expires_at": (next_start + br.RETEST_BARS * BAR).isoformat(),
-               "plan": json.dumps({**plan, "levels": levels, "break_extreme": extreme})}
+               "plan": json.dumps({**plan, "levels": levels, "break_extreme": extreme,
+                                   "candles": [[c.timestamp.isoformat(), c.open, c.high, c.low, c.close] for c in b.tail(CHART_BARS).itertuples()]})}
         setup_id = repo.insert_structure_setup(row)
         if setup_id is None:
             continue

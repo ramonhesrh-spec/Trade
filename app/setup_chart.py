@@ -1,0 +1,88 @@
+"""Tekent een structuur-setup als de grafiek die een handelaar zelf maakt: candles, de gebroken lijn, de limiet op het
+retest-niveau, de stopzone en de doelen. Pure functie zonder netwerk: alles komt uit de momentopname die structure_live
+bij de breuk bewaart. Kleuren staan in CSS (klassen .sc-*), zodat het thema bepaalt hoe het eruitziet."""
+from datetime import datetime
+from html import escape
+from typing import Optional
+
+W, H = 720, 330
+PAD_L, PAD_R, PAD_T, PAD_B = 8, 150, 14, 22
+LABEL_GAP = 13            # minimale afstand tussen twee labels, zodat dicht bij elkaar liggende doelen leesbaar blijven
+FUTURE_BARS = 14          # lege ruimte rechts voor stopzone en doelen
+BAR_SECONDS = 30 * 60
+
+
+def _fmt(x: float) -> str:
+    return f"{x:.6g}" if abs(x) < 1000 else f"{x:,.1f}".replace(",", "")
+
+
+def _ts(value: str) -> float:
+    return datetime.fromisoformat(value).timestamp()
+
+
+def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[float] = None) -> str:
+    """candles: [[iso_tijd, open, hoog, laag, slot], ...] oud naar nieuw. setup: coin, direction, kind, line_a, line_slope,
+    p1_at, break_at. plan: level, stop, targets, targets_r. Geeft '' als er geen candles zijn."""
+    if not candles:
+        return ""
+    n = len(candles)
+    times = [_ts(c[0]) for c in candles]
+    slots = n + FUTURE_BARS
+    plot_w, plot_h = W - PAD_L - PAD_R, H - PAD_T - PAD_B
+    step = plot_w / slots
+    levels = [plan["level"], plan["stop"], *plan["targets"], *([price] if price else [])]
+    lo = min([c[3] for c in candles] + levels)
+    hi = max([c[2] for c in candles] + levels)
+    span = (hi - lo) or 1.0
+    lo, hi = lo - span * 0.05, hi + span * 0.05
+
+    def y(v: float) -> float:
+        return PAD_T + (hi - v) / (hi - lo) * plot_h
+
+    def x(i: float) -> float:
+        return PAD_L + (i + 0.5) * step
+
+    def bar_index(t: float) -> float:
+        return (t - times[0]) / BAR_SECONDS
+
+    out = [f'<svg class="sc" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(setup["coin"])} {escape(setup["direction"])} structuur-setup">']
+    right = PAD_L + plot_w
+
+    break_i = max(0.0, min(n - 1, bar_index(_ts(setup["break_at"])) - 1))
+    zone_top, zone_bottom = sorted((plan["level"], plan["stop"]))
+    out.append(f'<rect class="sc-stopzone" x="{x(break_i):.1f}" y="{y(zone_bottom):.1f}" width="{right - x(break_i):.1f}" '
+               f'height="{max(1.0, y(zone_top) - y(zone_bottom)):.1f}"/>')
+
+    p1 = bar_index(_ts(setup["p1_at"]))
+    x0 = max(0.0, p1)
+    pts = []
+    for i in (x0, n - 1 + FUTURE_BARS):
+        v = setup["line_a"] + setup["line_slope"] * (i - p1)
+        pts.append(f"{x(i):.1f},{y(v):.1f}")
+    out.append(f'<polyline class="sc-structure" points="{" ".join(pts)}"/>')
+
+    for i, (_, o, h, low, c) in enumerate(candles):
+        cls = "sc-up" if c >= o else "sc-down"
+        body_top, body_h = y(max(o, c)), max(1.0, abs(y(o) - y(c)))
+        out.append(f'<line class="sc-wick {cls}" x1="{x(i):.1f}" x2="{x(i):.1f}" y1="{y(h):.1f}" y2="{y(low):.1f}"/>'
+                   f'<rect class="sc-body {cls}" x="{x(i) - step * 0.34:.1f}" y="{body_top:.1f}" width="{step * 0.68:.1f}" height="{body_h:.1f}"/>')
+
+    bx = x(break_i)
+    arrow_y = y(candles[int(break_i)][2]) - 8 if setup["direction"] == "short" else y(candles[int(break_i)][3]) + 8
+    out.append(f'<text class="sc-break" x="{bx:.1f}" y="{arrow_y:.1f}" text-anchor="middle">{"▼" if setup["direction"] == "short" else "▲"}</text>')
+
+    marks = [(plan["level"], "sc-limit", f"Limiet {_fmt(plan['level'])}"), (plan["stop"], "sc-stop", f"Stop {_fmt(plan['stop'])}")]
+    marks += [(t, "sc-target", f"T{k} {_fmt(t)} · {r:.1f}R") for k, (t, r) in enumerate(zip(plan["targets"], plan["targets_r"]), 1)]
+    if price:
+        marks.append((price, "sc-price", f"Nu {_fmt(price)}"))
+    placed, last_y = [], -1e9
+    for v, cls, text in sorted(marks, key=lambda m: y(m[0])):
+        label_y = max(y(v), last_y + LABEL_GAP)
+        placed.append((v, cls, text, label_y))
+        last_y = label_y
+    for v, cls, text, label_y in placed:
+        out.append(f'<line class="sc-line {cls}" x1="{x(n - 1):.1f}" x2="{right:.1f}" y1="{y(v):.1f}" y2="{y(v):.1f}"/>'
+                   f'<text class="sc-label {cls}" x="{right + 6:.1f}" y="{label_y + 4:.1f}">{escape(text)}</text>')
+
+    out.append("</svg>")
+    return "".join(out)

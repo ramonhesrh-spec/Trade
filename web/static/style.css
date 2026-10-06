@@ -1787,3 +1787,36 @@ a.nf-link:hover { background: var(--panel-hover); border-radius: var(--radius-sm
 /* Een melding opent de pagina op de kans zelf: scroll weg van de vaste kop en markeer de kaart. */
 .signal-card, .radar-card { scroll-margin-top: 80px; }
 .signal-card:target, .radar-card:target { outline: 2px solid var(--accent, #4ade80); outline-offset: 3px; }
+
+/* Structuur-setup: de trade getekend zoals een handelaar dat zelf doet (app/setup_chart.py). */
+.setup-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: var(--space-7); }
+.setup-card {
+  background: linear-gradient(180deg, var(--bg-elevated), var(--bg)); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: var(--space-6); display: flex; flex-direction: column; gap: var(--space-5); scroll-margin-top: 80px;
+}
+.setup-card:target { outline: 2px solid var(--accent); outline-offset: 3px; }
+.setup-head { display: flex; align-items: center; gap: var(--space-4); flex-wrap: wrap; }
+.setup-age { margin-left: auto; font-size: var(--text-xs); }
+.setup-grade { font-family: var(--mono); font-weight: 700; font-size: var(--text-xs); padding: 2px 9px; border-radius: 999px; border: 1px solid var(--border-strong); }
+.setup-grade-a { color: var(--accent); border-color: var(--accent); background: var(--accent-bg); }
+.setup-grade-b { color: var(--text-dim); }
+.setup-plan { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-4); margin: 0; }
+.setup-plan div { background: var(--panel); border-radius: var(--radius-sm); padding: var(--space-3) var(--space-4); }
+.setup-plan dt { font-size: var(--text-2xs); color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+.setup-plan dd { margin: 2px 0 0; font-family: var(--mono); font-size: var(--text-sm); color: var(--text); }
+.setup-reason { margin: 0; font-size: var(--text-sm); color: var(--text-dim); }
+.tag-untested { font-size: var(--text-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 999px; padding: 1px 8px; vertical-align: middle; }
+.sc { width: 100%; height: auto; display: block; background: var(--bg); border-radius: var(--radius-sm); }
+.sc-up { fill: var(--green); stroke: var(--green); }
+.sc-down { fill: var(--red); stroke: var(--red); }
+.sc-wick { stroke-width: 1; }
+.sc-structure { fill: none; stroke: var(--text-dim); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.sc-stopzone { fill: var(--red-bg); }
+.sc-line { stroke-width: 1.2; }
+.sc-limit { stroke: var(--accent); fill: var(--accent); }
+.sc-stop { stroke: var(--red); fill: var(--red); }
+.sc-target { stroke: var(--green); fill: var(--green); stroke-dasharray: 4 3; }
+.sc-price { stroke: var(--text); fill: var(--text); stroke-dasharray: 1 3; }
+.sc-label { font-family: var(--mono); font-size: 10.5px; stroke: none; }
+.sc-break { fill: var(--accent); stroke: none; font-size: 12px; }
+@media (max-width: 520px) { .setup-plan { grid-template-columns: repeat(2, 1fr); } }

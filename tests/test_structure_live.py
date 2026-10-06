@@ -33,6 +33,20 @@ class PureTest(unittest.TestCase):
         self.assertFalse(sl.should_disable([loss] * 29, 30))
 
 
+class ChartTest(unittest.TestCase):
+    def test_svg_has_line_zone_limit_stop_targets_and_price(self):
+        from app import setup_chart
+        candles = [[f"2026-03-02T{h:02d}:00:00+00:00", 100 - h, 101 - h, 99 - h, 100 - h] for h in range(10)]
+        setup = {"coin": "BTC", "direction": "short", "kind": "RANGE", "line_a": 100.0, "line_slope": 0.0,
+                 "p1_at": "2026-03-02T01:00:00+00:00", "break_at": "2026-03-02T06:00:00+00:00"}
+        plan = {"level": 95.0, "stop": 96.0, "targets": [93.0, 91.0], "targets_r": [2.0, 4.0]}
+        svg = setup_chart.setup_svg(candles, setup, plan, price=94.0)
+        for cls in ("sc-stopzone", "sc-structure", "sc-limit", "sc-stop", "sc-target", "sc-price", "sc-break"):
+            self.assertIn(cls, svg)
+        self.assertEqual(svg.count("sc-body"), 10)
+        self.assertEqual(setup_chart.setup_svg([], setup, plan), "")
+
+
 class LiveTest(DbCase):
     def setUp(self):
         super().setUp()
@@ -40,6 +54,9 @@ class LiveTest(DbCase):
         self.bars = make_bars(self.f, 30)
         self.pushed = []
         self.graded = []
+        patcher = mock.patch.object(sl, "MIN_RR", 0.0)       # het synthetische zwaaipunt ligt dichtbij: de ruimte-eis testen we apart
+        patcher.start()
+        self.addCleanup(patcher.stop)
 
     def fetch(self, n_closed, step_min=None):
         bars, f = self.bars, self.f
@@ -103,6 +120,12 @@ class LiveTest(DbCase):
         self.assertGreater(sig["stop_loss"], sig["price"])     # short: stop boven de instap
         self.assertLess(sig["take_profit"], sig["price"])
         self.assertTrue(any("gevuld" in t for t, *_ in self.pushed))
+
+    def test_no_alert_when_nearest_liquidity_leaves_less_than_min_rr(self):
+        with mock.patch.object(sl, "MIN_RR", 50.0):
+            self.run_live(BREAK_BAR + 4)
+        self.assertEqual(self.pushed, [])
+        self.assertEqual(self.graded, [])
 
     def test_off_switch(self):
         with mock.patch.object(config, "STRUCTURE_ENABLED", False):

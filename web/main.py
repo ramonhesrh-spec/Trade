@@ -28,7 +28,7 @@ from markupsafe import Markup
 
 from app import advice as advice_module
 from app import patterns as chart_patterns
-from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, radar, repo, risk, security, today, track_record
+from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, radar, repo, risk, security, setup_chart, today, track_record
 from app.market_scanner import smc_stop_take_margins
 
 logger = logging.getLogger("web")
@@ -282,12 +282,15 @@ async def _radar_cards() -> list[dict]:
     return cards
 
 
-def _structure_cards() -> list[dict]:
+async def _structure_cards() -> list[dict]:
     """Wachtende structuur-setups met hun plan, voor de Radar (app/structure_live.py)."""
+    setups = repo.list_structure_setups(("waiting",), 12)
+    prices = await _cached_prices({s["coin"] for s in setups}) if setups else {}
     cards = []
-    for s in repo.list_structure_setups(("waiting",), 12):
+    for s in setups:
         plan = json.loads(s["plan"])
-        cards.append({**s, "plan": plan, "targets": list(zip(plan["targets"], plan["targets_r"]))})
+        cards.append({**s, "plan": plan, "targets": list(zip(plan["targets"], plan["targets_r"])),
+                      "chart": Markup(setup_chart.setup_svg(plan.get("candles", []), s, plan, prices.get(s["coin"])))})
     return cards
 
 
@@ -311,7 +314,7 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     return templates.TemplateResponse(request, "smc.html", {
         "user": user,
         "setup_cards": [c for c in cards if c["kind"] == "setup"],
-        "structure_cards": _structure_cards(),
+        "structure_cards": await _structure_cards(),
         "signal_cards": [c for c in cards if c["kind"] == "signal"],
         "entries": entries,
     })
