@@ -420,6 +420,13 @@ async def api_vandaag(user: dict = Depends(require_login)):
     }
 
 
+@app.get("/api/kansen")
+async def api_kansen(user: dict = Depends(require_login)):
+    """Live afstand tot stap 1 per wachtend Structuur-plan, voor kansen.js."""
+    cards = await _structure_cards()
+    return {"structuur": {str(c["id"]): {"dist": c["steps"][0]["dist"]} for c in cards}}
+
+
 @app.get("/api/radar")
 async def api_radar(user: dict = Depends(require_login)):
     """Live status per radar-kaart, voor radar.js: nieuwe koers, afstand tot de limietorder, live R en de bijgewerkte ladder."""

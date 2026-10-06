@@ -260,17 +260,18 @@
 
 {# Een structuur-setup als getekende trade (app/setup_chart.py), met het plan eronder. Gebruikt op Setups en op Vandaag. #}
 {% macro setup_card(c, risk_eur=none) %}
-<article class="setup-card" id="structuur-{{ c.id }}">
+<article class="setup-card{% if c.grade is none or c.grade == 'C' %} is-weak{% endif %}" id="structuur-{{ c.id }}">
   <header class="setup-head">
     <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
     <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
     <span class="setup-grade setup-grade-{{ (c.grade or 'c')|lower }}" title="Oordeel van Claude">{{ c.grade or "-" }}</span>
     <span class="muted setup-age">{{ c.created_at | age }}</span>
   </header>
+  {% if c.grade is none or c.grade == 'C' %}<p class="setup-weak"><strong>{{ "Claude twijfelt" if c.grade == 'C' else "Geen oordeel van Claude" }}.</strong> {{ c.reason }}</p>{% endif %}
   {{ c.chart }}
   {{ steps_list(c.steps, risk_eur) }}
   {{ share_button(c.coin, c.direction, c.steps) }}
-  <p class="setup-reason">{{ c.reason }}</p>
+  {% if c.grade is not none and c.grade != 'C' %}<p class="setup-reason">{{ c.reason }}</p>{% endif %}
 </article>
 {% endmacro %}
 

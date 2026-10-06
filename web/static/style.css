@@ -1977,3 +1977,14 @@ html.reveal-done main > section, html.reveal-done main > .stats-collapse { anima
 .r-progress-end.start { left: 0; }
 .r-progress-end.end { right: 0; }
 @media (prefers-reduced-motion: reduce) { .r-progress-mark { transition: none; } }
+
+/* Oordeel C of geen oordeel: dezelfde kaart, rustiger, met de twijfel van Claude bovenaan. */
+.setup-card.is-weak { border-style: dashed; }
+.setup-card.is-weak .setup-grade { opacity: 0.7; }
+.setup-weak { margin: var(--space-3) 0; padding: var(--space-3) var(--space-4); border-left: 3px solid #f2b24c; background: rgba(242, 178, 76, 0.08); color: var(--text-dim); font-size: var(--text-sm, 0.875rem); }
+.setup-weak strong { color: #f2b24c; }
+
+/* Stap 1 pulseert zodra de koers dicht bij de voorwaarde is (0,5% of minder). De puls hangt aan de live afstand, niet aan de klok. */
+@keyframes step-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(23, 229, 214, 0.55); } 50% { box-shadow: 0 0 0 8px rgba(23, 229, 214, 0); } }
+.vd-step.is-now.is-near .vd-step-n { animation: step-pulse 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .vd-step.is-now.is-near .vd-step-n { animation: none; } }

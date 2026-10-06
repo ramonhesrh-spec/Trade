@@ -48,8 +48,24 @@ class WebVandaagTests(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         self.assertIn(f'id="structuur-{sid}"', r.text)
         self.assertIn("Laatste 24 uur: 1 breuk gezien, 1 goedgekeurd", r.text)
+        live = self.client.get("/api/kansen").json()
+        self.assertIn(str(sid), live["structuur"])                         # live afstand per wachtend plan
+        self.assertIn("te gaan", r.text)
         self.assertIn("sc-limit", r.text)
         self.assertIn("Schone range.", r.text)
+
+    def test_grade_c_card_is_muted_and_shows_claudes_doubt_on_top(self):
+        import json
+        candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
+        plan = {"level": 100.0, "stop": 101.0, "risk_pct": 1.0, "targets": [98.0, 97.0], "targets_r": [2.0, 3.0], "candles": candles}
+        repo.insert_structure_setup({
+            "coin": "BTC", "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
+            "line_slope": 0.0, "atr": 0.5, "grade": "C", "reason": "Te weinig ruimte.", "features": "{}", "state": "waiting",
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
+        text = self.client.get("/structuur").text
+        self.assertIn("is-weak", text)
+        self.assertIn("Claude twijfelt", text)
+        self.assertEqual(text.count("Te weinig ruimte."), 1)               # de reden staat één keer, bovenaan
 
     def test_coin_page_shows_masthead_price_and_waiting_structure_plan(self):
         import json
