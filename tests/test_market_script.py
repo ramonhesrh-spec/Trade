@@ -145,3 +145,45 @@ def raw_row():
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RetryTest(DbCase):
+    def test_second_attempt_replaces_first_only_when_it_has_more_valid_scenarios(self):
+        bad = {"summary": "s", "bias": "long", "scenarios": [raw(take_profit=101.0)]}      # R:R te laag
+        good = {"summary": "s2", "bias": "long", "scenarios": [raw()]}
+        ctx = ({"prijs": PRICE}, PRICE, ATR)
+        calls = []
+
+        def fake_call(context):
+            calls.append(context)
+            return bad if len(calls) == 1 else good
+
+        with mock.patch.object(ms, "gather_context", lambda coin, now: ctx), mock.patch.object(ms, "call_claude", fake_call):
+            ms.generate_for_coin("BTC", datetime.now(timezone.utc))
+        self.assertEqual(len(calls), 2)
+        self.assertIn("vorige_poging_afgekeurd", calls[1])
+        self.assertIn("R:R", calls[1]["vorige_poging_afgekeurd"][0])
+        self.assertEqual(len(repo.list_waiting_scenarios()), 1)
+
+    def test_no_retry_when_everything_is_valid_and_retry_failure_keeps_first(self):
+        calls = []
+        with mock.patch.object(ms, "gather_context", lambda coin, now: ({"prijs": PRICE}, PRICE, ATR)), \
+                mock.patch.object(ms, "call_claude", lambda c: calls.append(c) or {"summary": "s", "bias": "long", "scenarios": [raw()]}):
+            ms.generate_for_coin("BTC")
+        self.assertEqual(len(calls), 1)
+        seen = []
+
+        def flaky(c):
+            seen.append(1)
+            if len(seen) == 2:
+                raise RuntimeError("api weg")
+            return {"summary": "s", "bias": "long", "scenarios": [raw(), raw(take_profit=100.9)]}
+
+        with mock.patch.object(ms, "gather_context", lambda coin, now: ({"prijs": PRICE}, PRICE, ATR)), mock.patch.object(ms, "call_claude", flaky):
+            ms.generate_for_coin("ETH")
+        self.assertEqual(len([s for s in repo.list_waiting_scenarios() if s["coin"] == "ETH"]), 1)
+
+    def test_allowed_ranges_match_the_validator(self):
+        r = ms.allowed_ranges(100.0, 2.0)
+        self.assertEqual(r["niveau_tussen"], [94.0, 106.0])
+        self.assertEqual(r["entry_tussen"], [97.0, 103.0])

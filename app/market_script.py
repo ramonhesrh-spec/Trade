@@ -76,24 +76,25 @@ def validate_scenarios(raw: list, price: float, atr: float, min_stop_pct: Option
         except (KeyError, TypeError, ValueError):
             dropped.append(f"{i}: onvolledig")
             continue
+        info = f"{direction} {ttype} niveau {level:g} entry {entry:g} stop {stop:g} take {take:g}"
         if direction not in ("long", "short") or ttype not in TRIGGER_TYPES:
             dropped.append(f"{i}: onbekende richting of voorwaarde")
         elif not reason:
             dropped.append(f"{i}: geen reden")
         elif not ((direction == "long" and stop < entry < take) or (direction == "short" and take < entry < stop)):
-            dropped.append(f"{i}: stop, entry en take staan niet in de juiste volgorde")
+            dropped.append(f"{i}: stop, entry en take staan niet in de juiste volgorde ({info})")
         elif abs(entry - stop) / entry * 100 < min_stop_pct:
-            dropped.append(f"{i}: stop te dichtbij")
+            dropped.append(f"{i}: stop te dichtbij ({info})")
         elif rr_of(direction, entry, stop, take) < MIN_RR:
-            dropped.append(f"{i}: R:R onder {MIN_RR}")
+            dropped.append(f"{i}: R:R onder {MIN_RR} ({info})")
         elif atr <= 0 or abs(level - price) > MAX_LEVEL_DISTANCE_ATR * atr or abs(entry - price) > MAX_ENTRY_DISTANCE_ATR * atr:
-            dropped.append(f"{i}: niveau of entry te ver van de prijs")
+            dropped.append(f"{i}: niveau of entry te ver van de prijs ({info})")
         elif ttype == "close_above" and level <= price:
-            dropped.append(f"{i}: voorwaarde klopt al")
+            dropped.append(f"{i}: voorwaarde klopt al ({info})")
         elif ttype == "close_below" and level >= price:
-            dropped.append(f"{i}: voorwaarde klopt al")
+            dropped.append(f"{i}: voorwaarde klopt al ({info})")
         elif ttype == "sweep_reclaim" and not ((direction == "long" and level < price) or (direction == "short" and level > price)):
-            dropped.append(f"{i}: sweep ligt aan de verkeerde kant van de prijs")
+            dropped.append(f"{i}: sweep ligt aan de verkeerde kant van de prijs ({info})")
         else:
             good.append(Scenario(direction, ttype, level, entry, stop, take, reason[:REASON_MAX]))
     if len(good) > MAX_SCENARIOS:
@@ -138,6 +139,7 @@ Geef:
 - scenarios: maximaal twee. Elk scenario is een voorwaarde met een plan. Een goed scenario heeft een niveau uit het pakket (dag-, week- of swinghoog en -laag, een SMC-zone), een voorwaarde die nu NOG NIET klopt, een limietorder, een stop achter een logisch niveau en een take bij het volgende niveau met minstens 2R.
 - Voorwaarden: close_above (een 5m-candle sluit boven het niveau), close_below, of sweep_reclaim (de prijs steekt door het niveau en sluit terug). Bij sweep_reclaim long ligt het niveau onder de prijs, bij short erboven.
 - Staat er geen goede kans in, geef een lege lijst. Dat is een goed antwoord.
+Het pakket bevat onder 'toegestaan' de grenzen waar je scenario's op getoetst worden: houd je daaraan. Staat er 'vorige_poging_afgekeurd', dan zijn die scenario's om de genoemde reden afgekeurd: los precies dat op of geef een lege lijst.
 Roep altijd de tool record_script aan."""
 
 TOOL = {
@@ -173,11 +175,22 @@ TOOL = {
 }
 
 
+def allowed_ranges(price: float, atr: float) -> dict:
+    """De grenzen waar validate_scenarios op toetst, als getallen: zo hoeft Claude ze niet te raden."""
+    return {
+        "niveau_tussen": [round(price - MAX_LEVEL_DISTANCE_ATR * atr, 6), round(price + MAX_LEVEL_DISTANCE_ATR * atr, 6)],
+        "entry_tussen": [round(price - MAX_ENTRY_DISTANCE_ATR * atr, 6), round(price + MAX_ENTRY_DISTANCE_ATR * atr, 6)],
+        "minimale_stopafstand_pct": config.SMC_MIN_STOP_PCT, "minimale_rr": MIN_RR,
+        "volgorde": "long: stop < entry < take. short: take < entry < stop. R:R = afstand entry-take gedeeld door afstand entry-stop.",
+    }
+
+
 def build_context(coin: str, price: float, atr: float, levels: dict, smc_zones: list[dict], derivs: Optional[dict],
                   liquidations: Optional[dict], agenda: list[dict], calls: list[dict], events: list[dict], now: datetime) -> dict:
     """Het hele pakket dat Claude ziet. Alleen feiten, afgerond op bruikbare precisie."""
     return {
         "coin": coin, "tijd_utc": now.strftime("%Y-%m-%d %H:%M"), "prijs": price, "atr_4u": round(atr, 6),
+        "toegestaan": allowed_ranges(price, atr),
         "niveaus": levels, "smc_zones": smc_zones, "derivaten": derivs, "liquidaties_4u_usd": liquidations,
         "agenda_24u": [{"over_uren": round((a["at"] - now).total_seconds() / 3600, 1), "wat": a["label"]} for a in agenda],
         "community_calls_24u": calls, "nieuws_12u": events,
@@ -246,6 +259,14 @@ def generate_for_coin(coin: str, now: Optional[datetime] = None) -> Optional[int
     summary, bias, scenarios, dropped = process_response(call_claude(ctx), price, atr)
     if dropped:
         logger.info("%s: %s scenario('s) afgevallen: %s", coin, len(dropped), "; ".join(dropped))
+        # Eén herkansing met de redenen erbij. Alleen overnemen als er daarmee meer geldige scenario's zijn.
+        try:
+            retry = process_response(call_claude({**ctx, "vorige_poging_afgekeurd": dropped}), price, atr)
+            if len(retry[2]) > len(scenarios):
+                summary, bias, scenarios, dropped = retry
+                logger.info("%s: herkansing gaf %s geldige scenario('s)", coin, len(scenarios))
+        except Exception:
+            logger.exception("%s: herkansing mislukt, eerste poging blijft staan", coin)
     return repo.insert_market_script(coin, summary, bias, config.SCRIPT_MODEL, [s.as_row() for s in scenarios], len(dropped),
                                      (now + timedelta(hours=EXPIRY_HOURS)).isoformat())
 
