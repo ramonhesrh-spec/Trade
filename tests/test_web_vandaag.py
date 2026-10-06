@@ -116,7 +116,7 @@ class WebVandaagTests(unittest.TestCase):
         repo.insert_market_event(now.isoformat(), "Binance", "Binance will list SOL", "https://x/1", "SOL", "long", "hoog", "Binance lijst SOL.")
         r = self.client.get("/vandaag")
         self.assertEqual(r.status_code, 200)
-        for text in ("BTC test onder gisteren hoog.", "5m-candle sluit boven 101", "Wacht op de voorwaarde", "Limietorder",
+        for text in ("BTC test onder gisteren hoog.", "5m-candle sluit boven 101", "Wacht op de voorwaarde", "Zet een limietorder op", "Wacht tot: 5m-candle sluit boven 101", "te gaan",
                      "4,0M", "Binance lijst SOL.", "1 long-scenario's", "Score: wat HesPulse zelf voorspelde",
                      "Break boven gisteren hoog."):
             self.assertIn(text, r.text, text)

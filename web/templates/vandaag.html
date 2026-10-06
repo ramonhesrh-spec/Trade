@@ -70,13 +70,22 @@
             <span class="radar-dir radar-dir-{{ sc.direction }}">{{ sc.direction }}</span>
             <span class="vd-state" data-vd="state">{{ sc.state_label }}</span>
           </div>
-          <p class="vd-trigger">Als: {{ sc.trigger }}</p>
-          <dl class="vd-facts">
-            <div><dt>Limietorder</dt><dd>{{ fmt(sc.entry) }}</dd></div>
-            <div><dt>R:R</dt><dd>{{ "%.1f"|format(sc.rr) }}</dd></div>
-            <div><dt title="Afstand van de instap tot je stop. Raakt de stop, dan verlies je zoveel procent van de koers.">Stopafstand</dt><dd>{{ "%.2f"|format(sc.risk_pct) }}%</dd></div>
-            <div><dt title="Hoeveel de koers nog moet bewegen voor de voorwaarde klopt.">Nog te gaan</dt><dd data-vd="distance">{% if sc.to_trigger_pct is not none %}{{ "%+.2f"|format(sc.to_trigger_pct) }}%{% else %}-{% endif %}</dd></div>
-          </dl>
+          <ol class="vd-steps">
+            <li class="vd-step{% if sc.state == 'waiting' %} is-now{% else %} is-done{% endif %}">
+              <span class="vd-step-n">1</span>
+              <span class="vd-step-text"><strong>Wacht tot: {{ sc.trigger }}</strong>
+                <span class="muted">Nog <span data-vd="distance">{% if sc.to_trigger_pct is not none %}{{ "%+.2f"|format(sc.to_trigger_pct) }}%{% else %}-{% endif %}</span> te gaan.</span></span>
+            </li>
+            <li class="vd-step{% if sc.state == 'fired' %} is-now{% endif %}">
+              <span class="vd-step-n">2</span>
+              <span class="vd-step-text"><strong>Zet een limietorder op {{ fmt(sc.entry) }}</strong></span>
+            </li>
+            <li class="vd-step">
+              <span class="vd-step-n">3</span>
+              <span class="vd-step-text"><strong>Stop {{ fmt(sc.stop) }}, doel {{ fmt(sc.take) }}</strong>
+                <span class="muted">De stop ligt {{ "%.2f"|format(sc.risk_pct) }}% van je instap. Het doel levert {{ "%.1f"|format(sc.rr) }} keer wat je riskeert.</span></span>
+            </li>
+          </ol>
           <p class="muted vd-fine">{{ sc.reason }}</p>
           <p class="muted vd-fine">Vervalt over <span data-vd="left">{{ "%.0f"|format(sc.hours_left) }}</span> uur</p>
         </div>
