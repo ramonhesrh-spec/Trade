@@ -2744,3 +2744,35 @@ def notify_engine_disabled(name: str, detail: str) -> None:
 def update_structure_plan(setup_id: int, plan_json: str) -> None:
     with db.session() as conn:
         conn.execute("UPDATE structure_setups SET plan = ? WHERE id = ?", (plan_json, setup_id))
+
+
+def beat(name: str, detail: str = "") -> None:
+    with db.session() as conn:
+        conn.execute(
+            "INSERT INTO engine_heartbeat (name, at, detail) VALUES (?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET at = excluded.at, detail = excluded.detail", (name, db.now_iso(), detail))
+
+
+def get_beat(name: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM engine_heartbeat WHERE name = ?", (name,)).fetchone()
+        return dict(row) if row else None
+
+
+def structure_counts(since_iso: str) -> dict:
+    """Aantal gevonden breuken sinds een tijdstip, per uitkomst van de beoordeling."""
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT state, grade, COUNT(*) AS n FROM structure_setups WHERE created_at >= ? GROUP BY state, grade", (since_iso,)).fetchall()
+    out = {"total": 0, "goedgekeurd": 0, "afgekeurd": 0, "geen_plan": 0, "geen_oordeel": 0}
+    for r in rows:
+        out["total"] += r["n"]
+        if r["state"] == "geen_plan":
+            out["geen_plan"] += r["n"]
+        elif r["state"] == "geen_oordeel":
+            out["geen_oordeel"] += r["n"]
+        elif r["grade"] in ("A", "B") and r["state"] != "niet_gemeld":
+            out["goedgekeurd"] += r["n"]
+        else:
+            out["afgekeurd"] += r["n"]
+    return out

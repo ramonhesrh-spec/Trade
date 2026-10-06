@@ -162,6 +162,17 @@ class LiveTest(DbCase):
         self.assertEqual(self.pushed, [])
         self.assertEqual(self.graded, [])
 
+    def test_unplanned_breaks_are_counted_and_heartbeat_is_written(self):
+        with mock.patch.object(sl, "MIN_RR", 50.0):
+            self.run_live(BREAK_BAR + 4)
+        counts = repo.structure_counts("2000-01-01")
+        self.assertGreaterEqual(counts["geen_plan"], 1)
+        self.assertEqual(counts["goedgekeurd"], 0)
+        self.assertIsNotNone(repo.get_beat("structuur"))
+        with mock.patch.object(sl, "MIN_RR", 50.0):
+            self.run_live(BREAK_BAR + 4)
+        self.assertEqual(repo.structure_counts("2000-01-01")["geen_plan"], counts["geen_plan"])      # niet dubbel geteld
+
     def test_off_switch(self):
         with mock.patch.object(config, "STRUCTURE_ENABLED", False):
             self.run_live(BREAK_BAR + 4)

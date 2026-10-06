@@ -188,6 +188,12 @@ async def _discover(coin: str, now: datetime) -> None:
         levels = br.known_levels(b, p_high, p_low, ev.direction, ev.bar)
         plan = plan_for(ev, b, levels, level, extreme)
         if plan is None:
+            # Bewaard zodat de pagina Setups kan tonen hoeveel breuken er waren en waarom er niets uitkwam.
+            repo.insert_structure_setup({
+                "coin": coin, "direction": ev.direction, "kind": ev.kind, "break_at": break_at, "p1_at": b.at[ev.p1, "timestamp"].isoformat(),
+                "line_a": ev.a, "line_slope": ev.slope, "atr": ev.atr, "grade": None,
+                "reason": "Stop buiten 0,2 tot 2% of minder dan 2R ruimte tot het eerstvolgende doel.", "features": "{}", "state": "geen_plan",
+                "expires_at": break_at, "plan": None})
             continue
         row = {"coin": coin, "direction": ev.direction, "kind": ev.kind, "break_at": break_at,
                "p1_at": b.at[ev.p1, "timestamp"].isoformat(), "line_a": ev.a, "line_slope": ev.slope, "atr": ev.atr,
@@ -359,6 +365,7 @@ async def run(now: Optional[datetime] = None) -> None:
             logger.exception("Structuur-check voor %s is mislukt", coin)
     await _track(now)
     await _follow(now)
+    repo.beat("structuur", f"{len(config.BASE_COINS)} coins gecontroleerd")
 
 
 if __name__ == "__main__":

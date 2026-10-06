@@ -618,3 +618,10 @@ CREATE TABLE IF NOT EXISTS sent_alerts (
     key TEXT PRIMARY KEY,
     at TEXT NOT NULL
 );
+
+-- Levensteken per motor: wanneer liep hij voor het laatst. Zo valt "er zijn geen setups" te onderscheiden van "de motor draait niet".
+CREATE TABLE IF NOT EXISTS engine_heartbeat (
+    name TEXT PRIMARY KEY,
+    at TEXT NOT NULL,
+    detail TEXT
+);

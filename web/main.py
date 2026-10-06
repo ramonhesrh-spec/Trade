@@ -300,7 +300,7 @@ async def _structure_cards() -> list[dict]:
     return cards
 
 
-STRUCTURE_STATE_LABELS = {"fired": "Limiet geraakt, signaal gemeld", "expired": "Verlopen, koers kwam niet terug", "niet_gemeld": "Claude keurde af (C)",
+STRUCTURE_STATE_LABELS = {"geen_plan": "Geen plan: te weinig ruimte of stop buiten bereik", "fired": "Limiet geraakt, signaal gemeld", "expired": "Verlopen, koers kwam niet terug", "niet_gemeld": "Claude keurde af (C)",
                           "overgeslagen": "Stop buiten het toegestane bereik", "geen_oordeel": "Geen oordeel van Claude"}
 
 
@@ -309,9 +309,16 @@ async def structuur_page(request: Request, user: dict = Depends(require_login)):
     """De nieuwe methode: breuk van een lijn of range op 30m met het plan getekend (app/structure_live.py)."""
     since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     history = [{**h, "state_label": STRUCTURE_STATE_LABELS.get(h["state"], h["state"])}
-               for h in repo.list_structure_setups(("fired", "expired", "niet_gemeld", "overgeslagen", "geen_oordeel"), 40)
+               for h in repo.list_structure_setups(("fired", "expired", "niet_gemeld", "overgeslagen", "geen_oordeel", "geen_plan"), 40)
                if h["created_at"] >= since]
-    return templates.TemplateResponse(request, "structuur.html", {"user": user, "structure_cards": await _structure_cards(), "history": history})
+    beat = repo.get_beat("structuur")
+    minutes = None
+    if beat:
+        minutes = int((datetime.now(timezone.utc) - datetime.fromisoformat(beat["at"])).total_seconds() // 60)
+    since24 = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
+    return templates.TemplateResponse(request, "structuur.html", {
+        "user": user, "structure_cards": await _structure_cards(), "history": history,
+        "engine_minutes": minutes, "counts": repo.structure_counts(since24), "engine_on": config.STRUCTURE_ENABLED})
 
 
 @app.get("/smc")

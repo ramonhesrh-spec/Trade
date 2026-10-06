@@ -47,6 +47,7 @@ class WebVandaagTests(unittest.TestCase):
         r = self.client.get("/structuur")
         self.assertEqual(r.status_code, 200)
         self.assertIn(f'id="structuur-{sid}"', r.text)
+        self.assertIn("Laatste 24 uur: 1 breuk gezien, 1 goedgekeurd", r.text)
         self.assertIn("sc-limit", r.text)
         self.assertIn("Schone range.", r.text)
 

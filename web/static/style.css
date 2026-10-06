@@ -1939,3 +1939,5 @@ main > section + section { margin-top: var(--space-10); }
 .coin-menu summary { font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: 0.1em; text-transform: uppercase; }
 .coin-menu-list a { font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; }
 .vd-board-sub { margin: 0; font-size: var(--text-sm); color: var(--text-dim); max-width: 52ch; }
+.engine-status { margin: var(--space-6) 0 var(--space-9); padding: var(--space-5) var(--space-7); font-size: var(--text-sm); color: var(--text-dim); background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: var(--radius-sm); }
+.engine-status.is-stale, .engine-status.is-off { border-left-color: var(--red); color: var(--text); }
