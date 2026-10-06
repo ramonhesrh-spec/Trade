@@ -397,6 +397,9 @@ sudo systemctl start crypto-news.service crypto-script.service
   automatisch: CPI en FOMC komen uit het csv-bestand dat jij vult.
 - Structuur-setups sturen na de vulling een melding bij elk doel dat raakt. Bij T1 hoort de instructie: stop naar de instap.
   Een motor die zichzelf uitzet na een negatieve score meldt dat aan de beheerder (tabel `sent_alerts` voorkomt dubbele meldingen).
+- `app/trend_live.py`: trend plus pullback (4u en 1u trend, impuls op 15m, zone, bevestiging op 5m), dezelfde detector als de toets
+  `scripts/trendpullback_scan.py`. Gemeten op een jaar en 7 coins: bruto +0,03R, netto -0,06R. Daarom altijd ongetest, alleen stille meldingen
+  (max `TREND_MAX_PER_DAY`, 6) en `trade_type = 'trend'` zodat Bewijs de score toont. Gaat uit na `TREND_MAX_NEGATIVE` (40) negatieve afgeronde signalen.
 - `app/news.py`: RSS (CoinDesk, Cointelegraph, The Block) en Binance-aankondigingen, elke 10 minuten, gesorteerd door
   `ANTHROPIC_EXPLAIN_MODEL`. Een bron die niet antwoordt wordt overgeslagen.
 - `/vandaag` is de nieuwe startpagina: scripts, agenda van 24 uur, liquidaties van het laatste uur, nieuws en de score van

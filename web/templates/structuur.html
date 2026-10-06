@@ -29,6 +29,27 @@
 </section>
 
 <section style="--i: 1">
+  <h3 class="vd-section-title">Trend-pullback <span class="tag-untested">ongetest</span></h3>
+  <p class="muted">Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten. Gemeten op een jaar: −0,06R netto na kosten. Je ontvangt alleen stille meldingen.</p>
+  {% if not trend_on %}
+  <p class="muted empty">Staat uit (TREND_ENABLED=false).</p>
+  {% elif not trend_signals %}
+  <p class="muted empty">Geen instap de laatste 24 uur.</p>
+  {% else %}
+  <ul class="setup-history">
+    {% for s in trend_signals %}
+    <li class="setup-history-row">
+      <a class="radar-coin" href="/coins/{{ s.coin }}#signal-{{ s.id }}">{{ s.coin }}</a>
+      <span class="radar-dir radar-dir-{{ s.direction }}">{{ s.direction }}</span>
+      <span class="setup-history-state">Instap {{ "%.4f"|format(s.price) }} · stop {{ "%.4f"|format(s.stop_loss) }} · doel {{ "%.4f"|format(s.take_profit) }}</span>
+      <span class="muted setup-age">{{ s.auto_outcome or "open" }} · {{ s.created_at | age }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+</section>
+
+<section style="--i: 2">
   <h3 class="vd-section-title">Eerder, laatste 7 dagen</h3>
   {% if not history %}
   <p class="muted empty">Nog geen afgeronde setups.</p>

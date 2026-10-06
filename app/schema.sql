@@ -625,3 +625,12 @@ CREATE TABLE IF NOT EXISTS engine_heartbeat (
     at TEXT NOT NULL,
     detail TEXT
 );
+
+-- Trend-pullback-instappen (app/trend_live.py): de sleutel (coin, kant, tijd van de impuls) voorkomt dat dezelfde instap twee keer gemeld wordt.
+CREATE TABLE IF NOT EXISTS trend_entries (
+    key TEXT PRIMARY KEY,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    at TEXT NOT NULL,
+    signal_id INTEGER
+);

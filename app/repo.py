@@ -2776,3 +2776,28 @@ def structure_counts(since_iso: str) -> dict:
         else:
             out["afgekeurd"] += r["n"]
     return out
+
+
+def insert_trend_entry(key: str, coin: str, direction: str, at: str) -> bool:
+    """True als deze instap nieuw was."""
+    with db.session() as conn:
+        cur = conn.execute("INSERT OR IGNORE INTO trend_entries (key, coin, direction, at) VALUES (?, ?, ?, ?)", (key, coin, direction, at))
+        return cur.rowcount > 0
+
+
+def set_trend_signal(key: str, signal_id: int) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE trend_entries SET signal_id = ? WHERE key = ?", (signal_id, key))
+
+
+def count_trend_since(since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM trend_entries WHERE signal_id IS NOT NULL AND at >= ?", (since_iso,)).fetchone()[0]
+
+
+def list_recent_signals_of_type(trade_type: str, since_iso: str, limit: int = 30) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, coin, direction, price, stop_loss, take_profit, created_at, auto_outcome FROM signals
+               WHERE trade_type = ? AND created_at >= ? ORDER BY id DESC LIMIT ?""", (trade_type, since_iso, limit)).fetchall()
+        return [dict(r) for r in rows]
