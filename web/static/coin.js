@@ -83,7 +83,7 @@
   // lijn — precies de drukste plek van de grafiek, blijvend overlappend.
   // Kleur onderscheidt de twee lijnen al voldoende, geen tekst nodig.
   const ema9Series = chart.addLineSeries({
-    color: "#ffb224", lineWidth: 1, lastValueVisible: false, priceLineVisible: false,
+    color: "#17e5d6", lineWidth: 1, lastValueVisible: false, priceLineVisible: false,
   });
   const ema21Series = chart.addLineSeries({
     color: "#7d8c8a", lineWidth: 1, lastValueVisible: false, priceLineVisible: false,
@@ -302,17 +302,17 @@
       // waarde staat in de lijst onder de grafiek.
       zoneGroups.forEach((group) => {
         candleSeries.createPriceLine({
-          price: group.high, color: "#ffb224", lineWidth: 1,
+          price: group.high, color: "#17e5d6", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
         candleSeries.createPriceLine({
-          price: group.low, color: "#ffb224", lineWidth: 1,
+          price: group.low, color: "#17e5d6", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
       });
       singleLevels(chartableLevels, zoneGroups).forEach((lvl) => {
         candleSeries.createPriceLine({
-          price: lvl.price_level, color: "#ffb224", lineWidth: 1,
+          price: lvl.price_level, color: "#17e5d6", lineWidth: 1,
           lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: false,
         });
       });

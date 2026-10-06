@@ -663,7 +663,7 @@ def _compute_tension(current_price: Optional[float], stop_loss: Optional[float],
     dichtst is, groen als de take profit het dichtst is. Puur visueel,
     geen nieuw getal dat nergens anders al stond."""
     if current_price is None or not stop_loss or not take_profit:
-        return 0.0, "255, 178, 36"
+        return 0.0, "23, 229, 214"
     dist_to_sl = abs(current_price - stop_loss)
     dist_to_tp = abs(current_price - take_profit)
     total_range = abs(take_profit - stop_loss) or 1.0
