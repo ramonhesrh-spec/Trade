@@ -113,28 +113,31 @@ class EvaluateCompletionTest(unittest.TestCase):
         self.assertEqual(draft.sniper_reason, "reden")
         self.assertAlmostEqual(draft.risk_reward_ratio, 148.0 / 72.0)
 
-    def test_min_stop_distance_rejects_tight_stops(self):
+    def test_min_stop_distance_widens_tight_stops_instead_of_rejecting(self):
         # entry 2750, stop 2822: stopafstand 72 / 2750 = 2.62%
         with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2690.0, "reden")):
-            tight = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2750.0), min_stop_pct=3.0)
+            tight = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2750.0), min_stop_pct=2.65)
             exact = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2750.0), min_stop_pct=2.6)
             off = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2750.0), min_stop_pct=0)
-        self.assertIsNone(tight.signal)
-        self.assertEqual(tight.reject_reason, "stop_te_dichtbij")
-        self.assertIn("2.618%", tight.detail)
-        self.assertIsNotNone(exact.signal)
-        self.assertIsNotNone(off.signal)
+        self.assertIsNotNone(tight.signal)                                  # de kans blijft, de stop gaat verder weg
+        self.assertAlmostEqual(tight.signal.stop_loss, 2750.0 * 1.0265)
+        self.assertLess(tight.signal.risk_reward_ratio, off.signal.risk_reward_ratio)   # en de R:R zakt eerlijk mee
+        self.assertEqual(exact.signal.stop_loss, 2822.0)                    # al ruim genoeg: ongemoeid
+        self.assertEqual(off.signal.stop_loss, 2822.0)
 
-    def test_min_stop_distance_defaults_to_config_and_is_checked_before_risk_reward(self):
+    def test_widened_stop_counts_in_the_risk_reward_gate(self):
         with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2690.0, "reden")), \
                 mock.patch.object(smc_eval.config, "SMC_MIN_STOP_PCT", 5.0):
-            # entry 2700: stop 4.5% en R:R 0.80, de stopafstand gaat voor
-            result = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2700.0))
-        self.assertEqual(result.reject_reason, "stop_te_dichtbij")
-        with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2690.0, "reden")), \
-                mock.patch.object(smc_eval.config, "SMC_MIN_STOP_PCT", 0.0):
             result = smc_eval.evaluate_completion(self.short_setup(), self.flat_frame(2700.0))
         self.assertEqual(result.reject_reason, "risico_rendement_te_laag")
+        self.assertIn("stop 2835.0000", result.detail)                      # 2700 + 5%
+
+    def test_floor_stop_both_directions(self):
+        self.assertAlmostEqual(smc_eval.floor_stop("long", 100.0, 99.95, 0.2), 99.8)
+        self.assertEqual(smc_eval.floor_stop("long", 100.0, 98.0, 0.2), 98.0)       # al ruim: ongemoeid
+        self.assertAlmostEqual(smc_eval.floor_stop("short", 100.0, 100.05, 0.2), 100.2)
+        self.assertEqual(smc_eval.floor_stop("short", 100.0, 105.0, 0.2), 105.0)
+        self.assertEqual(smc_eval.floor_stop("long", 100.0, 99.95, 0), 99.95)       # 0 zet de toets uit
 
     def test_stop_on_wrong_side_is_rejected(self):
         with mock.patch.object(smc_eval.indicators, "find_sniper_entry_price", return_value=(2690.0, "reden")):
@@ -187,11 +190,11 @@ class FindCandidateSkipTest(unittest.TestCase):
         self.assertIn("101.5000", scan.detail)
         self.assertIn("100.0000-102.0000", scan.detail)
 
-    def test_stop_vlak_achter_de_limiet_is_geen_kans(self):
-        # short: limiet op zone_low 1000, stop 1000,6 + 0,5 = 1001,1 ligt 0,11% weg, onder de ondergrens van 0,2%
+    def test_stop_vlak_achter_de_limiet_blijft_een_kandidaat(self):
+        # de stop wordt later verbreed (floor_stop), de setup zelf blijft bestaan
         scan = self.run_scan(sweep=SimpleNamespace(index=0, price=1000.6), zone=(1000.0, 1000.5))
-        self.assertEqual((scan.break_direction, scan.candidate, scan.skip_reason), ("short", None, "stop_te_dichtbij"))
-        self.assertIn("ondergrens", scan.detail)
+        self.assertIsNone(scan.skip_reason)
+        self.assertEqual(scan.candidate.sweep_price, 1000.6)
 
     def test_koers_al_in_zone(self):
         # stop 105.5 en doel 90.5 liggen goed, maar de laatste close (101) zit al in/boven zone_low voor een short

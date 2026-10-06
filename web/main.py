@@ -29,7 +29,7 @@ from markupsafe import Markup
 from app import advice as advice_module
 from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, radar, repo, risk, security, setup_chart, today, track_record
-from app.market_scanner import smc_stop_take_margins
+from app.market_scanner import floor_stop, smc_stop_take_margins
 
 logger = logging.getLogger("web")
 
@@ -274,7 +274,9 @@ def _with_preview(setup: dict) -> dict:
     cijfer dat straks ook echt gebruikt wordt, tenzij de setup intussen vervalt of vervangen wordt."""
     sign = -1 if setup["direction"] == "long" else 1
     stop_margin, target_margin = smc_stop_take_margins(setup)
-    setup["preview_stop_loss"] = setup["sweep_price"] + stop_margin * sign
+    stop = setup["sweep_price"] + stop_margin * sign
+    limit = setup["zone_high"] if setup["direction"] == "long" else setup["zone_low"]
+    setup["preview_stop_loss"] = floor_stop(setup["direction"], limit, stop)
     setup["preview_take_profit"] = setup["liquidity_target"] + target_margin * sign
     return setup
 

@@ -24,7 +24,7 @@ from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen 
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
     SMC_SETUP_MAX_AGE_HOURS, SMC_ZONE_SEARCH_LOOKBACK_30M, STOP_MARGIN_ATR_MULTIPLE, TARGET_MARGIN_ATR_MULTIPLE,
     ZONE_BREAK_BUFFER_ATR_MULTIPLE, candles_since, evaluate_completion, find_candidate, judge_forming_setup,
-    last_candle_state, setup_expired, smc_stop_take_margins, valid_stop_take,
+    floor_stop, last_candle_state, setup_expired, smc_stop_take_margins, valid_stop_take,
 )
 from app.signal_processor import (
     compute_full_confirmation,
@@ -741,7 +741,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     if rejected:
         return setup
 
-    if not setup["alert_sent"] and not _stop_too_tight(setup):
+    if not setup["alert_sent"]:
         title = push_notify.alert_title(coin, direction, "zone gezet")
         body = (
             f"Structuur en sweep gezien.\nZone {push_notify.fmt_price(zone_low)} tot {push_notify.fmt_price(zone_high)}.\n"
@@ -792,8 +792,6 @@ async def _notify_zone_touches(coin: str) -> None:
         stop_loss = setup["sweep_price"] + stop_margin * sign
         take_profit = setup["liquidity_target"] + target_margin * sign
         plan = trade_plan.limit_plan(direction, setup["zone_low"], setup["zone_high"], stop_loss, take_profit)
-        if plan is not None and plan.risk_pct < config.SMC_MIN_STOP_PCT:
-            continue
         if plan is None or trade_plan.plan_state(direction, setup["zone_low"], setup["zone_high"], stop_loss, price) != "in_zone":
             continue
         repo.mark_smc_zone_alert_sent(setup["id"])
@@ -808,16 +806,6 @@ async def _notify_zone_touches(coin: str) -> None:
                 logger.exception("Zone-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
 
-def _stop_too_tight(setup: dict) -> bool:
-    """Een limietorder op de zonerand met een stop binnen de ruis (onder SMC_MIN_STOP_PCT) is geen kans om te melden: de stop is dan kleiner
-    dan de kosten van een rondreis. De radar toont zo'n plan wel, met een waarschuwing."""
-    sign = -1 if setup["direction"] == "long" else 1
-    stop_margin, target_margin = smc_stop_take_margins(setup)
-    plan = trade_plan.limit_plan(setup["direction"], setup["zone_low"], setup["zone_high"], setup["sweep_price"] + stop_margin * sign,
-                                 setup["liquidity_target"] + target_margin * sign)
-    return plan is not None and config.SMC_MIN_STOP_PCT > 0 and plan.risk_pct < config.SMC_MIN_STOP_PCT
-
-
 SMC_WARNING_TEXT = {
     "entry_slechter_dan_sniper": "Let op: de koers liep al verder dan de sniper prijs, de entry is slechter dan de setup veronderstelt.",
     "risico_rendement_te_laag": "Let op: lage verhouding tussen risico en rendement.",
@@ -826,7 +814,7 @@ SMC_WARNING_TEXT = {
 
 async def _fire_smc_warning(coin: str, setup: dict, df_15m, completion) -> Optional[int]:
     """SMC-kans die de code normaal weigert, met een waarschuwing gemeld. Geen melding als stop of doel aan de verkeerde kant
-    van de prijs liggen of de stop onder de ruisgrens zit: dan is er geen trade om te wegen."""
+    van de prijs liggen: dan is er geen trade om te wegen."""
     direction = setup["direction"]
     sign = -1 if direction == "long" else 1
     stop_margin, target_margin = smc_stop_take_margins(setup)
@@ -835,8 +823,7 @@ async def _fire_smc_warning(coin: str, setup: dict, df_15m, completion) -> Optio
     entry_price = float(df_15m["close"].iloc[-1])
     if not valid_stop_take(direction, entry_price, stop_loss, take_profit):
         return None
-    if config.SMC_MIN_STOP_PCT > 0 and abs(entry_price - stop_loss) / entry_price * 100 < config.SMC_MIN_STOP_PCT:
-        return None
+    stop_loss = floor_stop(direction, entry_price, stop_loss)
     warning = SMC_WARNING_TEXT[completion.reject_reason]
     reason = (f"SMC-liquidity-setup met waarschuwing: structuur brak op {setup['structure_level']:.4f}, sweep op {setup['sweep_price']:.4f}, "
               f"zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, doel bij liquidity {setup['liquidity_target']:.4f}. {warning}")
@@ -884,7 +871,7 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     if completion.signal is None:
         logger.info("SMC-setup %s voor %s niet gemeld: %s", setup["id"], coin, completion.detail)
         # Een late entry of een lage verhouding blijft een kans die jij zelf mag wegen: gemeld met een waarschuwing en apart op
-        # Bewijs (trade_type 'smc_waarschuwing'). Een stop onder de ruisgrens blijft dicht, die is gemeten als verlies.
+        # Bewijs (trade_type 'smc_waarschuwing').
         if config.SMC_WARNING_ALERTS and completion.reject_reason in ("entry_slechter_dan_sniper", "risico_rendement_te_laag"):
             return await _fire_smc_warning(coin, setup, df_15m, completion)
         return None

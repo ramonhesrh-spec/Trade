@@ -289,16 +289,6 @@ def find_candidate(closed_30m, df_30m, closed_15m, last_candle) -> SmcScan:
             detail=f"stop {projected_stop_loss:.4f} / doel {projected_take_profit:.4f} (na marge) liggen niet voorbij de zone {zone_low:.4f}-{zone_high:.4f}",
         )
 
-    # De limietorder staat op de zonerand. Ligt de stop daar minder dan de ondergrens vandaan, dan is het plan geen kans: de stop is kleiner dan
-    # de kosten van een rondreis en de R:R (18 op SOL, stop 0,05%) is schijn. Hier al overslaan, zodat zo'n setup niet op de radar komt.
-    limit = zone_high if direction == "long" else zone_low
-    limit_stop_pct = abs(limit - projected_stop_loss) / limit * 100
-    if config.SMC_MIN_STOP_PCT > 0 and limit_stop_pct < config.SMC_MIN_STOP_PCT:
-        return SmcScan(
-            direction, None, "stop_te_dichtbij",
-            detail=f"stop {projected_stop_loss:.4f} ligt {limit_stop_pct:.3f}% van de limiet {limit:.4f}, ondergrens {config.SMC_MIN_STOP_PCT}%",
-        )
-
     # Een bouwende setup is pas zinvol zolang de koers nog naar de zone
     # moet terugtrekken (short: nog eronder, long: nog erboven). Zonder
     # deze eis kon fase 1 hierboven een setup opruimen omdat de koers door
@@ -314,6 +304,18 @@ def find_candidate(closed_30m, df_30m, closed_15m, last_candle) -> SmcScan:
         structure_level=structure_break.broken_pivot.price, sweep_price=sweep.price,
         liquidity_target=liquidity_target_pivot.price, atr=atr,
     ), None)
+
+
+def floor_stop(direction: str, ref_price: float, stop: float, min_pct: Optional[float] = None) -> float:
+    """Zet de stop minstens min_pct procent van ref_price af, aan de verliezende kant. Een stop vlak achter de zonerand (SOL: 0,05%, R:R 18)
+    ligt binnen de ruis en is kleiner dan de kosten van een rondreis. De kans blijft bestaan, alleen de stop gaat verder weg en de R:R zakt
+    mee, zodat die eerlijk is. Gemeten: stops onder 0,2% verloren gemiddeld -0,73R bruto (zie config.SMC_MIN_STOP_PCT)."""
+    pct = config.SMC_MIN_STOP_PCT if min_pct is None else min_pct
+    if not pct or pct <= 0:
+        return stop
+    if direction == "long":
+        return min(stop, ref_price * (1 - pct / 100))
+    return max(stop, ref_price * (1 + pct / 100))
 
 
 @dataclass
@@ -401,15 +403,8 @@ def evaluate_completion(setup: dict, df_15m, min_stop_pct: Optional[float] = Non
             f"stop {stop_loss:.4f} / doel {take_profit:.4f} liggen niet aan de juiste kant van entry {entry_price:.4f} ({direction})"
         ))
 
-    # Een stop binnen de ruis van een minuutcandle is geen trade maar een muntworp met kosten: in het meetraam
-    # won die groep 6% en verloor -0,73R bruto (zie config.SMC_MIN_STOP_PCT).
-    min_stop = config.SMC_MIN_STOP_PCT if min_stop_pct is None else min_stop_pct
-    stop_pct = abs(entry_price - stop_loss) / entry_price * 100
-    if min_stop > 0 and stop_pct < min_stop:
-        return SmcCompletion(None, "stop_te_dichtbij", detail=(
-            f"stopafstand {stop_pct:.3f}% ligt onder de ondergrens van {min_stop}% "
-            f"(stop {stop_loss:.4f} / entry {entry_price:.4f}, {direction})"
-        ))
+    # Pas na de juiste-kant-toets verbreden: een prijs die al voorbij de stop liep is geen trade, ook niet met een ruimere stop.
+    stop_loss = floor_stop(direction, entry_price, stop_loss, config.SMC_MIN_STOP_PCT if min_stop_pct is None else min_stop_pct)
 
     # Geen stop_within_max_distance-toets hier, bewust anders dan de andere
     # drie detectoren: die grens (1,5%) is gebouwd voor ATR-gebaseerde

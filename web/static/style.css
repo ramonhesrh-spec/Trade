@@ -1952,4 +1952,3 @@ html.reveal-done main > section, html.reveal-done main > .stats-collapse { anima
 .vd-step-text { display: flex; flex-direction: column; gap: 2px; }
 .vd-step-text strong { font-weight: 600; }
 
-.radar-warn { margin: var(--space-3) 0; padding: var(--space-3) var(--space-4); border: 1px solid var(--red, #f4695b); border-radius: var(--radius-sm, 4px); color: var(--red, #f4695b); font-size: var(--text-sm, 0.875rem); }
