@@ -20,6 +20,17 @@ class RTests(unittest.TestCase):
         self.assertIsNone(tr.signal_r(row(outcome=None)))
         self.assertIsNone(tr.signal_r(row(stop=100.0)))
 
+    def test_score_split_toont_hoge_tegenover_lage_score(self):
+        rows = [dict(row(outcome="take_profit"), pass_pct=86.0), dict(row(outcome="stop_loss"), pass_pct=43.0),
+                dict(row(outcome="stop_loss"), pass_pct=29.0), row(outcome="take_profit")]   # laatste heeft geen score
+        entry = next(e for e in tr.summarize(rows, 0.0, NOW) if e["source"] == "scan" and e["trade_type"] == "smc")
+        split = entry["score_split"]
+        self.assertEqual((split["high_n"], split["low_n"]), (1, 2))
+        self.assertAlmostEqual(split["high_avg"], 2.0)
+        self.assertAlmostEqual(split["low_avg"], -1.0)
+        plain = next(e for e in tr.summarize([row()], 0.0, NOW) if e["source"] == "scan")
+        self.assertIsNone(plain["score_split"])
+
     def test_kosten_per_signaal_hangen_af_van_stopafstand(self):
         # stop 1% en kosten 0,06% per rondreis: 0,06R. Stop 0,1%: 0,6R.
         self.assertAlmostEqual(tr._cost_r(row(), 0.06), 0.06)

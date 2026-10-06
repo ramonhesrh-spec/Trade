@@ -66,6 +66,21 @@ def _parse(value: str) -> datetime:
     return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
 
 
+SCORE_CUT_PCT = 70.0
+
+
+def _score_split(resolved: list[tuple[dict, float]], net: list[float]) -> Optional[dict]:
+    """Gemiddeld resultaat na kosten voor kansen met een hoge tegenover een lage kenmerkenscore (app/chance_checks.py). Alleen als er
+    afgeronde kansen mét score zijn: zo toont Bewijs of een hoge score ook echt vaker wint, in plaats van dat we het aannemen."""
+    scored = [(r["pass_pct"], n) for (r, _), n in zip(resolved, net) if r.get("pass_pct") is not None]
+    if not scored:
+        return None
+    high = [n for p, n in scored if p >= SCORE_CUT_PCT]
+    low = [n for p, n in scored if p < SCORE_CUT_PCT]
+    return {"cut": SCORE_CUT_PCT, "high_n": len(high), "high_avg": sum(high) / len(high) if high else None,
+            "low_n": len(low), "low_avg": sum(low) / len(low) if low else None}
+
+
 def summarize(rows: list[dict], round_trip_cost_pct: float, now: Optional[datetime] = None) -> list[dict]:
     """Eén entry per (bron, soort), gesorteerd op aantal afgeronde trades. Alles samen staat als laatste entry
     met bron 'alles'. 'recent' zijn de laatste RECENT_DAYS dagen, de status gaat uit van alles sinds het begin."""
@@ -104,6 +119,7 @@ def summarize(rows: list[dict], round_trip_cost_pct: float, now: Optional[dateti
             cumulative.append(running)
         n_resolved = len(resolved)
         avg_net = sum(net) / n_resolved if n_resolved else None
+        score_split = _score_split(resolved, net)
         out.append({
             "source": source, "trade_type": trade_type,
             "label": "Alle meldingen samen" if source == "alles" else f"{TYPE_LABELS.get(trade_type, trade_type)}",
@@ -115,6 +131,7 @@ def summarize(rows: list[dict], round_trip_cost_pct: float, now: Optional[dateti
             "avg_net": avg_net,
             "recent_resolved": len(recent), "recent_avg_net": sum(n for _, n in recent) / len(recent) if recent else None,
             "status": _status(n_resolved, avg_net), "cumulative": cumulative, "cost_pct": round_trip_cost_pct,
+            "score_split": score_split,
         })
     out.sort(key=lambda e: (e["source"] == "alles", -e["resolved"]))
     return out

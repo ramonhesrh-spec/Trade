@@ -10,7 +10,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, push_notify, repo
+from app import chance_checks, config, push_notify, repo
 from app.replay import trendpullback as tp
 from app.replay.lab import add_indicators
 
@@ -48,12 +48,13 @@ def levels(direction: str, entry: float, stop: float) -> Optional[tuple[float, f
 async def _fire(coin: str, e: dict, stop: float, take: float) -> None:
     from app.signal_processor import fanout_confirmed_signal
     direction, entry = e["direction"], e["entry"]
-    reason = ("Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten.")
+    narrative = "Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten."
+    reason, pass_pct = chance_checks.finish(chance_checks.trend_checks(direction, entry, stop, e["extreme"]))
     signal_id = repo.insert_signal({
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "trend", "pattern_name": "Trend-pullback",
         "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None, "atr": None, "atr_avg20": None,
-        "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Trend-pullback", "reason": reason,
-        "stop_loss": stop, "take_profit": take, "context_note": None, "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None,
+        "adx": None, "technical_confirmed": 1, "pass_pct": pass_pct, "hard_gates_ok": 1, "confidence": "Trend-pullback", "reason": reason,
+        "stop_loss": stop, "take_profit": take, "context_note": None, "is_practice": 0, "plain_explanation": narrative, "suggested_entry_low": None,
         "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
     })
     repo.set_trend_signal(f"{coin}:{e['key']}", signal_id)

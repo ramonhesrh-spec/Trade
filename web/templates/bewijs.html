@@ -35,6 +35,10 @@
       <div><dt>Zonder kosten</dt><dd>{% if e.avg_gross is not none %}{{ "%+.2f"|format(e.avg_gross) }}R{% else %}-{% endif %}</dd></div>
       <div><dt>Laatste {{ recent_days }} dagen</dt><dd>{% if e.recent_avg_net is not none %}{{ "%+.2f"|format(e.recent_avg_net) }}R ({{ e.recent_resolved }})</dd>{% else %}-</dd>{% endif %}</div>
     </dl>
+    {% if e.score_split and e.source != 'alles' %}
+    <p class="proof-footnote muted">Score van {{ "%.0f"|format(e.score_split.cut) }}% of hoger: {% if e.score_split.high_avg is not none %}{{ "%+.2f"|format(e.score_split.high_avg) }}R ({{ e.score_split.high_n }}){% else %}nog geen afgeronde kans{% endif %}.
+      Lager: {% if e.score_split.low_avg is not none %}{{ "%+.2f"|format(e.score_split.low_avg) }}R ({{ e.score_split.low_n }}){% else %}nog geen afgeronde kans{% endif %}. Dit toont of de gemeten kenmerken iets zeggen.</p>
+    {% endif %}
     <p class="proof-footnote muted">{{ e.wins }} winst, {{ e.losses }} verlies. {{ e.open_or_expired }} nog open of vervallen, die tellen niet mee in winrate en R.</p>
   </article>
   {% endfor %}

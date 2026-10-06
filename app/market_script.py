@@ -14,7 +14,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, repo
+from app import chance_checks, config, repo
 from app.track_record import signal_r
 
 logger = logging.getLogger("market_script")
@@ -293,14 +293,16 @@ async def _fire(s: dict) -> None:
     from app import push_notify
     from app.signal_processor import fanout_confirmed_signal
     coin, direction = s["coin"], s["direction"]
-    reason = f"Markt-script: {trigger_text(s['trigger_type'], direction, s['trigger_level'])}. {s['reason']}"
+    narrative = f"Markt-script: {trigger_text(s['trigger_type'], direction, s['trigger_level'])}. {s['reason']}"
+    bias = next((x["bias"] for x in repo.latest_scripts() if x["coin"] == coin), None)
+    reason, pass_pct = chance_checks.finish(chance_checks.script_checks(direction, s["entry"], s["stop_loss"], s["take_profit"], bias))
     signal_id = repo.insert_signal({
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "script",
         "pattern_name": "Markt-script", "price": s["entry"], "rsi": None, "macd": None, "macd_signal": None,
         "volume_ratio": None, "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None,
-        "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Markt-script",
+        "technical_confirmed": 1, "pass_pct": pass_pct, "hard_gates_ok": 1, "confidence": "Markt-script",
         "reason": reason, "stop_loss": s["stop_loss"], "take_profit": s["take_profit"], "context_note": None,
-        "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None, "suggested_entry_high": None,
+        "is_practice": 0, "plain_explanation": narrative, "suggested_entry_low": None, "suggested_entry_high": None,
         "sniper_entry_price": None, "sniper_reason": None,
     })
     repo.set_scenario_state(s["id"], "fired", signal_id)

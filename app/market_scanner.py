@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import calendar_alerts, config, exchange, indicators, market_script, trend_live, patterns, push_notify, repo, risk, samenval, structure_live, trade_plan
+from app import calendar_alerts, chance_checks, config, exchange, indicators, market_script, trend_live, patterns, push_notify, repo, risk, samenval, structure_live, trade_plan
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
@@ -825,15 +825,18 @@ async def _fire_smc_warning(coin: str, setup: dict, df_15m, completion) -> Optio
         return None
     stop_loss = floor_stop(direction, entry_price, stop_loss)
     warning = SMC_WARNING_TEXT[completion.reject_reason]
-    reason = (f"SMC-liquidity-setup met waarschuwing: structuur brak op {setup['structure_level']:.4f}, sweep op {setup['sweep_price']:.4f}, "
-              f"zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, doel bij liquidity {setup['liquidity_target']:.4f}. {warning}")
+    narrative = (f"SMC-liquidity-setup met waarschuwing: structuur brak op {setup['structure_level']:.4f}, sweep op {setup['sweep_price']:.4f}, "
+                 f"zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, doel bij liquidity {setup['liquidity_target']:.4f}. {warning}")
+    rr = abs(take_profit - entry_price) / abs(entry_price - stop_loss) if entry_price != stop_loss else 0.0
+    reason, pass_pct = chance_checks.finish(chance_checks.smc_checks(
+        rr, abs(entry_price - stop_loss) / entry_price * 100, False, warning=completion.reject_reason == "entry_slechter_dan_sniper"))
     signal_id = repo.insert_signal({
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "smc_waarschuwing",
         "pattern_name": "SMC liquidity sweep", "price": entry_price, "rsi": None, "macd": None, "macd_signal": None,
         "volume_ratio": None, "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None,
-        "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "SMC met waarschuwing",
+        "technical_confirmed": 1, "pass_pct": pass_pct, "hard_gates_ok": 1, "confidence": "SMC met waarschuwing",
         "reason": reason, "stop_loss": stop_loss, "take_profit": take_profit, "context_note": None,
-        "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None, "suggested_entry_high": None,
+        "is_practice": 0, "plain_explanation": narrative, "suggested_entry_low": None, "suggested_entry_high": None,
         "sniper_entry_price": None, "sniper_reason": None,
     })
     repo.complete_smc_setup(setup["id"], signal_id)
@@ -897,11 +900,13 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
             except Exception:
                 logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
-    reason = (
+    narrative = (
         f"SMC-liquidity-setup: structuur brak op {setup['structure_level']:.4f}, "
         f"sweep op {setup['sweep_price']:.4f}, zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, "
         f"doel bij liquidity {setup['liquidity_target']:.4f}."
     )
+    reason, pass_pct = chance_checks.finish(chance_checks.smc_checks(
+        draft.risk_reward_ratio, abs(entry_price - stop_loss) / entry_price * 100, sniper_entry_price is not None, warning=False))
 
     signal_data = {
         "message_id": None, "coin": coin, "direction": direction,
@@ -909,11 +914,11 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
         "price": entry_price, "rsi": None, "macd": None, "macd_signal": None,
         "volume_ratio": None, "ema9": None, "ema21": None,
         "atr": None, "atr_avg20": None, "adx": None,
-        "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1,
+        "technical_confirmed": 1, "pass_pct": pass_pct, "hard_gates_ok": 1,
         "confidence": "SMC-setup bevestigd",
         "reason": reason,
         "stop_loss": stop_loss, "take_profit": take_profit,
-        "context_note": None, "is_practice": 0, "plain_explanation": None,
+        "context_note": None, "is_practice": 0, "plain_explanation": narrative,
         "suggested_entry_low": None, "suggested_entry_high": None,
         "sniper_entry_price": sniper_entry_price, "sniper_reason": sniper_reason,
     }

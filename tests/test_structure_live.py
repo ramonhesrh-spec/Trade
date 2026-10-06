@@ -122,6 +122,10 @@ class LiveTest(DbCase):
         self.assertGreater(sig["stop_loss"], sig["price"])     # short: stop boven de instap
         self.assertLess(sig["take_profit"], sig["price"])
         self.assertTrue(any("gevuld" in t for t, *_ in self.pushed))
+        full = repo.get_signal(repo.list_structure_setups(("fired",))[0]["signal_id"])
+        self.assertTrue(full["reason"].startswith(("✓", "✗")))        # gemeten kenmerken in de vorm die de kaart leest
+        self.assertIsNotNone(full["pass_pct"])
+        self.assertIn("Structuur", full["plain_explanation"])        # de uitleg in woorden staat apart
 
     def test_follow_reports_each_target_and_moves_stop_to_entry_at_t1(self):
         t0 = pd.Timestamp("2026-03-05T10:00:00+00:00")

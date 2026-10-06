@@ -20,7 +20,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from app import config, repo
+from app import chance_checks, config, repo
 from app.replay import breakretest as br
 from app.replay.lab import add_indicators
 from app.track_record import signal_r
@@ -246,13 +246,14 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
     fired["targets"] = [entry + sign * risk * r for r in plan["targets_r"]]
     take = take_profit_of(fired)
     grade = setup["grade"] or "zonder oordeel"
-    reason = f"Structuur {grade}: {setup['kind'].lower()} gebroken op 30m, terugkeer naar {push_notify.fmt_price(entry)}. {setup['reason'] or ''}".strip()
+    narrative = f"Structuur {grade}: {setup['kind'].lower()} gebroken op 30m, terugkeer naar {push_notify.fmt_price(entry)}. {setup['reason'] or ''}".strip()
+    reason, pass_pct = chance_checks.finish(chance_checks.structure_checks(chance_checks.parse_features(setup.get("features")), plan, setup["grade"]))
     signal_id = repo.insert_signal({
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "structuur_c" if setup["grade"] == "C" else "structuur",
         "pattern_name": "Structuur", "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None,
-        "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None,
+        "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": pass_pct,
         "hard_gates_ok": 1, "confidence": f"Structuur {grade}", "reason": reason, "stop_loss": stop,
-        "take_profit": take, "context_note": None, "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None,
+        "take_profit": take, "context_note": None, "is_practice": 0, "plain_explanation": narrative, "suggested_entry_low": None,
         "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
     })
     repo.set_structure_state(setup["id"], "fired", signal_id)

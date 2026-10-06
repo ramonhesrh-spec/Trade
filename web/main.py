@@ -642,6 +642,10 @@ def _add_signal_context(entries: list[dict], winrate: dict, pattern_winrate: dic
     return entries
 
 
+# Soorten met gemeten kenmerken (app/chance_checks.py): de melding ging al uit, de score beschrijft de kans en bepaalt geen groene of rode rand.
+SCORED_TYPES = ("structuur", "structuur_c", "trend", "script", "smc_waarschuwing")
+
+
 def _apply_user_confirmed(entries: list[dict], threshold_pct: float, required_factors: set[str]) -> None:
     """Zet entry['user_confirmed'] per signaal, de echte trade-kans-vlag
     achter macros.signal_card's groene rand. Swing is altijd bevestigd
@@ -662,7 +666,7 @@ def _apply_user_confirmed(entries: list[dict], threshold_pct: float, required_fa
     tussen een echte kans en ruis. Moet NA _add_signal_context draaien:
     patroon se success_rate bestaat pas dan."""
     for entry in entries:
-        if entry["trade_type"] in ("swing", "smc"):
+        if entry["trade_type"] in ("swing", "smc", *SCORED_TYPES):
             entry["user_confirmed"] = True
         elif entry["trade_type"] == "patroon":
             entry["user_confirmed"] = repo.user_confirmed(

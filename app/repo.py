@@ -2470,7 +2470,7 @@ def list_signals_for_quality_report(since_iso: Optional[str] = None) -> list[dic
     with db.session() as conn:
         rows = conn.execute(
             """SELECT s.message_id, s.trade_type, s.auto_outcome, s.auto_outcome_at, s.price, s.stop_loss, s.take_profit,
-                      s.created_at, (sv.id IS NOT NULL) AS samenval
+                      s.created_at, s.pass_pct, (sv.id IS NOT NULL) AS samenval
                FROM signals s LEFT JOIN samenvallen sv ON sv.smc_signal_id = s.id
                WHERE s.is_practice = 0 AND (? IS NULL OR s.created_at >= ?) ORDER BY s.created_at""",
             (since_iso, since_iso),
