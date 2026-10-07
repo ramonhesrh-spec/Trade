@@ -208,9 +208,10 @@ a { color: var(--accent); }
 
 /* Zachte overgang tussen pagina's: fade + kleine schuif, zodat navigeren
    meer als één samenhangende app aanvoelt dan als losse serverpagina's.
-   Klasse wordt gezet/verwijderd door base.html, hier alleen het effect. */
-body { transition: opacity .18s ease, transform .18s ease; }
-html.page-transition-out body { opacity: 0; transform: translateY(-4px); }
+   Klasse wordt gezet/verwijderd door base.html, hier alleen het effect.
+   Alleen opacity: een transform op body maakt van body het blok voor fixed elementen, en dan zweeft de tabbalk midden in de pagina als de klasse blijft hangen. */
+body { transition: opacity .18s ease; }
+html.page-transition-out body { opacity: 0; }
 
 .page-ambient { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; }
 .ambient-glow {
