@@ -2122,3 +2122,29 @@ html { -webkit-tap-highlight-color: transparent; }
 @keyframes money-fall { from { transform: translateY(0) rotate(0deg); opacity: 1; } to { transform: translateY(110vh) rotate(360deg); opacity: 0.9; } }
 .ceo-toast { position: fixed; left: 50%; bottom: calc(110px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 950; padding: var(--space-4) var(--space-6); border-radius: 999px; background: linear-gradient(180deg, #fff1b8, #d4af37); color: #2a1f03; font-family: var(--display); letter-spacing: 0.1em; text-transform: uppercase; }
 @media (max-width: 760px) { .ceo-stats { grid-template-columns: repeat(2, 1fr); } }
+
+/* CEO-pagina, tweede laag: hoger beeld, grotere foto, gouden afwerking en de leerlingen als team. */
+.ceo-yacht { height: 260px; }
+.ceo-portrait { width: 196px; height: 196px; margin-top: -98px; box-shadow: 0 0 0 6px rgba(212, 175, 55, 0.12), 0 0 56px rgba(212, 175, 55, 0.5); }
+.ceo-crown { top: -40px; font-size: 56px; }
+.ceo-name { font-size: clamp(2.8rem, 13vw, 4.6rem); letter-spacing: 0.1em; text-shadow: 0 2px 24px rgba(212, 175, 55, 0.35); }
+.ceo-title { font-size: var(--text-xl, 1.4rem); letter-spacing: 0.4em; }
+.ceo-divider { display: flex; align-items: center; gap: var(--space-4); margin: var(--space-7) 0 var(--space-5); color: #d4af37; }
+.ceo-divider span { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #d4af37, transparent); }
+.ceo-divider i { font-style: normal; font-size: 14px; }
+.ceo-stats { margin-top: var(--space-5); }
+.ceo-stats div { padding: var(--space-5) var(--space-3); background: linear-gradient(160deg, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.02) 60%); box-shadow: inset 0 1px 0 rgba(255, 241, 184, 0.18); }
+.ceo-stats dd { font-size: 2.1rem; }
+.ceo-stats dd.ceo-small { font-size: 1.15rem; line-height: 2.7rem; letter-spacing: 0.05em; text-transform: uppercase; }
+.ceo-card { display: grid; gap: 0; margin: var(--space-5) 0; border: 1px solid #5a4710; border-radius: var(--radius); background: linear-gradient(180deg, #17120a, #0d0b06); }
+.ceo-card p { display: flex; justify-content: space-between; gap: var(--space-4); margin: 0; padding: var(--space-4) var(--space-5); border-bottom: 1px solid rgba(90, 71, 16, 0.5); color: #f3e3a4; }
+.ceo-card p:last-child { border-bottom: 0; }
+.ceo-card span { font-size: var(--text-2xs); letter-spacing: 0.12em; text-transform: uppercase; color: #a8925a; align-self: center; }
+.ceo-h3 { color: #e9d8a0; letter-spacing: 0.14em; }
+.ceo-students { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); counter-reset: leerling; }
+.ceo-students li { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: var(--space-4); padding: var(--space-4); border: 1px solid var(--border-strong); border-radius: 16px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent); }
+.ceo-students li.is-star { border-color: #d4af37; background: linear-gradient(135deg, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.03)); box-shadow: 0 0 24px rgba(212, 175, 55, 0.16); }
+.ceo-avatar { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; font-family: var(--display); font-size: 1.5rem; color: #2a1f03; background: conic-gradient(from 20deg, #fff1b8, #d4af37, #8a6d1c, #fff1b8); }
+.ceo-student { display: flex; flex-direction: column; min-width: 0; }
+.ceo-student strong { font-size: 1.05rem; overflow-wrap: anywhere; }
+.ceo-star { grid-column: 1 / -1; justify-self: start; padding: 2px 10px; border-radius: 999px; background: #d4af37; color: #2a1f03; font-size: var(--text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }

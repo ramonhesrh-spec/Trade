@@ -168,6 +168,8 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("tester", page)                                     # de eerst aangemaakte gebruiker is de CEO
         self.assertIn("leerling1", page)                                  # en de rest staat bij de leerlingen
         self.assertIn("De leerlingen", page)
+        self.assertIn("Leerling van de maand", page)
+        self.assertNotIn("Winrate", page)                                 # geen handelscijfers op de CEO-pagina
         self.assertIn("CEO tester", self.client.get("/vandaag").text)     # de CEO ziet zichzelf als CEO
         self.assertIn("Goede", self.client.get("/vandaag").text)
 
@@ -210,7 +212,7 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn('href="/vandaag"', page)
         self.assertIn(">Journaal<", page)
         r = self.client.get("/", follow_redirects=False)
-        self.assertEqual(r.headers["location"], "/vandaag")
+        self.assertEqual(r.headers["location"], "/ceo")
 
 
     def test_public_landing_shows_live_vandaag_without_scenarios_and_manifest_opens_on_vandaag(self):
@@ -224,7 +226,7 @@ class WebVandaagTests(unittest.TestCase):
         self.assertNotIn("Geheime samenvatting", page)           # scenario's en duiding blijven achter het inloggen
         self.assertNotIn("Break boven gisteren hoog.", page)       # de reden bij een scenario blijft ook achter het inloggen
         self.assertNotIn("Wacht op de voorwaarde", page)
-        self.assertEqual(anon.get("/static/manifest.json").json()["start_url"], "/vandaag")
+        self.assertEqual(anon.get("/static/manifest.json").json()["start_url"], "/ceo")
         self.assertEqual(self.client.get("/dashboard", follow_redirects=False).headers["location"], "/vandaag")
 
 

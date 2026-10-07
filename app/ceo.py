@@ -67,5 +67,7 @@ def quote_of_the_day(today: date) -> str:
     return QUOTES[today.toordinal() % len(QUOTES)]
 
 
-def students(usernames: list[str]) -> list[dict]:
-    return [{"name": n, "title": STUDENT_TITLES[i % len(STUDENT_TITLES)]} for i, n in enumerate(usernames)]
+def students(usernames: list[str], today: date) -> list[dict]:
+    """De leerlingen met een functietitel. Eén van hen is leerling van de maand, wisselend per kalendermaand."""
+    star = (today.year * 12 + today.month) % len(usernames) if usernames else -1
+    return [{"name": n, "title": STUDENT_TITLES[i % len(STUDENT_TITLES)], "star": i == star} for i, n in enumerate(usernames)]

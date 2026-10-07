@@ -142,7 +142,7 @@ async def landing(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     user_id = security.verify_session_token(token) if token else None
     if user_id and repo.get_user(user_id):
-        return RedirectResponse(url="/vandaag", status_code=303)
+        return RedirectResponse(url="/ceo", status_code=303)
 
     now = datetime.now(timezone.utc)
     scripts = repo.latest_scripts()
@@ -570,7 +570,7 @@ async def login_submit(request: Request, username: str = Form(...), password: st
         )
 
     token = security.create_session_token(user["id"])
-    response = RedirectResponse(url="/vandaag", status_code=303)
+    response = RedirectResponse(url="/ceo", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 
@@ -625,7 +625,7 @@ async def register_submit(
         return error("Deze gebruikersnaam is al in gebruik.")
 
     token = security.create_session_token(user_id)
-    response = RedirectResponse(url="/vandaag", status_code=303)
+    response = RedirectResponse(url="/ceo", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 
@@ -1604,18 +1604,17 @@ async def api_candles(symbol: str, user: dict = Depends(require_login)):
 
 @app.get("/ceo")
 async def ceo_page(request: Request, user: dict = Depends(require_login)):
-    """De pagina van de CEO. De titels zijn de grap, de cijfers zijn echt: ze komen uit hetzelfde trackrecord als Bewijs."""
+    """De startpagina: de CEO. Alleen echte gegevens waar het ertoe doet (dagen in functie, aantal leerlingen, het weekresultaat voor de geldregen),
+    de rest is de grap. Handelscijfers staan op Bewijs."""
     boss = ceo_user() or user
     rows = repo.list_signals_for_quality_report(None)
-    summary = next((e for e in track_record.summarize(rows, config.TRACK_RECORD_COST_PCT) if e["source"] == "alles"), None)
     week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
     first = min((track_record._parse(r["created_at"]) for r in rows), default=None)
     now = datetime.now(timezone.utc)
     photo = BASE_DIR / "static" / "ceo.jpg"
+    students = ceo.students([u["username"] for u in repo.list_users() if u["id"] != boss["id"]], now.date())
     return templates.TemplateResponse(request, "ceo.html", {
-        "user": user, "boss": boss, "summary": summary, "week": week,
-        "days_in_office": (now - first).days if first else 0,
-        "quote": ceo.quote_of_the_day(now.date()), "rain": ceo.rain_count(week["net_r"]),
-        "students": ceo.students([u["username"] for u in repo.list_users() if u["id"] != boss["id"]]),
+        "user": user, "boss": boss, "days_in_office": (now - first).days if first else 0,
+        "quote": ceo.quote_of_the_day(now.date()), "rain": ceo.rain_count(week["net_r"]), "students": students,
         "photo": f"/static/ceo.jpg?v={int(photo.stat().st_mtime)}" if photo.exists() else None,
     })

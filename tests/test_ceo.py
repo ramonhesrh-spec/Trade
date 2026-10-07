@@ -30,9 +30,12 @@ class CeoTests(unittest.TestCase):
 
     def test_quote_is_stable_per_day_and_students_get_titles(self):
         self.assertEqual(ceo.quote_of_the_day(date(2026, 10, 7)), ceo.quote_of_the_day(date(2026, 10, 7)))
-        got = ceo.students(["a", "b"])
+        got = ceo.students(["a", "b"], date(2026, 10, 7))
         self.assertEqual([s["name"] for s in got], ["a", "b"])
         self.assertNotEqual(got[0]["title"], got[1]["title"])
+        self.assertEqual(sum(1 for s in got if s["star"]), 1)                # precies één leerling van de maand
+        self.assertEqual(ceo.students(["a", "b"], date(2026, 10, 25)), got)   # en die wisselt niet binnen de maand
+        self.assertEqual(ceo.students([], date(2026, 10, 7)), [])
 
 
 if __name__ == "__main__":
