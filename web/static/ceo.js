@@ -1,4 +1,4 @@
-// Twee dingen voor de CEO. (1) De knop op de CEO-pagina laat geld regenen.
+// Twee dingen voor de CEO. (1) Op de CEO-pagina regent geld, maar alleen als het resultaat van de week positief is: meer resultaat, meer biljetten.
 // (2) Tik vijf keer op het logo en het regent confetti met "Bonus geboekt". Beide gebeuren op een echte aanleiding, niet om te versieren.
 (function () {
   var mc = document.getElementById("masterclass");
@@ -31,6 +31,12 @@
   }
 
   window.ceoShower = shower;
+  var page = document.querySelector(".ceo-page");
+  if (page) {
+    var rain = parseInt(page.getAttribute("data-rain") || "0", 10);
+    if (rain > 0) shower(rain, ["💸", "💶", "💰"]);
+  }
+
   var logo = document.querySelector(".topbar .logo, .topbar a[href='/vandaag'], .topbar svg");
   var taps = [], toastTimer = null;
   if (logo) logo.addEventListener("click", function () {

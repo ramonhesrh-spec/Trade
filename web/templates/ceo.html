@@ -2,36 +2,88 @@
 {% block title %}De CEO — HesPulse{% endblock %}
 {% block content %}
 <article class="ceo-page" data-rain="{{ rain }}">
-  <p class="ceo-mast"><span>HesPulse Business</span><span>Nr. {{ days_in_office }}</span></p>
-  <header class="ceo-cover">
-    {% if photo %}<img src="{{ photo }}" alt="De CEO">{% endif %}
-    <div class="ceo-nameplate">
-      <h1 class="ceo-name">{{ boss.username }}</h1>
-      <p class="ceo-title">Chief Executive Officer</p>
+  <section class="ceo-hero">
+    <svg class="ceo-yacht" viewBox="0 0 640 260" role="img" aria-label="Een jacht op zee bij zonsondergang, met een helikopter" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="ceo-sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0d0830"/><stop offset="0.45" stop-color="#7c2d12"/><stop offset="0.8" stop-color="#f97316"/><stop offset="1" stop-color="#fcd34d"/></linearGradient>
+        <linearGradient id="ceo-sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#0e7490"/><stop offset="1" stop-color="#051f2b"/></linearGradient>
+        <linearGradient id="ceo-hull" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#b6c2d1"/></linearGradient>
+        <linearGradient id="ceo-gold" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#8a6d1c"/><stop offset="0.5" stop-color="#fff1b8"/><stop offset="1" stop-color="#8a6d1c"/></linearGradient>
+      </defs>
+      <rect width="640" height="260" fill="url(#ceo-sky)"/>
+      <g fill="#fff" opacity="0.75"><circle cx="60" cy="30" r="1.4"/><circle cx="130" cy="58" r="1"/><circle cx="210" cy="22" r="1.6"/><circle cx="300" cy="46" r="1"/><circle cx="380" cy="18" r="1.3"/><circle cx="560" cy="34" r="1.4"/><circle cx="610" cy="70" r="1"/><circle cx="25" cy="88" r="1"/></g>
+      <circle cx="500" cy="150" r="52" fill="#fde68a"/>
+      <circle cx="500" cy="150" r="70" fill="#fde68a" opacity="0.18"/>
+      <g transform="translate(70 52)" fill="#111827"><rect x="0" y="8" width="44" height="14" rx="7"/><rect x="40" y="12" width="26" height="4"/><line x1="-6" y1="4" x2="50" y2="4" stroke="#111827" stroke-width="2.5"/><line x1="8" y1="26" x2="40" y2="26" stroke="#111827" stroke-width="2"/></g>
+      <rect y="156" width="640" height="104" fill="url(#ceo-sea)"/>
+      <g stroke="#fde68a" stroke-linecap="round" opacity="0.7"><line x1="470" y1="168" x2="530" y2="168" stroke-width="3"/><line x1="480" y1="180" x2="522" y2="180" stroke-width="2.5"/><line x1="488" y1="192" x2="514" y2="192" stroke-width="2"/><line x1="494" y1="204" x2="508" y2="204" stroke-width="1.6"/></g>
+      <path d="M0 176 q40 -10 80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0" fill="none" stroke="#67e8f9" stroke-opacity="0.4" stroke-width="2"/>
+      <path d="M0 214 q40 -10 80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0 t80 0" fill="none" stroke="#67e8f9" stroke-opacity="0.25" stroke-width="2"/>
+      <g transform="translate(160 96)">
+        <path d="M0 62 L300 62 L270 100 L30 100 Z" fill="url(#ceo-hull)"/>
+        <rect x="14" y="58" width="274" height="6" fill="url(#ceo-gold)"/>
+        <rect x="52" y="34" width="160" height="26" rx="4" fill="#f8fafc"/>
+        <rect x="78" y="14" width="102" height="22" rx="4" fill="#e2e8f0"/>
+        <g fill="#38bdf8"><rect x="64" y="42" width="18" height="10" rx="2"/><rect x="92" y="42" width="18" height="10" rx="2"/><rect x="120" y="42" width="18" height="10" rx="2"/><rect x="148" y="42" width="18" height="10" rx="2"/><rect x="176" y="42" width="18" height="10" rx="2"/></g>
+        <g fill="#fde68a"><circle cx="46" cy="82" r="3"/><circle cx="78" cy="82" r="3"/><circle cx="110" cy="82" r="3"/><circle cx="142" cy="82" r="3"/><circle cx="174" cy="82" r="3"/><circle cx="206" cy="82" r="3"/><circle cx="238" cy="82" r="3"/></g>
+        <line x1="128" y1="14" x2="128" y2="-16" stroke="#e2e8f0" stroke-width="2"/>
+        <path d="M128 -16 l28 6 l-28 6 z" fill="url(#ceo-gold)"/>
+        <g transform="translate(236 22)"><path d="M0 0 h10 l-3 12 h-4 z" fill="#fff" opacity="0.9"/><rect x="4" y="12" width="2" height="10" fill="#fff" opacity="0.9"/><rect x="1" y="22" width="8" height="2" fill="#fff" opacity="0.9"/><circle cx="14" cy="8" r="3" fill="#fcd34d"/></g>
+      </g>
+    </svg>
+    <div class="ceo-portrait">
+      {% if photo %}<img src="{{ photo }}" alt="De CEO">{% else %}<div class="ceo-silhouette" aria-hidden="true">👑</div>{% endif %}
+      <i class="ceo-crown" aria-hidden="true">👑</i>
     </div>
-  </header>
+    <h1 class="ceo-name">{{ boss.username }}</h1>
+    <p class="ceo-title">Chief Executive Officer</p>
+    <p class="ceo-company">HesPulse Holdings International</p>
+    <p class="ceo-badges"><span>Visionair</span><span>Gelikt</span><span>Bestuurslid van zichzelf</span><span>Altijd in vergadering</span><span>Mentor</span><span>Thought leader</span></p>
+    <svg class="ceo-cash" viewBox="0 0 640 74" role="img" aria-label="Geldstapels en gouden munten" preserveAspectRatio="xMidYMax meet">
+      <defs>
+        <linearGradient id="ceo-bill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#86efac"/><stop offset="1" stop-color="#15803d"/></linearGradient>
+        <linearGradient id="ceo-coin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff1b8"/><stop offset="1" stop-color="#b8860b"/></linearGradient>
+      </defs>
+      <g id="ceo-stack">
+        <rect x="0" y="48" width="64" height="12" rx="2" fill="url(#ceo-bill)"/><rect x="2" y="38" width="64" height="12" rx="2" fill="url(#ceo-bill)" stroke="#0f5132" stroke-width="0.8"/>
+        <rect x="-2" y="28" width="64" height="12" rx="2" fill="url(#ceo-bill)" stroke="#0f5132" stroke-width="0.8"/><rect x="1" y="18" width="64" height="12" rx="2" fill="url(#ceo-bill)" stroke="#0f5132" stroke-width="0.8"/>
+        <rect x="14" y="14" width="38" height="46" fill="#fde68a" fill-opacity="0.28"/><circle cx="33" cy="32" r="8" fill="none" stroke="#14532d" stroke-width="1.5"/><text x="33" y="36" text-anchor="middle" font-size="11" font-weight="700" fill="#14532d">€</text>
+      </g>
+      <use href="#ceo-stack" x="86" y="6"/><use href="#ceo-stack" x="172" y="-4"/>
+      <g fill="url(#ceo-coin)" stroke="#8a6d1c" stroke-width="1"><circle cx="300" cy="58" r="11"/><circle cx="322" cy="58" r="11"/><circle cx="344" cy="58" r="11"/><circle cx="311" cy="46" r="11"/><circle cx="333" cy="46" r="11"/><circle cx="322" cy="34" r="11"/></g>
+      <g fill="#14532d" font-size="11" font-weight="700" text-anchor="middle"><text x="300" y="62">€</text><text x="322" y="62">€</text><text x="344" y="62">€</text><text x="311" y="50">€</text><text x="333" y="50">€</text><text x="322" y="38">€</text></g>
+      <g><path d="M388 62 L442 62 L452 40 L398 40 Z" fill="url(#ceo-coin)" stroke="#8a6d1c"/><path d="M398 40 L452 40 L444 30 L402 30 Z" fill="#fff1b8" stroke="#8a6d1c"/><path d="M404 62 L458 62 L468 40 L414 40 Z" fill="url(#ceo-coin)" stroke="#8a6d1c" transform="translate(32 0)"/></g>
+      <use href="#ceo-stack" x="520" y="-4"/><use href="#ceo-stack" x="578" y="8"/>
+    </svg>
+  </section>
 
-  <ul class="ceo-lines">
-    <li>Stop is geen verlies, het is een bijsturing</li>
-    <li>Van stagiair naar CEO in één weekend</li>
-    <li>Bereikbaar: niet</li>
-  </ul>
+  <p class="ceo-divider" aria-hidden="true"><span></span><i>◆</i><span></span></p>
 
-  <dl class="ceo-facts" aria-label="Over de CEO">
+  <section class="ceo-stats" aria-label="Prestaties van de CEO">
     <div><dt>Dagen in functie</dt><dd>{{ days_in_office }}</dd></div>
     <div><dt>Leerlingen in dienst</dt><dd>{{ students|length }}</dd></div>
     <div><dt>Rendement volgens de CEO</dt><dd>+∞%</dd></div>
-    <div><dt>Rendement volgens Bewijs</dt><dd><a href="/bewijs">Kijk zelf</a></dd></div>
-    <div><dt>Jacht</dt><dd>1, gehuurd</dd></div>
-    <div><dt>Kantoor</dt><dd>Voorste ligstoel</dd></div>
-    <div><dt>Passief inkomen</dt><dd>Gisteren</dd></div>
-  </dl>
+    <div><dt>Rendement volgens Bewijs</dt><dd class="ceo-small"><a href="/bewijs">Kijk zelf</a></dd></div>
+    <div><dt>Jachten</dt><dd>1 <span class="ceo-sub">gehuurd</span></dd></div>
+    <div><dt>Lambo's</dt><dd>1 <span class="ceo-sub">op huur</span></dd></div>
+    <div><dt>Passief inkomen</dt><dd class="ceo-small">Gisteren</dd></div>
+    <div><dt>Bonuspool</dt><dd class="ceo-small">Onbetaalbaar</dd></div>
+  </section>
 
-  <blockquote class="ceo-quote">{{ quote }}<footer>De CEO, vandaag</footer></blockquote>
+  <section class="ceo-card" aria-label="Visitekaartje">
+    <p><span>Kantoor</span>Dek, voorste ligstoel</p>
+    <p><span>Bereikbaar</span>Niet</p>
+    <p><span>Lunch</span>Vergadering</p>
+    <p><span>Stijl</span>Gelikt</p>
+    <p><span>Cursus</span>Van Stagiair naar CEO in 1 weekend</p>
+    <p><span>Link in bio</span>Hij staat er, kijk maar</p>
+  </section>
+
+  <blockquote class="ceo-quote">“{{ quote }}”<footer>De CEO, vandaag</footer></blockquote>
 
   <section class="ceo-masterclass">
     <h3 class="vd-section-title ceo-h3">Gratis masterclass</h3>
-    <p>Leer in 20 minuten hoe de CEO elke dag winst boekt. Beperkt aantal plekken.</p>
+    <p>Leer in 20 minuten hoe de CEO elke dag winst boekt. Beperkt aantal plekken. Echt.</p>
     <button type="button" class="ceo-cta" id="masterclass">Ja, ik wil rijk worden</button>
   </section>
 
@@ -40,10 +92,11 @@
     {% if students %}
     <ol class="ceo-students">
       {% for s in students %}
-      <li>
+      <li{% if s.star %} class="is-star"{% endif %}>
+        <span class="ceo-avatar" aria-hidden="true">{{ s.name[0]|upper }}</span>
         <span class="ceo-student"><strong>{{ s.name }}</strong><span class="muted">{{ s.title }}</span></span>
         <q class="ceo-testimonial">{{ s.quote }}</q>
-        {% if s.star %}<span class="ceo-star">Leerling van de maand</span>{% endif %}
+        {% if s.star %}<span class="ceo-star">👑 Leerling van de maand</span>{% endif %}
       </li>
       {% endfor %}
     </ol>
