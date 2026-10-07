@@ -242,7 +242,7 @@
   <li class="vd-step{% if s.state == 'now' %} is-now{% elif s.state == 'done' %} is-done{% endif %}">
     <span class="vd-step-n">{{ loop.index }}</span>
     <span class="vd-step-text"><strong>{{ s.title }}</strong>
-      {% if s.dist is defined %}<span class="muted"{% if s.dist == "-" %} hidden{% endif %}>Nog <span {{ s.dist_key }}="distance">{{ s.dist }}</span> te gaan.</span>{% endif %}
+      {% if s.dist is defined %}<span class="muted"{% if s.dist == "-" %} hidden{% endif %}>Nog <span {{ s.dist_key }}="distance"{% if s.live_coin is defined %} data-live-coin="{{ s.live_coin }}" data-live-level="{{ s.live_level }}" data-live-mode="{{ s.live_mode }}"{% endif %}>{{ s.dist }}</span> te gaan.</span>{% endif %}
       {% if s.sub and s.dist is not defined %}<span class="muted">{{ s.sub }}</span>{% endif %}
       {% if s.rr is defined and risk_eur %}<span class="steps-money">Raakt de stop, dan verlies je ongeveer € {{ "%.0f"|format(risk_eur) }}. Het doel levert ongeveer € {{ "%.0f"|format(risk_eur * s.rr) }}.</span>{% endif %}
     </span>
@@ -295,10 +295,10 @@
   <header class="setup-head">
     <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
     <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
-    <span class="setup-grade setup-grade-{{ (c.grade or 'c')|lower }}" title="Oordeel van Claude">{{ c.grade or "-" }}</span>
+    <span class="setup-grade setup-grade-{{ (c.grade or 'c')|lower }}" title="Oordeel van de CEO">{{ c.grade or "-" }}</span>
     <span class="muted setup-age">{{ c.created_at | age }}</span>
   </header>
-  {% if c.grade is none or c.grade == 'C' %}<p class="setup-weak"><strong>{{ "Claude twijfelt" if c.grade == 'C' else "Geen oordeel van Claude" }}.</strong> {{ c.reason }}</p>{% endif %}
+  {% if c.grade is none or c.grade == 'C' %}<p class="setup-weak"><strong>{{ "De CEO twijfelt" if c.grade == 'C' else "De CEO zit in een vergadering" }}.</strong> {{ c.reason }}</p>{% endif %}
   {{ c.chart }}
   {{ steps_list(c.steps, risk_eur) }}
   {{ r_bars(c.targets) }}

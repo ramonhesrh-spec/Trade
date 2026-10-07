@@ -83,7 +83,7 @@ def timeline_svg(now: datetime, moments: list[dict], hours: int = 24, width: int
     return "".join(parts)
 
 
-def scenario_view(s: dict, price: Optional[float], now: datetime) -> dict:
+def scenario_view(s: dict, price: Optional[float], now: datetime, coin: str = "") -> dict:
     """Eén scenario als kaartje: voorwaarde in woorden, plan, R:R, afstand tot de voorwaarde, tijd tot verval."""
     expires = datetime.fromisoformat(s["expires_at"])
     expires = expires if expires.tzinfo else expires.replace(tzinfo=timezone.utc)
@@ -94,7 +94,7 @@ def scenario_view(s: dict, price: Optional[float], now: datetime) -> dict:
         to_trigger = (s["trigger_level"] - price) / price * 100
     state = s["state"] if s["state"] != "waiting" or hours_left > 0 else "expired"
     view = {
-        "id": s["id"], "direction": s["direction"], "state": state, "state_label": STATE_LABELS.get(state, state),
+        "id": s["id"], "coin": coin, "trigger_level": s["trigger_level"], "direction": s["direction"], "state": state, "state_label": STATE_LABELS.get(state, state),
         "trigger": ms.trigger_text(s["trigger_type"], s["direction"], s["trigger_level"]), "reason": s["reason"],
         "entry": s["entry"], "stop": s["stop_loss"], "take": s["take_profit"], "rr": rr,
         "risk_pct": abs(s["entry"] - s["stop_loss"]) / s["entry"] * 100, "hours_left": hours_left, "to_trigger_pct": to_trigger,
@@ -130,7 +130,7 @@ def script_view(script: dict, price: Optional[float], now: datetime) -> dict:
     created = created if created.tzinfo else created.replace(tzinfo=timezone.utc)
     return {"coin": script["coin"], "summary": script["summary"], "bias": script["bias"], "price": price,
             "age_hours": (now - created).total_seconds() / 3600, "written": local(created),
-            "scenarios": [scenario_view(s, price, now) for s in script["scenarios"]], "n_dropped": script["n_dropped"]}
+            "scenarios": [scenario_view(s, price, now, script["coin"]) for s in script["scenarios"]], "n_dropped": script["n_dropped"]}
 
 
 def mood(scripts: list[dict]) -> dict:

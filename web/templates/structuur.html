@@ -6,14 +6,14 @@
 <div class="page-head">
   <h2>Setups</h2>
 </div>
-<p class="page-intro">Breuk van een lijn of range op 30 minuten. Claude beoordeelt de kwaliteit, de code rekent het plan uit: de limietorder staat op het gebroken niveau, de stop vlak erachter, de doelen op zwaaipunten. Zet de order klaar voordat de koers terugkomt. De score van deze methode staat op <a href="/bewijs">Bewijs</a>.</p>
+<p class="page-intro">Breuk van een lijn of range op 30 minuten. De CEO beoordeelt de kwaliteit, de code rekent het plan uit: de limietorder staat op het gebroken niveau, de stop vlak erachter, de doelen op zwaaipunten. Zet de order klaar voordat de koers terugkomt. De score van deze methode staat op <a href="/bewijs">Bewijs</a>.</p>
 
 <p class="engine-status {% if not engine_on %}is-off{% elif engine_minutes is none or engine_minutes > 15 %}is-stale{% endif %}">
   {% if not engine_on %}De motor staat uit (STRUCTURE_ENABLED=false).
   {% elif engine_minutes is none %}De motor heeft nog niet gedraaid. Hij start in de eerstvolgende scan van 5 minuten, na een herstart van de bot.
   {% elif engine_minutes > 15 %}Let op: de motor draaide {{ engine_minutes }} minuten geleden voor het laatst. Controleer crypto-market-scan-smc.timer.
   {% else %}Motor actief, laatste controle {{ engine_minutes }} min geleden.{% endif %}
-  Laatste 24 uur: {{ counts.total }} {{ "breuk" if counts.total == 1 else "breuken" }} gezien, {{ counts.goedgekeurd }} goedgekeurd, {{ counts.afgekeurd }} afgekeurd door Claude, {{ counts.geen_plan }} zonder plan{% if counts.geen_oordeel %}, {{ counts.geen_oordeel }} zonder oordeel{% endif %}.
+  Laatste 24 uur: {{ counts.total }} {{ "breuk" if counts.total == 1 else "breuken" }} gezien, {{ counts.goedgekeurd }} goedgekeurd, {{ counts.afgekeurd }} afgekeurd door de CEO, {{ counts.geen_plan }} zonder plan{% if counts.geen_oordeel %}, {{ counts.geen_oordeel }} zonder oordeel{% endif %}.
 </p>
 
 <section style="--i: 0">

@@ -44,6 +44,8 @@ def _nav_context(request: Request) -> dict:
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context])
 templates.env.globals["disclaimer"] = config.DISCLAIMER
 templates.env.globals["fmt_price"] = today.fmt_price
+templates.env.globals["live_exchange"] = config.EXCHANGE_ID
+templates.env.globals["live_quote"] = config.QUOTE_CURRENCY.lower()
 
 
 def _age_label(iso: str | None) -> str:
@@ -301,13 +303,13 @@ async def _structure_cards() -> list[dict]:
         plan = json.loads(s["plan"])
         targets = list(zip(plan["targets"], plan["targets_r"]))
         cards.append({**s, "plan": plan, "targets": targets,
-                      "steps": chance_steps.structure_steps(plan, targets, prices.get(s["coin"]), s["direction"]),
+                      "steps": chance_steps.structure_steps(plan, targets, prices.get(s["coin"]), s["direction"], s["coin"]),
                       "chart": Markup(setup_chart.setup_svg(plan.get("candles", []), s, plan, prices.get(s["coin"])))})
     return cards
 
 
-STRUCTURE_STATE_LABELS = {"schaduw": "Oordeel C: stil gevolgd, wacht op de terugkeer", "geen_plan": "Geen plan: te weinig ruimte of stop buiten bereik", "fired": "Limiet geraakt, signaal gemeld", "expired": "Verlopen, koers kwam niet terug", "niet_gemeld": "Claude keurde af (C)",
-                          "overgeslagen": "Stop buiten het toegestane bereik", "geen_oordeel": "Geen oordeel van Claude"}
+STRUCTURE_STATE_LABELS = {"schaduw": "Oordeel C: stil gevolgd, wacht op de terugkeer", "geen_plan": "Geen plan: te weinig ruimte of stop buiten bereik", "fired": "Limiet geraakt, signaal gemeld", "expired": "Verlopen, koers kwam niet terug", "niet_gemeld": "De CEO keurde af (C)",
+                          "overgeslagen": "Stop buiten het toegestane bereik", "geen_oordeel": "De CEO zat in een vergadering"}
 
 
 @app.get("/structuur")

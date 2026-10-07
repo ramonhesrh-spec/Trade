@@ -12,7 +12,8 @@
   }
 
   function apply(payload) {
-    document.querySelectorAll("[data-vd-price]").forEach(function (el) {
+    var live = window.hesLiveFresh && window.hesLiveFresh();      // de koersstroom (live.js) is actueler dan deze poll
+    if (!live) document.querySelectorAll("[data-vd-price]").forEach(function (el) {
       var coin = el.getAttribute("data-vd-price");
       var text = fmtPrice(payload.prices[coin], coin);
       if (text) el.textContent = text;
@@ -24,7 +25,7 @@
       if (state) state.textContent = data.label;
       el.className = el.className.replace(/vd-scenario-\w+/, "vd-scenario-" + data.state);
       var dist = el.querySelector('[data-vd="distance"]');
-      if (dist) dist.textContent = data.to_trigger_pct === null ? "-" : (data.to_trigger_pct >= 0 ? "+" : "") + data.to_trigger_pct.toFixed(2) + "%";
+      if (dist && !live) dist.textContent = data.to_trigger_pct === null ? "-" : (data.to_trigger_pct >= 0 ? "+" : "") + data.to_trigger_pct.toFixed(2) + "%";
       var left = el.querySelector('[data-vd="left"]');
       if (left) left.textContent = Math.round(data.hours_left);
       var ladder = el.querySelector('[data-vd="ladder"]');

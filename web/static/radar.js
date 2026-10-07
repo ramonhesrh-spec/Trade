@@ -20,7 +20,7 @@
         state.textContent = data.label;
         state.className = "radar-state radar-state-" + (data.state || "laden");
       }
-      if (data.distance_pct !== null && data.distance_pct !== undefined) {
+      if (!(window.hesLiveFresh && window.hesLiveFresh()) && data.distance_pct !== null && data.distance_pct !== undefined) {
         setText(card, "distance", (data.distance_pct >= 0 ? "+" : "") + data.distance_pct.toFixed(2) + "%");
       }
       var r = card.querySelector('[data-radar="live_r"]');

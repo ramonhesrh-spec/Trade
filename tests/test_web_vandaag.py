@@ -52,6 +52,7 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn(str(sid), live["structuur"])                         # live afstand per wachtend plan
         self.assertIn("te gaan", r.text)
         self.assertIn("sc-limit", r.text)
+        self.assertIn('data-live-coin="BTC"', r.text)                      # live.js volgt de koers van de beurt
         self.assertIn("Schone range.", r.text)
 
     def test_setups_filter_shows_only_a_and_b_on_request(self):
@@ -87,7 +88,7 @@ class WebVandaagTests(unittest.TestCase):
             "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
         text = self.client.get("/structuur").text
         self.assertIn("is-weak", text)
-        self.assertIn("Claude twijfelt", text)
+        self.assertIn("De CEO twijfelt", text)
         self.assertEqual(text.count("Te weinig ruimte."), 1)               # de reden staat één keer, bovenaan
 
     def test_coin_page_shows_masthead_price_and_waiting_structure_plan(self):

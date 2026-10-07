@@ -22,7 +22,7 @@ def setup_card(setup: dict, price: Optional[float]) -> Optional[dict]:
         "distance_pct": tp.distance_to_limit_pct(plan, price) if price else None, "live_r": None,
         "ladder": Markup(tp.ladder_svg(setup["direction"], plan.stop, plan.take, plan.limit, price, setup["zone_low"], setup["zone_high"])),
         "created_at": setup["created_at"], "setup": setup,
-        "steps": chance_steps.smc_steps(plan, setup["zone_low"], setup["zone_high"], price, distance),
+        "steps": chance_steps.smc_steps(plan, setup["zone_low"], setup["zone_high"], price, distance, setup["coin"]),
     }
 
 

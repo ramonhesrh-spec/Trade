@@ -26,7 +26,7 @@ def structure_checks(features: Optional[dict], plan: dict, grade: Optional[str])
         ("Structuur minstens 12 candles lang", int(f.get("span", 0)) >= 12),
         ("Doelen liggen op zwaaipunten", bool(plan.get("from_levels"))),
         ("Tweede doel minstens 2R ver", len(r_list) > 1 and r_list[1] >= 2.0),
-        ("Claude beoordeelt A of B", grade in ("A", "B")),
+        ("De CEO keurt goed (A of B)", grade in ("A", "B")),
     ]
 
 

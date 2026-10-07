@@ -13,6 +13,7 @@
   }
 
   function apply(payload) {
+    if (window.hesLiveFresh && window.hesLiveFresh()) return markNear();
     Object.keys(payload.structuur || {}).forEach(function (id) {
       var card = document.getElementById("structuur-" + id);
       if (!card) return;
