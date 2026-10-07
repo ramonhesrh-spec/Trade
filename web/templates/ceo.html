@@ -103,6 +103,21 @@
     {% else %}<p class="muted">Nog geen leerlingen. De CEO werkt alleen.</p>{% endif %}
   </section>
 
+  {% if presence is not none %}
+  <section>
+    <h3 class="vd-section-title ceo-h3">Aanwezigheid, laatste 30 dagen</h3>
+    <table class="ceo-presence">
+      <thead><tr><th>Wie</th><th>Weergaven</th><th>Dagen</th><th>Laatst</th></tr></thead>
+      <tbody>
+      {% for p in presence %}
+        <tr><td>{{ p.name }}</td><td>{{ p.views }}</td><td>{{ p.active_days }}</td><td>{{ p.last_at | age if p.last_at else "nooit" }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="muted ceo-note">Telt paginaweergaven sinds deze versie draait. Alleen jij ziet dit.</p>
+  </section>
+  {% endif %}
+
   <p class="ceo-fine">De CEO is geen financieel adviseur. De CEO is vooral een CEO.</p>
 </article>
 {% endblock %}

@@ -161,6 +161,21 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("?tf=5m", page.text)                                  # tijdsknoppen onder de grafiek
         self.assertEqual(self.client.get(f"/kans/{ids[0]}?tf=zomaar").status_code, 200)
 
+    def test_visits_count_page_views_not_api_polls_and_only_the_ceo_sees_them(self):
+        repo.create_user("leerling2", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        self.client.get("/vandaag")
+        self.client.get("/api/kansen")
+        stats = repo.visit_stats(datetime.now(timezone.utc))
+        me = repo.get_user_by_username("tester")["id"]
+        self.assertEqual(stats[me]["active_days"], 1)
+        self.assertGreaterEqual(stats[me]["views"], 1)
+        before = stats[me]["views"]
+        self.client.get("/api/kansen")
+        self.assertEqual(repo.visit_stats(datetime.now(timezone.utc))[me]["views"], before)
+        page = self.client.get("/ceo").text
+        self.assertIn("Aanwezigheid", page)
+        self.assertIn("leerling2", page)
+
     def test_ceo_page_shows_the_boss_and_students_and_marks_roles(self):
         repo.create_user("leerling1", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
         page = self.client.get("/ceo").text

@@ -636,3 +636,12 @@ CREATE TABLE IF NOT EXISTS trend_entries (
     at TEXT NOT NULL,
     signal_id INTEGER
 );
+
+-- Paginabezoeken per gebruiker per dag (UTC), alleen voor het overzicht van de CEO. Telt paginaweergaven, geen API-aanroepen.
+CREATE TABLE IF NOT EXISTS user_visits (
+    user_id INTEGER NOT NULL,
+    day TEXT NOT NULL,
+    views INTEGER NOT NULL DEFAULT 0,
+    last_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, day)
+);

@@ -2163,3 +2163,7 @@ html { -webkit-tap-highlight-color: transparent; }
 .ceo-fine { margin: var(--space-7) 0 var(--space-5); text-align: center; font-size: var(--text-2xs); color: #8a7a4a; }
 .tab-ceo { color: #d4af37; }
 .tab-ceo.is-active { background: rgba(212, 175, 55, 0.16); color: #f3e3a4; }
+.ceo-presence { width: 100%; border-collapse: collapse; }
+.ceo-presence th { text-align: right; padding: var(--space-2) var(--space-3); font-size: var(--text-2xs); letter-spacing: 0.08em; text-transform: uppercase; color: #a8925a; }
+.ceo-presence td { text-align: right; padding: var(--space-3); border-top: 1px solid rgba(90, 71, 16, 0.5); font-variant-numeric: tabular-nums; }
+.ceo-presence th:first-child, .ceo-presence td:first-child { text-align: left; overflow-wrap: anywhere; }

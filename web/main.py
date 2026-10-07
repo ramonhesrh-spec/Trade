@@ -130,6 +130,12 @@ def require_login(request: Request) -> dict:
     user = repo.get_user(user_id) if user_id else None
     if not user:
         raise HTTPException(status_code=401)
+    # Alleen paginaweergaven tellen: de koers- en kansenpolls van een open tab zouden elke gebruiker de hele dag "actief" maken.
+    if request.method == "GET" and not request.url.path.startswith(("/api", "/static", "/ws")):
+        try:
+            repo.record_visit(user["id"], datetime.now(timezone.utc))
+        except Exception:
+            pass
     return user
 
 
@@ -1613,7 +1619,14 @@ async def ceo_page(request: Request, user: dict = Depends(require_login)):
     now = datetime.now(timezone.utc)
     photo = BASE_DIR / "static" / "ceo.jpg"
     students = ceo.students([u["username"] for u in repo.list_users() if u["id"] != boss["id"]], now.date())
+    presence = None
+    if is_ceo(user):
+        stats = repo.visit_stats(now)
+        presence = sorted(
+            ({"name": u["username"], **stats.get(u["id"], {"views": 0, "active_days": 0, "last_at": None})} for u in repo.list_users()),
+            key=lambda p: (-p["views"], p["name"].lower()))
     return templates.TemplateResponse(request, "ceo.html", {
+        "presence": presence,
         "user": user, "boss": boss, "days_in_office": (now - first).days if first else 0,
         "quote": ceo.quote_of_the_day(now.date()), "rain": ceo.rain_count(week["net_r"]), "students": students,
         "photo": f"/static/ceo.jpg?v={int(photo.stat().st_mtime)}" if photo.exists() else None,

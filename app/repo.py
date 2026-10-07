@@ -926,6 +926,28 @@ def get_user_by_username(username: str) -> Optional[dict]:
         return dict(row) if row else None
 
 
+def record_visit(user_id: int, now: datetime) -> None:
+    stamp = now.astimezone(timezone.utc)
+    with db.session() as conn:
+        conn.execute(
+            "INSERT INTO user_visits (user_id, day, views, last_at) VALUES (?, ?, 1, ?) "
+            "ON CONFLICT(user_id, day) DO UPDATE SET views = views + 1, last_at = excluded.last_at",
+            (user_id, stamp.date().isoformat(), stamp.isoformat()),
+        )
+
+
+def visit_stats(now: datetime, days: int = 30) -> dict[int, dict]:
+    """Per gebruiker: paginaweergaven en actieve dagen in de laatste `days` dagen, en het laatste bezoek ooit."""
+    since = (now.astimezone(timezone.utc).date() - timedelta(days=days - 1)).isoformat()
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT user_id, SUM(CASE WHEN day >= ? THEN views ELSE 0 END) AS views, "
+            "SUM(CASE WHEN day >= ? THEN 1 ELSE 0 END) AS active_days, MAX(last_at) AS last_at "
+            "FROM user_visits GROUP BY user_id", (since, since),
+        ).fetchall()
+    return {r["user_id"]: {"views": r["views"] or 0, "active_days": r["active_days"] or 0, "last_at": r["last_at"]} for r in rows}
+
+
 def list_users() -> list[dict]:
     with db.session() as conn:
         rows = conn.execute("SELECT * FROM users ORDER BY id").fetchall()
