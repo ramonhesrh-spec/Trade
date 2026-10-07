@@ -23,6 +23,15 @@ QUOTES = (
     "De markt sluit nooit, een CEO ook niet.",
 )
 
+TESTIMONIALS = (
+    "Dankzij de CEO weet ik nu wat een stop is.",
+    "Ik heb mijn baan opgezegd. Daarna ook mijn saldo.",
+    "De CEO deelt geen trades, hij deelt een gevoel.",
+    "Sinds ik meekijk slaap ik beter. De CEO niet, die handelt.",
+    "Eerst was ik arm in euro's, nu ben ik arm in R. Vooruitgang.",
+    "De masterclass was gratis. De les kostte een stop.",
+)
+
 STUDENT_TITLES = ("Stagiair Chief Fomo Officer", "Trainee Overtrading", "Junior analist van de CEO", "Hoofd Koffiezetten", "Leerling-handelaar eerste klas",
                   "Meeloper van de Raad", "Assistent Revenge-trades")
 
@@ -58,9 +67,13 @@ def timeline_text(text: str) -> str:
     return {"Doel geraakt": "Doel gehaald, bonus", "Vervallen zonder uitkomst": "Vervallen, de CEO ging lunchen"}.get(text, text)
 
 
+RAIN_BASE = 16
+
+
 def rain_count(net_r: float) -> int:
-    """Hoeveel geldbiljetten er regenen op de CEO-pagina: alleen bij een positief resultaat deze week, meer naarmate het resultaat groter is."""
-    return 0 if net_r <= 0 else min(40, math.ceil(net_r * 8))
+    """Hoeveel geldbiljetten er regenen als je de CEO-pagina opent: altijd een bui (de CEO regent altijd), en meer naarmate het weekresultaat
+    positief is. Het regent één keer per bezoek, niet doorlopend."""
+    return RAIN_BASE if net_r <= 0 else min(56, RAIN_BASE + math.ceil(net_r * 8))
 
 
 def quote_of_the_day(today: date) -> str:
@@ -70,4 +83,5 @@ def quote_of_the_day(today: date) -> str:
 def students(usernames: list[str], today: date) -> list[dict]:
     """De leerlingen met een functietitel. Eén van hen is leerling van de maand, wisselend per kalendermaand."""
     star = (today.year * 12 + today.month) % len(usernames) if usernames else -1
-    return [{"name": n, "title": STUDENT_TITLES[i % len(STUDENT_TITLES)], "star": i == star} for i, n in enumerate(usernames)]
+    return [{"name": n, "title": STUDENT_TITLES[i % len(STUDENT_TITLES)], "star": i == star,
+             "quote": TESTIMONIALS[(i + today.month) % len(TESTIMONIALS)]} for i, n in enumerate(usernames)]

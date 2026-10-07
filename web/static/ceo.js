@@ -1,6 +1,16 @@
 // Twee dingen voor de CEO. (1) Op de CEO-pagina regent geld, maar alleen als het resultaat van de week positief is: meer resultaat, meer biljetten.
 // (2) Tik vijf keer op het logo en het regent confetti met "Bonus geboekt". Beide gebeuren op een echte aanleiding, niet om te versieren.
 (function () {
+  var mc = document.getElementById("masterclass");
+  if (mc) mc.addEventListener("click", function () {
+    if (window.ceoShower) window.ceoShower(48, ["💸", "💰", "🍾", "🛥️"]);
+    var t = document.createElement("div");
+    t.className = "ceo-toast";
+    t.textContent = "Je staat op de wachtlijst, leerling";
+    document.body.appendChild(t);
+    setTimeout(function () { t.remove(); }, 2800);
+  });
+
   if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
   function shower(n, glyphs) {
@@ -20,6 +30,7 @@
     setTimeout(function () { layer.remove(); }, 6000);
   }
 
+  window.ceoShower = shower;
   var page = document.querySelector(".ceo-page");
   if (page) {
     var rain = parseInt(page.getAttribute("data-rain") || "0", 10);

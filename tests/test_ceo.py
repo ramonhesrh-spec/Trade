@@ -23,10 +23,10 @@ class CeoTests(unittest.TestCase):
         self.assertIn("T2 geraakt (3.0R)", ceo.timeline_text("T2 geraakt (3.0R)"))
         self.assertEqual(ceo.timeline_text("Onbekende regel"), "Onbekende regel")
 
-    def test_money_rains_only_with_a_positive_week_and_is_capped(self):
-        self.assertEqual((ceo.rain_count(-2.0), ceo.rain_count(0.0)), (0, 0))
-        self.assertEqual(ceo.rain_count(1.0), 8)
-        self.assertEqual(ceo.rain_count(500.0), 40)
+    def test_money_always_rains_a_bit_more_with_a_positive_week_and_is_capped(self):
+        self.assertEqual((ceo.rain_count(-2.0), ceo.rain_count(0.0)), (16, 16))       # de CEO regent altijd een beetje
+        self.assertGreater(ceo.rain_count(1.0), ceo.rain_count(0.0))                  # en meer bij een positieve week
+        self.assertEqual(ceo.rain_count(500.0), 56)
 
     def test_quote_is_stable_per_day_and_students_get_titles(self):
         self.assertEqual(ceo.quote_of_the_day(date(2026, 10, 7)), ceo.quote_of_the_day(date(2026, 10, 7)))
