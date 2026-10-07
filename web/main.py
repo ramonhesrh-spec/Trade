@@ -29,12 +29,35 @@ from markupsafe import Markup
 from app import advice as advice_module
 from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, radar, repo, risk, security, setup_chart, today, track_record
-from app import chance_steps, kans_view
+from app import ceo, chance_steps, kans_view
 from app.market_scanner import floor_stop, smc_stop_take_margins
 
 logger = logging.getLogger("web")
 
 BASE_DIR = Path(__file__).resolve().parent
+def ceo_user() -> Optional[dict]:
+    """De enige CEO: CEO_USERNAME, anders de eerst aangemaakte gebruiker. Alle anderen zijn leerlingen."""
+    if config.CEO_USERNAME:
+        found = repo.get_user_by_username(config.CEO_USERNAME)
+        if found:
+            return found
+    users = repo.list_users()
+    return users[0] if users else None
+
+
+_ceo_cache: dict = {"at": 0.0, "id": None}
+
+
+def is_ceo(user: Optional[dict]) -> bool:
+    """Is deze gebruiker de CEO? Een minuut onthouden: base.html vraagt het bij elke pagina."""
+    if not user:
+        return False
+    if time.monotonic() - _ceo_cache["at"] > 60:
+        found = ceo_user()
+        _ceo_cache.update(at=time.monotonic(), id=found["id"] if found else None)
+    return user["id"] == _ceo_cache["id"]
+
+
 def _nav_context(request: Request) -> dict:
     """De coinlijst in het menu staat in elke pagina. Zonder dit moest elke route `coins` zelf meegeven, en de nieuwere
     pagina's (Vandaag, Setups, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
@@ -44,6 +67,7 @@ def _nav_context(request: Request) -> dict:
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context])
 templates.env.globals["disclaimer"] = config.DISCLAIMER
 templates.env.globals["fmt_price"] = today.fmt_price
+templates.env.globals["is_ceo"] = lambda user: is_ceo(user)
 templates.env.globals["live_exchange"] = config.EXCHANGE_ID
 templates.env.globals["live_quote"] = config.QUOTE_CURRENCY.lower()
 
@@ -410,7 +434,9 @@ async def _vandaag_context() -> dict:
 async def vandaag_page(request: Request, user: dict = Depends(require_login)):
     """Cockpit: het markt-script van nu, de agenda van de komende 24 uur, wat beweegt (liquidaties en nieuws) en de score van
     wat HesPulse zelf voorspelde. Alles komt uit app/today.py en de verzamelaars; er staat niets op wat niet gemeten is."""
-    return templates.TemplateResponse(request, "vandaag.html", {"user": user, **await _vandaag_context()})
+    ctx = await _vandaag_context()
+    greeting = ceo.greeting(today.local(datetime.now(timezone.utc)).hour, is_ceo(user), user["username"])
+    return templates.TemplateResponse(request, "vandaag.html", {"user": user, "greeting": greeting, **ctx})
 
 
 @app.get("/api/vandaag")
@@ -461,7 +487,7 @@ async def week_page(request: Request, dagen: int = 7, user: dict = Depends(requi
     dagen = dagen if dagen in WEEK_RANGES else 7
     week = track_record.week_summary(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT, days=dagen)
     spark = track_record.sparkline_svg(week["cumulative"], width=320, height=80).replace("<svg", "<svg data-share-chart", 1)
-    return templates.TemplateResponse(request, "week.html", {"user": user, "week": week, "spark": Markup(spark), "dagen": dagen, "ranges": WEEK_RANGES})
+    return templates.TemplateResponse(request, "week.html", {"user": user, "week": week, "spark": Markup(spark), "headline": ceo.week_headline(week["net_r"], week["resolved"]), "dagen": dagen, "ranges": WEEK_RANGES})
 
 
 @app.get("/api/kansen")
@@ -485,7 +511,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     for entry in summary:
         entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
     return templates.TemplateResponse(request, "bewijs.html", {
-        "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS,
+        "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
         "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,
         "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,
     })
@@ -1574,3 +1600,22 @@ async def api_candles(symbol: str, user: dict = Depends(require_login)):
         "patterns": patterns, "sr_zones": sr_zones, "trendlines": trendline_data,
         "forming_patterns": forming_patterns,
     }
+
+
+@app.get("/ceo")
+async def ceo_page(request: Request, user: dict = Depends(require_login)):
+    """De pagina van de CEO. De titels zijn de grap, de cijfers zijn echt: ze komen uit hetzelfde trackrecord als Bewijs."""
+    boss = ceo_user() or user
+    rows = repo.list_signals_for_quality_report(None)
+    summary = next((e for e in track_record.summarize(rows, config.TRACK_RECORD_COST_PCT) if e["source"] == "alles"), None)
+    week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
+    first = min((track_record._parse(r["created_at"]) for r in rows), default=None)
+    now = datetime.now(timezone.utc)
+    photo = BASE_DIR / "static" / "ceo.jpg"
+    return templates.TemplateResponse(request, "ceo.html", {
+        "user": user, "boss": boss, "summary": summary, "week": week,
+        "days_in_office": (now - first).days if first else 0,
+        "quote": ceo.quote_of_the_day(now.date()), "rain": ceo.rain_count(week["net_r"]),
+        "students": ceo.students([u["username"] for u in repo.list_users() if u["id"] != boss["id"]]),
+        "photo": f"/static/ceo.jpg?v={int(photo.stat().st_mtime)}" if photo.exists() else None,
+    })

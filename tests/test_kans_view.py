@@ -34,7 +34,7 @@ class KansViewTests(unittest.TestCase):
     def test_timeline_orders_events_and_adds_outcome_for_plain_signals(self):
         signal = {"created_at": candle(5)[0], "auto_outcome": "take_profit", "auto_outcome_at": candle(9)[0]}
         texts = [e["text"] for e in kans_view.timeline(signal, None)]
-        self.assertEqual(texts, ["Gemeld", "Doel geraakt"])
+        self.assertEqual(texts, ["Persbericht uitgegeven (gemeld)", "Doel gehaald, bonus"])
         first = kans_view.timeline({"created_at": "2026-10-06T16:47:00+00:00", "auto_outcome": None}, None)[0]["at"]
         self.assertEqual(first.strftime("%H:%M"), "18:47")                  # 16:47 UTC is 18:47 in Nederland (zomertijd)
 

@@ -298,6 +298,7 @@
     <span class="setup-grade setup-grade-{{ (c.grade or 'c')|lower }}" title="Oordeel van de CEO">{{ c.grade or "-" }}</span>
     <span class="muted setup-age">{{ c.created_at | age }}</span>
   </header>
+  {% if c.grade in ('A', 'B') %}<p class="setup-verdict">{{ "De CEO keurt goed." if c.grade == 'A' else "De CEO knikt." }}</p>{% endif %}
   {% if c.grade is none or c.grade == 'C' %}<p class="setup-weak"><strong>{{ "De CEO twijfelt" if c.grade == 'C' else "De CEO zit in een vergadering" }}.</strong> {{ c.reason }}</p>{% endif %}
   {{ c.chart }}
   {{ steps_list(c.steps, risk_eur) }}

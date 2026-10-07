@@ -156,10 +156,20 @@ class WebVandaagTests(unittest.TestCase):
         page = self.client.get(f"/kans/{ids[0]}")
         self.assertEqual(page.status_code, 200)
         self.assertIn("Wat er gebeurde", page.text)
-        self.assertIn("Gemeld", page.text)
+        self.assertIn("Persbericht uitgegeven", page.text)
         self.assertEqual(self.client.get("/kans/999999").status_code, 404)
         self.assertIn("?tf=5m", page.text)                                  # tijdsknoppen onder de grafiek
         self.assertEqual(self.client.get(f"/kans/{ids[0]}?tf=zomaar").status_code, 200)
+
+    def test_ceo_page_shows_the_boss_and_students_and_marks_roles(self):
+        repo.create_user("leerling1", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        page = self.client.get("/ceo").text
+        self.assertIn("Chief Executive Officer", page)
+        self.assertIn("tester", page)                                     # de eerst aangemaakte gebruiker is de CEO
+        self.assertIn("leerling1", page)                                  # en de rest staat bij de leerlingen
+        self.assertIn("De leerlingen", page)
+        self.assertIn("CEO tester", self.client.get("/vandaag").text)     # de CEO ziet zichzelf als CEO
+        self.assertIn("Goede", self.client.get("/vandaag").text)
 
     def test_week_page_shows_totals_and_share_button(self):
         r = self.client.get("/week")

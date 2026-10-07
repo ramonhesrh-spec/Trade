@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Optional
 
-from app import setup_chart, today
+from app import ceo, setup_chart, today
 from app.track_record import TYPE_LABELS
 
 OUTCOME_TEXT = {"take_profit": "Doel geraakt", "stop_loss": "Stop geraakt", "vervallen": "Vervallen zonder uitkomst"}
@@ -28,7 +28,7 @@ def timeline(signal: dict, setup: Optional[dict]) -> list[dict]:
     if outcome and not any(e["text"].startswith(("Stop", "T")) for e in events if setup):
         events.append({"at": signal.get("auto_outcome_at") or signal["created_at"], "text": OUTCOME_TEXT.get(outcome, outcome)})
     events.sort(key=lambda e: _parse(e["at"]))
-    return [{"at": today.local(_parse(e["at"])), "text": e["text"]} for e in events]    # Nederlandse tijd, zoals de rest van de site
+    return [{"at": today.local(_parse(e["at"])), "text": ceo.timeline_text(e["text"])} for e in events]    # Nederlandse tijd, zoals de rest van de site
 
 
 def facts(signal: dict) -> dict:

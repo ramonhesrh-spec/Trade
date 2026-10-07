@@ -262,7 +262,7 @@
       </button>
       <button type="button" id="shortcuts-hint" class="shortcuts-hint" title="Sneltoetsen (?)" aria-label="Sneltoetsen tonen">?</button>
       <form action="/logout" method="post" class="logout-form">
-        {% if user %}<span class="muted">{{ user.username }}</span>{% endif %}
+        {% if user %}<span class="muted">{{ "CEO" if is_ceo(user) else "Leerling" }} {{ user.username }}</span>{% endif %}
         <button type="submit">Uitloggen</button>
       </form>
     </div>
@@ -327,7 +327,7 @@
 <div class="more-sheet" id="more-sheet" hidden>
   <div class="more-sheet-panel" role="dialog" aria-label="Meer">
     <div class="more-links">
-      <a href="/week">Jouw week</a><a href="/signalen">Journaal</a><a href="/meldingen">Meldingen</a><a href="/account">Account</a><a href="/uitleg">Uitleg</a>
+      <a href="/ceo">De CEO</a><a href="/week">Kwartaalcijfers</a><a href="/signalen">Journaal</a><a href="/meldingen">Meldingen</a><a href="/account">Account</a><a href="/uitleg">Uitleg</a>
     </div>
     <p class="muted more-label">Coins</p>
     <div class="more-coins">{% for c in coins %}<a href="/coins/{{ c.symbol }}">{{ c.symbol }}</a>{% endfor %}</div>
@@ -918,6 +918,7 @@
 <script src="/static/tabbar.js?v=1" defer></script>
 <script src="/static/ticker.js?v=1" defer></script>
 <script src="/static/live.js?v=1" defer></script>
+<script src="/static/ceo.js?v=1" defer></script>
 <script src="/static/share.js?v=1" defer></script>
 </body>
 </html>

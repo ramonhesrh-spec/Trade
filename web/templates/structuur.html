@@ -25,7 +25,7 @@
     <a class="chip{% if side == 'short' %} is-active{% endif %}" href="/structuur?kant=short">Short</a>
   </p>
   {% if not structure_cards %}
-  {{ macros.empty_state("Geen plan klaar", "Zodra een lijn of range breekt en het plan genoeg ruimte heeft, krijg je een melding en staat hier de kaart met de grafiek. De motor kijkt elke 5 minuten.", "Bekijk de Radar", "/smc") }}
+  {{ macros.empty_state("Geen plan klaar", "De CEO neemt koffie. Zodra een lijn of range breekt en het plan genoeg ruimte heeft, krijg je een melding en staat hier de kaart met de grafiek. De motor kijkt elke 5 minuten.", "Bekijk de Radar", "/smc") }}
   {% else %}
   <div class="setup-grid">
     {% for c in structure_cards %}{{ macros.setup_card(c, user.risk_per_trade_eur) }}{% endfor %}

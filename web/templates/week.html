@@ -3,9 +3,10 @@
 {% block title %}Jouw week — HesPulse{% endblock %}
 {% block content %}
 <article class="week-card kans-card">
-  <header class="setup-head"><h2>Jouw {{ "week" if dagen == 7 else "periode" }}</h2><span class="muted">laatste {{ dagen }} dagen</span></header>
+  <header class="setup-head"><h2>Kwartaalcijfers van de CEO</h2><span class="muted">laatste {{ dagen }} dagen</span></header>
   <p class="filter-chips">{% for d, label in ranges.items() %}<a class="chip{% if d == dagen %} is-active{% endif %}" href="/week?dagen={{ d }}">{{ label }}</a>{% endfor %}</p>
   <p class="kans-outcome {{ 'is-win' if week.net_r > 0 else 'is-loss' if week.net_r < 0 }}">{{ "%+.1f"|format(week.net_r) }}R na kosten</p>
+  <p class="ceo-headline">{{ headline }}</p>
   {{ spark }}
   <p class="muted vd-fine">Cumulatief resultaat in R per dag.{% if week.resolved %} Hoogste punt {{ "%+.1f"|format(week.cumulative|max) }}R, laagste {{ "%+.1f"|format(week.cumulative|min) }}R.{% endif %}</p>
   <dl class="kans-facts">
@@ -14,8 +15,8 @@
     <div><dt>Winst</dt><dd>{{ week.wins }}</dd></div>
     <div><dt>Verlies</dt><dd>{{ week.resolved - week.wins }}</dd></div>
   </dl>
-  {% if week.best %}<p>Beste kans: <a href="/kans/{{ week.best.id }}">{{ week.best.coin }} {{ week.best.direction }}</a>, {{ "%+.1f"|format(week.best.net_r) }}R.</p>{% endif %}
-  {% if week.worst %}<p>Slechtste kans: <a href="/kans/{{ week.worst.id }}">{{ week.worst.coin }} {{ week.worst.direction }}</a>, {{ "%+.1f"|format(week.worst.net_r) }}R.</p>{% endif %}
+  {% if week.best %}<p>Deal van de week: <a href="/kans/{{ week.best.id }}">{{ week.best.coin }} {{ week.best.direction }}</a>, {{ "%+.1f"|format(week.best.net_r) }}R.</p>{% endif %}
+  {% if week.worst %}<p>Fusie die mislukte: <a href="/kans/{{ week.worst.id }}">{{ week.worst.coin }} {{ week.worst.direction }}</a>, {{ "%+.1f"|format(week.worst.net_r) }}R.</p>{% endif %}
   {% if not week.resolved %}<p class="muted">Nog geen afgeronde kansen deze week. Open en vervallen kansen tellen niet mee in R.</p>{% endif %}
   {% set share_lines = [{"title": "Kansen gemeld: " ~ week.signals}, {"title": "Afgerond: " ~ week.resolved ~ ", winst " ~ week.wins},
                         {"title": "Resultaat: " ~ ("%+.1f"|format(week.net_r)) ~ "R na kosten"}] %}

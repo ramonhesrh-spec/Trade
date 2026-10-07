@@ -22,6 +22,7 @@
       </div>
       <span class="proof-chip proof-chip-{{ e.status }}">{{ status_labels[e.status] }}</span>
     </header>
+    <p class="muted proof-quote">{{ ceo_status[e.status] }}</p>
     {% if e.avg_net is not none %}
     <div class="proof-number {{ 'pos' if e.avg_net > 0 else 'neg' }}">{{ "%+.2f"|format(e.avg_net) }}<span class="proof-unit">R per trade, na kosten</span></div>
     {% else %}

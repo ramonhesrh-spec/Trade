@@ -4,7 +4,7 @@
 {% block content %}
 
 <h2>Mijn account</h2>
-<p class="page-intro">Journaal, instellingen en winrate.</p>
+<p class="page-intro">{% if is_ceo(user) %}Welkom terug, CEO {{ user.username }}.{% else %}Welkom, leerling {{ user.username }}. De CEO kijkt mee.{% endif %} Journaal, instellingen en winrate.</p>
 
 {% if not onboarding_complete %}
 <section class="card onboarding-checklist" style="--i: 0">

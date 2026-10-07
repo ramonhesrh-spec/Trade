@@ -15,7 +15,7 @@ logger = logging.getLogger("heartbeat")
 
 async def send_heartbeats() -> None:
     timestamp = db.now_iso()[:16].replace("T", " ")
-    title = "HesPulse draait"
+    title = "Kwartaalcijfers van de CEO"
     plans = len(repo.list_structure_setups(("waiting",)))
     next_moment = today.agenda(market_calendar.upcoming(datetime.now(timezone.utc), 24))
     day = track_record.day_summary(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT, datetime.now(timezone.utc) - timedelta(hours=24))

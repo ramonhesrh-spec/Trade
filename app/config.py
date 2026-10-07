@@ -48,6 +48,9 @@ FIXED_COINS = BASE_COINS + EXTRA_COINS
 # overzicht laat zien dat de drempels niet bijna alles wegfilteren.
 ENABLE_ADVANCED_FACTORS = _get("ENABLE_ADVANCED_FACTORS", "false").lower() == "true"
 
+# Gebruikersnaam van de CEO (de eigenaar). Alle andere gebruikers zijn leerlingen. Leeg: de eerst aangemaakte gebruiker.
+CEO_USERNAME = _get("CEO_USERNAME", "").strip()
+
 # Minimale stopafstand van een SMC-signaal, in procenten van de entry. Uit het meetraam (12 maanden, 7 coins,
 # 122 signalen): signalen met een stop onder 0,1% wonnen 6% en verloren gemiddeld -0,73R bruto, omdat zo'n
 # stop binnen de ruis van een minuutcandle ligt. Vanaf 0,2% was het +0,12R bruto. Een krappere stop wordt verbreed tot deze afstand, nooit geweigerd.
