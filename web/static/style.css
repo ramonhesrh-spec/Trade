@@ -69,11 +69,11 @@
    JS-gestuurde intro op het dashboard, additief boven de content (de
    content zelf is nooit van die JS afhankelijk om zichtbaar te worden). */
 main > section, main > .stats-collapse {
-  animation: section-reveal 0.4s ease both;
-  animation-delay: calc(var(--i, 0) * 55ms);
+  animation: section-reveal 0.22s ease-out both;
+  animation-delay: calc(var(--i, 0) * 25ms);
 }
 @keyframes section-reveal {
-  from { opacity: 0; transform: translateY(8px); }
+  from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: none; }
 }
 
