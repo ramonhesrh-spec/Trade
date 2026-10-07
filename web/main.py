@@ -38,7 +38,7 @@ BASE_DIR = Path(__file__).resolve().parent
 def _nav_context(request: Request) -> dict:
     """De coinlijst in het menu staat in elke pagina. Zonder dit moest elke route `coins` zelf meegeven, en de nieuwere
     pagina's (Vandaag, Setups, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
-    return {"coins": repo.list_coins()}
+    return {"coins": repo.list_coins(), "nav_counts": {"setups": len(repo.list_structure_setups(("waiting",), 50)), "radar": len(repo.list_forming_smc_setups())}}
 
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context])
@@ -311,7 +311,7 @@ STRUCTURE_STATE_LABELS = {"schaduw": "Oordeel C: stil gevolgd, wacht op de terug
 
 
 @app.get("/structuur")
-async def structuur_page(request: Request, alleen: str = "", user: dict = Depends(require_login)):
+async def structuur_page(request: Request, alleen: str = "", kant: str = "", user: dict = Depends(require_login)):
     """De nieuwe methode: breuk van een lijn of range op 30m met het plan getekend (app/structure_live.py)."""
     since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
     history = [{**h, "state_label": STRUCTURE_STATE_LABELS.get(h["state"], h["state"])}
@@ -325,8 +325,9 @@ async def structuur_page(request: Request, alleen: str = "", user: dict = Depend
     trend_beat = repo.get_beat("trend")
     trend_minutes = int((datetime.now(timezone.utc) - datetime.fromisoformat(trend_beat["at"])).total_seconds() // 60) if trend_beat else None
     return templates.TemplateResponse(request, "structuur.html", {"trend_minutes": trend_minutes,
-        "user": user, "structure_cards": [c for c in await _structure_cards() if alleen != "ab" or c["grade"] in ("A", "B")],
-        "only_ab": alleen == "ab", "history": history,
+        "user": user, "structure_cards": [c for c in await _structure_cards()
+                            if (alleen != "ab" or c["grade"] in ("A", "B")) and (kant not in ("long", "short") or c["direction"] == kant)],
+        "only_ab": alleen == "ab", "side": kant if kant in ("long", "short") else "", "history": history,
         "engine_minutes": minutes, "counts": repo.structure_counts(since24), "engine_on": config.STRUCTURE_ENABLED,
         "trend_signals": repo.list_recent_signals_of_type("trend", since24), "trend_on": config.TREND_ENABLED})
 
@@ -422,16 +423,20 @@ async def api_vandaag(user: dict = Depends(require_login)):
     }
 
 
+KANS_TIMEFRAMES = ("5m", "15m", "30m", "4h")
+
+
 @app.get("/kans/{signal_id}")
-async def kans_page(request: Request, signal_id: int, user: dict = Depends(require_login)):
+async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dict = Depends(require_login)):
     """Eén kans op één scherm: grafiek, feiten, gemeten kenmerken en wat er sinds de melding gebeurde. Hier landt een tik op een melding."""
     signal = repo.get_signal(signal_id)
     if not signal or signal["is_practice"]:
         raise HTTPException(status_code=404)
     setup = repo.get_structure_setup_by_signal(signal_id)
     candles, price = None, None
+    tf = tf if tf in KANS_TIMEFRAMES and not setup else "30m"        # Structuur tekent zijn eigen momentopname op 30 minuten
     try:
-        df = await asyncio.to_thread(exchange.fetch_ohlcv, signal["coin"], timeframe="30m", limit=60)
+        df = await asyncio.to_thread(exchange.fetch_ohlcv, signal["coin"], timeframe=tf, limit=60)
         candles = [[row.timestamp.isoformat(), row.open, row.high, row.low, row.close] for row in df.itertuples()]
     except Exception:
         candles = None
@@ -441,15 +446,20 @@ async def kans_page(request: Request, signal_id: int, user: dict = Depends(requi
     return templates.TemplateResponse(request, "kans.html", {
         "user": user, "signal": signal, "facts": kans_view.facts(signal), "events": kans_view.timeline(signal, setup),
         "chart": Markup(kans_view.chart(signal, setup, candles, price)), "price": price, "setup": setup,
+        "tf": tf, "timeframes": KANS_TIMEFRAMES if not setup else (),
     })
 
 
+WEEK_RANGES = {7: "1W", 14: "2W", 30: "1M", 90: "3M"}
+
+
 @app.get("/week")
-async def week_page(request: Request, user: dict = Depends(require_login)):
+async def week_page(request: Request, dagen: int = 7, user: dict = Depends(require_login)):
     """Jouw week in één plaatje, om te delen: kansen, resultaat in R na kosten, beste en slechtste kans."""
-    week = track_record.week_summary(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
+    dagen = dagen if dagen in WEEK_RANGES else 7
+    week = track_record.week_summary(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT, days=dagen)
     spark = track_record.sparkline_svg(week["cumulative"], width=320, height=80).replace("<svg", "<svg data-share-chart", 1)
-    return templates.TemplateResponse(request, "week.html", {"user": user, "week": week, "spark": Markup(spark)})
+    return templates.TemplateResponse(request, "week.html", {"user": user, "week": week, "spark": Markup(spark), "dagen": dagen, "ranges": WEEK_RANGES})
 
 
 @app.get("/api/kansen")

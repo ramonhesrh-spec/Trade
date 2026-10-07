@@ -45,8 +45,11 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
     def x(i: float) -> float:
         return PAD_L + (i + 0.5) * step
 
+    diffs = sorted(b - a for a, b in zip(times, times[1:]))
+    bar_seconds = diffs[len(diffs) // 2] if diffs else BAR_SECONDS        # 5m, 15m, 30m of 4u, zoals de candles zelf
+
     def bar_index(t: float) -> float:
-        return (t - times[0]) / BAR_SECONDS
+        return (t - times[0]) / bar_seconds
 
     out = [f'<svg class="sc" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(setup["coin"])} {escape(setup["direction"])} structuur-setup">']
     right = PAD_L + plot_w

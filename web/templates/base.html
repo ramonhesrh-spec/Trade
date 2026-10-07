@@ -306,6 +306,32 @@
 <main>
 {% block content %}{% endblock %}
 </main>
+{% if user %}
+{% set here = request.url.path %}
+<nav class="tabbar" aria-label="Hoofdmenu">
+  <a class="tab{% if here == '/vandaag' %} is-active{% endif %}" href="/vandaag"{% if here == '/vandaag' %} aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span>Vandaag</span></a>
+  <a class="tab{% if here == '/structuur' %} is-active{% endif %}" href="/structuur"{% if here == '/structuur' %} aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span>Setups</span>
+    {% if nav_counts and nav_counts.setups %}<i class="tab-badge">{{ nav_counts.setups }}</i>{% endif %}</a>
+  <a class="tab{% if here == '/smc' %} is-active{% endif %}" href="/smc"{% if here == '/smc' %} aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg><span>Radar</span>
+    {% if nav_counts and nav_counts.radar %}<i class="tab-badge">{{ nav_counts.radar }}</i>{% endif %}</a>
+  <a class="tab{% if here == '/bewijs' %} is-active{% endif %}" href="/bewijs"{% if here == '/bewijs' %} aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Bewijs</span></a>
+  <button class="tab" type="button" id="more-toggle" aria-expanded="false" aria-controls="more-sheet">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>Meer</span></button>
+</nav>
+<div class="more-sheet" id="more-sheet" hidden>
+  <div class="more-sheet-panel" role="dialog" aria-label="Meer">
+    <div class="more-links">
+      <a href="/week">Jouw week</a><a href="/signalen">Journaal</a><a href="/meldingen">Meldingen</a><a href="/account">Account</a><a href="/uitleg">Uitleg</a>
+    </div>
+    <p class="muted more-label">Coins</p>
+    <div class="more-coins">{% for c in coins %}<a href="/coins/{{ c.symbol }}">{{ c.symbol }}</a>{% endfor %}</div>
+  </div>
+</div>
+{% endif %}
 <footer class="footer">{{ disclaimer }}</footer>
 
 <div id="shortcuts-help" class="shortcuts-help" hidden>
@@ -887,6 +913,8 @@
 </script>
 <script src="/static/hints.js?v=1" defer></script>
 <script src="/static/kansen.js?v=1" defer></script>
+<script src="/static/tabbar.js?v=1" defer></script>
+<script src="/static/ticker.js?v=1" defer></script>
 <script src="/static/share.js?v=1" defer></script>
 </body>
 </html>

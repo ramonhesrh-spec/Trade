@@ -2008,3 +2008,83 @@ html.reveal-done main > section, html.reveal-done main > .stats-collapse { anima
 .filter-chips { display: flex; gap: var(--space-3); margin: 0 0 var(--space-4); }
 .chip { padding: var(--space-2) var(--space-4); border: 1px solid var(--border-interactive); border-radius: 999px; color: var(--text-dim); text-decoration: none; font-size: var(--text-sm, 0.875rem); }
 .chip.is-active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+
+/* ===== Soepele ervaring ===== */
+html { -webkit-tap-highlight-color: transparent; }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+
+/* Pagina's lopen in elkaar over in plaats van te knipperen. De balken blijven staan terwijl de inhoud overvloeit. */
+@view-transition { navigation: auto; }
+.topbar { view-transition-name: topbar; }
+.tabbar { view-transition-name: tabbar; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.18s; animation-timing-function: ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
+}
+
+/* Aanraking voelt direct: kaarten en knoppen drukken licht in. */
+.setup-card, .radar-card, .vd-scenario, .vd-score, .proof-card, .quick-action, .tab, .chip, .share-btn { transition: transform 0.12s ease, background-color 0.18s ease, border-color 0.18s ease; }
+.vd-score:active, .quick-action:active, .tab:active, .chip:active, .share-btn:active { transform: scale(0.96); }
+
+/* Onderbalk met tabs op een telefoon, zoals in een app. Bovenaan blijft alleen het logo. */
+.tabbar, .more-sheet { display: none; }
+@media (max-width: 760px) {
+  .topbar nav { display: none; }
+  main { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
+  .tabbar {
+    display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 500;
+    padding: 6px; background: rgba(19, 26, 27, 0.86); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    border: 1px solid var(--border-strong); border-radius: 22px; box-shadow: var(--shadow-md);
+  }
+  .tab { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0 6px; background: none; border: 0; border-radius: 16px;
+         color: var(--muted); text-decoration: none; font: inherit; font-size: 11px; letter-spacing: 0.04em; cursor: pointer; }
+  .tab svg { width: 22px; height: 22px; }
+  .tab.is-active { background: var(--accent-bg); color: var(--accent); }
+  .tab-badge { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 16px; padding: 0 4px; border-radius: 999px; background: var(--accent); color: var(--on-accent);
+               font-style: normal; font-size: 10px; font-weight: 700; line-height: 16px; text-align: center; }
+  .more-sheet { display: block; position: fixed; inset: 0; z-index: 450; background: rgba(0, 0, 0, 0); transition: background-color 0.2s ease; }
+  .more-sheet[hidden] { display: none; }
+  .more-sheet.is-open { background: rgba(0, 0, 0, 0.5); }
+  .more-sheet-panel { position: absolute; left: 0; right: 0; bottom: 0; padding: var(--space-6) var(--space-6) calc(100px + env(safe-area-inset-bottom)); background: var(--panel);
+                      border-top: 1px solid var(--border-strong); border-radius: 24px 24px 0 0; transform: translateY(100%); transition: transform 0.22s ease-out; }
+  .more-sheet.is-open .more-sheet-panel { transform: translateY(0); }
+  .more-links { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--space-3); }
+  .more-links a, .more-coins a { padding: var(--space-4); border: 1px solid var(--border-strong); border-radius: 14px; color: var(--text); text-decoration: none; text-align: center; }
+  .more-label { margin: var(--space-5) 0 var(--space-3); font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: 0.08em; }
+  .more-coins { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); }
+  .more-coins a { padding: var(--space-3); font-family: var(--mono); font-size: var(--text-sm, 0.875rem); }
+}
+@media (prefers-reduced-motion: reduce) { .more-sheet, .more-sheet-panel { transition: none; } }
+
+/* Grijze plaatshouders tijdens het laden: een lege prijs of afstand toont een glanzend blokje in plaats van een streepje. */
+@keyframes skel-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+[data-vd-price]:empty, [data-radar="distance"]:empty, [data-vd="distance"]:empty, .skel {
+  display: inline-block; min-width: 4.5ch; height: 1em; border-radius: 4px; vertical-align: middle;
+  background: linear-gradient(90deg, var(--panel) 25%, var(--panel-hover) 50%, var(--panel) 75%); background-size: 200% 100%; animation: skel-shimmer 1.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) { [data-vd-price]:empty, [data-radar="distance"]:empty, [data-vd="distance"]:empty, .skel { animation: none; } }
+
+/* Cijfers die tikken: alleen het cijfer dat verandert rolt in vanaf boven of onder. */
+@keyframes tick-up { from { transform: translateY(70%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+@keyframes tick-down { from { transform: translateY(-70%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+.tick-d { display: inline-block; }
+.tick-up { animation: tick-up 0.28s ease-out; }
+.tick-down { animation: tick-down 0.28s ease-out; }
+
+/* Snelle acties: ronde knoppen met een icoon, grote tikdoelen. */
+.quick-actions { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--space-3); margin: var(--space-6) 0; }
+.quick-action { display: flex; flex-direction: column; align-items: center; gap: var(--space-2); color: var(--text-dim); text-decoration: none; font-size: var(--text-2xs); letter-spacing: 0.04em; text-align: center; }
+.quick-icon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; background: var(--panel); border: 1px solid var(--border-strong); color: var(--accent); }
+.quick-icon svg { width: 22px; height: 22px; }
+
+/* Lege staat met uitnodiging. */
+.empty-state { padding: var(--space-7) var(--space-5); text-align: center; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
+.empty-state strong { font-family: var(--display); font-size: var(--text-lg, 1.25rem); letter-spacing: 0.05em; text-transform: uppercase; }
+.empty-state p { margin: var(--space-3) auto var(--space-5); max-width: 42ch; }
+
+/* Balken per doel, naar R. */
+.r-bars { display: grid; gap: var(--space-2); margin: var(--space-4) 0; }
+.r-bar { display: grid; grid-template-columns: 2.2rem 1fr 3.2rem; gap: var(--space-3); align-items: center; font-family: var(--mono); font-size: var(--text-2xs); color: var(--muted); }
+.r-bar-track { height: 8px; border-radius: 4px; background: var(--panel-hover); overflow: hidden; }
+.r-bar-track i { display: block; height: 100%; border-radius: 4px; background: var(--green); transition: width 0.4s ease; }
+.r-bar-value { text-align: right; color: var(--text-dim); }

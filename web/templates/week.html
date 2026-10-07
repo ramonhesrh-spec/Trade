@@ -3,10 +3,11 @@
 {% block title %}Jouw week — HesPulse{% endblock %}
 {% block content %}
 <article class="week-card kans-card">
-  <header class="setup-head"><h2>Jouw week</h2><span class="muted">laatste 7 dagen</span></header>
+  <header class="setup-head"><h2>Jouw {{ "week" if dagen == 7 else "periode" }}</h2><span class="muted">laatste {{ dagen }} dagen</span></header>
+  <p class="filter-chips">{% for d, label in ranges.items() %}<a class="chip{% if d == dagen %} is-active{% endif %}" href="/week?dagen={{ d }}">{{ label }}</a>{% endfor %}</p>
   <p class="kans-outcome {{ 'is-win' if week.net_r > 0 else 'is-loss' if week.net_r < 0 }}">{{ "%+.1f"|format(week.net_r) }}R na kosten</p>
   {{ spark }}
-  <p class="muted vd-fine">Cumulatief resultaat in R per dag.</p>
+  <p class="muted vd-fine">Cumulatief resultaat in R per dag.{% if week.resolved %} Hoogste punt {{ "%+.1f"|format(week.cumulative|max) }}R, laagste {{ "%+.1f"|format(week.cumulative|min) }}R.{% endif %}</p>
   <dl class="kans-facts">
     <div><dt>Kansen gemeld</dt><dd>{{ week.signals }}</dd></div>
     <div><dt>Afgerond</dt><dd>{{ week.resolved }}</dd></div>

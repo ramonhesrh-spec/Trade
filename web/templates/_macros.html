@@ -258,6 +258,27 @@
 {% endmacro %}
 
 
+{# Lege staat met een uitnodiging: wat gebeurt hier straks en wat kun je intussen doen. #}
+{% macro empty_state(title, text, link_text=none, link_href=none) %}
+<div class="empty-state">
+  <strong>{{ title }}</strong>
+  <p class="muted">{{ text }}</p>
+  {% if link_text %}<a class="chip" href="{{ link_href }}">{{ link_text }}</a>{% endif %}
+</div>
+{% endmacro %}
+
+
+{# Balken per doel: hoe verder het doel, hoe langer de balk, in R. #}
+{% macro r_bars(targets) %}
+{% set top = targets|map(attribute=1)|max %}
+<div class="r-bars" aria-label="Opbrengst per doel in R">
+  {% for price, r in targets %}
+  <div class="r-bar"><span class="r-bar-label">T{{ loop.index }}</span><span class="r-bar-track"><i style="width: {{ "%.0f"|format(r / top * 100) }}%"></i></span><span class="r-bar-value">{{ "%.1f"|format(r) }}R</span></div>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+
 {# Tijdlijn van een kans: wat er gebeurde en wanneer, oud naar nieuw. #}
 {% macro timeline_list(events) %}
 <ol class="kans-timeline">
@@ -280,6 +301,7 @@
   {% if c.grade is none or c.grade == 'C' %}<p class="setup-weak"><strong>{{ "Claude twijfelt" if c.grade == 'C' else "Geen oordeel van Claude" }}.</strong> {{ c.reason }}</p>{% endif %}
   {{ c.chart }}
   {{ steps_list(c.steps, risk_eur) }}
+  {{ r_bars(c.targets) }}
   {{ share_button(c.coin, c.direction, c.steps) }}
   {% if c.grade is not none and c.grade != 'C' %}<p class="setup-reason">{{ c.reason }}</p>{% endif %}
 </article>

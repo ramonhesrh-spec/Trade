@@ -70,6 +70,13 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("Reden A.", only)
         self.assertNotIn("Reden C.", only)
 
+    def test_tabbar_filters_and_empty_state_invite_the_user(self):
+        text = self.client.get("/vandaag").text
+        self.assertIn('class="tabbar"', text)                              # onderbalk met tabs voor de telefoon
+        self.assertIn("quick-actions", text)
+        self.assertIn("Geen plan klaar", self.client.get("/structuur").text)   # lege staat met uitleg en een knop
+        self.assertIn("Alleen A en B", self.client.get("/structuur?kant=short").text)
+
     def test_grade_c_card_is_muted_and_shows_claudes_doubt_on_top(self):
         import json
         candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
@@ -150,6 +157,8 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("Wat er gebeurde", page.text)
         self.assertIn("Gemeld", page.text)
         self.assertEqual(self.client.get("/kans/999999").status_code, 404)
+        self.assertIn("?tf=5m", page.text)                                  # tijdsknoppen onder de grafiek
+        self.assertEqual(self.client.get(f"/kans/{ids[0]}?tf=zomaar").status_code, 200)
 
     def test_week_page_shows_totals_and_share_button(self):
         r = self.client.get("/week")
@@ -158,6 +167,9 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("Nog geen afgeronde kansen deze week", r.text)
         self.assertIn("data-share-chart", r.text)
         self.assertIn("share-btn", r.text)
+        self.assertIn('href="/week?dagen=30"', r.text)                     # tijdsknoppen onder het kopje
+        self.assertIn("laatste 30 dagen", self.client.get("/week?dagen=30").text)
+        self.assertIn("laatste 7 dagen", self.client.get("/week?dagen=999").text)     # onbekende periode valt terug op een week
 
     def test_page_shows_script_scenario_liquidations_events_and_score(self):
         now = datetime.now(timezone.utc)

@@ -18,7 +18,7 @@
     {% if scenarios_waiting %}<p class="vd-board-sub">Daarnaast wachten {{ scenarios_waiting }} scenario's van het markt-script op een voorwaarde. Dat zijn hypotheses, geen getekende plannen.</p>{% endif %}
     <div class="vd-hero-price">
       <span class="vd-hero-label">BTC</span>
-      <span class="vd-hero-number" data-vd-price="BTC">{% if prices.get("BTC") %}{{ "{:,.0f}".format(prices["BTC"]).replace(",", ".") }}{% else %}-{% endif %}</span>
+      <span class="vd-hero-number" data-vd-price="BTC">{% if prices.get("BTC") %}{{ "{:,.0f}".format(prices["BTC"]).replace(",", ".") }}{% endif %}</span>
     </div>
     <div class="vd-hero-mood">
       <div class="vd-hero-label">Stemming van het markt-script</div>
@@ -31,6 +31,13 @@
   </div>
 </section>
 
+<nav class="quick-actions" aria-label="Snelle acties">
+  <a class="quick-action" href="/week"><span class="quick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg></span>Mijn week</a>
+  <a class="quick-action" href="/structuur?alleen=ab"><span class="quick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg></span>Beste setups</a>
+  <a class="quick-action" href="#agenda"><span class="quick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg></span>Agenda</a>
+  <a class="quick-action" href="/account"><span class="quick-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.3 1a7 7 0 0 0-2-1.2L14.2 3h-4l-.4 2.7a7 7 0 0 0-2 1.2l-2.3-1-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.3-1a7 7 0 0 0 2 1.2l.4 2.7h4l.4-2.7a7 7 0 0 0 2-1.2l2.3 1 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z"/></svg></span>Instellingen</a>
+</nav>
+
 {% if structure_cards %}
 <section style="--i: 1">
   <h3 class="vd-section-title">Getekende plannen <a class="vd-more" href="/structuur">alle setups</a></h3>
@@ -40,7 +47,7 @@
 </section>
 {% endif %}
 
-<section class="card vd-card" style="--i: 1">
+<section class="card vd-card" id="agenda" style="--i: 1">
   <h3>Agenda, komende 24 uur</h3>
   <div class="vd-timeline-wrap">{{ timeline }}</div>
   {% if not moments %}<p class="muted vd-fine">Geen moment in de komende 24 uur waarop de markt meetbaar anders beweegt.</p>{% endif %}

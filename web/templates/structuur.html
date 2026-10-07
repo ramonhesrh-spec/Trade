@@ -18,9 +18,14 @@
 
 <section style="--i: 0">
   <h3 class="vd-section-title">Wachten op de terugkeer</h3>
-  <p class="filter-chips"><a class="chip{% if not only_ab %} is-active{% endif %}" href="/structuur">Alles</a><a class="chip{% if only_ab %} is-active{% endif %}" href="/structuur?alleen=ab">Alleen A en B</a></p>
+  <p class="filter-chips">
+    <a class="chip{% if not only_ab and not side %} is-active{% endif %}" href="/structuur">Alles</a>
+    <a class="chip{% if only_ab %} is-active{% endif %}" href="/structuur?alleen=ab">Alleen A en B</a>
+    <a class="chip{% if side == 'long' %} is-active{% endif %}" href="/structuur?kant=long">Long</a>
+    <a class="chip{% if side == 'short' %} is-active{% endif %}" href="/structuur?kant=short">Short</a>
+  </p>
   {% if not structure_cards %}
-  <p class="muted empty">Geen plan klaar. Een melding volgt zodra een lijn of range breekt, het plan genoeg ruimte heeft en Claude de breuk goedkeurt.</p>
+  {{ macros.empty_state("Geen plan klaar", "Zodra een lijn of range breekt en het plan genoeg ruimte heeft, krijg je een melding en staat hier de kaart met de grafiek. De motor kijkt elke 5 minuten.", "Bekijk de Radar", "/smc") }}
   {% else %}
   <div class="setup-grid">
     {% for c in structure_cards %}{{ macros.setup_card(c, user.risk_per_trade_eur) }}{% endfor %}

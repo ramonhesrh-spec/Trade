@@ -13,7 +13,7 @@
 <section class="card" style="--i: 0">
   <h3>Wachten op de zone</h3>
   {% if not setup_cards %}
-  <p class="muted empty">Nog geen bouwende setup gevonden.</p>
+  {{ macros.empty_state("Nog geen bouwende setup", "Een SMC-setup verschijnt hier zodra structuur breekt, een sweep de liquiditeit pakt en er een zone ontstaat om op te wachten. Je krijgt dan een melding.", "Bekijk de Setups", "/structuur") }}
   {% else %}
   <div class="radar-grid">
     {% for c in setup_cards %}
@@ -46,7 +46,7 @@
 <section class="card" style="--i: 1">
   <h3>Open trades</h3>
   {% if not signal_cards %}
-  <p class="muted empty">Geen open SMC-trades.</p>
+  {{ macros.empty_state("Geen open trades", "Een open SMC-trade toont hier zijn voortgang tussen stop en doel, live.") }}
   {% else %}
   <div class="radar-grid">
     {% for c in signal_cards %}

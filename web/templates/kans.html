@@ -18,6 +18,7 @@
   {% else %}<p class="kans-outcome is-open">Loopt nog{% if price %} · nu {{ fmt(price) }}{% endif %}</p>{% endif %}
 
   {{ chart }}
+  {% if timeframes %}<p class="filter-chips tf-chips">{% for t in timeframes %}<a class="chip{% if t == tf %} is-active{% endif %}" href="/kans/{{ signal.id }}?tf={{ t }}">{{ t|replace('h', 'u') }}</a>{% endfor %}</p>{% endif %}
 
   <dl class="kans-facts">
     <div><dt>Instap</dt><dd>{{ fmt(facts.entry) }}</dd></div>
