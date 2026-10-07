@@ -2032,7 +2032,7 @@ html { -webkit-tap-highlight-color: transparent; }
   .topbar nav { display: none; }
   main { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
   .tabbar {
-    display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 500;
+    display: grid; grid-template-columns: repeat(6, 1fr); position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 500;
     padding: 6px; background: rgba(19, 26, 27, 0.86); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
     border: 1px solid var(--border-strong); border-radius: 22px; box-shadow: var(--shadow-md);
   }
@@ -2155,3 +2155,5 @@ html { -webkit-tap-highlight-color: transparent; }
 .ceo-cta:active { transform: scale(0.96); }
 .ceo-testimonial { grid-column: 1 / -1; display: block; font-style: italic; color: #e9d8a0; }
 .ceo-fine { margin: var(--space-7) 0 var(--space-5); text-align: center; font-size: var(--text-2xs); color: #8a7a4a; }
+.tab-ceo { color: #d4af37; }
+.tab-ceo.is-active { background: rgba(212, 175, 55, 0.16); color: #f3e3a4; }

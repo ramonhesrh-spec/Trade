@@ -311,6 +311,8 @@
 {% if user %}
 {% set here = request.url.path %}
 <nav class="tabbar" aria-label="Hoofdmenu">
+  <a class="tab tab-ceo{% if here == '/ceo' %} is-active{% endif %}" href="/ceo"{% if here == '/ceo' %} aria-current="page"{% endif %}>
+    <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z"/></svg><span>CEO</span></a>
   <a class="tab{% if here == '/vandaag' %} is-active{% endif %}" href="/vandaag"{% if here == '/vandaag' %} aria-current="page"{% endif %}>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span>Vandaag</span></a>
   <a class="tab{% if here == '/structuur' %} is-active{% endif %}" href="/structuur"{% if here == '/structuur' %} aria-current="page"{% endif %}>
@@ -327,7 +329,7 @@
 <div class="more-sheet" id="more-sheet" hidden>
   <div class="more-sheet-panel" role="dialog" aria-label="Meer">
     <div class="more-links">
-      <a href="/ceo">De CEO</a><a href="/week">Kwartaalcijfers</a><a href="/signalen">Journaal</a><a href="/meldingen">Meldingen</a><a href="/account">Account</a><a href="/uitleg">Uitleg</a>
+      <a href="/week">Kwartaalcijfers</a><a href="/signalen">Journaal</a><a href="/meldingen">Meldingen</a><a href="/account">Account</a><a href="/uitleg">Uitleg</a>
     </div>
     <p class="muted more-label">Coins</p>
     <div class="more-coins">{% for c in coins %}<a href="/coins/{{ c.symbol }}">{{ c.symbol }}</a>{% endfor %}</div>
