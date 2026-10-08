@@ -65,4 +65,28 @@
     document.title = best && best.v <= 1 ? best.v.toFixed(1) + "% " + best.text + " · HesPulse" : baseTitle;
   }
   if (document.querySelector(".setup-card")) setInterval(titleTick, 2000);
+
+  // Een tik op een melding: de service worker stuurt de bestemming als bericht naar de open app, of zet haar kort in een cache voor een koude start.
+  // iOS negeert in een geïnstalleerde app vaak de link van de melding zelf, dus de pagina navigeert hier zelf naartoe.
+  function goTo(url) {
+    try {
+      var u = new URL(url, location.origin);
+      if (u.origin === location.origin && u.href !== location.href) location.href = u.href;
+    } catch (e) { /* ongeldige bestemming: blijf waar je bent */ }
+  }
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.addEventListener("message", function (e) {
+      if (e.data && e.data.hespulseNavigate) goTo(e.data.hespulseNavigate);
+    });
+    if (navigator.serviceWorker.startMessages) navigator.serviceWorker.startMessages();
+  }
+  if ("caches" in window) {
+    caches.open("hespulse-nav").then(function (c) {
+      return c.match("/__pending-nav").then(function (r) {
+        if (!r) return;
+        c.delete("/__pending-nav");
+        return r.json().then(function (d) { if (d && Date.now() - d.at < 120000) goTo(d.url); });
+      });
+    }).catch(function () {});
+  }
 })();

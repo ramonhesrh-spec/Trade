@@ -150,8 +150,9 @@ async def service_worker():
     kunnen bedienen. navigator.serviceWorker.ready op /dashboard bleef
     daardoor voor altijd hangen, precies de oorzaak van de kapotte
     pushmelding-knop. Zie base.html voor de registratie."""
+    # no-cache: een gewijzigde service worker moet bij het volgende openen van de app opgepikt worden, anders blijft een oude versie hangen.
     return FileResponse(
-        str(BASE_DIR / "static" / "service-worker.js"), media_type="application/javascript",
+        str(BASE_DIR / "static" / "service-worker.js"), media_type="application/javascript", headers={"Cache-Control": "no-cache"},
     )
 
 SESSION_COOKIE = "session"

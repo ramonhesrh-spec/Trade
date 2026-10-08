@@ -26,7 +26,7 @@ self.addEventListener("install", (event) => {
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+      Promise.all(keys.filter((k) => k !== CACHE_NAME && k !== "hespulse-nav").map((k) => caches.delete(k)))
     )
   );
   self.clients.claim();
@@ -70,31 +70,30 @@ self.addEventListener("push", (event) => {
   );
 });
 
+const NAV_CACHE = "hespulse-nav";
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const relativeUrl = event.notification.data && event.notification.data.url;
   if (!relativeUrl) return;
-  // Absoluut pad, niet het kale relatieve pad dat de server meestuurt:
-  // clients.openWindow met een relatief pad is op iOS/WebKit onbetrouwbaar
-  // gebleken, vooral bij een koude start vanuit de melding (de app was nog
-  // niet open) — precies het "ik tik erop en er gebeurt niks"-gedrag.
+  // Absoluut pad, niet het kale relatieve pad dat de server meestuurt (clients.openWindow met een relatief pad is op iOS/WebKit onbetrouwbaar).
   const targetUrl = new URL(relativeUrl, self.location.origin).href;
-  event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((windowClients) => {
-      // Een al open venster hergebruiken en ernaartoe navigeren in plaats
-      // van altijd een nieuw venster te openen: clients.openWindow kan op
-      // iOS een aparte Safari-tab openen naast de al geïnstalleerde
-      // standalone-app, wat ook aanvoelt als "er gebeurt niks" omdat de
-      // gebruiker niet in de app zelf terechtkomt.
-      for (const client of windowClients) {
-        if ("focus" in client) {
-          client.focus();
-          // Lukt navigeren niet (iOS weigert het soms), open dan een venster in plaats van op de oude pagina te blijven.
-          if ("navigate" in client) return client.navigate(targetUrl).catch(() => clients.openWindow(targetUrl));
-          return clients.openWindow(targetUrl);
-        }
+  event.waitUntil((async () => {
+    // Twee wegen, omdat iOS in een geïnstalleerde app de link vaak negeert: client.navigate doet niets op een open app en openWindow opent bij een koude
+    // start de startpagina. (1) De open app krijgt een bericht en navigeert zelf. (2) De bestemming staat kort in een cache; de pagina leest die bij het
+    // laden en gaat er alsnog heen (zie smooth.js).
+    try {
+      const cache = await caches.open(NAV_CACHE);
+      await cache.put("/__pending-nav", new Response(JSON.stringify({ url: targetUrl, at: Date.now() }), { headers: { "Content-Type": "application/json" } }));
+    } catch (e) { /* zonder cache valt alleen de koude-startroute weg */ }
+    const windowClients = await clients.matchAll({ type: "window", includeUncontrolled: true });
+    for (const client of windowClients) {
+      if ("focus" in client) {
+        try { await client.focus(); } catch (e) { /* focus mislukt: het bericht hieronder werkt toch */ }
+        client.postMessage({ hespulseNavigate: targetUrl });
+        return;
       }
-      return clients.openWindow(targetUrl);
-    })
-  );
+    }
+    return clients.openWindow(targetUrl);
+  })());
 });

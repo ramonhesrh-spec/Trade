@@ -11,7 +11,7 @@ from app import config, exchange
 
 BASE_TIMEFRAME = "15m"
 BASE_DELTA = pd.Timedelta(minutes=15)
-BASE_DELTAS = {"1m": pd.Timedelta(minutes=1), "15m": BASE_DELTA}
+BASE_DELTAS = {"1m": pd.Timedelta(minutes=1), "15m": BASE_DELTA, "1h": pd.Timedelta(hours=1), "4h": pd.Timedelta(hours=4)}
 PAGE_LIMIT = 1000
 CACHE_DIR = Path(config.BASE_DIR) / "data" / "candles"
 
