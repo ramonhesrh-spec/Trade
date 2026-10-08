@@ -161,6 +161,14 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("?tf=5m", page.text)                                  # tijdsknoppen onder de grafiek
         self.assertEqual(self.client.get(f"/kans/{ids[0]}?tf=zomaar").status_code, 200)
 
+    def test_static_files_are_cached_by_version_and_pages_are_compressed(self):
+        page = self.client.get("/vandaag", headers={"Accept-Encoding": "gzip"})
+        self.assertEqual(page.headers.get("content-encoding"), "gzip")
+        import re
+        href = re.search(r'href="(/static/style\.css\?v=\d+)"', page.text).group(1)         # versie = wijzigingstijd, dus een nieuw bestand krijgt een nieuwe URL
+        self.assertIn("immutable", self.client.get(href).headers["cache-control"])
+        self.assertNotIn("immutable", self.client.get("/static/style.css").headers["cache-control"])   # kale URL blijft kort in de cache
+
     def test_visits_count_page_views_not_api_polls_and_only_the_ceo_sees_them(self):
         repo.create_user("leerling2", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
         self.client.get("/vandaag")

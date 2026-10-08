@@ -210,7 +210,7 @@
       <button id="push-subscribe-btn" type="button">Meldingen aanzetten</button>
       <p id="push-subscribe-status" class="muted" style="margin: var(--space-2) 0 0; font-size: var(--text-base);" hidden></p>
     </div>
-    <script src="/static/push-subscribe.js?v=2" defer></script>
+    <script src="{{ asset('push-subscribe.js') }}" defer></script>
     <form action="/push/voorbeeld" method="post" class="inline-form">
       <button type="submit" class="button-link">Stuur mezelf een testpush</button>
     </form>

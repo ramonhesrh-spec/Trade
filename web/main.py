@@ -23,6 +23,7 @@ import pandas as pd
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 
@@ -66,6 +67,16 @@ def _nav_context(request: Request) -> dict:
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context])
 templates.env.globals["disclaimer"] = config.DISCLAIMER
+def asset(path: str) -> str:
+    """URL van een statisch bestand met zijn wijzigingstijd erachter, zodat de browser het onthoudt tot het bestand verandert."""
+    try:
+        version = int((BASE_DIR / "static" / path).stat().st_mtime)
+    except OSError:
+        version = 0
+    return f"/static/{path}?v={version}"
+
+
+templates.env.globals["asset"] = asset
 templates.env.globals["fmt_price"] = today.fmt_price
 templates.env.globals["is_ceo"] = lambda user: is_ceo(user)
 templates.env.globals["live_exchange"] = config.EXCHANGE_ID
@@ -93,8 +104,21 @@ def _age_label(iso: str | None) -> str:
 
 templates.env.filters["age"] = _age_label
 
+class CachedStatic(StaticFiles):
+    """Statische bestanden krijgen een lange cache: de pagina verwijst met ?v=<wijzigingstijd> (zie asset()), dus een nieuw bestand krijgt een nieuwe
+    URL en een oud blijft veilig onthouden. Zonder dit haalde elke paginawissel style.css (140 KB) opnieuw op."""
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            # Alleen met ?v= is de URL gegarandeerd nieuw bij een wijziging; een kale URL (icoon, manifest) blijft kort in de cache.
+            versioned = b"v=" in scope.get("query_string", b"")
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable" if versioned else "public, max-age=3600"
+        return response
+
+
 app = FastAPI(title="HesPulse")
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+app.mount("/static", CachedStatic(directory=str(BASE_DIR / "static")), name="static")
 
 
 @app.get("/service-worker.js")

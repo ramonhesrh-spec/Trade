@@ -54,7 +54,17 @@
 
   function apply(coin, p) {
     document.querySelectorAll('svg.sc[data-chart-coin="' + coin + '"]').forEach(function (svg) { moveChart(svg, p); });
-    document.querySelectorAll('[data-vd-price="' + coin + '"]').forEach(function (el) { el.textContent = fmtPrice(p, coin); });
+    document.querySelectorAll('[data-vd-price="' + coin + '"]').forEach(function (el) {
+      var next = fmtPrice(p, coin), before = parseFloat(el.getAttribute("data-px"));
+      if (el.textContent === next) return;
+      el.textContent = next;
+      el.setAttribute("data-px", String(p));
+      if (!isNaN(before) && before !== p) {
+        el.classList.remove("px-up", "px-down");
+        void el.offsetWidth;
+        el.classList.add(p > before ? "px-up" : "px-down");
+      }
+    });
     document.querySelectorAll('[data-live-coin="' + coin + '"]').forEach(function (el) {
       var level = parseFloat(el.getAttribute("data-live-level"));
       if (isNaN(level)) return;
