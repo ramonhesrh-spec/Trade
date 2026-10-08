@@ -227,18 +227,20 @@ async def _discover(coin: str, now: datetime) -> None:
         setup_id = repo.insert_structure_setup(row)
         if setup_id is None:
             continue
-        try:
-            grade, reason = parse_grade(await asyncio.to_thread(call_claude, judge_context(coin, ev, b, plan)))
-        except Exception:
-            logger.exception("Oordeel van Claude voor %s is mislukt", coin)
-            grade, reason = None, ""
+        # Eerst de dagcap: een breuk die toch niet gemeld wordt krijgt geen Claude-aanroep, anders betaal je voor een oordeel dat niemand ziet.
         capped = repo.count_structure_alerts_since((now - timedelta(hours=24)).isoformat()) >= config.STRUCTURE_MAX_ALERTS_PER_DAY
-        # Elke breuk met een plan wordt gemeld, ook C en een breuk zonder oordeel: jij beslist, het oordeel staat erbij. Alleen A klinkt luid.
-        # Bewijs houdt C apart (trade_type 'structuur_c'), zodat zichtbaar blijft of het oordeel iets toevoegt.
+        grade, reason = None, ""
+        if not capped:
+            try:
+                grade, reason = parse_grade(await asyncio.to_thread(call_claude, judge_context(coin, ev, b, plan)))
+            except Exception:
+                logger.exception("Oordeel van Claude voor %s is mislukt", coin)
+        # Elke breuk met een plan staat op de pagina, ook C en een breuk zonder oordeel: jij beslist, het oordeel staat erbij. Alleen A en B geven een
+        # melding (A luid): een C vult de pagina, niet je vergrendelscherm. Bewijs houdt C apart (trade_type 'structuur_c').
         state = "niet_gemeld" if capped else "waiting"
         repo.update_structure_judgement(setup_id, grade, reason, state)
         logger.info("Structuur %s %s %s: oordeel %s (%s)", coin, ev.direction, ev.kind, grade, state)
-        if state == "waiting":
+        if state == "waiting" and grade != "C":
             setup = {**row, "id": setup_id, "reason": reason}
             await _push_all(push_notify.alert_title(coin, ev.direction, f"Structuur {grade or 'zonder oordeel'}"), alert_body(setup, plan),
                             f"/structuur#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A")
@@ -387,8 +389,12 @@ async def _follow(now: datetime) -> None:
             if changed:
                 fired["hits"] = hits
                 repo.update_structure_plan(s["id"], json.dumps(plan))
+            # Alleen T1 (stop naar de instap) en het laatste doel geven een melding; de doelen ertussen staan in de tijdlijn van de kans. Elke
+            # melding houdt een eigen tag, anders verving T2 de melding van T1 en was die niet meer terug te vinden.
+            url = push_notify.signal_url(coin, s["signal_id"]) if s["signal_id"] else "/structuur"
             for title, body, loud in messages:
-                await _push_all(title, body, push_notify.signal_url(coin, s["signal_id"]), f"structuur-{coin}-t", loud=loud)
+                if loud:
+                    await _push_all(title, body, url, f"structuur-{s['id']}-{title}", loud=True)
 
 
 async def run(now: Optional[datetime] = None) -> None:

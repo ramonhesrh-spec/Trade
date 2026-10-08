@@ -100,11 +100,9 @@ class LiveTest(DbCase):
         self.run_live(BREAK_BAR + 4)
         self.assertEqual(len(self.graded), 1)                 # dezelfde breuk wordt niet opnieuw beoordeeld
 
-    def test_grade_c_is_alerted_silently_with_its_grade_in_the_title(self):
+    def test_grade_c_gets_no_push_but_stays_on_the_page(self):
         self.run_live(BREAK_BAR + 4, grade="C")
-        self.assertEqual(len(self.pushed), 1)
-        self.assertIn("Structuur C", self.pushed[0][0])
-        self.assertTrue(self.pushed[0][3])
+        self.assertEqual(len(self.pushed), 0)
         self.assertEqual(len(repo.list_structure_setups(("waiting",))), 1)
 
     def test_grade_b_is_silent(self):
@@ -155,10 +153,8 @@ class LiveTest(DbCase):
         follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0)]))               # zelfde candles: niet nog een keer
         self.assertEqual(len(self.pushed), 1)
         follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0), (98.0, 98.1, 96.9, 97.0)]))   # T2 erbij
-        self.assertEqual(len(self.pushed), 2)
-        self.assertIn("T2 geraakt", self.pushed[1][0])
+        self.assertEqual(len(self.pushed), 1)                               # T2 krijgt geen melding, alleen een regel in de tijdlijn
         self.assertFalse(self.pushed[0][2])                                 # T1 is luid: je stop moet naar de instap
-        self.assertTrue(self.pushed[1][2])                                  # T2 is stil als er nog een doel volgt
         follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0), (98.0, 98.1, 96.9, 97.0), (97.0, 100.2, 96.9, 100.0)]))  # terug op de instap
         fired = json.loads(repo.list_structure_setups(("fired",))[0]["plan"])["fired"]
         self.assertTrue(fired["closed"])
