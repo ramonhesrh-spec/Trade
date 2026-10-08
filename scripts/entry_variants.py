@@ -25,11 +25,14 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--coins", default=",".join(config.BASE_COINS))
     ap.add_argument("--kosten", type=float, default=config.TRACK_RECORD_COST_PCT)
+    ap.add_argument("--jaren", type=float, default=0.5, help="hoeveel jaar 1m-candles er gedownload worden als de cache ontbreekt (kost minuten per coin)")
     a = ap.parse_args()
     parts = []
     for coin in a.coins.split(","):
         try:
-            frame = candle_cache.load_candles(coin, "1m")
+            if not candle_cache.cache_path(coin, "1m").exists():
+                print(f"{coin}: candles ophalen ({a.jaren} jaar), dit duurt even...", flush=True)
+            frame = candle_cache.ensure_candles(coin, a.jaren, timeframe="1m")
         except Exception as exc:
             print(f"{coin}: geen candles ({exc})")
             continue

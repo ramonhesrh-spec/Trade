@@ -1,6 +1,7 @@
 """Entry-varianten voor dezelfde breuken: een structuurbreuk gaat snel, en wie wacht op een terugkeer naar het exacte niveau mist veel beweging.
 Dezelfde detector, dezelfde stop en dezelfde ladder (1R, 2R, 3R, stop naar de instap na het eerste doel) als app/replay/breakretest.py; alleen de instap verschilt:
-  RETEST  limiet op het gebroken niveau (zoals live)
+  RETEST  limiet op het gebroken niveau, 8 candles open (zoals live)
+  LANG16  zelfde limiet, maar 16 candles (8 uur) open: vangt de terugkeer die na 4 uur alsnog komt
   ZONE25  limiet een kwart ATR vóór het niveau, de koers hoeft minder ver terug
   ZONE50  limiet een halve ATR vóór het niveau
   MARKT   instap op het slot van de breukcandle
@@ -16,16 +17,17 @@ from app import smc_eval
 from app.replay import breakretest as br
 from app.replay.lab import add_indicators, make_bars
 
-MODES = ("RETEST", "ZONE25", "ZONE50", "MARKT", "SPLIT")
+MODES = ("RETEST", "LANG16", "ZONE25", "ZONE50", "MARKT", "SPLIT")
+LONG_WINDOW_BARS = 16
 LADDER = "ladder 1-2-3R"
 ZONE_FRACTION = {"ZONE25": 0.25, "ZONE50": 0.5}
 
 
-def _plan_zone(ev, b: pd.DataFrame, m: br.Minutes, frac: float) -> Optional[tuple[int, float, float, int]]:
-    """Zoals br._plan_retest, maar de limiet ligt frac * ATR vóór het niveau (korter bij de koers). De stop blijft achter het niveau."""
+def _plan_zone(ev, b: pd.DataFrame, m: br.Minutes, frac: float, bars: int = br.RETEST_BARS) -> Optional[tuple[int, float, float, int]]:
+    """Zoals br._plan_retest, maar de limiet ligt frac * ATR vóór het niveau (korter bij de koers) en blijft `bars` candles open. De stop blijft achter het niveau."""
     direction, i, n = ev.direction, ev.bar, len(b)
     sign = 1 if direction == "long" else -1
-    for j in range(i + 1, min(i + 1 + br.RETEST_BARS, n)):
+    for j in range(i + 1, min(i + 1 + bars, n)):
         prev_level = br.level_at(ev, j - 1)
         if -sign * (b.at[j - 1, "close"] - prev_level) > br.BREAK_ATR * ev.atr:
             return None
@@ -65,6 +67,7 @@ def run_variants(frame_1m: pd.DataFrame, cost_pct: float = 0.06) -> pd.DataFrame
     m = br.Minutes(frame_1m)
     p_high, p_low = br._pivots(b)
     planners: dict[str, Callable] = {"RETEST": br._plan_retest, "MARKT": br._plan_market,
+                                     "LANG16": lambda ev, bb, mm: _plan_zone(ev, bb, mm, 0.0, LONG_WINDOW_BARS),
                                      **{name: (lambda ev, bb, mm, f=frac: _plan_zone(ev, bb, mm, f)) for name, frac in ZONE_FRACTION.items()}}
     rows = []
     for ev in events.itertuples():

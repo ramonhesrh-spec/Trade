@@ -11,7 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from app import config, db, structure_review as sr   # noqa: E402
+from app import config, db, structure_live, structure_review as sr   # noqa: E402
 
 
 def load(days: int) -> list[dict]:
@@ -60,7 +60,7 @@ def report_missed(rows: list[dict]) -> None:
         except Exception as exc:
             print(f"  #{r['id']} {r['coin']}: geen candles ({exc})")
             continue
-        result = sr.after_break(r["direction"], plan["level"], plan["stop"], plan["targets"], df[df["timestamp"] < pd.Timestamp(start + timedelta(hours=12))])
+        result = sr.after_break(r["direction"], lambda t, r=r: structure_live.line_value(r, t), plan["stop"], plan["targets"], df[df["timestamp"] < pd.Timestamp(start + timedelta(hours=12))])
         tally[result] = tally.get(result, 0) + 1
     for k, v in sorted(tally.items(), key=lambda kv: -kv[1]):
         print(f"  {k:<12} {v}")

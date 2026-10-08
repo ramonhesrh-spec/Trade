@@ -97,6 +97,7 @@ class EntryVariantsTest(unittest.TestCase):
         rate = rows.groupby("mode")["filled"].mean()
         self.assertGreaterEqual(rate["ZONE50"], rate["ZONE25"] - 1e-9)
         self.assertGreaterEqual(rate["ZONE25"], rate["RETEST"] - 1e-9)
+        self.assertGreaterEqual(rate["LANG16"], rate["RETEST"] - 1e-9)                    # een langer open limiet vult minstens zo vaak
 
     def test_compare_reports_net_per_seen_break_with_a_margin(self):
         from app.replay import entry_variants as ev

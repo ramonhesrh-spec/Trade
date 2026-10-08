@@ -1,6 +1,8 @@
 import json
 import unittest
 
+import pandas as pd
+
 from app import structure_review as sr
 
 
@@ -69,16 +71,23 @@ class FunnelTest(unittest.TestCase):
 class AfterBreakTest(unittest.TestCase):
     def frame(self, rows):
         import pandas as pd
-        return pd.DataFrame(rows, columns=["high", "low"])
+        return pd.DataFrame([(pd.Timestamp("2026-10-01", tz="UTC") + pd.Timedelta(minutes=5 * i), h, l) for i, (h, l) in enumerate(rows)], columns=["timestamp", "high", "low"])
 
     def test_short_that_ran_away_without_returning_is_a_missed_winner(self):
         c = self.frame([(99.5, 98.9), (99.0, 97.8), (98.0, 96.9)])                   # nooit terug naar 100, doel 2 op 97,6 bereikt
-        self.assertEqual(sr.after_break("short", 100.0, 100.8, [99.2, 97.6, 96.0], c), "doel 2")
+        self.assertEqual(sr.after_break("short", lambda t: 100.0, 100.8, [99.2, 97.6, 96.0], c), "doel 2")
 
     def test_first_event_decides_and_stop_zone_means_waiting_saved_a_loss(self):
-        self.assertEqual(sr.after_break("short", 100.0, 100.8, [99.2, 97.6, 96.0], self.frame([(99.5, 99.0), (101.0, 99.5)])), "kwam terug")
-        self.assertEqual(sr.after_break("long", 100.0, 99.2, [100.8, 102.0], self.frame([(100.9, 100.1)])), "doel 1")
-        self.assertEqual(sr.after_break("short", 100.0, 100.8, [99.2, 97.6], self.frame([(99.9, 99.8)])), "niets")
+        self.assertEqual(sr.after_break("short", lambda t: 100.0, 100.8, [99.2, 97.6, 96.0], self.frame([(99.5, 99.0), (101.0, 99.5)])), "kwam terug")
+        self.assertEqual(sr.after_break("long", lambda t: 100.0, 99.2, [100.8, 102.0], self.frame([(100.9, 100.1)])), "doel 1")
+        self.assertEqual(sr.after_break("short", lambda t: 100.0, 100.8, [99.2, 97.6], self.frame([(99.9, 99.8)])), "niets")
+
+    def test_a_sloping_line_is_followed_so_a_static_level_does_not_fake_a_return(self):
+        c = self.frame([(99.6, 99.0), (99.7, 99.1), (99.7, 98.9), (99.0, 97.0)])
+        static = sr.after_break("short", lambda t: 99.5, 100.8, [99.2, 97.6], c)         # een vast niveau van 99,5 lijkt geraakt
+        sloping = sr.after_break("short", lambda t: 100.2 - 0.2 * ((t - pd.Timestamp("2026-10-01", tz="UTC")).total_seconds() / 300), 100.8, [99.2, 97.6], c)
+        self.assertEqual(static, "kwam terug")
+        self.assertEqual(sloping, "doel 2")                                              # de lijn zakt weg onder de highs: nooit teruggekeerd
 
     def test_funnel_by_grade(self):
         got = sr.funnel_by_grade([{"grade": "C", "signal_id": 1}, {"grade": "C", "signal_id": None}, {"grade": None, "signal_id": None}])

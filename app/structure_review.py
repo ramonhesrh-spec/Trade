@@ -133,14 +133,16 @@ DIMENSIONS: dict[str, Callable[[dict], str]] = {
 }
 
 
-def after_break(direction: str, level: float, stop: float, targets: list[float], candles) -> str:
-    """Wat een breuk deed die nooit vulde: de eerste gebeurtenis op de candles vanaf de breuk (5m, oud naar nieuw, kolommen high en low).
-    'kwam terug' = de koers raakte het niveau alsnog (de limiet had gevuld), 'doel 2' of 'doel 1' = liep weg zonder terugkeer,
+def after_break(direction: str, level_at: Callable, stop: float, targets: list[float], candles) -> str:
+    """Wat een breuk deed die nooit vulde: de eerste gebeurtenis op de candles vanaf de breuk (5m, oud naar nieuw, kolommen timestamp, high en low).
+    level_at(tijd) geeft het niveau op dat moment: bij een schuine lijn loopt het mee, een vast niveau zou een terugkeer tonen die live niet bestond.
+    'kwam terug' = de koers raakte het niveau alsnog (een limiet die langer open bleef had gevuld), 'doel 2' of 'doel 1' = liep weg zonder terugkeer,
     'stop' = ging de verkeerde kant op, 'niets' = bleef in het gebied. Een candle die twee dingen raakt telt als het ongunstigste."""
     short = direction == "short"
     t1, t2 = targets[0], targets[1] if len(targets) > 1 else targets[0]
     first_hit_t1 = False
     for c in candles.itertuples():
+        level = level_at(c.timestamp)
         touched = c.high >= level if short else c.low <= level
         stopped = c.high >= stop if short else c.low <= stop
         if stopped and not touched:
