@@ -18,7 +18,7 @@ def load(days: int) -> list[dict]:
     since = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT s.id, s.coin, s.direction, s.kind, s.grade, s.state, s.created_at, s.break_at, s.features, s.plan, s.signal_id,
+            """SELECT s.id, s.coin, s.direction, s.kind, s.grade, s.state, s.created_at, s.break_at, s.p1_at, s.line_a, s.line_slope, s.features, s.plan, s.signal_id,
                       g.price, g.stop_loss, g.take_profit, g.auto_outcome, g.created_at AS fired_at
                FROM structure_setups s LEFT JOIN signals g ON g.id = s.signal_id
                WHERE s.created_at >= ? ORDER BY s.id""", (since,)).fetchall()
