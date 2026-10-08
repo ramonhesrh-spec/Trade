@@ -130,6 +130,8 @@ auth is a JWT in a cookie (`app/security.py`), checked via the
 
 **Kansen en kaarten.** Elke kans die nog niet gevuld is toont dezelfde drie stappen (`app/chance_steps.py`, macro `steps_list`): wacht, zet de limietorder, stop en doel. Gemeten kenmerken per kans (✓/✗ en een score in `pass_pct`) komen uit `app/chance_checks.py`; ze beschrijven de kans en Bewijs toont per soort of een hoge score vaker wint (`track_record.score_split`), neem ze dus nooit als bewezen voorspeller op. Een stop onder `SMC_MIN_STOP_PCT` wordt verbreed met `smc_eval.floor_stop`, nooit geweigerd.
 
+**Rejectie en misser-controle.** `app/replay/rejection.py` (zuivere detector, beide richtingen) en `app/rejection_live.py` melden een afwijzing op een niveau met minstens drie aanrakingen (`trade_type = 'rejectie'`, altijd ongetest, Bewijs toont de score). `scripts/misser_check.py` toetst een trade die jij zag en HesPulse niet meldde: per motor zag hij hem, en zo niet welke regel hem weigerde. Stel drempels af op meerdere missers, niet op één voorbeeld. Een kans krijgt altijd een melding zodra de limiet vult; letters A, B en C heten in de UI sterk, redelijk en zwak.
+
 **Marktbrein.** `/vandaag` (startpagina) komt uit `app/today.py` (pure weergavefuncties), `app/market_script.py` (scenario's van Claude met harde toets en
 een motor die ze tot gewone signalen maakt, `trade_type = 'script'`), `app/news.py`, `app/liquidations.py` en `app/market_calendar.py`. Alles wat Claude
 levert is een hypothese: valideer in code, label ongetest, laat Bewijs de score tonen. Voeg geen getal toe aan Vandaag dat niet gemeten is (zie

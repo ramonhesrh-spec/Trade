@@ -24,7 +24,7 @@ MIN_T_FOR_EDGE = 2.0
 MIN_CALLS_PER_COIN = 8
 FEE_PCT = 0.02
 SLIPPAGE_PCT = 0.01
-TYPE_ORDER = ("smc", "patroon", "day_trading", "swing", "samenval", "script", "structuur", "structuur_c", "trend", "smc_waarschuwing")
+TYPE_ORDER = ("smc", "patroon", "day_trading", "swing", "samenval", "script", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing")
 
 
 def _r_of(row: dict) -> Optional[float]:

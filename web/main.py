@@ -77,6 +77,7 @@ def asset(path: str) -> str:
 
 
 templates.env.globals["asset"] = asset
+templates.env.filters["grade_word"] = lambda g: {"A": "Sterk", "B": "Redelijk", "C": "Zwak"}.get(g, "Geen oordeel")
 templates.env.globals["fmt_price"] = today.fmt_price
 templates.env.globals["is_ceo"] = lambda user: is_ceo(user)
 templates.env.globals["live_exchange"] = config.EXCHANGE_ID
@@ -414,7 +415,7 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
 
 
 OPEN_SIGNAL_HOURS = 6
-OPEN_SIGNAL_LABELS = (("structuur", "Structuur gevuld"), ("structuur_c", "Structuur C gevuld"), ("trend", "Trend"), ("smc", "SMC"),
+OPEN_SIGNAL_LABELS = (("structuur", "Structuur gevuld"), ("structuur_c", "Structuur C gevuld"), ("trend", "Trend"), ("rejectie", "Rejectie"), ("smc", "SMC"),
                       ("smc_waarschuwing", "SMC met waarschuwing"), ("script", "Markt-script"))
 
 
@@ -446,7 +447,7 @@ async def _vandaag_context() -> dict:
     open_parts = _open_chances(now, len(structure_cards))
     nearest = today.nearest_chance(structure_cards, scripts, await _radar_cards())
     summary = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
-    score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "smc_waarschuwing") or e["source"] == "alles"]
+    score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing") or e["source"] == "alles"]
     for e in score:
         e["spark"] = Markup(track_record.sparkline_svg(e["cumulative"], width=180, height=36))
     return {
@@ -754,7 +755,7 @@ def _add_signal_context(entries: list[dict], winrate: dict, pattern_winrate: dic
 
 
 # Soorten met gemeten kenmerken (app/chance_checks.py): de melding ging al uit, de score beschrijft de kans en bepaalt geen groene of rode rand.
-SCORED_TYPES = ("structuur", "structuur_c", "trend", "script", "smc_waarschuwing")
+SCORED_TYPES = ("structuur", "structuur_c", "trend", "rejectie", "script", "smc_waarschuwing")
 
 
 def _apply_user_confirmed(entries: list[dict], threshold_pct: float, required_factors: set[str]) -> None:

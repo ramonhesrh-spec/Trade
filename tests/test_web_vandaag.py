@@ -76,7 +76,7 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn('class="tabbar"', text)                              # onderbalk met tabs voor de telefoon
         self.assertIn("quick-actions", text)
         self.assertIn("Geen plan klaar", self.client.get("/structuur").text)   # lege staat met uitleg en een knop
-        self.assertIn("Alleen A en B", self.client.get("/structuur?kant=short").text)
+        self.assertIn("Alleen sterk en redelijk", self.client.get("/structuur?kant=short").text)
 
     def test_grade_c_card_is_muted_and_shows_claudes_doubt_on_top(self):
         import json

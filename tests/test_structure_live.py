@@ -90,7 +90,7 @@ class LiveTest(DbCase):
         self.assertEqual(len(rows), 1)
         self.assertEqual((rows[0]["direction"], rows[0]["grade"]), ("short", "A"))
         title, body, url, silent = self.pushed[0]
-        self.assertIn("Structuur A", title)
+        self.assertIn("Structuur wacht", title)
         self.assertNotIn("ngetest", title + body)
         self.assertIn("Limietorder", body)
         self.assertIn("Doelen", body)
@@ -175,13 +175,13 @@ class LiveTest(DbCase):
         self.assertEqual(plan["targets_r"], [1.0, 2.0, 3.0])
         self.assertFalse(plan["from_levels"])
 
-    def test_grade_c_fill_is_its_own_signal_type_and_silent(self):
+    def test_grade_c_fill_is_its_own_signal_type_and_is_announced(self):
         self.run_live(BREAK_BAR + 4, grade="C")
         self.pushed.clear()
         self.run_live(BREAK_BAR + 9)                               # de koers komt terug bij het niveau
         rows = repo.list_signals_for_quality_report(None)
         self.assertEqual([r["trade_type"] for r in rows], ["structuur_c"])
-        self.assertTrue(self.pushed and all(p[3] for p in self.pushed))   # wel gemeld, maar stil
+        self.assertTrue(self.pushed and not any(p[3] for p in self.pushed))   # een gevulde trade krijgt altijd een melding, ook bij zwak
 
     def test_stop_with_room_widens_a_tight_stop_to_the_floor(self):
         self.assertAlmostEqual(sl.stop_with_room("short", 100.0, 100.0, 0.05), 100.4)      # kwart ATR gaf 100,0125: te krap

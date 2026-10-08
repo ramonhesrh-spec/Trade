@@ -4,7 +4,8 @@ gebroken niveau, limietorder, stop net achter de terugkeer, ladder van doelen), 
 Drie stappen, elke 5 minuten in de SMC-snelcyclus:
   1. Ontdekken: de detector uit app/replay/breakretest.py (zelfde code als de toets, alleen gesloten candles) vindt een verse
      breuk. Claude geeft een oordeel A, B of C op de kwaliteit. Claude verzint geen prijzen: niveau, stop en doelen komen uit code.
-  2. Melden: elke breuk met een plan. A klinkt luid, B, C en een breuk zonder oordeel zijn stil. Het plan staat erin: limietniveau, stop en doelen.
+  2. Melden: elke breuk met een plan staat op de pagina en in de dagbrief. Sterk (A) klinkt luid, redelijk (B) is stil, zwak (C) krijgt pas een melding als de limiet vult.
+     Het plan staat erin: limietniveau, stop en doelen.
   3. Volgen: raakt de koers het niveau, dan wordt het een gewoon signaal (trade_type 'structuur'), zodat journaal, uitkomst en Bewijs
      werken zonder extra code. Keert de koers terug voorbij het niveau, dan vervalt de setup.
 
@@ -242,7 +243,7 @@ async def _discover(coin: str, now: datetime) -> None:
         logger.info("Structuur %s %s %s: oordeel %s (%s)", coin, ev.direction, ev.kind, grade, state)
         if state == "waiting" and grade != "C":
             setup = {**row, "id": setup_id, "reason": reason}
-            await _push_all(push_notify.alert_title(coin, ev.direction, f"Structuur {grade or 'zonder oordeel'}"), alert_body(setup, plan),
+            await _push_all(push_notify.alert_title(coin, ev.direction, "Structuur wacht"), alert_body(setup, plan),
                             f"/structuur#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A")
 
 
@@ -273,9 +274,9 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
     targets = " · ".join(f"{push_notify.fmt_price(t)} ({r:g}R)" for t, r in zip(fired["targets"], plan["targets_r"]))
     await fanout_confirmed_signal(
         signal_id, coin, direction, entry, stop, take, entry,
-        title=push_notify.alert_title(coin, direction, f"Structuur {grade} gevuld"),
+        title=push_notify.alert_title(coin, direction, "Structuur gevuld"),
         make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, f"Doelen {targets}", "Limiet geraakt, de trade loopt."),
-        reason=reason, signal_type="structuur_c" if setup["grade"] == "C" else "structuur", force_silent=setup["grade"] == "C",
+        reason=reason, signal_type="structuur_c" if setup["grade"] == "C" else "structuur",
         tag=trade_tag(signal_id),
     )
 

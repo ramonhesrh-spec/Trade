@@ -148,3 +148,10 @@ TREND_ENABLED = _get("TREND_ENABLED", "true").lower() == "true"
 TREND_MAX_PER_DAY = int(_get("TREND_MAX_PER_DAY", "6"))
 TREND_MAX_NEGATIVE = int(_get("TREND_MAX_NEGATIVE", "40"))
 TREND_RR = float(_get("TREND_RR", "2.0"))
+
+# Rejectie op een niveau (app/rejection_live.py): een niveau met minstens drie aanrakingen houdt en de koers sluit er weer van weg, short bij weerstand en
+# long bij steun (ook na een sweep). Altijd ongetest. Draait op alle gevolgde coins, ook EXTRA_COINS. Gaat vanzelf uit na REJECTION_MAX_NEGATIVE
+# afgeronde signalen die samen negatief zijn.
+REJECTION_ENABLED = _get("REJECTION_ENABLED", "true").lower() == "true"
+REJECTION_MAX_PER_DAY = int(_get("REJECTION_MAX_PER_DAY", "8"))
+REJECTION_MAX_NEGATIVE = int(_get("REJECTION_MAX_NEGATIVE", "30"))
