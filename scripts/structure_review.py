@@ -44,10 +44,35 @@ def fmt(s: dict) -> str:
             f"({lo:+.2f} tot {hi:+.2f})  {s['verdict']}")
 
 
+def report_missed(rows: list[dict]) -> None:
+    import pandas as pd
+    from app import exchange
+    expired = [r for r in rows if r["state"] == "expired"]
+    print(f"\nBreuken die nooit vulden ({len(expired)}): wat deed de koers in de 12 uur na de breuk?")
+    tally: dict[str, int] = {}
+    for r in expired:
+        plan = json.loads(r["plan"]) if r["plan"] else {}
+        if not plan.get("targets") or "stop" not in plan:
+            continue
+        start = datetime.fromisoformat(r["break_at"])
+        try:
+            df = exchange.fetch_ohlcv(r["coin"], timeframe="5m", limit=144, since=int(start.timestamp() * 1000))
+        except Exception as exc:
+            print(f"  #{r['id']} {r['coin']}: geen candles ({exc})")
+            continue
+        result = sr.after_break(r["direction"], plan["level"], plan["stop"], plan["targets"], df[df["timestamp"] < pd.Timestamp(start + timedelta(hours=12))])
+        tally[result] = tally.get(result, 0) + 1
+    for k, v in sorted(tally.items(), key=lambda kv: -kv[1]):
+        print(f"  {k:<12} {v}")
+    print("  doel 2 en doel 1 zijn kansen die zonder terugkeer wegliepen: daar kost wachten op de limiet je de trade.")
+    print("  kwam terug zonder vulling kan niet, tenzij de limiet net gemist is; stop betekent dat wachten je een verlies bespaarde.")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--cost", type=float, default=config.TRACK_RECORD_COST_PCT, help="kosten per rondreis in procenten van de instap")
     ap.add_argument("--dagen", type=int, default=30)
+    ap.add_argument("--gemist", action="store_true", help="kijk wat de breuken deden die nooit vulden (haalt candles op bij de beurs)")
     a = ap.parse_args()
     rows = load(a.dagen)
     print(f"\nStructuur, laatste {a.dagen} dagen, kosten {a.cost}% per rondreis\n")
@@ -56,6 +81,13 @@ def main() -> None:
     print("Trechter")
     print(f"  {f['gezien']} breuken gezien, {f['gevuld']} gevuld ({f['gevuld'] / f['gezien'] * 100 if f['gezien'] else 0:.0f}%), {f['afgerond']} afgerond")
     print("  status: " + ", ".join(f"{k} {v}" for k, v in sorted(f["per_status"].items(), key=lambda kv: -kv[1])))
+
+    print("\nPer oordeel, alle breuken (ook die niet vulden)")
+    for g, e in sorted(sr.funnel_by_grade(rows).items(), key=lambda kv: -kv[1]["gezien"]):
+        print(f"  {g:<16} {e['gezien']:>3} gezien, {e['gevuld']:>3} gevuld ({e['gevuld'] / e['gezien'] * 100:.0f}%)")
+
+    if a.gemist:
+        report_missed(rows)
 
     done = [r for r in rows if r.get("signal_id") and r.get("auto_outcome") in ("take_profit", "stop_loss")]
     for r in done:

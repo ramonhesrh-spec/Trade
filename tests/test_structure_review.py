@@ -66,5 +66,25 @@ class FunnelTest(unittest.TestCase):
         self.assertEqual(got["sessie bij vulling (UTC)"], "Azië (0-7)")
 
 
+class AfterBreakTest(unittest.TestCase):
+    def frame(self, rows):
+        import pandas as pd
+        return pd.DataFrame(rows, columns=["high", "low"])
+
+    def test_short_that_ran_away_without_returning_is_a_missed_winner(self):
+        c = self.frame([(99.5, 98.9), (99.0, 97.8), (98.0, 96.9)])                   # nooit terug naar 100, doel 2 op 97,6 bereikt
+        self.assertEqual(sr.after_break("short", 100.0, 100.8, [99.2, 97.6, 96.0], c), "doel 2")
+
+    def test_first_event_decides_and_stop_zone_means_waiting_saved_a_loss(self):
+        self.assertEqual(sr.after_break("short", 100.0, 100.8, [99.2, 97.6, 96.0], self.frame([(99.5, 99.0), (101.0, 99.5)])), "kwam terug")
+        self.assertEqual(sr.after_break("long", 100.0, 99.2, [100.8, 102.0], self.frame([(100.9, 100.1)])), "doel 1")
+        self.assertEqual(sr.after_break("short", 100.0, 100.8, [99.2, 97.6], self.frame([(99.9, 99.8)])), "niets")
+
+    def test_funnel_by_grade(self):
+        got = sr.funnel_by_grade([{"grade": "C", "signal_id": 1}, {"grade": "C", "signal_id": None}, {"grade": None, "signal_id": None}])
+        self.assertEqual(got["zwak (C)"], {"gezien": 2, "gevuld": 1})
+        self.assertEqual(got["geen oordeel"], {"gezien": 1, "gevuld": 0})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -80,7 +80,7 @@ class LiveTest(DbCase):
 
         now = (self.bars.at[n_closed - 1, "close_time"]).to_pydatetime()
         with mock.patch("app.exchange.fetch_ohlcv", self.fetch(n_closed)), mock.patch("app.push_notify.send_push", fake_push), \
-                mock.patch.object(sl, "call_claude", fake_claude), mock.patch.object(config, "BASE_COINS", ["BTC"]), \
+                mock.patch.object(sl, "call_claude", fake_claude), mock.patch.object(config, "FIXED_COINS", ["BTC"]), \
                 mock.patch.object(repo, "list_coins", lambda: [{"symbol": "BTC"}]):
             asyncio.run(sl.run(now))
 

@@ -418,7 +418,8 @@ async def run(now: Optional[datetime] = None) -> None:
         repo.notify_engine_disabled("Structuur-breuken", f"De laatste {config.STRUCTURE_MAX_NEGATIVE} afgeronde signalen zijn samen negatief. Zie Bewijs.")
         return
     symbols = {c["symbol"] for c in repo.list_coins()}
-    for coin in config.BASE_COINS:
+    # Alle gevolgde coins, niet alleen de basiscoins: meer breuken betekent eerder een cijfer waar we iets op kunnen afstellen.
+    for coin in config.FIXED_COINS:
         if coin not in symbols:
             continue
         try:
@@ -432,7 +433,7 @@ async def run(now: Optional[datetime] = None) -> None:
         await digest.run(now)
     except Exception:
         logger.exception("Dagbrief is mislukt")
-    repo.beat("structuur", f"{len(config.BASE_COINS)} coins gecontroleerd")
+    repo.beat("structuur", f"{len(config.FIXED_COINS)} coins gecontroleerd")
 
 
 if __name__ == "__main__":

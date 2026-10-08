@@ -131,3 +131,35 @@ DIMENSIONS: dict[str, Callable[[dict], str]] = {
     "wachttijd tot vulling": lambda r: bucket(r.get("wait_hours"), [1.0, 3.0], ["onder 1 uur", "1 tot 3 uur", "3 uur of meer"]),
     "sessie bij vulling (UTC)": lambda r: bucket(r.get("hour_utc"), [7, 13, 21], ["Azië (0-7)", "Londen (7-13)", "New York (13-21)", "nacht (21-24)"]),
 }
+
+
+def after_break(direction: str, level: float, stop: float, targets: list[float], candles) -> str:
+    """Wat een breuk deed die nooit vulde: de eerste gebeurtenis op de candles vanaf de breuk (5m, oud naar nieuw, kolommen high en low).
+    'kwam terug' = de koers raakte het niveau alsnog (de limiet had gevuld), 'doel 2' of 'doel 1' = liep weg zonder terugkeer,
+    'stop' = ging de verkeerde kant op, 'niets' = bleef in het gebied. Een candle die twee dingen raakt telt als het ongunstigste."""
+    short = direction == "short"
+    t1, t2 = targets[0], targets[1] if len(targets) > 1 else targets[0]
+    first_hit_t1 = False
+    for c in candles.itertuples():
+        touched = c.high >= level if short else c.low <= level
+        stopped = c.high >= stop if short else c.low <= stop
+        if stopped and not touched:
+            return "stop"
+        if touched:
+            return "kwam terug"
+        if (c.low <= t2) if short else (c.high >= t2):
+            return "doel 2"
+        if (c.low <= t1) if short else (c.high >= t1):
+            first_hit_t1 = True
+    return "doel 1" if first_hit_t1 else "niets"
+
+
+def funnel_by_grade(rows: list[dict]) -> dict:
+    """Per oordeel: hoeveel breuken, hoeveel gevuld. Laat zien of het oordeel iets scheidt, ook onder de breuken die nooit vulden."""
+    out: dict[str, dict] = {}
+    for r in rows:
+        g = {"A": "sterk (A)", "B": "redelijk (B)", "C": "zwak (C)"}.get(r.get("grade"), "geen oordeel")
+        e = out.setdefault(g, {"gezien": 0, "gevuld": 0})
+        e["gezien"] += 1
+        e["gevuld"] += 1 if r.get("signal_id") else 0
+    return out
