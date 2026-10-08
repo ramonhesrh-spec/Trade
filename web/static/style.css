@@ -2196,14 +2196,8 @@ html[data-session="londen"] .glow-accent { opacity: 0.10; }
 html[data-session="newyork"] .glow-accent { background: #ffb347; opacity: 0.12; }
 html[data-session="nacht"] .glow-accent { opacity: 0.05; }
 
-/* Spaarzaam scrollen: tijdens het scrollen staan de zwevende vlakken stil, en kaarten buiten beeld worden pas getekend als je er bijna bent. */
+/* Spaarzaam scrollen: tijdens het scrollen staan de zwevende vlakken stil. */
 html.is-scrolling .ambient-glow { animation-play-state: paused; }
-.setup-card, .radar-card, .proof-card, .vd-scenario { content-visibility: auto; contain-intrinsic-size: auto 520px; }
-@media (max-width: 760px) {
-  .topbar { transition: transform 0.25s ease-out; }
-  html.topbar-away .topbar { transform: translateY(-100%); }
-}
-@media (prefers-reduced-motion: reduce) { .topbar { transition: none; } }
 .pull-hint { position: fixed; top: 8px; left: 50%; transform: translate(-50%, 0); z-index: 600; padding: 6px 14px; border-radius: 999px; background: var(--panel); border: 1px solid var(--border-strong); color: var(--text-dim); font-size: var(--text-xs); opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
 /* Een koers die verandert flitst kort in de richting van de verandering. */
 .px-up { animation: px-up 0.7s ease-out; }

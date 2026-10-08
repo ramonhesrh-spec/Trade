@@ -1,23 +1,17 @@
 // Vloeiendheid en spaarzaamheid, vier dingen die samen het verschil maken op een telefoon:
 // (1) tijdens het scrollen staan de zwevende achtergrondvlakken stil, zodat de GPU alleen scrolt;
-// (2) de kopbalk schuift weg bij omlaag scrollen en komt terug bij omhoog, meer ruimte voor de kaarten;
-// (3) een tik op een tab kleurt hem meteen, nog voor de pagina geladen is;
-// (4) trek de pagina bovenaan omlaag om te verversen, zoals in een app, en de tabtitel toont de dichtstbijzijnde kans.
+// (2) een tik op een tab kleurt hem meteen, nog voor de pagina geladen is;
+// (3) trek de pagina bovenaan omlaag om te verversen, zoals in een app, en de tabtitel toont de dichtstbijzijnde kans.
 (function () {
-  var root = document.documentElement, ticking = false, lastY = window.scrollY, idle = null;
-  var phone = window.matchMedia && window.matchMedia("(max-width: 760px)");
+  var root = document.documentElement, ticking = false, idle = null;
 
   function onScroll() {
     if (ticking) return;
     ticking = true;
     requestAnimationFrame(function () {
-      var y = window.scrollY, dy = y - lastY;
       root.classList.add("is-scrolling");
       clearTimeout(idle);
       idle = setTimeout(function () { root.classList.remove("is-scrolling"); }, 160);
-      if (phone && phone.matches && Math.abs(dy) > 6) root.classList.toggle("topbar-away", dy > 0 && y > 90);
-      if (y < 40) root.classList.remove("topbar-away");
-      lastY = y;
       ticking = false;
     });
   }
