@@ -51,7 +51,10 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
     def bar_index(t: float) -> float:
         return (t - times[0]) / bar_seconds
 
-    out = [f'<svg class="sc" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(setup["coin"])} {escape(setup["direction"])} structuur-setup">']
+    # De data-attributen laten live.js de prijslijn verplaatsen zonder de pagina te herladen: y = pad_t + (hi - prijs) / (hi - lo) * plot_h.
+    out = [f'<svg class="sc" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(setup["coin"])} {escape(setup["direction"])} structuur-setup" '
+           f'data-chart-coin="{escape(setup["coin"])}" data-hi="{hi:.8g}" data-lo="{lo:.8g}" data-pad-t="{PAD_T}" data-plot-h="{plot_h}" '
+           f'data-level="{plan["level"]:.8g}" data-stop="{plan["stop"]:.8g}">']
     right = PAD_L + plot_w
 
     has_structure = setup.get("line_a") is not None

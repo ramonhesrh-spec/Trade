@@ -276,6 +276,7 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
         title=push_notify.alert_title(coin, direction, f"Structuur {grade} gevuld"),
         make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, f"Doelen {targets}", "Limiet geraakt, de trade loopt."),
         reason=reason, signal_type="structuur_c" if setup["grade"] == "C" else "structuur", force_silent=setup["grade"] == "C",
+        tag=trade_tag(signal_id),
     )
 
 
@@ -331,13 +332,23 @@ async def _track(now: datetime) -> None:
                 extreme = max(extreme, c.high) if s["direction"] == br.SHORT else min(extreme, c.low)
 
 
+def trade_tag(signal_id: int) -> str:
+    """Eén lopende melding per trade: gevuld, T1, T2 en klaar vervangen elkaar, zodat je vergrendelscherm niet volloopt."""
+    return f"trade-{signal_id}"
+
+
+def progress_bar(hits: int, total: int) -> str:
+    return "▰" * hits + "▱" * (total - hits)
+
+
 def _target_message(setup: dict, plan: dict, fired: dict, n: int) -> tuple[str, str]:
     """Melding bij het n-de doel (1-based). Bij het eerste doel hoort de instructie uit het recept: stop naar de instap."""
     from app import push_notify
     targets, r_list = fired["targets"], plan["targets_r"]
-    title = push_notify.alert_title(setup["coin"], setup["direction"], f"T{n} geraakt")
+    total = len(targets)
+    title = push_notify.alert_title(setup["coin"], setup["direction"], f"{progress_bar(n, total)} T{n} van {total}")
     first = f"T{n} {push_notify.fmt_price(targets[n - 1])} ({r_list[n - 1]:g}R) geraakt."
-    if n == len(targets):
+    if n == total:
         return title, f"{first} Laatste doel: de trade is klaar."
     nxt = f"Volgend doel T{n + 1} {push_notify.fmt_price(targets[n])} ({r_list[n]:g}R)."
     if n == 1:
@@ -389,12 +400,11 @@ async def _follow(now: datetime) -> None:
             if changed:
                 fired["hits"] = hits
                 repo.update_structure_plan(s["id"], json.dumps(plan))
-            # Alleen T1 (stop naar de instap) en het laatste doel geven een melding; de doelen ertussen staan in de tijdlijn van de kans. Elke
-            # melding houdt een eigen tag, anders verving T2 de melding van T1 en was die niet meer terug te vinden.
+            # Eén melding per trade die zichzelf bijwerkt: T1 en het laatste doel klinken (stop naar de instap, de trade is klaar), de doelen
+            # ertussen vervangen stil dezelfde melding.
             url = push_notify.signal_url(coin, s["signal_id"]) if s["signal_id"] else "/structuur"
             for title, body, loud in messages:
-                if loud:
-                    await _push_all(title, body, url, f"structuur-{s['id']}-{title}", loud=True)
+                await _push_all(title, body, url, trade_tag(s["signal_id"]) if s["signal_id"] else f"structuur-{s['id']}", loud=loud)
 
 
 async def run(now: Optional[datetime] = None) -> None:
@@ -416,6 +426,11 @@ async def run(now: Optional[datetime] = None) -> None:
             logger.exception("Structuur-check voor %s is mislukt", coin)
     await _track(now)
     await _follow(now)
+    try:
+        from app import digest
+        await digest.run(now)
+    except Exception:
+        logger.exception("Dagbrief is mislukt")
     repo.beat("structuur", f"{len(config.BASE_COINS)} coins gecontroleerd")
 
 

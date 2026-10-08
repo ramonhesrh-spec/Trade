@@ -148,13 +148,16 @@ class LiveTest(DbCase):
 
         follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0)]))               # T1 geraakt, stop blijft onder de instap
         self.assertEqual(len(self.pushed), 1)
-        self.assertIn("T1 geraakt", self.pushed[0][0])
+        self.assertIn("T1 van 3", self.pushed[0][0])
         self.assertIn("Zet je stop op de instap", self.pushed[0][1])
         follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0)]))               # zelfde candles: niet nog een keer
         self.assertEqual(len(self.pushed), 1)
         follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0), (98.0, 98.1, 96.9, 97.0)]))   # T2 erbij
-        self.assertEqual(len(self.pushed), 1)                               # T2 krijgt geen melding, alleen een regel in de tijdlijn
+        self.assertEqual(len(self.pushed), 2)
+        self.assertIn("T2 van 3", self.pushed[1][0])
+        self.assertIn("▰▰▱", self.pushed[1][0])                            # voortgang in de titel van de lopende melding
         self.assertFalse(self.pushed[0][2])                                 # T1 is luid: je stop moet naar de instap
+        self.assertTrue(self.pushed[1][2])                                  # T2 vervangt stil dezelfde melding
         follow(candles([(100, 100.4, 99.6, 99.8), (99.8, 99.9, 97.9, 98.0), (98.0, 98.1, 96.9, 97.0), (97.0, 100.2, 96.9, 100.0)]))  # terug op de instap
         fired = json.loads(repo.list_structure_setups(("fired",))[0]["plan"])["fired"]
         self.assertTrue(fired["closed"])

@@ -356,6 +356,7 @@ async def _fanout_confirmed_signal(
     reason: str = "",
     signal_type: Optional[str] = None,
     force_silent: bool = False,
+    tag: Optional[str] = None,
 ) -> None:
     """Deelt een al-bevestigd signaal (geen gepoold percentage, altijd
     gemeld) met alle gebruikers: journaalregel + pushmelding per gebruiker,
@@ -449,7 +450,8 @@ async def _fanout_confirmed_signal(
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             body = make_body(effective_stop_loss, effective_take_profit, stop_was_capped)
-            await push_notify.send_push(user["id"], title, body, push_notify.signal_url(coin, signal_id), silent=quiet or force_silent)
+            extra = {"tag": tag} if tag else {}
+            await push_notify.send_push(user["id"], title, body, push_notify.signal_url(coin, signal_id), silent=quiet or force_silent, **extra)
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
             logger.exception("Melding voor %s naar gebruiker %s is mislukt", coin, user["username"])

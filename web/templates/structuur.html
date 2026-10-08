@@ -27,6 +27,17 @@
   {% if not structure_cards %}
   {{ macros.empty_state("Geen plan klaar", "De CEO neemt koffie. Zodra een lijn of range breekt en het plan genoeg ruimte heeft, krijg je een melding en staat hier de kaart met de grafiek. De motor kijkt elke 5 minuten.", "Bekijk de Radar", "/smc") }}
   {% else %}
+  {% if structure_cards|length > 1 %}
+  <div class="stack-controls">
+    <button type="button" class="chip" id="stack-toggle" aria-pressed="false">Toon als stapel</button>
+    <span id="stack-bar" class="stack-bar" hidden>
+      <button type="button" class="chip" id="stack-skip">Negeer</button>
+      <span id="stack-count" class="muted"></span>
+      <button type="button" class="chip" id="stack-keep">Bewaar</button>
+      <button type="button" class="chip" id="stack-reset">Opnieuw</button>
+    </span>
+  </div>
+  {% endif %}
   <div class="setup-grid">
     {% for c in structure_cards %}{{ macros.setup_card(c, user.risk_per_trade_eur) }}{% endfor %}
   </div>

@@ -2168,3 +2168,30 @@ html { -webkit-tap-highlight-color: transparent; }
 .ceo-presence th { text-align: right; padding: var(--space-2) var(--space-3); font-size: var(--text-2xs); letter-spacing: 0.08em; text-transform: uppercase; color: #a8925a; }
 .ceo-presence td { text-align: right; padding: var(--space-3); border-top: 1px solid rgba(90, 71, 16, 0.5); font-variant-numeric: tabular-nums; }
 .ceo-presence th:first-child, .ceo-presence td:first-child { text-align: left; overflow-wrap: anywhere; }
+
+/* Afstandsring rond de kaart: loopt vol zodra de koers het limietniveau nadert (ring.js). */
+.dist-ring { width: 34px; height: 34px; flex: none; transform: rotate(-90deg); }
+.dist-ring circle { fill: none; stroke-width: 3.5; }
+.dist-ring-bg { stroke: var(--border-strong); }
+.dist-ring-fill { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 0.8s ease-out; }
+.setup-card.is-ringfull .dist-ring-fill { stroke: var(--green); }
+/* Live grafiek: de limietlijn pulseert zodra de koers binnen 0,3% komt. Alleen bij een echte nadering, niet als versiering. */
+@media (prefers-reduced-motion: no-preference) { svg.sc.is-near .sc-limit { animation: limit-pulse 1.4s ease-in-out infinite; } }
+@keyframes limit-pulse { 50% { opacity: 0.35; } }
+.sc-price { transition: none; }
+
+/* Kaartenstapel */
+.stack-controls { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin-bottom: var(--space-4); }
+.stack-bar { display: flex; flex: 1; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; }
+.setup-grid.is-stack { display: block; touch-action: pan-y; }
+.setup-grid.is-stack .setup-card { will-change: transform; user-select: none; }
+.setup-card.is-swipe-keep { outline: 2px solid var(--green); }
+.setup-card.is-swipe-skip { outline: 2px solid var(--red); }
+.setup-card.is-kept::before { content: "Bewaard"; display: inline-block; margin-bottom: var(--space-3); font-size: var(--text-2xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
+
+/* Marktsessie: een zachte tint onder de inhoud. Azië koel, Londen neutraal, New York warm, nacht donker. */
+html[data-session] body { background-color: var(--bg); }
+html[data-session="azie"] .glow-accent { background: #4aa3ff; opacity: 0.12; }
+html[data-session="londen"] .glow-accent { opacity: 0.10; }
+html[data-session="newyork"] .glow-accent { background: #ffb347; opacity: 0.12; }
+html[data-session="nacht"] .glow-accent { opacity: 0.05; }
