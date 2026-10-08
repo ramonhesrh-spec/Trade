@@ -179,9 +179,8 @@ def alert_body(setup: dict, plan: dict) -> str:
     from app import push_notify
     rr = abs(plan["targets"][0] - plan["level"]) / abs(plan["level"] - plan["stop"])
     targets = " · ".join(f"{push_notify.fmt_price(t)} ({r:g}R)" for t, r in zip(plan["targets"], plan["targets_r"]))
-    kind = "Range" if setup["kind"] == "RANGE" else "Lijn"
     return push_notify.trade_body("Limietorder", plan["level"], plan["stop"], take_profit_of(plan), None,
-                                  f"Doelen {targets}", f"{kind} gebroken op 30m. {setup['reason'] or ''}".strip())
+                                  f"Doelen {targets}", (setup["reason"] or "").strip())
 
 
 async def _push_all(title: str, body: str, url: str, tag: str, loud: bool) -> None:
@@ -257,7 +256,7 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
     fired["targets"] = [entry + sign * risk * r for r in plan["targets_r"]]
     take = take_profit_of(fired)
     grade = setup["grade"] or "zonder oordeel"
-    narrative = f"Structuur {grade}: {setup['kind'].lower()} gebroken op 30m, terugkeer naar {push_notify.fmt_price(entry)}. {setup['reason'] or ''}".strip()
+    narrative = f"Structuur, instap {push_notify.fmt_price(entry)}. {setup['reason'] or ''}".strip()
     reason, pass_pct = chance_checks.finish(chance_checks.structure_checks(chance_checks.parse_features(setup.get("features")), plan, setup["grade"]))
     signal_id = repo.insert_signal({
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "structuur_c" if setup["grade"] == "C" else "structuur",
@@ -295,7 +294,7 @@ async def _fire_shadow(setup: dict, plan: dict, entry: float, stop: float) -> No
         "message_id": None, "coin": setup["coin"], "direction": setup["direction"], "category": "day_trading", "trade_type": "structuur_c",
         "pattern_name": "Structuur C", "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None,
         "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Structuur C (schaduw)",
-        "reason": f"Oordeel C van Claude, stil gevolgd. {setup['reason'] or ''}".strip(), "stop_loss": stop, "take_profit": take, "context_note": None,
+        "reason": f"Zwak oordeel, stil gevolgd. {setup['reason'] or ''}".strip(), "stop_loss": stop, "take_profit": take, "context_note": None,
         "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None, "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
     })
     repo.set_structure_state(setup["id"], "fired", signal_id)

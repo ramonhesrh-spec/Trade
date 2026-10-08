@@ -7,7 +7,7 @@
 <meta name="color-scheme" content="dark">
 <style>html{background:#0a0e0f}</style>
 <title>HesPulse</title>
-<meta name="description" content="HesPulse tekent het plan voordat de koers terugkomt: breuk, limietorder, stop en doelen. Elke melding telt mee op een openbare score. Geen orders, geen garantie.">
+<meta name="description" content="HesPulse meldt kansen met instap, stop en doelen. Elke melding wordt vastgelegd en is na te rekenen. Geen orders, geen garantie.">
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <link rel="manifest" href="/static/manifest.json">
@@ -29,9 +29,9 @@
     <span>HesPulse</span>
   </a>
   <nav>
-    <a href="#wat-je-krijgt">Wat je krijgt</a>
-    <a href="#vandaag">Vandaag</a>
-    <a href="#eerlijk">Eerlijk</a>
+    <a href="#aanpak">Aanpak</a>
+    <a href="#marktbeeld">Marktbeeld</a>
+    <a href="#kader">Kader</a>
     <a href="/login">Inloggen</a>
     <a href="/registreer" class="button">Registreren</a>
   </nav>
@@ -52,49 +52,49 @@
 <section class="lp-hero" style="--i: 0">
   <div class="lp-hero-text">
     <p class="lp-eyebrow">Voor wie zelf handelt</p>
-    <h1>Het plan staat klaar voordat de koers terugkomt.</h1>
-    <p class="lp-lead">HesPulse tekent de breuk, de terugkeer, de limietorder, de stop en de doelen. Jij zet de order. Elke melding telt mee op een score die niemand kan aanpassen, ook wij niet.</p>
+    <h1>Handelen met een plan.</h1>
+    <p class="lp-lead">HesPulse volgt de markt en meldt een kans met instap, stop en doelen. Jij beslist en plaatst zelf de order. Elke melding wordt vastgelegd en is voor iedereen na te rekenen.</p>
     <p class="lp-cta"><a href="/registreer" class="button-primary">Registreren</a> <a href="/login" class="hero-secondary">Al een account? Inloggen</a></p>
   </div>
   <figure class="lp-demo">
     <div class="setup-card lp-demo-card">
-      <header class="setup-head"><span class="radar-coin">VOORBEELD</span><span class="radar-dir radar-dir-short">short</span><span class="setup-grade setup-grade-a">Sterk</span></header>
+      <header class="setup-head"><span class="radar-coin">VOORBEELD</span><span class="radar-dir radar-dir-short">short</span></header>
       {{ demo_chart }}
-      <p class="setup-reason">Lijn gebroken op 30 minuten. Limietorder op het gebroken niveau, stop erachter, doelen op zwaaipunten.</p>
+      <p class="setup-reason">Instap, stop en doelen staan op de kaart.</p>
     </div>
-    <figcaption class="muted">Voorbeeld met verzonnen koersen, geen echt signaal.</figcaption>
+    <figcaption class="muted">Illustratie met fictieve koersen.</figcaption>
   </figure>
 </section>
 
-<section class="landing-section lp-three" id="wat-je-krijgt" style="--i: 1">
-  <h2>Wat je krijgt</h2>
+<section class="landing-section lp-three" id="aanpak" style="--i: 1">
+  <h2>Aanpak</h2>
   <div class="lp-three-grid">
     <article class="lp-point">
-      <h3>Een getekend plan</h3>
-      <p>Bij een breuk van een lijn of range krijg je een melding met limiet, stop en doelen, vóórdat de trade uitspeelt. Op de pagina Setups staat het plan op de grafiek.</p>
+      <h3>Een compleet plan</h3>
+      <p>Instap, stop en doelen in één melding, met de grafiek erbij.</p>
     </article>
     <article class="lp-point">
-      <h3>Een markt-script</h3>
-      <p>Elke 4 uur schrijft Claude per coin scenario's met een voorwaarde. De code toetst stop, risico en rendement. Wat niet klopt, valt af.</p>
+      <h3>Live overzicht</h3>
+      <p>Agenda, stemming en kansen per coin op één scherm, live bijgewerkt.</p>
     </article>
     <article class="lp-point">
-      <h3>Een score die klopt</h3>
-      <p>Elk signaal telt mee op Bewijs, in R na kosten, ook de verliezers. Een nieuwe methode heet ongetest tot er genoeg afgeronde trades zijn.</p>
+      <h3>Controleerbaar</h3>
+      <p>Elke melding krijgt een vingerafdruk en telt mee in het resultatenoverzicht, ook de verliezers. <a href="/keten">Zelf narekenen</a>.</p>
     </article>
   </div>
 </section>
 
-<section class="landing-section vd-public" id="vandaag" style="--i: 2">
-  <h2>Vandaag, live</h2>
-  <p>Dit is wat je na het inloggen als eerste ziet. Hieronder de agenda van de komende 24 uur en de stemming van het markt-script. De plannen zelf staan achter het inloggen.</p>
+<section class="landing-section vd-public" id="marktbeeld" style="--i: 2">
+  <h2>Marktbeeld</h2>
+  <p>Een deel van het scherm na het inloggen. De kansen zelf zijn alleen voor leden.</p>
   <div class="vd-public-grid">
     <div class="card vd-card vd-public-card">
-      <h3>Stemming van het markt-script</h3>
+      <h3>Marktstemming</h3>
       {% if mood.total %}
       {{ macros.mood_bar(mood) }}
-      <p class="muted vd-fine">{{ n_scripts }} coins, bijgewerkt elke 4 uur.</p>
+      <p class="muted vd-fine">{{ n_scripts }} coins.</p>
       {% else %}
-      <p class="muted vd-empty">Het eerste markt-script verschijnt binnenkort.</p>
+      <p class="muted vd-empty">Het marktbeeld verschijnt binnenkort.</p>
       {% endif %}
     </div>
     <div class="card vd-card vd-public-card">
@@ -105,18 +105,18 @@
   </div>
 </section>
 
-<section class="landing-section" id="eerlijk" style="--i: 3">
-  <h2>Wat we niet beloven</h2>
+<section class="landing-section" id="kader" style="--i: 3">
+  <h2>Kader</h2>
   <ul class="lp-honest">
     <li><strong>Geen orders.</strong> HesPulse plaatst nooit een trade. Elke trade is jouw beslissing.</li>
-    <li><strong>Geen garantie.</strong> Een plan is een hypothese. Een methode die na kosten verliest, zie je terug op Bewijs.</li>
-    <li><strong>Besloten.</strong> HesPulse is een persoonlijk project voor eigen gebruik en een klein aantal genodigden. Er wordt geen dienst verkocht.</li>
+    <li><strong>Geen garantie.</strong> Een plan is geen voorspelling. De resultaten per soort melding staan voor leden op Bewijs, na kosten.</li>
+    <li><strong>Besloten.</strong> HesPulse is een persoonlijk project voor een klein aantal genodigden. Er wordt geen dienst verkocht.</li>
   </ul>
 </section>
 
 <section class="landing-section" id="meldingen-aanzetten" style="--i: 4">
-  <h2>Meldingen aanzetten</h2>
-  <p>Geen aparte app nodig. Log in en zet pushmeldingen aan op je accountpagina. Je browser of telefoon vraagt eenmalig om toestemming. Een tik op een melding opent het plan zelf.</p>
+  <h2>Meldingen</h2>
+  <p>Geen aparte app nodig. Zet pushmeldingen aan via je account. Een tik op een melding opent de kans.</p>
 </section>
 
 <section class="landing-section" style="--i: 5">

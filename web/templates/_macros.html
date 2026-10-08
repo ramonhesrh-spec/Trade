@@ -305,7 +305,7 @@
   {{ steps_list(c.steps, risk_eur) }}
   {{ r_bars(c.targets) }}
   {{ share_button(c.coin, c.direction, c.steps) }}
-  {% if c.reason %}<p class="setup-reason"><span class="muted">Toelichting van het model, een hypothese:</span> {{ c.reason }}</p>{% endif %}
+  {% if c.reason %}<p class="setup-reason"><span class="muted">Toelichting:</span> {{ c.reason }}</p>{% endif %}
 </article>
 {% endmacro %}
 

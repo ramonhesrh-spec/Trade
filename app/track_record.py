@@ -23,7 +23,7 @@ TYPE_LABELS = {
     "structuur": "Structuur-breuk (ongetest)",
     "structuur_c": "Structuur oordeel C",
     "smc_waarschuwing": "SMC met waarschuwing",
-    "trend": "Trend-pullback (ongetest)",
+    "trend": "Trend (ongetest)",
     "rejectie": "Rejectie op een niveau (ongetest)",
 }
 SOURCE_LABELS = {"scan": "Door HesPulse gevonden", "community": "Via de community"}

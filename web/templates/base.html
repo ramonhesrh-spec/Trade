@@ -289,7 +289,7 @@
       <a href="/signalen"{% if here == "/signalen" %} class="is-active" aria-current="page"{% endif %}>Journaal</a>
       <a href="/meldingen"{% if here == "/meldingen" %} class="is-active" aria-current="page"{% endif %}>Meldingen</a>
       <a href="/account"{% if here == "/account" %} class="is-active" aria-current="page"{% endif %}>Account</a>
-      <a href="/uitleg"{% if here == "/uitleg" %} class="is-active" aria-current="page"{% endif %}>Uitleg</a>
+      <a href="/uitleg"{% if here == "/uitleg" %} class="is-active" aria-current="page"{% endif %}>Handleiding</a>
     </div>
     <details class="coin-menu js-accordion">
       <summary>
@@ -329,7 +329,7 @@
 <div class="more-sheet" id="more-sheet" hidden>
   <div class="more-sheet-panel" role="dialog" aria-label="Meer">
     <div class="more-links">
-      <a href="/week">Kwartaalcijfers</a><a href="/signalen">Journaal</a><a href="/meldingen">Meldingen</a><a href="/account">Account</a><a href="/uitleg">Uitleg</a>
+      <a href="/week">Kwartaalcijfers</a><a href="/signalen">Journaal</a><a href="/meldingen">Meldingen</a><a href="/account">Account</a><a href="/uitleg">Handleiding</a>
     </div>
     <p class="muted more-label">Coins</p>
     <div class="more-coins">{% for c in coins %}<a href="/coins/{{ c.symbol }}">{{ c.symbol }}</a>{% endfor %}</div>
@@ -357,7 +357,7 @@
   <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="Snel zoeken">
     <div class="cmdk-input-row">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input id="cmdk-input" type="text" placeholder="Zoek een coin of pagina... (bv. eth, uitleg)" autocomplete="off"
+      <input id="cmdk-input" type="text" placeholder="Zoek een coin of pagina... (bv. eth, handleiding)" autocomplete="off"
              role="combobox" aria-expanded="true" aria-controls="cmdk-results" aria-autocomplete="list" aria-label="Zoeken">
       <kbd>Esc</kbd>
     </div>
@@ -562,7 +562,7 @@
       var list = [
         { label: "Signalen", href: "/signalen", hint: "pagina" },
         { label: "Mijn account", href: "/account", hint: "pagina" },
-        { label: "Uitleg", href: "/uitleg", hint: "pagina" },
+        { label: "Handleiding", href: "/uitleg", hint: "pagina" },
       ];
       document.querySelectorAll(".coin-menu-list a").forEach(function (a) {
         list.push({ label: a.textContent.trim(), href: a.getAttribute("href"), hint: "coin" });

@@ -41,7 +41,7 @@ class TrendLiveTest(DbCase):
         rows = repo.list_signals_for_quality_report(None)
         self.assertEqual([r["trade_type"] for r in rows], ["trend"])
         title, body, silent = self.pushed[0]
-        self.assertIn("Trend-pullback", title)
+        self.assertIn("Trend", title)
         self.assertNotIn("ngetest", title + body)
         self.assertNotIn("-0,06R", body)                       # geen afschrikkende regel in de melding, de score staat op Bewijs
         self.assertIn("Tik voor de grafiek en het plan.", body)

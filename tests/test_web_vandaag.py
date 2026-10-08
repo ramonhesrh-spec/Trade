@@ -47,7 +47,7 @@ class WebVandaagTests(unittest.TestCase):
         r = self.client.get("/structuur")
         self.assertEqual(r.status_code, 200)
         self.assertIn(f'id="structuur-{sid}"', r.text)
-        self.assertIn("Laatste 24 uur: 1 breuk gezien, 1 goedgekeurd", r.text)
+        self.assertIn("Laatste 24 uur: 1 kans gezien, 1 beoordeeld", r.text)
         live = self.client.get("/api/kansen").json()
         self.assertIn(str(sid), live["structuur"])                         # live afstand per wachtend plan
         self.assertIn("te gaan", r.text)
@@ -259,7 +259,9 @@ class WebVandaagTests(unittest.TestCase):
         repo.insert_market_script("BTC", "Geheime samenvatting", "long", "m", [scenario_row()], 0, (now + timedelta(hours=10)).isoformat())
         anon = TestClient(self.main.app)
         page = anon.get("/").text
-        self.assertIn("Vandaag, live", page)
+        self.assertIn("Marktbeeld", page)
+        self.assertNotIn("Claude", page)                         # de werkwijze staat niet op de openbare pagina
+        self.assertNotIn("markt-script", page)
         self.assertIn("vd-timeline", page)
         self.assertIn("1 long-scenario", page)
         self.assertNotIn("Geheime samenvatting", page)           # scenario's en duiding blijven achter het inloggen

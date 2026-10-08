@@ -49,7 +49,7 @@ def levels(direction: str, entry: float, stop: float) -> Optional[tuple[float, f
 async def _fire(coin: str, e: dict, stop: float, take: float) -> None:
     from app.signal_processor import fanout_confirmed_signal
     direction, entry = e["direction"], e["entry"]
-    narrative = "Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten."
+    narrative = f"Trend, instap {push_notify.fmt_price(entry)}."
     reason, pass_pct = chance_checks.finish(chance_checks.trend_checks(direction, entry, stop, e["extreme"]))
     signal_id = repo.insert_signal({
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "trend", "pattern_name": "Trend-pullback",
@@ -62,8 +62,8 @@ async def _fire(coin: str, e: dict, stop: float, take: float) -> None:
     rr = abs(take - entry) / abs(entry - stop)
     await fanout_confirmed_signal(
         signal_id, coin, direction, entry, stop, take, entry,
-        title=push_notify.alert_title(coin, direction, "Trend-pullback"),
-        make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, "Trend op 4u en 1u, pullback bevestigd op 5m."),
+        title=push_notify.alert_title(coin, direction, "Trend"),
+        make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr),
         reason=reason, signal_type="trend",
     )
 

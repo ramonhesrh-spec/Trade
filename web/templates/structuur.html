@@ -6,18 +6,21 @@
 <div class="page-head">
   <h2>Setups</h2>
 </div>
-<p class="page-intro">Breuk van een lijn of range op 30 minuten. De CEO beoordeelt de kwaliteit, de code rekent het plan uit: de limietorder staat op het gebroken niveau, de stop vlak erachter, de doelen op zwaaipunten. Zet de order klaar voordat de koers terugkomt. De score van deze methode staat op <a href="/bewijs">Bewijs</a>.</p>
+<p class="page-intro">Kansen die klaarstaan, met instap, stop en doelen. De score per soort staat op <a href="/bewijs">Bewijs</a>.</p>
 
 <p class="engine-status {% if not engine_on %}is-off{% elif engine_minutes is none or engine_minutes > 15 %}is-stale{% endif %}">
-  {% if not engine_on %}De motor staat uit (STRUCTURE_ENABLED=false).
-  {% elif engine_minutes is none %}De motor heeft nog niet gedraaid. Hij start in de eerstvolgende scan van 5 minuten, na een herstart van de bot.
-  {% elif engine_minutes > 15 %}Let op: de motor draaide {{ engine_minutes }} minuten geleden voor het laatst. Controleer crypto-market-scan-smc.timer.
-  {% else %}Motor actief, laatste controle {{ engine_minutes }} min geleden.{% endif %}
-  Laatste 24 uur: {{ counts.total }} {{ "breuk" if counts.total == 1 else "breuken" }} gezien, {{ counts.goedgekeurd }} goedgekeurd, {{ counts.afgekeurd }} afgekeurd door de CEO, {{ counts.geen_plan }} zonder plan{% if counts.geen_oordeel %}, {{ counts.geen_oordeel }} zonder oordeel{% endif %}.
+  {% if is_ceo(user) %}
+    {% if not engine_on %}De motor staat uit (STRUCTURE_ENABLED=false).
+    {% elif engine_minutes is none %}De motor heeft nog niet gedraaid. Hij start in de eerstvolgende scan van 5 minuten, na een herstart van de bot.
+    {% elif engine_minutes > 15 %}Let op: de motor draaide {{ engine_minutes }} minuten geleden voor het laatst. Controleer crypto-market-scan-smc.timer.
+    {% else %}Laatste controle {{ engine_minutes }} min geleden.{% endif %}
+  {% elif engine_on and engine_minutes is not none and engine_minutes <= 15 %}Laatste controle {{ engine_minutes }} min geleden.
+  {% else %}Controle tijdelijk niet actueel.{% endif %}
+  Laatste 24 uur: {{ counts.total }} {{ "kans" if counts.total == 1 else "kansen" }} gezien, {{ counts.goedgekeurd + counts.afgekeurd }} beoordeeld, {{ counts.geen_plan }} zonder plan.
 </p>
 
 <section style="--i: 0">
-  <h3 class="vd-section-title">Wachten op de terugkeer</h3>
+  <h3 class="vd-section-title">Klaarstaand</h3>
   <p class="filter-chips">
     <a class="chip{% if not only_ab and not side %} is-active{% endif %}" href="/structuur">Alles</a>
     <a class="chip{% if only_ab %} is-active{% endif %}" href="/structuur?alleen=ab">Alleen sterk en redelijk</a>
@@ -45,16 +48,14 @@
 </section>
 
 <section style="--i: 1">
-  <h3 class="vd-section-title">Trend-pullback</h3>
-  <p class="muted">Trend op 4 uur en 1 uur, impuls op 15 minuten, pullback naar de zone en een bevestiging op 5 minuten.</p>
+  <h3 class="vd-section-title">Trend</h3>
   <p class="engine-status {% if trend_minutes is none or trend_minutes > 15 %}is-stale{% endif %}">
-    {% if trend_minutes is none %}De trend-motor heeft nog niet gedraaid. Hij start in de eerstvolgende scan van 5 minuten.
-    {% elif trend_minutes > 15 %}Let op: de trend-motor draaide {{ trend_minutes }} minuten geleden voor het laatst.
-    {% else %}Trend-motor actief, laatste controle {{ trend_minutes }} min geleden.{% endif %}
-    Op een jaar candles zijn er ongeveer 2 instappen per coin per dag, dus verwacht er binnen een paar uur een paar.
+    {% if trend_minutes is none %}Nog geen controle gedraaid.
+    {% elif trend_minutes > 15 %}Laatste controle {{ trend_minutes }} minuten geleden.
+    {% else %}Laatste controle {{ trend_minutes }} min geleden.{% endif %}
   </p>
   {% if not trend_on %}
-  <p class="muted empty">Staat uit (TREND_ENABLED=false).</p>
+  <p class="muted empty">Staat uit.</p>
   {% elif not trend_signals %}
   <p class="muted empty">Geen instap de laatste 24 uur.</p>
   {% else %}
