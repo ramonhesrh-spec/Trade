@@ -124,3 +124,32 @@ def diagnose(bars: pd.DataFrame, i: int, direction: str) -> dict:
             out["close_from_level_atr"] = float((close[i] - level) / atr)
             out["bullish"] = bool(close[i] > open_[i])
     return out
+
+
+def run(frame_1m: pd.DataFrame, cost_pct: float = 0.06) -> pd.DataFrame:
+    """Toets van de Rejectie-regel op 1m-candles: één rij per afwijzing, instap op het slot van de afwijzende 30m-candle, stop en doelen
+    zoals live (plan_for met smc_eval.floor_stop), ladder met een derde per doel en de stop naar de instap na het eerste doel."""
+    from app import smc_eval
+    from app.replay.lab import make_bars
+    bars = make_bars(frame_1m, br.BAR_MINUTES)
+    events = find_rejections(bars)
+    cols = ["at", "direction", "swept", "touches", "vol_ratio", "risk_pct", "net", "outcome", "target_r"]
+    if events.empty:
+        return pd.DataFrame(columns=cols)
+    b = add_indicators(bars).reset_index(drop=True)
+    m = br.Minutes(frame_1m)
+    rows = []
+    for ev in events.itertuples():
+        plan = plan_for(ev, b, smc_eval.floor_stop)
+        if plan is None:
+            continue
+        k = m.index(b.at[int(ev.bar), "close_time"])
+        if k >= len(m.high):
+            continue
+        r_list = tuple(plan["targets_r"])
+        fractions = tuple(1 / len(r_list) for _ in r_list)
+        w = m.window(k)
+        _, net, outcome = br.simulate(ev.direction, plan["entry"], plan["stop"], r_list, fractions, True, m.high[w], m.low[w], m.close[w], cost_pct)
+        rows.append({"at": b.at[int(ev.bar), "close_time"], "direction": ev.direction, "swept": ev.swept, "touches": int(ev.touches),
+                     "vol_ratio": ev.vol_ratio, "risk_pct": plan["risk_pct"], "net": net, "outcome": outcome, "target_r": r_list[-1]})
+    return pd.DataFrame(rows, columns=cols)

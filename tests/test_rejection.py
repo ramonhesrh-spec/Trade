@@ -97,3 +97,26 @@ class LiveTest(DbCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReplayRunTest(unittest.TestCase):
+    @staticmethod
+    def minute_frame(df30: pd.DataFrame) -> pd.DataFrame:
+        """1m-candles die terug naar dezelfde 30m-candles samenvoegen: open, hoog, laag en slot staan op vaste minuten."""
+        rows = []
+        for r in df30.itertuples():
+            path = [r.open, r.high, r.low] + [(r.open + r.close) / 2] * 26 + [r.close]
+            for i, price in enumerate(path):
+                rows.append({"timestamp": r.timestamp + pd.Timedelta(minutes=i), "open": price, "high": price, "low": price, "close": price, "volume": 1.0})
+        return pd.DataFrame(rows)
+
+    def test_run_simulates_the_planted_rejection_with_costs_and_a_ladder(self):
+        trades = rj.run(self.minute_frame(frame("short")), cost_pct=0.06)
+        self.assertEqual(list(trades.columns), ["at", "direction", "swept", "touches", "vol_ratio", "risk_pct", "net", "outcome", "target_r"])
+        row = trades[(trades["direction"] == "short") & (trades["touches"] >= 3)].iloc[0]
+        self.assertGreaterEqual(row["risk_pct"], config.SMC_MIN_STOP_PCT - 1e-9)            # stop minimaal zoals live
+        self.assertIn(row["outcome"], ("stop", "be", "doel", "tijd"))
+
+    def test_run_returns_an_empty_frame_with_columns_when_nothing_is_found(self):
+        flat = frame("short").assign(open=100.0, high=100.1, low=99.9, close=100.0)
+        self.assertTrue(rj.run(self.minute_frame(flat)).empty)
