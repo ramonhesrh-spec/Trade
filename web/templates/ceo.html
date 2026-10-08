@@ -79,6 +79,13 @@
     <p><span>Link in bio</span>Hij staat er, kijk maar</p>
   </section>
 
+  {% if scrapped %}
+  <section class="ceo-scrapped">
+    <h3 class="vd-section-title ceo-h3">De CEO schrapte</h3>
+    {% for x in scrapped %}<p><strong>{{ x.name }}</strong>: de laatste {{ x.limit }} afgeronde trades waren samen negatief, dus staat deze soort uit. <a href="/bewijs">Bewijs</a></p>{% endfor %}
+  </section>
+  {% endif %}
+
   <blockquote class="ceo-quote">“{{ quote }}”<footer>De CEO, vandaag</footer></blockquote>
 
   <section class="ceo-masterclass">

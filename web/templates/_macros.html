@@ -299,13 +299,13 @@
     <span class="setup-grade setup-grade-{{ (c.grade or 'c')|lower }}" title="Oordeel van de CEO">{{ c.grade | grade_word }}</span>
     <span class="muted setup-age">{{ c.created_at | age }}</span>
   </header>
-  {% if c.grade in ('A', 'B') %}<p class="setup-verdict">{{ "De CEO keurt goed." if c.grade == 'A' else "De CEO knikt." }}</p>{% endif %}
-  {% if c.grade is none or c.grade == 'C' %}<p class="setup-weak"><strong>{{ "De CEO twijfelt" if c.grade == 'C' else "De CEO zit in een vergadering" }}.</strong> {{ c.reason }}</p>{% endif %}
+  {{ proof_line("structuur") }}
+  {% if c.checks %}<ul class="setup-checks" aria-label="Wat er klopt en wat niet">{% for label, ok in c.checks %}<li class="{{ 'is-ok' if ok else 'is-no' }}"><span aria-hidden="true">{{ "✓" if ok else "✗" }}</span> {{ label }}</li>{% endfor %}</ul>{% endif %}
   {{ c.chart }}
   {{ steps_list(c.steps, risk_eur) }}
   {{ r_bars(c.targets) }}
   {{ share_button(c.coin, c.direction, c.steps) }}
-  {% if c.grade is not none and c.grade != 'C' %}<p class="setup-reason">{{ c.reason }}</p>{% endif %}
+  {% if c.reason %}<p class="setup-reason"><span class="muted">Toelichting van het model, een hypothese:</span> {{ c.reason }}</p>{% endif %}
 </article>
 {% endmacro %}
 
@@ -321,4 +321,15 @@
   <span class="r-ruler-tick" style="left: 100%"><i>+2R</i></span>
   <span class="r-ruler-mark" style="left: {{ (clamped + 1) / 3 * 100 }}%"></span>
 </div>
+{% endmacro %}
+
+
+{# Bewijsregel onder een kans: wat deze soort tot nu toe deed, met aantallen, en een balk naar de 50 trades waarna we oordelen. #}
+{% macro proof_line(trade_type) %}
+{% set p = proof(trade_type) %}
+<p class="proof-line is-{{ p.state }}" title="Uit afgeronde trades van deze soort. Bewijs toont de details.">
+  <strong>{{ p.label }}</strong> <span>{{ p.text }}</span>
+  {% if p.state == "proef" %}<span class="proof-bar" aria-hidden="true"><i style="width: {{ (p.progress * 100)|round(0) }}%"></i></span>{% endif %}
+  <a href="/bewijs">Bewijs</a>
+</p>
 {% endmacro %}

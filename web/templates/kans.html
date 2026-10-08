@@ -12,11 +12,12 @@
     <span class="muted setup-age">{{ signal.created_at | age }}</span>
   </header>
 
-  {% if signal.auto_outcome == "take_profit" %}<p class="kans-outcome is-win">✓ Doel geraakt</p>
+  {% if signal.auto_outcome == "take_profit" %}<p class="kans-outcome is-win" data-win="{{ signal.id }}">✓ Doel geraakt</p>
   {% elif signal.auto_outcome == "stop_loss" %}<p class="kans-outcome is-loss">✗ Stop geraakt</p>
   {% elif signal.auto_outcome == "vervallen" %}<p class="kans-outcome">Vervallen zonder uitkomst</p>
   {% else %}<p class="kans-outcome is-open">Loopt nog{% if price %} · nu {{ fmt(price) }}{% endif %}</p>{% endif %}
 
+  {{ macros.proof_line(signal.trade_type) }}
   {{ chart }}
   {% if timeframes %}<p class="filter-chips tf-chips">{% for t in timeframes %}<a class="chip{% if t == tf %} is-active{% endif %}" href="/kans/{{ signal.id }}?tf={{ t }}">{{ t|replace('h', 'u') }}</a>{% endfor %}</p>{% endif %}
 
@@ -39,6 +40,7 @@
   {{ macros.reason_popup(signal) }}
   {% endif %}
 
+  {% if fingerprint %}<p class="muted keten-note">Vingerafdruk van dit plan bij het melden: <code>{{ fingerprint[:16] }}…</code> <a href="/keten">Narekenen</a></p>{% endif %}
   <p><a href="/coins/{{ signal.coin }}">Alle kansen op {{ signal.coin }}</a></p>
 </article>
 {% endblock %}

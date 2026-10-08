@@ -20,7 +20,7 @@ def slot_key(now: datetime) -> Optional[str]:
     return None
 
 
-def build(waiting: list[dict]) -> Optional[tuple[str, str]]:
+def build(waiting: list[dict], quote: Optional[str] = None) -> Optional[tuple[str, str]]:
     """waiting: [{coin, direction, grade, dist_pct}], dist_pct = hoever de koers nog van het niveau is (positief = nog te gaan).
     Geeft (titel, tekst) of None als er niets wacht."""
     if not waiting:
@@ -31,7 +31,7 @@ def build(waiting: list[dict]) -> Optional[tuple[str, str]]:
     title = f"{n} {'kans wacht' if n == 1 else 'kansen wachten'}"
     lines = [f"{w['coin']} {w['direction']}{' ' + w['grade'] if w.get('grade') in ('A', 'B') else ''}: nog {abs(w['dist_pct']):.1f}%" for w in ordered[:3]]
     body = f"Het dichtst bij: {nearest['coin']} {nearest['direction']}, nog {abs(nearest['dist_pct']):.1f}%.\n" + "\n".join(lines[1:] if n > 1 else [])
-    return title, body.strip()
+    return title, (body.strip() + (f"\n{quote}" if quote else ""))
 
 
 async def run(now: Optional[datetime] = None) -> None:
@@ -50,7 +50,8 @@ async def run(now: Optional[datetime] = None) -> None:
         level = json.loads(s["plan"])["level"]
         dist = (level - price) / price * 100 if s["direction"] == "short" else (price - level) / price * 100
         waiting.append({"coin": s["coin"], "direction": s["direction"], "grade": s["grade"], "dist_pct": dist})
-    message = build(waiting)
+    from app import ceo
+    message = build(waiting, ceo.quote_of_the_day(today.local(now).date()))
     if not message or not repo.alert_once(key):
         return
     for user in repo.list_users():

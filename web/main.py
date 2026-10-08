@@ -30,7 +30,8 @@ from markupsafe import Markup
 from app import advice as advice_module
 from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, radar, repo, risk, security, setup_chart, today, track_record
-from app import ceo, chance_steps, kans_view
+from app import ceo, chance_checks, chance_steps, kans_view, trust
+from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 
 logger = logging.getLogger("web")
@@ -76,6 +77,24 @@ def asset(path: str) -> str:
     return f"/static/{path}?v={version}"
 
 
+_proof_cache = {"at": 0.0, "map": {}}
+
+
+def proof(trade_type: str) -> dict:
+    """Bewijsstatus van een soort kans (app/trust.py), een minuut onthouden: elke kaart vraagt erom."""
+    if time.monotonic() - _proof_cache["at"] > 60:
+        entries = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
+        by_type = {}
+        for e in entries:
+            if e["source"] != "alles":
+                prev = by_type.get(e["trade_type"])
+                if prev is None or e["resolved"] > prev["resolved"]:
+                    by_type[e["trade_type"]] = e
+        _proof_cache.update(at=time.monotonic(), map=by_type)
+    return trust.status(_proof_cache["map"].get(trade_type))
+
+
+templates.env.globals["proof"] = proof
 templates.env.globals["asset"] = asset
 templates.env.filters["grade_word"] = lambda g: {"A": "Sterk", "B": "Redelijk", "C": "Zwak"}.get(g, "Geen oordeel")
 templates.env.globals["fmt_price"] = today.fmt_price
@@ -183,6 +202,26 @@ async def landing(request: Request):
         "kraken_referral_url": config.KRAKEN_REFERRAL_URL,
         "kraken_referral_code": config.KRAKEN_REFERRAL_CODE,
     })
+
+
+@app.get("/keten")
+async def keten_page(request: Request):
+    """Openbaar, zonder login: de ketting moet voor iedereen narekenbaar zijn."""
+    rows = repo.list_chain(100000)
+    ok, bad = chain_mod.verify(rows)
+    recent = []
+    for r in reversed(rows[-100:]):
+        body = json.loads(r["payload"])
+        recent.append({**r, "created_at": body["created_at"], "coin": body["coin"], "direction": body["direction"], "trade_type": body["trade_type"]})
+    return templates.TemplateResponse(request, "keten.html", {
+        "ok": ok, "bad": bad, "total": len(rows), "recent": recent, "first_id": rows[0]["signal_id"] if rows else None,
+        "base_url": config.DASHBOARD_URL.rstrip("/"),
+    })
+
+
+@app.get("/keten.json")
+async def keten_json():
+    return JSONResponse(repo.list_chain(100000))
 
 
 # Vaste, kleine lijst voor de tickerstrook op de landingspagina: geen login
@@ -357,7 +396,8 @@ async def _structure_cards() -> list[dict]:
     for s in setups:
         plan = json.loads(s["plan"])
         targets = list(zip(plan["targets"], plan["targets_r"]))
-        cards.append({**s, "plan": plan, "targets": targets,
+        checks = chance_checks.structure_checks(chance_checks.parse_features(s.get("features")), plan, s["grade"])
+        cards.append({**s, "plan": plan, "targets": targets, "checks": [c for c in checks if not c[0].startswith("De CEO")],
                       "steps": chance_steps.structure_steps(plan, targets, prices.get(s["coin"]), s["direction"], s["coin"]),
                       "chart": Markup(setup_chart.setup_svg(plan.get("candles", []), s, plan, prices.get(s["coin"])))})
     return cards
@@ -506,6 +546,7 @@ async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dic
         "user": user, "signal": signal, "facts": kans_view.facts(signal), "events": kans_view.timeline(signal, setup),
         "chart": Markup(kans_view.chart(signal, setup, candles, price)), "price": price, "setup": setup,
         "tf": tf, "timeframes": KANS_TIMEFRAMES if not setup else (),
+        "fingerprint": (repo.get_chain_link(signal["id"]) or {}).get("hash"),
     })
 
 
@@ -1644,6 +1685,13 @@ async def ceo_page(request: Request, user: dict = Depends(require_login)):
     now = datetime.now(timezone.utc)
     photo = BASE_DIR / "static" / "ceo.jpg"
     students = ceo.students([u["username"] for u in repo.list_users() if u["id"] != boss["id"]], now.date())
+    scrapped = []
+    from app.structure_live import should_disable
+    for trade_type, name, limit in (("structuur", "Structuur", config.STRUCTURE_MAX_NEGATIVE), ("trend", "Trend-pullback", config.TREND_MAX_NEGATIVE),
+                                    ("rejectie", "Rejectie", config.REJECTION_MAX_NEGATIVE), ("script", "Markt-script", config.SCRIPT_MAX_NEGATIVE),
+                                    ("samenval", "Samenval", config.SAMENVAL_MAX_NEGATIVE)):
+        if should_disable(repo.list_type_results(trade_type, limit), limit):
+            scrapped.append({"name": name, "limit": limit})
     presence = None
     if is_ceo(user):
         stats = repo.visit_stats(now)
@@ -1651,7 +1699,7 @@ async def ceo_page(request: Request, user: dict = Depends(require_login)):
             ({"name": u["username"], **stats.get(u["id"], {"views": 0, "active_days": 0, "last_at": None})} for u in repo.list_users()),
             key=lambda p: (-p["views"], p["name"].lower()))
     return templates.TemplateResponse(request, "ceo.html", {
-        "presence": presence,
+        "presence": presence, "scrapped": scrapped,
         "user": user, "boss": boss, "days_in_office": (now - first).days if first else 0,
         "quote": ceo.quote_of_the_day(now.date()), "rain": ceo.rain_count(week["net_r"]), "students": students,
         "photo": f"/static/ceo.jpg?v={int(photo.stat().st_mtime)}" if photo.exists() else None,

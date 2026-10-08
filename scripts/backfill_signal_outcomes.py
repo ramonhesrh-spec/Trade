@@ -8,7 +8,10 @@ afhandeling aan de gewone periodieke check_signal_outcomes over, dit
 script raakt alleen de hit-detectie zelf aan. Puur een correctie met
 terugwerkende kracht, wijzigt verder niets aan het systeem.
 
-Draai met: python3 scripts/backfill_signal_outcomes.py [--dry-run]"""
+Met --include-vervallen worden ook signalen herbeoordeeld die als 'vervallen' zijn afgesloten: een doel of stop dat geraakt werd terwijl de check
+niet draaide, werd vroeger nooit gezien. Alleen een echt geraakte stop of doel overschrijft 'vervallen'.
+
+Draai met: python3 scripts/backfill_signal_outcomes.py [--dry-run] [--include-vervallen]"""
 import asyncio
 import sys
 from pathlib import Path
@@ -23,10 +26,11 @@ from app.level_check import (  # noqa: E402
 )
 
 dry_run = "--dry-run" in sys.argv
+include_expired = "--include-vervallen" in sys.argv
 
 
 async def main() -> None:
-    signals = repo.list_unresolved_signals_with_levels()
+    signals = repo.list_unresolved_signals_with_levels() + (repo.list_expired_signals_with_levels() if include_expired else [])
     print(f"{len(signals)} signalen zonder vastgestelde uitkomst om te herbeoordelen\n")
 
     fixed = 0

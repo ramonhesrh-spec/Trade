@@ -2211,3 +2211,25 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
 @keyframes px-up { from { color: var(--green); } }
 @keyframes px-down { from { color: var(--red); } }
 @media (prefers-reduced-motion: reduce) { .px-up, .px-down { animation: none; } }
+
+/* Vertrouwen uit bewijs: bewijsregel, controlepunten en de ketting. */
+.proof-line { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3); margin: var(--space-3) 0; font-size: var(--text-sm, 0.875rem); color: var(--text-dim); }
+.proof-line strong { padding: 1px 8px; border-radius: 999px; border: 1px solid var(--border-strong); font-size: var(--text-2xs); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text); }
+.proof-line.is-bewezen strong { border-color: var(--green); color: var(--green); }
+.proof-line.is-negatief strong { border-color: var(--red); color: var(--red); }
+.proof-bar { flex: 1 1 80px; max-width: 140px; height: 4px; border-radius: 2px; background: var(--panel-hover); overflow: hidden; }
+.proof-bar i { display: block; height: 100%; background: var(--accent); }
+.setup-checks { list-style: none; margin: var(--space-3) 0; padding: 0; display: grid; gap: 2px; font-size: var(--text-sm, 0.875rem); }
+.setup-checks .is-ok { color: var(--text-dim); }
+.setup-checks .is-no { color: var(--text-dim); opacity: 0.75; }
+.setup-checks .is-ok span { color: var(--green); }
+.setup-checks .is-no span { color: var(--red); }
+.keten-page { max-width: 720px; margin: 0 auto; padding: var(--space-7) var(--space-6); }
+.keten-status { padding: var(--space-4) var(--space-5); border-radius: var(--radius); border: 1px solid var(--border-strong); }
+.keten-status.is-ok { border-color: var(--green); color: var(--green); }
+.keten-status.is-broken { border-color: var(--red); color: var(--red); }
+.keten-code { overflow-x: auto; padding: var(--space-4); border: 1px solid var(--border); border-radius: var(--radius); background: var(--panel); font-family: var(--mono); font-size: var(--text-xs); }
+.keten-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm, 0.875rem); }
+.keten-table th, .keten-table td { padding: var(--space-3); text-align: left; border-bottom: 1px solid var(--border); }
+.keten-note code { font-family: var(--mono); }
+.ceo-scrapped p { color: var(--text-dim); }

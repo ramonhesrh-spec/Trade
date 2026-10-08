@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e0f">
+<meta name="color-scheme" content="dark">
+<style>html{background:#0a0e0f}</style>
+<title>Ketting — HesPulse</title>
+<link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ asset('style.css') }}">
+</head>
+<body>
+<main class="keten-page">
+  <h2>Ketting</h2>
+  <p class="page-intro">Elk plan krijgt bij het melden een vingerafdruk (hash) die aan de vorige hangt. Past iemand later een plan aan, laat hij een signaal weg of voegt hij er een tussen, dan klopt de ketting niet meer. Je hoeft ons niet te geloven: reken het zelf na.</p>
+
+  <p class="keten-status {{ 'is-ok' if ok else 'is-broken' }}">
+    {% if not total %}Nog geen signalen in de ketting. De eerste komt bij de volgende melding.
+    {% elif ok %}Ketting klopt: {{ total }} signalen, geen enkel plan achteraf aangepast.
+    {% else %}Ketting gebroken bij signaal #{{ bad }}. Een plan is achteraf veranderd of een signaal ontbreekt.{% endif %}
+  </p>
+
+  <h3 class="vd-section-title">Zelf narekenen</h3>
+  <p class="muted">Haal <a href="/keten.json">/keten.json</a> op. Voor elk signaal geldt: hash = SHA-256 van <code>vorige hash | payload</code>, met <code>genesis</code> als vorige hash voor de eerste. Controleer ook dat de vorige hash gelijk is aan de hash van het signaal ervoor.</p>
+  <pre class="keten-code">import hashlib, json, urllib.request
+rows = json.load(urllib.request.urlopen("{{ base_url }}/keten.json"))
+prev = None
+for r in rows:
+    assert r["prev"] == prev
+    assert hashlib.sha256(f"{prev or 'genesis'}|{r['payload']}".encode()).hexdigest() == r["hash"]
+    prev = r["hash"]
+print("klopt", len(rows))</pre>
+  <p class="muted">De ketting begint bij signaal #{{ first_id if first_id else "-" }}. Wat eerder gemeld is, zit er niet in en bewijzen we dus niet. In de payload staat het plan op het moment van melden: tijd, coin, richting, soort, instap, stop en doel. De uitkomst staat er bewust niet in, die komt later.</p>
+
+  <h3 class="vd-section-title">Laatste signalen</h3>
+  <table class="keten-table">
+    <thead><tr><th>#</th><th>Tijd (UTC)</th><th>Plan</th><th>Hash</th></tr></thead>
+    <tbody>
+    {% for r in recent %}
+      <tr><td>{{ r.signal_id }}</td><td>{{ r.created_at[:16]|replace("T", " ") }}</td><td>{{ r.coin }} {{ r.direction }} · {{ r.trade_type }}</td><td class="mono">{{ r.hash[:12] }}…</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</main>
+</body>
+</html>

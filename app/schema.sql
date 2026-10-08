@@ -645,3 +645,11 @@ CREATE TABLE IF NOT EXISTS user_visits (
     last_at TEXT NOT NULL,
     PRIMARY KEY (user_id, day)
 );
+
+-- Ketting van vingerafdrukken over de signalen op het moment van melden (app/chain.py). Eigen tabel: de signals-tabel wordt bij een migratie soms herbouwd.
+CREATE TABLE IF NOT EXISTS signal_chain (
+    signal_id INTEGER PRIMARY KEY,
+    prev TEXT,
+    payload TEXT NOT NULL,
+    hash TEXT NOT NULL
+);

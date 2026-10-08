@@ -2,10 +2,13 @@
 signalen. Wordt gebruikt door de Discord bot, de verwerkingspijplijn en het
 webdashboard."""
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import config, db, risk
+from app import chain, config, db, risk
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -1008,13 +1011,35 @@ def insert_signal(data: dict) -> int:
         for f in fields
     ]
     placeholders = ", ".join("?" for _ in fields)
+    created_at = db.now_iso()
     with db.session() as conn:
         cur = conn.execute(
             f"""INSERT INTO signals ({", ".join(fields)}, created_at)
                 VALUES ({placeholders}, ?)""",
-            (*values, db.now_iso()),
+            (*values, created_at),
         )
+        # In dezelfde transactie als het signaal, zodat er nooit een signaal zonder schakel is. Een fout hier mag het melden niet blokkeren.
+        try:
+            signal = {**dict(zip(fields, values)), "id": cur.lastrowid, "created_at": created_at}
+            last = conn.execute("SELECT hash FROM signal_chain ORDER BY signal_id DESC LIMIT 1").fetchone()
+            prev = last["hash"] if last else None
+            body = chain.payload(signal)
+            conn.execute("INSERT INTO signal_chain (signal_id, prev, payload, hash) VALUES (?, ?, ?, ?)", (cur.lastrowid, prev, body, chain.link(prev, body)))
+        except Exception:
+            logger.exception("Schakel voor signaal %s niet vastgelegd", cur.lastrowid)
         return cur.lastrowid
+
+
+def list_chain(limit: int = 500, newest_first: bool = False) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT signal_id, prev, payload, hash FROM signal_chain ORDER BY signal_id " + ("DESC" if newest_first else "ASC") + " LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_chain_link(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT signal_id, prev, payload, hash FROM signal_chain WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
 
 
 def get_signal(signal_id: int) -> Optional[dict]:
@@ -1754,6 +1779,17 @@ def list_unresolved_signals_with_levels() -> list[dict]:
                  AND stop_loss IS NOT NULL
                  AND take_profit IS NOT NULL
                  AND is_practice = 0"""
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def list_expired_signals_with_levels() -> list[dict]:
+    """Signalen die als 'vervallen' zijn afgesloten, voor een herbeoordeling op candles sinds hun aanmaakmoment (scripts/backfill_signal_outcomes.py)."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, coin, direction, stop_loss, take_profit, created_at, nearest_sr_zone_price
+               FROM signals
+               WHERE auto_outcome = 'vervallen' AND stop_loss IS NOT NULL AND take_profit IS NOT NULL AND is_practice = 0"""
         ).fetchall()
         return [dict(row) for row in rows]
 

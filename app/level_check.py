@@ -21,6 +21,8 @@ from typing import Optional
 
 from datetime import datetime, timedelta, timezone
 
+import pandas as pd
+
 from app import db, exchange, indicators, push_notify, repo
 from app.signal_processor import (
     SWING_WATCH_MAX_AGE_DAYS, _price_broke_through, _price_near_level, run_swing_check,
@@ -133,6 +135,17 @@ async def check_open_trades() -> None:
         repo.mark_level_alert_sent(entry["id"])
 
 
+def _aware(moment: datetime) -> datetime:
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def _fetch_since(coin: str, since: datetime):
+    """5m-candles vanaf `since` (maximaal 1000, ongeveer 3,5 dag); voor een ouder signaal 15m, wat ver genoeg terugreikt."""
+    age = datetime.now(timezone.utc) - since
+    timeframe = LEVEL_CHECK_CANDLE_TIMEFRAME if age <= timedelta(days=3) else "15m"
+    return exchange.fetch_ohlcv(coin, timeframe=timeframe, limit=1000, since=int((since - timedelta(minutes=15)).timestamp() * 1000))
+
+
 async def check_signal_outcomes() -> None:
     """Volledig automatisch trackrecord: voor elk signaal waarvan de
     uitkomst nog niet vaststaat, checkt dit of de candle-hoog/laag sinds de
@@ -143,21 +156,26 @@ async def check_signal_outcomes() -> None:
     signals = repo.list_unresolved_signals_with_levels()
     logger.info("%d signalen zonder vastgestelde uitkomst om te checken", len(signals))
 
+    # Per coin candles vanaf het oudste openstaande signaal, niet alleen de laatste 30 minuten: een doel of stop dat geraakt werd terwijl deze taak
+    # even niet draaide (herstart, vertraagde cyclus) werd anders nooit gezien en het signaal vervalde als "geen uitkomst". Elk signaal wordt
+    # daarna alleen getoetst op candles vanaf zijn eigen aanmaakmoment.
+    oldest: dict[str, datetime] = {}
+    for signal in signals:
+        created = _aware(datetime.fromisoformat(signal["created_at"]))
+        oldest[signal["coin"]] = min(created, oldest.get(signal["coin"], created))
     coin_candles: dict[str, object] = {}
+    for coin, since in oldest.items():
+        try:
+            coin_candles[coin] = await asyncio.to_thread(_fetch_since, coin, since)
+        except Exception:
+            logger.exception("Kon geen candles ophalen voor %s, sla over", coin)
+            coin_candles[coin] = None
     for signal in signals:
         coin = signal["coin"]
-        if coin not in coin_candles:
-            try:
-                coin_candles[coin] = await asyncio.to_thread(
-                    exchange.fetch_ohlcv, coin,
-                    timeframe=LEVEL_CHECK_CANDLE_TIMEFRAME, limit=LEVEL_CHECK_CANDLE_LOOKBACK,
-                )
-            except Exception:
-                logger.exception("Kon geen candles ophalen voor %s, sla over", coin)
-                coin_candles[coin] = None
-        candles = coin_candles[coin]
+        candles = coin_candles.get(coin)
         if candles is None:
             continue
+        candles = candles[candles["timestamp"] >= pd.Timestamp(_aware(datetime.fromisoformat(signal["created_at"])))]
 
         hit_result = _level_hit_in_candles(signal["direction"], signal["stop_loss"], signal["take_profit"], candles)
         if hit_result is not None:

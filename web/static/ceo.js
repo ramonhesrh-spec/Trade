@@ -37,6 +37,14 @@
     if (rain > 0) shower(rain, ["💸", "💶", "💰"]);
   }
 
+  // Een kans die zijn doel haalde viert dat één keer per apparaat. Alleen bij een echte uitkomst, en niet bij verminderde beweging (deze file stopt daar al eerder).
+  var win = document.querySelector("[data-win]");
+  if (win) {
+    var key = "hespulse-win-" + win.getAttribute("data-win"), seen = false;
+    try { seen = !!localStorage.getItem(key); localStorage.setItem(key, "1"); } catch (e) {}
+    if (!seen) shower(24, ["🎯", "💰", "✓"]);
+  }
+
   var logo = document.querySelector(".topbar .logo, .topbar a[href='/vandaag'], .topbar svg");
   var taps = [], toastTimer = null;
   if (logo) logo.addEventListener("click", function () {

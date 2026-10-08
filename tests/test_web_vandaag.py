@@ -78,7 +78,7 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("Geen plan klaar", self.client.get("/structuur").text)   # lege staat met uitleg en een knop
         self.assertIn("Alleen sterk en redelijk", self.client.get("/structuur?kant=short").text)
 
-    def test_grade_c_card_is_muted_and_shows_claudes_doubt_on_top(self):
+    def test_grade_c_card_is_muted_and_shows_facts_not_a_verdict(self):
         import json
         candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
         plan = {"level": 100.0, "stop": 101.0, "risk_pct": 1.0, "targets": [98.0, 97.0], "targets_r": [2.0, 3.0], "candles": candles}
@@ -88,8 +88,11 @@ class WebVandaagTests(unittest.TestCase):
             "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
         text = self.client.get("/structuur").text
         self.assertIn("is-weak", text)
-        self.assertIn("De CEO twijfelt", text)
-        self.assertEqual(text.count("Te weinig ruimte."), 1)               # de reden staat één keer, bovenaan
+        self.assertNotIn("De CEO twijfelt", text)                          # geen gevoel van een model, maar controlepunten en bewijs
+        self.assertIn("Zwak", text)
+        self.assertIn("Lijn of range minstens 3 keer aangeraakt", text)
+        self.assertIn("In proef", text)                                    # bewijsregel met de proefbalk
+        self.assertEqual(text.count("Te weinig ruimte."), 1)               # de toelichting staat één keer
 
     def test_coin_page_shows_masthead_price_and_waiting_structure_plan(self):
         import json
@@ -160,6 +163,19 @@ class WebVandaagTests(unittest.TestCase):
         self.assertEqual(self.client.get("/kans/999999").status_code, 404)
         self.assertIn("?tf=5m", page.text)                                  # tijdsknoppen onder de grafiek
         self.assertEqual(self.client.get(f"/kans/{ids[0]}?tf=zomaar").status_code, 200)
+
+    def test_chain_page_is_public_verifies_and_kans_page_shows_the_fingerprint(self):
+        sig_id = repo.insert_signal({"coin": "BTC", "direction": "short", "category": "day_trading", "trade_type": "rejectie", "price": 100.0, "stop_loss": 101.0,
+                                     "take_profit": 98.0, "technical_confirmed": 1, "hard_gates_ok": 1, "confidence": "Rejectie", "reason": "x"})
+        from fastapi.testclient import TestClient
+        from web.main import app
+        anon = TestClient(app)                                              # zonder login
+        page = anon.get("/keten")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("Ketting klopt", page.text)
+        rows = anon.get("/keten.json").json()
+        self.assertEqual(rows[-1]["signal_id"], sig_id)
+        self.assertIn(rows[-1]["hash"][:16], self.client.get(f"/kans/{sig_id}").text)
 
     def test_static_files_are_cached_by_version_and_pages_are_compressed(self):
         page = self.client.get("/vandaag", headers={"Accept-Encoding": "gzip"})
