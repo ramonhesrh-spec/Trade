@@ -135,6 +135,14 @@ async def check_open_trades() -> None:
         repo.mark_level_alert_sent(entry["id"])
 
 
+def candles_in_validity(candles, created_at: str):
+    """Alleen candles vanaf het aanmaakmoment en binnen de geldigheid van het signaal. Daarna vervalt een signaal; een raak op dag vijf telt dus niet
+    als uitkomst, anders geldt voor oude en nieuwe signalen een andere regel en klopt Bewijs niet."""
+    created = pd.Timestamp(_aware(datetime.fromisoformat(created_at)))
+    end = created + timedelta(days=SIGNAL_MAX_AGE_DAYS + 1)
+    return candles[(candles["timestamp"] >= created) & (candles["timestamp"] < end)]
+
+
 def _aware(moment: datetime) -> datetime:
     return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
 
@@ -175,7 +183,7 @@ async def check_signal_outcomes() -> None:
         candles = coin_candles.get(coin)
         if candles is None:
             continue
-        candles = candles[candles["timestamp"] >= pd.Timestamp(_aware(datetime.fromisoformat(signal["created_at"])))]
+        candles = candles_in_validity(candles, signal["created_at"])
 
         hit_result = _level_hit_in_candles(signal["direction"], signal["stop_loss"], signal["take_profit"], candles)
         if hit_result is not None:

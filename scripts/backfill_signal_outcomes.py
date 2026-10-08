@@ -22,7 +22,7 @@ from datetime import datetime  # noqa: E402
 
 from app import db, exchange, repo  # noqa: E402
 from app.level_check import (  # noqa: E402
-    LEVEL_CHECK_CANDLE_TIMEFRAME, _level_hit_in_candles,
+    LEVEL_CHECK_CANDLE_TIMEFRAME, _level_hit_in_candles, candles_in_validity,
 )
 
 dry_run = "--dry-run" in sys.argv
@@ -34,6 +34,7 @@ async def main() -> None:
     print(f"{len(signals)} signalen zonder vastgestelde uitkomst om te herbeoordelen\n")
 
     fixed = 0
+    tally = {"take_profit": 0, "stop_loss": 0}
     for signal in signals:
         coin = signal["coin"]
         since_ms = int(datetime.fromisoformat(signal["created_at"]).timestamp() * 1000)
@@ -45,21 +46,25 @@ async def main() -> None:
             print(f"  signaal {signal['id']} ({coin}): kon geen candles ophalen, overgeslagen ({exc})")
             continue
 
-        hit_result = _level_hit_in_candles(signal["direction"], signal["stop_loss"], signal["take_profit"], candles)
+        # Zelfde geldigheid als de live controle: een raak na het vervallen van het signaal telt niet.
+        hit_result = _level_hit_in_candles(signal["direction"], signal["stop_loss"], signal["take_profit"], candles_in_validity(candles, signal["created_at"]))
         if hit_result is None:
             continue
 
         hit, hit_price, hit_at = hit_result
         outcome = "take_profit" if hit == "take profit" else "stop_loss"
         occurred_at = hit_at.isoformat()
-        print(f"  signaal {signal['id']} ({coin}, {signal['direction']}): {outcome} op {hit_price} ({occurred_at})")
+        delay = hit_at - __import__("pandas").Timestamp(datetime.fromisoformat(signal["created_at"]))
+        print(f"  signaal {signal['id']} ({coin}, {signal['direction']}): {outcome} op {hit_price} ({occurred_at}), {delay.total_seconds() / 3600:.1f} uur na het signaal")
         if not dry_run:
             repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at)
             if outcome == "stop_loss" and signal["nearest_sr_zone_price"] is not None:
                 repo.record_sr_zone_failure(coin, signal["direction"], signal["nearest_sr_zone_price"], occurred_at)
         fixed += 1
+        tally[outcome] += 1
 
-    print(f"\n{fixed} signalen {'zouden' if dry_run else ''} gecorrigeerd {'worden' if dry_run else ''}".strip())
+    print(f"\nDaarvan {tally['take_profit']} doel en {tally['stop_loss']} stop")
+    print(f"{fixed} signalen {'zouden' if dry_run else ''} gecorrigeerd {'worden' if dry_run else ''}".strip())
 
 
 asyncio.run(main())

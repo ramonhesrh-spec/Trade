@@ -42,6 +42,14 @@ class OutcomeTest(DbCase):
         self.run_check(candles(start, rows))
         self.assertIsNone(repo.get_signal(sid)["auto_outcome"])
 
+    def test_a_hit_after_the_signal_expired_does_not_count(self):
+        sid = self.make_signal(hours_ago=60)                                  # 2,5 dag oud: de geldigheid is verlopen
+        start = datetime.now(timezone.utc) - timedelta(hours=60)
+        rows = [(100, 100.3, 99.7, 100.1)] * 12 * 52 + [(100, 102.6, 100, 102.2)] + [(102, 102.1, 101.9, 102)] * 50       # doel pas na ruim 52 uur
+        self.run_check(candles(start, rows))
+        signal = repo.get_signal(sid)
+        self.assertEqual(signal["auto_outcome"], "vervallen")                 # hetzelfde als de oude regel: geen late uitkomst
+
     def test_stop_wins_when_both_levels_are_in_one_candle(self):
         sid = self.make_signal(hours_ago=1)
         start = datetime.now(timezone.utc) - timedelta(minutes=50)
