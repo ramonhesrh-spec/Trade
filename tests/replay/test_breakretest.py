@@ -77,3 +77,31 @@ class BreakRetestTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EntryVariantsTest(unittest.TestCase):
+    def test_variants_cover_every_break_and_unfilled_breaks_count_as_zero(self):
+        from app.replay import entry_variants as ev
+        rows = ev.run_variants(frame(plant=True))
+        self.assertFalse(rows.empty)
+        self.assertEqual(set(rows["mode"]), set(ev.MODES))
+        counts = rows.groupby("mode").size()
+        self.assertEqual(counts.nunique(), 1)                                   # elke variant ziet dezelfde breuken
+        self.assertTrue((rows.loc[~rows["filled"], "net"] == 0.0).all())
+        market = rows[rows["mode"] == "MARKT"]
+        self.assertGreaterEqual(market["filled"].mean(), rows[rows["mode"] == "RETEST"]["filled"].mean())   # instappen op het slot vult altijd, wachten niet
+
+    def test_shallower_limits_fill_at_least_as_often(self):
+        from app.replay import entry_variants as ev
+        rows = ev.run_variants(frame(plant=True))
+        rate = rows.groupby("mode")["filled"].mean()
+        self.assertGreaterEqual(rate["ZONE50"], rate["ZONE25"] - 1e-9)
+        self.assertGreaterEqual(rate["ZONE25"], rate["RETEST"] - 1e-9)
+
+    def test_compare_reports_net_per_seen_break_with_a_margin(self):
+        from app.replay import entry_variants as ev
+        table = {c["mode"]: c for c in ev.compare(ev.run_variants(frame(plant=True)))}
+        self.assertEqual(set(table), set(ev.MODES))
+        for c in table.values():
+            self.assertAlmostEqual(c["per_break"], c["total"] / c["breaks"])
+            self.assertLessEqual(c["ci"][0], c["ci"][1])
