@@ -51,7 +51,7 @@ class WebRadarTests(unittest.TestCase):
         self.assertIn("Zet een limietorder op 100.00", r.text)   # limietprijs = bovenrand van de long-zone, in de drie stappen
         self.assertIn("Wacht tot de koers in de zone", r.text)
         self.assertIn("+1.00R", r.text)                # ETH long entry 100, stop 97, koers 103
-        self.assertIn("trade-strip", r.text)
+        self.assertIn("trade-ladder", r.text)
         self.assertIn("r-progress", r.text)                # voortgang tussen stop en doel bij de open trade
         self.assertIn("Doel +", r.text)
 
@@ -66,7 +66,7 @@ class WebRadarTests(unittest.TestCase):
         self.assertAlmostEqual(setup["distance_pct"], 2.0)
         signal = data[[k for k in keys if k.startswith("signal:")][0]]
         self.assertAlmostEqual(signal["live_r"], 1.0)
-        self.assertTrue(signal["ladder"].startswith("<div class=\"trade-strip\""))
+        self.assertTrue(signal["ladder"].startswith("<svg"))
 
     def test_koers_cache_en_mislukte_ophaal_houdt_laatste_stand(self):
         self.client.get("/api/radar")

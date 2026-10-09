@@ -1,4 +1,4 @@
-"""Kaarten voor de Trade Radar: elke bouwende SMC-setup en elk open SMC-signaal als handelsplan met een strook, status
+"""Kaarten voor de Trade Radar: elke bouwende SMC-setup en elk open SMC-signaal als handelsplan met prijsladder, status
 en afstand tot de limietorder. Pure functies zonder database of netwerk; de route haalt setups, signalen en koersen op en
 geeft ze hier door. Dezelfde kaarten voeden de eerste paginaweergave en de live-verversing (/api/radar)."""
 from typing import Optional
@@ -17,12 +17,12 @@ def setup_card(setup: dict, price: Optional[float]) -> Optional[dict]:
     state = setup_state(setup, price)
     moot = state == "doel_geraakt"
     distance = tp.distance_to_limit_pct(plan, price) if price and not moot else None
-    # Een moot plan krijgt geen strook en geen stappen: er is niets meer te doen, alleen de uitkomst blijft staan.
+    # Een moot plan krijgt geen ladder en geen stappen: er is niets meer te doen, alleen de uitkomst blijft staan.
     return {
         "key": f"setup:{setup['id']}", "kind": "setup", "coin": setup["coin"], "direction": setup["direction"],
         "plan": plan, "price": price, "state": state, "state_label": tp.STATE_LABELS.get(state, "Koers wordt opgehaald"),
         "distance_pct": distance, "live_r": None,
-        "ladder": Markup("" if moot else tp.strip_html(setup["direction"], plan.stop, plan.take, plan.limit, price, setup["zone_low"], setup["zone_high"])),
+        "ladder": Markup("" if moot else tp.ladder_svg(setup["direction"], plan.stop, plan.take, plan.limit, price, setup["zone_low"], setup["zone_high"])),
         "created_at": setup["created_at"], "setup": setup,
         "steps": [] if moot else chance_steps.smc_steps(plan, setup["zone_low"], setup["zone_high"], price, distance, setup["coin"]),
     }
@@ -47,7 +47,7 @@ def waiting_count(setups: list[dict], prices: dict) -> int:
 
 
 def signal_card(signal: dict, price: Optional[float]) -> Optional[dict]:
-    """Een open SMC-signaal: de strook toont de werkelijke entry, het resultaat loopt live mee in R."""
+    """Een open SMC-signaal: de ladder toont de werkelijke entry, het resultaat loopt live mee in R."""
     entry, stop, take = signal["price"], signal["stop_loss"], signal["take_profit"]
     if not entry or not stop or not take:
         return None
@@ -56,14 +56,14 @@ def signal_card(signal: dict, price: Optional[float]) -> Optional[dict]:
         "key": f"signal:{signal['id']}", "kind": "signal", "coin": signal["coin"], "direction": signal["direction"],
         "plan": None, "price": price, "state": "open", "state_label": "Open trade",
         "distance_pct": None, "live_r": r,
-        "ladder": Markup(tp.strip_html(signal["direction"], stop, take, entry, price, entry=entry)),
+        "ladder": Markup(tp.ladder_svg(signal["direction"], stop, take, entry, price, entry=entry)),
         "created_at": signal["created_at"], "signal": signal,
         "rr": abs(take - entry) / abs(entry - stop),
     }
 
 
 def live_payload(cards: list[dict]) -> dict:
-    """Wat de browser elke paar seconden ververst: status, afstand, live R en de nieuwe strook per kaart."""
+    """Wat de browser elke paar seconden ververst: status, afstand, live R en de nieuwe ladder per kaart."""
     return {
         c["key"]: {
             "state": c["state"], "label": c["state_label"], "price": c["price"],

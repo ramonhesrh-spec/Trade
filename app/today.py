@@ -98,7 +98,7 @@ def scenario_view(s: dict, price: Optional[float], now: datetime, coin: str = ""
         "trigger": ms.trigger_text(s["trigger_type"], s["direction"], s["trigger_level"]), "reason": s["reason"],
         "entry": s["entry"], "stop": s["stop_loss"], "take": s["take_profit"], "rr": rr,
         "risk_pct": abs(s["entry"] - s["stop_loss"]) / s["entry"] * 100, "hours_left": hours_left, "to_trigger_pct": to_trigger,
-        "ladder": tp.strip_html(s["direction"], s["stop_loss"], s["take_profit"], s["entry"], price, entry=s["entry"]),
+        "ladder": tp.ladder_svg(s["direction"], s["stop_loss"], s["take_profit"], s["entry"], price, entry=s["entry"], width=280, height=150),
     }
     view["steps"] = chance_steps.script_steps(view)
     return view

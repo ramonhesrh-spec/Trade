@@ -441,7 +441,7 @@ async def structuur_page(request: Request, alleen: str = "", kant: str = "", use
 
 @app.get("/smc")
 async def smc_page(request: Request, user: dict = Depends(require_login)):
-    """Trade Radar: bouwende setups en open SMC-signalen als handelsplan met een strook en live status (de limietorder
+    """Trade Radar: bouwende setups en open SMC-signalen als handelsplan met prijsladder en live status (de limietorder
     staat op de zone-rand, zie app/trade_plan.py), daaronder de afgeronde signalen in dezelfde stijl als /signalen.
     Afgeronde signalen verschijnen ook op /signalen en het dashboard: deze pagina is een extra, gerichte weergave."""
     cards = await _radar_cards()
@@ -587,7 +587,7 @@ async def api_kansen(user: dict = Depends(require_login)):
 
 @app.get("/api/radar")
 async def api_radar(user: dict = Depends(require_login)):
-    """Live status per radar-kaart, voor radar.js: nieuwe koers, afstand tot de limietorder, live R en de bijgewerkte strook."""
+    """Live status per radar-kaart, voor radar.js: nieuwe koers, afstand tot de limietorder, live R en de bijgewerkte ladder."""
     return radar.live_payload(await _radar_cards())
 
 

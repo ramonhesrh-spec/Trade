@@ -9,13 +9,13 @@ SIGNAL = {"id": 3, "coin": "ETH", "direction": "short", "price": 100.0, "stop_lo
 
 
 class RadarTests(unittest.TestCase):
-    def test_setup_kaart_met_status_afstand_en_strook(self):
+    def test_setup_kaart_met_status_afstand_en_ladder(self):
         card = radar.setup_card(SETUP, 102.0)
         self.assertEqual(card["key"], "setup:7")
         self.assertEqual(card["state"], "wacht")
         self.assertAlmostEqual(card["distance_pct"], 2.0)
         self.assertAlmostEqual(card["plan"].rr, 2.0)
-        self.assertIn("trade-strip", str(card["ladder"]))
+        self.assertIn("<svg", str(card["ladder"]))
         self.assertIn("Nu 102.00", str(card["ladder"]))
 
     def test_status_in_zone_en_zonder_koers(self):
@@ -35,7 +35,7 @@ class RadarTests(unittest.TestCase):
         self.assertAlmostEqual(card["live_r"], 1.0)
         self.assertEqual(card["state"], "open")
         self.assertAlmostEqual(card["rr"], 2.0)
-        self.assertIn("(entry)", str(card["ladder"]))
+        self.assertIn("Entry 100.00", str(card["ladder"]))
         self.assertIsNone(radar.signal_card(dict(SIGNAL, stop_loss=None), 97.0))
 
     def test_doel_gehaald_zonder_vulling_is_een_stille_kaart(self):
@@ -68,7 +68,7 @@ class RadarTests(unittest.TestCase):
         self.assertEqual(set(payload), {"setup:7", "signal:3"})
         self.assertEqual(payload["setup:7"]["state"], "wacht")
         self.assertAlmostEqual(payload["signal:3"]["live_r"], 1.0)
-        self.assertTrue(payload["setup:7"]["ladder"].startswith("<div class=\"trade-strip\""))
+        self.assertTrue(payload["setup:7"]["ladder"].startswith("<svg"))
 
 
 if __name__ == "__main__":
