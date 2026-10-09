@@ -157,5 +157,18 @@ class EvaluateStrictTest(unittest.TestCase):
         self.assertIn("week_ci", out)
 
 
+class FullHistoryTest(unittest.TestCase):
+    def bars(self, start):
+        return pd.DataFrame({"timestamp": pd.date_range(start, periods=10, freq="4h", tz="UTC")})
+
+    def test_keeps_coins_that_cover_the_whole_period(self):
+        got = tl.full_history({"BTC": self.bars("2023-01-01"), "ETH": self.bars("2023-01-03"), "NEW": self.bars("2024-06-01")})
+        self.assertEqual(sorted(got), ["BTC", "ETH"])
+
+    def test_empty_input_and_empty_frames(self):
+        self.assertEqual(tl.full_history({}), [])
+        self.assertEqual(tl.full_history({"X": pd.DataFrame({"timestamp": []})}), [])
+
+
 if __name__ == "__main__":
     unittest.main()

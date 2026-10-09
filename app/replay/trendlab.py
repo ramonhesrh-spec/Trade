@@ -206,8 +206,9 @@ MIN_HALF = MIN_TRADES // 4   # elke helft moet minstens een kwart van het minimu
 
 
 def evaluate(trades: pd.DataFrame, placebo: pd.DataFrame) -> dict:
-    """Oordeel over één variant over alle coins samen. 'slaagt' alleen als het gemiddelde netto resultaat in beide helften boven 0 ligt, de marge van het
-    totaal boven 0 ligt en de variant beter is dan willekeurige instappen met dezelfde uitgang."""
+    """Oordeel over één variant over alle coins samen. 'slaagt' alleen als aan alles tegelijk voldaan is: minstens MIN_TRADES (500) trades, het gemiddelde
+    netto resultaat in beide helften boven 0, de marge van het totaal boven 0, de marge per week-cluster boven 0 en minstens MIN_PLACEBO_MARGIN beter
+    dan willekeurige instappen met dezelfde uitgang."""
     from app import structure_review as sr
     from app.replay import stats
     if trades.empty:
@@ -230,3 +231,12 @@ def evaluate(trades: pd.DataFrame, placebo: pd.DataFrame) -> dict:
     out["checks"], out["passes"] = checks, all(checks.values())
     out["reason"] = "" if out["passes"] else "faalt: " + ", ".join(k for k, ok in checks.items() if not ok)
     return out
+
+
+def full_history(bars_by_coin: dict[str, pd.DataFrame], tolerance_days: int = 7) -> list[str]:
+    """Overlevingscontrole: coins die later begonnen zijn bestaan nu nog, dus het lab ziet de verdwenen verliezers niet. Alleen coins met de volle periode tellen mee."""
+    firsts = {c: b["timestamp"].iloc[0] for c, b in bars_by_coin.items() if len(b)}
+    if not firsts:
+        return []
+    earliest = min(firsts.values())
+    return [c for c, ts in firsts.items() if (ts - earliest) <= pd.Timedelta(days=tolerance_days)]
