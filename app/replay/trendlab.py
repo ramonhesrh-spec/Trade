@@ -200,28 +200,33 @@ def placebo_variant(v: Variant, bars: pd.DataFrame, real: pd.DataFrame, cost_pct
     return pd.DataFrame(rows, columns=["net", "gross"])
 
 
-MIN_HALF = 25            # minstens zoveel trades per helft voor een oordeel
+MIN_TRADES = 500             # spec sectie 6: minder trades zeggen te weinig over een voordeel van 0,1R
+MIN_PLACEBO_MARGIN = 0.03    # R per trade boven willekeurige instappen met dezelfde uitgang
+MIN_HALF = MIN_TRADES // 4   # elke helft moet minstens een kwart van het minimum bevatten
 
 
 def evaluate(trades: pd.DataFrame, placebo: pd.DataFrame) -> dict:
     """Oordeel over één variant over alle coins samen. 'slaagt' alleen als het gemiddelde netto resultaat in beide helften boven 0 ligt, de marge van het
     totaal boven 0 ligt en de variant beter is dan willekeurige instappen met dezelfde uitgang."""
     from app import structure_review as sr
+    from app.replay import stats
     if trades.empty:
         return {"n": 0, "passes": False, "reason": "geen trades"}
     t = trades.sort_values("at")
     cut = t["at"].quantile(0.5)
     first, second = t[t["at"] < cut], t[t["at"] >= cut]
     lo, hi = sr.bootstrap_mean(t["net"].tolist())
-    out = {"n": len(t), "avg": float(t["net"].mean()), "ci": (lo, hi), "gross": float(t["gross"].mean()), "total": float(t["net"].sum()),
+    wlo, whi = stats.cluster_bootstrap_mean(t["net"].tolist(), [stats.week_key(x) for x in t["at"]])
+    out = {"n": len(t), "avg": float(t["net"].mean()), "ci": (lo, hi), "week_ci": (wlo, whi), "gross": float(t["gross"].mean()), "total": float(t["net"].sum()),
            "winrate": float((t["net"] > 0).mean()), "median_risk_pct": float(t["risk_pct"].median()),
            "train": (len(first), float(first["net"].mean()) if len(first) else None), "test": (len(second), float(second["net"].mean()) if len(second) else None),
            "placebo": float(placebo["net"].mean()) if len(placebo) else None, "best": float(t["net"].max()), "avg_win": float(t.loc[t["net"] > 0, "net"].mean()) if (t["net"] > 0).any() else 0.0}
-    checks = {"genoeg trades per helft": len(first) >= MIN_HALF and len(second) >= MIN_HALF,
+    checks = {"genoeg trades": len(t) >= MIN_TRADES,
               "eerste helft positief": out["train"][1] is not None and out["train"][1] > 0,
               "tweede helft positief": out["test"][1] is not None and out["test"][1] > 0,
               "marge boven 0": lo > 0,
-              "beter dan willekeurig": out["placebo"] is not None and out["avg"] > out["placebo"]}
+              "marge per week boven 0": wlo > 0,
+              "duidelijk beter dan willekeurig": out["placebo"] is not None and out["avg"] - out["placebo"] >= MIN_PLACEBO_MARGIN}
     out["checks"], out["passes"] = checks, all(checks.values())
     out["reason"] = "" if out["passes"] else "faalt: " + ", ".join(k for k, ok in checks.items() if not ok)
     return out

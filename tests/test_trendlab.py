@@ -115,14 +115,14 @@ class EvaluateTest(unittest.TestCase):
         return pd.DataFrame({"at": pd.date_range("2025-01-01", periods=n, freq="1D", tz="UTC"), "net": nets, "gross": nets, "risk_pct": risk})
 
     def test_passes_only_when_both_halves_margin_and_placebo_agree(self):
-        good = self.frame([1.0, -0.5] * 60)                                     # gemiddeld +0,25R, beide helften positief
+        good = self.frame([1.0, -0.5] * 300)                                     # gemiddeld +0,25R, beide helften positief
         verdict = tl.evaluate(good, pd.DataFrame({"net": [-0.1] * 50, "gross": [-0.1] * 50}))
         self.assertTrue(verdict["passes"], verdict["reason"])
 
     def test_fails_when_the_second_half_turns_negative_or_it_does_not_beat_random(self):
-        bad_second = self.frame([2.0, -0.5] * 30 + [-1.0, 0.5] * 30)
+        bad_second = self.frame([2.0, -0.5] * 150 + [-1.0, 0.5] * 150)
         self.assertFalse(tl.evaluate(bad_second, pd.DataFrame({"net": [0.0] * 50, "gross": [0.0] * 50})) ["passes"])
-        good = self.frame([1.0, -0.5] * 60)
+        good = self.frame([1.0, -0.5] * 300)
         v = tl.evaluate(good, pd.DataFrame({"net": [0.5] * 50, "gross": [0.5] * 50}))
         self.assertFalse(v["passes"])
         self.assertIn("beter dan willekeurig", v["reason"])
@@ -130,7 +130,31 @@ class EvaluateTest(unittest.TestCase):
     def test_small_samples_never_pass(self):
         v = tl.evaluate(self.frame([1.0] * 20), pd.DataFrame({"net": [0.0] * 5, "gross": [0.0] * 5}))
         self.assertFalse(v["passes"])
-        self.assertIn("genoeg trades per helft", v["reason"])
+        self.assertIn("genoeg trades", v["reason"])
+
+
+class EvaluateStrictTest(unittest.TestCase):
+    def frame(self, nets, start="2024-01-01", step_hours=4):
+        at = pd.date_range(start, periods=len(nets), freq=f"{step_hours}h", tz="UTC")
+        return pd.DataFrame({"at": at, "net": nets, "gross": nets, "risk_pct": 5.0})
+
+    def test_too_few_trades_never_pass(self):
+        t = self.frame([0.5] * 100)
+        out = tl.evaluate(t, self.frame([0.0] * 100))
+        self.assertFalse(out["passes"])
+        self.assertIn("genoeg trades", out["reason"])
+
+    def test_edge_must_beat_placebo_by_margin(self):
+        nets = [0.3, -0.1] * 300
+        out = tl.evaluate(self.frame(nets), self.frame([0.29, -0.1] * 300))
+        self.assertFalse(out["passes"])
+        self.assertIn("duidelijk beter dan willekeurig", out["reason"])
+
+    def test_clear_edge_passes(self):
+        nets = [0.3, -0.1] * 300
+        out = tl.evaluate(self.frame(nets), self.frame([0.0, -0.1] * 300))
+        self.assertTrue(out["passes"], out["reason"])
+        self.assertIn("week_ci", out)
 
 
 if __name__ == "__main__":
