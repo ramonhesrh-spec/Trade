@@ -1,10 +1,12 @@
 # HesPulse onderzoek en proefmotor Implementation Plan
 
+> Let op: de proefmotor heet `app/rule_live.py`, omdat `app/trend_live.py` al bestond (een oudere, andere motor). Waar hieronder `trend_live` staat, is `rule_live` bedoeld.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Een strenger swing-lab bouwen, de beste kandidaat als proefmotor voor de CEO laten lopen en per regel eerlijk laten zien of hij "In proef", "Bewezen" of "Negatief" is.
 
-**Architecture:** Het lab (`app/replay/trendlab.py`, `scripts/strategy_lab.py`) krijgt strengere statistiek en vooraf vastgelegde swing-families. De uitkomst per regel staat in een nieuwe tabel `rule_status`. Een proefmotor (`app/trend_live.py`) maakt signalen met `trade_type = 'trend_4h'` voor alleen de CEO; trailing trades slaan hun echte R op in `trade_results`, die `track_record.signal_r` voorrang geeft. Bewijs toont de status per regel.
+**Architecture:** Het lab (`app/replay/trendlab.py`, `scripts/strategy_lab.py`) krijgt strengere statistiek en vooraf vastgelegde swing-families. De uitkomst per regel staat in een nieuwe tabel `rule_status`. Een proefmotor (`app/rule_live.py`) maakt signalen met `trade_type = 'don55_trend'` voor alleen de CEO; trailing trades slaan hun echte R op in `trade_results`, die `track_record.signal_r` voorrang geeft. Bewijs toont de status per regel.
 
 **Tech Stack:** Python 3.11, pandas, SQLite, FastAPI, Jinja2, stdlib unittest.
 
@@ -34,7 +36,7 @@
 | `scripts/strategy_lab.py` | Overlevingscontrole, aantal varianten, `--opslaan` |
 | `app/schema.sql`, `app/db.py`, `app/repo.py` | Tabellen `rule_status` en `trade_results` |
 | `app/track_record.py` | R-override, regelstatus |
-| `app/trend_live.py` (nieuw) | Proefmotor 4u trend: signaal en meelopende stop |
+| `app/rule_live.py` (nieuw) | Proefmotor 4u trend: signaal en meelopende stop |
 | `app/level_check.py`, `main.py` | Proefmotor in de scan-cyclus |
 | `web/main.py`, `web/templates/bewijs.html` | Status per regel op Bewijs |
 | `app/misser.py` (nieuw), `scripts/misser_check.py` | CEO-handtrades uit CSV |
@@ -515,22 +517,22 @@ Plus een repo-test in `tests/test_rule_status.py` (zelfde bestand, tweede klasse
 Voorwaarde: Task 5 en de labrun hebben een kandidaat opgeleverd (zie het slot van Task 5). De regelnaam hieronder is `DON55_TREND`; vervang hem door de gekozen variant (`trendlab.VARIANTS` bevat de parameters) en schrijf de keuze in de commitmelding.
 
 **Files:**
-- Create: `app/trend_live.py`
+- Create: `app/rule_live.py`
 - Modify: `main.py` (aanroep in de scan-cyclus naast `market_scanner`)
-- Modify: `app/level_check.py` (aanroep `trend_live.update_open`)
-- Test: `tests/test_trend_live.py`
+- Modify: `app/level_check.py` (aanroep `rule_live.update_open`)
+- Test: `tests/test_rule_live.py`
 
 **Interfaces:**
 - Consumes: `trendlab.prepare`, `trendlab.signals_for`, `trendlab.TRAIL_K_STOP`, `trendlab.TRAIL_K`, `repo.set_trade_result` (Task 7), `repo.get_rule_lab` (Task 6), `push_notify.send_push`.
 - Produces:
-  - `trend_live.RULE = "don55_trend"` (de `trade_type`-waarde).
-  - `trend_live.detect(bars: pd.DataFrame, variant) -> Optional[dict]`: kijkt alleen naar de laatste *gesloten* candle; geeft `{"direction": "long"|"short", "entry": float, "stop": float, "atr": float}` of `None`. Entry is de open van de volgende candle, dus bij detectie gebruikt de motor de slotkoers van de signaalcandle als richtprijs en meldt dat zo.
-  - `trend_live.next_stop(direction: str, current_stop: float, bars_since_entry: pd.DataFrame, atr: float, k_trail: float = trendlab.TRAIL_K) -> float`: de meelopende stop gaat alleen in de gunstige richting.
-  - `trend_live.close_if_hit(signal: dict, bars_since_entry: pd.DataFrame) -> Optional[tuple[float, str]]`: `(r_value, "stop_loss"|"take_profit")` als de stop geraakt is, anders `None`. R > 0 geeft `take_profit`, anders `stop_loss`.
-  - `trend_live.scan(now) -> None`: voor elke labcoin met 4u-candles uit de candle-cache `detect`; maakt een signaal met `trade_type = RULE`, alleen zichtbaar voor de CEO (zie hieronder), en stuurt één push via `send_kans_push` met tag `f"trend-{signal_id}"`.
-  - `trend_live.update_open(now) -> None`: voor elk open trendsignaal `next_stop`, bij een nieuwe stop een update-push (via `send_push`, zelfde tag, dus de melding vervangt zichzelf) en bij een geraakte stop `repo.set_trade_result` plus `auto_outcome`.
+  - `rule_live.RULE = "don55_trend"` (de `trade_type`-waarde).
+  - `rule_live.detect(bars: pd.DataFrame, variant) -> Optional[dict]`: kijkt alleen naar de laatste *gesloten* candle; geeft `{"direction": "long"|"short", "entry": float, "stop": float, "atr": float}` of `None`. Entry is de open van de volgende candle, dus bij detectie gebruikt de motor de slotkoers van de signaalcandle als richtprijs en meldt dat zo.
+  - `rule_live.next_stop(direction: str, current_stop: float, bars_since_entry: pd.DataFrame, atr: float, k_trail: float = trendlab.TRAIL_K) -> float`: de meelopende stop gaat alleen in de gunstige richting.
+  - `rule_live.close_if_hit(signal: dict, bars_since_entry: pd.DataFrame) -> Optional[tuple[float, str]]`: `(r_value, "stop_loss"|"take_profit")` als de stop geraakt is, anders `None`. R > 0 geeft `take_profit`, anders `stop_loss`.
+  - `rule_live.scan(now) -> None`: voor elke labcoin met 4u-candles uit de candle-cache `detect`; maakt een signaal met `trade_type = RULE`, alleen zichtbaar voor de CEO (zie hieronder), en stuurt één push via `send_kans_push` met tag `f"trend-{signal_id}"`.
+  - `rule_live.update_open(now) -> None`: voor elk open trendsignaal `next_stop`, bij een nieuwe stop een update-push (via `send_push`, zelfde tag, dus de melding vervangt zichzelf) en bij een geraakte stop `repo.set_trade_result` plus `auto_outcome`.
 
-CEO-only: lees eerst hoe `web/main.py:is_ceo` (regel 53) de CEO bepaalt en hergebruik dat criterium in `trend_live` via een kleine functie in `repo` (bijvoorbeeld `repo.list_ceo_user_ids()`); vind die eerst met `sed -n 50,60p web/main.py`. Maak de journalrij (`journal_entries`) alleen voor die gebruikers aan, zodat leerlingen het signaal niet zien. Het label "In proef" staat al in de UI zolang `rule_status.lab_passes` niet gepromoveerd is (Task 9).
+CEO-only: lees eerst hoe `web/main.py:is_ceo` (regel 53) de CEO bepaalt en hergebruik dat criterium in `rule_live` via een kleine functie in `repo` (bijvoorbeeld `repo.list_ceo_user_ids()`); vind die eerst met `sed -n 50,60p web/main.py`. Maak de journalrij (`journal_entries`) alleen voor die gebruikers aan, zodat leerlingen het signaal niet zien. Het label "In proef" staat al in de UI zolang `rule_status.lab_passes` niet gepromoveerd is (Task 9).
 
 - [ ] **Step 1: Tests** (pure functies, geen netwerk)
 
@@ -538,32 +540,32 @@ CEO-only: lees eerst hoe `web/main.py:is_ceo` (regel 53) de CEO bepaalt en herge
 class NextStopTest(unittest.TestCase):
     def test_long_stop_only_moves_up(self):
         bars = pd.DataFrame({"high": [110.0, 120.0, 118.0], "low": [105.0, 112.0, 110.0]})
-        s = trend_live.next_stop("long", 95.0, bars, atr=2.0, k_trail=3.0)
+        s = rule_live.next_stop("long", 95.0, bars, atr=2.0, k_trail=3.0)
         self.assertEqual(s, 120.0 - 3 * 2.0)
-        self.assertEqual(trend_live.next_stop("long", 130.0, bars, atr=2.0, k_trail=3.0), 130.0)
+        self.assertEqual(rule_live.next_stop("long", 130.0, bars, atr=2.0, k_trail=3.0), 130.0)
 
     def test_short_stop_only_moves_down(self):
         bars = pd.DataFrame({"high": [100.0, 99.0], "low": [90.0, 85.0]})
-        self.assertEqual(trend_live.next_stop("short", 110.0, bars, atr=2.0, k_trail=3.0), 85.0 + 6.0)
-        self.assertEqual(trend_live.next_stop("short", 80.0, bars, atr=2.0, k_trail=3.0), 80.0)
+        self.assertEqual(rule_live.next_stop("short", 110.0, bars, atr=2.0, k_trail=3.0), 85.0 + 6.0)
+        self.assertEqual(rule_live.next_stop("short", 80.0, bars, atr=2.0, k_trail=3.0), 80.0)
 
 
 class CloseIfHitTest(unittest.TestCase):
     def test_long_stopped_out_with_profit_counts_as_take_profit(self):
         sig = {"direction": "long", "price": 100.0, "initial_stop": 95.0, "stop_loss": 108.0}
         bars = pd.DataFrame({"high": [112.0], "low": [107.0]})
-        r, outcome = trend_live.close_if_hit(sig, bars)
+        r, outcome = rule_live.close_if_hit(sig, bars)
         self.assertEqual(outcome, "take_profit")
         self.assertAlmostEqual(r, (108.0 - 100.0) / 5.0)
 
     def test_initial_stop_is_minus_one_r(self):
         sig = {"direction": "long", "price": 100.0, "initial_stop": 95.0, "stop_loss": 95.0}
-        r, outcome = trend_live.close_if_hit(sig, pd.DataFrame({"high": [99.0], "low": [94.0]}))
+        r, outcome = rule_live.close_if_hit(sig, pd.DataFrame({"high": [99.0], "low": [94.0]}))
         self.assertEqual((r, outcome), (-1.0, "stop_loss"))
 
     def test_not_hit_returns_none(self):
         sig = {"direction": "long", "price": 100.0, "initial_stop": 95.0, "stop_loss": 95.0}
-        self.assertIsNone(trend_live.close_if_hit(sig, pd.DataFrame({"high": [103.0], "low": [97.0]})))
+        self.assertIsNone(rule_live.close_if_hit(sig, pd.DataFrame({"high": [103.0], "low": [97.0]})))
 ```
 
 `initial_stop` bewaar je in `trade_results`-onafhankelijke vorm: voeg aan `trade_results` in Task 7 *niet* toe; sla de eerste stop op in de tabel `rule_trades (signal_id PRIMARY KEY, initial_stop REAL, rule TEXT)` die dit task aanmaakt in `schema.sql` en `repo.set_initial_stop/get_initial_stop`. Het signaal-`stop_loss` is de huidige meelopende stop.
