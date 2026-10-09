@@ -13,6 +13,21 @@ def row(trade_type="smc", outcome="take_profit", price=100.0, stop=99.0, take=10
 
 
 class RTests(unittest.TestCase):
+    def test_r_override_beats_the_fixed_formula(self):
+        r = {"price": 100.0, "stop_loss": 95.0, "take_profit": 120.0, "auto_outcome": "take_profit", "r_override": 2.3}
+        self.assertEqual(tr.signal_r(r), 2.3)
+        r["auto_outcome"], r["r_override"] = "stop_loss", -0.4
+        self.assertEqual(tr.signal_r(r), -0.4)
+
+    def test_without_override_nothing_changes(self):
+        r = {"price": 100.0, "stop_loss": 95.0, "take_profit": 110.0, "auto_outcome": "take_profit"}
+        self.assertEqual(tr.signal_r(r), 2.0)
+        self.assertEqual(tr.signal_r({**r, "r_override": None}), 2.0)
+
+    def test_override_on_unresolved_signal_is_ignored(self):
+        for outcome in (None, "vervallen"):
+            self.assertIsNone(tr.signal_r({**row(outcome=outcome), "r_override": 1.5}))
+
     def test_r_per_uitkomst(self):
         self.assertEqual(tr.signal_r(row()), 2.0)
         self.assertEqual(tr.signal_r(row(outcome="stop_loss")), -1.0)

@@ -19,8 +19,9 @@ def load(days: int) -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(
             """SELECT s.id, s.coin, s.direction, s.kind, s.grade, s.state, s.created_at, s.break_at, s.p1_at, s.line_a, s.line_slope, s.features, s.plan, s.signal_id,
-                      g.price, g.stop_loss, g.take_profit, g.auto_outcome, g.created_at AS fired_at
+                      g.price, g.stop_loss, g.take_profit, g.auto_outcome, g.created_at AS fired_at, tr.r_value AS r_override
                FROM structure_setups s LEFT JOIN signals g ON g.id = s.signal_id
+               LEFT JOIN trade_results tr ON tr.signal_id = g.id
                WHERE s.created_at >= ? ORDER BY s.id""", (since,)).fetchall()
     out = []
     for r in map(dict, rows):

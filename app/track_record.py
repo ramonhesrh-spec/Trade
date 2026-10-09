@@ -36,6 +36,11 @@ STATUS_LABELS = {
 
 
 def signal_r(row: dict) -> Optional[float]:
+    """r_override is de echte R van een meelopende stop (trade_results); de vaste formule past daar niet op. Alleen bij een
+    vaststaande uitkomst, zodat een override nooit een open of vervallen signaal meetelt."""
+    ov = row.get("r_override")
+    if ov is not None and row.get("auto_outcome") in ("take_profit", "stop_loss"):
+        return float(ov)
     risk = abs((row["price"] or 0) - (row["stop_loss"] or 0))
     if row["auto_outcome"] == "take_profit" and risk > 0 and row["take_profit"] is not None:
         return abs(row["take_profit"] - row["price"]) / risk

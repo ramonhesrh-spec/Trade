@@ -2550,8 +2550,9 @@ def list_signals_for_quality_report(since_iso: Optional[str] = None) -> list[dic
     with db.session() as conn:
         rows = conn.execute(
             """SELECT s.id, s.coin, s.direction, s.message_id, s.trade_type, s.auto_outcome, s.auto_outcome_at, s.price, s.stop_loss, s.take_profit,
-                      s.created_at, s.pass_pct, (sv.id IS NOT NULL) AS samenval
+                      s.created_at, s.pass_pct, (sv.id IS NOT NULL) AS samenval, tr.r_value AS r_override
                FROM signals s LEFT JOIN samenvallen sv ON sv.smc_signal_id = s.id
+               LEFT JOIN trade_results tr ON tr.signal_id = s.id
                WHERE s.is_practice = 0 AND (? IS NULL OR s.created_at >= ?) ORDER BY s.created_at""",
             (since_iso, since_iso),
         ).fetchall()
@@ -2614,8 +2615,9 @@ def list_samenval_results(limit: int = 30) -> list[dict]:
     """De laatste afgeronde samenvallen (take of stop geraakt) met de prijzen om R uit te rekenen."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT s.price, s.stop_loss, s.take_profit, s.auto_outcome FROM samenvallen sv
+            """SELECT s.price, s.stop_loss, s.take_profit, s.auto_outcome, tr.r_value AS r_override FROM samenvallen sv
                JOIN signals s ON s.id = sv.smc_signal_id
+               LEFT JOIN trade_results tr ON tr.signal_id = s.id
                WHERE s.auto_outcome IN ('take_profit', 'stop_loss')
                ORDER BY s.auto_outcome_at DESC LIMIT ?""", (limit,),
         ).fetchall()
@@ -2694,9 +2696,10 @@ def list_script_results(limit: int = 30) -> list[dict]:
     """De laatste afgeronde script-signalen (take of stop geraakt), voor de zelfuitschakeling."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT price, stop_loss, take_profit, auto_outcome FROM signals
-               WHERE trade_type = 'script' AND auto_outcome IN ('take_profit', 'stop_loss')
-               ORDER BY auto_outcome_at DESC LIMIT ?""", (limit,),
+            """SELECT s.price, s.stop_loss, s.take_profit, s.auto_outcome, tr.r_value AS r_override FROM signals s
+               LEFT JOIN trade_results tr ON tr.signal_id = s.id
+               WHERE s.trade_type = 'script' AND s.auto_outcome IN ('take_profit', 'stop_loss')
+               ORDER BY s.auto_outcome_at DESC LIMIT ?""", (limit,),
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -2796,9 +2799,10 @@ def list_type_results(trade_type: str, limit: int = 30) -> list[dict]:
     """De laatste afgeronde signalen van één soort (take of stop geraakt), voor een zelfuitschakeling."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT price, stop_loss, take_profit, auto_outcome FROM signals
-               WHERE trade_type = ? AND auto_outcome IN ('take_profit', 'stop_loss')
-               ORDER BY auto_outcome_at DESC LIMIT ?""", (trade_type, limit),
+            """SELECT s.price, s.stop_loss, s.take_profit, s.auto_outcome, tr.r_value AS r_override FROM signals s
+               LEFT JOIN trade_results tr ON tr.signal_id = s.id
+               WHERE s.trade_type = ? AND s.auto_outcome IN ('take_profit', 'stop_loss')
+               ORDER BY s.auto_outcome_at DESC LIMIT ?""", (trade_type, limit),
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -2887,6 +2891,15 @@ def list_recent_signals_of_type(trade_type: str, since_iso: str, limit: int = 30
             """SELECT id, coin, direction, price, stop_loss, take_profit, created_at, auto_outcome FROM signals
                WHERE trade_type = ? AND created_at >= ? ORDER BY id DESC LIMIT ?""", (trade_type, since_iso, limit)).fetchall()
         return [dict(r) for r in rows]
+
+
+def set_trade_result(signal_id: int, r_value: float, closed_at: str) -> None:
+    """De echte R van een meelopende stop; Bewijs gebruikt die in plaats van de vaste formule (track_record.signal_r)."""
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO trade_results (signal_id, r_value, closed_at) VALUES (?, ?, ?)
+               ON CONFLICT(signal_id) DO UPDATE SET r_value = excluded.r_value, closed_at = excluded.closed_at""",
+            (signal_id, r_value, closed_at))
 
 
 def set_rule_lab(rule: str, passes: bool, summary: dict, now: str) -> None:

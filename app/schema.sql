@@ -672,3 +672,10 @@ CREATE TABLE IF NOT EXISTS rule_status (
     lab_json TEXT,
     lab_at TEXT
 );
+
+-- Echte R van een meelopende stop (trailing); zonder rij geldt de vaste formule uit track_record.signal_r.
+CREATE TABLE IF NOT EXISTS trade_results (
+    signal_id INTEGER PRIMARY KEY,
+    r_value REAL NOT NULL,
+    closed_at TEXT NOT NULL
+);
