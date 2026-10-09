@@ -339,6 +339,25 @@ class WebVisibilityTest(DbCase):
         self.assertNotIn("Status per regel", seen["leerling"])
         self.assertNotIn("afgeronde live trades", seen["leerling"])
 
+    def test_other_lab_variants_are_invisible_to_a_leerling(self):
+        from fastapi.testclient import TestClient
+        from app import security
+        from web import main
+        leerling = repo.create_user("b3", security.hash_password("wachtwoord-123456"), 0, 1)
+        ceo = repo.get_user_by_username("a")["id"]
+        with db.session() as conn:
+            conn.execute("INSERT INTO rule_status (rule, lab_passes, lab_json, lab_at) VALUES ('don20', 0, '{}', ?)", (db.now_iso(),))
+        main._ceo_cache.update(at=0.0, id=None)
+        seen = {}
+        with mock.patch.object(config, "CEO_USERNAME", ""):
+            for name, uid in (("ceo", ceo), ("leerling", leerling)):
+                client = TestClient(main.app)
+                client.cookies.set(main.SESSION_COOKIE, security.create_session_token(uid))
+                seen[name] = client.get("/bewijs").text
+        self.assertIn("don20", seen["ceo"])
+        self.assertNotIn("don20", seen["leerling"])
+        self.assertNotIn("Status per regel", seen["leerling"])
+
     def test_public_chain_skips_the_proef_and_still_verifies(self):
         from fastapi.testclient import TestClient
         from app import chain

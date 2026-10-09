@@ -488,7 +488,8 @@ async def _vandaag_context(user: dict) -> dict:
     structure_cards = await _structure_cards()
     open_parts = _open_chances(now, len(structure_cards))
     nearest = today.nearest_chance(structure_cards, scripts, await _radar_cards())
-    summary = track_record.summarize(report_rows(user), config.TRACK_RECORD_COST_PCT)
+    rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
+    summary = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT)
     score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing") or e["source"] == "alles"]
     for e in score:
         e["spark"] = Markup(track_record.sparkline_svg(e["cumulative"], width=180, height=36))
@@ -580,16 +581,14 @@ async def api_radar(user: dict = Depends(require_login)):
 @app.get("/bewijs")
 async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     """Eerlijk, automatisch gemeten trackrecord per soort melding in R na kosten (zie app/track_record.py)."""
-    summary = track_record.summarize(report_rows(user), config.TRACK_RECORD_COST_PCT)
+    rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
+    summary = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT)
     summary.sort(key=lambda e: e["source"] != "alles")      # het totaal bovenaan, de rest in vaste volgorde
     for entry in summary:
         entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
-    rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien; de regelstatus van een CEO-only soort blijft zo voor leerlingen weg
     lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
     rule_statuses = []
-    for trade_type in sorted(set(lab_types) | set(rule_live.CEO_ONLY_TYPES)):
-        if trade_type in rule_live.CEO_ONLY_TYPES and not is_ceo(user):
-            continue
+    for trade_type in track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES):
         status = track_record.rule_status(lab_types.get(trade_type), track_record.live_net_r(rows, trade_type, config.TRACK_RECORD_COST_PCT))
         rule_statuses.append({**status, "label": track_record.TYPE_LABELS.get(trade_type, trade_type), "css": status["status"].lower().replace(" ", "-")})
     return templates.TemplateResponse(request, "bewijs.html", {

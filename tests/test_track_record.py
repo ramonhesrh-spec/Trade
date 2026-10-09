@@ -161,9 +161,32 @@ class RuleStatusTest(unittest.TestCase):
     def test_failed_lab_is_negative_even_without_live_trades(self):
         self.assertEqual(tr.rule_status({"lab_passes": False}, [])["status"], "Negatief")
 
-    def test_proven_rule_falls_back_when_last_hundred_turn_clearly_negative(self):
-        series = [0.5] * 100 + [-0.2] * 100
-        self.assertNotEqual(tr.rule_status(self.PASS, series)["status"], "Bewezen")
+    def test_clearly_negative_recent_trades_are_negatief_by_rule_one(self):
+        self.assertEqual(tr.rule_status(self.PASS, [0.5] * 100 + [-0.2] * 100)["status"], "Negatief")
+
+    def test_bewaking_alone_blocks_proof_and_gives_in_proef(self):
+        series = [1.0] * 300 + [-0.5] * 70 + [0.1] * 30   # laatste 30 +0.1, alles +0.67, laatste 100 -0.32 met bovengrens < 0
+        self.assertGreaterEqual(sum(series[-30:]) / 30, 0)
+        self.assertGreaterEqual(sum(series) / len(series), 0)
+        from app import structure_review
+        self.assertLess(structure_review.bootstrap_mean(series[-100:])[1], 0)
+        self.assertEqual(tr.rule_status(self.PASS, series)["status"], "In proef")
+
+    def test_negative_boundary_is_exactly_thirty(self):
+        self.assertEqual(tr.rule_status(self.PASS, [-0.5] * 29)["status"], "In proef")
+        self.assertEqual(tr.rule_status(self.PASS, [-0.5] * 30)["status"], "Negatief")
+
+    def test_hundred_trade_boundary_for_average_and_bewaking(self):
+        self.assertIsNone(tr.rule_status(self.PASS, [0.1] * 99)["avg_last100"])
+        self.assertAlmostEqual(tr.rule_status(self.PASS, [0.1] * 100)["avg_last100"], 0.1)
+        # onder 100 trades is er geen bewaking: 99 trades met een zwakke staart blijven Bewezen, de bewaking pakt pas bij 100
+        self.assertEqual(tr.rule_status(self.PASS, [1.0] * 99)["status"], "Bewezen")
+        self.assertEqual(tr.rule_status(self.PASS, [1.0] * 100)["status"], "Bewezen")
+
+    def test_visible_rule_types(self):
+        types = {"don55_trend", "don20", "trend"}
+        self.assertEqual(tr.visible_rule_types(types, True, ("don55_trend",)), ["don20", "don55_trend", "trend"])
+        self.assertEqual(tr.visible_rule_types(types, False, ("don55_trend",)), ["trend"])
 
     def test_result_keys_and_average_of_last_hundred(self):
         few = tr.rule_status(self.PASS, [0.1] * 99)

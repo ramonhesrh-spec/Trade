@@ -210,6 +210,12 @@ def rule_status(lab: Optional[dict], live_r_net: list[float]) -> dict:
     return out("In proef", f"Geslaagde test; nog {max(0, RULE_MIN_LIVE_PROVEN - n)} afgeronde trades nodig voor bewezen.")
 
 
+def visible_rule_types(types, ceo: bool, ceo_only=()) -> list[str]:
+    """Welke regelstatussen een kijker ziet. De CEO ziet alles; anderen alleen soorten met een openbaar label in TYPE_LABELS die niet CEO-only zijn:
+    een labvariant zonder label (don20, sw_trend_1h) is een methodenaam en blijft voor leerlingen weg."""
+    return sorted(t for t in set(types) if ceo or (t in TYPE_LABELS and t not in ceo_only))
+
+
 def live_net_r(rows: list[dict], trade_type: str, round_trip_cost_pct: float) -> list[float]:
     """Netto R van de afgeronde (take of stop) live trades van één soort, oudste afronding eerst."""
     done = [(r, signal_r(r)) for r in rows if r["trade_type"] == trade_type]
