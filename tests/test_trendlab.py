@@ -170,10 +170,6 @@ class FullHistoryTest(unittest.TestCase):
         self.assertEqual(tl.full_history({"X": pd.DataFrame({"timestamp": []})}), [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SwingTest(unittest.TestCase):
     def test_htf_trend_uses_only_closed_4h_candles(self):
         ts4 = pd.date_range("2024-01-01", periods=300, freq="4h", tz="UTC")
@@ -187,14 +183,20 @@ class SwingTest(unittest.TestCase):
         self.assertEqual(int(trend[-1]), 1)
 
     def test_htf_trend_does_not_look_ahead_inside_a_4h_candle(self):
-        ts4 = pd.date_range("2024-01-01", periods=300, freq="4h", tz="UTC")
-        up = pd.Series([100.0] * 150 + [200.0] * 150)
-        b4 = pd.DataFrame({"timestamp": ts4, "open": up, "high": up, "low": up, "close": up, "volume": 1.0})
-        ts1 = pd.date_range("2024-01-01", periods=1200, freq="1h", tz="UTC")
+        ts4 = pd.date_range("2024-01-01", periods=500, freq="4h", tz="UTC")
+        close4 = pd.Series(np.concatenate([np.linspace(300.0, 50.0, 250), np.full(250, 1000.0)]))   # eerst dalend, dan een sprong omhoog
+        b4 = pd.DataFrame({"timestamp": ts4, "open": close4, "high": close4, "low": close4, "close": close4, "volume": 1.0})
+        e50, e200 = close4.ewm(span=50, adjust=False).mean(), close4.ewm(span=200, adjust=False).mean()
+        k = int(np.flatnonzero((e50 > e200).to_numpy())[0])        # eerste 4u-candle waarvan de slotstand omhoog wijst
+        self.assertGreater(k, 200)
+        self.assertEqual(int((e50 < e200).iloc[k - 1]), 1)
+        ts1 = pd.date_range("2024-01-01", periods=2000, freq="1h", tz="UTC")
         trend = tl.htf_trend(pd.DataFrame({"timestamp": ts1}), b4)
-        # de 4u-candle die om 600:00 begint sluit pas om 604:00; een 1u-candle daarbinnen mag haar niet kennen
-        i_open = int((ts4[150] - ts1[0]) / pd.Timedelta(hours=1))
-        self.assertEqual(trend[i_open], trend[i_open - 1])
+        i_open = int((ts4[k] - ts1[0]) / pd.Timedelta(hours=1))
+        # candle k begint op i_open en sluit op i_open + 4u: pas dan mag haar trend gelden
+        for off in (0, 1, 2, 3):
+            self.assertEqual(trend[i_open + off], -1, off)
+        self.assertEqual(trend[i_open + 4], 1)
 
     def test_variant_count_and_names_are_fixed(self):
         names = [v.name for v in tl.VARIANTS]
@@ -237,3 +239,7 @@ class SwingTest(unittest.TestCase):
             self.assertTrue(all(starts[k + 1] > ends[k] for k in range(len(starts) - 1)), v.name)
             p = tl.placebo_variant(v, b1, t, htf_bars=b4)
             self.assertEqual(len(p), len(t), v.name)
+
+
+if __name__ == "__main__":
+    unittest.main()
