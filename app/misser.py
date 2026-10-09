@@ -24,8 +24,11 @@ def _local_to_utc(raw: str) -> datetime:
 
 def parse_rows(text: str) -> list[dict]:
     """CSV met de kolommen coin,richting,tijd,instap,stop,doel,uitkomst. Elke fout noemt het regelnummer (de kopregel is regel 1)."""
-    lines = list(csv.reader(io.StringIO(text)))
-    # csv.reader geeft voor een lege regel [] terug; reader.line_num zou bij velden met regeleinden afwijken, dus tel op de lijst zelf
+    text = text.lstrip("\ufeff")                                 # Excel zet een BOM voor de eerste kolomnaam
+    first = next((ln for ln in text.splitlines() if ln.strip()), "")
+    delimiter = ";" if ";" in first and "," not in first else ","      # Nederlandse Excel slaat op met puntkomma
+    # regelnummers tellen records, niet fysieke regels: een veld met een regeleinde in aanhalingstekens verschuift ze, dat komt in deze lijst niet voor
+    lines = list(csv.reader(io.StringIO(text), delimiter=delimiter))
     numbered = [(n, row) for n, row in enumerate(lines, start=1) if any(cell.strip() for cell in row)]
     if not numbered:
         raise ValueError("geen kopregel gevonden, verwacht: " + ",".join(COLUMNS))
@@ -34,11 +37,17 @@ def parse_rows(text: str) -> list[dict]:
     missing = [c for c in COLUMNS if c not in names]
     if missing:
         raise ValueError(f"regel {head_no}: kolom ontbreekt in de kopregel: {', '.join(missing)} (verwacht: {','.join(COLUMNS)})")
+    dupes = sorted({n for n in names if names.count(n) > 1})
+    if dupes:
+        raise ValueError(f"regel {head_no}: kolom komt dubbel voor in de kopregel: {', '.join(dupes)}")
     pos = {c: names.index(c) for c in COLUMNS}
     rows = []
     for n, cells in numbered[1:]:
-        if len(cells) < len(names):
-            raise ValueError(f"regel {n}: {len(cells)} velden, verwacht {len(names)}")
+        while len(cells) > len(names) and not cells[-1].strip():       # Excel zet soms lege velden achteraan
+            cells = cells[:-1]
+        if len(cells) != len(names):
+            hint = " (komma als decimaalteken? gebruik puntkomma als scheiding of aanhalingstekens)" if len(cells) > len(names) else ""
+            raise ValueError(f"regel {n}: {len(cells)} velden, verwacht {len(names)}{hint}")
         try:
             direction = cells[pos["richting"]].strip().lower()
             if direction not in ("long", "short"):

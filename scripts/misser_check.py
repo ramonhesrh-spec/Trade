@@ -73,14 +73,18 @@ def judge(closed: pd.DataFrame, idx: int, direction: str) -> dict:
     if not engines:
         if len(rej):
             blocker = "rejectie: plan viel af (stop te ver)"
+        elif not diag["atr"] == diag["atr"]:                           # NaN: te weinig candles voor de ATR, alle vergelijkingen zouden onwaar zijn
+            blocker = "rejectie: te weinig candles voor de ATR"
         elif diag["level"] is None or diag["touches"] < rj.TOUCHES:
             blocker = f"rejectie: te weinig aanrakingen (nodig: {rj.TOUCHES})"
         elif diag["gap_to_level_atr"] > rj.TEST_ATR:
             blocker = "rejectie: prik te ver van het niveau"
         elif diag["close_from_level_atr"] < rj.REJECT_ATR:
             blocker = "rejectie: slot te dicht bij het niveau"
+        elif not diag.get("bearish", diag.get("bullish")):
+            blocker = "rejectie: candle heeft de verkeerde kleur voor de richting"
         else:
-            blocker = "rejectie: candle zonder afwijzing (kleur of richting)"
+            blocker = "rejectie: geen oorzaak aan te wijzen op de instapcandle"   # detector kijkt ook naar idx-12..idx+4 en kent een afkoeltijd
     return {"engines": engines, "blocker": blocker, "rejections": rej, "rejection_plans": rej_plans, "diagnosis": diag, "breaks": near_breaks}
 
 
@@ -90,9 +94,10 @@ def window_for(coin: str, at: pd.Timestamp) -> tuple[pd.DataFrame, pd.DataFrame,
     return df, closed, int((closed["timestamp"] <= at).sum()) - 1
 
 
-def run_csv(path: str, only_parse: bool) -> None:
+def run_csv(path: str, only_parse: bool, fetch=None) -> dict | None:
+    fetch = fetch or window_for
     try:
-        rows = misser.parse_rows(Path(path).read_text(encoding="utf-8"))
+        rows = misser.parse_rows(Path(path).read_text(encoding="utf-8-sig"))
     except ValueError as exc:
         sys.exit(f"{path}: {exc}")
     results = []
@@ -102,19 +107,21 @@ def run_csv(path: str, only_parse: bool) -> None:
             print(f"{r['coin']} {r['direction']} {when} instap {r['entry']:g} stop {r['stop']:g} doel {r['target']:g} uitkomst {r['outcome']}")
             continue
         try:
-            _, closed, idx = window_for(r["coin"], pd.Timestamp(r["at"]))
+            _, closed, idx = fetch(r["coin"], pd.Timestamp(r["at"]))
             res = judge(closed, idx, r["direction"])
+            extra = ""
         except Exception as exc:                                       # een coin zonder data mag de rest van de lijst niet stoppen
-            res = {"engines": [], "blocker": f"geen data: {exc}"}
+            res, extra = {"engines": [], "blocker": "geen data"}, f" ({exc})"
         results.append(res)
-        print(f"{r['coin']} {r['direction']} {when}: " + (", ".join(res["engines"]) if res["engines"] else "geen motor") + (f" | {res['blocker']}" if res["blocker"] else ""))
+        print(f"{r['coin']} {r['direction']} {when}: " + (", ".join(res["engines"]) if res["engines"] else "geen motor") + (f" | {res['blocker']}" if res["blocker"] else "") + extra)
     if only_parse:
         print(f"{len(rows)} rijen gelezen")
-        return
+        return None
     s = misser.summarize(results)
     print(f"\n{s['n']} trades, {s['seen']} door minstens een motor gezien")
     print("per motor:", s["by_engine"] or "-")
     print("geweigerd door:", s["by_blocker"] or "-")
+    return s
 
 
 def main() -> None:
