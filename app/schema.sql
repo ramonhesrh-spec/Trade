@@ -664,3 +664,11 @@ CREATE TABLE IF NOT EXISTS push_log (
     direction TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_push_log_user_at ON push_log(user_id, at);
+
+-- Uitkomst van het strategie-lab per regel (scripts/strategy_lab.py --opslaan); de regel heet als de labvariant in kleine letters.
+CREATE TABLE IF NOT EXISTS rule_status (
+    rule TEXT PRIMARY KEY,
+    lab_passes INTEGER NOT NULL DEFAULT 0,
+    lab_json TEXT,
+    lab_at TEXT
+);

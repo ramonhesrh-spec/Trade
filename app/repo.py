@@ -2887,3 +2887,27 @@ def list_recent_signals_of_type(trade_type: str, since_iso: str, limit: int = 30
             """SELECT id, coin, direction, price, stop_loss, take_profit, created_at, auto_outcome FROM signals
                WHERE trade_type = ? AND created_at >= ? ORDER BY id DESC LIMIT ?""", (trade_type, since_iso, limit)).fetchall()
         return [dict(r) for r in rows]
+
+
+def set_rule_lab(rule: str, passes: bool, summary: dict, now: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO rule_status (rule, lab_passes, lab_json, lab_at) VALUES (?, ?, ?, ?)
+               ON CONFLICT(rule) DO UPDATE SET lab_passes = excluded.lab_passes, lab_json = excluded.lab_json, lab_at = excluded.lab_at""",
+            (rule, 1 if passes else 0, json.dumps(summary, default=lambda o: o.item() if hasattr(o, "item") else float(o)), now))
+
+
+def _rule_lab_row(row) -> dict:
+    return {"rule": row["rule"], "lab_passes": bool(row["lab_passes"]),
+            "summary": json.loads(row["lab_json"]) if row["lab_json"] else {}, "lab_at": row["lab_at"]}
+
+
+def get_rule_lab(rule: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT rule, lab_passes, lab_json, lab_at FROM rule_status WHERE rule = ?", (rule,)).fetchone()
+        return _rule_lab_row(row) if row else None
+
+
+def list_rule_labs() -> list[dict]:
+    with db.session() as conn:
+        return [_rule_lab_row(r) for r in conn.execute("SELECT rule, lab_passes, lab_json, lab_at FROM rule_status ORDER BY rule").fetchall()]
