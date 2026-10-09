@@ -208,7 +208,7 @@
     <p class="muted levels-hint">Alleen voor de weergave: op elke kaart staat dan wat je verliest als de stop raakt en wat het doel oplevert. HesPulse plaatst nooit zelf een order. Leeg laten zet het uit.</p>
     <form action="/settings/meldingen" method="post" class="inline-form" style="margin-top: var(--space-6);">
       <label>Maximaal aantal pushes per dag
-        <input type="text" inputmode="numeric" name="budget" placeholder="standaard 12" value="{{ user.push_budget if user.push_budget is not none else '' }}">
+        <input type="text" inputmode="numeric" name="budget" placeholder="standaard 6" value="{{ user.push_budget if user.push_budget is not none else '' }}">
       </label>
       <button type="submit">Opslaan</button>
     </form>

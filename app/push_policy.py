@@ -8,7 +8,7 @@ Alleen kansen met een coin en richting vallen hieronder. Updates van een lopende
 from datetime import datetime, timedelta
 from typing import Optional
 
-DEFAULT_BUDGET = 12
+DEFAULT_BUDGET = 6
 CONFLICT_HOURS = 6
 
 

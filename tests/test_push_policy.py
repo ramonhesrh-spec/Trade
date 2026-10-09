@@ -22,10 +22,10 @@ class DecideTest(unittest.TestCase):
         self.assertTrue(push_policy.decide([push("BTC", "long", 2)], "ETH", "short", None, NOW)[0])      # andere coin
         self.assertTrue(push_policy.decide([push("BTC", "long", 2)], "BTC", "long", None, NOW)[0])       # zelfde richting
 
-    def test_daily_budget_defaults_to_twelve_and_zero_switches_it_off(self):
-        many = [push(f"C{i}", "long", 3) for i in range(12)]
+    def test_daily_budget_defaults_to_six_and_zero_switches_it_off(self):
+        many = [push(f"C{i}", "long", 3) for i in range(6)]
         self.assertFalse(push_policy.decide(many, "NEW", "long", None, NOW)[0])
-        self.assertTrue(push_policy.decide(many[:11], "NEW", "long", None, NOW)[0])
+        self.assertTrue(push_policy.decide(many[:5], "NEW", "long", None, NOW)[0])
         self.assertTrue(push_policy.decide(many, "NEW", "long", 20, NOW)[0])
         self.assertTrue(push_policy.decide(many, "NEW", "long", 0, NOW)[0])
 
