@@ -18,6 +18,7 @@ import pandas as pd
 
 from app import config, push_notify, repo
 from app.replay import trendlab as tl
+from app import track_record
 from app.track_record import _cost_r, signal_r
 
 logger = logging.getLogger("rule_live")
@@ -25,6 +26,7 @@ logger = logging.getLogger("rule_live")
 RULE_VARIANT = "DON55_TREND"
 RULE = RULE_VARIANT.lower()
 COINS = tl.LAB_COINS
+ENGINE_TYPES = (RULE,)       # regels uit het lab die een live motor hebben; de andere labvarianten tonen op Bewijs "Geen motor"
 CEO_ONLY_TYPES = (RULE,)     # soorten die alleen de CEO ziet: geen journaal, kans, cijfers of activiteit voor leerlingen
 MAX_NEGATIVE = 30            # spec sectie 5: een regel zet zichzelf uit na 30 negatieve afgeronde trades
 FETCH_LIMIT = 1000           # het maximum van Binance per aanroep; de EMA van 200 heeft ruim aanloop nodig om op de labwaarde uit te komen
@@ -143,8 +145,18 @@ def fetch_bars(coin: str, timeframe: str, limit: int) -> pd.DataFrame:
     return exchange.fetch_ohlcv(coin, timeframe=timeframe, limit=limit)
 
 
-def label(v: tl.Variant) -> str:
-    return f"Trend {v.timeframe.replace('h', 'u')} in proef"
+def label(v: tl.Variant, proven: bool = False) -> str:
+    """Soort in de melding; "in proef" valt weg zodra Bewijs de regel bewezen noemt, zodat melding en Bewijs elkaar niet tegenspreken."""
+    return f"Trend {v.timeframe.replace('h', 'u')}" + ("" if proven else " in proef")
+
+
+def live_results() -> list[float]:
+    """Netto R van alle afgeronde trades van deze regel, oud naar nieuw."""
+    return net_results(repo.list_type_results(RULE, 1_000_000), config.TRACK_RECORD_COST_PCT)
+
+
+def is_proven(lab: Optional[dict], net: list[float]) -> bool:
+    return track_record.rule_status(lab, net)["status"] == "Bewezen"
 
 
 def tag(signal_id: int) -> str:
@@ -166,7 +178,7 @@ async def _push_ceo(title: str, body: str, url: str, signal_id: int, kans: Optio
             logger.exception("Proefmelding %s naar gebruiker %s is mislukt", signal_id, uid)
 
 
-async def _open_trade(coin: str, v: tl.Variant, sig: dict, entered_at: pd.Timestamp) -> None:
+async def _open_trade(coin: str, v: tl.Variant, sig: dict, entered_at: pd.Timestamp, proven: bool) -> None:
     direction, entry, stop = sig["direction"], sig["entry"], sig["stop"]
     k_trail = stop_factors(v)[1]
     # Geen schakel in de openbare ketting: /keten is zonder login en de proef is alleen voor de CEO.
@@ -175,7 +187,7 @@ async def _open_trade(coin: str, v: tl.Variant, sig: dict, entered_at: pd.Timest
         "price": entry, "technical_confirmed": 1, "hard_gates_ok": 1, "confidence": "In proef", "stop_loss": stop, "take_profit": None,
         # Een tekst zonder " | ": de pagina's lezen reason, en het ✓/✗-format hoort bij gemeten kenmerken die deze regel niet heeft.
         "reason": f"In proef: {v.name}, meelopende stop op {k_trail:g} ATR", "pass_pct": None, "is_practice": 0,
-        "plain_explanation": f"{label(v)}: richtprijs {push_notify.fmt_price(entry)} is het slot van de signaalcandle, het lab stapt in op de open van de "
+        "plain_explanation": f"{label(v, proven)}: richtprijs {push_notify.fmt_price(entry)} is het slot van de signaalcandle, het lab stapt in op de open van de "
                              f"volgende. Geen vast doel, de stop loopt mee op {k_trail:g} ATR.",
     }, chain_it=False)
     # De signaalcandle is verwerkt; de instapcandle (entered_at) is de eerste die tegen de stop wordt getoetst.
@@ -184,11 +196,11 @@ async def _open_trade(coin: str, v: tl.Variant, sig: dict, entered_at: pd.Timest
         repo.create_journal_entry(signal_id, uid, None)
     body = "\n".join([f"Richtprijs {push_notify.fmt_price(entry)} (slot van de signaalcandle, instap op de open van de volgende)",
                       f"Stop {push_notify.fmt_price(stop)} · geen vast doel, de stop loopt mee op {k_trail:g} ATR", push_notify.OPEN_PLAN_LINE])
-    await _push_ceo(push_notify.alert_title(coin, direction, label(v)), body, push_notify.signal_url(coin, signal_id), signal_id, kans=(coin, direction))
+    await _push_ceo(push_notify.alert_title(coin, direction, label(v, proven)), body, push_notify.signal_url(coin, signal_id), signal_id, kans=(coin, direction))
     logger.info("Proef %s: %s %s op %s, stop %s", RULE, coin, direction, entry, stop)
 
 
-async def _scan_coin(coin: str, v: tl.Variant, delta: pd.Timedelta, now: pd.Timestamp) -> None:
+async def _scan_coin(coin: str, v: tl.Variant, delta: pd.Timedelta, now: pd.Timestamp, proven: bool) -> None:
     if repo.list_open_rule_trades(RULE, coin):
         return
     closed = closed_only(await asyncio.to_thread(fetch_bars, coin, v.timeframe, FETCH_LIMIT), delta, now)
@@ -200,7 +212,7 @@ async def _scan_coin(coin: str, v: tl.Variant, delta: pd.Timedelta, now: pd.Time
     htf = closed_only(await asyncio.to_thread(fetch_bars, coin, "4h", FETCH_LIMIT), pd.Timedelta(hours=4), now) if v.htf else None
     sig = detect(closed, v, htf)
     if sig is not None:
-        await _open_trade(coin, v, sig, entered_at)
+        await _open_trade(coin, v, sig, entered_at, proven)
 
 
 async def scan(now: Optional[datetime] = None) -> None:
@@ -210,18 +222,25 @@ async def scan(now: Optional[datetime] = None) -> None:
     delta = pd.Timedelta(v.timeframe)
     if stamp - stamp.floor(delta) > SCAN_WINDOW:
         return
-    if should_disable(net_results(repo.list_type_results(RULE, MAX_NEGATIVE), config.TRACK_RECORD_COST_PCT)):
+    # Spec sectie 7: geen nieuwe regel live zonder lab-toets. Open trades volgt update_open gewoon verder.
+    lab = repo.get_rule_lab(RULE)
+    if not (lab or {}).get("lab_passes"):
+        logger.info("Proef %s: geen geslaagde labtoets (scripts/strategy_lab.py --opslaan), geen nieuwe trades", RULE)
+        return
+    net = live_results()
+    if should_disable(net):
         repo.notify_engine_disabled(label(v), f"De laatste {MAX_NEGATIVE} afgeronde trades zijn samen netto negatief. Zie Bewijs.")
         return
+    proven = is_proven(lab, net)
     for coin in COINS:
         try:
-            await _scan_coin(coin, v, delta, stamp)
+            await _scan_coin(coin, v, delta, stamp, proven)
         except Exception:
             logger.exception("Proef %s voor %s is mislukt", RULE, coin)
     repo.beat(RULE, f"{len(COINS)} coins gecontroleerd")
 
 
-async def _update_trade(t: dict, v: tl.Variant, delta: pd.Timedelta, now: pd.Timestamp) -> None:
+async def _update_trade(t: dict, v: tl.Variant, delta: pd.Timedelta, now: pd.Timestamp, proven: bool) -> None:
     b = tl.prepare(await asyncio.to_thread(fetch_bars, t["coin"], v.timeframe, FETCH_LIMIT))
     is_closed = b["timestamp"] + delta <= now
     closed, forming = b[is_closed], b[~is_closed].head(1)
@@ -233,13 +252,15 @@ async def _update_trade(t: dict, v: tl.Variant, delta: pd.Timedelta, now: pd.Tim
         stop = t["current_stop"]
     last_closed = since["timestamp"].iloc[-1] if len(since) else checked
     def title_of(word: str) -> str:
-        return push_notify.alert_title(t["coin"], t["direction"], f"{label(v)} · {word}")
+        return push_notify.alert_title(t["coin"], t["direction"], f"{label(v, proven)} · {word}")
     url = push_notify.signal_url(t["coin"], t["signal_id"])
     if hit:
-        r, outcome, at = hit
+        r, outcome, _candle_at = hit
+        # Het moment van vaststellen, nooit vóór de melding: een stop in de instapcandle heeft een candletijd van vóór "Gemeld".
+        closed_at = max(now, pd.Timestamp(t["created_at"])).isoformat()
         repo.set_rule_progress(t["signal_id"], stop, max(last_closed, checked).isoformat())
-        repo.set_trade_result(t["signal_id"], r, at.isoformat())
-        repo.mark_signal_auto_outcome(t["signal_id"], outcome, at.isoformat())
+        repo.set_trade_result(t["signal_id"], r, closed_at)
+        repo.mark_signal_auto_outcome(t["signal_id"], outcome, closed_at)
         exit_price = t["price"] + (1 if t["direction"] == "long" else -1) * r * abs(t["price"] - t["initial_stop"])
         await _push_ceo(title_of("gesloten"), f"Stop geraakt, uitgang {push_notify.fmt_price(exit_price)}\nResultaat {r:+.2f}R bruto, de trade is klaar.",
                         url, t["signal_id"])
@@ -259,9 +280,13 @@ async def update_open(now: Optional[datetime] = None) -> None:
     stamp = pd.Timestamp(now or datetime.now(timezone.utc))
     v = variant()
     delta = pd.Timedelta(v.timeframe)
-    for t in repo.list_open_rule_trades(RULE):
+    trades = repo.list_open_rule_trades(RULE)
+    if not trades:
+        return
+    proven = is_proven(repo.get_rule_lab(RULE), live_results())
+    for t in trades:
         try:
-            await _update_trade(t, v, delta, stamp)
+            await _update_trade(t, v, delta, stamp, proven)
         except Exception:
             logger.exception("Proeftrade %s volgen is mislukt", t["signal_id"])
 

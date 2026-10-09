@@ -5,7 +5,7 @@ from unittest import mock
 import numpy as np
 import pandas as pd
 
-from app import config, db, level_check, repo, rule_live
+from app import config, db, level_check, repo, rule_live, track_record
 from app.replay import trendlab as tl
 from tests.test_samenval import DbCase
 
@@ -124,6 +124,27 @@ class StopMovedTest(unittest.TestCase):
         self.assertFalse(rule_live.stop_moved("short", 107.0, 107.5))
 
 
+class LabelAndStatusTest(unittest.TestCase):
+    def test_push_label_drops_in_proef_only_when_proven(self):
+        self.assertEqual(rule_live.label(DON), "Trend 4u in proef")
+        self.assertEqual(rule_live.label(DON, proven=True), "Trend 4u")
+        self.assertNotIn("proef", track_record.TYPE_LABELS[rule_live.RULE])
+
+    def test_lab_variant_without_engine_is_geen_motor(self):
+        self.assertEqual(track_record.rule_status({"lab_passes": True}, [], has_engine=False)["status"], "Geen motor")
+        self.assertEqual(track_record.rule_status({"lab_passes": True}, [])["status"], "In proef")
+
+    def test_proof_line_uses_the_rule_status_and_never_says_doel(self):
+        wins = [0.5] * 60
+        self.assertEqual(track_record.rule_proof({"lab_passes": True}, wins)["label"], "Bewezen")
+        self.assertEqual(track_record.rule_proof(None, wins)["label"], "In proef")          # zonder labtoets nooit bewezen (trust.status zou het wel zeggen)
+        self.assertEqual(track_record.rule_proof({"lab_passes": False}, wins)["label"], "Negatief")
+        p = track_record.rule_proof({"lab_passes": True}, [2.0, -1.0])
+        self.assertEqual((p["state"], p["n"]), ("proef", 2))
+        self.assertNotIn("doel", p["text"].lower())
+        self.assertIn("R", p["text"])
+
+
 class DetectTest(unittest.TestCase):
     def test_breakout_on_the_last_closed_candle_is_long(self):
         b = breakout()
@@ -166,6 +187,7 @@ class ScanAndFollowTest(DbCase):
                   mock.patch.object(rule_live, "fetch_bars", self.fetch), mock.patch("app.push_notify.send_push", self.fake_push)):
             p.start()
             self.addCleanup(p.stop)
+        repo.set_rule_lab(rule_live.RULE, True, {}, db.now_iso())        # nieuwe trades alleen na een geslaagde labtoets
 
     def at(self, i):
         return (self.series["timestamp"].iloc[i] + pd.Timedelta(minutes=5)).to_pydatetime()
@@ -235,9 +257,12 @@ class ScanAndFollowTest(DbCase):
         self.follow(304)                                    # 303 valt door de meelopende stop
         sig = repo.get_signal(s["id"])
         self.assertEqual(sig["auto_outcome"], "take_profit")
-        self.assertEqual(sig["auto_outcome_at"], self.series["timestamp"].iloc[303].isoformat())
+        # Vastgesteld nu, nooit vóór de melding: de candletijd (2025) ligt hier vóór created_at.
+        self.assertEqual(sig["auto_outcome_at"], max(pd.Timestamp(self.now), pd.Timestamp(sig["created_at"])).isoformat())
+        self.assertGreaterEqual(pd.Timestamp(sig["auto_outcome_at"]), pd.Timestamp(sig["created_at"]))
         with db.session() as conn:
             tr = dict(conn.execute("SELECT * FROM trade_results WHERE signal_id = ?", (s["id"],)).fetchone())
+        self.assertEqual(tr["closed_at"], sig["auto_outcome_at"])
         self.assertGreater(tr["r_value"], 0)
         self.assertEqual(repo.list_open_rule_trades(rule_live.RULE), [])
         self.assertEqual(self.pushed[-1]["tag"], f"trend-{s['id']}")
@@ -268,6 +293,31 @@ class ScanAndFollowTest(DbCase):
         bodies = {p["user"]: p["body"] for p in self.pushed}
         self.assertIn("1 kans gemeld, 1 afgerond", bodies[self.ceo])
         self.assertIn("0 kansen gemeld, 0 afgerond", bodies[self.leerling])
+
+    def test_no_new_trades_without_a_passed_lab_test_but_open_ones_are_followed(self):
+        with db.session() as conn:
+            conn.execute("DELETE FROM rule_status")
+        self.scan(300)                                                        # geen labrij
+        self.assertEqual(self.signals(), [])
+        repo.set_rule_lab(rule_live.RULE, False, {}, db.now_iso())
+        self.scan(300)                                                        # labtoets niet geslaagd
+        self.assertEqual(self.signals(), [])
+        repo.set_rule_lab(rule_live.RULE, True, {}, db.now_iso())
+        self.scan(300)
+        self.assertEqual(len(self.signals()), 1)
+        repo.set_rule_lab(rule_live.RULE, False, {}, db.now_iso())            # teruggezet: de lopende trade wordt toch gevolgd en gesloten
+        self.follow(304)
+        self.assertEqual(repo.get_signal(self.signals()[0]["id"])["auto_outcome"], "take_profit")
+
+    def test_pending_directions_ignore_the_proef_and_resolved_signals(self):
+        self.scan(300)
+        self.assertEqual(repo.pending_directions_for_coin("BTC"), {"long"})
+        self.assertEqual(repo.pending_directions_for_coin("BTC", exclude_types=rule_live.CEO_ONLY_TYPES), set())
+        other = repo.insert_signal({"coin": "BTC", "direction": "short", "category": "day_trading", "trade_type": "smc", "price": 100.0,
+                                    "stop_loss": 101.0, "take_profit": 98.0, "technical_confirmed": 1, "hard_gates_ok": 1, "confidence": "x"})
+        repo.create_journal_entry(other, self.leerling, None)
+        repo.mark_signal_auto_outcome(other, "stop_loss", db.now_iso())
+        self.assertEqual(repo.pending_directions_for_coin("BTC", exclude_types=rule_live.CEO_ONLY_TYPES), set())
 
     def test_outside_the_window_after_a_close_nothing_is_fetched(self):
         self.now = (self.series["timestamp"].iloc[300] + pd.Timedelta(hours=1)).to_pydatetime()
@@ -375,6 +425,67 @@ class WebVisibilityTest(DbCase):
         page = anon.get("/keten")
         self.assertEqual(page.status_code, 200)
         self.assertNotIn(rule_live.RULE, page.text + anon.get("/keten.json").text)
+
+
+class KansAndBewijsTest(DbCase):
+    def client(self, uid):
+        from fastapi.testclient import TestClient
+        from app import security
+        from web import main
+        main._ceo_cache.update(at=0.0, id=None)
+        main._proof_cache.update(at=0.0)
+        c = TestClient(main.app)
+        c.cookies.set(main.SESSION_COOKIE, security.create_session_token(uid))
+        return c
+
+    def test_kans_of_a_trailing_trade_has_no_doel_and_the_rule_status(self):
+        from web import main
+        ceo = repo.get_user_by_username("a")["id"]
+        sid = repo.insert_signal({"coin": "ADA", "direction": "long", "category": "day_trading", "trade_type": rule_live.RULE, "price": 100.0,
+                                  "stop_loss": 97.0, "take_profit": None, "technical_confirmed": 1, "hard_gates_ok": 1, "confidence": "In proef",
+                                  "reason": "In proef"}, chain_it=False)
+        repo.set_trade_result(sid, 2.5, db.now_iso())
+        repo.mark_signal_auto_outcome(sid, "take_profit", db.now_iso())
+        repo.set_rule_lab(rule_live.RULE, False, {}, db.now_iso())
+        with mock.patch.object(config, "CEO_USERNAME", ""), mock.patch.object(main.exchange, "fetch_ohlcv", side_effect=RuntimeError("geen netwerk")), \
+                mock.patch.object(main.exchange, "fetch_last_price", side_effect=RuntimeError("geen netwerk")):
+            page = self.client(ceo).get(f"/kans/{sid}").text
+        self.assertIn("Afgesloten met winst, +2.50R", page)
+        self.assertNotIn("Doel geraakt", page)
+        self.assertNotIn("raakten het doel", page)
+        self.assertIn("Slaagde niet in de test", page)                  # de status van Bewijs, niet die van trust.status
+
+    def test_bewijs_shows_geen_motor_and_the_caveat_for_the_ceo(self):
+        ceo = repo.get_user_by_username("a")["id"]
+        repo.set_rule_lab("don20", True, {}, db.now_iso())
+        repo.set_rule_lab(rule_live.RULE, True, {}, db.now_iso())
+        with mock.patch.object(config, "CEO_USERNAME", ""):
+            page = self.client(ceo).get("/bewijs").text
+        self.assertIn("Geen motor", page)
+        self.assertIn("50 live trades kunnen een voordeel van 0,1R", page)
+        self.assertIn("Jij ziet ook de regels in proef", page)
+
+
+class MigrationTest(unittest.TestCase):
+    def test_old_rule_trades_get_checked_until_from_the_signal_candle(self):
+        import sqlite3
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as tmp:
+            path = str(Path(tmp) / "old.db")
+            conn = sqlite3.connect(path)
+            conn.execute("""CREATE TABLE rule_trades (signal_id INTEGER PRIMARY KEY, rule TEXT NOT NULL, coin TEXT NOT NULL, entered_at TEXT NOT NULL,
+                            initial_stop REAL NOT NULL, current_stop REAL NOT NULL, atr REAL NOT NULL, UNIQUE (rule, coin, entered_at))""")
+            conn.execute("INSERT INTO rule_trades VALUES (1, 'don55_trend', 'BTC', '2026-10-09T04:00:00+00:00', 95, 97, 1.5)")
+            conn.execute("INSERT INTO rule_trades VALUES (2, 'onbekend', 'ETH', '2026-10-09T04:00:00+00:00', 95, 97, 1.5)")
+            conn.commit()
+            conn.close()
+            with mock.patch.object(config, "DATABASE_PATH", path):
+                db.init_db()
+                db.init_db()                                                   # idempotent
+                with db.session() as c:
+                    rows = {r["signal_id"]: r["checked_until"] for r in c.execute("SELECT signal_id, checked_until FROM rule_trades")}
+        self.assertEqual(rows, {1: "2026-10-09T00:00:00+00:00", 2: "2026-10-09T04:00:00+00:00"})
 
 
 if __name__ == "__main__":

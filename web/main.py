@@ -78,20 +78,25 @@ def asset(path: str) -> str:
     return f"/static/{path}?v={version}"
 
 
-_proof_cache = {"at": 0.0, "map": {}}
+_proof_cache = {"at": 0.0, "map": {}, "labs": {}, "rows": []}
 
 
 def proof(trade_type: str) -> dict:
     """Bewijsstatus van een soort kans (app/trust.py), een minuut onthouden: elke kaart vraagt erom."""
     if time.monotonic() - _proof_cache["at"] > 60:
-        entries = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
+        rows = repo.list_signals_for_quality_report(None)
+        entries = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT)
         by_type = {}
         for e in entries:
             if e["source"] != "alles":
                 prev = by_type.get(e["trade_type"])
                 if prev is None or e["resolved"] > prev["resolved"]:
                     by_type[e["trade_type"]] = e
-        _proof_cache.update(at=time.monotonic(), map=by_type)
+        _proof_cache.update(at=time.monotonic(), map=by_type, labs={lab["rule"]: lab for lab in repo.list_rule_labs()}, rows=rows)
+    labs = _proof_cache["labs"]
+    if trade_type in rule_live.CEO_ONLY_TYPES or trade_type in labs:
+        # Eén betekenis van Bewezen: voor een regel met een labtoets dezelfde status als op Bewijs (labtoets, 50 live trades, bewaking).
+        return track_record.rule_proof(labs.get(trade_type), track_record.live_net_r(_proof_cache["rows"], trade_type, config.TRACK_RECORD_COST_PCT))
     return trust.status(_proof_cache["map"].get(trade_type))
 
 
@@ -545,8 +550,12 @@ async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dic
     prices = await _cached_prices({signal["coin"]})
     price = prices.get(signal["coin"])
     signal.setdefault("message_summary", None)
+    trailing = None
+    if signal["trade_type"] in rule_live.ENGINE_TYPES:          # meelopende stop: geen doel, de uitkomst is winst of verlies in R
+        trailing = kans_view.trailing_outcome(signal, (repo.get_trade_result(signal_id) or {}).get("r_value"))
     return templates.TemplateResponse(request, "kans.html", {
-        "user": user, "signal": signal, "facts": kans_view.facts(signal), "events": kans_view.timeline(signal, setup),
+        "user": user, "signal": signal, "facts": kans_view.facts(signal), "trailing": trailing,
+        "events": kans_view.timeline(signal, setup, trailing["text"] if trailing else None),
         "chart": Markup(kans_view.chart(signal, setup, candles, price)), "price": price, "setup": setup,
         "tf": tf, "timeframes": KANS_TIMEFRAMES if not setup else (),
         "fingerprint": (repo.get_chain_link(signal["id"]) or {}).get("hash"),
@@ -589,10 +598,11 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
     rule_statuses = []
     for trade_type in track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES):
-        status = track_record.rule_status(lab_types.get(trade_type), track_record.live_net_r(rows, trade_type, config.TRACK_RECORD_COST_PCT))
+        status = track_record.rule_status(lab_types.get(trade_type), track_record.live_net_r(rows, trade_type, config.TRACK_RECORD_COST_PCT),
+                                          has_engine=trade_type in rule_live.ENGINE_TYPES)
         rule_statuses.append({**status, "label": track_record.TYPE_LABELS.get(trade_type, trade_type), "css": status["status"].lower().replace(" ", "-")})
     return templates.TemplateResponse(request, "bewijs.html", {
-        "rule_statuses": rule_statuses, "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
+        "rule_statuses": rule_statuses, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
         "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,
         "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,
     })

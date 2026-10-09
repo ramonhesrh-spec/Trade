@@ -1256,6 +1256,8 @@ async def scan_smc_fast() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    from app import db
+    db.init_db()      # nieuwe tabellen (rule_trades) bestaan dan ook als deze timer na een deploy eerder draait dan de bot
     if "--smc-only" in sys.argv:
         asyncio.run(scan_smc_fast())
     else:

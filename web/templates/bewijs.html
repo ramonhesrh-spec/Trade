@@ -7,11 +7,12 @@
   <h2>Bewijs</h2>
 </div>
 <p class="muted"><a href="/week">Jouw week als plaatje om te delen</a></p>
-<p class="page-intro">Wat elke soort melding echt opleverde, automatisch gemeten uit de uitkomsten van alle signalen. Geen selectie, geen beste maanden: wat hier staat, staat er voor iedereen.</p>
+<p class="page-intro">Wat elke soort melding echt opleverde, automatisch gemeten uit de uitkomsten van alle signalen. Geen selectie, geen beste maanden: wat hier staat, staat er voor iedereen.{% if ceo_view %} Jij ziet ook de regels in proef; die tellen mee in jouw totalen, leerlingen zien ze niet.{% endif %}</p>
 
 {% if rule_statuses %}
 <section class="card" style="--i: 0">
   <h3>Status per regel</h3>
+  <p class="muted">Eerlijk: 50 live trades kunnen een voordeel van 0,1R per trade niet bewijzen. Het bewijs komt uit de test op historische data; live is een controle of de werkelijkheid daarvan afwijkt.</p>
   {% for r in rule_statuses %}
   <div class="proof-card proof-rule-{{ r.css }}">
     <header class="proof-head">

@@ -475,7 +475,7 @@ async def check_pending_signals() -> None:
         # tegenstrijdige kant is opgelost (genomen, genegeerd, of vervallen).
         opposite = "short" if entry["direction"].lower() == "long" else "long"
         if coin not in coin_directions:
-            coin_directions[coin] = repo.pending_directions_for_coin(coin)
+            coin_directions[coin] = repo.pending_directions_for_coin(coin, exclude_types=rule_live.CEO_ONLY_TYPES)
         if opposite in coin_directions[coin]:
             continue
 
@@ -582,4 +582,5 @@ async def run_all_checks() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    db.init_db()      # een nieuwe tabel (zoals rule_trades) bestaat dan ook als deze timer eerder draait dan de bot na een deploy
     asyncio.run(run_all_checks())

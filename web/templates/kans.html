@@ -12,7 +12,8 @@
     <span class="muted setup-age">{{ signal.created_at | age }}</span>
   </header>
 
-  {% if signal.auto_outcome == "take_profit" %}<p class="kans-outcome is-win" data-win="{{ signal.id }}">✓ Doel geraakt</p>
+  {% if trailing %}<p class="kans-outcome {{ 'is-win' if trailing.win else 'is-loss' }}"{% if trailing.win %} data-win="{{ signal.id }}"{% endif %}>{{ "✓" if trailing.win else "✗" }} {{ trailing.text }}</p>
+  {% elif signal.auto_outcome == "take_profit" %}<p class="kans-outcome is-win" data-win="{{ signal.id }}">✓ Doel geraakt</p>
   {% elif signal.auto_outcome == "stop_loss" %}<p class="kans-outcome is-loss">✗ Stop geraakt</p>
   {% elif signal.auto_outcome == "vervallen" %}<p class="kans-outcome">Vervallen zonder uitkomst</p>
   {% else %}<p class="kans-outcome is-open">Loopt nog{% if price %} · nu {{ fmt(price) }}{% endif %}</p>{% endif %}

@@ -2,7 +2,7 @@
 lezers (dashboard) en schrijvers (bot)."""
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app import config
@@ -288,6 +288,24 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_sr_zone_failures_lookup "
         "ON sr_zone_failures (coin, direction, failed_at)"
     )
+    _migrate_rule_trades(conn)
+
+
+def _migrate_rule_trades(conn: sqlite3.Connection) -> None:
+    """rule_trades bestond kort zonder checked_until. Bestaande rijen krijgen het openmoment van de signaalcandle (instap min één candle): dan
+    wordt de instapcandle nog getoetst, zoals bij een nieuwe trade. Onbekende regel of timeframe: entered_at, de veilige kant (geen oude candle
+    wordt opnieuw getoetst)."""
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(rule_trades)")}
+    if not cols or "checked_until" in cols:
+        return
+    conn.execute("ALTER TABLE rule_trades ADD COLUMN checked_until TEXT")
+    from app.replay.trendlab import VARIANTS     # pas hier: alleen nodig voor deze eenmalige aanvulling
+    hours = {v.name.lower(): int(v.timeframe[:-1]) for v in VARIANTS if v.timeframe.endswith("h")}
+    for row in conn.execute("SELECT signal_id, rule, entered_at FROM rule_trades").fetchall():
+        entered = datetime.fromisoformat(row["entered_at"])
+        h = hours.get(row["rule"])
+        checked = entered - timedelta(hours=h) if h else entered
+        conn.execute("UPDATE rule_trades SET checked_until = ? WHERE signal_id = ?", (checked.isoformat(), row["signal_id"]))
 
 
 def get_setting(key: str, default: str = "") -> str:

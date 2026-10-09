@@ -15,7 +15,16 @@ def _parse(value: str) -> datetime:
     return t if t.tzinfo else t.replace(tzinfo=timezone.utc)
 
 
-def timeline(signal: dict, setup: Optional[dict]) -> list[dict]:
+def trailing_outcome(signal: dict, r_value: Optional[float]) -> Optional[dict]:
+    """Uitkomst van een trade met een meelopende stop: die heeft geen doel, dus winst of verlies in R in plaats van "doel geraakt"."""
+    outcome = signal.get("auto_outcome")
+    if outcome not in ("take_profit", "stop_loss"):
+        return None
+    win = outcome == "take_profit"
+    return {"win": win, "text": f"Afgesloten met {'winst' if win else 'verlies'}" + (f", {r_value:+.2f}R" if r_value is not None else "")}
+
+
+def timeline(signal: dict, setup: Optional[dict], outcome_text: Optional[str] = None) -> list[dict]:
     """Gebeurtenissen oud naar nieuw: plan gemeld, limiet geraakt, doelen en stop (alleen Structuur kent die tijden), uitkomst."""
     events = []
     if setup:
@@ -26,7 +35,7 @@ def timeline(signal: dict, setup: Optional[dict]) -> list[dict]:
         events.append({"at": signal["created_at"], "text": "Gemeld"})
     outcome = signal.get("auto_outcome")
     if outcome and not any(e["text"].startswith(("Stop", "T")) for e in events if setup):
-        events.append({"at": signal.get("auto_outcome_at") or signal["created_at"], "text": OUTCOME_TEXT.get(outcome, outcome)})
+        events.append({"at": signal.get("auto_outcome_at") or signal["created_at"], "text": outcome_text or OUTCOME_TEXT.get(outcome, outcome)})
     events.sort(key=lambda e: _parse(e["at"]))
     return [{"at": today.local(_parse(e["at"])), "text": ceo.timeline_text(e["text"])} for e in events]    # Nederlandse tijd, zoals de rest van de site
 

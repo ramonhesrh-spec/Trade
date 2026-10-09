@@ -25,7 +25,7 @@ TYPE_LABELS = {
     "smc_waarschuwing": "SMC met waarschuwing",
     "trend": "Trend (ongetest)",
     "rejectie": "Rejectie op een niveau (ongetest)",
-    "don55_trend": "Trend 4u met meelopende stop (in proef)",
+    "don55_trend": "Trend 4u met meelopende stop",
 }
 SOURCE_LABELS = {"scan": "Door HesPulse gevonden", "community": "Via de community"}
 STATUS_LABELS = {
@@ -187,7 +187,7 @@ RULE_MIN_LIVE_PROVEN = 50
 RULE_WATCH_LAST = 100
 
 
-def rule_status(lab: Optional[dict], live_r_net: list[float]) -> dict:
+def rule_status(lab: Optional[dict], live_r_net: list[float], has_engine: bool = True) -> dict:
     """Status van één regel, elke keer opnieuw uit de data (niets opgeslagen, dus een Bewezen regel valt vanzelf terug). live_r_net: netto R
     van de afgeronde live trades, oudste eerst. Volgorde: Negatief, Bewezen, anders In proef."""
     from app import structure_review      # structure_review importeert dit module al: bovenaan importeren geeft een kringverwijzing
@@ -196,6 +196,9 @@ def rule_status(lab: Optional[dict], live_r_net: list[float]) -> dict:
     avg_last100 = sum(last100) / RULE_WATCH_LAST if n >= RULE_WATCH_LAST else None
     out = lambda status, reason: {"status": status, "reason": reason, "n_live": n, "avg_last100": avg_last100}
     lab_passes = bool(lab and lab.get("lab_passes"))
+    if not has_engine:
+        # Een labvariant zonder live motor kan geen live trades krijgen: "In proef, nog 50 trades" zou iets beloven dat nooit komt.
+        return out("Geen motor", f"{'Slaagde' if lab_passes else 'Slaagde niet'} in de test op historische data; er draait geen live motor voor deze regel.")
     last30 = live_r_net[-MIN_FOR_STATUS:]
     if n >= MIN_FOR_STATUS and sum(last30) / MIN_FOR_STATUS < 0:
         return out("Negatief", f"De laatste {MIN_FOR_STATUS} afgeronde trades samen onder nul na kosten.")
@@ -208,6 +211,20 @@ def rule_status(lab: Optional[dict], live_r_net: list[float]) -> dict:
     if not lab_passes:
         return out("In proef", f"Nog geen geslaagde test; {n} afgeronde trades.")
     return out("In proef", f"Geslaagde test; nog {max(0, RULE_MIN_LIVE_PROVEN - n)} afgeronde trades nodig voor bewezen.")
+
+
+PROOF_STATES = {"In proef": "proef", "Bewezen": "bewezen", "Negatief": "negatief", "Geen motor": "proef"}
+
+
+def rule_proof(lab: Optional[dict], live_r_net: list[float]) -> dict:
+    """Bewijsregel onder een kans van een regel met een labtoets, in dezelfde vorm als trust.status maar met de status van rule_status: Bewezen
+    vraagt dan ook de labtoets en de bewaking over de laatste 100. Zonder "doel": een meelopende stop heeft er geen, de uitkomst is R."""
+    st = rule_status(lab, live_r_net)
+    n = len(live_r_net)
+    total = sum(live_r_net)
+    text = (f"{n} afgeronde {'trade' if n == 1 else 'trades'}, netto {total:+.1f}R, gemiddeld {total / n:+.2f}R per trade. " if n else "Nog geen afgeronde trades. ")
+    return {"state": PROOF_STATES[st["status"]], "label": st["status"], "text": text + st["reason"], "n": n, "target": RULE_MIN_LIVE_PROVEN,
+            "progress": min(1.0, n / RULE_MIN_LIVE_PROVEN), "wins": sum(1 for r in live_r_net if r > 0), "avg_net": total / n if n else None}
 
 
 def visible_rule_types(types, ceo: bool, ceo_only=()) -> list[str]:

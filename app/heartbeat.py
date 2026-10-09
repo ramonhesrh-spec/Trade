@@ -52,4 +52,5 @@ async def send_heartbeats() -> None:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    db.init_db()
     asyncio.run(send_heartbeats())

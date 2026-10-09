@@ -1750,7 +1750,7 @@ def mark_level_alert_sent(entry_id: int) -> None:
         conn.execute("UPDATE journal_entries SET level_alert_sent = 1 WHERE id = ?", (entry_id,))
 
 
-def pending_directions_for_coin(coin: str) -> set[str]:
+def pending_directions_for_coin(coin: str, exclude_types: tuple[str, ...] = ()) -> set[str]:
     """Alle richtingen waarin deze coin nu nog minstens één niet-genomen,
     niet-genegeerd signaal heeft staan, over alle trade_types en
     gebruikers heen (dus ook swing, die auto_ignore_opposite_pending
@@ -1759,13 +1759,15 @@ def pending_directions_for_coin(coin: str) -> set[str]:
     stil te houden zolang er een tegenstrijdig signaal open staat, zonder
     een van beide signalen zelf aan te passen."""
     with db.session() as conn:
+        # Een signaal met een uitkomst is niet meer open, en exclude_types (de proef van de CEO) mag de meldingen van anderen niet stilhouden.
         rows = conn.execute(
-            """SELECT DISTINCT s.direction AS direction
+            f"""SELECT DISTINCT s.direction AS direction
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id
                WHERE s.coin = ? AND je.entry_price IS NULL
-                     AND je.status != 'genegeerd' AND s.is_practice = 0""",
-            (coin.upper(),),
+                     AND je.status != 'genegeerd' AND s.is_practice = 0 AND s.auto_outcome IS NULL
+                     AND s.trade_type NOT IN ({",".join("?" * len(exclude_types)) or "''"})""",
+            (coin.upper(), *exclude_types),
         ).fetchall()
         return {r["direction"] for r in rows}
 
@@ -2961,7 +2963,7 @@ def list_open_rule_trades(rule: str, coin: Optional[str] = None) -> list[dict]:
     """Open is: het signaal heeft nog geen uitkomst."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT rt.signal_id, rt.rule, rt.coin, rt.entered_at, rt.initial_stop, rt.current_stop, rt.atr, rt.checked_until, s.direction, s.price
+            """SELECT rt.signal_id, rt.rule, rt.coin, rt.entered_at, rt.initial_stop, rt.current_stop, rt.atr, rt.checked_until, s.direction, s.price, s.created_at
                FROM rule_trades rt JOIN signals s ON s.id = rt.signal_id
                WHERE rt.rule = ? AND (? IS NULL OR rt.coin = ?) AND s.auto_outcome IS NULL ORDER BY rt.signal_id""",
             (rule, coin, coin)).fetchall()
@@ -2971,3 +2973,9 @@ def list_open_rule_trades(rule: str, coin: Optional[str] = None) -> list[dict]:
 def set_rule_progress(signal_id: int, stop: float, checked_until: str) -> None:
     with db.session() as conn:
         conn.execute("UPDATE rule_trades SET current_stop = ?, checked_until = ? WHERE signal_id = ?", (stop, checked_until, signal_id))
+
+
+def get_trade_result(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT signal_id, r_value, closed_at FROM trade_results WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
