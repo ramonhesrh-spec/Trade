@@ -22,6 +22,7 @@ CREATE TABLE IF NOT EXISTS users (
     quiet_hours_end TEXT,
     -- Eigen bedrag in euro dat jij per trade riskeert (de waarde van 1R). Alleen voor weergave op de kaarten, nooit voor orders. NULL = niet ingevuld.
     risk_per_trade_eur REAL,
+    push_budget INTEGER,
     -- Drempel (percentage) waarboven de gepoolde factoren voor DEZE
     -- gebruiker als "bevestigd" tellen. De twee harde eisen (Uitgerektheid,
     -- BTC-trend) blijven voor iedereen hard, dit percentage geldt alleen
@@ -653,3 +654,13 @@ CREATE TABLE IF NOT EXISTS signal_chain (
     payload TEXT NOT NULL,
     hash TEXT NOT NULL
 );
+
+-- Wat er als push naar een gebruiker is gegaan, voor het dagbudget en het weren van tegenstrijdige meldingen (app/push_policy.py).
+CREATE TABLE IF NOT EXISTS push_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    at TEXT NOT NULL,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_push_log_user_at ON push_log(user_id, at);

@@ -69,7 +69,7 @@ async def run(now: Optional[datetime] = None) -> int:
         for user in repo.list_users():
             quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
             try:
-                await push_notify.send_push(user["id"], title, body, push_notify.signal_url(s["coin"], s["id"]), silent=quiet)
+                await push_notify.send_kans_push(user["id"], s["coin"], s["direction"], title, body, push_notify.signal_url(s["coin"], s["id"]), silent=quiet)
             except Exception:
                 logger.exception("Samenval-melding voor %s naar gebruiker %s is mislukt", s["coin"], user["username"])
     return sent

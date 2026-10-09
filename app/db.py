@@ -189,6 +189,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN quiet_hours_end TEXT")
     if "risk_per_trade_eur" not in existing_users:
         conn.execute("ALTER TABLE users ADD COLUMN risk_per_trade_eur REAL")
+    if "push_budget" not in existing_users:
+        conn.execute("ALTER TABLE users ADD COLUMN push_budget INTEGER")
     if "confirm_threshold_pct" not in existing_users:
         conn.execute(
             "ALTER TABLE users ADD COLUMN confirm_threshold_pct REAL NOT NULL DEFAULT 60.0"

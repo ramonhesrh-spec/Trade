@@ -750,7 +750,7 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
         for user in repo.list_users():
             quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
             try:
-                await push_notify.send_push(user["id"], title, body, f"/smc#radar-setup-{setup_id}", silent=quiet, tag=f"smc-zone-{coin}")
+                await push_notify.send_kans_push(user["id"], coin, direction, title, body, f"/smc#radar-setup-{setup_id}", silent=quiet, tag=f"smc-zone-{coin}")
             except Exception:
                 logger.exception("SMC-bouwend-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
         repo.mark_smc_alert_sent(setup_id)
@@ -801,7 +801,7 @@ async def _notify_zone_touches(coin: str) -> None:
         for user in repo.list_users():
             quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
             try:
-                await push_notify.send_push(user["id"], title, body, f"/smc#radar-setup-{setup['id']}", silent=quiet, tag=f"smc-zone-{coin}")
+                await push_notify.send_kans_push(user["id"], coin, direction, title, body, f"/smc#radar-setup-{setup['id']}", silent=quiet, tag=f"smc-zone-{coin}")
             except Exception:
                 logger.exception("Zone-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 

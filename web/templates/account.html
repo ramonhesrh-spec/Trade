@@ -206,6 +206,13 @@
       <button type="submit">Opslaan</button>
     </form>
     <p class="muted levels-hint">Alleen voor de weergave: op elke kaart staat dan wat je verliest als de stop raakt en wat het doel oplevert. HesPulse plaatst nooit zelf een order. Leeg laten zet het uit.</p>
+    <form action="/settings/meldingen" method="post" class="inline-form" style="margin-top: var(--space-6);">
+      <label>Maximaal aantal pushes per dag
+        <input type="text" inputmode="numeric" name="budget" placeholder="standaard 12" value="{{ user.push_budget if user.push_budget is not none else '' }}">
+      </label>
+      <button type="submit">Opslaan</button>
+    </form>
+    <p class="muted levels-hint">Is het budget op, dan komen nieuwe kansen alleen op de meldingenpagina. Een kans die de andere kant op wijst dan een melding van de laatste 6 uur op dezelfde coin komt ook alleen daar. Updates van een lopende trade en stop of doel komen altijd als push. Leeg laten geeft de standaard, 0 zet het budget uit.</p>
     <div id="push-subscribe-block" style="margin-top: var(--space-6);">
       <button id="push-subscribe-btn" type="button">Meldingen aanzetten</button>
       <p id="push-subscribe-status" class="muted" style="margin: var(--space-2) 0 0; font-size: var(--text-base);" hidden></p>

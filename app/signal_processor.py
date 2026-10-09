@@ -451,7 +451,7 @@ async def _fanout_confirmed_signal(
         try:
             body = make_body(effective_stop_loss, effective_take_profit, stop_was_capped)
             extra = {"tag": tag} if tag else {}
-            await push_notify.send_push(user["id"], title, body, push_notify.signal_url(coin, signal_id), silent=quiet or force_silent, **extra)
+            await push_notify.send_kans_push(user["id"], coin, direction, title, body, push_notify.signal_url(coin, signal_id), silent=quiet or force_silent, **extra)
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
             logger.exception("Melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
@@ -1020,8 +1020,8 @@ async def process_day_trading_signal(
             if signal_data.get("context_note"):
                 body += f"\n{signal_data['context_note']}"
             body += f"\n{push_notify.OPEN_PLAN_LINE}"
-            await push_notify.send_push(
-                user["id"], title, body, push_notify.signal_url(interp.coin, signal_id), silent=force_silent,
+            await push_notify.send_kans_push(
+                user["id"], interp.coin, interp.direction, title, body, push_notify.signal_url(interp.coin, signal_id), silent=force_silent,
             )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:

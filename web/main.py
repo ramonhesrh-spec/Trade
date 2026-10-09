@@ -1205,6 +1205,19 @@ async def update_risk_per_trade(risk_eur: str = Form(""), user: dict = Depends(r
     return RedirectResponse(url="/account", status_code=303)
 
 
+@app.post("/settings/meldingen")
+async def update_push_budget(budget: str = Form(""), user: dict = Depends(require_login)):
+    """Maximaal aantal pushes voor nieuwe kansen per 24 uur (app/push_policy.py). Leeg is de standaard, 0 zet het budget uit."""
+    try:
+        value = int(budget.strip()) if budget.strip() else None
+    except ValueError:
+        value = None
+    if value is not None and not (0 <= value <= 500):
+        value = None
+    repo.set_push_budget(user["id"], value)
+    return RedirectResponse(url="/account", status_code=303)
+
+
 @app.post("/push/voorbeeld")
 async def send_demo_push_message(user: dict = Depends(require_login)):
     """Stuurt een testpush naar elk apparaat van de ingelogde gebruiker:

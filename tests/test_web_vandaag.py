@@ -177,6 +177,16 @@ class WebVandaagTests(unittest.TestCase):
         self.assertEqual(rows[-1]["signal_id"], sig_id)
         self.assertIn(rows[-1]["hash"][:16], self.client.get(f"/kans/{sig_id}").text)
 
+    def test_push_budget_form_saves_and_rejects_nonsense(self):
+        me = repo.get_user_by_username("tester")["id"]
+        self.client.post("/settings/meldingen", data={"budget": "6"}, follow_redirects=False)
+        self.assertEqual(repo.get_user(me)["push_budget"], 6)
+        self.client.post("/settings/meldingen", data={"budget": "veel"}, follow_redirects=False)
+        self.assertIsNone(repo.get_user(me)["push_budget"])                    # ongeldig: terug naar de standaard
+        self.client.post("/settings/meldingen", data={"budget": "0"}, follow_redirects=False)
+        self.assertEqual(repo.get_user(me)["push_budget"], 0)                  # 0 zet het budget uit
+        self.assertIn("Maximaal aantal pushes per dag", self.client.get("/account").text)
+
     def test_static_files_are_cached_by_version_and_pages_are_compressed(self):
         page = self.client.get("/vandaag", headers={"Accept-Encoding": "gzip"})
         self.assertEqual(page.headers.get("content-encoding"), "gzip")

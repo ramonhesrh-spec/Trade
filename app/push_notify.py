@@ -86,6 +86,23 @@ async def send_push(user_id: int, title: str, body: str, url: str, silent: bool 
             logger.exception("Pushmelding naar abonnement %s mislukt", sub["id"])
 
 
+async def send_kans_push(user_id: int, coin: str, direction: str, title: str, body: str, url: str, silent: bool = False, tag: Optional[str] = None) -> bool:
+    """Push voor een nieuwe kans, met de regels van app/push_policy.py: geen tegenstrijdige richting kort na elkaar op dezelfde coin en een dagbudget per
+    gebruiker. Een geweerde kans wordt een rustige melding op de meldingenpagina, dus niets verdwijnt. Geeft True als er een push is gestuurd.
+    Updates van een lopende trade, stop en doel en de agenda gaan rechtstreeks via send_push en komen altijd."""
+    from datetime import timedelta, timezone
+    from app import push_policy
+    now = datetime.now(timezone.utc)
+    user = repo.get_user(user_id) or {}
+    allowed, reason = push_policy.decide(repo.list_recent_pushes(user_id, (now - timedelta(hours=24)).isoformat()), coin, direction, user.get("push_budget"), now)
+    if not allowed:
+        repo.create_notification(user_id, "kans", title, f"{body}\n{reason}", url)
+        return False
+    repo.record_push(user_id, coin, direction, now.isoformat())
+    await send_push(user_id, title, body, url, silent=silent, **({"tag": tag} if tag else {}))
+    return True
+
+
 _COIN_SYMBOLS = {"BTC": "₿", "ETH": "Ξ"}
 
 

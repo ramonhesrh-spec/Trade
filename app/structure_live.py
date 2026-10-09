@@ -183,12 +183,17 @@ def alert_body(setup: dict, plan: dict) -> str:
                                   f"Doelen {targets}", (setup["reason"] or "").strip())
 
 
-async def _push_all(title: str, body: str, url: str, tag: str, loud: bool) -> None:
+async def _push_all(title: str, body: str, url: str, tag: str, loud: bool, coin: Optional[str] = None, direction: Optional[str] = None) -> None:
+    """Met coin en richting is het een nieuwe kans en gelden de pushregels (geen tegenstrijdige richting, dagbudget). Zonder is het een update van een
+    lopende trade en komt de push altijd."""
     from app import push_notify
     for user in repo.list_users():
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            await push_notify.send_push(user["id"], title, body, url, silent=quiet or not loud, tag=tag)
+            if coin and direction:
+                await push_notify.send_kans_push(user["id"], coin, direction, title, body, url, silent=quiet or not loud, tag=tag)
+            else:
+                await push_notify.send_push(user["id"], title, body, url, silent=quiet or not loud, tag=tag)
         except Exception:
             logger.exception("Structuur-melding voor %s naar gebruiker %s is mislukt", tag, user["username"])
 
@@ -243,7 +248,7 @@ async def _discover(coin: str, now: datetime) -> None:
         if state == "waiting" and grade != "C":
             setup = {**row, "id": setup_id, "reason": reason}
             await _push_all(push_notify.alert_title(coin, ev.direction, "Structuur wacht"), alert_body(setup, plan),
-                            f"/structuur#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A")
+                            f"/structuur#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A", coin=coin, direction=ev.direction)
 
 
 async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: pd.Timestamp) -> None:
