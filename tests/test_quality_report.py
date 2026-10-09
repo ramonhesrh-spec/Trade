@@ -22,6 +22,19 @@ class PureFunctionTests(unittest.TestCase):
         self.assertIsNone(quality_report._r_of(_row("smc", None)))
         self.assertIsNone(quality_report._r_of(_row("smc", "take_profit", stop=100.0)))  # geen stopafstand
 
+    def test_r_override_gaat_voor_en_zonder_override_blijft_alles_gelijk(self):
+        r = {**_row("smc", "take_profit"), "r_override": 2.3}
+        self.assertEqual(quality_report._r_of(r), 2.3)
+        self.assertEqual(quality_report._r_of({**_row("smc", "stop_loss"), "r_override": -0.4}), -0.4)
+        self.assertEqual(quality_report._r_of({**_row("smc", "take_profit"), "r_override": None}), 2.0)
+        self.assertIsNone(quality_report._r_of({**_row("smc", "vervallen"), "r_override": 1.5}))
+        # de klasse volgt het teken van de echte R: een meelopende stop met winst telt als winst
+        rows = [{**_row("smc", "stop_loss"), "r_override": 0.8}]
+        for x in rows:
+            x.setdefault("message_id", None)
+        s = quality_report.scan_stats(rows)["smc"]
+        self.assertEqual((s["tp"], s["sl"], s["r"]), (1, 0, [0.8]))
+
     def test_scan_stats_telt_alleen_scansignalen(self):
         rows = [_row("smc", "take_profit"), _row("smc", "stop_loss"), _row("smc", "vervallen"),
                 _row("smc", "take_profit", message_id=5), _row("patroon", "stop_loss")]

@@ -28,7 +28,11 @@ TYPE_ORDER = ("smc", "patroon", "day_trading", "swing", "samenval", "script", "s
 
 
 def _r_of(row: dict) -> Optional[float]:
-    """R van een afgerond signaal: take geeft de verhouding van take tot stop, stop geeft -1. Anders None."""
+    """R van een afgerond signaal: take geeft de verhouding van take tot stop, stop geeft -1. Anders None.
+    Een echte R uit trade_results (meelopende stop) gaat voor, net als op Bewijs. Zonder override blijft deze formule
+    bewust zoals ze was: bij stopafstand 0 telt een stop hier nog als -1 (track_record.signal_r geeft dan None)."""
+    if row.get("r_override") is not None and row["auto_outcome"] in ("take_profit", "stop_loss"):
+        return float(row["r_override"])
     risk = abs((row["price"] or 0) - (row["stop_loss"] or 0))
     if row["auto_outcome"] == "take_profit" and risk > 0 and row["take_profit"] is not None:
         return abs(row["take_profit"] - row["price"]) / risk
