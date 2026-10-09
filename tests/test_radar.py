@@ -38,6 +38,30 @@ class RadarTests(unittest.TestCase):
         self.assertIn("Entry 100.00", str(card["ladder"]))
         self.assertIsNone(radar.signal_card(dict(SIGNAL, stop_loss=None), 97.0))
 
+    def test_doel_gehaald_zonder_vulling_is_een_stille_kaart(self):
+        card = radar.setup_card(SETUP, 107.0)
+        self.assertEqual(card["state"], "doel_geraakt")
+        self.assertEqual(card["state_label"], "Doel gehaald zonder dat jouw order vulde")
+        self.assertEqual(card["steps"], [])
+        self.assertEqual(str(card["ladder"]), "")
+        self.assertIsNone(card["distance_pct"])
+        short = dict(SETUP, direction="short", zone_low=100.0, zone_high=101.0, preview_stop_loss=103.0, preview_take_profit=94.0)
+        self.assertEqual(radar.setup_card(short, 93.0)["state"], "doel_geraakt")
+
+    def test_groepering_en_telling_sluiten_doel_geraakt_uit(self):
+        moot = radar.setup_card(SETUP, 107.0)
+        waiting = radar.setup_card(dict(SETUP, id=8), 102.0)
+        in_zone = radar.setup_card(dict(SETUP, id=9), 99.5)
+        self.assertEqual([c["key"] for c in radar.waiting_cards([moot, waiting, in_zone])], ["setup:8", "setup:9"])
+        self.assertEqual([c["key"] for c in radar.moot_cards([moot, waiting, in_zone])], ["setup:7"])
+        self.assertEqual(radar.waiting_count([SETUP, dict(SETUP, id=8)], {"XRP": 107.0}), 0)
+        self.assertEqual(radar.waiting_count([SETUP, dict(SETUP, id=8, coin="ETH")], {"XRP": 107.0}), 1)
+        self.assertEqual(radar.waiting_count([SETUP], {}), 1)
+
+    def test_doel_gehaald_telt_niet_mee_voor_dichtstbijzijnde_kans(self):
+        from app import today
+        self.assertIsNone(today.nearest_chance([], [], [radar.setup_card(SETUP, 107.0)]))
+
     def test_live_payload(self):
         cards = [radar.setup_card(SETUP, 102.0), radar.signal_card(SIGNAL, 97.0)]
         payload = radar.live_payload(cards)

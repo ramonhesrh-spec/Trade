@@ -28,20 +28,23 @@ def limit_plan(direction: str, zone_low: float, zone_high: float, stop: float, t
     return TradePlan(direction, limit, stop, take, risk / limit * 100, abs(take - limit) / risk)
 
 
-def plan_state(direction: str, zone_low: float, zone_high: float, stop: float, price: float) -> str:
+def plan_state(direction: str, zone_low: float, zone_high: float, stop: float, price: float,
+               take: Optional[float] = None) -> str:
     """Waar de koers staat ten opzichte van een nog niet gevulde setup:
     wacht (nog buiten de zone, aan de kant waar de order wacht), in_zone (de order is waarschijnlijk geraakt),
-    door_zone (voorbij de zone maar nog niet de stop), ongeldig (voorbij de stop, het plan is vervallen)."""
+    door_zone (voorbij de zone maar nog niet de stop), ongeldig (voorbij de stop, het plan is vervallen),
+    doel_geraakt (met `take`: de koers is het doel al voorbij zonder de zone te raken, dus er valt niets meer te wachten;
+    binnen of voorbij de zone blijft de order mogelijk gevuld, dan geldt dit niet)."""
     if direction == "long":
         if price <= stop:
             return "ongeldig"
         if price > zone_high:
-            return "wacht"
+            return "doel_geraakt" if take is not None and price >= take else "wacht"
         return "in_zone" if price >= zone_low else "door_zone"
     if price >= stop:
         return "ongeldig"
     if price < zone_low:
-        return "wacht"
+        return "doel_geraakt" if take is not None and price <= take else "wacht"
     return "in_zone" if price <= zone_high else "door_zone"
 
 
@@ -50,6 +53,7 @@ STATE_LABELS = {
     "in_zone": "In de zone: je order is waarschijnlijk geraakt",
     "door_zone": "Koers is door de zone heen",
     "ongeldig": "Plan vervallen, de stop is geraakt",
+    "doel_geraakt": "Doel gehaald zonder dat jouw order vulde",
 }
 
 

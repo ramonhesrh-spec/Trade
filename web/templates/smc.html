@@ -43,6 +43,24 @@
   {% endif %}
 </section>
 
+{% if moot_cards %}
+<section class="card" style="--i: 0">
+  <h3>Doel gehaald zonder vulling</h3>
+  <div class="radar-grid">
+    {% for c in moot_cards %}
+    <article class="radar-card is-moot" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
+      <header class="radar-head">
+        <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
+        <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
+      </header>
+      <div class="radar-state radar-state-{{ c.state }}" data-radar="state">{{ c.state_label }}</div>
+      <div class="radar-meta muted">{{ c.created_at | age }}</div>
+    </article>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
 <section class="card" style="--i: 1">
   <h3>Open trades</h3>
   {% if not signal_cards %}

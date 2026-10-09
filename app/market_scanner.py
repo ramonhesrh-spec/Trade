@@ -792,7 +792,7 @@ async def _notify_zone_touches(coin: str) -> None:
         stop_loss = setup["sweep_price"] + stop_margin * sign
         take_profit = setup["liquidity_target"] + target_margin * sign
         plan = trade_plan.limit_plan(direction, setup["zone_low"], setup["zone_high"], stop_loss, take_profit)
-        if plan is None or trade_plan.plan_state(direction, setup["zone_low"], setup["zone_high"], stop_loss, price) != "in_zone":
+        if plan is None or trade_plan.plan_state(direction, setup["zone_low"], setup["zone_high"], stop_loss, price, take=take_profit) != "in_zone":
             continue
         repo.mark_smc_zone_alert_sent(setup["id"])
         title = push_notify.alert_title(coin, direction, "in de zone")

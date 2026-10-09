@@ -55,6 +55,33 @@ class StateTests(unittest.TestCase):
         self.assertIsNone(tp.live_r("long", 100.0, 100.0, 103.0))
 
 
+class DoelGeraaktTests(unittest.TestCase):
+    def test_long_boven_doel_zonder_vulling(self):
+        self.assertEqual(tp.plan_state("long", 99.0, 100.0, 97.0, 106.0, take=106.0), "doel_geraakt")
+        self.assertEqual(tp.plan_state("long", 99.0, 100.0, 97.0, 110.0, take=106.0), "doel_geraakt")
+        self.assertEqual(tp.plan_state("long", 99.0, 100.0, 97.0, 105.0, take=106.0), "wacht")
+
+    def test_short_onder_doel_zonder_vulling(self):
+        self.assertEqual(tp.plan_state("short", 100.0, 101.0, 103.0, 94.0, take=94.0), "doel_geraakt")
+        self.assertEqual(tp.plan_state("short", 100.0, 101.0, 103.0, 90.0, take=94.0), "doel_geraakt")
+        self.assertEqual(tp.plan_state("short", 100.0, 101.0, 103.0, 95.0, take=94.0), "wacht")
+
+    def test_zonder_take_ongewijzigd(self):
+        self.assertEqual(tp.plan_state("long", 99.0, 100.0, 97.0, 110.0), "wacht")
+        self.assertEqual(tp.plan_state("short", 100.0, 101.0, 103.0, 90.0), "wacht")
+
+    def test_stop_houdt_voorrang_en_zone_blijft_zone(self):
+        self.assertEqual(tp.plan_state("long", 99.0, 100.0, 97.0, 96.0, take=106.0), "ongeldig")
+        self.assertEqual(tp.plan_state("short", 100.0, 101.0, 103.0, 104.0, take=94.0), "ongeldig")
+        # Een doel dat (door een rare invoer) in of onder de zone ligt, maakt de zone niet moot: de order kan gevuld zijn.
+        self.assertEqual(tp.plan_state("long", 99.0, 100.0, 97.0, 99.5, take=99.2), "in_zone")
+        self.assertEqual(tp.plan_state("long", 99.0, 100.0, 97.0, 98.0, take=98.5), "door_zone")
+        self.assertEqual(tp.plan_state("short", 100.0, 101.0, 103.0, 100.5, take=100.2), "in_zone")
+
+    def test_label(self):
+        self.assertEqual(tp.STATE_LABELS["doel_geraakt"], "Doel gehaald zonder dat jouw order vulde")
+
+
 class LadderTests(unittest.TestCase):
     def y_of(self, svg, css):
         return float(re.search(rf'<line class="ladder-line ladder-{css}"[^>]*y1="([\d.]+)"', svg).group(1))

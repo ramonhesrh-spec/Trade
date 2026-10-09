@@ -1602,6 +1602,9 @@ main + .footer { border-top: 1px solid var(--border); }
 .radar-state-in_zone { color: var(--accent); font-weight: 600; }
 .radar-state-ongeldig, .radar-state-door_zone { color: var(--red); }
 .radar-state-open { color: var(--accent); }
+.radar-state-doel_geraakt { color: var(--text-dim); }
+.radar-card.is-moot { opacity: 0.7; }
+.radar-card.is-moot .radar-ladder, .radar-card.is-moot .vd-steps, .radar-card.is-moot .confidence-detail, .radar-card.is-moot .share-btn { display: none; }
 .radar-ladder { background: var(--panel); border-radius: var(--radius-sm); padding: var(--space-4); }
 .trade-ladder { width: 100%; height: auto; display: block; font-family: var(--mono); font-size: 10px; }
 .trade-ladder .ladder-zone { fill: var(--accent-bg); stroke: var(--accent-dark); stroke-width: 1; stroke-dasharray: 3 3; }

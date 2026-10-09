@@ -64,7 +64,10 @@ def report_rows(user: Optional[dict]) -> list[dict]:
 def _nav_context(request: Request) -> dict:
     """De coinlijst in het menu staat in elke pagina. Zonder dit moest elke route `coins` zelf meegeven, en de nieuwere
     pagina's (Vandaag, Setups, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
-    return {"coins": repo.list_coins(), "nav_counts": {"setups": len(repo.list_structure_setups(("waiting",), 50)), "radar": len(repo.list_forming_smc_setups())}}
+    # Alleen de koersen uit de cache: het menu mag geen Binance-aanroep per paginaweergave doen. Zonder koers telt een setup mee.
+    cached = {coin: hit[1] for coin, hit in _price_cache.items() if hit[1]}
+    radar_count = radar.waiting_count([_with_preview(s) for s in repo.list_forming_smc_setups()], cached)
+    return {"coins": repo.list_coins(), "nav_counts": {"setups": len(repo.list_structure_setups(("waiting",), 50)), "radar": radar_count}}
 
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context])
@@ -455,7 +458,8 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     entries.sort(key=lambda e: e["created_at"], reverse=True)
     return templates.TemplateResponse(request, "smc.html", {
         "user": user,
-        "setup_cards": [c for c in cards if c["kind"] == "setup"],
+        "setup_cards": radar.waiting_cards(cards),
+        "moot_cards": radar.moot_cards(cards),
         "signal_cards": [c for c in cards if c["kind"] == "signal"],
         "entries": entries,
     })

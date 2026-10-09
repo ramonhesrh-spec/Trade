@@ -20,6 +20,8 @@
         state.textContent = data.label;
         state.className = "radar-state radar-state-" + (data.state || "laden");
       }
+      // Doel gehaald terwijl de pagina openstaat: ladder en stappen verdwijnen, de rest van de kaart komt bij de volgende paginaweergave.
+      card.classList.toggle("is-moot", data.state === "doel_geraakt");
       if (!(window.hesLiveFresh && window.hesLiveFresh()) && data.distance_pct !== null && data.distance_pct !== undefined) {
         setText(card, "distance", (data.distance_pct >= 0 ? "+" : "") + data.distance_pct.toFixed(2) + "%");
       }
