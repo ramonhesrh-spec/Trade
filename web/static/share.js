@@ -23,19 +23,54 @@
 
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
+  // De strook is HTML (past zich aan de breedte aan); voor de afbeelding tekenen we dezelfde balk en prijzen als SVG uit de data-attributen.
+  function stripSvg(el, css) {
+    var g = function (n) { return el.getAttribute(n); };
+    var w = 320, x0 = 10, bw = w - 20, hasBar = g("data-bar") === "1";
+    var out = "";
+    var colors = { stop: css.red, instap: css.accent, take: css.green };
+    if (hasBar) {
+      var ip = parseFloat(g("data-instap-pos")), at = function (p) { return x0 + bw * p / 100; };
+      out += '<rect x="' + x0 + '" y="30" width="' + (at(ip) - x0) + '" height="10" rx="5" fill="' + css.red + '" fill-opacity="0.55"/>' +
+        '<rect x="' + at(ip) + '" y="30" width="' + (x0 + bw - at(ip)) + '" height="10" rx="5" fill="' + css.green + '" fill-opacity="0.55"/>' +
+        '<rect x="' + (at(ip) - 1.5) + '" y="25" width="3" height="20" fill="' + css.accent + '"/>';
+      if (g("data-dot")) {
+        var dp = parseFloat(g("data-dot")), anchor = dp > 70 ? "end" : dp < 30 ? "start" : "middle";
+        out += '<circle cx="' + at(dp) + '" cy="35" r="7" fill="' + css.text + '" stroke="' + css.bg + '" stroke-width="2"/>' +
+          '<text x="' + at(dp) + '" y="16" text-anchor="' + anchor + '" fill="' + css.text + '" font-size="13" font-weight="600">' + esc(g("data-now")) + "</text>";
+      }
+    }
+    var top = hasBar ? 62 : 6;
+    [["stop", "Stop", g("data-stop")], ["instap", "Instap", g("data-instap")], ["take", "Doel", g("data-take")]].forEach(function (b, i) {
+      var cx = 10 + i * 100;
+      out += '<rect x="' + cx + '" y="' + top + '" width="96" height="52" rx="3" fill="' + css.panel + '"/>' +
+        '<rect x="' + cx + '" y="' + top + '" width="96" height="2" fill="' + colors[b[0]] + '"/>' +
+        '<text x="' + (cx + 8) + '" y="' + (top + 20) + '" fill="' + css.muted + '" font-size="10">' + b[1].toUpperCase() + "</text>" +
+        '<text x="' + (cx + 8) + '" y="' + (top + 40) + '" fill="' + colors[b[0]] + '" font-size="14" font-weight="600">' + esc(b[2]) + "</text>";
+    });
+    return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + w + " " + (top + 58) + '" font-family="ui-monospace, Consolas, monospace">' + out + "</svg>";
+  }
+
   function build(card, data) {
-    var chart = card.querySelector("svg.sc, svg.trade-ladder, svg[data-share-chart]");
+    var chart = card.querySelector("svg.sc, .trade-strip, svg[data-share-chart]");
     var rootStyle = window.getComputedStyle(document.documentElement);
     var bg = rootStyle.getPropertyValue("--bg").trim() || "#0a0e0f";
     var text = rootStyle.getPropertyValue("--text").trim() || "#e8eeee";
     var accent = rootStyle.getPropertyValue("--accent").trim() || "#2dd4bf";
     var chartH = 0, chartMarkup = "";
+    var cv = function (n, d) { return rootStyle.getPropertyValue(n).trim() || d; };
+    if (chart && chart.classList.contains("trade-strip")) {
+      var holder = document.createElement("div");
+      holder.innerHTML = stripSvg(chart, { bg: bg, text: text, accent: accent, red: cv("--red", "#f2685c"), green: cv("--green", "#33d69f"), muted: cv("--muted", "#7d8c8a"), panel: cv("--panel", "#131a1b") });
+      chart = holder.firstElementChild;
+      var stripSvgEl = chart;
+    }
     if (chart) {
       var vb = chart.viewBox.baseVal;
       var scale = (W - 2 * PAD) / vb.width;
       chartH = vb.height * scale;
       var clone = chart.cloneNode(true);
-      inlineStyles(chart, clone);
+      if (!stripSvgEl) inlineStyles(chart, clone);
       clone.setAttribute("width", W - 2 * PAD);
       clone.setAttribute("height", chartH);
       clone.setAttribute("x", PAD);

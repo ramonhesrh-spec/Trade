@@ -1,5 +1,5 @@
 /* Live verversing van de Trade Radar: haalt elke 15 seconden /api/radar op en werkt per kaart de status, afstand,
-   live R en prijsladder bij. De eerste weergave komt gewoon van de server; zonder JS blijft de pagina volledig bruikbaar.
+   live R en de strook met R:R bij. De eerste weergave komt gewoon van de server; zonder JS blijft de pagina volledig bruikbaar.
    Stopt zolang het tabblad verborgen is, zodat een vergeten tabblad geen koersen blijft ophalen. */
 (function () {
   var INTERVAL_MS = 15000;
@@ -20,7 +20,7 @@
         state.textContent = data.label;
         state.className = "radar-state radar-state-" + (data.state || "laden");
       }
-      // Doel gehaald terwijl de pagina openstaat: ladder en stappen verdwijnen, de rest van de kaart komt bij de volgende paginaweergave.
+      // Doel gehaald terwijl de pagina openstaat: strook en stappen verdwijnen, de rest van de kaart komt bij de volgende paginaweergave.
       card.classList.toggle("is-moot", data.state === "doel_geraakt");
       if (!(window.hesLiveFresh && window.hesLiveFresh()) && data.distance_pct !== null && data.distance_pct !== undefined) {
         setText(card, "distance", (data.distance_pct >= 0 ? "+" : "") + data.distance_pct.toFixed(2) + "%");
@@ -38,7 +38,7 @@
         mark.className = "r-progress-mark" + (data.live_r > 0 ? " pos" : data.live_r < 0 ? " neg" : "");
       }
       var ladder = card.querySelector('[data-radar="ladder"]');
-      if (ladder && data.ladder) ladder.innerHTML = data.ladder;
+      if (ladder && data.ladder) window.hesStripSwap(ladder, data.ladder);
     });
   }
 

@@ -1,5 +1,5 @@
 /* Live verversing van Vandaag: haalt elke 15 seconden /api/vandaag op en werkt koersen en per scenario status, afstand,
-   resterende tijd en ladder bij. De eerste weergave komt van de server; zonder JS blijft de pagina volledig bruikbaar.
+   resterende tijd en strook bij. De eerste weergave komt van de server; zonder JS blijft de pagina volledig bruikbaar.
    Stopt zolang het tabblad verborgen is. */
 (function () {
   var INTERVAL_MS = 15000;
@@ -29,7 +29,7 @@
       var left = el.querySelector('[data-vd="left"]');
       if (left) left.textContent = Math.round(data.hours_left);
       var ladder = el.querySelector('[data-vd="ladder"]');
-      if (ladder && data.ladder) ladder.innerHTML = data.ladder;
+      if (ladder && data.ladder) window.hesStripSwap(ladder, data.ladder);
     });
   }
 
