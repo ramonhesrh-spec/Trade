@@ -141,3 +141,39 @@ class WeekSummaryTests(unittest.TestCase):
         self.assertEqual(len(w["days"]), 7)
         self.assertAlmostEqual(w["cumulative"][-1], 1.0)
         self.assertEqual((w["best"]["coin"], w["worst"]["coin"]), ("BTC", "ETH"))
+
+
+class RuleStatusTest(unittest.TestCase):
+    PASS = {"lab_passes": True}
+
+    def test_new_rule_is_in_proef(self):
+        self.assertEqual(tr.rule_status(self.PASS, [0.1] * 10)["status"], "In proef")
+        self.assertEqual(tr.rule_status(None, [])["status"], "In proef")
+
+    def test_proven_needs_lab_and_fifty_live_trades(self):
+        self.assertEqual(tr.rule_status(self.PASS, [0.1] * 50)["status"], "Bewezen")
+        self.assertEqual(tr.rule_status(self.PASS, [0.1] * 49)["status"], "In proef")
+        self.assertEqual(tr.rule_status(None, [0.1] * 80)["status"], "In proef")
+
+    def test_thirty_losing_trades_make_a_rule_negative(self):
+        self.assertEqual(tr.rule_status(self.PASS, [0.2] * 60 + [-0.5] * 30)["status"], "Negatief")
+
+    def test_failed_lab_is_negative_even_without_live_trades(self):
+        self.assertEqual(tr.rule_status({"lab_passes": False}, [])["status"], "Negatief")
+
+    def test_proven_rule_falls_back_when_last_hundred_turn_clearly_negative(self):
+        series = [0.5] * 100 + [-0.2] * 100
+        self.assertNotEqual(tr.rule_status(self.PASS, series)["status"], "Bewezen")
+
+    def test_result_keys_and_average_of_last_hundred(self):
+        few = tr.rule_status(self.PASS, [0.1] * 99)
+        self.assertIsNone(few["avg_last100"])
+        self.assertEqual(few["n_live"], 99)
+        self.assertTrue(few["reason"])
+        full = tr.rule_status(self.PASS, [-0.1] * 20 + [0.2] * 100)
+        self.assertAlmostEqual(full["avg_last100"], 0.2)
+        self.assertEqual(full["status"], "Bewezen")
+
+    def test_last_hundred_with_negative_upper_bound_blocks_proof(self):
+        series = [1.0] * 400 + [-0.05] * 100       # gemiddelde alles positief, laatste 100 duidelijk onder 0
+        self.assertNotEqual(tr.rule_status(self.PASS, series)["status"], "Bewezen")

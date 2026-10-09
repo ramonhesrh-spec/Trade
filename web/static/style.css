@@ -1636,6 +1636,8 @@ main + .footer { border-top: 1px solid var(--border); }
 .proof-chip-voordeel { color: var(--green); background: var(--green-bg); border-color: transparent; }
 .proof-chip-positief { color: var(--accent); background: var(--accent-bg); border-color: transparent; }
 .proof-chip-verlies { color: var(--red); background: var(--red-bg); border-color: transparent; }
+.proof-chip-bewezen { color: var(--green); background: var(--green-bg); border-color: transparent; }
+.proof-chip-negatief { color: var(--red); background: var(--red-bg); border-color: transparent; }
 .proof-number { font-family: var(--mono); font-size: var(--text-3xl); font-weight: 700; line-height: 1; }
 .proof-number.pos { color: var(--green); }
 .proof-number.neg { color: var(--red); }
@@ -1966,6 +1968,8 @@ html.reveal-done main > section, html.reveal-done main > .stats-collapse { anima
 .proof-chip::before, .vd-score-label::before { content: ""; display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--muted); vertical-align: baseline; }
 .proof-chip-positief::before, .proof-positief .vd-score-label::before { background: #f2b24c; }
 .proof-chip-voordeel::before, .proof-voordeel .vd-score-label::before { background: var(--green); }
+.proof-chip-bewezen::before { background: var(--green); }
+.proof-chip-negatief::before { background: var(--red); }
 .proof-chip-verlies::before, .proof-verlies .vd-score-label::before { background: var(--red); }
 
 /* Voortgang van een open trade: links de stop (-1R), rechts het doel, de streep is break-even, het blokje is waar de koers nu staat. */

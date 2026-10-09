@@ -584,8 +584,16 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     summary.sort(key=lambda e: e["source"] != "alles")      # het totaal bovenaan, de rest in vaste volgorde
     for entry in summary:
         entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
+    rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien; de regelstatus van een CEO-only soort blijft zo voor leerlingen weg
+    lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
+    rule_statuses = []
+    for trade_type in sorted(set(lab_types) | set(rule_live.CEO_ONLY_TYPES)):
+        if trade_type in rule_live.CEO_ONLY_TYPES and not is_ceo(user):
+            continue
+        status = track_record.rule_status(lab_types.get(trade_type), track_record.live_net_r(rows, trade_type, config.TRACK_RECORD_COST_PCT))
+        rule_statuses.append({**status, "label": track_record.TYPE_LABELS.get(trade_type, trade_type), "css": status["status"].lower().replace(" ", "-")})
     return templates.TemplateResponse(request, "bewijs.html", {
-        "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
+        "rule_statuses": rule_statuses, "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
         "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,
         "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,
     })

@@ -182,6 +182,41 @@ def summarize(rows: list[dict], round_trip_cost_pct: float, now: Optional[dateti
     return out
 
 
+RULE_STATUS_STATES = ("In proef", "Bewezen", "Negatief")
+RULE_MIN_LIVE_PROVEN = 50
+RULE_WATCH_LAST = 100
+
+
+def rule_status(lab: Optional[dict], live_r_net: list[float]) -> dict:
+    """Status van één regel, elke keer opnieuw uit de data (niets opgeslagen, dus een Bewezen regel valt vanzelf terug). live_r_net: netto R
+    van de afgeronde live trades, oudste eerst. Volgorde: Negatief, Bewezen, anders In proef."""
+    from app import structure_review      # structure_review importeert dit module al: bovenaan importeren geeft een kringverwijzing
+    n = len(live_r_net)
+    last100 = live_r_net[-RULE_WATCH_LAST:]
+    avg_last100 = sum(last100) / RULE_WATCH_LAST if n >= RULE_WATCH_LAST else None
+    out = lambda status, reason: {"status": status, "reason": reason, "n_live": n, "avg_last100": avg_last100}
+    lab_passes = bool(lab and lab.get("lab_passes"))
+    last30 = live_r_net[-MIN_FOR_STATUS:]
+    if n >= MIN_FOR_STATUS and sum(last30) / MIN_FOR_STATUS < 0:
+        return out("Negatief", f"De laatste {MIN_FOR_STATUS} afgeronde trades samen onder nul na kosten.")
+    if lab is not None and not lab_passes:
+        return out("Negatief", "Slaagde niet in de test op historische data.")
+    if lab_passes and n >= RULE_MIN_LIVE_PROVEN and sum(live_r_net) / n >= 0:
+        if n < RULE_WATCH_LAST or structure_review.bootstrap_mean(last100)[1] >= 0:
+            return out("Bewezen", f"Slaagde in de test en houdt stand over {n} afgeronde trades.")
+        return out("In proef", "De laatste 100 trades liggen duidelijk onder nul, de regel is niet langer bewezen.")
+    if not lab_passes:
+        return out("In proef", f"Nog geen geslaagde test; {n} afgeronde trades.")
+    return out("In proef", f"Geslaagde test; nog {max(0, RULE_MIN_LIVE_PROVEN - n)} afgeronde trades nodig voor bewezen.")
+
+
+def live_net_r(rows: list[dict], trade_type: str, round_trip_cost_pct: float) -> list[float]:
+    """Netto R van de afgeronde (take of stop) live trades van één soort, oudste afronding eerst."""
+    done = [(r, signal_r(r)) for r in rows if r["trade_type"] == trade_type]
+    done = sorted(((r, g) for r, g in done if g is not None), key=lambda x: x[0]["auto_outcome_at"] or x[0]["created_at"])
+    return [g - _cost_r(r, round_trip_cost_pct) for r, g in done]
+
+
 def sparkline_svg(values: list[float], width: int = 300, height: int = 56) -> str:
     """Lijn van het cumulatieve resultaat in R over de laatste weken, met een nullijn. Lege of vlakke reeksen
     geven een vlakke lijn in plaats van een fout."""

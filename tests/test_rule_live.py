@@ -317,6 +317,28 @@ class WebVisibilityTest(DbCase):
         self.assertEqual(seen["ceo"]["/api/coin_menu_activity"].json(), ["ADA"])
         self.assertEqual(seen["leerling"]["/api/coin_menu_activity"].json(), [])
 
+    def test_rule_status_line_is_only_for_the_ceo(self):
+        from fastapi.testclient import TestClient
+        from app import security
+        from web import main
+        leerling = repo.create_user("b2", security.hash_password("wachtwoord-123456"), 0, 1)
+        ceo = repo.get_user_by_username("a")["id"]
+        sid = repo.insert_signal({"coin": "ADA", "direction": "long", "category": "day_trading", "trade_type": rule_live.RULE, "price": 100.0,
+                                  "stop_loss": 97.0, "take_profit": None, "technical_confirmed": 1, "hard_gates_ok": 1, "confidence": "In proef"})
+        repo.set_trade_result(sid, 2.0, db.now_iso())
+        repo.mark_signal_auto_outcome(sid, "take_profit", db.now_iso())
+        main._ceo_cache.update(at=0.0, id=None)
+        seen = {}
+        with mock.patch.object(config, "CEO_USERNAME", ""):
+            for name, uid in (("ceo", ceo), ("leerling", leerling)):
+                client = TestClient(main.app)
+                client.cookies.set(main.SESSION_COOKIE, security.create_session_token(uid))
+                seen[name] = client.get("/bewijs").text
+        self.assertIn("Status per regel", seen["ceo"])
+        self.assertIn("1 afgeronde live trades", seen["ceo"])
+        self.assertNotIn("Status per regel", seen["leerling"])
+        self.assertNotIn("afgeronde live trades", seen["leerling"])
+
     def test_public_chain_skips_the_proef_and_still_verifies(self):
         from fastapi.testclient import TestClient
         from app import chain

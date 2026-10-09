@@ -9,6 +9,22 @@
 <p class="muted"><a href="/week">Jouw week als plaatje om te delen</a></p>
 <p class="page-intro">Wat elke soort melding echt opleverde, automatisch gemeten uit de uitkomsten van alle signalen. Geen selectie, geen beste maanden: wat hier staat, staat er voor iedereen.</p>
 
+{% if rule_statuses %}
+<section class="card" style="--i: 0">
+  <h3>Status per regel</h3>
+  {% for r in rule_statuses %}
+  <div class="proof-card proof-rule-{{ r.css }}">
+    <header class="proof-head">
+      <div><h4>{{ r.label }}</h4></div>
+      <span class="proof-chip proof-chip-{{ r.css }}">{{ r.status }}</span>
+    </header>
+    <p class="muted proof-quote">{{ r.reason }}</p>
+    <p class="proof-footnote muted">{{ r.n_live }} afgeronde live trades{% if r.avg_last100 is not none %}, laatste 100 gemiddeld {{ "%+.2f"|format(r.avg_last100) }}R na kosten{% endif %}.</p>
+  </div>
+  {% endfor %}
+</section>
+{% endif %}
+
 {% if not summary %}
 <section class="card" style="--i: 0"><p class="muted empty">Nog geen signalen om te meten.</p></section>
 {% else %}
