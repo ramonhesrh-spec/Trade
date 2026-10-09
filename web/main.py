@@ -58,8 +58,7 @@ def is_ceo(user: Optional[dict]) -> bool:
 def report_rows(user: Optional[dict]) -> list[dict]:
     """Signalen voor de cijfers op Bewijs, Vandaag, Week en de CEO-pagina. De proefmotor (app/rule_live.py) is alleen voor de CEO: leerlingen
     zien zijn trades niet, ook niet in de totalen."""
-    rows = repo.list_signals_for_quality_report(None)
-    return rows if is_ceo(user) else [r for r in rows if r["trade_type"] != rule_live.RULE]
+    return rule_live.for_viewer(repo.list_signals_for_quality_report(None), is_ceo(user))
 
 
 def _nav_context(request: Request) -> dict:
@@ -532,7 +531,7 @@ KANS_TIMEFRAMES = ("5m", "15m", "30m", "4h")
 async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dict = Depends(require_login)):
     """Eén kans op één scherm: grafiek, feiten, gemeten kenmerken en wat er sinds de melding gebeurde. Hier landt een tik op een melding."""
     signal = repo.get_signal(signal_id)
-    if not signal or signal["is_practice"] or (signal["trade_type"] == rule_live.RULE and not is_ceo(user)):
+    if not signal or signal["is_practice"] or (signal["trade_type"] in rule_live.CEO_ONLY_TYPES and not is_ceo(user)):
         raise HTTPException(status_code=404)
     setup = repo.get_structure_setup_by_signal(signal_id)
     candles, price = None, None
@@ -1400,7 +1399,7 @@ async def coin_page(request: Request, symbol: str, signal: Optional[int] = None,
         e["signal_id"]: e for e in entries
         if e["entry_price"] is None and e["status"] != "genegeerd"
     }
-    hidden = () if is_ceo(user) else (rule_live.RULE,)          # de proefmotor is alleen voor de CEO
+    hidden = () if is_ceo(user) else rule_live.CEO_ONLY_TYPES          # de proefmotor is alleen voor de CEO
     recent_signals = [
         s for s in repo.list_recent_signals(symbol, exclude_types=hidden)
         if s["id"] not in open_signal_ids and s["id"] not in ignored_signal_ids
@@ -1615,7 +1614,7 @@ async def api_coins(user: dict = Depends(require_login)):
 async def api_coin_menu_activity(user: dict = Depends(require_login)):
     """Welke coins de laatste 24 uur nog een echt signaal hadden, voor het
     activiteits-stipje in het coin-menu (base.html)."""
-    return sorted(repo.coins_with_recent_signal())
+    return sorted(repo.coins_with_recent_signal(exclude_types=() if is_ceo(user) else rule_live.CEO_ONLY_TYPES))
 
 
 @app.get("/api/candles/{symbol}")

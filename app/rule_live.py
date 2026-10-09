@@ -25,6 +25,7 @@ logger = logging.getLogger("rule_live")
 RULE_VARIANT = "DON55_TREND"
 RULE = RULE_VARIANT.lower()
 COINS = tl.LAB_COINS
+CEO_ONLY_TYPES = (RULE,)     # soorten die alleen de CEO ziet: geen journaal, kans, cijfers of activiteit voor leerlingen
 MAX_NEGATIVE = 30            # spec sectie 5: een regel zet zichzelf uit na 30 negatieve afgeronde trades
 FETCH_LIMIT = 1000           # het maximum van Binance per aanroep; de EMA van 200 heeft ruim aanloop nodig om op de labwaarde uit te komen
 # Een candle van 4 uur verandert maar één keer per 4 uur. Alleen in het eerste halfuur na een slot ophalen; daarna is een melding ook te laat,
@@ -90,11 +91,15 @@ def close_if_hit(signal: dict, bars: pd.DataFrame) -> Optional[tuple[float, str]
 
 
 def follow(trade: dict, closed: pd.DataFrame, forming: Optional[pd.DataFrame], k_trail: float,
-           start_stop: Optional[float] = None) -> tuple[float, Optional[tuple[float, str, pd.Timestamp]]]:
-    """(stop, None) of (stop, (R, uitkomst, tijdstip)). Loopt de gesloten candles sinds de instap af zoals exit_trail: eerst toetsen tegen de stop
-    van vóór die candle, dan de stop bijwerken. De vormende candle wordt alleen getoetst: de stop schuift pas op als een candle gesloten is."""
-    stop = trade["initial_stop"] if start_stop is None else start_stop
+           checked_until: Optional[pd.Timestamp] = None) -> tuple[float, Optional[tuple[float, str, pd.Timestamp]]]:
+    """(stop, None) of (stop, (R, uitkomst, tijdstip)). Begint bij trade["current_stop"] en loopt de gesloten candles sinds de instap af zoals
+    exit_trail: eerst toetsen tegen de stop van vóór die candle, dan de stop bijwerken. Candles tot en met checked_until zijn al verwerkt (de
+    bewaarde stop bevat ze) en tellen alleen nog mee voor het uiterste sinds de instap. De vormende candle wordt alleen getoetst: de stop
+    schuift pas op als een candle gesloten is."""
+    stop = trade["current_stop"]
     for j in range(len(closed)):
+        if checked_until is not None and closed["timestamp"].iloc[j] <= checked_until:
+            continue
         hit = close_if_hit({**trade, "current_stop": stop}, closed.iloc[[j]])
         if hit:
             return stop, (*hit, closed["timestamp"].iloc[j])
@@ -104,6 +109,17 @@ def follow(trade: dict, closed: pd.DataFrame, forming: Optional[pd.DataFrame], k
         if hit:
             return stop, (*hit, forming["timestamp"].iloc[0])
     return stop, None
+
+
+def for_viewer(rows: list[dict], ceo: bool) -> list[dict]:
+    """Signaalrijen voor de cijfers die een gebruiker ziet: de proef telt alleen voor de CEO mee."""
+    return rows if ceo else [r for r in rows if r["trade_type"] not in CEO_ONLY_TYPES]
+
+
+def stop_moved(direction: str, old: float, new: float) -> bool:
+    """Alleen een echte verschuiving de gunstige kant op: een paar bits verschil in de ATR geeft geen melding met dezelfde prijs."""
+    step = (new - old) if direction == "long" else (old - new)
+    return step > 1e-9 * abs(old)
 
 
 def should_disable(closed_r_net: list[float]) -> bool:
@@ -153,6 +169,7 @@ async def _push_ceo(title: str, body: str, url: str, signal_id: int, kans: Optio
 async def _open_trade(coin: str, v: tl.Variant, sig: dict, entered_at: pd.Timestamp) -> None:
     direction, entry, stop = sig["direction"], sig["entry"], sig["stop"]
     k_trail = stop_factors(v)[1]
+    # Geen schakel in de openbare ketting: /keten is zonder login en de proef is alleen voor de CEO.
     signal_id = repo.insert_signal({
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": RULE, "pattern_name": v.name,
         "price": entry, "technical_confirmed": 1, "hard_gates_ok": 1, "confidence": "In proef", "stop_loss": stop, "take_profit": None,
@@ -160,8 +177,9 @@ async def _open_trade(coin: str, v: tl.Variant, sig: dict, entered_at: pd.Timest
         "reason": f"In proef: {v.name}, meelopende stop op {k_trail:g} ATR", "pass_pct": None, "is_practice": 0,
         "plain_explanation": f"{label(v)}: richtprijs {push_notify.fmt_price(entry)} is het slot van de signaalcandle, het lab stapt in op de open van de "
                              f"volgende. Geen vast doel, de stop loopt mee op {k_trail:g} ATR.",
-    })
-    repo.insert_rule_trade(signal_id, RULE, coin, entered_at.isoformat(), stop, sig["atr"])
+    }, chain_it=False)
+    # De signaalcandle is verwerkt; de instapcandle (entered_at) is de eerste die tegen de stop wordt getoetst.
+    repo.insert_rule_trade(signal_id, RULE, coin, entered_at.isoformat(), stop, sig["atr"], (entered_at - pd.Timedelta(v.timeframe)).isoformat())
     for uid in repo.list_ceo_user_ids():
         repo.create_journal_entry(signal_id, uid, None)
     body = "\n".join([f"Richtprijs {push_notify.fmt_price(entry)} (slot van de signaalcandle, instap op de open van de volgende)",
@@ -209,23 +227,27 @@ async def _update_trade(t: dict, v: tl.Variant, delta: pd.Timedelta, now: pd.Tim
     closed, forming = b[is_closed], b[~is_closed].head(1)
     entered = pd.Timestamp(t["entered_at"])
     since = closed[closed["timestamp"] >= entered].reset_index(drop=True)
-    # Een trade die ouder is dan het opgehaalde venster begint bij de bewaarde stop: de candles daarvoor zijn al verwerkt.
-    start = t["current_stop"] if len(closed) and closed["timestamp"].iloc[0] > entered else None
-    stop, hit = follow(t, since, forming, stop_factors(v)[1], start_stop=start)
+    checked = pd.Timestamp(t["checked_until"])
+    stop, hit = follow(t, since, forming, stop_factors(v)[1], checked_until=checked)
+    if not stop_moved(t["direction"], t["current_stop"], stop):
+        stop = t["current_stop"]
+    last_closed = since["timestamp"].iloc[-1] if len(since) else checked
     def title_of(word: str) -> str:
         return push_notify.alert_title(t["coin"], t["direction"], f"{label(v)} · {word}")
     url = push_notify.signal_url(t["coin"], t["signal_id"])
     if hit:
         r, outcome, at = hit
-        repo.set_rule_stop(t["signal_id"], stop)
+        repo.set_rule_progress(t["signal_id"], stop, max(last_closed, checked).isoformat())
         repo.set_trade_result(t["signal_id"], r, at.isoformat())
         repo.mark_signal_auto_outcome(t["signal_id"], outcome, at.isoformat())
         exit_price = t["price"] + (1 if t["direction"] == "long" else -1) * r * abs(t["price"] - t["initial_stop"])
         await _push_ceo(title_of("gesloten"), f"Stop geraakt, uitgang {push_notify.fmt_price(exit_price)}\nResultaat {r:+.2f}R bruto, de trade is klaar.",
                         url, t["signal_id"])
         logger.info("Proef %s: trade %s gesloten op %+.2fR", RULE, t["signal_id"], r)
-    elif stop != t["current_stop"]:
-        repo.set_rule_stop(t["signal_id"], stop)
+        return
+    if last_closed > checked:
+        repo.set_rule_progress(t["signal_id"], stop, last_closed.isoformat())
+    if stop != t["current_stop"]:
         locked = (1 if t["direction"] == "long" else -1) * (stop - t["price"]) / abs(t["price"] - t["initial_stop"])
         await _push_ceo(title_of("stop verplaatst"),
                         f"Zet je stop op {push_notify.fmt_price(stop)} (was {push_notify.fmt_price(t['current_stop'])})\n"

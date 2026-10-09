@@ -96,6 +96,34 @@ class FollowTest(unittest.TestCase):
         self.assertEqual(hit[2], forming["timestamp"].iloc[0])
 
 
+    def test_only_candles_after_checked_until_are_tested_but_the_extreme_still_counts(self):
+        # Trade ouder dan het venster: de stop is al naar 107 getrokken. De oude candles (laag 99 en 105) zouden die raken, maar zijn al verwerkt.
+        trade = {"direction": "long", "price": 100.0, "initial_stop": 96.0, "current_stop": 107.0, "atr": 1.0}
+        ts = pd.date_range("2025-01-01", periods=3, freq="4h", tz="UTC")
+        closed = pd.DataFrame({"timestamp": ts, "open": [100.0, 111.0, 109.0], "high": [112.0, 111.5, 109.8], "low": [99.0, 105.0, 108.5], "atr": [1.0] * 3})
+        stop, hit = rule_live.follow(trade, closed, None, k_trail=3.0, checked_until=ts[1])
+        self.assertIsNone(hit)
+        self.assertEqual(stop, 112.0 - 3.0)                           # het uiterste van vóór het venster-einde telt nog mee, zoals in het lab
+        stop, hit = rule_live.follow(trade, closed, None, k_trail=3.0)  # zonder checked_until: de oude candle zou de trade vals sluiten
+        self.assertIsNotNone(hit)
+
+    def test_first_run_tests_the_entry_candle(self):
+        trade = {"direction": "long", "price": 100.0, "initial_stop": 96.0, "current_stop": 96.0, "atr": 1.0}
+        ts = pd.date_range("2025-01-01", periods=2, freq="4h", tz="UTC")
+        closed = pd.DataFrame({"timestamp": ts[1:], "open": [100.0], "high": [100.5], "low": [95.0], "atr": [1.0]})
+        _, hit = rule_live.follow(trade, closed, None, k_trail=3.0, checked_until=ts[0])     # checked_until = de signaalcandle
+        self.assertEqual(hit[:2], (-1.0, "stop_loss"))
+
+
+class StopMovedTest(unittest.TestCase):
+    def test_float_drift_and_a_lower_stop_are_not_a_move(self):
+        self.assertFalse(rule_live.stop_moved("long", 107.0, 107.0 + 1e-12))
+        self.assertFalse(rule_live.stop_moved("long", 107.0, 106.0))
+        self.assertTrue(rule_live.stop_moved("long", 107.0, 107.5))
+        self.assertTrue(rule_live.stop_moved("short", 107.0, 106.5))
+        self.assertFalse(rule_live.stop_moved("short", 107.0, 107.5))
+
+
 class DetectTest(unittest.TestCase):
     def test_breakout_on_the_last_closed_candle_is_long(self):
         b = breakout()
@@ -175,6 +203,8 @@ class ScanAndFollowTest(DbCase):
         self.assertIn("Richtprijs", self.pushed[0]["body"])
         trade = repo.list_open_rule_trades(rule_live.RULE)[0]
         self.assertEqual((trade["initial_stop"], trade["current_stop"]), (s["stop_loss"], s["stop_loss"]))
+        self.assertEqual(trade["checked_until"], self.series["timestamp"].iloc[299].isoformat())   # de signaalcandle: de instapcandle wordt getoetst
+        self.assertIsNone(repo.get_chain_link(s["id"]))                                             # geen schakel in de openbare ketting
 
         self.scan(300)                                      # zelfde candle na een herstart: niets nieuws
         self.scan(301)                                      # open trade op deze coin: geen tweede
@@ -194,6 +224,7 @@ class ScanAndFollowTest(DbCase):
 
         self.follow(302)                                    # 300 en 301 gesloten en gestegen: de stop schuift op
         trade = repo.list_open_rule_trades(rule_live.RULE)[0]
+        self.assertEqual(trade["checked_until"], self.series["timestamp"].iloc[301].isoformat())
         self.assertGreater(trade["current_stop"], trade["initial_stop"])
         self.assertEqual(repo.get_signal(s["id"])["stop_loss"], trade["initial_stop"])     # het signaal houdt de eerste stop
         self.assertEqual(self.pushed[-1]["tag"], f"trend-{s['id']}")
@@ -212,6 +243,31 @@ class ScanAndFollowTest(DbCase):
         self.assertEqual(self.pushed[-1]["tag"], f"trend-{s['id']}")
         self.assertIn("R", self.pushed[-1]["body"])
         self.assertTrue(all(p["user"] == self.ceo for p in self.pushed))
+
+    def test_trade_older_than_the_window_is_not_closed_on_an_old_candle(self):
+        # Instap lang vóór het opgehaalde venster, stop al opgetrokken tot boven de lows van de oude candles in het venster.
+        stop = float(self.series["close"].iloc[298])
+        sid = repo.insert_signal({"coin": "BTC", "direction": "long", "category": "day_trading", "trade_type": rule_live.RULE, "price": 90.0,
+                                  "stop_loss": 85.0, "take_profit": None, "technical_confirmed": 1, "hard_gates_ok": 1, "confidence": "x"}, chain_it=False)
+        repo.insert_rule_trade(sid, rule_live.RULE, "BTC", "2024-01-01T00:00:00+00:00", 85.0, 1.0, self.series["timestamp"].iloc[299].isoformat())
+        repo.set_rule_progress(sid, stop, self.series["timestamp"].iloc[299].isoformat())
+        self.assertLess(self.series["low"].iloc[:300].min(), stop)                  # een oude candle zou de stop raken
+        self.follow(302)
+        trade = repo.list_open_rule_trades(rule_live.RULE)[0]
+        self.assertIsNone(repo.get_signal(sid)["auto_outcome"])
+        self.assertEqual(trade["checked_until"], self.series["timestamp"].iloc[301].isoformat())
+        self.assertGreaterEqual(trade["current_stop"], stop)
+
+    def test_heartbeat_counts_the_proef_only_for_the_ceo(self):
+        from app import heartbeat
+        sid = repo.insert_signal({"coin": "ETH", "direction": "long", "category": "day_trading", "trade_type": rule_live.RULE, "price": 100.0,
+                                  "stop_loss": 98.0, "take_profit": None, "technical_confirmed": 1, "hard_gates_ok": 1, "confidence": "x"}, chain_it=False)
+        repo.set_trade_result(sid, 3.0, db.now_iso())
+        repo.mark_signal_auto_outcome(sid, "take_profit", db.now_iso())
+        asyncio.run(heartbeat.send_heartbeats())
+        bodies = {p["user"]: p["body"] for p in self.pushed}
+        self.assertIn("1 kans gemeld, 1 afgerond", bodies[self.ceo])
+        self.assertIn("0 kansen gemeld, 0 afgerond", bodies[self.leerling])
 
     def test_outside_the_window_after_a_close_nothing_is_fetched(self):
         self.now = (self.series["timestamp"].iloc[300] + pd.Timedelta(hours=1)).to_pydatetime()
@@ -251,13 +307,33 @@ class WebVisibilityTest(DbCase):
             for name, uid in (("ceo", ceo), ("leerling", leerling)):
                 client = TestClient(main.app)
                 client.cookies.set(main.SESSION_COOKIE, security.create_session_token(uid))
-                seen[name] = {p: client.get(p) for p in (f"/kans/{sid}", "/bewijs", "/coins/ADA")}
+                seen[name] = {p: client.get(p) for p in (f"/kans/{sid}", "/bewijs", "/coins/ADA", "/api/coin_menu_activity")}
         self.assertEqual(seen["ceo"][f"/kans/{sid}"].status_code, 200)
         self.assertEqual(seen["leerling"][f"/kans/{sid}"].status_code, 404)
         self.assertIn("in proef", seen["ceo"]["/bewijs"].text)
         self.assertNotIn("in proef", seen["leerling"]["/bewijs"].text)
         self.assertIn("meelopende stop", seen["ceo"]["/coins/ADA"].text)
         self.assertNotIn("meelopende stop", seen["leerling"]["/coins/ADA"].text)
+        self.assertEqual(seen["ceo"]["/api/coin_menu_activity"].json(), ["ADA"])
+        self.assertEqual(seen["leerling"]["/api/coin_menu_activity"].json(), [])
+
+    def test_public_chain_skips_the_proef_and_still_verifies(self):
+        from fastapi.testclient import TestClient
+        from app import chain
+        from web import main
+        base = {"coin": "BTC", "direction": "long", "category": "day_trading", "price": 100.0, "stop_loss": 97.0, "take_profit": 106.0,
+                "technical_confirmed": 1, "hard_gates_ok": 1, "confidence": "x"}
+        repo.insert_signal({**base, "trade_type": "smc"})
+        proef = repo.insert_signal({**base, "trade_type": rule_live.RULE, "take_profit": None}, chain_it=False)
+        repo.insert_signal({**base, "trade_type": "smc"})
+        anon = TestClient(main.app)
+        rows = anon.get("/keten.json").json()
+        self.assertEqual(len(rows), 2)
+        self.assertNotIn(proef, [r["signal_id"] for r in rows])
+        self.assertEqual(chain.verify(rows), (True, None))
+        page = anon.get("/keten")
+        self.assertEqual(page.status_code, 200)
+        self.assertNotIn(rule_live.RULE, page.text + anon.get("/keten.json").text)
 
 
 if __name__ == "__main__":

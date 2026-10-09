@@ -682,6 +682,8 @@ CREATE TABLE IF NOT EXISTS trade_results (
 
 -- Lopende trades van de proefmotor (app/rule_live.py). signals.stop_loss blijft de eerste stop, want risico, R en kosten rekenen daarmee;
 -- de meelopende stop staat hier. entered_at is het openmoment van de instapcandle: één trade per regel, coin en candle, ook na een herstart.
+-- checked_until is het openmoment van de laatst verwerkte gesloten candle: alleen nieuwere candles worden getoetst, anders raakt een oude candle
+-- een stop die toen nog lager lag (een trade ouder dan het opgehaalde venster).
 CREATE TABLE IF NOT EXISTS rule_trades (
     signal_id INTEGER PRIMARY KEY,
     rule TEXT NOT NULL,
@@ -690,5 +692,6 @@ CREATE TABLE IF NOT EXISTS rule_trades (
     initial_stop REAL NOT NULL,
     current_stop REAL NOT NULL,
     atr REAL NOT NULL,
+    checked_until TEXT NOT NULL,
     UNIQUE (rule, coin, entered_at)
 );

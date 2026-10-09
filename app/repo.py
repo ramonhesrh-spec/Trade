@@ -834,15 +834,16 @@ def list_coins() -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def coins_with_recent_signal(hours: int = 24) -> set[str]:
+def coins_with_recent_signal(hours: int = 24, exclude_types: tuple[str, ...] = ()) -> set[str]:
     """Coins met minstens één echt signaal in de laatste `hours` uur. Basis
     voor het activiteits-stipje in het coin-menu: welke coins net nog iets
     deden, in plaats van dat de lijst er overal even stil uitziet."""
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     with db.session() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT coin FROM signals WHERE created_at >= ? AND is_practice = 0",
-            (cutoff,),
+            f"""SELECT DISTINCT coin FROM signals WHERE created_at >= ? AND is_practice = 0
+                AND trade_type NOT IN ({",".join("?" * len(exclude_types)) or "''"})""",
+            (cutoff, *exclude_types),
         ).fetchall()
         return {r["coin"] for r in rows}
 
@@ -995,7 +996,8 @@ def update_confirm_threshold(user_id: int, threshold_pct: float) -> None:
 # Signalen: gedeelde technische toetsing, hetzelfde voor iedereen
 # ---------------------------------------------------------------------------
 
-def insert_signal(data: dict) -> int:
+def insert_signal(data: dict, chain_it: bool = True) -> int:
+    """chain_it=False: geen schakel in de openbare ketting (/keten), voor de proefmotor die alleen de CEO ziet."""
     fields = [
         "message_id", "coin", "direction", "category", "price", "rsi", "macd",
         "macd_signal", "volume_ratio", "ema9", "ema21", "atr", "atr_avg20", "adx",
@@ -1018,6 +1020,8 @@ def insert_signal(data: dict) -> int:
                 VALUES ({placeholders}, ?)""",
             (*values, created_at),
         )
+        if not chain_it:
+            return cur.lastrowid
         # In dezelfde transactie als het signaal, zodat er nooit een signaal zonder schakel is. Een fout hier mag het melden niet blokkeren.
         try:
             signal = {**dict(zip(fields, values)), "id": cur.lastrowid, "created_at": created_at}
@@ -2942,10 +2946,10 @@ def list_ceo_user_ids() -> list[int]:
     return [ceo["id"]] if ceo else []
 
 
-def insert_rule_trade(signal_id: int, rule: str, coin: str, entered_at: str, initial_stop: float, atr: float) -> None:
+def insert_rule_trade(signal_id: int, rule: str, coin: str, entered_at: str, initial_stop: float, atr: float, checked_until: str) -> None:
     with db.session() as conn:
-        conn.execute("INSERT INTO rule_trades (signal_id, rule, coin, entered_at, initial_stop, current_stop, atr) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                     (signal_id, rule, coin, entered_at, initial_stop, initial_stop, atr))
+        conn.execute("""INSERT INTO rule_trades (signal_id, rule, coin, entered_at, initial_stop, current_stop, atr, checked_until)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (signal_id, rule, coin, entered_at, initial_stop, initial_stop, atr, checked_until))
 
 
 def rule_trade_exists(rule: str, coin: str, entered_at: str) -> bool:
@@ -2957,13 +2961,13 @@ def list_open_rule_trades(rule: str, coin: Optional[str] = None) -> list[dict]:
     """Open is: het signaal heeft nog geen uitkomst."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT rt.signal_id, rt.rule, rt.coin, rt.entered_at, rt.initial_stop, rt.current_stop, rt.atr, s.direction, s.price
+            """SELECT rt.signal_id, rt.rule, rt.coin, rt.entered_at, rt.initial_stop, rt.current_stop, rt.atr, rt.checked_until, s.direction, s.price
                FROM rule_trades rt JOIN signals s ON s.id = rt.signal_id
                WHERE rt.rule = ? AND (? IS NULL OR rt.coin = ?) AND s.auto_outcome IS NULL ORDER BY rt.signal_id""",
             (rule, coin, coin)).fetchall()
         return [dict(r) for r in rows]
 
 
-def set_rule_stop(signal_id: int, stop: float) -> None:
+def set_rule_progress(signal_id: int, stop: float, checked_until: str) -> None:
     with db.session() as conn:
-        conn.execute("UPDATE rule_trades SET current_stop = ? WHERE signal_id = ?", (stop, signal_id))
+        conn.execute("UPDATE rule_trades SET current_stop = ?, checked_until = ? WHERE signal_id = ?", (stop, checked_until, signal_id))
