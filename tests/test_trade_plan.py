@@ -117,6 +117,47 @@ class LadderTests(unittest.TestCase):
         # de limietlijn staat nog steeds op de echte prijs: dichter bij de stop dan bij het doel
         self.assertLess(abs(self.y_of(svg, "limit") - self.y_of(svg, "stop")), abs(self.y_of(svg, "limit") - self.y_of(svg, "take")))
 
+    def price_y(self, svg):
+        return float(re.search(r'<g class="ladder-price"><line[^>]*y1="([\d.]+)"', svg).group(1))
+
+    def test_breedste_label_past_binnen_de_viewbox(self):
+        svg = tp.ladder_svg("long", 81449.89, 82700.82, 81777.00, price=82000.0, zone_low=81740.01, zone_high=81777.00)
+        width = float(re.search(r'viewBox="0 0 ([\d.]+) ', svg).group(1))
+        for x, text in re.findall(r'<text class="ladder-label[^>]*x="([\d.]+)"[^>]*>([^<]*)</text>', svg):
+            self.assertLessEqual(float(x) + len(text) * tp.LABEL_CHAR_W, width)
+        self.assertIn("Limiet 81777.00", svg)
+
+    def test_dunne_zone_geeft_geen_apart_vlak_maar_blijft_in_de_title(self):
+        svg = tp.ladder_svg("long", 81449.89, 82700.82, 81777.00, price=82000.0, zone_low=81740.01, zone_high=81777.00)
+        self.assertNotIn("ladder-zone", svg)
+        self.assertIn("Zone 81740.01 tot 81777.00", svg)
+
+    def test_koers_voorbij_doel_wordt_net_boven_de_doellijn_getoond(self):
+        svg = tp.ladder_svg("long", 97.0, 106.0, 100.0, price=140.0)
+        self.assertIn("Nu 140.00 \u2191", svg)
+        self.assertLess(self.price_y(svg), self.y_of(svg, "take"))
+        self.assertGreaterEqual(self.price_y(svg), 0)
+        self.assertLess(self.y_of(svg, "take") - self.price_y(svg), 15)
+
+    def test_koers_voorbij_stop_wordt_net_onder_de_stoplijn_getoond(self):
+        svg = tp.ladder_svg("long", 97.0, 106.0, 100.0, price=60.0)
+        self.assertIn("Nu 60.0000 \u2193", svg)
+        self.assertGreater(self.price_y(svg), self.y_of(svg, "stop"))
+        self.assertLessEqual(self.price_y(svg), 190)
+
+    def test_koers_voorbij_stop_bij_short_staat_boven_de_stoplijn(self):
+        svg = tp.ladder_svg("short", 103.0, 94.0, 100.0, price=150.0)
+        self.assertIn("\u2191", svg)
+        self.assertLess(self.price_y(svg), self.y_of(svg, "stop"))
+
+    def test_koers_binnen_het_bereik_blijft_op_de_echte_plek_zonder_pijl(self):
+        svg = tp.ladder_svg("long", 97.0, 106.0, 100.0, price=103.0)
+        self.assertNotIn("\u2191", svg)
+        self.assertNotIn("\u2193", svg)
+        self.assertAlmostEqual(self.price_y(svg), (self.y_of(svg, "take") * 3 + self.y_of(svg, "limit") * 3) / 6, delta=20)
+        self.assertLess(self.y_of(svg, "take"), self.price_y(svg))
+        self.assertLess(self.price_y(svg), self.y_of(svg, "limit"))
+
     def test_kleine_prijzen_krijgen_vier_decimalen(self):
         svg = tp.ladder_svg("long", 0.0912, 0.101, 0.0950)
         self.assertIn("Stop 0.0912", svg)
