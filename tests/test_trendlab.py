@@ -172,3 +172,68 @@ class FullHistoryTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SwingTest(unittest.TestCase):
+    def test_htf_trend_uses_only_closed_4h_candles(self):
+        ts4 = pd.date_range("2024-01-01", periods=300, freq="4h", tz="UTC")
+        close4 = pd.Series(range(300), dtype=float) + 100        # stijgend: EMA50 > EMA200
+        b4 = pd.DataFrame({"timestamp": ts4, "open": close4, "high": close4, "low": close4, "close": close4, "volume": 1.0})
+        ts1 = pd.date_range("2024-01-01", periods=1200, freq="1h", tz="UTC")
+        b1 = pd.DataFrame({"timestamp": ts1})
+        trend = tl.htf_trend(b1, b4)
+        self.assertEqual(len(trend), 1200)
+        self.assertEqual(int(trend[0]), 0)                       # nog geen gesloten 4u-candle met een trend
+        self.assertEqual(int(trend[-1]), 1)
+
+    def test_htf_trend_does_not_look_ahead_inside_a_4h_candle(self):
+        ts4 = pd.date_range("2024-01-01", periods=300, freq="4h", tz="UTC")
+        up = pd.Series([100.0] * 150 + [200.0] * 150)
+        b4 = pd.DataFrame({"timestamp": ts4, "open": up, "high": up, "low": up, "close": up, "volume": 1.0})
+        ts1 = pd.date_range("2024-01-01", periods=1200, freq="1h", tz="UTC")
+        trend = tl.htf_trend(pd.DataFrame({"timestamp": ts1}), b4)
+        # de 4u-candle die om 600:00 begint sluit pas om 604:00; een 1u-candle daarbinnen mag haar niet kennen
+        i_open = int((ts4[150] - ts1[0]) / pd.Timedelta(hours=1))
+        self.assertEqual(trend[i_open], trend[i_open - 1])
+
+    def test_variant_count_and_names_are_fixed(self):
+        names = [v.name for v in tl.VARIANTS]
+        for n in ("SW_TREND_1H", "SW_PULL_1H", "SW_DON_1H", "SW_SQUEEZE_1H"):
+            self.assertIn(n, names)
+        self.assertEqual(len(names), 14)
+
+    def test_trail_max_bars_closes_on_the_close_of_that_candle(self):
+        df = pd.DataFrame([(100, 100.5, 99.9, 100.2)] * 6, columns=["open", "high", "low", "close"])
+        df["timestamp"] = pd.date_range("2025-01-01", periods=6, freq="1h", tz="UTC")
+        df["atr"] = 1.0
+        df.loc[2, "close"] = 100.4
+        r, j, out = tl.exit_trail(df, 0, 1, 100.0, 98.0, 3.0, max_bars=3)
+        self.assertEqual((j, out), (2, "tijd"))
+        self.assertAlmostEqual(r, 0.4 / 2.0)
+        self.assertEqual(tl.exit_trail(df, 0, 1, 100.0, 98.0, 3.0)[1], 5)       # zonder max_bars ongewijzigd
+
+    def test_swing_signals_follow_htf_and_run_variant_needs_htf_bars(self):
+        b = tl.prepare(trending(n=600, start=350))
+        up, down, flat = (np.full(len(b), x) for x in (1, -1, 0))
+        base = tl.donchian_signals(b, 24, False)
+        self.assertEqual(tl.swing_donchian_signals(b, 24, up), [s for s in base if s[1] == 1])
+        self.assertEqual(tl.swing_donchian_signals(b, 24, flat), [])
+        self.assertTrue(all(s == -1 for _, s in tl.swing_pullback_signals(b, 21, down)))
+        self.assertTrue(all(s == -1 for _, s in tl.swing_squeeze_signals(b, 12, down)))
+        v = [x for x in tl.VARIANTS if x.name == "SW_DON_1H"][0]
+        with self.assertRaises(ValueError):
+            tl.run_variant(v, trending(n=600, start=350, slope=0.01))
+
+    def test_swing_variants_run_and_respect_max_bars_and_one_position(self):
+        b1 = bars(3000, minutes=60, seed=3, drift=0.0004, noise=0.006)
+        b4 = b1.set_index("timestamp").resample("4h").agg({"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}).dropna().reset_index()
+        for v in [x for x in tl.VARIANTS if x.htf]:
+            t = tl.run_variant(v, b1, htf_bars=b4)
+            self.assertEqual(list(t.columns), ["at", "direction", "risk_pct", "gross", "net", "bars", "outcome", "i", "sign"], v.name)
+            self.assertFalse(t.empty, v.name)
+            self.assertTrue((t["bars"] <= v.max_bars + 1).all(), v.name)
+            starts = t["i"].tolist()
+            ends = [s + int(n) for s, n in zip(starts, t["bars"])]
+            self.assertTrue(all(starts[k + 1] > ends[k] for k in range(len(starts) - 1)), v.name)
+            p = tl.placebo_variant(v, b1, t, htf_bars=b4)
+            self.assertEqual(len(p), len(t), v.name)

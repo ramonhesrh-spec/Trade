@@ -51,12 +51,15 @@ def main() -> None:
             bars = tfs.get(v.timeframe)
             if bars is None or len(bars) < tl.WARMUP + 50:
                 continue
-            real = tl.run_variant(v, bars, a.kosten)
+            htf_bars = tfs.get("4h") if v.htf else None
+            if v.htf and (htf_bars is None or len(htf_bars) == 0):
+                continue
+            real = tl.run_variant(v, bars, a.kosten, htf_bars=htf_bars)
             if real.empty:
                 continue
             real["coin"] = coin
             parts.append(real)
-            plac.append(tl.placebo_variant(v, bars, real, a.kosten))
+            plac.append(tl.placebo_variant(v, bars, real, a.kosten, htf_bars=htf_bars))
         trades = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
         placebo = pd.concat(plac, ignore_index=True) if plac else pd.DataFrame()
         results.append((v, tl.evaluate(trades, placebo)))

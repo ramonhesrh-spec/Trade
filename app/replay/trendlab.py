@@ -25,9 +25,13 @@ WARMUP = 210             # candles voor de EMA van 200
 @dataclass(frozen=True)
 class Variant:
     name: str
-    family: str          # donchian, pullback of sweep
+    family: str          # donchian, pullback, sweep of swing_*
     timeframe: str
     params: tuple
+    k_stop: float = TRAIL_K_STOP     # alleen de swing-families gebruiken deze drie; de oudere families houden de vaste waarden
+    k_trail: float = TRAIL_K
+    max_bars: Optional[int] = None
+    htf: bool = False                # vraagt 4u-candles voor het trendfilter
 
 
 VARIANTS = (
@@ -41,6 +45,10 @@ VARIANTS = (
     Variant("SWEEP_DAG_3R", "sweep", "1h", ("D", 3.0)),
     Variant("SWEEP_WEEK_2R", "sweep", "1h", ("W", 2.0)),
     Variant("SWEEP_WEEK_3R", "sweep", "1h", ("W", 3.0)),
+    Variant("SW_TREND_1H", "swing_donchian", "1h", (48,), 1.5, 2.5, 48, True),
+    Variant("SW_PULL_1H", "swing_pullback", "1h", (21,), 1.5, 2.5, 48, True),
+    Variant("SW_DON_1H", "swing_donchian", "1h", (24,), 1.5, 2.0, 36, True),
+    Variant("SW_SQUEEZE_1H", "swing_squeeze", "1h", (12,), 1.5, 2.0, 36, True),
 )
 
 
@@ -68,6 +76,42 @@ def pullback_signals(b: pd.DataFrame, x: int) -> list[tuple[int, int]]:
     return sorted([(i, 1) for i in np.flatnonzero(long_ok.to_numpy()) if i >= WARMUP] + [(i, -1) for i in np.flatnonzero(short_ok.to_numpy()) if i >= WARMUP])
 
 
+def htf_trend(b1h: pd.DataFrame, b4h: pd.DataFrame) -> np.ndarray:
+    """Per 1u-candle +1, -1 of 0: EMA50 boven of onder EMA200 op de laatste *gesloten* 4u-candle. Een 4u-candle is pas bekend op timestamp + 4u
+    (de timestamp is het openmoment), anders kijkt een 1u-candle midden in een 4u-candle naar de toekomst."""
+    close = b4h["close"].reset_index(drop=True)
+    e50, e200 = close.ewm(span=50, adjust=False).mean(), close.ewm(span=200, adjust=False).mean()
+    trend = pd.Series(np.sign(e50 - e200).to_numpy(), dtype=float)
+    trend.iloc[:200] = 0
+    frame = pd.DataFrame({"avail": b4h["timestamp"].reset_index(drop=True) + pd.Timedelta(hours=4), "trend": trend})
+    merged = pd.merge_asof(b1h[["timestamp"]].reset_index(drop=True), frame.rename(columns={"avail": "timestamp"}), on="timestamp")
+    return merged["trend"].fillna(0).to_numpy().astype(int)
+
+
+def _swing_filter(long_ok: pd.Series, short_ok: pd.Series, htf: np.ndarray) -> list[tuple[int, int]]:
+    return sorted([(i, 1) for i in np.flatnonzero(long_ok.to_numpy()) if i >= WARMUP and htf[i] == 1]
+                  + [(i, -1) for i in np.flatnonzero(short_ok.to_numpy()) if i >= WARMUP and htf[i] == -1])
+
+
+def swing_donchian_signals(b: pd.DataFrame, n: int, htf: np.ndarray) -> list[tuple[int, int]]:
+    return [(i, s) for i, s in donchian_signals(b, n, False) if htf[i] == s]
+
+
+def swing_pullback_signals(b: pd.DataFrame, x: int, htf: np.ndarray) -> list[tuple[int, int]]:
+    """Zoals pullback_signals, maar de trend komt van de 4u (htf) in plaats van de EMA's van de eigen reeks."""
+    ema = b[f"ema{x}"]
+    return _swing_filter((b["low"] <= ema) & (b["close"] > ema), (b["high"] >= ema) & (b["close"] < ema), htf)
+
+
+def swing_squeeze_signals(b: pd.DataFrame, n: int, htf: np.ndarray) -> list[tuple[int, int]]:
+    """Bollinger-breedte (20, 2) in het laagste kwintiel van de laatste 100 candles en een slot voorbij het hoogste hoog of laagste laag van de vorige n."""
+    mid, sd = b["close"].rolling(20).mean(), b["close"].rolling(20).std(ddof=0)
+    width = 4 * sd / mid
+    squeezed = width <= width.rolling(100).quantile(0.2)
+    hh, ll = b["high"].shift(1).rolling(n).max(), b["low"].shift(1).rolling(n).min()
+    return _swing_filter(squeezed & (b["close"] > hh), squeezed & (b["close"] < ll), htf)
+
+
 def sweep_signals(b: pd.DataFrame, period: str) -> list[tuple[int, int]]:
     """Prik door het hoog of laag van de vorige dag (D) of week (W) en sluit er weer terug; hetzelfde niveau telt binnen SWEEP_COOLDOWN candles één keer."""
     ts = b["timestamp"].dt.tz_convert("UTC").dt.tz_localize(None)
@@ -88,20 +132,21 @@ def sweep_signals(b: pd.DataFrame, period: str) -> list[tuple[int, int]]:
     return out
 
 
-def exit_trail(b: pd.DataFrame, j0: int, sign: int, entry: float, stop0: float, k_trail: float) -> tuple[float, int, str]:
+def exit_trail(b: pd.DataFrame, j0: int, sign: int, entry: float, stop0: float, k_trail: float, max_bars: Optional[int] = None) -> tuple[float, int, str]:
     """(bruto R, uitgangscandle, uitkomst). Chandelier: de stop volgt het uiterste sinds de instap op k_trail ATR en gaat alleen de goede kant op.
-    Een gat door de stop vult op de open. Stop eerst als open en stop samenvallen."""
+    Een gat door de stop vult op de open. Stop eerst als open en stop samenvallen. Met max_bars sluit de trade op de close van de max_bars-ste candle (tijd)."""
     hi, lo, cl, op, atr = (b[c].to_numpy() for c in ("high", "low", "close", "open", "atr"))
     risk = abs(entry - stop0)
     stop, ext = stop0, entry
-    for j in range(j0, len(cl)):
+    last = len(cl) - 1 if max_bars is None else min(len(cl), j0 + max_bars) - 1
+    for j in range(j0, last + 1):
         if (lo[j] <= stop) if sign == 1 else (hi[j] >= stop):
             fill = min(op[j], stop) if sign == 1 else max(op[j], stop)
             return sign * (fill - entry) / risk, j, "stop"
         ext = max(ext, hi[j]) if sign == 1 else min(ext, lo[j])
         trail = ext - sign * k_trail * atr[j]
         stop = max(stop, trail) if sign == 1 else min(stop, trail)
-    return sign * (cl[-1] - entry) / risk, len(cl) - 1, "tijd"
+    return sign * (cl[last] - entry) / risk, last, "tijd"
 
 
 def exit_target(b: pd.DataFrame, j0: int, sign: int, entry: float, stop: float, target_r: float, max_bars: int) -> tuple[float, int, str]:
@@ -135,15 +180,22 @@ def _trade(v: Variant, b: pd.DataFrame, i: int, sign: int, cost_pct: float) -> O
         if i + 1 >= len(b):
             return None
         entry = float(b["open"].iloc[i + 1])
-        stop = entry - sign * TRAIL_K_STOP * atr
+        swing = v.family.startswith("swing_")
+        stop = entry - sign * (v.k_stop if swing else TRAIL_K_STOP) * atr
         risk = abs(entry - stop)
-        gross, j, outcome = exit_trail(b, i + 1, sign, entry, stop, TRAIL_K)
+        gross, j, outcome = exit_trail(b, i + 1, sign, entry, stop, v.k_trail if swing else TRAIL_K, v.max_bars if swing else None)
     cost_r = cost_pct / 100 * entry / risk
     return {"at": b["timestamp"].iloc[i + 1 if v.family != "sweep" else i], "direction": "long" if sign == 1 else "short", "risk_pct": risk / entry * 100,
             "gross": gross, "net": gross - cost_r, "bars": j - i, "outcome": outcome, "i": i, "sign": sign}
 
 
-def signals_for(v: Variant, b: pd.DataFrame) -> list[tuple[int, int]]:
+def signals_for(v: Variant, b: pd.DataFrame, htf: Optional[np.ndarray] = None) -> list[tuple[int, int]]:
+    if v.family == "swing_donchian":
+        return swing_donchian_signals(b, *v.params, htf)
+    if v.family == "swing_pullback":
+        return swing_pullback_signals(b, *v.params, htf)
+    if v.family == "swing_squeeze":
+        return swing_squeeze_signals(b, *v.params, htf)
     if v.family == "donchian":
         return donchian_signals(b, *v.params)
     if v.family == "pullback":
@@ -151,11 +203,16 @@ def signals_for(v: Variant, b: pd.DataFrame) -> list[tuple[int, int]]:
     return sweep_signals(b, v.params[0])
 
 
-def run_variant(v: Variant, bars: pd.DataFrame, cost_pct: float = 0.06) -> pd.DataFrame:
+def run_variant(v: Variant, bars: pd.DataFrame, cost_pct: float = 0.06, htf_bars: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     """Alle trades van één variant op één coin; één positie tegelijk (bij een trailing-regel pas een nieuw signaal na de uitgang)."""
     b = prepare(bars)
+    htf = None
+    if v.htf:
+        if htf_bars is None:
+            raise ValueError(f"{v.name} heeft 4u-candles nodig (htf_bars)")
+        htf = htf_trend(b, prepare(htf_bars))
     rows, busy_until = [], -1
-    for i, sign in signals_for(v, b):
+    for i, sign in signals_for(v, b, htf):
         if v.family != "sweep" and i <= busy_until:
             continue
         t = _trade(v, b, i, sign, cost_pct)
@@ -166,9 +223,10 @@ def run_variant(v: Variant, bars: pd.DataFrame, cost_pct: float = 0.06) -> pd.Da
     return pd.DataFrame(rows, columns=["at", "direction", "risk_pct", "gross", "net", "bars", "outcome", "i", "sign"])
 
 
-def placebo_variant(v: Variant, bars: pd.DataFrame, real: pd.DataFrame, cost_pct: float = 0.06, seed: int = 0) -> pd.DataFrame:
+def placebo_variant(v: Variant, bars: pd.DataFrame, real: pd.DataFrame, cost_pct: float = 0.06, seed: int = 0, htf_bars: Optional[pd.DataFrame] = None) -> pd.DataFrame:
     """Zelfde aantal trades en kantverdeling, zelfde uitgangsregel, maar op willekeurige candles. Vangt de drift van de markt: een long-regel in
-    een stijgende markt hoort eerst beter te zijn dan willekeurig long gaan."""
+    een stijgende markt hoort eerst beter te zijn dan willekeurig long gaan. htf_bars staat in de handtekening voor symmetrie met run_variant; de
+    willekeurige instappen gebruiken het trendfilter bewust niet, ze meten alleen de drift onder dezelfde uitgang."""
     if real.empty:
         return real
     b = prepare(bars)
@@ -192,9 +250,10 @@ def placebo_variant(v: Variant, bars: pd.DataFrame, real: pd.DataFrame, cost_pct
                 if not np.isfinite(atr) or atr <= 0:
                     continue
                 entry = float(b["open"].iloc[i + 1])
-                stop = entry - sign * TRAIL_K_STOP * atr
+                swing = v.family.startswith("swing_")
+                stop = entry - sign * (v.k_stop if swing else TRAIL_K_STOP) * atr
                 risk = abs(entry - stop)
-                gross, j, outcome = exit_trail(b, i + 1, sign, entry, stop, TRAIL_K)
+                gross, j, outcome = exit_trail(b, i + 1, sign, entry, stop, v.k_trail if swing else TRAIL_K, v.max_bars if swing else None)
             rows.append({"net": gross - cost_pct / 100 * entry / risk, "gross": gross})
             break
     return pd.DataFrame(rows, columns=["net", "gross"])
