@@ -30,7 +30,7 @@ from markupsafe import Markup
 from app import advice as advice_module
 from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, radar, repo, risk, security, setup_chart, today, track_record
-from app import ceo, chance_checks, chance_steps, kans_view, trust
+from app import ceo, chance_checks, chance_steps, kans_view, rule_live, trust
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 
@@ -39,12 +39,7 @@ logger = logging.getLogger("web")
 BASE_DIR = Path(__file__).resolve().parent
 def ceo_user() -> Optional[dict]:
     """De enige CEO: CEO_USERNAME, anders de eerst aangemaakte gebruiker. Alle anderen zijn leerlingen."""
-    if config.CEO_USERNAME:
-        found = repo.get_user_by_username(config.CEO_USERNAME)
-        if found:
-            return found
-    users = repo.list_users()
-    return users[0] if users else None
+    return repo.get_ceo_user()
 
 
 _ceo_cache: dict = {"at": 0.0, "id": None}
@@ -58,6 +53,13 @@ def is_ceo(user: Optional[dict]) -> bool:
         found = ceo_user()
         _ceo_cache.update(at=time.monotonic(), id=found["id"] if found else None)
     return user["id"] == _ceo_cache["id"]
+
+
+def report_rows(user: Optional[dict]) -> list[dict]:
+    """Signalen voor de cijfers op Bewijs, Vandaag, Week en de CEO-pagina. De proefmotor (app/rule_live.py) is alleen voor de CEO: leerlingen
+    zien zijn trades niet, ook niet in de totalen."""
+    rows = repo.list_signals_for_quality_report(None)
+    return rows if is_ceo(user) else [r for r in rows if r["trade_type"] != rule_live.RULE]
 
 
 def _nav_context(request: Request) -> dict:
@@ -471,7 +473,7 @@ def _open_chances(now: datetime, waiting_plans: int) -> list[tuple[int, str]]:
     return [(n, label) for n, label in parts if n]
 
 
-async def _vandaag_context() -> dict:
+async def _vandaag_context(user: dict) -> dict:
     now = datetime.now(timezone.utc)
     scripts_raw = repo.latest_scripts()
     coins = [c["symbol"] for c in repo.list_coins()]
@@ -487,7 +489,7 @@ async def _vandaag_context() -> dict:
     structure_cards = await _structure_cards()
     open_parts = _open_chances(now, len(structure_cards))
     nearest = today.nearest_chance(structure_cards, scripts, await _radar_cards())
-    summary = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
+    summary = track_record.summarize(report_rows(user), config.TRACK_RECORD_COST_PCT)
     score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing") or e["source"] == "alles"]
     for e in score:
         e["spark"] = Markup(track_record.sparkline_svg(e["cumulative"], width=180, height=36))
@@ -506,7 +508,7 @@ async def _vandaag_context() -> dict:
 async def vandaag_page(request: Request, user: dict = Depends(require_login)):
     """Cockpit: het markt-script van nu, de agenda van de komende 24 uur, wat beweegt (liquidaties en nieuws) en de score van
     wat HesPulse zelf voorspelde. Alles komt uit app/today.py en de verzamelaars; er staat niets op wat niet gemeten is."""
-    ctx = await _vandaag_context()
+    ctx = await _vandaag_context(user)
     greeting = ceo.greeting(today.local(datetime.now(timezone.utc)).hour, is_ceo(user), user["username"])
     return templates.TemplateResponse(request, "vandaag.html", {"user": user, "greeting": greeting, **ctx})
 
@@ -514,7 +516,7 @@ async def vandaag_page(request: Request, user: dict = Depends(require_login)):
 @app.get("/api/vandaag")
 async def api_vandaag(user: dict = Depends(require_login)):
     """Live koersen en afstand tot de voorwaarde per scenario, voor vandaag.js."""
-    ctx = await _vandaag_context()
+    ctx = await _vandaag_context(user)
     return {
         "prices": ctx["prices"],
         "scenarios": {str(sc["id"]): {"state": sc["state"], "label": sc["state_label"], "to_trigger_pct": sc["to_trigger_pct"],
@@ -530,7 +532,7 @@ KANS_TIMEFRAMES = ("5m", "15m", "30m", "4h")
 async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dict = Depends(require_login)):
     """Eén kans op één scherm: grafiek, feiten, gemeten kenmerken en wat er sinds de melding gebeurde. Hier landt een tik op een melding."""
     signal = repo.get_signal(signal_id)
-    if not signal or signal["is_practice"]:
+    if not signal or signal["is_practice"] or (signal["trade_type"] == rule_live.RULE and not is_ceo(user)):
         raise HTTPException(status_code=404)
     setup = repo.get_structure_setup_by_signal(signal_id)
     candles, price = None, None
@@ -558,7 +560,7 @@ WEEK_RANGES = {7: "1W", 14: "2W", 30: "1M", 90: "3M"}
 async def week_page(request: Request, dagen: int = 7, user: dict = Depends(require_login)):
     """Jouw week in één plaatje, om te delen: kansen, resultaat in R na kosten, beste en slechtste kans."""
     dagen = dagen if dagen in WEEK_RANGES else 7
-    week = track_record.week_summary(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT, days=dagen)
+    week = track_record.week_summary(report_rows(user), config.TRACK_RECORD_COST_PCT, days=dagen)
     spark = track_record.sparkline_svg(week["cumulative"], width=320, height=80).replace("<svg", "<svg data-share-chart", 1)
     return templates.TemplateResponse(request, "week.html", {"user": user, "week": week, "spark": Markup(spark), "headline": ceo.week_headline(week["net_r"], week["resolved"]), "dagen": dagen, "ranges": WEEK_RANGES})
 
@@ -579,7 +581,7 @@ async def api_radar(user: dict = Depends(require_login)):
 @app.get("/bewijs")
 async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     """Eerlijk, automatisch gemeten trackrecord per soort melding in R na kosten (zie app/track_record.py)."""
-    summary = track_record.summarize(repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT)
+    summary = track_record.summarize(report_rows(user), config.TRACK_RECORD_COST_PCT)
     summary.sort(key=lambda e: e["source"] != "alles")      # het totaal bovenaan, de rest in vaste volgorde
     for entry in summary:
         entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
@@ -1398,8 +1400,9 @@ async def coin_page(request: Request, symbol: str, signal: Optional[int] = None,
         e["signal_id"]: e for e in entries
         if e["entry_price"] is None and e["status"] != "genegeerd"
     }
+    hidden = () if is_ceo(user) else (rule_live.RULE,)          # de proefmotor is alleen voor de CEO
     recent_signals = [
-        s for s in repo.list_recent_signals(symbol)
+        s for s in repo.list_recent_signals(symbol, exclude_types=hidden)
         if s["id"] not in open_signal_ids and s["id"] not in ignored_signal_ids
         and (s["stop_loss"] or s["take_profit"])
     ]
@@ -1407,7 +1410,7 @@ async def coin_page(request: Request, symbol: str, signal: Optional[int] = None,
     # tussen nieuwere) zou anders ontbreken en de tik landde op een pagina zonder zijn kans.
     if signal and signal not in open_signal_ids and all(s["id"] != signal for s in recent_signals):
         wanted = repo.get_signal(signal)
-        if wanted and wanted["coin"] == symbol and not wanted["is_practice"]:
+        if wanted and wanted["coin"] == symbol and not wanted["is_practice"] and wanted["trade_type"] not in hidden:
             wanted.setdefault("message_summary", "Zelf gedetecteerd door HesPulse")
             recent_signals.insert(0, wanted)
     for s in recent_signals:
@@ -1427,7 +1430,7 @@ async def coin_page(request: Request, symbol: str, signal: Optional[int] = None,
     # tijdlijn leest. Puur signaal-geschiedenis (niet oefentrades, dat zijn
     # geen signalen), alleen om in één oogopslag te zien hoe vaak deze coin
     # recent hoog vertrouwen gaf.
-    sparkline = list(reversed(repo.list_recent_signals(symbol, limit=14)))
+    sparkline = list(reversed(repo.list_recent_signals(symbol, limit=14, exclude_types=hidden)))
 
     # Korte context bovenaan de pagina: hoeveel signalen kwamen er recent
     # binnen voor deze coin, zonder eerst de hele sparkline te moeten
@@ -1693,7 +1696,7 @@ async def ceo_page(request: Request, user: dict = Depends(require_login)):
     """De startpagina: de CEO. Alleen echte gegevens waar het ertoe doet (dagen in functie, aantal leerlingen, het weekresultaat voor de geldregen),
     de rest is de grap. Handelscijfers staan op Bewijs."""
     boss = ceo_user() or user
-    rows = repo.list_signals_for_quality_report(None)
+    rows = report_rows(user)
     week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
     first = min((track_record._parse(r["created_at"]) for r in rows), default=None)
     now = datetime.now(timezone.utc)

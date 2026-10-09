@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
-from app import db, exchange, indicators, push_notify, repo
+from app import db, exchange, indicators, push_notify, repo, rule_live
 from app.signal_processor import (
     SWING_WATCH_MAX_AGE_DAYS, _price_broke_through, _price_near_level, run_swing_check,
 )
@@ -99,6 +99,8 @@ async def check_open_trades() -> None:
 
     coin_candles: dict[str, object] = {}
 
+    # De proefmotor volgt zijn eigen meelopende stop (rule_live.update_open); de vaste stop hier zou op een verouderd niveau melden.
+    entries = [e for e in entries if e["trade_type"] != rule_live.RULE]
     for entry in entries:
         coin = entry["coin"]
         if coin not in coin_candles:
@@ -161,7 +163,8 @@ async def check_signal_outcomes() -> None:
     Onafhankelijk van of een gebruiker het signaal ooit als "genomen"
     markeerde — dit is precies waarom het trackrecord niet meer van een
     handmatige actie afhangt."""
-    signals = repo.list_unresolved_signals_with_levels()
+    # Geen vast doel en een meelopende stop: rule_live zet de uitkomst en de echte R zelf.
+    signals = [s for s in repo.list_unresolved_signals_with_levels() if s["trade_type"] != rule_live.RULE]
     logger.info("%d signalen zonder vastgestelde uitkomst om te checken", len(signals))
 
     # Per coin candles vanaf het oudste openstaande signaal, niet alleen de laatste 30 minuten: een doel of stop dat geraakt werd terwijl deze taak
@@ -568,6 +571,10 @@ async def check_narratives() -> None:
 async def run_all_checks() -> None:
     await check_open_trades()
     await check_signal_outcomes()
+    try:
+        await rule_live.update_open()
+    except Exception:
+        logger.exception("Proefmotor volgen is mislukt")
     await check_pending_signals()
     await check_swing_watches()
     await check_narratives()

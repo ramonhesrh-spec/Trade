@@ -20,6 +20,8 @@ TRAIL_K = 3.0            # chandelier-stop op 3 ATR van het uiterste sinds de in
 SWEEP_MAX_BARS = 48      # 1u-candles tot de sweep-trade op het slot sluit
 SWEEP_COOLDOWN = 24      # hetzelfde niveau telt binnen zoveel candles één keer
 WARMUP = 210             # candles voor de EMA van 200
+# Coins van het lab; de proefmotor (app/rule_live.py) draait op dezelfde set, zodat live en lab dezelfde markten vergelijken.
+LAB_COINS = ("BTC", "ETH", "SOL", "BNB", "XRP", "ADA", "DOGE", "AVAX", "LINK", "DOT", "LTC", "BCH", "NEAR", "ATOM", "UNI", "AAVE", "SUI", "INJ", "APT", "ARB")
 
 
 @dataclass(frozen=True)

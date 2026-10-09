@@ -18,7 +18,7 @@ from app.replay import candles as candle_cache  # noqa: E402
 from app.replay import trendlab as tl  # noqa: E402
 
 SUMMARY_KEYS = ("n", "avg", "ci", "week_ci", "train", "test", "placebo", "winrate", "gross", "median_risk_pct")
-LAB_COINS = "BTC,ETH,SOL,BNB,XRP,ADA,DOGE,AVAX,LINK,DOT,LTC,BCH,NEAR,ATOM,UNI,AAVE,SUI,INJ,APT,ARB"
+LAB_COINS = ",".join(tl.LAB_COINS)
 
 
 def save_results(results, now_iso: str) -> int:

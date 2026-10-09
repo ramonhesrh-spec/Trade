@@ -25,6 +25,7 @@ TYPE_LABELS = {
     "smc_waarschuwing": "SMC met waarschuwing",
     "trend": "Trend (ongetest)",
     "rejectie": "Rejectie op een niveau (ongetest)",
+    "don55_trend": "Trend 4u met meelopende stop (in proef)",
 }
 SOURCE_LABELS = {"scan": "Door HesPulse gevonden", "community": "Via de community"}
 STATUS_LABELS = {

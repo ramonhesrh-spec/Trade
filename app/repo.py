@@ -1070,7 +1070,7 @@ def list_day_trading_signals_for_backtest(limit: int = 50) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
+def list_recent_signals(coin: str, limit: int = 3, exclude_types: tuple[str, ...] = ()) -> list[dict]:
     """Gedeelde, echte signalen voor deze coin, hetzelfde voor iedereen.
     Oefentrades zijn persoonlijk en horen hier niet tussen, anders lijkt
     een handmatige oefening net een echt signaal voor alle gebruikers.
@@ -1078,14 +1078,15 @@ def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
     signaal heeft geen message_id, zie app/market_scanner.py."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT s.*,
+            f"""SELECT s.*,
                       COALESCE(mcr.message_summary, m.message_summary, 'Zelf gedetecteerd door HesPulse')
                           AS message_summary
                FROM signals s
                LEFT JOIN messages m ON m.id = s.message_id
                LEFT JOIN message_coin_results mcr ON mcr.message_id = s.message_id AND mcr.coin = s.coin
-               WHERE s.coin = ? AND s.is_practice = 0 ORDER BY s.created_at DESC LIMIT ?""",
-            (coin.upper(), limit),
+               WHERE s.coin = ? AND s.is_practice = 0 AND s.trade_type NOT IN ({",".join("?" * len(exclude_types)) or "''"})
+               ORDER BY s.created_at DESC LIMIT ?""",
+            (coin.upper(), *exclude_types, limit),
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -1689,7 +1690,7 @@ def list_open_entries_with_levels() -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(
             """SELECT je.id AS id, je.user_id AS user_id, je.entry_price AS entry_price, je.signal_id AS signal_id,
-                      s.coin AS coin, s.direction AS direction,
+                      s.coin AS coin, s.direction AS direction, s.trade_type AS trade_type,
                       COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss,
                       COALESCE(je.take_profit_override, s.take_profit) AS take_profit,
                       u.username AS username, u.telegram_chat_id AS telegram_chat_id,
@@ -1773,7 +1774,7 @@ def list_unresolved_signals_with_levels() -> list[dict]:
     markeerde."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT id, coin, direction, stop_loss, take_profit, created_at, nearest_sr_zone_price
+            """SELECT id, coin, direction, stop_loss, take_profit, created_at, nearest_sr_zone_price, trade_type
                FROM signals
                WHERE auto_outcome IS NULL
                  AND stop_loss IS NOT NULL
@@ -2924,3 +2925,45 @@ def get_rule_lab(rule: str) -> Optional[dict]:
 def list_rule_labs() -> list[dict]:
     with db.session() as conn:
         return [_rule_lab_row(r) for r in conn.execute("SELECT rule, lab_passes, lab_json, lab_at FROM rule_status ORDER BY rule").fetchall()]
+
+
+def get_ceo_user() -> Optional[dict]:
+    """De enige CEO: CEO_USERNAME, anders de eerst aangemaakte gebruiker. Alle anderen zijn leerlingen."""
+    if config.CEO_USERNAME:
+        found = get_user_by_username(config.CEO_USERNAME)
+        if found:
+            return found
+    users = list_users()
+    return users[0] if users else None
+
+
+def list_ceo_user_ids() -> list[int]:
+    ceo = get_ceo_user()
+    return [ceo["id"]] if ceo else []
+
+
+def insert_rule_trade(signal_id: int, rule: str, coin: str, entered_at: str, initial_stop: float, atr: float) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT INTO rule_trades (signal_id, rule, coin, entered_at, initial_stop, current_stop, atr) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                     (signal_id, rule, coin, entered_at, initial_stop, initial_stop, atr))
+
+
+def rule_trade_exists(rule: str, coin: str, entered_at: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("SELECT 1 FROM rule_trades WHERE rule = ? AND coin = ? AND entered_at = ?", (rule, coin, entered_at)).fetchone() is not None
+
+
+def list_open_rule_trades(rule: str, coin: Optional[str] = None) -> list[dict]:
+    """Open is: het signaal heeft nog geen uitkomst."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT rt.signal_id, rt.rule, rt.coin, rt.entered_at, rt.initial_stop, rt.current_stop, rt.atr, s.direction, s.price
+               FROM rule_trades rt JOIN signals s ON s.id = rt.signal_id
+               WHERE rt.rule = ? AND (? IS NULL OR rt.coin = ?) AND s.auto_outcome IS NULL ORDER BY rt.signal_id""",
+            (rule, coin, coin)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_rule_stop(signal_id: int, stop: float) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE rule_trades SET current_stop = ? WHERE signal_id = ?", (stop, signal_id))
