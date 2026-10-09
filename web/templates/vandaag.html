@@ -85,7 +85,7 @@
           <p class="muted vd-fine">{{ sc.reason }}</p>
           <p class="muted vd-fine">Vervalt over <span data-vd="left">{{ "%.0f"|format(sc.hours_left) }}</span> uur</p>
         </div>
-        <div class="vd-ladder" data-vd="ladder">{{ sc.ladder|safe }}</div>
+        {{ macros.level_chart(s.coin, sc.chart, extra_class="vd-chart") }}
       </div>
       {% endfor %}
       <footer class="vd-script-foot muted">Geschreven om {{ s.written.strftime("%H:%M") }}</footer>
@@ -153,5 +153,7 @@
   </div>
 </section>
 
+<script defer src="{{ asset('vendor/lightweight-charts-4.2.0.standalone.production.js') }}"></script>
+<script defer src="{{ asset('levelchart.js') }}"></script>
 <script src="/static/vandaag.js" defer></script>
 {% endblock %}

@@ -1588,7 +1588,7 @@ main + .footer { border-top: 1px solid var(--border); }
 .prop-eval-start label { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-base); color: var(--muted); }
 
 /* ===== Trade Radar en Bewijs ===== */
-.radar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: var(--space-7); }
+.radar-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: var(--space-7); }
 .radar-card {
   background: var(--bg-elevated); border: 1px solid var(--border); border-radius: var(--radius);
   padding: var(--space-7); display: flex; flex-direction: column; gap: var(--space-5);
@@ -1604,20 +1604,12 @@ main + .footer { border-top: 1px solid var(--border); }
 .radar-state-open { color: var(--accent); }
 .radar-state-doel_geraakt { color: var(--text-dim); }
 .radar-card.is-moot { opacity: 0.7; }
-.radar-card.is-moot .radar-ladder, .radar-card.is-moot .vd-steps, .radar-card.is-moot .confidence-detail, .radar-card.is-moot .share-btn { display: none; }
-.radar-ladder { background: var(--panel); border-radius: var(--radius-sm); padding: var(--space-4); }
-.trade-ladder { width: 100%; height: auto; display: block; font-family: var(--mono); font-size: 10px; }
-.trade-ladder .ladder-zone { fill: var(--accent-bg); stroke: var(--accent-dark); stroke-width: 1; stroke-dasharray: 3 3; }
-.trade-ladder .ladder-line { stroke-width: 1.5; }
-.trade-ladder line.ladder-take { stroke: var(--green); }
-.trade-ladder line.ladder-stop { stroke: var(--red); }
-.trade-ladder line.ladder-limit, .trade-ladder line.ladder-entry { stroke: var(--accent); }
-.trade-ladder text.ladder-take { fill: var(--green); }
-.trade-ladder text.ladder-stop { fill: var(--red); }
-.trade-ladder text.ladder-limit, .trade-ladder text.ladder-entry { fill: var(--accent); }
-.trade-ladder .ladder-price line { stroke: var(--text); stroke-width: 1; stroke-dasharray: 2 3; }
-.trade-ladder .ladder-price circle { fill: var(--text); }
-.trade-ladder text.ladder-price { fill: var(--text); font-weight: 600; }
+.radar-card.is-moot .level-chart, .radar-card.is-moot .vd-steps, .radar-card.is-moot .confidence-detail, .radar-card.is-moot .share-btn { display: none; }
+/* Candlegrafiek per kaart (levelchart.js). touch-action pan-y: een veeg over de grafiek scrolt de pagina, de grafiek pakt geen gebaren. */
+.level-chart { position: relative; height: 200px; background: var(--panel); border-radius: var(--radius-sm); overflow: hidden; touch-action: pan-y; }
+.level-chart:empty::after { content: "Grafiek laden"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: var(--text-xs); color: var(--muted); }
+.level-chart.is-failed::after { content: "Geen koersdata, niveaus staan in de tekst"; }
+.vd-chart { margin-top: var(--space-6); }
 .radar-facts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4) var(--space-7); margin: 0; }
 .radar-facts div { display: flex; flex-direction: column; }
 .radar-facts dt { font-size: var(--text-xs); color: var(--muted); }
@@ -1724,7 +1716,6 @@ main + .footer { border-top: 1px solid var(--border); }
 .vd-facts div { display: flex; flex-direction: column; }
 .vd-facts dt { font-size: var(--text-2xs); text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
 .vd-facts dd { margin: 0; font-family: var(--mono); font-size: var(--text-base); white-space: nowrap; }
-.vd-ladder svg { display: block; width: 100%; max-width: 280px; height: auto; margin: 0 auto; }
 .vd-script-foot { font-size: var(--text-xs); }
 
 .vd-two { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: var(--space-7); }

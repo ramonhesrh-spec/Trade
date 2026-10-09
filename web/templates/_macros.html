@@ -252,6 +252,13 @@
 {% endmacro %}
 
 
+{# Candlegrafiek met de niveaus van een plan (web/static/levelchart.js tekent hem zodra hij in beeld komt). `chart` is
+   trade_plan.chart_spec; zonder JavaScript blijft de aria-tekst met de niveaus staan. #}
+{% macro level_chart(coin, chart, tf="15m", extra_class="") %}
+<div class="level-chart {{ extra_class }}" data-levelchart='{{ chart|tojson }}' data-coin="{{ coin }}" data-tf="{{ tf }}" role="img" aria-label="{{ chart.label }}"></div>
+{% endmacro %}
+
+
 {# Deelknop: maakt van de kaart een afbeelding voor een groepschat (web/static/share.js). #}
 {% macro share_button(coin, direction, steps) %}
 <button type="button" class="share-btn" data-share-card='{{ {"title": coin ~ " " ~ direction, "lines": steps|map(attribute="title")|list}|tojson }}'>Deel</button>

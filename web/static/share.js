@@ -1,4 +1,4 @@
-// Deelt een kans als nette afbeelding (PNG) voor een groepschat: titel, de grafiek en de drie stappen, zonder menu of bedragen van jezelf.
+// Deelt een kans als nette afbeelding (PNG) voor een groepschat: titel, de grafiek (SVG, of het canvas van de candlegrafiek) en de drie stappen, zonder menu of bedragen van jezelf.
 // Zonder bestanden delen (navigator.share met files) valt het terug op een download.
 (function () {
   var W = 720, PAD = 28;
@@ -23,14 +23,18 @@
 
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
-  function build(card, data) {
-    var chart = card.querySelector("svg.sc, svg.trade-ladder, svg[data-share-chart]");
+  function build(card, data, shot) {
+    var chart = card.querySelector("svg.sc, svg[data-share-chart]");
     var rootStyle = window.getComputedStyle(document.documentElement);
     var bg = rootStyle.getPropertyValue("--bg").trim() || "#0a0e0f";
     var text = rootStyle.getPropertyValue("--text").trim() || "#e8eeee";
     var accent = rootStyle.getPropertyValue("--accent").trim() || "#2dd4bf";
     var chartH = 0, chartMarkup = "";
-    if (chart) {
+    if (shot) {
+      // De candlegrafiek (levelchart.js) is canvas, geen SVG: als afbeelding in de deelafbeelding.
+      chartH = (W - 2 * PAD) * shot.height / shot.width;
+      chartMarkup = '<image x="' + PAD + '" y="78" width="' + (W - 2 * PAD) + '" height="' + chartH + '" href="' + shot.toDataURL("image/png") + '"/>';
+    } else if (chart) {
       var vb = chart.viewBox.baseVal;
       var scale = (W - 2 * PAD) / vb.width;
       chartH = vb.height * scale;
@@ -83,7 +87,9 @@
     if (!card) return;
     var data;
     try { data = JSON.parse(btn.getAttribute("data-share-card")); } catch (err) { return; }
-    toPng(build(card, data)).then(function (blob) {
+    var holder = card.querySelector("[data-levelchart]");
+    var shot = holder && window.hesLevelChart ? window.hesLevelChart.screenshot(holder) : Promise.resolve(null);
+    shot.then(function (canvas) { return toPng(build(card, data, canvas)); }).then(function (blob) {
       var file = new File([blob], "hespulse-kans.png", { type: "image/png" });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
         return navigator.share({ files: [file], title: data.title });

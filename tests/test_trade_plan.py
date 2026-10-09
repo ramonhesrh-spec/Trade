@@ -82,86 +82,17 @@ class DoelGeraaktTests(unittest.TestCase):
         self.assertEqual(tp.STATE_LABELS["doel_geraakt"], "Doel gehaald zonder dat jouw order vulde")
 
 
-class LadderTests(unittest.TestCase):
-    def y_of(self, svg, css):
-        return float(re.search(rf'<line class="ladder-line ladder-{css}"[^>]*y1="([\d.]+)"', svg).group(1))
+class ChartSpecTests(unittest.TestCase):
+    def test_setup_geeft_getallen_en_leesbare_tekst(self):
+        spec = tp.chart_spec("long", 97.0, 106.0, 100.0, price=101.5, zone_low=99.0, zone_high=100.0)
+        self.assertEqual({k: spec[k] for k in ("direction", "stop", "take", "limit", "zone_low", "zone_high", "entry", "price")},
+                         {"direction": "long", "stop": 97.0, "take": 106.0, "limit": 100.0, "zone_low": 99.0, "zone_high": 100.0,
+                          "entry": None, "price": 101.5})
+        self.assertEqual(spec["label"], "Long-plan: Doel 106.00, Stop 97.0000, Limiet 100.00, zone 99.0000 tot 100.00, Nu 101.50")
 
-    def test_long_ladder_volgorde_doel_boven_stop_onder(self):
-        svg = tp.ladder_svg("long", 97.0, 106.0, 100.0, price=101.5, zone_low=99.0, zone_high=100.0)
-        self.assertLess(self.y_of(svg, "take"), self.y_of(svg, "limit"))
-        self.assertLess(self.y_of(svg, "limit"), self.y_of(svg, "stop"))
-        self.assertIn("Doel 106.00", svg)
-        self.assertIn("Stop 97.00", svg)
-        self.assertIn("Nu 101.50", svg)
-        self.assertIn("ladder-zone", svg)
-
-    def test_short_ladder_hoogste_prijs_bovenaan(self):
-        svg = tp.ladder_svg("short", 103.0, 94.0, 100.0)
-        self.assertLess(self.y_of(svg, "stop"), self.y_of(svg, "limit"))
-        self.assertLess(self.y_of(svg, "limit"), self.y_of(svg, "take"))
-        self.assertNotIn("ladder-price", svg)
-
-    def test_entry_vervangt_limiet_en_prijs_buiten_het_bereik_blijft_binnen_de_svg(self):
-        svg = tp.ladder_svg("long", 97.0, 106.0, 100.0, price=120.0, entry=100.5)
-        self.assertIn("Entry 100.50", svg)
-        self.assertNotIn("Limiet", svg)
-        for y in re.findall(r'y1="([\d.]+)"', svg):
-            self.assertTrue(0 <= float(y) <= 190)
-
-    def test_labels_van_nabije_niveaus_overlappen_niet_en_lijnen_blijven_op_hun_prijs(self):
-        svg = tp.ladder_svg("short", 152.3, 140.3, 150.2, price=150.6, zone_low=150.2, zone_high=151.0)
-        ys = sorted(float(y) for y in re.findall(r'<text class="ladder-label[^>]*y="([\d.]+)"', svg))
-        for a, b in zip(ys, ys[1:]):
-            self.assertGreaterEqual(b - a, tp.LABEL_GAP - 0.2)
-        self.assertLessEqual(ys[-1], 190)
-        # de limietlijn staat nog steeds op de echte prijs: dichter bij de stop dan bij het doel
-        self.assertLess(abs(self.y_of(svg, "limit") - self.y_of(svg, "stop")), abs(self.y_of(svg, "limit") - self.y_of(svg, "take")))
-
-    def price_y(self, svg):
-        return float(re.search(r'<g class="ladder-price"><line[^>]*y1="([\d.]+)"', svg).group(1))
-
-    def test_breedste_label_past_binnen_de_viewbox(self):
-        svg = tp.ladder_svg("long", 81449.89, 82700.82, 81777.00, price=82000.0, zone_low=81740.01, zone_high=81777.00)
-        width = float(re.search(r'viewBox="0 0 ([\d.]+) ', svg).group(1))
-        for x, text in re.findall(r'<text class="ladder-label[^>]*x="([\d.]+)"[^>]*>([^<]*)</text>', svg):
-            self.assertLessEqual(float(x) + len(text) * tp.LABEL_CHAR_W, width)
-        self.assertIn("Limiet 81777.00", svg)
-
-    def test_dunne_zone_geeft_geen_apart_vlak_maar_blijft_in_de_title(self):
-        svg = tp.ladder_svg("long", 81449.89, 82700.82, 81777.00, price=82000.0, zone_low=81740.01, zone_high=81777.00)
-        self.assertNotIn("ladder-zone", svg)
-        self.assertIn("Zone 81740.01 tot 81777.00", svg)
-
-    def test_koers_voorbij_doel_wordt_net_boven_de_doellijn_getoond(self):
-        svg = tp.ladder_svg("long", 97.0, 106.0, 100.0, price=140.0)
-        self.assertIn("Nu 140.00 \u2191", svg)
-        self.assertLess(self.price_y(svg), self.y_of(svg, "take"))
-        self.assertGreaterEqual(self.price_y(svg), 0)
-        self.assertLess(self.y_of(svg, "take") - self.price_y(svg), 15)
-
-    def test_koers_voorbij_stop_wordt_net_onder_de_stoplijn_getoond(self):
-        svg = tp.ladder_svg("long", 97.0, 106.0, 100.0, price=60.0)
-        self.assertIn("Nu 60.0000 \u2193", svg)
-        self.assertGreater(self.price_y(svg), self.y_of(svg, "stop"))
-        self.assertLessEqual(self.price_y(svg), 190)
-
-    def test_koers_voorbij_stop_bij_short_staat_boven_de_stoplijn(self):
-        svg = tp.ladder_svg("short", 103.0, 94.0, 100.0, price=150.0)
-        self.assertIn("\u2191", svg)
-        self.assertLess(self.price_y(svg), self.y_of(svg, "stop"))
-
-    def test_koers_binnen_het_bereik_blijft_op_de_echte_plek_zonder_pijl(self):
-        svg = tp.ladder_svg("long", 97.0, 106.0, 100.0, price=103.0)
-        self.assertNotIn("\u2191", svg)
-        self.assertNotIn("\u2193", svg)
-        self.assertAlmostEqual(self.price_y(svg), (self.y_of(svg, "take") * 3 + self.y_of(svg, "limit") * 3) / 6, delta=20)
-        self.assertLess(self.y_of(svg, "take"), self.price_y(svg))
-        self.assertLess(self.price_y(svg), self.y_of(svg, "limit"))
-
-    def test_kleine_prijzen_krijgen_vier_decimalen(self):
-        svg = tp.ladder_svg("long", 0.0912, 0.101, 0.0950)
-        self.assertIn("Stop 0.0912", svg)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    def test_open_trade_noemt_entry_in_plaats_van_limiet_en_prijs_is_optioneel(self):
+        spec = tp.chart_spec("short", 103.0, 94.0, 100.0, entry=100.0)
+        self.assertIn("Entry 100.00", spec["label"])
+        self.assertNotIn("Limiet", spec["label"])
+        self.assertNotIn("Nu", spec["label"])
+        self.assertIsNone(spec["price"])

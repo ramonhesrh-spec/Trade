@@ -9,14 +9,15 @@ SIGNAL = {"id": 3, "coin": "ETH", "direction": "short", "price": 100.0, "stop_lo
 
 
 class RadarTests(unittest.TestCase):
-    def test_setup_kaart_met_status_afstand_en_ladder(self):
+    def test_setup_kaart_met_status_afstand_en_grafiekgegevens(self):
         card = radar.setup_card(SETUP, 102.0)
         self.assertEqual(card["key"], "setup:7")
         self.assertEqual(card["state"], "wacht")
         self.assertAlmostEqual(card["distance_pct"], 2.0)
         self.assertAlmostEqual(card["plan"].rr, 2.0)
-        self.assertIn("<svg", str(card["ladder"]))
-        self.assertIn("Nu 102.00", str(card["ladder"]))
+        self.assertIn("Nu 102.00", card["chart"]["label"])
+        self.assertEqual(card["chart"]["price"], 102.0)
+        self.assertEqual((card["chart"]["zone_low"], card["chart"]["zone_high"]), (SETUP["zone_low"], SETUP["zone_high"]))
 
     def test_status_in_zone_en_zonder_koers(self):
         self.assertEqual(radar.setup_card(SETUP, 99.5)["state"], "in_zone")
@@ -24,7 +25,7 @@ class RadarTests(unittest.TestCase):
         self.assertIsNone(no_price["state"])
         self.assertIsNone(no_price["distance_pct"])
         self.assertEqual(no_price["state_label"], "Koers wordt opgehaald")
-        self.assertNotIn("Nu ", str(no_price["ladder"]))
+        self.assertNotIn("Nu ", no_price["chart"]["label"])
 
     def test_setup_met_onmogelijk_plan_krijgt_geen_kaart(self):
         bad = dict(SETUP, preview_stop_loss=100.5)
@@ -35,7 +36,8 @@ class RadarTests(unittest.TestCase):
         self.assertAlmostEqual(card["live_r"], 1.0)
         self.assertEqual(card["state"], "open")
         self.assertAlmostEqual(card["rr"], 2.0)
-        self.assertIn("Entry 100.00", str(card["ladder"]))
+        self.assertIn("Entry 100.00", card["chart"]["label"])
+        self.assertEqual(card["chart"]["entry"], 100.0)
         self.assertIsNone(radar.signal_card(dict(SIGNAL, stop_loss=None), 97.0))
 
     def test_doel_gehaald_zonder_vulling_is_een_stille_kaart(self):
@@ -43,7 +45,7 @@ class RadarTests(unittest.TestCase):
         self.assertEqual(card["state"], "doel_geraakt")
         self.assertEqual(card["state_label"], "Doel gehaald zonder dat jouw order vulde")
         self.assertEqual(card["steps"], [])
-        self.assertEqual(str(card["ladder"]), "")
+        self.assertIsNone(card["chart"])
         self.assertIsNone(card["distance_pct"])
         short = dict(SETUP, direction="short", zone_low=100.0, zone_high=101.0, preview_stop_loss=103.0, preview_take_profit=94.0)
         self.assertEqual(radar.setup_card(short, 93.0)["state"], "doel_geraakt")
@@ -68,7 +70,7 @@ class RadarTests(unittest.TestCase):
         self.assertEqual(set(payload), {"setup:7", "signal:3"})
         self.assertEqual(payload["setup:7"]["state"], "wacht")
         self.assertAlmostEqual(payload["signal:3"]["live_r"], 1.0)
-        self.assertTrue(payload["setup:7"]["ladder"].startswith("<svg"))
+        self.assertEqual(payload["setup:7"]["chart"]["price"], 102.0)
 
 
 if __name__ == "__main__":

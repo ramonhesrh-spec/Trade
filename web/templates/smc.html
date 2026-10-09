@@ -23,7 +23,7 @@
         <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
       </header>
       <div class="radar-state radar-state-{{ c.state or 'laden' }}" data-radar="state">{{ c.state_label }}</div>
-      <div class="radar-ladder" data-radar="ladder">{{ c.ladder }}</div>
+      {% if c.chart %}{{ macros.level_chart(c.coin, c.chart) }}{% endif %}
       {{ macros.steps_list(c.steps, user.risk_per_trade_eur) }}
       {{ macros.share_button(c.coin, c.direction, c.steps) }}
       <details class="confidence-detail js-accordion">
@@ -74,7 +74,7 @@
         <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
       </header>
       <div class="radar-state radar-state-open" data-radar="state">{{ c.state_label }}</div>
-      <div class="radar-ladder" data-radar="ladder">{{ c.ladder }}</div>
+      {% if c.chart %}{{ macros.level_chart(c.coin, c.chart) }}{% endif %}
       {% set pos = [[((c.live_r if c.live_r is not none else 0) + 1) / (c.rr + 1) * 100, 0]|max, 100]|min %}
       <div class="r-progress" data-rr="{{ c.rr }}" role="img" aria-label="Voortgang tussen stop en doel">
         <span class="r-progress-mark{% if c.live_r is not none and c.live_r < 0 %} neg{% elif c.live_r is not none and c.live_r > 0 %} pos{% endif %}" data-radar="progress" style="left: {{ "%.1f"|format(pos) }}%"></span>
@@ -104,5 +104,7 @@
   </div>
   {% endif %}
 </section>
+<script defer src="{{ asset('vendor/lightweight-charts-4.2.0.standalone.production.js') }}"></script>
+<script defer src="{{ asset('levelchart.js') }}"></script>
 <script defer src="/static/radar.js"></script>
 {% endblock %}

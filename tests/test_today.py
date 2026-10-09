@@ -46,7 +46,7 @@ class ScenarioTest(unittest.TestCase):
         self.assertAlmostEqual(v["to_trigger_pct"], 1.0)
         self.assertAlmostEqual(v["hours_left"], 9.0)
         self.assertEqual(v["trigger"], "5m-candle sluit boven 101")
-        self.assertIn("<svg", v["ladder"])
+        self.assertEqual((v["chart"]["entry"], v["chart"]["stop"], v["chart"]["take"], v["chart"]["price"]), (100.8, 99.8, 103.0, 100.0))
 
     def test_overdue_waiting_scenario_shows_as_expired_and_fired_has_no_distance(self):
         old = scenario(expires_at=(NOW - timedelta(hours=1)).isoformat())

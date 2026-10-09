@@ -441,7 +441,7 @@ async def structuur_page(request: Request, alleen: str = "", kant: str = "", use
 
 @app.get("/smc")
 async def smc_page(request: Request, user: dict = Depends(require_login)):
-    """Trade Radar: bouwende setups en open SMC-signalen als handelsplan met prijsladder en live status (de limietorder
+    """Trade Radar: bouwende setups en open SMC-signalen als handelsplan met candlegrafiek en live status (de limietorder
     staat op de zone-rand, zie app/trade_plan.py), daaronder de afgeronde signalen in dezelfde stijl als /signalen.
     Afgeronde signalen verschijnen ook op /signalen en het dashboard: deze pagina is een extra, gerichte weergave."""
     cards = await _radar_cards()
@@ -529,7 +529,7 @@ async def api_vandaag(user: dict = Depends(require_login)):
     return {
         "prices": ctx["prices"],
         "scenarios": {str(sc["id"]): {"state": sc["state"], "label": sc["state_label"], "to_trigger_pct": sc["to_trigger_pct"],
-                                       "hours_left": sc["hours_left"], "ladder": sc["ladder"]}
+                                       "hours_left": sc["hours_left"], "chart": sc["chart"]}
                       for s in ctx["scripts"] for sc in s["scenarios"]},
     }
 
@@ -587,8 +587,36 @@ async def api_kansen(user: dict = Depends(require_login)):
 
 @app.get("/api/radar")
 async def api_radar(user: dict = Depends(require_login)):
-    """Live status per radar-kaart, voor radar.js: nieuwe koers, afstand tot de limietorder, live R en de bijgewerkte ladder."""
+    """Live status per radar-kaart, voor radar.js: nieuwe koers, afstand tot de limietorder, live R en de niveaus voor de grafiek."""
     return radar.live_payload(await _radar_cards())
+
+
+RADAR_TIMEFRAMES = ("5m", "15m", "1h", "4h")
+RADAR_CANDLE_TTL_SECONDS = 60
+RADAR_CANDLE_FETCH = 200            # altijd evenveel ophalen, zodat elke `limit` uit dezelfde cache-regel komt
+_candle_cache: dict[tuple[str, str], tuple[float, list]] = {}
+
+
+@app.get("/api/radar_candles/{coin}")
+async def api_radar_candles(coin: str, tf: str = "15m", limit: int = 96, user: dict = Depends(require_login)):
+    """Compacte candles voor de grafiek op een radar-kaart: {"coin", "tf", "candles": [[unix_s, open, high, low, close], ...]},
+    oudste eerst. Per (coin, tf) een minuut onthouden: elke kaart en elke ingelogde gebruiker vraagt erom, en dat mag niet
+    elke keer een Binance-aanroep worden. Mislukt het ophalen, dan geldt de laatste goede stand (ook al is die verlopen)."""
+    coin = coin.upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,12}", coin) or tf not in RADAR_TIMEFRAMES:
+        raise HTTPException(status_code=422)
+    limit = max(10, min(limit, RADAR_CANDLE_FETCH))
+    hit = _candle_cache.get((coin, tf))
+    if not hit or time.monotonic() - hit[0] >= RADAR_CANDLE_TTL_SECONDS:
+        try:
+            df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, tf, RADAR_CANDLE_FETCH)
+            rows = [[int(r.timestamp.timestamp()), float(r.open), float(r.high), float(r.low), float(r.close)] for r in df.itertuples()]
+            hit = (time.monotonic(), rows)
+            _candle_cache[(coin, tf)] = hit
+        except Exception:
+            if not hit:
+                raise HTTPException(status_code=503, detail="candles niet beschikbaar")
+    return {"coin": coin, "tf": tf, "candles": hit[1][-limit:]}
 
 
 @app.get("/bewijs")
