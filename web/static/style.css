@@ -1975,6 +1975,8 @@ html.reveal-done main > section, html.reveal-done main > .stats-collapse { anima
 
 .hint-pop { position: absolute; z-index: 600; max-width: min(320px, calc(100vw - 24px)); padding: var(--space-3) var(--space-4); background: var(--panel); border: 1px solid var(--accent); border-radius: var(--radius-sm, 4px); font-size: var(--text-sm, 0.875rem); line-height: 1.4; }
 .share-btn { background: none; border: 1px solid var(--accent); color: var(--accent); border-radius: var(--radius-sm, 4px); padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-sm, 0.875rem); cursor: pointer; }
+/* De algemene button:hover vult de knop met de accentkleur; op iOS blijft die hover na een tik staan en dan verdwijnt de tekst (accent op accent). */
+.share-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
 
 .vd-nearest { margin: 0 0 var(--space-4); }
 .vd-nearest a { display: flex; flex-direction: column; gap: 2px; color: var(--text); text-decoration: none; padding: var(--space-3) var(--space-4); border: 1px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent-bg); }
