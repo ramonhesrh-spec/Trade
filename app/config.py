@@ -130,7 +130,9 @@ SAMENVAL_MAX_NEGATIVE = int(_get("SAMENVAL_MAX_NEGATIVE", "30"))
 # Markt-script (app/market_script.py): elke 4 uur per coin een duiding met twee scenario's. Een scenario dat afgaat geeft
 # een melding met het label ongetest. Gaat vanzelf uit als de laatste SCRIPT_MAX_NEGATIVE afgeronde scenario's negatief zijn.
 SCRIPT_ENABLED = _get("SCRIPT_ENABLED", "true").lower() == "true"
-SCRIPT_MODEL = _get("SCRIPT_MODEL", ANTHROPIC_MODEL)
+# Haiku 5.5 kost een twintigste van Sonnet 5 ($0,10 en $0,50 per miljoen tokens tegen $2 en $10). Bij 42 aanroepen per dag plus herkansingen was het script de
+# grootste kostenpost; de harde toets in code (validate_scenarios) blijft gelden, vergelijk n_dropped per model in market_scripts voor je terugschakelt.
+SCRIPT_MODEL = _get("SCRIPT_MODEL", "claude-haiku-5-5")
 SCRIPT_MAX_ALERTS_PER_DAY = int(_get("SCRIPT_MAX_ALERTS_PER_DAY", "6"))
 SCRIPT_MAX_NEGATIVE = int(_get("SCRIPT_MAX_NEGATIVE", "30"))
 
