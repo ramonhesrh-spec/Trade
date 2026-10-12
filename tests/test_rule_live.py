@@ -404,8 +404,11 @@ class WebVisibilityTest(DbCase):
                 client = TestClient(main.app)
                 client.cookies.set(main.SESSION_COOKIE, security.create_session_token(uid))
                 seen[name] = client.get("/bewijs").text
-        self.assertIn("don20", seen["ceo"])
-        self.assertNotIn("don20", seen["leerling"])
+        self.assertIn("Andere geteste regels", seen["ceo"])
+        self.assertIn("Uitbraak 20 candles, 4u", seen["ceo"])
+        self.assertNotIn("don20", seen["ceo"])
+        self.assertNotIn("Uitbraak 20", seen["leerling"])
+        self.assertNotIn("Andere geteste regels", seen["leerling"])
         self.assertNotIn("Status per regel", seen["leerling"])
 
     def test_public_chain_skips_the_proef_and_still_verifies(self):
@@ -461,7 +464,10 @@ class KansAndBewijsTest(DbCase):
         repo.set_rule_lab(rule_live.RULE, True, {}, db.now_iso())
         with mock.patch.object(config, "CEO_USERNAME", ""):
             page = self.client(ceo).get("/bewijs").text
-        self.assertIn("Geen motor", page)
+        self.assertIn("Andere geteste regels", page)
+        self.assertIn('<details class="stats-collapse js-accordion proof-others">', page)     # standaard dicht
+        self.assertIn("Voor deze regels draait geen live motor.", page)
+        self.assertNotIn("Geen motor", page)
         self.assertIn("50 live trades kunnen een voordeel van 0,1R", page)
         self.assertIn("Jij ziet ook de regels in proef", page)
 

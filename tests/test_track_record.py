@@ -200,3 +200,34 @@ class RuleStatusTest(unittest.TestCase):
     def test_last_hundred_with_negative_upper_bound_blocks_proof(self):
         series = [1.0] * 400 + [-0.05] * 100       # gemiddelde alles positief, laatste 100 duidelijk onder 0
         self.assertNotEqual(tr.rule_status(self.PASS, series)["status"], "Bewezen")
+
+
+class LabRuleHelpersTest(unittest.TestCase):
+    def test_labels_cover_every_lab_variant_and_fall_back_to_the_raw_name(self):
+        from app.replay import trendlab
+        for v in trendlab.VARIANTS:
+            self.assertIn(v.name.lower(), tr.LAB_LABELS)
+        self.assertEqual(tr.rule_label("onbekend_x"), "onbekend_x")
+        self.assertEqual(tr.rule_label("don55_trend"), "Trend 4u met meelopende stop")
+
+    def test_fmt_r_uses_comma_and_sign(self):
+        self.assertEqual(tr.fmt_r(0.094), "+0,09R")
+        self.assertEqual(tr.fmt_r(-0.06), "-0,06R")
+
+    def test_lab_line_omits_what_is_missing(self):
+        lab = {"lab_passes": False, "summary": {"n": 2218, "avg": 0.09}}
+        self.assertEqual(tr.lab_line(lab), "Test op historische data: niet geslaagd, gemiddeld +0,09R netto per trade over 2218 trades")
+        self.assertEqual(tr.lab_line({"lab_passes": True, "summary": {}}), "Test op historische data: geslaagd")
+        self.assertEqual(tr.lab_line(None), "")
+
+    def test_split_and_sort(self):
+        eng, other = tr.split_rule_types(["don20", "don55_trend", "pull21"], ("don55_trend",))
+        self.assertEqual((eng, other), (["don55_trend"], ["don20", "pull21"]))
+        labs = {"don20": {"lab_passes": False, "summary": {"n": 10, "avg": 0.08}},
+                "pull21": {"lab_passes": False, "summary": {"n": 5, "avg": 0.11}},
+                "sw_don_1h": {"lab_passes": True, "summary": {"n": 7, "avg": -0.02}},
+                "pull50": {"lab_passes": False, "summary": {}}}
+        rows = tr.other_rule_rows(labs, list(labs))
+        self.assertEqual([r["rule"] for r in rows], ["sw_don_1h", "pull21", "don20", "pull50"])
+        self.assertEqual(rows[1]["avg_text"], "+0,11R")
+        self.assertEqual(rows[3]["avg_text"], "-")

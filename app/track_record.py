@@ -27,6 +27,23 @@ TYPE_LABELS = {
     "rejectie": "Rejectie op een niveau (ongetest)",
     "don55_trend": "Trend 4u met meelopende stop",
 }
+# Leesbare namen voor de labvarianten (sleutel: Variant.name.lower()); alleen de CEO ziet ze. Onbekend: de ruwe naam.
+LAB_LABELS = {
+    "don20": "Uitbraak 20 candles, 4u",
+    "don20_trend": "Uitbraak 20 candles met trend, 4u",
+    "don55": "Uitbraak 55 candles, 4u",
+    "don55_trend": "Uitbraak 55 candles met trend, 4u",
+    "pull21": "Terugval naar EMA21, 4u",
+    "pull50": "Terugval naar EMA50, 4u",
+    "sweep_dag_2r": "Sweep dagniveau, doel 2R, 1u",
+    "sweep_dag_3r": "Sweep dagniveau, doel 3R, 1u",
+    "sweep_week_2r": "Sweep weekniveau, doel 2R, 1u",
+    "sweep_week_3r": "Sweep weekniveau, doel 3R, 1u",
+    "sw_trend_1h": "Swing trend, 1u",
+    "sw_pull_1h": "Swing terugval, 1u",
+    "sw_don_1h": "Swing uitbraak, 1u",
+    "sw_squeeze_1h": "Swing samentrekking, 1u",
+}
 SOURCE_LABELS = {"scan": "Door HesPulse gevonden", "community": "Via de community"}
 STATUS_LABELS = {
     "te_weinig": "Nog te weinig data",
@@ -211,6 +228,49 @@ def rule_status(lab: Optional[dict], live_r_net: list[float], has_engine: bool =
     if not lab_passes:
         return out("In proef", f"Nog geen geslaagde test; {n} afgeronde trades.")
     return out("In proef", f"Geslaagde test; nog {max(0, RULE_MIN_LIVE_PROVEN - n)} afgeronde trades nodig voor bewezen.")
+
+
+def rule_label(rule: str) -> str:
+    return TYPE_LABELS.get(rule) or LAB_LABELS.get(rule, rule)
+
+
+def fmt_r(value: float) -> str:
+    """Netto R met teken en decimale komma, bijvoorbeeld +0,09R."""
+    return f"{value:+.2f}".replace(".", ",") + "R"
+
+
+def lab_line(lab: Optional[dict]) -> str:
+    """Laatste labuitslag in één regel; wat ontbreekt blijft weg."""
+    if not lab:
+        return ""
+    summary = lab.get("summary") or {}
+    text = "Test op historische data: " + ("geslaagd" if lab.get("lab_passes") else "niet geslaagd")
+    if summary.get("avg") is not None:
+        text += f", gemiddeld {fmt_r(summary['avg'])} netto per trade"
+        if summary.get("n") is not None:
+            text += f" over {summary['n']} trades"
+    elif summary.get("n") is not None:
+        text += f", {summary['n']} trades"
+    return text
+
+
+def split_rule_types(types, engine_types) -> tuple[list[str], list[str]]:
+    """Regels met een live motor apart van de zuivere labregels."""
+    types = sorted(set(types))
+    return [t for t in types if t in engine_types], [t for t in types if t not in engine_types]
+
+
+def other_rule_rows(labs: dict, types) -> list[dict]:
+    """Rijen voor 'Andere geteste regels': geslaagd eerst, dan gemiddelde netto R aflopend."""
+    rows = []
+    for t in types:
+        lab = labs.get(t) or {}
+        summary = lab.get("summary") or {}
+        avg = summary.get("avg")
+        rows.append({"rule": t, "label": rule_label(t), "passes": bool(lab.get("lab_passes")), "avg": avg,
+                     "avg_text": fmt_r(avg) if avg is not None else "-", "n": summary.get("n")})
+    rows.sort(key=lambda r: (not r["passes"], -(r["avg"] if r["avg"] is not None else float("-inf")), r["label"]))
+    return rows
 
 
 PROOF_STATES = {"In proef": "proef", "Bewezen": "bewezen", "Negatief": "negatief", "Geen motor": "proef"}

@@ -628,13 +628,16 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     for entry in summary:
         entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
     lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
+    visible = track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES)
+    engine_types, other_types = track_record.split_rule_types(visible, rule_live.ENGINE_TYPES)
     rule_statuses = []
-    for trade_type in track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES):
-        status = track_record.rule_status(lab_types.get(trade_type), track_record.live_net_r(rows, trade_type, config.TRACK_RECORD_COST_PCT),
-                                          has_engine=trade_type in rule_live.ENGINE_TYPES)
-        rule_statuses.append({**status, "label": track_record.TYPE_LABELS.get(trade_type, trade_type), "css": status["status"].lower().replace(" ", "-")})
+    for trade_type in engine_types:
+        status = track_record.rule_status(lab_types.get(trade_type), track_record.live_net_r(rows, trade_type, config.TRACK_RECORD_COST_PCT))
+        rule_statuses.append({**status, "label": track_record.rule_label(trade_type), "css": status["status"].lower().replace(" ", "-"),
+                              "lab_line": track_record.lab_line(lab_types.get(trade_type))})
+    other_rules = track_record.other_rule_rows(lab_types, other_types)
     return templates.TemplateResponse(request, "bewijs.html", {
-        "rule_statuses": rule_statuses, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
+        "rule_statuses": rule_statuses, "other_rules": other_rules, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
         "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,
         "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,
     })

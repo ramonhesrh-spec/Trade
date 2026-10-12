@@ -9,7 +9,7 @@
 <p class="muted"><a href="/week">Jouw week als plaatje om te delen</a></p>
 <p class="page-intro">Wat elke soort melding echt opleverde, automatisch gemeten uit de uitkomsten van alle signalen. Geen selectie, geen beste maanden: wat hier staat, staat er voor iedereen.{% if ceo_view %} Jij ziet ook de regels in proef; die tellen mee in jouw totalen, leerlingen zien ze niet.{% endif %}</p>
 
-{% if rule_statuses %}
+{% if rule_statuses or other_rules %}
 <section class="card" style="--i: 0">
   <h3>Status per regel</h3>
   <p class="muted">Eerlijk: 50 live trades kunnen een voordeel van 0,1R per trade niet bewijzen. Het bewijs komt uit de test op historische data; live is een controle of de werkelijkheid daarvan afwijkt.</p>
@@ -20,9 +20,28 @@
       <span class="proof-chip proof-chip-{{ r.css }}">{{ r.status }}</span>
     </header>
     <p class="muted proof-quote">{{ r.reason }}</p>
+    {% if r.lab_line %}<p class="muted proof-quote">{{ r.lab_line }}.</p>{% endif %}
     <p class="proof-footnote muted">{{ r.n_live }} afgeronde live trades{% if r.avg_last100 is not none %}, laatste 100 gemiddeld {{ "%+.2f"|format(r.avg_last100) }}R na kosten{% endif %}.</p>
   </div>
   {% endfor %}
+  {% if other_rules %}
+  <details class="stats-collapse js-accordion proof-others">
+    <summary class="stats-summary">
+      <span>Andere geteste regels ({{ other_rules|length }})</span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+    </summary>
+    <p class="muted">Voor deze regels draait geen live motor. Ze zijn alleen getoetst op historische data.</p>
+    <ul class="proof-others-list">
+      {% for o in other_rules %}
+      <li>
+        <span class="proof-others-name">{{ o.label }}</span>
+        <span class="proof-others-num">{{ o.avg_text }}{% if o.n is not none %} <span class="muted">· {{ o.n }} trades</span>{% endif %}</span>
+        <span class="proof-chip proof-others-chip">{{ "geslaagd" if o.passes else "niet geslaagd" }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
 </section>
 {% endif %}
 
