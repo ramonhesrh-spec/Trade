@@ -2023,8 +2023,8 @@ html { -webkit-tap-highlight-color: transparent; }
 
 /* Pagina's lopen in elkaar over in plaats van te knipperen. De balken blijven staan terwijl de inhoud overvloeit. */
 @view-transition { navigation: auto; }
-.topbar { view-transition-name: topbar; }
-.tabbar { view-transition-name: tabbar; }
+/* De balken kregen eerst een eigen view-transition-name zodat ze bleven staan terwijl de inhoud overvloeide. Op iOS kan een vaste balk met zo'n naam na het openen
+   vanuit een andere app (een link uit Discord) midden in het scherm blijven hangen; nu vloeit de hele pagina over, ook de balken, die toch identiek zijn. */
 ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.18s; animation-timing-function: ease-out; }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
