@@ -72,6 +72,14 @@ def _cost_r(row: dict, round_trip_cost_pct: float) -> float:
     return round_trip_cost_pct / stop_pct if stop_pct else 0.0
 
 
+def net_signal_r(row: dict, round_trip_cost_pct: float) -> Optional[float]:
+    """R na kosten van een signaal, zoals Bewijs het rekent; None zolang de uitkomst niet vaststaat (take of stop)."""
+    gross = signal_r(row)
+    if gross is None or not row.get("price"):
+        return None
+    return gross - _cost_r(row, round_trip_cost_pct)
+
+
 def _status(n_resolved: int, avg_net: Optional[float]) -> str:
     if n_resolved < MIN_FOR_STATUS or avg_net is None:
         return "te_weinig"
