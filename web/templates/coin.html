@@ -1,32 +1,27 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 {% block title %}{{ symbol }} — HesPulse{% endblock %}
+{% block page_title %}{{ symbol }}{% endblock %}
 {% block content %}
 
+{# De koers is het grote getal; coin.js-script onderaan werkt #coin-price elke 10 seconden bij. #}
 <div class="coin-head coin-masthead">
-  <div class="coin-masthead-top">
-    <h2>{{ symbol }}</h2>
-    <div class="coin-price" aria-live="off"><span class="coin-price-label">Koers</span><span class="coin-price-number" id="coin-price" data-symbol="{{ symbol }}">{% if price %}{{ "%.4f"|format(price) if price < 100 else "{:,.2f}".format(price).replace(",", " ") }}{% else %}-{% endif %}</span></div>
-  </div>
+{{ macros.headline("Koers", ("%.4f"|format(price) if price < 100 else "{:,.2f}".format(price).replace(",", " ")) if price else "-", live_quote|upper,
+     spark_coin=symbol, delta_coin=symbol, attrs={"id": "coin-price", "data-symbol": symbol}) }}
+{{ macros.keylines([
+  {"label": "Signalen deze week", "value": recent_activity.count if recent_activity else 0},
+  {"label": "Hoog vertrouwen", "value": recent_activity.hoog if recent_activity else 0},
+  {"label": "Notitie", "value": (coin_note|truncate(24)) if coin_note else "-"}], "cn") }}
+  {% if is_muted %}
   <div class="coin-head-meta">
-    {% if recent_activity %}
-    <span class="muted">
-      {% if recent_activity.count > 0 %}
-        {{ recent_activity.count }} {{ "signaal" if recent_activity.count == 1 else "signalen" }} deze week{% if recent_activity.hoog > 0 %}, {{ recent_activity.hoog }} hoog vertrouwen{% endif %}
-      {% else %}
-        Geen signalen deze week, laatste op {{ recent_activity.last_at[:10] }}
-      {% endif %}
-    </span>
-    {% endif %}
-    {% if is_muted %}
     <span class="muted-pill">
       🔕 Meldingen uit
       <form action="/coins/{{ symbol }}/unmute" method="post" class="inline-form">
         <button type="submit" class="link-button">weer aanzetten</button>
       </form>
     </span>
-    {% endif %}
   </div>
+  {% endif %}
   {% if coin_note %}
   <p class="coin-note-banner">📌 {{ coin_note }}</p>
   {% endif %}
@@ -120,14 +115,14 @@
       {% endif %}
     </div>
 
-    <div class="card">
+    <div class="flat">
       <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 2-3 4"/><line x1="12" y1="17" x2="12.01" y2="17"/><circle cx="12" cy="12" r="10"/></svg>{% if primary.trade_type == 'swing' %}Waarom dit bewaakte niveau{% elif primary.trade_type == 'patroon' %}Waarom dit patroon{% elif primary.trade_type == 'smc' %}Waarom deze SMC-setup{% else %}Waarom {{ primary.confidence.split(" ")[0] }} ({{ primary.reason.count("✓") }}/{{ primary.reason.split(" | ")|length }}){% endif %}</h3>
       {% if primary.plain_explanation %}<p class="plain-explanation">{{ primary.plain_explanation }}</p>{% endif %}
       {{ macros.reason_factors(primary, p_style="margin: 0 0 var(--space-3); font-size: var(--text-base);") }}
       <p class="muted advice-text" style="margin-top: var(--space-4);">{{ primary.advice }}</p>
     </div>
     {% else %}
-    <div class="card">
+    <div class="flat">
       <p class="muted">Nog geen signaal voor {{ symbol }}.</p>
     </div>
     {% endif %}

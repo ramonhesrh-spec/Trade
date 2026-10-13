@@ -1938,11 +1938,6 @@ main > section + section { margin-top: var(--space-10); }
 
 /* Coinpagina: de kop is het merk van de coin, daaronder het plan, de cijfers en dan pas de grafiek. */
 .coin-masthead { margin-bottom: var(--space-8); }
-.coin-masthead-top { display: flex; align-items: flex-end; justify-content: space-between; gap: var(--space-8); flex-wrap: wrap; }
-.coin-masthead h2 { font-size: clamp(56px, 16vw, 96px); line-height: 0.8; margin: 0; color: var(--text); }
-.coin-price { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-2); }
-.coin-price-label { font-family: var(--mono); font-size: var(--text-2xs); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
-.coin-price-number { font-family: var(--display); font-weight: 800; font-size: clamp(30px, 8vw, 44px); line-height: 1; color: var(--accent); letter-spacing: 0.01em; }
 .coin-masthead .coin-head-meta { margin-top: var(--space-6); }
 .coin-structure { margin-bottom: var(--space-9); }
 .coin-structure .setup-card { max-width: 640px; }
@@ -2385,7 +2380,7 @@ main { position: relative; z-index: 1; }
 .hl-delta { margin: var(--space-3) 0 0; font-family: var(--mono); font-size: var(--text-md); font-weight: 600; color: var(--muted); }
 .hl-delta.pos, .hl-delta.is-up { color: var(--green); }
 .hl-delta.neg, .hl-delta.is-down { color: var(--red); }
-.hl-spark { flex: 0 1 132px; min-width: 88px; height: 44px; }
+.hl-spark { flex: 0 1 132px; min-width: 56px; height: 44px; }
 .hl-spark svg { display: block; width: 100%; height: 100%; }
 
 /* Kernregels */

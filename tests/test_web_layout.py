@@ -298,3 +298,30 @@ class ListPagesLayoutTests(BaseShellTests):
         for needle in ['class="ph"', "data-share-chart", "laatste 30 dagen", 'class="hl-num"', 'class="kl"', "ceo-headline"]:
             self.assertIn(needle, html, needle)
         self.assertNotIn("kans-outcome", html)
+
+
+class CoinLayoutTests(BaseShellTests):
+    def test_koers_is_het_grote_getal_met_live_haken(self):
+        user = repo.get_user_by_username("tester")
+        repo.add_coin_if_new("BTC", "crypto")
+        html = self.client.get("/coins/BTC").text
+        self.assertIn('class="hl-num"', html)
+        self.assertIn('id="coin-price"', html)
+        self.assertIn('data-symbol="BTC"', html)
+        for needle in ['class="ph"', 'data-spark-coin="BTC"', 'data-spark-chg="BTC"', 'class="kl"', "Signalen deze week", "Hoog vertrouwen", "Notitie",
+                       '<span class="hl-unit">USDT</span>']:
+            self.assertIn(needle, html, needle)
+        self.assertNotIn("coin-price-number", html)
+
+    def test_plan_en_risicobedrag_blijven(self):
+        import json
+        from datetime import datetime, timedelta, timezone
+        candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
+        plan = {"level": 100.0, "stop": 101.0, "risk_pct": 1.0, "targets": [98.0, 97.0], "targets_r": [2.0, 3.0], "candles": candles}
+        repo.insert_structure_setup({"coin": "BTC", "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
+            "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "x", "features": "{}", "state": "waiting",
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
+        self.client.post("/settings/risico", data={"risk_eur": "25"}, follow_redirects=False)
+        html = self.client.get("/coins/BTC").text
+        self.assertIn("Plan voor BTC", html)
+        self.assertIn("verlies je ongeveer € 25", html)
