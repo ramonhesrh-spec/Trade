@@ -192,3 +192,40 @@ class RadarLayoutTests(BaseShellTests):
         self.assertIn('class="kl"', html)
         self.assertIn("Doel gehaald zonder vulling", html)
         self.assertIn('id="fsearch"', html)
+
+
+class SetupsLayoutTests(BaseShellTests):
+    def seed_waiting(self):
+        import json
+        from datetime import datetime, timedelta, timezone
+        candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
+        plan = {"level": 100.0, "stop": 101.0, "risk_pct": 1.0, "targets": [98.0, 97.0], "targets_r": [2.0, 3.0], "candles": candles}
+        repo.insert_structure_setup({
+            "coin": "BTC", "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
+            "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "Schone range.", "features": "{}", "state": "waiting",
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
+        repo.insert_structure_setup({
+            "coin": "SOL", "direction": "long", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
+            "line_slope": 0.0, "atr": 0.5, "grade": "B", "reason": "Tweede range.", "features": "{}", "state": "waiting",
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
+        repo.insert_structure_setup({
+            "coin": "ETH", "direction": "long", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
+            "line_slope": 0.0, "atr": 0.5, "grade": "B", "reason": "Geen ruimte.", "features": "{}", "state": "geen_plan", "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": None})
+
+    def test_setups_in_de_nieuwe_indeling(self):
+        self.seed_waiting()
+        with db.session() as conn:
+            conn.execute("""INSERT INTO signals (message_id, coin, direction, category, confidence, technical_confirmed, price, stop_loss,
+                            take_profit, trade_type, created_at) VALUES (NULL, 'SOL', 'long', 'x', 'hoog', 1, 100, 99, 102, 'trend', ?)""", (db.now_iso(),))
+        html = self.client.get("/structuur").text
+        for needle in ['data-utabs="setups"', 'id="tab-klaarstaand"', 'id="tab-trend"', 'id="tab-eerder"', 'class="kl"',
+                       "Laatste 24 uur: 3 kansen gezien, 2 beoordeeld", "Alleen sterk en redelijk", "stack-toggle", 'class="mrow"',
+                       "Instap 100.0000, stop 99.0000, doel 102.0000", "Geen ruimte."]:
+            self.assertIn(needle, html, needle)
+        self.assertRegex(html, r'class="hl-num">2</span><span class="hl-unit">klaar')
+        self.assertNotIn("·</span>", html[html.index('id="tab-trend"'):html.index('id="tab-eerder"')])
+
+    def test_lege_staat_blijft(self):
+        html = self.client.get("/structuur").text
+        self.assertIn("Geen plan klaar", html)
+        self.assertRegex(html, r'class="hl-num">0</span><span class="hl-unit">klaar')

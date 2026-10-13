@@ -1,13 +1,26 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 {% block title %}Setups — HesPulse{% endblock %}
+{% block page_title %}Setups{% endblock %}
 {% block content %}
 
-<div class="page-head">
-  <h2>Setups</h2>
-</div>
-<p class="page-intro">Kansen die klaarstaan, met instap, stop en doelen. De score per soort staat op <a href="/bewijs">Bewijs</a>.</p>
+{{ macros.headline("Plannen die klaarstaan", structure_cards|length, "klaar",
+     delta=(("Laatste controle " ~ engine_minutes ~ " min geleden") if engine_on and engine_minutes is not none else "")) }}
 
+{{ macros.keylines([
+  {"label": "Gezien, 24 uur", "value": counts.total},
+  {"label": "Beoordeeld", "value": counts.goedgekeurd + counts.afgekeurd},
+  {"label": "Zonder plan", "value": counts.geen_plan}], "st") }}
+
+{{ macros.utabs([
+  {"key": "klaarstaand", "label": "Klaarstaand", "href": "#tab-klaarstaand", "count": structure_cards|length},
+  {"key": "trend", "label": "Trend", "href": "#tab-trend"},
+  {"key": "eerder", "label": "Eerder", "href": "#tab-eerder"}], "klaarstaand", "setups") }}
+
+<div class="ut-panels" data-utabs-panels="setups">
+
+<section id="tab-klaarstaand" data-utab-panel class="is-shown">
+<p class="page-intro">Kansen die klaarstaan, met instap, stop en doelen. De score per soort staat op <a href="/bewijs">Bewijs</a>.</p>
 <p class="engine-status {% if not engine_on %}is-off{% elif engine_minutes is none or engine_minutes > 15 %}is-stale{% endif %}">
   {% if is_ceo(user) %}
     {% if not engine_on %}De motor staat uit (STRUCTURE_ENABLED=false).
@@ -19,7 +32,6 @@
   Laatste 24 uur: {{ counts.total }} {{ "kans" if counts.total == 1 else "kansen" }} gezien, {{ counts.goedgekeurd + counts.afgekeurd }} beoordeeld, {{ counts.geen_plan }} zonder plan.
 </p>
 
-<section style="--i: 0">
   <h3 class="vd-section-title">Klaarstaand</h3>
   <p class="filter-chips">
     <a class="chip{% if not only_ab and not side %} is-active{% endif %}" href="/structuur">Alles</a>
@@ -47,7 +59,7 @@
   {% endif %}
 </section>
 
-<section style="--i: 1">
+<section id="tab-trend" data-utab-panel>
   <h3 class="vd-section-title">Trend</h3>
   <p class="engine-status {% if trend_minutes is none or trend_minutes > 15 %}is-stale{% endif %}">
     {% if trend_minutes is none %}Nog geen controle gedraaid.
@@ -59,35 +71,30 @@
   {% elif not trend_signals %}
   <p class="muted empty">Geen instap de laatste 24 uur.</p>
   {% else %}
-  <ul class="setup-history">
-    {% for s in trend_signals %}
-    <li class="setup-history-row">
-      <a class="radar-coin" href="/coins/{{ s.coin }}#signal-{{ s.id }}">{{ s.coin }}</a>
-      <span class="radar-dir radar-dir-{{ s.direction }}">{{ s.direction }}</span>
-      <span class="setup-history-state">Instap {{ "%.4f"|format(s.price) }} · stop {{ "%.4f"|format(s.stop_loss) }} · doel {{ "%.4f"|format(s.take_profit) }}</span>
-      <span class="muted setup-age">{{ s.auto_outcome or "open" }} · {{ s.created_at | age }}</span>
-    </li>
-    {% endfor %}
-  </ul>
+  {{ macros.row_head("Markten", "", "Stand") }}
+  {% for s in trend_signals %}
+  {{ macros.market_row(s.coin, s.coin, chip=s.direction, chip_tone=("pos" if s.direction == "long" else "neg"),
+       subtitle="Instap " ~ "%.4f"|format(s.price) ~ ", stop " ~ "%.4f"|format(s.stop_loss) ~ ", doel " ~ "%.4f"|format(s.take_profit),
+       right_text=(s.auto_outcome or "open"), href="/coins/" ~ s.coin ~ "#signal-" ~ s.id) }}
+  {% endfor %}
   {% endif %}
 </section>
 
-<section style="--i: 2">
+<section id="tab-eerder" data-utab-panel>
   <h3 class="vd-section-title">Eerder, laatste 7 dagen</h3>
   {% if not history %}
   <p class="muted empty">Nog geen afgeronde setups.</p>
   {% else %}
-  <ul class="setup-history">
-    {% for h in history %}
-    <li class="setup-history-row">
-      <span class="radar-coin">{{ h.coin }}</span>
-      <span class="radar-dir radar-dir-{{ h.direction }}">{{ h.direction }}</span>
-      <span class="setup-grade setup-grade-{{ (h.grade or 'c')|lower }}">{{ h.grade | grade_word }}</span>
-      <span class="setup-history-state">{{ h.state_label }}{% if h.state == "geen_plan" and h.reason %}<br><span class="muted">{{ h.reason }}</span>{% endif %}</span>
-      <span class="muted setup-age">{{ h.created_at | age }}</span>
-    </li>
-    {% endfor %}
-  </ul>
+  {{ macros.row_head("Markten", "", "Oordeel") }}
+  {% for h in history %}
+  <div class="mrow-wrap">
+    {{ macros.market_row(h.coin, h.coin, chip=h.direction, chip_tone=("pos" if h.direction == "long" else "neg"), subtitle=h.state_label,
+         right_text=(h.grade | grade_word), el="div") }}
+    {% if h.state == "geen_plan" and h.reason %}<p class="muted mrow-reason">{{ h.reason }}</p>{% endif %}
+  </div>
+  {% endfor %}
   {% endif %}
 </section>
+
+</div>
 {% endblock %}
