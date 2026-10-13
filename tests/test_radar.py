@@ -98,5 +98,22 @@ class RadarTests(unittest.TestCase):
         self.assertEqual(radar.in_zone_count([SETUP], {}), 0)                    # zonder koers niets beloven
 
 
+class SparkTests(unittest.TestCase):
+    def test_path_spans_the_box_oldest_left(self):
+        path = radar.spark_path([1.0, 3.0, 2.0], width=104, height=24)
+        self.assertEqual(path, "M2.0,22.0 L52.0,2.0 L102.0,12.0")
+
+    def test_flat_series_is_a_middle_line_and_short_series_is_empty(self):
+        self.assertEqual(radar.spark_path([5.0, 5.0], width=104, height=24), "M2.0,12.0 L102.0,12.0")
+        self.assertEqual(radar.spark_path([5.0]), "")
+
+    def test_spark_has_change_over_the_period(self):
+        s = radar.spark([100.0, 103.0, 102.0])
+        self.assertAlmostEqual(s["change_pct"], 2.0)
+        self.assertEqual(s["change_text"], "+2,0% 24u")
+        self.assertIsNone(radar.spark([100.0]))
+        self.assertIsNone(radar.spark([0.0, 1.0]))
+
+
 if __name__ == "__main__":
     unittest.main()

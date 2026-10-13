@@ -612,15 +612,9 @@ RADAR_CANDLE_FETCH = 200            # altijd evenveel ophalen, zodat elke `limit
 _candle_cache: dict[tuple[str, str], tuple[float, list]] = {}
 
 
-@app.get("/api/radar_candles/{coin}")
-async def api_radar_candles(coin: str, tf: str = "15m", limit: int = 96, user: dict = Depends(require_login)):
-    """Compacte candles voor de grafiek op een radar-kaart: {"coin", "tf", "candles": [[unix_s, open, high, low, close], ...]},
-    oudste eerst. Per (coin, tf) een minuut onthouden: elke kaart en elke ingelogde gebruiker vraagt erom, en dat mag niet
-    elke keer een Binance-aanroep worden. Mislukt het ophalen, dan geldt de laatste goede stand (ook al is die verlopen)."""
-    coin = coin.upper()
-    if not re.fullmatch(r"[A-Z0-9]{2,12}", coin) or tf not in RADAR_TIMEFRAMES:
-        raise HTTPException(status_code=422)
-    limit = max(10, min(limit, RADAR_CANDLE_FETCH))
+async def _cached_candles(coin: str, tf: str) -> Optional[list]:
+    """Candles per (coin, tf) uit de minuutcache, [[unix_s, open, high, low, close], ...] oudste eerst. Mislukt het ophalen, dan geldt de
+    laatste goede stand (ook al is die verlopen); None als er nog nooit een goede ophaal was."""
     hit = _candle_cache.get((coin, tf))
     if not hit or time.monotonic() - hit[0] >= RADAR_CANDLE_TTL_SECONDS:
         try:
@@ -630,8 +624,36 @@ async def api_radar_candles(coin: str, tf: str = "15m", limit: int = 96, user: d
             _candle_cache[(coin, tf)] = hit
         except Exception:
             if not hit:
-                raise HTTPException(status_code=503, detail="candles niet beschikbaar")
-    return {"coin": coin, "tf": tf, "candles": hit[1][-limit:]}
+                return None
+    return hit[1]
+
+
+@app.get("/api/radar_candles/{coin}")
+async def api_radar_candles(coin: str, tf: str = "15m", limit: int = 96, user: dict = Depends(require_login)):
+    """Compacte candles voor de grafiek op een radar-kaart: {"coin", "tf", "candles": [[unix_s, open, high, low, close], ...]},
+    oudste eerst. Per (coin, tf) een minuut onthouden (_cached_candles): elke kaart en elke ingelogde gebruiker vraagt erom."""
+    coin = coin.upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,12}", coin) or tf not in RADAR_TIMEFRAMES:
+        raise HTTPException(status_code=422)
+    limit = max(10, min(limit, RADAR_CANDLE_FETCH))
+    rows = await _cached_candles(coin, tf)
+    if rows is None:
+        raise HTTPException(status_code=503, detail="candles niet beschikbaar")
+    return {"coin": coin, "tf": tf, "candles": rows[-limit:]}
+
+
+@app.get("/api/sparklines")
+async def api_sparklines(coins: str = "", user: dict = Depends(require_login)):
+    """Minigrafiek van de laatste 24 uur per coin, voor spark.js: een aanroep voor alle kaarten, uit dezelfde candlecache als de grafieken
+    (1u-candles), dus nooit een beursaanroep per kaart. Een coin zonder data ontbreekt in het antwoord."""
+    active = {c["symbol"] for c in repo.list_coins()}
+    wanted = [c for c in dict.fromkeys(x.strip().upper() for x in coins.split(",")) if c in active]
+    out = {}
+    for coin, rows in zip(wanted, await asyncio.gather(*[_cached_candles(c, "1h") for c in wanted])):
+        item = radar.spark([r[4] for r in rows[-radar.SPARK_HOURS:]]) if rows else None
+        if item:
+            out[coin] = item
+    return out
 
 
 @app.get("/bewijs")

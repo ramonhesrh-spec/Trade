@@ -21,6 +21,8 @@
       <header class="radar-head">
         <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
         <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
+        <svg class="radar-spark" data-spark-coin="{{ c.coin }}" viewBox="0 0 120 28" preserveAspectRatio="none" role="img" aria-label="Koers {{ c.coin }}, laatste 24 uur"><path d=""/></svg>
+        <span class="radar-spark-chg" data-spark-chg="{{ c.coin }}"></span>
       </header>
       <div class="radar-state radar-state-{{ c.state or 'laden' }}" data-radar="state">{{ c.state_label }}</div>
       <div class="approach" role="img" aria-label="Koers op {{ "%.0f"|format(c.approach_pct or 0) }}% van de weg naar je instap"{% if c.approach_pct is none %} hidden{% endif %}>
@@ -78,6 +80,8 @@
       <header class="radar-head">
         <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
         <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
+        <svg class="radar-spark" data-spark-coin="{{ c.coin }}" viewBox="0 0 120 28" preserveAspectRatio="none" role="img" aria-label="Koers {{ c.coin }}, laatste 24 uur"><path d=""/></svg>
+        <span class="radar-spark-chg" data-spark-chg="{{ c.coin }}"></span>
       </header>
       <div class="radar-state radar-state-open" data-radar="state">{{ c.state_label }}</div>
       {% if c.chart %}{{ macros.level_chart(c.coin, c.chart) }}{% endif %}
@@ -114,4 +118,5 @@
 <script defer src="{{ asset('vendor/lightweight-charts-4.2.0.standalone.production.js') }}"></script>
 <script defer src="{{ asset('levelchart.js') }}"></script>
 <script defer src="/static/radar.js"></script>
+<script defer src="{{ asset('spark.js') }}"></script>
 {% endblock %}

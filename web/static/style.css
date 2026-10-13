@@ -2287,3 +2287,11 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
                 box-shadow: 0 0 0 2px var(--bg-elevated); transition: left 0.6s ease-out; }
 .approach-end { position: absolute; left: 100%; top: 1px; margin-left: 6px; font-family: var(--mono); font-size: var(--text-2xs); color: var(--accent); }
 @media (prefers-reduced-motion: reduce) { .approach-dot { transition: none; } }
+
+/* Minigrafiek van 24 uur in de kop van een radar-kaart (spark.js). Zonder data blijft het vak weg, geen lege doos. */
+.radar-spark { display: none; width: 72px; height: 22px; margin-left: auto; flex: none; }
+.radar-spark.has-data { display: block; }
+.radar-spark path { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.radar-spark.is-up path { stroke: var(--green); }
+.radar-spark.is-down path { stroke: var(--red); }
+.radar-spark-chg { font-family: var(--mono); font-size: var(--text-2xs); color: var(--muted); }

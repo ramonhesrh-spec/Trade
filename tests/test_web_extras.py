@@ -155,5 +155,41 @@ class PushBannerTest(WebCase):
         self.assertEqual(account.count("push-subscribe.js"), 1)            # anders koppelt de knop twee keer
 
 
+class SparklineRouteTest(WebCase):
+    def frame(self):
+        import pandas as pd
+        from datetime import datetime, timedelta, timezone
+        start = datetime(2026, 10, 1, tzinfo=timezone.utc)
+        return pd.DataFrame([{"timestamp": pd.Timestamp(start + timedelta(hours=i)), "open": 100.0 + i, "high": 101.0 + i, "low": 99.0 + i,
+                              "close": 100.0 + i, "volume": 1.0} for i in range(200)])
+
+    def test_one_fetch_per_coin_and_unknown_coins_are_ignored(self):
+        self.main._candle_cache.clear()
+        with mock.patch.object(self.main.exchange, "fetch_ohlcv", return_value=self.frame()) as fetch:
+            data = self.client.get("/api/sparklines?coins=BTC,ETH,BTC,NOPE").json()
+            self.client.get("/api/sparklines?coins=BTC")
+        self.assertEqual(set(data), {"BTC", "ETH"})
+        self.assertEqual(fetch.call_count, 2)                                 # de tweede aanroep komt uit de cache
+        self.assertTrue(data["BTC"]["path"].startswith("M"))
+        self.assertAlmostEqual(data["BTC"]["change_pct"], (299.0 - 276.0) / 276.0 * 100)     # laatste 24 slotkoersen
+
+    def test_candle_route_still_works_from_the_shared_cache(self):
+        self.main._candle_cache.clear()
+        with mock.patch.object(self.main.exchange, "fetch_ohlcv", return_value=self.frame()):
+            body = self.client.get("/api/radar_candles/BTC?tf=1h&limit=10").json()
+        self.assertEqual(len(body["candles"]), 10)
+
+    def test_failing_exchange_gives_no_sparkline_not_an_error(self):
+        self.main._candle_cache.clear()
+        with mock.patch.object(self.main.exchange, "fetch_ohlcv", side_effect=RuntimeError("storing")):
+            r = self.client.get("/api/sparklines?coins=BTC")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json(), {})
+
+    def test_requires_login(self):
+        self.client.cookies.clear()
+        self.assertIn(self.client.get("/api/sparklines?coins=BTC", follow_redirects=False).status_code, (302, 303, 401))
+
+
 if __name__ == "__main__":
     unittest.main()

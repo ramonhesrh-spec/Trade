@@ -79,3 +79,28 @@ def live_payload(cards: list[dict]) -> dict:
         }
         for c in cards
     }
+
+
+SPARK_HOURS = 24
+
+
+def spark_path(closes: list[float], width: float = 120, height: float = 28) -> str:
+    """SVG-pad van de slotkoersen (oudste eerst) in een vak van width bij height, met 2px marge. Leeg onder twee punten."""
+    if len(closes) < 2:
+        return ""
+    pad = 2.0
+    lo, hi = min(closes), max(closes)
+    step = (width - 2 * pad) / (len(closes) - 1)
+
+    def y(v: float) -> float:
+        return height / 2 if hi == lo else pad + (hi - v) / (hi - lo) * (height - 2 * pad)
+
+    return "M" + " L".join(f"{pad + i * step:.1f},{y(v):.1f}" for i, v in enumerate(closes))
+
+
+def spark(closes: list[float]) -> Optional[dict]:
+    """Wat spark.js per coin invult: het pad en de verandering over de periode."""
+    if len(closes) < 2 or not closes[0]:
+        return None
+    change = (closes[-1] - closes[0]) / closes[0] * 100
+    return {"path": spark_path(closes), "change_pct": change, "change_text": f"{change:+.1f}".replace(".", ",") + "% 24u"}
