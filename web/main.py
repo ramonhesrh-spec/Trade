@@ -517,6 +517,7 @@ async def _vandaag_context(user: dict) -> dict:
         "structure_cards": structure_cards,
         "plans_ready": sum(n for n, _ in open_parts), "open_parts": open_parts, "nearest": nearest,
         "scenarios_waiting": sum(1 for sc in scripts for x in sc["scenarios"] if x["state"] == "waiting"),
+        "budget": today.budget_ring(len(repo.list_recent_pushes(user["id"], (now - timedelta(hours=24)).isoformat())), user.get("push_budget")),
     }
 
 

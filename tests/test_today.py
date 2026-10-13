@@ -109,3 +109,19 @@ class NearestChanceTest(unittest.TestCase):
     def test_no_price_or_nothing_open_gives_none(self):
         self.assertIsNone(today.nearest_chance([{"coin": "BTC", "direction": "long", "steps": [{"dist": "-"}]}], [], []))
         self.assertIsNone(today.nearest_chance([], [], []))
+
+
+class BudgetRingTest(unittest.TestCase):
+    def test_default_budget_is_six(self):
+        ring = today.budget_ring(3, None)
+        self.assertEqual((ring["limit"], ring["offset"], ring["full"], ring["off"]), (6, 50.0, False, False))
+        self.assertEqual(ring["label"], "3 van 6 meldingen in 24 uur")
+
+    def test_full_and_over_budget_stays_a_full_ring(self):
+        ring = today.budget_ring(8, 6)
+        self.assertEqual((ring["offset"], ring["full"]), (0.0, True))
+
+    def test_zero_switches_the_budget_off(self):
+        ring = today.budget_ring(1, 0)
+        self.assertTrue(ring["off"])
+        self.assertEqual(ring["label"], "1 melding in 24 uur, geen budget")

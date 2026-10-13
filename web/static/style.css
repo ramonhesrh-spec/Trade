@@ -2295,3 +2295,11 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
 .radar-spark.is-up path { stroke: var(--green); }
 .radar-spark.is-down path { stroke: var(--red); }
 .radar-spark-chg { font-family: var(--mono); font-size: var(--text-2xs); color: var(--muted); }
+
+/* Budgetring op Vandaag (today.budget_ring): vol = het dagbudget is op, nieuwe kansen komen dan alleen op de meldingenpagina. */
+.vd-budget { display: inline-flex; align-items: center; gap: var(--space-4); color: var(--text-dim); font-size: var(--text-sm); text-decoration: none; }
+.vd-budget-ring { width: 30px; height: 30px; flex: none; transform: rotate(-90deg); }
+.vd-budget-ring circle { fill: none; stroke-width: 4; }
+.vd-budget-bg { stroke: var(--border-strong); }
+.vd-budget-fill { stroke: var(--accent); stroke-linecap: round; }
+.vd-budget.is-full .vd-budget-fill { stroke: var(--amber); }

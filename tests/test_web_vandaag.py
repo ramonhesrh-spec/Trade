@@ -36,6 +36,15 @@ class WebVandaagTests(unittest.TestCase):
         self.patch.stop()
         self.tmp.cleanup()
 
+    def test_ring_counts_chance_pushes_of_the_last_24_hours(self):
+        uid = repo.get_user_by_username("tester")["id"]
+        now = datetime.now(timezone.utc)
+        repo.record_push(uid, "BTC", "long", now.isoformat())
+        repo.record_push(uid, "ETH", "long", (now - timedelta(hours=30)).isoformat())     # buiten het venster
+        r = self.client.get("/vandaag")
+        self.assertIn("1 van 6 meldingen in 24 uur", r.text)
+        self.assertIn('stroke-dashoffset="83.3"', r.text)
+
     def test_setups_page_shows_waiting_structure_setup_with_chart(self):
         import json
         candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
