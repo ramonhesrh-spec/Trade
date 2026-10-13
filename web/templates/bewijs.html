@@ -65,6 +65,29 @@
 </section>
 {% endif %}
 
+{% if hours.total %}
+<section class="card" style="--i: 1">
+  <details class="stats-collapse js-accordion">
+    <summary class="stats-summary">
+      <span>Uurkaart</span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+    </summary>
+    <p class="muted">Gemiddelde R na kosten per weekdag en uur van de melding, Nederlandse tijd. Het kleine getal is het aantal afgeronde trades. Onder {{ hours.min_n }} trades blijft een vak grijs: te weinig om iets te zeggen.</p>
+    <p class="muted">Een vak is geen bewijs. Met 168 vakken springt er bij toeval altijd een paar groen of rood uit; zoek hier geen uren om op te handelen.</p>
+    <div class="hourmap-wrap">
+      <table class="hourmap">
+        <thead><tr><th></th>{% for h in range(24) %}<th scope="col">{{ "%02d"|format(h) }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for r in hours.rows %}
+          <tr><th scope="row">{{ r.day }}</th>{% for c in r.cells %}<td class="hm hm-{{ c.heat }}{% if c.weak %} is-weak{% endif %}" title="{{ c.title }}">{% if c.n %}{% if not c.weak %}<span class="hm-avg">{{ c.avg_short }}</span>{% endif %}<span class="hm-n">{{ c.n }}</span>{% endif %}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+</section>
+{% endif %}
+
 {% if not summary %}
 <section class="card" style="--i: 0"><p class="muted empty">Nog geen signalen om te meten.</p></section>
 {% else %}

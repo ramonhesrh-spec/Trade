@@ -205,5 +205,17 @@ class BewijsCurveTest(WebCase):
         self.assertIn("1 open of vervallen, niet meegeteld", r.text)
 
 
+class BewijsHourGridTest(WebCase):
+    def test_hour_grid_section(self):
+        with db.session() as conn:
+            conn.execute("""INSERT INTO signals (message_id, coin, direction, category, confidence, technical_confirmed, price, stop_loss,
+                            take_profit, trade_type, auto_outcome, auto_outcome_at, created_at)
+                            VALUES (NULL, 'BTC', 'long', 'x', 'hoog', 1, 100, 99, 102, 'smc', 'take_profit', ?, ?)""", (db.now_iso(), db.now_iso()))
+        r = self.client.get("/bewijs")
+        self.assertIn("Uurkaart", r.text)
+        self.assertIn('class="hourmap"', r.text)
+        self.assertIn("is-weak", r.text)                                       # één trade is te weinig voor kleur
+
+
 if __name__ == "__main__":
     unittest.main()

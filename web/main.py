@@ -679,6 +679,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
         c["svg"] = Markup(track_record.equity_svg(c["cumulative"], c["drawdown"]))
     return templates.TemplateResponse(request, "bewijs.html", {
         "curves": curves,
+        "hours": track_record.hour_grid(rows, config.TRACK_RECORD_COST_PCT),
         "rule_statuses": rule_statuses, "other_rules": other_rules, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
         "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,
         "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,

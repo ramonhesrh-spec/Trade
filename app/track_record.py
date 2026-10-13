@@ -7,6 +7,7 @@ from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 RECENT_DAYS = 90
 MIN_FOR_STATUS = 30
@@ -361,6 +362,46 @@ def equity_svg(cumulative: list[float], drawdown: list[float], width: int = 320,
             f'<polygon class="equity-dd" points="{shade}"/>'
             f'<line class="equity-zero" x1="{pad}" x2="{width - pad}" y1="{zero:.1f}" y2="{zero:.1f}"/>'
             f'<polyline class="equity-line" points="{line}"/></svg>')
+
+
+HOUR_GRID_MIN_N = 5
+WEEKDAYS_SHORT = ("ma", "di", "wo", "do", "vr", "za", "zo")
+
+
+def _heat(avg: float) -> str:
+    if avg >= 0.5:
+        return "pos2"
+    if avg > 0:
+        return "pos1"
+    if avg <= -0.5:
+        return "neg2"
+    return "neg1" if avg < 0 else "nul"
+
+
+def hour_grid(rows: list[dict], round_trip_cost_pct: float, tz=None, min_n: int = HOUR_GRID_MIN_N) -> dict:
+    """Gemiddelde netto R per weekdag en uur van de melding (Nederlandse tijd), alleen afgeronde trades (take of stop). Een vak met minder
+    dan min_n trades krijgt geen kleur: een paar trades per uur zeggen niets, en een fel vak zou dat wel suggereren."""
+    tz = tz or ZoneInfo("Europe/Amsterdam")
+    cells: dict[tuple[int, int], list[float]] = defaultdict(list)
+    for r in rows:
+        net = net_signal_r(r, round_trip_cost_pct)
+        if net is None:
+            continue
+        at = _parse(r["created_at"]).astimezone(tz)
+        cells[(at.weekday(), at.hour)].append(net)
+    out_rows = []
+    for d, day in enumerate(WEEKDAYS_SHORT):
+        row_cells = []
+        for h in range(24):
+            vals = cells.get((d, h), [])
+            avg = sum(vals) / len(vals) if vals else None
+            weak = len(vals) < min_n
+            title = f"{day} {h:02d}:00, {len(vals)} {'trade' if len(vals) == 1 else 'trades'}" + (f", gemiddeld {fmt_r(avg)}" if avg is not None else "")
+            row_cells.append({"hour": h, "n": len(vals), "avg": avg, "weak": weak,
+                              "heat": "zwak" if weak or avg is None else _heat(avg),
+                              "avg_short": f"{avg:+.1f}".replace(".", ",") if avg is not None else "", "title": title})
+        out_rows.append({"day": day, "cells": row_cells})
+    return {"rows": out_rows, "min_n": min_n, "total": sum(len(v) for v in cells.values())}
 
 
 def sparkline_svg(values: list[float], width: int = 300, height: int = 56) -> str:

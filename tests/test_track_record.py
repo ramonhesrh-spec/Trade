@@ -139,6 +139,28 @@ class EquityTests(unittest.TestCase):
         self.assertEqual(tr.equity_svg([], []), "")
 
 
+class HourGridTests(unittest.TestCase):
+    def test_cells_by_local_weekday_and_hour_with_weak_cells(self):
+        monday_14 = "2026-10-05T12:10:00+00:00"                                  # maandag 14:10 in Amsterdam (zomertijd)
+        tuesday_9 = "2026-10-06T07:00:00+00:00"
+        rows = [row(outcome="take_profit", created=monday_14)] * 4 + [row(outcome="stop_loss", created=monday_14)] \
+            + [row(outcome="stop_loss", created=tuesday_9)] * 2 + [row(outcome=None, created=tuesday_9)]
+        grid = tr.hour_grid(rows, 0.0)
+        mon = grid["rows"][0]["cells"][14]
+        self.assertEqual((grid["rows"][0]["day"], mon["n"], mon["weak"]), ("ma", 5, False))
+        self.assertAlmostEqual(mon["avg"], (4 * 2.0 - 1.0) / 5)
+        self.assertEqual(mon["heat"], "pos2")
+        self.assertEqual(mon["avg_short"], "+1,4")
+        tue = grid["rows"][1]["cells"][9]
+        self.assertEqual((tue["n"], tue["weak"], tue["heat"]), (2, True, "zwak"))     # open signaal telt niet, te weinig voor kleur
+        self.assertIn("2 trades", tue["title"])
+        self.assertEqual(grid["total"], 7)
+        self.assertEqual(grid["rows"][2]["cells"][0]["n"], 0)
+
+    def test_heat_levels(self):
+        self.assertEqual([tr._heat(v) for v in (0.6, 0.1, 0.0, -0.1, -0.7)], ["pos2", "pos1", "nul", "neg1", "neg2"])
+
+
 if __name__ == "__main__":
     unittest.main()
 

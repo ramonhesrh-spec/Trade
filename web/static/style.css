@@ -2314,3 +2314,16 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
 .equity-down .equity-line { stroke: var(--red); }
 .equity-dd { fill: var(--red-bg); stroke: none; }
 .equity-zero { stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }
+
+/* Uurkaart op Bewijs (track_record.hour_grid). Scrolt binnen zijn kader, nooit de pagina. Kleur alleen vanaf het minimum aantal trades. */
+.hourmap-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.hourmap { border-collapse: separate; border-spacing: 2px; font-family: var(--mono); font-size: var(--text-2xs); }
+.hourmap th { color: var(--muted); font-weight: 500; padding: 0 2px; }
+.hm { width: 30px; height: 30px; padding: 0; text-align: center; vertical-align: middle; border-radius: var(--radius-sm); background: var(--panel); color: var(--text-dim); line-height: 1.1; }
+.hm span { display: block; }
+.hm-n { color: var(--muted); font-size: 9px; }
+.hm-pos1 { background: rgba(51, 214, 159, 0.18); }
+.hm-pos2 { background: rgba(51, 214, 159, 0.38); color: var(--text); }
+.hm-neg1 { background: rgba(242, 104, 92, 0.18); }
+.hm-neg2 { background: rgba(242, 104, 92, 0.38); color: var(--text); }
+.hm.is-weak { background: var(--panel); opacity: 0.6; }
