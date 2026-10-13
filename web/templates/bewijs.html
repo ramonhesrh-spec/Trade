@@ -46,7 +46,7 @@
 {% endif %}
 
 {% if curves %}
-<section class="card" style="--i: 0">
+<section class="card" style="--i: 1">
   <details class="stats-collapse js-accordion">
     <summary class="stats-summary">
       <span>Resultaatcurve per soort</span>
@@ -56,7 +56,7 @@
     <div class="equity-grid">
       {% for c in curves %}
       <figure class="equity-card">
-        <figcaption><strong>{{ c.label }}</strong><span class="muted">{{ c.n }} afgerond, {{ c.total_text }}, grootste terugval {{ c.dd_text }}. {{ c.excluded }} open of vervallen, niet meegeteld.</span></figcaption>
+        <figcaption><strong>{{ c.label }}</strong><span class="muted">{{ c.n }} afgerond, {{ c.total_text }}, {{ c.dd_line }}. Alle bronnen samen. {{ c.excluded }} open of vervallen, niet meegeteld.</span></figcaption>
         {{ c.svg }}
       </figure>
       {% endfor %}
@@ -66,7 +66,7 @@
 {% endif %}
 
 {% if hours.total %}
-<section class="card" style="--i: 1">
+<section class="card" style="--i: 2">
   <details class="stats-collapse js-accordion">
     <summary class="stats-summary">
       <span>Uurkaart</span>
@@ -89,9 +89,9 @@
 {% endif %}
 
 {% if not summary %}
-<section class="card" style="--i: 0"><p class="muted empty">Nog geen signalen om te meten.</p></section>
+<section class="card" style="--i: 3"><p class="muted empty">Nog geen signalen om te meten.</p></section>
 {% else %}
-<section class="proof-grid" style="--i: 0">
+<section class="proof-grid" style="--i: 3">
   {% for e in summary %}
   <article class="proof-card proof-{{ e.status }}{% if e.source == 'alles' %} proof-total{% endif %}">
     <header class="proof-head">
@@ -125,7 +125,7 @@
   {% endfor %}
 </section>
 
-<section class="card" style="--i: 1">
+<section class="card" style="--i: 4">
   <h3>Zo lees je dit</h3>
   <div class="proof-notes">
     <p><strong>R</strong> is de winst als veelvoud van het risico. Een take van 2 keer de stop is +2R, een stop is -1R. Een gemiddelde van +0,20R betekent dat een trade gemiddeld een vijfde van het risico opleverde.</p>

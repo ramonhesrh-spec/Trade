@@ -334,7 +334,8 @@ def equity_curves(rows: list[dict], round_trip_cost_pct: float) -> list[dict]:
             drawdown.append(running - peak)
         out.append({"trade_type": trade_type, "label": TYPE_LABELS.get(trade_type, trade_type), "n": len(net), "cumulative": cumulative,
                     "drawdown": drawdown, "max_drawdown": min(drawdown), "total": running, "excluded": len(items) - len(net),
-                    "total_text": fmt_r(running), "dd_text": fmt_r(min(drawdown))})
+                    "total_text": fmt_r(running), "dd_text": fmt_r(min(drawdown)),
+                    "dd_line": "geen terugval" if min(drawdown) == 0 else f"grootste terugval {fmt_r(min(drawdown))}"})
     out.sort(key=lambda c: -c["n"])
     return out
 
@@ -369,6 +370,8 @@ WEEKDAYS_SHORT = ("ma", "di", "wo", "do", "vr", "za", "zo")
 
 
 def _heat(avg: float) -> str:
+    """Klasse van de afgeronde waarde die in het vak staat, zodat tekst en kleur nooit verschillen (+0,0 is neutraal, ook bij +0,04)."""
+    avg = round(avg, 1)
     if avg >= 0.5:
         return "pos2"
     if avg > 0:
@@ -399,7 +402,7 @@ def hour_grid(rows: list[dict], round_trip_cost_pct: float, tz=None, min_n: int 
             title = f"{day} {h:02d}:00, {len(vals)} {'trade' if len(vals) == 1 else 'trades'}" + (f", gemiddeld {fmt_r(avg)}" if avg is not None else "")
             row_cells.append({"hour": h, "n": len(vals), "avg": avg, "weak": weak,
                               "heat": "zwak" if weak or avg is None else _heat(avg),
-                              "avg_short": f"{avg:+.1f}".replace(".", ",") if avg is not None else "", "title": title})
+                              "avg_short": ("0,0" if round(avg, 1) == 0 else f"{avg:+.1f}".replace(".", ",")) if avg is not None else "", "title": title})
         out_rows.append({"day": day, "cells": row_cells})
     return {"rows": out_rows, "min_n": min_n, "total": sum(len(v) for v in cells.values())}
 

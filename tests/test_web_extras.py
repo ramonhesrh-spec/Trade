@@ -257,6 +257,28 @@ class BewijsCurveTest(WebCase):
         self.assertIn("1 open of vervallen, niet meegeteld", r.text)
 
 
+class BewijsViewerTest(WebCase):
+    def seed(self):
+        with db.session() as conn:
+            for trade_type in ("smc", "don55_trend"):
+                conn.execute("""INSERT INTO signals (message_id, coin, direction, category, confidence, technical_confirmed, price, stop_loss,
+                                take_profit, trade_type, auto_outcome, auto_outcome_at, created_at)
+                                VALUES (NULL, 'BTC', 'long', 'x', 'hoog', 1, 100, 99, 102, ?, 'stop_loss', ?, ?)""", (trade_type, db.now_iso(), db.now_iso()))
+
+    def test_a_student_sees_no_trial_engine_in_curves_or_hour_grid(self):
+        self.seed()
+        self.main._ceo_cache.update(at=0.0, id=None)
+        student = repo.create_user("leerling", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        label = self.main.track_record.TYPE_LABELS.get("don55_trend", "don55_trend")
+        ceo_page = self.client.get("/bewijs").text
+        self.assertIn(f"<strong>{label}</strong>", ceo_page)                     # de CEO ziet de proefmotor wel
+        self.client.cookies.set(self.main.SESSION_COOKIE, security.create_session_token(student))
+        page = self.client.get("/bewijs").text
+        self.assertNotIn(f"<strong>{label}</strong>", page)
+        rows = self.main.report_rows(repo.get_user(student))
+        self.assertEqual(self.main.track_record.hour_grid(rows, 0.0)["total"], 1)
+
+
 class BewijsHourGridTest(WebCase):
     def test_hour_grid_section(self):
         with db.session() as conn:

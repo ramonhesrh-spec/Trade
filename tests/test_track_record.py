@@ -124,6 +124,16 @@ class EquityTests(unittest.TestCase):
         self.assertEqual(smc["total_text"], "+2,00R")
         self.assertEqual(curves[1]["drawdown"], [-1.0])                         # een eerste verlies is al terugval vanaf 0
 
+    def test_curve_total_equals_live_net_r_sum(self):
+        rows = self.rows()
+        curve = tr.equity_curves(rows, 0.1)[0]
+        self.assertAlmostEqual(curve["total"], sum(tr.live_net_r(rows, "smc", 0.1)))
+
+    def test_no_drawdown_is_worded_as_such(self):
+        only_wins = tr.equity_curves([row(outcome="take_profit"), row(outcome="take_profit")], 0.0)[0]
+        self.assertEqual(only_wins["dd_line"], "geen terugval")
+        self.assertEqual(tr.equity_curves(self.rows(), 0.0)[0]["dd_line"], "grootste terugval -2,00R")
+
     def test_costs_come_off_every_trade(self):
         smc = tr.equity_curves(self.rows()[:1], 0.1)[0]
         self.assertAlmostEqual(smc["cumulative"][0], 2.0 - 0.1 / 1.0)            # stop op 1% afstand: 0,1R kosten
@@ -156,6 +166,24 @@ class HourGridTests(unittest.TestCase):
         self.assertIn("2 trades", tue["title"])
         self.assertEqual(grid["total"], 7)
         self.assertEqual(grid["rows"][2]["cells"][0]["n"], 0)
+
+    def test_heat_follows_the_rounded_value_shown(self):
+        self.assertEqual(tr._heat(0.04), "nul")                                 # +0,0 in het vak, dus geen groen
+        self.assertEqual(tr._heat(-0.04), "nul")
+        self.assertEqual(tr._heat(0.46), "pos2")                                # toont +0,5
+
+    def test_rounded_zero_has_no_sign(self):
+        rows = [row(outcome="take_profit", take=100.04, created="2026-10-05T12:10:00+00:00")] * 5       # +0,04R per trade
+        cell = tr.hour_grid(rows, 0.0)["rows"][0]["cells"][14]
+        self.assertEqual((cell["avg_short"], cell["heat"]), ("0,0", "nul"))
+        neg = tr.hour_grid([row(outcome="take_profit", take=99.96, created="2026-10-05T12:10:00+00:00")] * 5, 0.0)["rows"][0]["cells"][14]
+        self.assertEqual(neg["avg_short"], "0,0")
+
+    def test_dst_boundary_lands_on_local_sunday_hour(self):
+        # 2026-10-25 00:30 UTC is nog zomertijd (CEST, +2): zondag 02:30 in Amsterdam, het uur dat bij het terugzetten twee keer voorkomt.
+        grid = tr.hour_grid([row(created="2026-10-25T00:30:00+00:00")] * 5, 0.0)
+        self.assertEqual(grid["rows"][6]["cells"][2]["n"], 5)
+        self.assertEqual(grid["rows"][6]["day"], "zo")
 
     def test_heat_levels(self):
         self.assertEqual([tr._heat(v) for v in (0.6, 0.1, 0.0, -0.1, -0.7)], ["pos2", "pos1", "nul", "neg1", "neg2"])
