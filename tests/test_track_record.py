@@ -230,6 +230,26 @@ class WeekSummaryTests(unittest.TestCase):
         self.assertEqual((w["best"]["coin"], w["worst"]["coin"]), ("BTC", "ETH"))
 
 
+class WeekSummaryLocalDaysTest(unittest.TestCase):
+    def test_vandaag_is_de_nederlandse_dag_ook_na_middernacht_nl(self):
+        now = datetime(2026, 10, 13, 22, 30, tzinfo=timezone.utc)     # 00:30 NL op 14 oktober
+        win = dict(row(created="2026-10-13T22:00:00+00:00", done="2026-10-13T22:10:00+00:00"), id=1, coin="BTC", direction="long")   # 00:10 NL
+        late = dict(row(created="2026-10-13T20:00:00+00:00", done="2026-10-13T21:50:00+00:00"), id=2, coin="ETH", direction="long")  # 23:50 NL, gisteren
+        w = tr.week_summary([win, late], 0.0, now)
+        self.assertEqual(str(w["days"][-1][0]), "2026-10-14")
+        self.assertAlmostEqual(w["days"][-1][1], 2.0)                   # alleen de winst van na middernacht NL
+        self.assertAlmostEqual(w["days"][-2][1], 2.0)
+
+    def test_totaal_en_dagstaven_tellen_dezelfde_trades_op_de_vensterrand(self):
+        now = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)      # NL-dagen 7 t/m 13 oktober
+        edge_in = dict(row(created="2026-10-06T22:00:00+00:00", done="2026-10-06T23:00:00+00:00"), id=1, coin="BTC", direction="long")   # 00:00 NL op 7 oktober
+        edge_out = dict(row(created="2026-10-06T21:59:00+00:00", done="2026-10-06T23:00:00+00:00"), id=2, coin="ETH", direction="long")  # 23:59 NL op 6 oktober
+        w = tr.week_summary([edge_in, edge_out], 0.0, now)
+        self.assertEqual((w["signals"], w["resolved"]), (1, 1))
+        self.assertAlmostEqual(w["net_r"], sum(v for _, v in w["days"]))
+        self.assertAlmostEqual(w["days"][0][1], w["net_r"])
+
+
 class RuleStatusTest(unittest.TestCase):
     PASS = {"lab_passes": True}
 

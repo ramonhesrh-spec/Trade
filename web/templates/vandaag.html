@@ -31,9 +31,10 @@
 <div class="ut-panels" data-utabs-panels="vandaag">
 
 <section id="tab-kansen" data-utab-panel class="is-shown">
+{% if open_parts %}<p class="muted vd-fine">{{ plans_ready }} open: {{ parts|trim }}. Hier staan de nieuwste plannen en scripts, de rest staat op <a href="/smc">Radar</a> en <a href="/structuur">Setups</a>.</p>{% endif %}
 {% if structure_cards %}
 <div class="flat">
-  <h3>Getekende plannen <a class="vd-more" href="/structuur">alle setups</a></h3>
+  <h3>Getekende plannen <a class="vd-more" href="/structuur">{% if structure_cards|length > 2 %}alle {{ structure_cards|length }} setups{% else %}alle setups{% endif %}</a></h3>
   <div class="setup-grid">
     {% for c in structure_cards[:2] %}{{ macros.setup_card(c, user.risk_per_trade_eur) }}{% endfor %}
   </div>

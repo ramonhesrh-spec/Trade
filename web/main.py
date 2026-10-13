@@ -107,6 +107,12 @@ def proof(trade_type: str) -> dict:
 templates.env.globals["proof"] = proof
 templates.env.globals["asset"] = asset
 templates.env.filters["grade_word"] = lambda g: {"A": "Sterk", "B": "Redelijk", "C": "Zwak"}.get(g, "Geen oordeel")
+def _nl_price(v: float) -> str:
+    """Zelfde notatie als de live koers in coin.html (toLocaleString nl-NL): punt voor duizendtallen, komma voor decimalen."""
+    return f"{v:.4f}" .replace(".", ",") if v < 100 else f"{v:,.2f}".replace(",", "\0").replace(".", ",").replace("\0", ".")
+
+
+templates.env.filters["nl_price"] = _nl_price
 templates.env.filters["outcome_word"] = lambda o: kans_view.OUTCOME_TEXT.get(o, "Open")
 templates.env.globals["fmt_price"] = today.fmt_price
 templates.env.globals["is_ceo"] = lambda user: is_ceo(user)

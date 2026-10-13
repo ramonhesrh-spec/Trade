@@ -6,12 +6,12 @@
 
 {# De koers is het grote getal; coin.js-script onderaan werkt #coin-price elke 10 seconden bij. #}
 <div class="coin-head coin-masthead">
-{{ macros.headline("Koers", ("%.4f"|format(price) if price < 100 else "{:,.2f}".format(price).replace(",", " ")) if price else "-", live_quote|upper,
+{{ macros.headline("Koers", (price|nl_price) if price else "-", live_quote|upper,
      spark_coin=symbol, delta_coin=symbol, attrs={"id": "coin-price", "data-symbol": symbol}) }}
 {{ macros.keylines([
   {"label": "Signalen deze week", "value": recent_activity.count if recent_activity else 0},
-  {"label": "Hoog vertrouwen", "value": recent_activity.hoog if recent_activity else 0},
-  {"label": "Notitie", "value": (coin_note|truncate(24)) if coin_note else "-"}], "cn") }}
+  {"label": "Hoog vertrouwen", "value": recent_activity.hoog if recent_activity else 0}]
+  + ([] if coin_note else [{"label": "Notitie", "value": "-"}]), "cn") }}
   {% if is_muted %}
   <div class="coin-head-meta">
     <span class="muted-pill">

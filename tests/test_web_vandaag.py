@@ -80,6 +80,19 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("Reden A.", only)
         self.assertNotIn("Reden C.", only)
 
+    def test_kansen_tab_telt_wat_het_paneel_toont_of_zegt_waar_de_rest_staat(self):
+        import json
+        candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
+        plan = {"level": 100.0, "stop": 101.0, "risk_pct": 1.0, "targets": [98.0, 97.0], "targets_r": [2.0, 3.0], "candles": candles}
+        for coin in ("BTC", "ETH", "SOL"):
+            repo.insert_structure_setup({
+                "coin": coin, "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
+                "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "Reden.", "features": "{}", "state": "waiting",
+                "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
+        text = self.client.get("/vandaag").text
+        self.assertIn("3 open:", text)
+        self.assertIn("alle 3 setups", text)                              # het paneel toont er twee, de koptekst zegt het echte aantal
+
     def test_tabbar_filters_and_empty_state_invite_the_user(self):
         text = self.client.get("/vandaag").text
         self.assertIn('class="tabbar"', text)                              # onderbalk met tabs voor de telefoon

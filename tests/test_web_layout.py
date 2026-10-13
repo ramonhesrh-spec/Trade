@@ -313,6 +313,22 @@ class CoinLayoutTests(BaseShellTests):
             self.assertIn(needle, html, needle)
         self.assertNotIn("coin-price-number", html)
 
+    def test_serverkoers_heeft_dezelfde_nl_notatie_als_de_live_js(self):
+        repo.add_coin_if_new("BTC", "crypto")
+        with mock.patch.object(main.exchange, "fetch_last_price", return_value=67002.99):
+            html = self.client.get("/coins/BTC").text
+        self.assertIn("67.002,99", html)
+        self.assertNotIn("67 002.99", html)
+        self.assertEqual([main._nl_price(v) for v in (0.1632, 99.5, 100.0, 1234567.891)], ["0,1632", "99,5000", "100,00", "1.234.567,89"])
+
+    def test_notitie_staat_niet_dubbel_als_de_banner_zichtbaar_is(self):
+        repo.add_coin_if_new("BTC", "crypto")
+        self.assertIn("<dt>Notitie</dt>", self.client.get("/coins/BTC").text)
+        repo.set_coin_note("BTC", "Wachten op de retest")
+        html = self.client.get("/coins/BTC").text
+        self.assertIn("coin-note-banner", html)
+        self.assertNotIn("<dt>Notitie</dt>", html)
+
     def test_plan_en_risicobedrag_blijven(self):
         import json
         from datetime import datetime, timedelta, timezone
