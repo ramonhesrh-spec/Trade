@@ -25,13 +25,10 @@
     } catch (e) {}
   }
 
-  async function subscribe() {
-    const statusEl = document.getElementById("push-subscribe-status");
+  // Ook gebruikt door de banner (push-banner.js): een aanmeldroute, zodat een fix voor iOS op beide plekken geldt.
+  async function subscribe(onStatus) {
     const showStatus = function (text) {
-      if (statusEl) {
-        statusEl.hidden = false;
-        statusEl.textContent = text;
-      }
+      if (onStatus) onStatus(text);
       report(text);
     };
 
@@ -40,7 +37,7 @@
     try {
       if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
         showStatus("Pushmeldingen vereisen een geïnstalleerde app (voeg toe aan beginscherm).");
-        return;
+        return false;
       }
       report("serviceWorker + PushManager aanwezig");
 
@@ -48,7 +45,7 @@
       report("Notification.requestPermission() -> " + permission);
       if (permission !== "granted") {
         showStatus("Toestemming niet gegeven, geen pushmeldingen mogelijk.");
-        return;
+        return false;
       }
 
       const reg = await navigator.serviceWorker.ready;
@@ -71,18 +68,32 @@
         body: JSON.stringify(Object.assign(subscription.toJSON(), { device_label: navigator.userAgent.slice(0, 60) })),
       });
       report("api/push/subscribe response status: " + subResp.status);
+      if (!subResp.ok) {
+        showStatus("Kon meldingen niet opslaan, probeer het opnieuw.");
+        return false;
+      }
 
       showStatus("Meldingen staan aan op dit apparaat.");
+      return true;
     } catch (err) {
       showStatus("Kon meldingen niet aanzetten: " + err.name + ": " + err.message);
+      return false;
     }
   }
 
+  window.hesPushSubscribe = subscribe;
+
   const btn = document.getElementById("push-subscribe-btn");
   if (btn) {
-    btn.addEventListener("click", subscribe);
+    const statusEl = document.getElementById("push-subscribe-status");
+    btn.addEventListener("click", function () {
+      subscribe(function (text) {
+        if (statusEl) {
+          statusEl.hidden = false;
+          statusEl.textContent = text;
+        }
+      });
+    });
     report("push-subscribe.js geladen, knop-listener gekoppeld");
-  } else {
-    report("push-subscribe.js geladen, MAAR push-subscribe-btn niet gevonden in de pagina");
   }
 })();

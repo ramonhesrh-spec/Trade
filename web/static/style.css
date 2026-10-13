@@ -2271,3 +2271,10 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
 .price-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
 .price-dot[hidden] { display: none; }
 .price-dot.is-stale { background: var(--amber); }
+
+/* Banner als dit apparaat geen meldingen krijgt (push-banner.js). */
+.push-banner { display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap; margin: var(--space-4) 16px 0; padding: var(--space-5) var(--space-6);
+               background: var(--accent-bg); border: 1px solid var(--accent); border-radius: var(--radius); color: var(--text); font-size: var(--text-sm); }
+.push-banner[hidden] { display: none; }
+.push-banner span { flex: 1 1 200px; }
+.push-banner-close { background: none; border: 0; color: var(--muted); font-size: var(--text-lg); min-width: 32px; min-height: 32px; cursor: pointer; }

@@ -145,5 +145,15 @@ class PriceAgeTest(WebCase):
         self.assertIn("X-Price-Age", self.client.get("/api/vandaag").headers)
 
 
+class PushBannerTest(WebCase):
+    def test_banner_is_on_every_page_and_subscribe_code_loads_once(self):
+        r = self.client.get("/vandaag")
+        self.assertIn('id="push-banner"', r.text)
+        self.assertIn("Meldingen staan uit op dit apparaat.", r.text)
+        self.assertIn("push-banner.js", r.text)
+        account = self.client.get("/account").text
+        self.assertEqual(account.count("push-subscribe.js"), 1)            # anders koppelt de knop twee keer
+
+
 if __name__ == "__main__":
     unittest.main()
