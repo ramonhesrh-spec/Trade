@@ -356,3 +356,97 @@
   <a href="/bewijs">Bewijs</a>
 </p>
 {% endmacro %}
+
+{# ===== Indeling (plan 2026-10-13). Kop, groot getal, kernregels, tabs, rijen en zoekveld: elke pagina bouwt hiermee,
+   zodat de indeling op één plek bijgehouden wordt. ===== #}
+
+{# Kop van een pagina: avatar naar Account, titel die het Meer-blad opent (pagina wisselen), rechts de vaste knoppen uit base.html. #}
+{% macro page_header(user, title) %}
+<div class="ph">
+  <a class="ph-avatar" href="/account" aria-label="Mijn account">{{ (user.username or "?")[0]|upper }}</a>
+  <button type="button" class="ph-title" data-more-toggle aria-controls="more-sheet" aria-expanded="false">
+    <span>{{ title }}</span>
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+  </button>
+  {{ caller() if caller }}
+</div>
+{% endmacro %}
+
+{# Eén groot meetgetal. `spark` is kant-en-klare SVG (track_record.sparkline_svg) of leeg; `spark_coin` tekent de live koerslijn via
+   spark.js. `delta` is tekst met `tone` pos/neg; `delta_coin` laat spark.js de 24u-verandering invullen. `attrs` komt op het getal,
+   zodat live.js of coin.js het kan bijwerken (bv. {"id": "coin-price", "data-symbol": "BTC"}). #}
+{% macro headline(label, value, unit="", spark=none, spark_coin=none, delta=none, tone="", delta_coin=none, href=none, attrs={}) %}
+<section class="hl">
+  <div class="hl-text">
+    <p class="hl-label">{% if href %}<a href="{{ href }}">{{ label }}</a>{% else %}{{ label }}{% endif %}</p>
+    <p class="hl-value"><span class="hl-num"{{ attrs|xmlattr }}>{{ value }}</span>{% if unit %}<span class="hl-unit">{{ unit }}</span>{% endif %}</p>
+    {% if delta_coin %}<p class="hl-delta" data-spark-chg="{{ delta_coin }}"></p>
+    {% elif delta %}<p class="hl-delta {{ tone }}">{{ delta }}</p>{% endif %}
+  </div>
+  {% if spark %}<div class="hl-spark">{{ spark }}</div>
+  {% elif spark_coin %}<div class="hl-spark"><svg class="radar-spark" data-spark-coin="{{ spark_coin }}" viewBox="0 0 120 28" preserveAspectRatio="none" role="img" aria-label="Koers {{ spark_coin }}, laatste 24 uur"><path d=""/></svg></div>{% endif %}
+</section>
+{% endmacro %}
+
+{# Drie (of meer) kernregels. Elke regel: {"label", "value", "unit"?, "explain"?, "tone"?, "href"?, "html"?}. `html` is Markup die naast
+   de waarde komt (bv. de dagbudgetring). Een uitleg opent met het native popover-attribuut: geen JS nodig, en in een browser zonder
+   popover blijft het label gewoon tekst met een stippellijn. #}
+{% macro keylines(rows, id_prefix="kl") %}
+<dl class="kl">
+  {% for r in rows %}
+  <div class="kl-row">
+    <dt>{% if r.explain %}<button type="button" class="kl-term" popovertarget="{{ id_prefix }}-{{ loop.index }}">{{ r.label }}</button>
+        <span class="kl-pop" id="{{ id_prefix }}-{{ loop.index }}" popover>{{ r.explain }}</span>{% else %}{{ r.label }}{% endif %}</dt>
+    <dd class="{{ r.tone or '' }}">{% if r.href %}<a href="{{ r.href }}">{% endif %}{{ r.html or "" }}<span class="kl-num">{{ r.value }}</span>{% if r.unit %}<span class="kl-unit">{{ r.unit }}</span>{% endif %}{% if r.href %}</a>{% endif %}</dd>
+  </div>
+  {% endfor %}
+</dl>
+{% endmacro %}
+
+{# Tekst-tabs met streep. items: lijst van {"key", "label", "href", "count"?}. Een href die met # begint is een paneeltab (utabs.js
+   toont alleen dat paneel); anders is het een gewone link. `menu` is een lijst {"label", "href"} achter de drie puntjes. #}
+{% macro utabs(items, active, group="main", menu=none, menu_class="") %}
+<div class="ut" data-utabs="{{ group }}">
+  <div class="ut-list" role="tablist" aria-label="Onderdelen">
+    {% for t in items %}
+    <a class="ut-tab{% if t.key == active %} is-active{% endif %}" href="{{ t.href }}" role="tab" aria-selected="{{ 'true' if t.key == active else 'false' }}"
+       {% if t.href.startswith('#') %}aria-controls="{{ t.href[1:] }}"{% endif %}>{{ t.label }}{% if t.count %} <i class="ut-count">{{ t.count }}</i>{% endif %}</a>
+    {% endfor %}
+  </div>
+  {% if menu %}
+  <details class="ut-more">
+    <summary aria-label="Meer opties"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></summary>
+    <nav class="ut-menu {{ menu_class }}">{% for m in menu %}<a href="{{ m.href }}">{{ m.label }}</a>{% endfor %}</nav>
+  </details>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Kolomkoppen boven een lijst rijen, zoals "Markten / Prijs / 24 uur" in de referentie. #}
+{% macro row_head(left, mid="", right="") %}
+<div class="mrow-head" aria-hidden="true"><span>{{ left }}</span><span>{{ mid }}</span><span>{{ right }}</span></div>
+{% endmacro %}
+
+{# Eén rij per coin of soort. `el` is a, div of summary (in een <details> voor een uitklapbare rij). `price_coin` laat live.js de koers
+   bijwerken; `chg_coin` laat spark.js de 24u-verandering invullen. Zonder die twee tonen `price_text`/`right_text` vaste tekst. #}
+{% macro market_row(icon, title, chip=none, chip_tone="", subtitle="", price_coin=none, price_text="", chg_coin=none, right_text=none, right_tone="", href=none, el="a", attrs={}) %}
+<{{ el }} class="mrow"{% if el == "a" and href %} href="{{ href }}"{% endif %}{{ attrs|xmlattr }}>
+  <span class="mrow-icon" aria-hidden="true">{{ icon[:4] }}</span>
+  <span class="mrow-main">
+    <span class="mrow-title">{{ title }}{% if chip %} <i class="mrow-chip {{ chip_tone }}">{{ chip }}</i>{% endif %}</span>
+    {% if subtitle %}<span class="mrow-sub">{{ subtitle }}</span>{% endif %}
+  </span>
+  <span class="mrow-price"{% if price_coin %} data-vd-price="{{ price_coin }}"{% endif %}>{{ price_text }}</span>
+  {% if chg_coin %}<span class="mrow-chg" data-spark-chg="{{ chg_coin }}" data-spark-short></span>
+  {% else %}<span class="mrow-chg {{ right_tone }}">{{ right_text or "" }}</span>{% endif %}
+</{{ el }}>
+{% endmacro %}
+
+{# Zwevend zoekveld boven de tabbalk. Een knop, geen echt veld: een tik opent de bestaande command palette (base.html), zodat er
+   één zoekfunctie blijft. #}
+{% macro float_search() %}
+<button type="button" class="fsearch" id="fsearch" aria-haspopup="dialog" aria-controls="cmdk">
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  <span>Zoek een coin of pagina</span>
+</button>
+{% endmacro %}
