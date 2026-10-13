@@ -2513,3 +2513,14 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
   .copy-toast, .ceo-toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
 }
 @media (prefers-reduced-motion: reduce) { .dock, .ph-title svg { transition: none; } }
+
+/* Vandaag in de nieuwe indeling */
+.kl .vd-budget-ring { width: 18px; height: 18px; }
+.ut-menu.quick-actions { margin: 0; }
+.mrow-body .vd-summary { font-size: var(--text-md); }
+.mrow-body .vd-summary .vd-coin { font-size: inherit; margin-right: var(--space-2); }
+.mrow-body .vd-scenario { margin-top: var(--space-5); }
+.mrow-body .vd-script-foot { margin-top: var(--space-5); }
+.ut-panels > [data-utab-panel] { min-width: 0; }
+.vd-greeting { font-family: var(--sans); font-size: var(--text-md); letter-spacing: 0; text-transform: none; margin: 0; }
+.vd-meta { margin: 0 0 var(--space-6); font-size: var(--text-sm); }

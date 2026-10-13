@@ -105,3 +105,36 @@ class BaseShellTests(unittest.TestCase):
         html = TestClient(main.app).get("/login").text
         self.assertNotIn("fsearch", html)
         self.assertNotIn("top-glow", html)
+
+
+class VandaagLayoutTests(BaseShellTests):
+    def seed_resolved(self):
+        with db.session() as conn:
+            for outcome in ("take_profit", "stop_loss"):
+                conn.execute("""INSERT INTO signals (message_id, coin, direction, category, confidence, technical_confirmed, price, stop_loss,
+                                take_profit, trade_type, auto_outcome, auto_outcome_at, created_at)
+                                VALUES (NULL, 'BTC', 'long', 'x', 'hoog', 1, 100, 99, 102, 'smc', ?, ?, ?)""", (outcome, db.now_iso(), db.now_iso()))
+
+    def test_groot_getal_is_het_weekresultaat_van_de_weekpagina(self):
+        self.seed_resolved()
+        user = repo.get_user_by_username("tester")
+        week = main.track_record.week_summary(main.report_rows(user), main.config.TRACK_RECORD_COST_PCT)
+        html = self.client.get("/vandaag").text
+        self.assertIn('class="hl-num">%+.1f</span>' % week["net_r"], html)
+        self.assertIn("proof-spark", html[html.index('class="hl-spark"'):])
+        self.assertIn("%+.1f" % week["net_r"], self.client.get("/week").text)
+
+    def test_zonder_afgeronde_trades_staat_er_geen_verzonnen_delta(self):
+        html = self.client.get("/vandaag").text
+        self.assertIn("Nog niets afgerond", html)
+
+    def test_tabs_en_panelen(self):
+        from datetime import datetime, timedelta, timezone
+        repo.insert_market_script("BTC", "BTC duiding.", "long", "m", [{"direction": "long", "trigger_type": "close_above", "trigger_level": 101.0,
+                                  "entry": 100.8, "stop_loss": 99.8, "take_profit": 103.0, "reason": "Break."}], 1,
+                                  (datetime.now(timezone.utc) + timedelta(hours=10)).isoformat())
+        html = self.client.get("/vandaag").text
+        for needle in ['data-utabs="vandaag"', 'data-utabs-panels="vandaag"', 'id="tab-kansen"', 'id="tab-markt"', 'id="tab-agenda"',
+                       'id="tab-score"', 'class="mrow-wrap', "quick-actions", "data-spark-chg", 'data-vd-price="BTC"']:
+            self.assertIn(needle, html, needle)
+        self.assertNotIn('class="quick-action"', html)

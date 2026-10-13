@@ -505,6 +505,7 @@ async def _vandaag_context(user: dict) -> dict:
     open_parts = _open_chances(now, len(structure_cards))
     nearest = today.nearest_chance(structure_cards, scripts, await _radar_cards())
     rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
+    week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
     summary = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT)
     score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing") or e["source"] == "alles"]
     for e in score:
@@ -515,6 +516,8 @@ async def _vandaag_context(user: dict) -> dict:
         "liq_last": repo.latest_liquidation_bucket(), "events": events, "score": score, "money": today.money,
         "status_labels": track_record.STATUS_LABELS, "script_enabled": config.SCRIPT_ENABLED,
         "structure_cards": structure_cards,
+        "week": week, "week_spark": Markup(track_record.sparkline_svg(week["cumulative"], width=132, height=44)),
+        "today_r": week["days"][-1][1] if week["days"] else 0.0,
         "plans_ready": sum(n for n, _ in open_parts), "open_parts": open_parts, "nearest": nearest,
         "scenarios_waiting": sum(1 for sc in scripts for x in sc["scenarios"] if x["state"] == "waiting"),
         "budget": today.budget_ring(len(repo.list_recent_pushes(user["id"], (now - timedelta(hours=24)).isoformat())), user.get("push_budget")),
