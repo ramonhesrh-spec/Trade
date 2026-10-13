@@ -265,6 +265,21 @@
 {% endmacro %}
 
 
+{# Instap, stop en doel als knoppen: een tik zet het getal op het klembord (web/static/copy.js). `levels` komt uit chance_steps.level_chips;
+   `url` is waar een prijsalarm later naartoe linkt. #}
+{% macro level_chips(coin, levels, url="") %}
+{% if levels %}
+<div class="level-chips" data-chips-coin="{{ coin }}" data-chips-url="{{ url }}">
+  {% for l in levels %}
+  <span class="level-chip level-chip-{{ l.key }}">
+    <button type="button" class="level-copy" data-copy="{{ l.text }}" aria-label="Kopieer {{ l.label|lower }} {{ l.text }}"><span class="level-chip-label">{{ l.label }}</span> {{ l.text }}</button>
+  </span>
+  {% endfor %}
+</div>
+{% endif %}
+{% endmacro %}
+
+
 {# Lege staat met een uitnodiging: wat gebeurt hier straks en wat kun je intussen doen. #}
 {% macro empty_state(title, text, link_text=none, link_href=none) %}
 <div class="empty-state">

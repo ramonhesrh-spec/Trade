@@ -25,5 +25,15 @@ class ChanceStepsTests(unittest.TestCase):
         self.assertNotIn("live_coin", cs.script_steps({**sc, "state": "fired"})[0])
 
 
+class LevelChipsTest(unittest.TestCase):
+    def test_three_chips_in_the_same_notation_as_the_steps(self):
+        chips = cs.level_chips(100.0, 97.0, 0.09571)
+        self.assertEqual([c["key"] for c in chips], ["entry", "stop", "take"])
+        self.assertEqual([c["label"] for c in chips], ["Instap", "Stop", "Doel"])
+        self.assertEqual([c["text"] for c in chips], ["100.00", "97.0000", "0.09571"])
+        self.assertEqual(chips[2]["value"], 0.09571)
+
+
 if __name__ == "__main__":
     unittest.main()
+

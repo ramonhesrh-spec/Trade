@@ -23,6 +23,7 @@ def setup_card(setup: dict, price: Optional[float]) -> Optional[dict]:
         "chart": None if moot else tp.chart_spec(setup["direction"], plan.stop, plan.take, plan.limit, price, setup["zone_low"], setup["zone_high"]),
         "created_at": setup["created_at"], "setup": setup,
         "steps": [] if moot else chance_steps.smc_steps(plan, setup["zone_low"], setup["zone_high"], price, distance, setup["coin"]),
+        "levels": [] if moot else chance_steps.level_chips(plan.limit, plan.stop, plan.take),
     }
 
 
@@ -57,6 +58,7 @@ def signal_card(signal: dict, price: Optional[float]) -> Optional[dict]:
         "chart": tp.chart_spec(signal["direction"], stop, take, entry, price, entry=entry),
         "created_at": signal["created_at"], "signal": signal,
         "rr": abs(take - entry) / abs(entry - stop),
+        "levels": chance_steps.level_chips(entry, stop, take),
     }
 
 

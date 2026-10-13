@@ -101,6 +101,7 @@ def scenario_view(s: dict, price: Optional[float], now: datetime, coin: str = ""
         "chart": tp.chart_spec(s["direction"], s["stop_loss"], s["take_profit"], s["entry"], price, entry=s["entry"]),
     }
     view["steps"] = chance_steps.script_steps(view)
+    view["levels"] = chance_steps.level_chips(s["entry"], s["stop_loss"], s["take_profit"])
     return view
 
 

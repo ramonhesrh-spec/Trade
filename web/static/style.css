@@ -2245,3 +2245,17 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
 .push-pause.is-paused, .push-pause.is-paused:hover { color: var(--amber); border-color: var(--amber); }
 .push-pause:disabled { opacity: 0.6; }
 @media (max-width: 560px) { .topbar-right { gap: var(--space-4); } .push-pause svg { display: none; } }
+
+/* Kopieerbare niveaus op een kaart (copy.js). Minstens 32px hoog: het is een tikdoel op een telefoon. */
+.level-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.level-chip { display: inline-flex; align-items: stretch; border: 1px solid var(--border-strong); border-radius: 999px; overflow: hidden; }
+.level-chip-stop { border-color: rgba(242, 104, 92, 0.45); }
+.level-chip-take { border-color: rgba(51, 214, 159, 0.45); }
+.level-copy { min-height: 32px; padding: 4px 10px; background: none; border: 0; color: var(--text); font-family: var(--mono); font-size: var(--text-sm); cursor: pointer; }
+.level-copy:active { background: var(--panel-hover); }
+.level-chip-label { color: var(--muted); font-family: var(--sans); font-size: var(--text-xs); }
+.copy-toast { position: fixed; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 700; padding: 8px 14px;
+              border-radius: 999px; background: var(--panel); border: 1px solid var(--border-strong); color: var(--text); font-size: var(--text-sm);
+              opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
+.copy-toast.is-on { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { .copy-toast { transition: none; } }

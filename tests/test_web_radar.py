@@ -132,6 +132,13 @@ class WebRadarTests(unittest.TestCase):
         self.assertIn('>SMC</a>', r.text)
         self.assertIn('>Bewijs</a>', r.text)
 
+    def test_niveaus_zijn_tikbaar_om_te_kopieren(self):
+        r = self.client.get("/smc")
+        self.assertIn('data-copy="100.00"', r.text)                      # limiet van de XRP-setup
+        self.assertIn('data-chips-coin="XRP"', r.text)
+        self.assertIn('data-copy="106.00"', r.text)                      # doel van de open ETH-trade
+        self.assertIn("copy.js", r.text)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -81,6 +81,7 @@
             <span class="vd-state" data-vd="state">{{ sc.state_label }}</span>
           </div>
           {{ macros.steps_list(sc.steps, user.risk_per_trade_eur) }}
+          {{ macros.level_chips(s.coin, sc.levels, "/vandaag") }}
           {{ macros.share_button(s.coin, sc.direction, sc.steps) }}
           <p class="muted vd-fine">{{ sc.reason }}</p>
           <p class="muted vd-fine">Vervalt over <span data-vd="left">{{ "%.0f"|format(sc.hours_left) }}</span> uur</p>

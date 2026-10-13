@@ -72,6 +72,12 @@ class RadarTests(unittest.TestCase):
         self.assertAlmostEqual(payload["signal:3"]["live_r"], 1.0)
         self.assertEqual(payload["setup:7"]["chart"]["price"], 102.0)
 
+    def test_kaarten_hebben_kopieerbare_niveaus(self):
+        card = radar.setup_card(SETUP, 102.0)
+        self.assertEqual([c["text"] for c in card["levels"]], ["100.00", "97.0000", "106.00"])
+        self.assertEqual(radar.setup_card(SETUP, 107.0)["levels"], [])           # doel al gehaald: niets meer te kopiëren
+        self.assertEqual([c["value"] for c in radar.signal_card(SIGNAL, 99.0)["levels"]], [100.0, 103.0, 94.0])
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -48,6 +48,10 @@ class ScenarioTest(unittest.TestCase):
         self.assertEqual(v["trigger"], "5m-candle sluit boven 101")
         self.assertEqual((v["chart"]["entry"], v["chart"]["stop"], v["chart"]["take"], v["chart"]["price"]), (100.8, 99.8, 103.0, 100.0))
 
+    def test_scenario_has_copyable_levels(self):
+        view = today.scenario_view(scenario(), 100.0, NOW)
+        self.assertEqual([c["value"] for c in view["levels"]], [100.8, 99.8, 103.0])
+
     def test_overdue_waiting_scenario_shows_as_expired_and_fired_has_no_distance(self):
         old = scenario(expires_at=(NOW - timedelta(hours=1)).isoformat())
         self.assertEqual(today.scenario_view(old, 100.0, NOW)["state"], "expired")

@@ -53,3 +53,10 @@ def script_steps(sc: dict) -> list[dict]:
     return plan_steps(f"Wacht tot: {sc['trigger']}", sc["entry"], sc["stop"], f"doel {fmt(sc['take'])}", sc["risk_pct"], sc["rr"],
                       state=state, distance_pct=sc["to_trigger_pct"], page="vandaag",
                       live=(sc["coin"], sc["trigger_level"], "lp") if state == "waiting" and sc.get("coin") else None)
+
+
+def level_chips(entry: float, stop: float, take: float) -> list[dict]:
+    """Instap, stop en doel als losse getallen voor de tik-om-te-kopiëren-knoppen. Zelfde notatie als in de stappen, met een punt als
+    decimaalteken, want dat accepteert elk orderveld van een beurs."""
+    return [{"key": key, "label": label, "value": value, "text": fmt(value)}
+            for key, label, value in (("entry", "Instap", entry), ("stop", "Stop", stop), ("take", "Doel", take))]
