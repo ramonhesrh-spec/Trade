@@ -697,3 +697,18 @@ CREATE TABLE IF NOT EXISTS rule_trades (
     checked_until TEXT NOT NULL,
     UNIQUE (rule, coin, entered_at)
 );
+
+-- Prijsalarm dat een gebruiker zelf op een niveau van een kaart zet (app/price_alerts.py). side ligt vast bij het aanmaken ('above' of
+-- 'below' de koers van dat moment). sent_at gezet = afgegaan; een alarm gaat precies één keer af (level_check markeert vóór het versturen).
+CREATE TABLE IF NOT EXISTS price_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    coin TEXT NOT NULL,
+    price REAL NOT NULL,
+    side TEXT NOT NULL,
+    label TEXT NOT NULL,
+    url TEXT,
+    created_at TEXT NOT NULL,
+    sent_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_price_alerts_open ON price_alerts(sent_at, coin);

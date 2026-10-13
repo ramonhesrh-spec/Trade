@@ -10,6 +10,7 @@ TYPE_CHIPS = {
     "quality_report": ("Rapport", "chip-report"),
     "expired_signal": ("Vervallen", "chip-muted"),
     "new_coin": ("Coin", "chip-muted"),
+    "prijsalarm": ("Alarm", "chip-new"),
 }
 DEFAULT_CHIP = ("Melding", "chip-muted")
 

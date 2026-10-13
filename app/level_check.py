@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
-from app import db, exchange, indicators, push_notify, repo, rule_live
+from app import db, exchange, indicators, price_alerts, push_notify, repo, rule_live
 from app.signal_processor import (
     SWING_WATCH_MAX_AGE_DAYS, _price_broke_through, _price_near_level, run_swing_check,
 )
@@ -568,8 +568,40 @@ async def check_narratives() -> None:
         logger.info("%d narrative(s) verlopen wegens inactiviteit", len(expired))
 
 
+async def check_price_alerts() -> None:
+    """Prijsalarmen die gebruikers op een kaart zetten. Eerst markeren, dan versturen: een mislukte push mag nooit betekenen dat hetzelfde
+    alarm elke 15 minuten opnieuw afgaat. De melding staat ook op de meldingenpagina, zodat een alarm tijdens een pauze niet verdwijnt."""
+    by_coin: dict[str, list[dict]] = {}
+    for alert in repo.list_open_price_alerts():
+        by_coin.setdefault(alert["coin"], []).append(alert)
+    for coin, alerts in by_coin.items():
+        try:
+            candles = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe=LEVEL_CHECK_CANDLE_TIMEFRAME, limit=LEVEL_CHECK_CANDLE_LOOKBACK)
+        except Exception:
+            logger.exception("Kon geen candles ophalen voor prijsalarm %s, sla over", coin)
+            continue
+        for alert in alerts:
+            created = pd.Timestamp(_aware(datetime.fromisoformat(alert["created_at"])))
+            # Een candle die vóór het alarm begon, bevat koersen van vóór het aanmaken; die tellen niet.
+            after = candles[candles["timestamp"] >= created]
+            hit = price_alerts.first_hit(alert["side"], alert["price"], zip(after["high"], after["low"]))
+            if hit is None or not repo.mark_price_alert_sent(alert["id"]):
+                continue
+            title, body = price_alerts.alert_text(coin, alert["label"], alert["price"], hit)
+            url = alert["url"] or "/smc"
+            repo.create_notification(alert["user_id"], "prijsalarm", title, body, url)
+            try:
+                await push_notify.send_push(alert["user_id"], title, body, url, tag=f"prijsalarm-{alert['id']}")
+            except Exception:
+                logger.exception("Prijsalarm %s versturen mislukt", alert["id"])
+
+
 async def run_all_checks() -> None:
     await check_open_trades()
+    try:
+        await check_price_alerts()
+    except Exception:
+        logger.exception("Prijsalarmen controleren is mislukt")
     await check_signal_outcomes()
     try:
         await rule_live.update_open()
