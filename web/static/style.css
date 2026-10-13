@@ -2541,3 +2541,10 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .mrow-reason { margin: calc(-1 * var(--space-3)) 0 var(--space-5) calc(var(--icon-row) + var(--space-6)); font-size: var(--text-sm); }
 #tab-klaarstaand > .engine-status { margin-top: 0; }
 #tab-trend .mrow-sub, #tab-eerder .mrow-sub { white-space: normal; }
+
+/* Bewijs in de nieuwe indeling: het grote getal staat bovenaan, dus de kaartinhoud in een rij wordt kleiner en luchtiger. */
+.mrow-body .proof-number { font-size: var(--text-2xl, 1.75rem); margin: var(--space-4) 0; }
+.mrow-body .proof-facts { margin-top: var(--space-6); }
+.mrow-body .proof-caption, .mrow-body .proof-footnote { margin-top: var(--space-4); }
+#tab-soort .proof-source { display: block; margin-bottom: var(--space-3); }
+.hl + .kl + .proof-footnote { margin: var(--space-5) 0 var(--space-8); }

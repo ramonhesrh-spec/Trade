@@ -671,6 +671,8 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     summary.sort(key=lambda e: e["source"] != "alles")      # het totaal bovenaan, de rest in vaste volgorde
     for entry in summary:
         entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
+    total = next((e for e in summary if e["source"] == "alles"), None)
+    per_type = [e for e in summary if e["source"] != "alles"]
     lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
     visible = track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES)
     engine_types, other_types = track_record.split_rule_types(visible, rule_live.ENGINE_TYPES)
@@ -684,7 +686,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     for c in curves:
         c["svg"] = Markup(track_record.equity_svg(c["cumulative"], c["drawdown"]))
     return templates.TemplateResponse(request, "bewijs.html", {
-        "curves": curves,
+        "curves": curves, "total": total, "per_type": per_type,
         "hours": track_record.hour_grid(rows, config.TRACK_RECORD_COST_PCT),
         "rule_statuses": rule_statuses, "other_rules": other_rules, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
         "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,

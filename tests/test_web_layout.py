@@ -229,3 +229,33 @@ class SetupsLayoutTests(BaseShellTests):
         html = self.client.get("/structuur").text
         self.assertIn("Geen plan klaar", html)
         self.assertRegex(html, r'class="hl-num">0</span><span class="hl-unit">klaar')
+
+
+class BewijsLayoutTests(BaseShellTests):
+    def seed(self):
+        with db.session() as conn:
+            for outcome in ("take_profit", "stop_loss", "stop_loss"):
+                conn.execute("""INSERT INTO signals (message_id, coin, direction, category, confidence, technical_confirmed, price, stop_loss,
+                                take_profit, trade_type, auto_outcome, auto_outcome_at, created_at)
+                                VALUES (NULL, 'BTC', 'long', 'x', 'hoog', 1, 100, 99, 102, 'smc', ?, ?, ?)""", (outcome, db.now_iso(), db.now_iso()))
+            conn.execute("""INSERT INTO signals (message_id, coin, direction, category, confidence, technical_confirmed, price, stop_loss,
+                            take_profit, trade_type, created_at) VALUES (NULL, 'ETH', 'long', 'x', 'hoog', 1, 100, 99, 102, 'smc', ?)""", (db.now_iso(),))
+
+    def test_totaal_is_het_grote_getal_en_geen_rij(self):
+        self.seed()
+        user = repo.get_user_by_username("tester")
+        summary = main.track_record.summarize(main.report_rows(user), main.config.TRACK_RECORD_COST_PCT)
+        total = next(e for e in summary if e["source"] == "alles")
+        html = self.client.get("/bewijs").text
+        self.assertIn('class="hl-num">%+.2f</span><span class="hl-unit">R per trade' % total["avg_net"], html)
+        for needle in ['data-utabs="bewijs"', 'id="tab-soort"', 'id="tab-regels"', 'id="tab-curves"', 'id="tab-uurkaart"', 'class="kl"',
+                       "Open of vervallen", "1 winst, 2 verlies", "Resultaatcurve per soort", "Uurkaart", 'class="hourmap"',
+                       'class="equity-dd"', "proof-spark", "Nog te weinig data", "die tellen niet mee"]:
+            self.assertIn(needle, html, needle)
+        rows = html[html.index('id="tab-soort"'):html.index('id="tab-regels"')]
+        self.assertEqual(rows.count('class="mrow-wrap'), len(summary) - 1)
+        self.assertNotIn("Alle meldingen samen", rows)
+
+    def test_lege_staat(self):
+        html = self.client.get("/bewijs").text
+        self.assertIn("Nog geen signalen om te meten.", html)
