@@ -113,6 +113,18 @@ class BaseShellTests(unittest.TestCase):
             self.assertIn('class="dock"', html, pad)
             self.assertIn('id="cmdk"', html, pad)
 
+    def test_gloed_bovenaan_is_statisch_en_volbleed(self):
+        css = open(os.path.join(os.path.dirname(main.__file__), "static", "style.css"), encoding="utf-8").read()
+        for token in ("--glow-top-peak:", "--glow-top-mid:", "--glow-top-shoulder:"):
+            self.assertIn(token, css)
+        blok = css[css.index(".top-glow {"):]
+        blok = blok[:blok.index("}")]
+        self.assertIn("top: 0", blok)
+        self.assertNotIn("animation", blok)
+        html = self.client.get("/vandaag").text
+        self.assertIn("viewport-fit=cover", html)
+        self.assertIn('content="black-translucent"', html)
+
     def test_login_blijft_zonder_schil(self):
         html = TestClient(main.app).get("/login").text
         self.assertNotIn("fsearch", html)

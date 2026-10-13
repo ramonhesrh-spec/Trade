@@ -72,8 +72,11 @@
   --sep: 1px solid var(--border);
   --radius-pill: 999px;
   --radius-dock: 22px;
-  /* Gloed bovenaan. Maximaal 8% teal: daarboven zakt --muted onder 4,5:1 (gemeten 4,7:1 bij 0,06, rekensom plan 1.5). Niet verhogen zonder die som opnieuw. */
-  --glow-top: rgba(23, 229, 214, 0.06);
+  /* Gloed bovenaan, achter statusbalk en eiland. Piek en middenstop zijn instelbaar. De tekst begint onder het veilige gebied (rond 60 tot 120px),
+     daar moet de gloed <= 0,10 zijn: zie het contrastverslag (.superpowers/sdd/2026-10-13-indeling-nieuw-ontwerp/glow-search-report.md). */
+  --glow-top-peak: rgba(23, 229, 214, 0.34);
+  --glow-top-mid: rgba(60, 140, 255, 0.05);
+  --glow-top-shoulder: rgba(23, 229, 214, 0.09);
   --glow-top-height: 320px;
   --glow-tab: 0 0 18px -2px rgba(23, 229, 214, 0.35);
 }
@@ -2292,7 +2295,7 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
 .price-dot.is-stale { background: var(--amber); }
 
 /* Banner als dit apparaat geen meldingen krijgt (push-banner.js). */
-.push-banner { display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap; margin: var(--space-4) 16px 0; padding: var(--space-5) var(--space-6);
+.push-banner { display: flex; align-items: center; gap: var(--space-5); flex-wrap: wrap; margin: calc(var(--space-4) + env(safe-area-inset-top)) 16px 0; padding: var(--space-5) var(--space-6);
                background: var(--accent-bg); border: 1px solid var(--accent); border-radius: var(--radius); color: var(--text); font-size: var(--text-sm); }
 .push-banner[hidden] { display: none; }
 .push-banner span { flex: 1 1 200px; }
@@ -2353,9 +2356,7 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
 /* Gloed bovenaan: statisch, één laag achter alles. Een vaste laag en geen body-achtergrond, omdat html[data-session] de body-kleur zet. */
 .top-glow {
   position: absolute; top: 0; left: 0; right: 0; height: var(--glow-top-height); z-index: 0; pointer-events: none;
-  background:
-    radial-gradient(120% 100% at 50% 0%, var(--glow-top) 0%, transparent 70%),
-    linear-gradient(to bottom, var(--glow-top) 0%, transparent 100%);
+  background: radial-gradient(ellipse 130% 100% at 50% 0%, var(--glow-top-peak) 0%, var(--glow-top-shoulder) 24%, var(--glow-top-mid) 42%, transparent 100%);
 }
 /* Niet z-index -1: html en body hebben allebei een eigen achtergrond, en de body-achtergrond zou een negatieve laag afdekken. */
 main { position: relative; z-index: 1; }
