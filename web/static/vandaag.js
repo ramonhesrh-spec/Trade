@@ -35,14 +35,18 @@
 
   function refresh(force) {
     if (document.hidden && !force) return Promise.resolve(false);
-    return fetch("/api/vandaag", { cache: "no-store", credentials: "same-origin" })
+    // Zonder tijdslimiet blijft een haperende verbinding eeuwig "bezig" en blijft de trekhint van smooth.js hangen.
+    var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 10000) : null;
+    return fetch("/api/vandaag", { cache: "no-store", credentials: "same-origin", signal: ctrl ? ctrl.signal : undefined })
       .then(function (resp) {
         if (!resp.ok) return false;
         var age = resp.headers.get("X-Price-Age");
         if (age !== null && window.hesPriceSeen) window.hesPriceSeen(age);
         return resp.json().then(function (payload) { apply(payload); return true; });
       })
-      .catch(function () { return false; /* een mislukte verversing laat de laatste stand staan */ });
+      .catch(function () { return false; /* een mislukte verversing laat de laatste stand staan */ })
+      .then(function (ok) { if (timer) clearTimeout(timer); return ok; });
   }
 
   window.hesRefresh = function () { return refresh(true); };

@@ -97,6 +97,11 @@ class RadarTests(unittest.TestCase):
         self.assertEqual(radar.in_zone_count([SETUP, other], {"XRP": 99.5, "ETH": 102.0}), 1)
         self.assertEqual(radar.in_zone_count([SETUP], {}), 0)                    # zonder koers niets beloven
 
+    def test_in_zone_count_slaat_setups_zonder_limietplan_over(self):
+        bad = {**SETUP, "preview_stop_loss": 101.0}                              # stop aan de verkeerde kant: geen kaart op de radar
+        self.assertIsNone(radar.setup_card(bad, 99.5))
+        self.assertEqual(radar.in_zone_count([bad], {"XRP": 99.5}), 0)
+
 
 class SparkTests(unittest.TestCase):
     def test_path_spans_the_box_oldest_left(self):

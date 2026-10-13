@@ -30,4 +30,5 @@
     tick();
   };
   setInterval(tick, 5000);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) tick(); });   // timers staan stil op een verborgen tab
 })(typeof window !== "undefined" ? window : globalThis);

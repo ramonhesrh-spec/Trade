@@ -74,6 +74,7 @@
       }
 
       showStatus("Meldingen staan aan op dit apparaat.");
+      document.dispatchEvent(new CustomEvent("hespush:subscribed"));
       return true;
     } catch (err) {
       showStatus("Kon meldingen niet aanzetten: " + err.name + ": " + err.message);

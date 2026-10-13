@@ -39,6 +39,8 @@
   bar.addEventListener("click", function (e) {
     var tab = e.target.closest && e.target.closest("a.tab[aria-current='page']");
     if (!tab) return;
+    // Staat de tab op een andere url dan de pagina (bijvoorbeeld een ?filter), dan is een tik gewoon navigeren.
+    if (tab.href.split("#")[0] !== location.href.split("#")[0]) return;
     e.preventDefault();
     var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });

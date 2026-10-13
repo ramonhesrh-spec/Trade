@@ -49,8 +49,9 @@ def waiting_count(setups: list[dict], prices: dict) -> int:
 
 def in_zone_count(setups: list[dict], prices: dict) -> int:
     """Bouwende setups waarvan de koers nu in de zone staat, voor het getal op het appicoon. Zonder koers telt een setup niet mee:
-    het icoon zou anders iets beloven wat niet gemeten is."""
-    return sum(1 for s in setups if setup_state(s, prices.get(s["coin"])) == "in_zone")
+    het icoon zou anders iets beloven wat niet gemeten is. Een setup zonder geldig limietplan krijgt geen kaart en telt dus ook niet."""
+    return sum(1 for s in setups if setup_state(s, prices.get(s["coin"])) == "in_zone"
+               and tp.limit_plan(s["direction"], s["zone_low"], s["zone_high"], s["preview_stop_loss"], s["preview_take_profit"]) is not None)
 
 
 def signal_card(signal: dict, price: Optional[float]) -> Optional[dict]:

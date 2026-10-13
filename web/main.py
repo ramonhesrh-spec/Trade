@@ -1196,7 +1196,8 @@ async def api_system_status(user: dict = Depends(require_login)):
         }
 
     forming = [_with_preview(s) for s in repo.list_forming_smc_setups()]
-    zone_prices = await _cached_prices({s["coin"] for s in forming}) if forming else {}
+    # Alleen wat de radar al in de cache zette: deze poll mag niet trager worden door een beurs die net niet antwoordt.
+    zone_prices = {c: hit[1] for c in {s["coin"] for s in forming} if (hit := _price_cache.get(c)) and hit[1]}
     return {
         "exchange_ok": exchange_ok,
         "last_message_at": repo.last_message_received_at(),

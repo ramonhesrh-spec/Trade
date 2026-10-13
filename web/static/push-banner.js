@@ -1,5 +1,5 @@
 // Banner bovenaan als dit apparaat geen meldingen krijgt. Zonder PushManager (Safari op iOS buiten een geïnstalleerde app) kan de knop
-// niets, dus dan blijft de banner weg; staat de toestemming op geblokkeerd, dan kan alleen de telefoon zelf het herstellen.
+// niets, dus dan blijft de banner weg; staat de toestemming op geblokkeerd, dan kan alleen het apparaat zelf het herstellen.
 // Wegtikken onthoudt dit apparaat 7 dagen.
 (function () {
   var banner = document.getElementById("push-banner");
@@ -19,18 +19,17 @@
   btn.addEventListener("click", function () {
     if (!window.hesPushSubscribe) return;
     btn.disabled = true;
-    window.hesPushSubscribe(function (t) { text.textContent = t; }).then(function (ok) {
-      btn.disabled = false;
-      if (ok) setTimeout(function () { banner.hidden = true; }, 1500);
-    });
+    window.hesPushSubscribe(function (t) { text.textContent = t; }).then(function () { btn.disabled = false; });
   });
+  // Ook een aanmelding via de instellingenpagina haalt de banner weg; even laten staan zodat de bevestiging leesbaar is.
+  document.addEventListener("hespush:subscribed", function () { setTimeout(function () { banner.hidden = true; }, 1500); });
 
   navigator.serviceWorker.ready
     .then(function (reg) { return reg.pushManager.getSubscription(); })
     .then(function (sub) {
       if (sub && Notification.permission === "granted") return;
       if (Notification.permission === "denied") {
-        text.textContent = "Meldingen zijn geblokkeerd. Zet ze aan in de instellingen van je telefoon.";
+        text.textContent = "Meldingen zijn geblokkeerd. Zet ze aan in de instellingen van je apparaat.";
         btn.hidden = true;
       }
       banner.hidden = false;

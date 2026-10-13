@@ -150,7 +150,18 @@ class SystemStatusBadgeTest(WebCase):
         with db.session() as conn:
             conn.execute("""INSERT INTO smc_setups (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, atr,
                             created_at, updated_at) VALUES ('XRP', 'long', 99.0, 101.0, 102.0, 97.0, 110.0, 1.0, ?, ?)""", (db.now_iso(), db.now_iso()))
+        self.main._price_cache["XRP"] = (0.0, 100.0)                                       # de radar zette hem al in de cache
         self.assertEqual(self.client.get("/api/system_status").json()["in_zone"], 1)       # koers 100 ligt in 99-101
+
+    def test_status_poll_never_fetches_prices_for_the_badge(self):
+        with db.session() as conn:
+            conn.execute("""INSERT INTO smc_setups (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, atr,
+                            created_at, updated_at) VALUES ('XRP', 'long', 99.0, 101.0, 102.0, 97.0, 110.0, 1.0, ?, ?)""", (db.now_iso(), db.now_iso()))
+        self.main._price_cache.clear()
+        with mock.patch.object(self.main.exchange, "fetch_last_price", side_effect=RuntimeError("storing")) as fetch:
+            r = self.client.get("/api/system_status")
+        self.assertEqual(r.json()["in_zone"], 0)
+        self.assertNotIn("XRP", [c.args[0] for c in fetch.call_args_list])
 
 
 class PriceAgeTest(WebCase):
