@@ -5,6 +5,7 @@
      dan MAX_LIVE tegelijk, zodat een lange pagina op een telefoon soepel blijft.
    - Geen gebaren: scrollen en zoomen staan uit, een veeg over de grafiek scrolt gewoon de pagina (iOS).
    - Live: update(el, spec) verschuift de laatste candle en de Nu-lijn; de grafiek wordt niet opnieuw gemaakt.
+   - Rood vlak van instap (of limiet) tot stop, groen van instap tot doel (areas): de niveaus van het plan, geen schatting.
    - Candles komen van /api/radar_candles (een minuut gecachet op de server en hier per coin+tijdframe gedeeld).
    De lightweight-charts-bibliotheek tekent zonder animatie, dus er is niets dat prefers-reduced-motion hoeft te dempen. */
 (function () {
@@ -14,6 +15,7 @@
   var LC = window.LightweightCharts;
   var api = { update: function () {}, screenshot: function () { return Promise.resolve(null); } };
   window.hesLevelChart = api;
+  api.areas = areas;
   var els = document.querySelectorAll("[data-levelchart]");
   if (!LC || !els.length) return;
 
@@ -38,6 +40,44 @@
   function precision(s) {
     var ref = Math.abs(s.entry != null ? s.entry : s.limit);
     return ref >= 100 ? 2 : ref >= 1 ? 4 : 6;
+  }
+
+  // Risico en beloning van het plan zelf: van instap (of limiet) tot stop, en van instap tot doel. Geen schatting, alleen de niveaus.
+  function areas(s) {
+    var base = typeof s.entry === "number" && isFinite(s.entry) ? s.entry : s.limit;
+    if (typeof base !== "number" || !isFinite(base)) return [];
+    var out = [];
+    if (typeof s.stop === "number" && isFinite(s.stop) && s.stop !== base) out.push({ key: "risk", base: base, value: s.stop });
+    if (typeof s.take === "number" && isFinite(s.take) && s.take !== base) out.push({ key: "reward", base: base, value: s.take });
+    return out;
+  }
+
+  function rgba(hex, a) {
+    var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex).trim());
+    return m ? "rgba(" + parseInt(m[1], 16) + "," + parseInt(m[2], 16) + "," + parseInt(m[3], 16) + "," + a + ")" : hex;
+  }
+
+  // Een baselineserie met een prijsgrondlijn blijft aan de prijzen vastzitten als de schaal verschuift of de grafiek van maat wisselt.
+  function areaSeries(chart, color) {
+    var fill = rgba(color, 0.1), none = "rgba(0,0,0,0)";
+    return chart.addBaselineSeries({
+      baseValue: { type: "price", price: 0 },
+      topLineColor: none, bottomLineColor: none,
+      topFillColor1: fill, topFillColor2: fill, bottomFillColor1: fill, bottomFillColor2: fill,
+      lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      autoscaleInfoProvider: function () { return null; },
+    });
+  }
+
+  function syncAreas(lc) {
+    var s = spec(lc.el), wanted = {};
+    (s ? areas(s) : []).forEach(function (a) { wanted[a.key] = a; });
+    ["risk", "reward"].forEach(function (k) {
+      var a = wanted[k], series = lc.areas[k];
+      if (!a || !lc.candles.length) { series.setData([]); return; }
+      series.applyOptions({ baseValue: { type: "price", price: a.base } });
+      series.setData(lc.candles.map(function (c) { return { time: c.time, value: a.value }; }));
+    });
   }
 
   function fetchCandles(coin, tf) {
@@ -114,6 +154,7 @@
       overlayPrice(lc);
       lc.chart.timeScale().fitContent();
       syncBand(lc);
+      syncAreas(lc);
     });
   }
 
@@ -131,7 +172,10 @@
       crosshair: { vertLine: { visible: false, labelVisible: false }, horzLine: { visible: false, labelVisible: false } },
       handleScroll: false, handleScale: false,
     });
-    var lc = { el: el, chart: chart, lines: {}, candles: [], dead: false };
+    var lc = { el: el, chart: chart, lines: {}, candles: [], dead: false, areas: {} };
+    // Eerst toegevoegd, dus onderop: zone en candles blijven er leesbaar overheen.
+    lc.areas.risk = areaSeries(chart, red);
+    lc.areas.reward = areaSeries(chart, green);
     // De zone eerst: een baselineserie met als grondlijn zone_low en overal zone_high als waarde vult precies het vlak ertussen.
     lc.band = chart.addBaselineSeries({
       baseValue: { type: "price", price: s.zone_low != null ? s.zone_low : 0 },
@@ -209,6 +253,7 @@
     overlayPrice(lc);
     lc.chart.priceScale("right").applyOptions({ autoScale: true });     // de schaal opnieuw bepalen met de nieuwe niveaus
     syncBand(lc);
+    syncAreas(lc);
   };
 
   // Voor de deelafbeelding (share.js): het canvas van de grafiek zoals hij er nu staat. Staat hij nog niet (kaart ver weg), dan
