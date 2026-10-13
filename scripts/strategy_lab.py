@@ -34,6 +34,15 @@ def save_results(results, now_iso: str) -> int:
     return saved
 
 
+def coverage_warning(tf: str, first: pd.Timestamp, last: pd.Timestamp, jaren: float):
+    """Waarschuwing als de candles die er echt zijn meer dan 14 dagen korter dekken dan gevraagd. ensure_candles geeft een bestaande cache terug zonder
+    naar het aantal jaren te kijken (de 15m-cache wordt door andere scripts gedeeld), dus --jaren kan stil genegeerd worden."""
+    days, asked = (last - first).days, round(jaren * 365)
+    if asked - (last - first) / pd.Timedelta(days=1) > 14:
+        return f"let op: {tf} dekt maar {days} dagen, gevraagd {asked}"
+    return None
+
+
 def select_variants(familie: str):
     if familie == "kanteling":
         return tuple(v for v in tl.VARIANTS if v.family == "kanteling")
@@ -83,10 +92,15 @@ def main() -> None:
             keep[tf] = tl.full_history(firsts[tf])
             print(f"{tf}: {len(keep[tf])} coins met volle historie", flush=True)
 
+    span: dict[str, list] = {}
     parts: dict[str, list] = {v.name: [] for v in variants}
     plac: dict[str, list] = {v.name: [] for v in variants}
     for coin in coins:
         tfs = load_coin(coin, timeframes, a.jaren)
+        for tf, df in tfs.items():
+            if len(df):
+                lo_hi = span.setdefault(tf, [df["timestamp"].iloc[0], df["timestamp"].iloc[-1]])
+                lo_hi[0], lo_hi[1] = min(lo_hi[0], df["timestamp"].iloc[0]), max(lo_hi[1], df["timestamp"].iloc[-1])
         for v in variants:
             if a.alleen_volledig and coin not in keep[v.timeframe]:
                 continue
@@ -103,6 +117,12 @@ def main() -> None:
             parts[v.name].append(real)
             plac[v.name].append(tl.placebo_variant(v, bars, real, a.kosten, htf_bars=htf_bars))
         del tfs
+
+    for tf, (first, last) in span.items():
+        print(f"{tf}: candles van {first:%Y-%m-%d} tot {last:%Y-%m-%d}", flush=True)
+        warn = coverage_warning(tf, first, last, a.jaren)
+        if warn:
+            print(warn, flush=True)
 
     results = []
     for v in variants:

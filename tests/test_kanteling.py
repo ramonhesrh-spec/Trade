@@ -95,6 +95,16 @@ class SignalTest(unittest.TestCase):
         self.assertEqual(case(32 + 96), [128])
         self.assertEqual(case(32 + 97), [])
 
+    def test_dubbel_is_a_subset_of_enkel_first_break_limit_is_48(self):
+        # eerste doorbraak op L0+60: enkel weigert hem, dus dubbel mag er ook niet aan beginnen
+        late = HEAD + flat(48, 105.0) + BREAK1 + MID + BREAK2 + TAIL[:5]
+        self.assertEqual(sigs(late, 1), [])
+        self.assertEqual(sigs(late, 2), [])
+
+    def test_dubbel_second_break_may_come_after_48_but_before_96(self):
+        rows = HEAD + BREAK1 + MID + [(109, 109.5, 108.5, 109)] * (102 - 56) + [(109, 113, 108.5, 112.5)] + TAIL[:5]
+        self.assertEqual([i for i, _, _ in sigs(rows, 2)], [102])        # eerste doorbraak op L0+12, tweede op L0+70
+
     def test_short_is_the_exact_mirror(self):
         for conf, idx, raw in ((1, 44, 103 - 0.25), (2, 56, 105 - 0.25)):
             long_sig = sigs(long_rows(), conf)
@@ -130,6 +140,21 @@ class TradeTest(unittest.TestCase):
         v = next(x for x in tl.VARIANTS if x.name == "KANT_2_5M")
         t = tl._trade(v, b, 56, 1, 0.0, 112.4)       # ruwe stop vlak onder de instap van 112,5
         self.assertGreaterEqual(t["risk_pct"], 0.4 - 1e-9)
+
+
+class CoverageWarningTest(unittest.TestCase):
+    def test_warns_only_when_the_span_is_more_than_14_days_short(self):
+        from importlib.util import module_from_spec, spec_from_file_location
+        from pathlib import Path
+        path = Path(__file__).resolve().parent.parent / "scripts" / "strategy_lab.py"
+        spec = spec_from_file_location("strategy_lab_script", path)
+        mod = module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        first, end = pd.Timestamp("2024-01-01", tz="UTC"), pd.Timestamp("2024-04-01", tz="UTC")     # 91 dagen
+        self.assertEqual(mod.coverage_warning("15m", first, end, 0.25), None)                     # gevraagd 91,25 dagen
+        text = mod.coverage_warning("15m", first, end, 3.0)
+        self.assertIn("let op: 15m dekt maar 91 dagen, gevraagd 1095", text)
+        self.assertIsNone(mod.coverage_warning("15m", first, end, 91 / 365 + 13 / 365))
 
 
 class CandleCacheTest(unittest.TestCase):
