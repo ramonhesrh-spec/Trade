@@ -1,6 +1,7 @@
 import os
 import tempfile
 import unittest
+from datetime import datetime, timedelta, timezone
 from unittest import mock
 
 from fastapi.testclient import TestClient
@@ -39,6 +40,25 @@ class PauseRouteTest(WebCase):
         off = self.client.post("/api/push/pauze").json()
         self.assertEqual(off["minutes_left"], 0)
         self.assertIsNone(repo.get_user(self.uid)["push_paused_until"])
+
+    def test_requires_login(self):
+        self.client.cookies.clear()
+        self.assertIn(self.client.get("/api/push/pauze", follow_redirects=False).status_code, (302, 303, 401))
+        self.assertIn(self.client.post("/api/push/pauze", follow_redirects=False).status_code, (302, 303, 401))
+
+    def test_pause_is_per_user(self):
+        self.client.post("/api/push/pauze")
+        other = repo.create_user("other", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        self.client.cookies.set(self.main.SESSION_COOKIE, security.create_session_token(other))
+        self.assertEqual(self.client.get("/api/push/pauze").json()["minutes_left"], 0)
+        self.assertIsNone(repo.get_user(other)["push_paused_until"])
+
+    def test_stale_pause_reads_as_zero_and_a_post_starts_a_fresh_one(self):
+        past = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        repo.set_push_pause(self.uid, past)
+        state = self.client.get("/api/push/pauze").json()
+        self.assertEqual((state["minutes_left"], state["paused_until"]), (0, None))
+        self.assertEqual(self.client.post("/api/push/pauze").json()["minutes_left"], 120)
 
     def test_button_shows_remaining_time_on_every_page(self):
         r = self.client.get("/bewijs")
@@ -89,6 +109,20 @@ class PriceAlertRouteTest(WebCase):
         aid = repo.list_price_alerts(self.uid)[0]["id"]
         self.client.cookies.set(self.main.SESSION_COOKIE, security.create_session_token(other))
         self.assertEqual(self.client.get("/api/prijsalarm").json()["alerts"], [])
+        self.assertEqual(self.client.delete(f"/api/prijsalarm/{aid}").status_code, 404)
+
+    def test_backslash_and_absolute_urls_fall_back(self):
+        for bad in ("/\\evil.test", "https://evil.test/", "//evil.test", "/ok\\x", "javascript:alert(1)"):
+            repo_alerts = self.post(url=bad)
+            self.assertEqual(repo_alerts.status_code, 200)
+            self.assertEqual(repo.list_price_alerts(self.uid)[-1]["url"], "/smc", bad)
+            with self.main.db.session() as conn:
+                conn.execute("DELETE FROM price_alerts")
+
+    def test_fired_alert_cannot_be_deleted(self):
+        self.post()
+        aid = repo.list_price_alerts(self.uid)[0]["id"]
+        repo.mark_price_alert_sent(aid)
         self.assertEqual(self.client.delete(f"/api/prijsalarm/{aid}").status_code, 404)
 
     def test_requires_login(self):

@@ -576,24 +576,33 @@ async def check_price_alerts() -> None:
         by_coin.setdefault(alert["coin"], []).append(alert)
     for coin, alerts in by_coin.items():
         try:
-            candles = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe=LEVEL_CHECK_CANDLE_TIMEFRAME, limit=LEVEL_CHECK_CANDLE_LOOKBACK)
+            # Vanaf het oudste alarm, niet alleen de laatste 30 minuten: een overgeslagen run mag een aanraking niet missen.
+            oldest = min(_aware(datetime.fromisoformat(a["created_at"])) for a in alerts)
+            candles = await asyncio.to_thread(_fetch_since, coin, oldest)
         except Exception:
             logger.exception("Kon geen candles ophalen voor prijsalarm %s, sla over", coin)
             continue
         for alert in alerts:
-            created = pd.Timestamp(_aware(datetime.fromisoformat(alert["created_at"])))
-            # Een candle die vóór het alarm begon, bevat koersen van vóór het aanmaken; die tellen niet.
-            after = candles[candles["timestamp"] >= created]
-            hit = price_alerts.first_hit(alert["side"], alert["price"], zip(after["high"], after["low"]))
-            if hit is None or not repo.mark_price_alert_sent(alert["id"]):
-                continue
-            title, body = price_alerts.alert_text(coin, alert["label"], alert["price"], hit)
-            url = alert["url"] or "/smc"
-            repo.create_notification(alert["user_id"], "prijsalarm", title, body, url)
             try:
-                await push_notify.send_push(alert["user_id"], title, body, url, tag=f"prijsalarm-{alert['id']}")
+                await _handle_price_alert(coin, alert, candles)
             except Exception:
-                logger.exception("Prijsalarm %s versturen mislukt", alert["id"])
+                logger.exception("Prijsalarm %s afhandelen mislukt", alert["id"])
+
+
+async def _handle_price_alert(coin: str, alert: dict, candles) -> None:
+    created = pd.Timestamp(_aware(datetime.fromisoformat(alert["created_at"])))
+    # Een candle die vóór het alarm begon, bevat koersen van vóór het aanmaken; die tellen niet.
+    after = candles[candles["timestamp"] >= created]
+    hit = price_alerts.first_hit(alert["side"], alert["price"], zip(after["high"], after["low"]))
+    if hit is None or not repo.mark_price_alert_sent(alert["id"]):
+        return
+    title, body = price_alerts.alert_text(coin, alert["label"], alert["price"], hit)
+    url = alert["url"] or "/smc"
+    repo.create_notification(alert["user_id"], "prijsalarm", title, body, url)
+    try:
+        await push_notify.send_push(alert["user_id"], title, body, url, tag=f"prijsalarm-{alert['id']}")
+    except Exception:
+        logger.exception("Prijsalarm %s versturen mislukt", alert["id"])
 
 
 async def run_all_checks() -> None:

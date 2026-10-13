@@ -1832,7 +1832,7 @@ def count_open_price_alerts(user_id: int) -> int:
 
 def delete_price_alert(alert_id: int, user_id: int) -> bool:
     with db.session() as conn:
-        return conn.execute("DELETE FROM price_alerts WHERE id = ? AND user_id = ?", (alert_id, user_id)).rowcount == 1
+        return conn.execute("DELETE FROM price_alerts WHERE id = ? AND user_id = ? AND sent_at IS NULL", (alert_id, user_id)).rowcount == 1
 
 
 def list_open_price_alerts() -> list[dict]:

@@ -36,13 +36,13 @@
     }).then(function (r) {
       return r.json().then(function (d) {
         if (r.ok) { byKey[k] = d.id; toast(d.message); } else { toast(d.error || "Alarm zetten lukte niet"); }
-      });
+      }, function () { toast("Alarm zetten lukte niet"); });   // geen JSON: de server of een proxy gaf een foutpagina
     });
   }
 
   function remove(k) {
     return fetch("/api/prijsalarm/" + byKey[k], { method: "DELETE", credentials: "same-origin" }).then(function (r) {
-      if (r.ok || r.status === 404) { delete byKey[k]; toast("Alarm weg"); }
+      if (r.ok || r.status === 404) { delete byKey[k]; toast("Alarm weg"); } else { toast("Alarm weghalen lukte niet"); }
     });
   }
 

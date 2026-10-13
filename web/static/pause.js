@@ -17,9 +17,12 @@
 
   function call(method) {
     return fetch("/api/push/pauze", { method: method, credentials: "same-origin", cache: "no-store" })
-      .then(function (r) { return r.ok ? r.json() : null; })
-      .then(function (s) { if (s) show(s); })
-      .catch(function () { /* geen verbinding: de knop houdt zijn laatste stand */ });
+      .then(function (r) {
+        if (r.status === 401) { location.reload(); return null; }      // sessie verlopen: de loginpagina neemt het over
+        return r.ok ? r.json() : null;
+      })
+      .then(function (s) { if (s) show(s); else if (method === "POST" && window.hesToast) window.hesToast("Pauze zetten lukte niet"); })
+      .catch(function () { if (method === "POST" && window.hesToast) window.hesToast("Geen verbinding"); });
   }
 
   function poll() {

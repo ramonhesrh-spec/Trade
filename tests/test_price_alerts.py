@@ -92,6 +92,40 @@ class CheckTest(DbCase):
         self.assertTrue(repo.delete_price_alert(aid, self.uid))
         self.assertEqual(repo.count_open_price_alerts(self.uid), 0)
 
+    def test_fetches_from_the_oldest_alert_not_just_the_last_half_hour(self):
+        self.alert(105.0, "above", 600)
+        seen = {}
+
+        def fake(coin, timeframe, limit, since=None):
+            seen["since"] = since
+            return frame(datetime.now(timezone.utc) - timedelta(minutes=30), [(101, 99, 100)])
+        with mock.patch("app.exchange.fetch_ohlcv", fake):
+            asyncio.run(level_check.check_price_alerts())
+        oldest_ms = (datetime.now(timezone.utc) - timedelta(minutes=600)).timestamp() * 1000
+        self.assertLess(seen["since"], oldest_ms)
+
+    def test_one_failing_alert_does_not_stop_the_rest(self):
+        first = self.alert(105.0, "above", 40)
+        self.alert(106.0, "above", 40)
+        start = datetime.now(timezone.utc) - timedelta(minutes=30)
+        real = repo.create_notification
+        calls = []
+
+        def flaky(*a, **k):
+            calls.append(a)
+            if len(calls) == 1:
+                raise RuntimeError("db stuk")
+            return real(*a, **k)
+        with mock.patch("app.repo.create_notification", flaky):
+            self.run_check(frame(start, [(110, 100, 105)]))
+        self.assertEqual(len(calls), 2)
+        self.assertIsNotNone(first)
+
+    def test_a_fired_alert_cannot_be_deleted(self):
+        aid = repo.create_price_alert(self.uid, "ETH", 2500.0, "below", "Stop", None)
+        repo.mark_price_alert_sent(aid)
+        self.assertFalse(repo.delete_price_alert(aid, self.uid))
+
 
 if __name__ == "__main__":
     unittest.main()

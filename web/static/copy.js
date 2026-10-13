@@ -25,6 +25,7 @@
     ta.style.opacity = "0";
     document.body.appendChild(ta);
     ta.select();
+    ta.setSelectionRange(0, text.length);
     var ok = false;
     try { ok = document.execCommand("copy"); } catch (e) { ok = false; }
     ta.remove();

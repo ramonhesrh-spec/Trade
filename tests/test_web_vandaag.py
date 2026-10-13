@@ -255,6 +255,12 @@ class WebVandaagTests(unittest.TestCase):
                      "Break boven gisteren hoog."):
             self.assertIn(text, r.text, text)
 
+    def test_copy_chips_render_for_a_scenario(self):
+        repo.insert_market_script("BTC", "x", "long", "m", [scenario_row()], 1, (datetime.now(timezone.utc) + timedelta(hours=10)).isoformat())
+        r = self.client.get("/vandaag")
+        self.assertIn('data-chips-coin="BTC"', r.text)
+        self.assertIn('data-copy="100.80"', r.text)
+
     def test_api_returns_prices_and_scenario_state(self):
         repo.insert_market_script("BTC", "x", "long", "m", [scenario_row()], 0, (datetime.now(timezone.utc) + timedelta(hours=10)).isoformat())
         data = self.client.get("/api/vandaag").json()

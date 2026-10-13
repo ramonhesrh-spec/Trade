@@ -1,5 +1,6 @@
 """Eén vorm voor elke kans die nog niet gevuld is: drie stappen met wat je nu doet. Pure functies, de templates tekenen alleen
 (macros.steps_list). Structuur, SMC en het markt-script gebruiken dezelfde stappen en dezelfde woorden."""
+import math
 from typing import Optional
 
 DIST_KEYS = {"vandaag": "data-vd", "radar": "data-radar"}
@@ -8,7 +9,11 @@ DIST_KEYS = {"vandaag": "data-vd", "radar": "data-radar"}
 def fmt(value: float) -> str:
     """0,0957 en 2717,08: vijf cijfers onder de 1 (ook voor kleine munten), vier decimalen onder 100, twee erboven."""
     if abs(value) < 1:
-        return f"{value:.5g}"
+        if value == 0:
+            return "0"
+        # Vast puntje en nooit 1.23e-05: dit komt in orderveldjes terecht.
+        decimals = 4 - math.floor(math.log10(abs(value)))
+        return f"{value:.{decimals}f}".rstrip("0").rstrip(".")
     return f"{value:.4f}" if abs(value) < 100 else f"{value:.2f}"
 
 

@@ -1258,6 +1258,12 @@ async def api_price_alerts(user: dict = Depends(require_login)):
     return {"alerts": [{"id": a["id"], "coin": a["coin"], "price": a["price"], "label": a["label"]} for a in repo.list_price_alerts(user["id"])]}
 
 
+def _is_local_path(url: str) -> bool:
+    """Alleen een pad op deze site. Een backslash telt als schuine streep in browsers, dus "/\\evil.test" is geen pad."""
+    parts = urlsplit(url)
+    return url.startswith("/") and not url.startswith("//") and "\\" not in url and not parts.netloc and not parts.scheme
+
+
 @app.post("/api/prijsalarm")
 async def api_price_alert_create(request: Request, user: dict = Depends(require_login)):
     """Alarm op een niveau van een kaart. De kant (boven of onder de koers) ligt vast bij het aanmaken; level_check toetst elke 15 minuten."""
@@ -1282,7 +1288,7 @@ async def api_price_alert_create(request: Request, user: dict = Depends(require_
     if current is None:
         return JSONResponse({"error": "Geen koers, probeer het zo opnieuw"}, status_code=503)
     raw_url = str(data.get("url") or "")
-    url = raw_url if raw_url.startswith("/") and not raw_url.startswith("//") else "/smc"
+    url = raw_url if _is_local_path(raw_url) else "/smc"
     side = price_alerts.side_for(price, current)
     alert_id = repo.create_price_alert(user["id"], coin, price, side, str(data.get("label") or "Niveau")[:20], url)
     return {"id": alert_id, "side": side, "message": f"Alarm staat op {chance_steps.fmt(price)}. Melding binnen 15 minuten na het raken."}
