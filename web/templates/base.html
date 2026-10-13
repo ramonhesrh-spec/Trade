@@ -248,6 +248,13 @@
       <span class="last-signal-pill" id="last-signal-banner" title="Laatste signaal" aria-live="polite" {% if not last_signal_text %}hidden{% endif %}>
         <span id="last-signal-text">{{ last_signal_text or "" }}</span>
       </span>
+      {% if user %}{% set pause_left = pause_minutes_left(user) %}
+      <button type="button" id="push-pause" class="push-pause{% if pause_left %} is-paused{% endif %}" aria-pressed="{{ 'true' if pause_left else 'false' }}"
+              title="{{ 'Tik om meldingen weer aan te zetten' if pause_left else 'Meldingen 2 uur stil' }}">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        <span id="push-pause-label">{{ pause_text(pause_left) }}</span>
+      </button>
+      {% endif %}
       <span class="live-pill"><span class="ping"></span><span id="live-clock">--:--:--</span></span>
       <button type="button" id="system-status" class="system-status" title="Systeemstatus" aria-label="Systeemstatus tonen" aria-expanded="false" aria-controls="system-status-popover">
         <span class="status-dot"></span><span class="status-label">systeem</span>
@@ -926,5 +933,6 @@
 <script src="{{ asset('ceo.js') }}" defer></script>
 <script src="{{ asset('share.js') }}" defer></script>
 <script src="{{ asset('smooth.js') }}" defer></script>
+<script src="{{ asset('pause.js') }}" defer></script>
 </body>
 </html>

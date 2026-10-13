@@ -29,7 +29,7 @@ from markupsafe import Markup
 
 from app import advice as advice_module
 from app import patterns as chart_patterns
-from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, radar, repo, risk, security, setup_chart, today, track_record
+from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, radar, repo, risk, security, setup_chart, today, track_record
 from app import ceo, chance_checks, chance_steps, kans_view, rule_live, trust
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
@@ -110,6 +110,8 @@ templates.env.globals["fmt_price"] = today.fmt_price
 templates.env.globals["is_ceo"] = lambda user: is_ceo(user)
 templates.env.globals["live_exchange"] = config.EXCHANGE_ID
 templates.env.globals["live_quote"] = config.QUOTE_CURRENCY.lower()
+templates.env.globals["pause_minutes_left"] = lambda u: push_policy.pause_minutes_left((u or {}).get("push_paused_until"), datetime.now(timezone.utc))
+templates.env.globals["pause_text"] = push_policy.pause_text
 
 
 def _age_label(iso: str | None) -> str:
@@ -1184,6 +1186,27 @@ async def api_push_subscribe(request: Request, user: dict = Depends(require_logi
         user["id"], endpoint, keys["p256dh"], keys["auth"], data.get("device_label"),
     )
     return {"ok": True}
+
+
+def _pause_state(user: dict) -> dict:
+    left = push_policy.pause_minutes_left(user.get("push_paused_until"), datetime.now(timezone.utc))
+    return {"paused_until": user.get("push_paused_until") if left else None, "minutes_left": left, "label": push_policy.pause_text(left)}
+
+
+@app.get("/api/push/pauze")
+async def api_push_pause_state(user: dict = Depends(require_login)):
+    return _pause_state(user)
+
+
+@app.post("/api/push/pauze")
+async def api_push_pause_toggle(user: dict = Depends(require_login)):
+    """Eén tik: twee uur geen pushes. Een tik tijdens de pauze heft hem op. Signalen en journaal lopen door (alleen push_notify kijkt hiernaar)."""
+    now = datetime.now(timezone.utc)
+    if push_policy.pause_minutes_left(user.get("push_paused_until"), now):
+        repo.set_push_pause(user["id"], None)
+    else:
+        repo.set_push_pause(user["id"], push_policy.pause_until(now).isoformat())
+    return _pause_state(repo.get_user(user["id"]))
 
 
 @app.post("/api/push/debug-log")

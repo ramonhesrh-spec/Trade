@@ -17,6 +17,7 @@
   --green-bg: rgba(51, 214, 159, 0.12);
   --red: #f2685c;
   --red-bg: rgba(242, 104, 92, 0.12);
+  --amber: #f2b33d;
   --accent: #17e5d6;
   --accent-dark: #0ec9bc;
   --accent-bg: rgba(23, 229, 214, 0.12);
@@ -2236,3 +2237,11 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
 .keten-table th, .keten-table td { padding: var(--space-3); text-align: left; border-bottom: 1px solid var(--border); }
 .keten-note code { font-family: var(--mono); }
 .ceo-scrapped p { color: var(--text-dim); }
+
+/* Pauzeknop voor meldingen (pause.js). Oranje zolang de pauze loopt: het is de enige stand waarin je meldingen mist. */
+.push-pause { display: inline-flex; align-items: center; gap: var(--space-2); padding: 2px 8px; min-height: 28px; border: 1px solid var(--border-strong);
+              border-radius: 999px; background: none; color: var(--muted); font: inherit; font-family: var(--mono); font-size: var(--text-xs); font-weight: 400; cursor: pointer; }
+.push-pause:hover { background: none; border-color: var(--muted); }
+.push-pause.is-paused, .push-pause.is-paused:hover { color: var(--amber); border-color: var(--amber); }
+.push-pause:disabled { opacity: 0.6; }
+@media (max-width: 560px) { .topbar-right { gap: var(--space-4); } .push-pause svg { display: none; } }
