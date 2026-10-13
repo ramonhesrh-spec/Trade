@@ -5,9 +5,12 @@ from pathlib import Path
 from PIL import Image
 from playwright.sync_api import sync_playwright
 
-REQUIRED = ["#push-pause", "#price-dot", "#system-status", "#fsearch", ".tabbar", "#more-sheet"]
+REQUIRED = ["#push-pause", "#price-dot", "#system-status", ".tabbar", "#more-sheet"]
+WITH_SEARCH = {"/vandaag", "/smc"}      # het zoekveld hoort alleen op deze twee pagina's te staan
 # Playwright vindt in deze omgeving zijn eigen Chromium niet; elders blijft de standaard gelden.
 CHROMIUM = os.environ.get("CHROMIUM_PATH") or None
+DEFAULT_PAGES = ["/vandaag", "/structuur", "/smc", "/bewijs", "/signalen", "/meldingen", "/account", "/week", "/ceo", "/uitleg", "/keten", "/coins/BTC"]
+PUBLIC = {"/keten"}          # openbare pagina zonder dok en vaste knoppen
 
 
 def lum(rgb):
@@ -21,7 +24,7 @@ def lum(rgb):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", required=True); ap.add_argument("--user", required=True); ap.add_argument("--password", default="wachtwoord-123456")
-    ap.add_argument("--pages", nargs="+", required=True); ap.add_argument("--out", required=True)
+    ap.add_argument("--pages", nargs="+", default=None, help="standaard alle ingelogde pagina's"); ap.add_argument("--out", required=True)
     ap.add_argument("--desktop", action="store_true"); ap.add_argument("--reduced-motion", action="store_true")
     a = ap.parse_args()
     out = Path(a.out); out.mkdir(parents=True, exist_ok=True)
@@ -33,17 +36,26 @@ def main():
         page = ctx.new_page()
         page.goto(a.base + "/login")
         page.fill("input[name=username]", a.user); page.fill("input[name=password]", a.password)
-        page.click("button[type=submit]"); page.wait_for_load_state("networkidle")
-        for path in a.pages:
-            page.goto(a.base + path); page.wait_for_load_state("networkidle"); page.wait_for_timeout(600)
+        page.click("button[type=submit]"); page.wait_for_timeout(2500)
+        pages = a.pages
+        if pages is None:
+            pages = list(DEFAULT_PAGES)
+            page.goto(a.base + "/week", wait_until="domcontentloaded")   # de deal van de week linkt naar een kans
+            kans = page.locator('a[href^="/kans/"]').first
+            if kans.count():
+                pages.append(kans.get_attribute("href"))
+        for path in pages:
+            page.goto(a.base + path, wait_until="domcontentloaded"); page.wait_for_timeout(1500)   # geen networkidle: de koerssocket staat nooit stil
             name = path.strip("/").replace("/", "_") or "root"
             shot = out / f"{name}-{'desktop' if a.desktop else '390'}.png"
             page.screenshot(path=str(shot), full_page=False)
             if not a.desktop and page.evaluate("document.documentElement.scrollWidth") > 390:
                 failures.append(f"{path}: horizontale scroll")
-            for sel in REQUIRED if not a.desktop else REQUIRED[:3]:
+            for sel in [] if path in PUBLIC else REQUIRED if not a.desktop else REQUIRED[:3]:   # op desktop bestaan dok en blad niet
                 if page.locator(sel).count() == 0:
                     failures.append(f"{path}: {sel} ontbreekt")
+            if (page.locator("#fsearch").count() > 0) != (path in WITH_SEARCH) and path not in PUBLIC:
+                failures.append(f"{path}: zoekveld {'ontbreekt' if path in WITH_SEARCH else 'hoort hier niet'}")
             label = page.locator(".hl-label").first
             if label.count():
                 box = label.bounding_box()
