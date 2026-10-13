@@ -50,5 +50,11 @@ class UtabsTest(unittest.TestCase):
         self.assertEqual(run_node("utabs_harness.js", "utabs.js")["noHashActive"], "tab-b")
 
 
+@unittest.skipUnless(shutil.which("node"), "node ontbreekt")
+class SparkChangeTest(unittest.TestCase):
+    def test_verandering_zonder_minigrafiek_wordt_gevuld(self):
+        self.assertEqual(run_node("spark_harness.js", "spark.js"), {"text": "-0,9%", "down": True, "fetched": "BTC"})
+
+
 if __name__ == "__main__":
     unittest.main()
