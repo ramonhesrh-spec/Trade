@@ -202,7 +202,7 @@ class SwingTest(unittest.TestCase):
         names = [v.name for v in tl.VARIANTS]
         for n in ("SW_TREND_1H", "SW_PULL_1H", "SW_DON_1H", "SW_SQUEEZE_1H"):
             self.assertIn(n, names)
-        self.assertEqual(len(names), 14)
+        self.assertEqual(len(names), 20)
 
     def test_trail_max_bars_closes_on_the_close_of_that_candle(self):
         df = pd.DataFrame([(100, 100.5, 99.9, 100.2)] * 6, columns=["open", "high", "low", "close"])

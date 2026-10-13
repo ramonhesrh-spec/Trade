@@ -1,6 +1,6 @@
 """Strategie-lab: toetst kosten-robuuste regels op 1u en 4u (zie app/replay/trendlab.py). Draai op de VPS, de candles zijn klein en snel op te halen:
 
-  .venv/bin/python3 scripts/strategy_lab.py [--jaren 3] [--coins BTC,ETH,...] [--kosten 0.06] [--alleen-volledig] [--opslaan]
+  .venv/bin/python3 scripts/strategy_lab.py [--jaren 3] [--coins BTC,ETH,...] [--kosten 0.06] [--familie alle|kanteling|standaard] [--alleen-volledig] [--opslaan]
 
 Een variant slaagt alleen als beide helften positief zijn, de marge boven 0 ligt en hij beter is dan willekeurige instappen met dezelfde uitgang.
 Het aantal getoetste varianten staat in de uitvoer: hoe meer, hoe minder bijzonder een treffer is. Met --alleen-volledig tellen alleen coins mee die de hele periode bestaan (overlevingscontrole). Vertrouw alleen wat ook in de tweede helft overeind blijft."""
@@ -34,34 +34,60 @@ def save_results(results, now_iso: str) -> int:
     return saved
 
 
+def select_variants(familie: str):
+    if familie == "kanteling":
+        return tuple(v for v in tl.VARIANTS if v.family == "kanteling")
+    if familie == "standaard":
+        return tuple(v for v in tl.VARIANTS if v.family != "kanteling")
+    return tl.VARIANTS
+
+
+def needed_timeframes(variants) -> list[str]:
+    """Alleen de timeframes die de gekozen varianten gebruiken (plus 4u voor het trendfilter), zodat een kanteling-run geen 4u of 5m onnodig ophaalt."""
+    need = {v.timeframe for v in variants} | {"4h" for v in variants if v.htf}
+    return [tf for tf in ("5m", "15m", "1h", "4h") if tf in need]
+
+
+def load_coin(coin: str, timeframes, jaren: float) -> dict[str, pd.DataFrame]:
+    tfs = {}
+    for tf in timeframes:
+        try:
+            tfs[tf] = candle_cache.ensure_candles(coin, jaren, timeframe=tf)
+        except Exception as exc:
+            print(f"{coin} {tf}: geen candles ({exc})", flush=True)
+    print(f"{coin}: " + ", ".join(f"{len(tfs[tf])} candles van {tf}" for tf in tfs), flush=True)
+    return tfs
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--coins", default=LAB_COINS)
     ap.add_argument("--jaren", type=float, default=3.0)
     ap.add_argument("--kosten", type=float, default=config.TRACK_RECORD_COST_PCT)
+    ap.add_argument("--familie", choices=("alle", "kanteling", "standaard"), default="alle", help="welke varianten: alle, alleen de kanteling of alleen de oudere")
     ap.add_argument("--alleen-volledig", action="store_true", help="alleen coins met candles over de volle periode (overlevingscontrole)")
     ap.add_argument("--opslaan", action="store_true", help="bewaar de uitkomst per regel in de database; zonder deze vlag schrijft het script niets")
     a = ap.parse_args()
-    frames: dict[str, dict[str, pd.DataFrame]] = {}
-    for coin in a.coins.split(","):
-        frames[coin] = {}
-        for tf in ("1h", "4h"):
-            try:
-                frames[coin][tf] = candle_cache.ensure_candles(coin, a.jaren, timeframe=tf)
-            except Exception as exc:
-                print(f"{coin} {tf}: geen candles ({exc})", flush=True)
-        print(f"{coin}: {len(frames[coin].get('4h', []))} candles van 4u", flush=True)
+    variants = select_variants(a.familie)
+    timeframes = needed_timeframes(variants)
+    coins = a.coins.split(",")
 
+    # Coin voor coin: 5m over drie jaar is ~315k candles per coin, alle coins tegelijk in het geheugen past niet op de 4 GB van de VPS.
     keep: dict[str, list[str]] = {}
     if a.alleen_volledig:
-        for tf in ("1h", "4h"):
-            keep[tf] = tl.full_history({c: tfs[tf] for c, tfs in frames.items() if tf in tfs})
+        firsts: dict[str, dict[str, pd.DataFrame]] = {tf: {} for tf in timeframes}
+        for coin in coins:
+            for tf, df in load_coin(coin, timeframes, a.jaren).items():
+                firsts[tf][coin] = df.head(1)
+        for tf in timeframes:
+            keep[tf] = tl.full_history(firsts[tf])
             print(f"{tf}: {len(keep[tf])} coins met volle historie", flush=True)
 
-    results = []
-    for v in tl.VARIANTS:
-        parts, plac = [], []
-        for coin, tfs in frames.items():
+    parts: dict[str, list] = {v.name: [] for v in variants}
+    plac: dict[str, list] = {v.name: [] for v in variants}
+    for coin in coins:
+        tfs = load_coin(coin, timeframes, a.jaren)
+        for v in variants:
             if a.alleen_volledig and coin not in keep[v.timeframe]:
                 continue
             bars = tfs.get(v.timeframe)
@@ -74,14 +100,18 @@ def main() -> None:
             if real.empty:
                 continue
             real["coin"] = coin
-            parts.append(real)
-            plac.append(tl.placebo_variant(v, bars, real, a.kosten, htf_bars=htf_bars))
-        trades = pd.concat(parts, ignore_index=True) if parts else pd.DataFrame()
-        placebo = pd.concat(plac, ignore_index=True) if plac else pd.DataFrame()
+            parts[v.name].append(real)
+            plac[v.name].append(tl.placebo_variant(v, bars, real, a.kosten, htf_bars=htf_bars))
+        del tfs
+
+    results = []
+    for v in variants:
+        trades = pd.concat(parts[v.name], ignore_index=True) if parts[v.name] else pd.DataFrame()
+        placebo = pd.concat(plac[v.name], ignore_index=True) if plac[v.name] else pd.DataFrame()
         results.append((v, tl.evaluate(trades, placebo)))
 
     print(f"\n{len(results)} varianten getoetst; bij zoveel toetsen is een toevallige treffer normaal.")
-    print(f"Kosten {a.kosten}% per rondreis, {a.jaren} jaar, {len(frames)} coins\n")
+    print(f"Kosten {a.kosten}% per rondreis, {a.jaren} jaar, {len(coins)} coins\n")
     print(f"{'variant':<15}{'n':>6}{'win':>5}{'stop%':>7}{'bruto':>8}{'netto':>8}  {'95%-marge':<17}{'eerste':>8}{'tweede':>8}{'willek.':>9}  oordeel")
     for v, r in results:
         if not r.get("n"):

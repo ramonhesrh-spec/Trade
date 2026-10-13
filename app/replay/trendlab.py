@@ -51,7 +51,17 @@ VARIANTS = (
     Variant("SW_PULL_1H", "swing_pullback", "1h", (21,), 1.5, 2.5, 48, True),
     Variant("SW_DON_1H", "swing_donchian", "1h", (24,), 1.5, 2.0, 36, True),
     Variant("SW_SQUEEZE_1H", "swing_squeeze", "1h", (12,), 1.5, 2.0, 36, True),
+    # Kanteling: params = (bevestigingen, pivotlengte n, impuls in ATR, impulsvenster, max candles sinds L0). Vooraf vastgelegd, nooit afgesteld.
+    Variant("KANT_1_5M", "kanteling", "5m", (1, 3, 3.0, 24, 48)),
+    Variant("KANT_2_5M", "kanteling", "5m", (2, 3, 3.0, 24, 96)),
+    Variant("KANT_1_15M", "kanteling", "15m", (1, 3, 3.0, 24, 48)),
+    Variant("KANT_2_15M", "kanteling", "15m", (2, 3, 3.0, 24, 96)),
+    Variant("KANT_1_1H", "kanteling", "1h", (1, 3, 3.0, 24, 48)),
+    Variant("KANT_2_1H", "kanteling", "1h", (2, 3, 3.0, 24, 96)),
 )
+KANT_TARGET_R = 2.0      # doel van de kanteling-trade
+KANT_MAX_BARS = 48       # candles tot de trade op het slot sluit
+KANT_STOP_ATR = 0.25     # de stop ligt zoveel ATR voorbij L1 (enkel) of L2 (dubbel)
 
 
 def prepare(bars: pd.DataFrame) -> pd.DataFrame:
@@ -134,6 +144,78 @@ def sweep_signals(b: pd.DataFrame, period: str) -> list[tuple[int, int]]:
     return out
 
 
+def _pivot_flags(low: np.ndarray, n: int) -> np.ndarray:
+    """flags[p] is True als low[p] een pivot-laag is: strikt lager dan de n candles links en lager of gelijk aan de n candles rechts. Strikt links
+    voorkomt dat een vlakke reeks elke candle tot pivot maakt; gelijk rechts houdt de eerste van twee gelijke bodems. Het kan pas bekend zijn op p + n."""
+    size = len(low)
+    flags = np.zeros(size, dtype=bool)
+    if size < 2 * n + 1:
+        return flags
+    win = np.lib.stride_tricks.sliding_window_view(low, 2 * n + 1)          # win[k] = low[k .. k+2n], middelpunt k+n
+    mid = win[:, n]
+    left_ok = (win[:, :n] > mid[:, None]).all(axis=1)
+    right_ok = (win[:, n + 1:] >= mid[:, None]).all(axis=1)
+    flags[n:size - n] = left_ok & right_ok
+    return flags
+
+
+def _kanteling_one_side(hi: np.ndarray, lo: np.ndarray, cl: np.ndarray, atr: np.ndarray, confirmations: int, n: int, impulse_atr: float,
+                        impulse_window: int, max_bars: int) -> list[tuple[int, float]]:
+    """Long-kant van de kanteling op (eventueel gespiegelde) reeksen; geeft [(signaalcandle, ruwe stop)].
+
+    Een pivot op p wordt pas gebruikt op candle p + n (dan is hij gesloten bevestigd). Toestanden: wacht op L0 (pivot-laag na een impuls), H1 (eerste
+    pivot-hoog na L0), L1 (eerste pivot-laag daarna, hoger dan L0), doorbraak (slot > H1); bij dubbel verder H2 (eerste pivot-hoog vanaf de
+    doorbraakcandle, boven H1), L2 (eerste pivot-laag na H2, hoger dan L1) en een slot > H2. Eenvoudigste lezing waar de spec twee kanten op kon:
+    een lage prik onder L0 of L1, of meer dan max_bars candles sinds L0, zet de hele reeks terug op nul (L1 terugzetten naar alleen L1 had een
+    tweede, ongevraagde regel opgeleverd); na een signaal begint ook alles opnieuw; een pivot die niet strikt hoger ligt dan L0/L1/H1 wordt overgeslagen."""
+    pl, ph = _pivot_flags(lo, n), _pivot_flags(-hi, n)
+    size = len(cl)
+    out: list[tuple[int, float]] = []
+    l0 = h1 = l1 = h2 = l2 = None          # indices
+    h1_price = h2_price = None
+    stage = 0                              # 0 wacht op L0, 1 op H1, 2 op L1, 3 op doorbraak, 4 op H2, 5 op L2, 6 op tweede doorbraak
+    i1 = None
+    for i in range(size):
+        p = i - n                          # de pivot die op deze candle bekend wordt
+        if stage and (lo[i] < lo[l0] or i - l0 > max_bars):
+            stage, l0 = 0, None
+        elif stage >= 3 and lo[i] < lo[l1] and i > l1:
+            stage, l0 = 0, None
+        if p >= 0 and stage == 0 and pl[p] and np.isfinite(atr[p]) and atr[p] > 0 and p >= 1:
+            window_high = hi[max(0, p - impulse_window):p].max() if p > 0 else -np.inf
+            if window_high - lo[p] >= impulse_atr * atr[p]:
+                l0, stage = p, 1
+        elif p >= 0 and stage == 1 and ph[p] and p > l0:
+            h1, h1_price, stage = p, hi[p], 2
+        elif p >= 0 and stage == 2 and pl[p] and p > h1 and lo[p] > lo[l0]:
+            l1, stage = p, 3
+        elif stage == 4 and p >= 0 and ph[p] and p >= i1 and hi[p] > h1_price:
+            h2, h2_price, stage = p, hi[p], 5
+        elif stage == 5 and p >= 0 and pl[p] and p > h2 and lo[p] > lo[l1]:
+            l2, stage = p, 6
+        if stage == 3 and i >= l1 + n and cl[i] > h1_price:
+            if confirmations == 1:
+                if np.isfinite(atr[i]):
+                    out.append((i, lo[l1] - KANT_STOP_ATR * atr[i]))
+                stage, l0 = 0, None
+            else:
+                i1, stage = i, 4
+        elif stage == 6 and i >= l2 + n and cl[i] > h2_price:
+            if np.isfinite(atr[i]):
+                out.append((i, lo[l2] - KANT_STOP_ATR * atr[i]))
+            stage, l0 = 0, None
+    return out
+
+
+def kanteling_signals(b: pd.DataFrame, confirmations: int, n: int, impulse_atr: float, impulse_window: int, max_bars: int) -> list[tuple[int, int, float]]:
+    """[(signaalcandle, +1 of -1, ruwe stop)] voor de kanteling. De short-kant is de exacte spiegel: hoog en laag wisselen en de reeks wordt
+    ontkend, zodat dezelfde code beide kanten rekent. ATR komt uit b['atr'] (zie prepare)."""
+    hi, lo, cl, atr = (b[c].to_numpy(dtype=float) for c in ("high", "low", "close", "atr"))
+    out = [(i, 1, raw) for i, raw in _kanteling_one_side(hi, lo, cl, atr, confirmations, n, impulse_atr, impulse_window, max_bars)]
+    out += [(i, -1, -raw) for i, raw in _kanteling_one_side(-lo, -hi, -cl, atr, confirmations, n, impulse_atr, impulse_window, max_bars)]
+    return sorted(out)
+
+
 def exit_trail(b: pd.DataFrame, j0: int, sign: int, entry: float, stop0: float, k_trail: float, max_bars: Optional[int] = None) -> tuple[float, int, str]:
     """(bruto R, uitgangscandle, uitkomst). Chandelier: de stop volgt het uiterste sinds de instap op k_trail ATR en gaat alleen de goede kant op.
     Een gat door de stop vult op de open. Stop eerst als open en stop samenvallen. Met max_bars sluit de trade op de close van de max_bars-ste candle (tijd)."""
@@ -164,12 +246,21 @@ def exit_target(b: pd.DataFrame, j0: int, sign: int, entry: float, stop: float, 
     return sign * (cl[last] - entry) / risk, last, "tijd"
 
 
-def _trade(v: Variant, b: pd.DataFrame, i: int, sign: int, cost_pct: float) -> Optional[dict]:
-    """Eén trade voor een signaal op candle i, of None als er geen geldige instap of stop is."""
+def _trade(v: Variant, b: pd.DataFrame, i: int, sign: int, cost_pct: float, raw_stop: Optional[float] = None) -> Optional[dict]:
+    """Eén trade voor een signaal op candle i, of None als er geen geldige instap of stop is. raw_stop is alleen voor de kanteling (de stop komt uit het patroon)."""
     atr = float(b["atr"].iloc[i])
     if not np.isfinite(atr) or atr <= 0:
         return None
-    if v.family == "sweep":
+    if v.family == "kanteling":
+        if i + 1 >= len(b) or raw_stop is None:
+            return None
+        entry = float(b["open"].iloc[i + 1])
+        stop = smc_eval.floor_stop("short" if sign == -1 else "long", entry, raw_stop)
+        risk = sign * (entry - stop)
+        if risk <= 0:                                    # de open ligt al voorbij de stop
+            return None
+        gross, j, outcome = exit_target(b, i + 1, sign, entry, stop, KANT_TARGET_R, KANT_MAX_BARS)
+    elif v.family == "sweep":
         entry = float(b["close"].iloc[i])
         extreme = float(b["high"].iloc[i] if sign == -1 else b["low"].iloc[i])
         raw = extreme + 0.25 * atr if sign == -1 else extreme - 0.25 * atr
@@ -187,11 +278,14 @@ def _trade(v: Variant, b: pd.DataFrame, i: int, sign: int, cost_pct: float) -> O
         risk = abs(entry - stop)
         gross, j, outcome = exit_trail(b, i + 1, sign, entry, stop, v.k_trail if swing else TRAIL_K, v.max_bars if swing else None)
     cost_r = cost_pct / 100 * entry / risk
-    return {"at": b["timestamp"].iloc[i + 1 if v.family != "sweep" else i], "direction": "long" if sign == 1 else "short", "risk_pct": risk / entry * 100,
+    return {"at": b["timestamp"].iloc[i if v.family == "sweep" else i + 1], "direction": "long" if sign == 1 else "short", "risk_pct": risk / entry * 100,
             "gross": gross, "net": gross - cost_r, "bars": j - i, "outcome": outcome, "i": i, "sign": sign}
 
 
-def signals_for(v: Variant, b: pd.DataFrame, htf: Optional[np.ndarray] = None) -> list[tuple[int, int]]:
+def signals_for(v: Variant, b: pd.DataFrame, htf: Optional[np.ndarray] = None) -> list[tuple]:
+    """(candle, kant) per signaal; de kanteling voegt er een derde waarde aan toe, de ruwe stop."""
+    if v.family == "kanteling":
+        return kanteling_signals(b, *v.params[:1], *v.params[1:])
     if v.family == "swing_donchian":
         return swing_donchian_signals(b, *v.params, htf)
     if v.family == "swing_pullback":
@@ -214,10 +308,11 @@ def run_variant(v: Variant, bars: pd.DataFrame, cost_pct: float = 0.06, htf_bars
             raise ValueError(f"{v.name} heeft 4u-candles nodig (htf_bars)")
         htf = htf_trend(b, prepare(htf_bars))
     rows, busy_until = [], -1
-    for i, sign in signals_for(v, b, htf):
+    for sig in signals_for(v, b, htf):
+        i, sign = sig[0], sig[1]
         if v.family != "sweep" and i <= busy_until:
             continue
-        t = _trade(v, b, i, sign, cost_pct)
+        t = _trade(v, b, i, sign, cost_pct, sig[2] if len(sig) > 2 else None)
         if t is None:
             continue
         busy_until = i + t["bars"]
@@ -235,10 +330,18 @@ def placebo_variant(v: Variant, bars: pd.DataFrame, real: pd.DataFrame, cost_pct
     rng = np.random.default_rng(seed)
     n = len(b)
     rows = []
-    for sign in real["sign"].tolist():
+    for sign, risk_pct in zip(real["sign"].tolist(), real["risk_pct"].tolist()):
         for _ in range(20):                                   # een paar pogingen voor een geldige instap
             i = int(rng.integers(WARMUP, n - 2))
-            if v.family == "sweep":
+            if v.family == "kanteling":
+                # zelfde uitgang en dezelfde stopafstand als de echte trade (risk_pct), alleen het instapmoment is willekeurig
+                entry = float(b["open"].iloc[i + 1])
+                stop = smc_eval.floor_stop("short" if sign == -1 else "long", entry, entry * (1 - sign * risk_pct / 100))
+                risk = abs(entry - stop)
+                if risk <= 0:
+                    continue
+                gross, j, outcome = exit_target(b, i + 1, sign, entry, stop, KANT_TARGET_R, KANT_MAX_BARS)
+            elif v.family == "sweep":
                 atr = float(b["atr"].iloc[i])
                 entry = float(b["close"].iloc[i])
                 raw = entry - sign * max(atr, entry * 0.004)

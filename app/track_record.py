@@ -43,6 +43,12 @@ LAB_LABELS = {
     "sw_pull_1h": "Swing terugval, 1u",
     "sw_don_1h": "Swing uitbraak, 1u",
     "sw_squeeze_1h": "Swing samentrekking, 1u",
+    "kant_1_5m": "Kanteling enkel, 5m",
+    "kant_2_5m": "Kanteling dubbel, 5m",
+    "kant_1_15m": "Kanteling enkel, 15m",
+    "kant_2_15m": "Kanteling dubbel, 15m",
+    "kant_1_1h": "Kanteling enkel, 1u",
+    "kant_2_1h": "Kanteling dubbel, 1u",
 }
 SOURCE_LABELS = {"scan": "Door HesPulse gevonden", "community": "Via de community"}
 STATUS_LABELS = {
