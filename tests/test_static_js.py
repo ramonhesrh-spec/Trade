@@ -50,6 +50,13 @@ class UtabsTest(unittest.TestCase):
         self.assertEqual(run_node("utabs_harness.js", "utabs.js")["noHashActive"], "tab-b")
 
 
+    def test_hash_naar_kaart_in_ander_paneel_toont_dat_paneel(self):
+        deep = run_node("utabs_harness.js", "utabs.js")["deep"]
+        self.assertEqual(deep["onLoad"], "tab-b+scroll")
+        self.assertEqual(deep["onHashchange"], "tab-b+scroll")
+        self.assertEqual(deep["stray"], "tab-b")                         # onbekende hash laat het getoonde paneel staan
+
+
 @unittest.skipUnless(shutil.which("node"), "node ontbreekt")
 class SparkChangeTest(unittest.TestCase):
     def test_verandering_zonder_minigrafiek_wordt_gevuld(self):

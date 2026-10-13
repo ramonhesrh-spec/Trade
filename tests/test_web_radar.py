@@ -56,6 +56,27 @@ class WebRadarTests(unittest.TestCase):
         self.assertIn("r-progress", r.text)                # voortgang tussen stop en doel bij de open trade
         self.assertIn("Doel +", r.text)
 
+    def test_elke_radarrij_linkt_naar_de_coinpagina(self):
+        text = self.client.get("/smc").text
+        for coin in ("XRP", "ETH"):
+            self.assertIn(f'<a class="mrow-link" href="/coins/{coin}">{coin}</a>', text)
+
+    def test_uitkomst_krijgt_nederlands_label_in_de_standrij(self):
+        word = self.main.templates.env.filters["outcome_word"]
+        self.assertEqual([word("take_profit"), word("stop_loss"), word(None)], ["Doel geraakt", "Stop geraakt", "Open"])
+
+    def test_radarrij_heeft_direct_een_koers(self):
+        text = self.client.get("/smc").text
+        self.assertIn('data-vd-price="ETH">103.00</span>', text)
+
+    def test_open_trade_kaart_staat_in_open_paneel_met_id_uit_alarmlink(self):
+        import re
+        text = self.client.get("/smc").text
+        url = re.search(r'data-chips-url="(/smc#radar-signal-\d+)"', text).group(1)
+        card_id = url.split("#")[1]
+        open_panel = text.split('id="tab-open"')[1].split('id="tab-afgerond"')[0]
+        self.assertIn(f'id="{card_id}"', open_panel)
+
     def test_api_radar_levert_live_data_per_kaart(self):
         r = self.client.get("/api/radar")
         self.assertEqual(r.status_code, 200)

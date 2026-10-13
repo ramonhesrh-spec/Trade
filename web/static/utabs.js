@@ -22,12 +22,23 @@
       window.dispatchEvent(new Event("resize"));
       return true;
     }
+    // Een hash kan ook een element in een niet-getoond paneel zijn (alarm.js linkt naar /smc#radar-signal-N): toon dan dat paneel.
+    function reveal() {
+      var id = decodeURIComponent(location.hash.slice(1));
+      if (!id) return false;
+      if (show(id, false)) return true;
+      var el = document.getElementById(id);
+      var panel = el && el.closest && el.closest("[data-utab-panel]");
+      if (!panel || !show(panel.id, false)) return false;
+      if (el.scrollIntoView) el.scrollIntoView();
+      return true;
+    }
     panels.classList.add("is-js");
-    var start = location.hash.slice(1);
-    if (!start || !show(start, false)) {
+    if (!reveal()) {
       var active = group.querySelector(".ut-tab.is-active");
       show((tabs.indexOf(active) === -1 ? tabs[0] : active).getAttribute("href").slice(1), false);
     }
+    window.addEventListener("hashchange", reveal);
     group.addEventListener("click", function (e) {
       var t = e.target.closest && e.target.closest(".ut-tab");
       if (!t || tabs.indexOf(t) === -1) return;
@@ -37,4 +48,11 @@
   }
   window.hpUtabsInit = init;
   document.querySelectorAll("[data-utabs]").forEach(init);
+
+  // Het drie-puntjesmenu sluit bij een tik ernaast en met Escape.
+  function closeMenus(except) {
+    document.querySelectorAll("details.ut-more[open]").forEach(function (d) { if (d !== except) d.removeAttribute("open"); });
+  }
+  document.addEventListener("click", function (e) { closeMenus(e.target.closest && e.target.closest("details.ut-more")); });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeMenus(null); });
 })();

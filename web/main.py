@@ -107,6 +107,7 @@ def proof(trade_type: str) -> dict:
 templates.env.globals["proof"] = proof
 templates.env.globals["asset"] = asset
 templates.env.filters["grade_word"] = lambda g: {"A": "Sterk", "B": "Redelijk", "C": "Zwak"}.get(g, "Geen oordeel")
+templates.env.filters["outcome_word"] = lambda o: kans_view.OUTCOME_TEXT.get(o, "Open")
 templates.env.globals["fmt_price"] = today.fmt_price
 templates.env.globals["is_ceo"] = lambda user: is_ceo(user)
 templates.env.globals["live_exchange"] = config.EXCHANGE_ID

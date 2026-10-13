@@ -434,7 +434,7 @@
 <{{ el }} class="mrow"{% if el == "a" and href %} href="{{ href }}"{% endif %}{{ attrs|xmlattr }}>
   <span class="mrow-icon" aria-hidden="true">{{ icon[:4] }}</span>
   <span class="mrow-main">
-    <span class="mrow-title">{{ title }}{% if chip %} <i class="mrow-chip {{ chip_tone }}">{{ chip }}</i>{% endif %}</span>
+    <span class="mrow-title">{% if href and el != "a" %}<a class="mrow-link" href="{{ href }}">{{ title }}</a>{% else %}{{ title }}{% endif %}{% if chip %} <i class="mrow-chip {{ chip_tone }}">{{ chip }}</i>{% endif %}</span>
     {% if subtitle %}<span class="mrow-sub">{{ subtitle }}</span>{% endif %}
   </span>
   <span class="mrow-price"{% if price_coin %} data-vd-price="{{ price_coin }}"{% endif %}>{{ price_text }}</span>
