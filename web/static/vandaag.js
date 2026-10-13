@@ -45,6 +45,8 @@
       .catch(function () { return false; /* een mislukte verversing laat de laatste stand staan */ });
   }
 
+  window.hesRefresh = function () { return refresh(true); };
+
   refresh();
   setInterval(refresh, INTERVAL_MS);
   document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });

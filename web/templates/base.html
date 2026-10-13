@@ -125,6 +125,7 @@
     window.HP.progressDone = done;
 
     document.addEventListener("click", function (e) {
+      if (e.defaultPrevented) return;      // tabbar.js vangt een tik op de actieve tab af: geen navigatie, dus geen uitfade
       var a = e.target.closest("a[href]");
       if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;

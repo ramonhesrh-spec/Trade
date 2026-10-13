@@ -30,3 +30,17 @@
     if (!ticking) { ticking = true; requestAnimationFrame(update); }
   }, { passive: true });
 })();
+
+// Een tik op de tab van de pagina waar je al bent brengt je naar boven, zoals in elke telefoon-app. aria-current komt van de server;
+// smooth.js zet is-active al bij pointerdown, dus daar kun je hier niet op vertrouwen.
+(function () {
+  var bar = document.querySelector(".tabbar");
+  if (!bar) return;
+  bar.addEventListener("click", function (e) {
+    var tab = e.target.closest && e.target.closest("a.tab[aria-current='page']");
+    if (!tab) return;
+    e.preventDefault();
+    var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+  });
+})();
