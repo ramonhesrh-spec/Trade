@@ -87,7 +87,7 @@ class BaseShellTests(unittest.TestCase):
 
     def test_vandaag_heeft_de_schil(self):
         html = self.client.get("/vandaag").text
-        for needle in ['class="top-glow"', 'id="fsearch"', 'class="dock"', 'class="tabbar"', 'id="push-pause"', 'id="price-dot"',
+        for needle in ['class="has-glow"', 'id="fsearch"', 'class="dock"', 'class="tabbar"', 'id="push-pause"', 'id="price-dot"',
                        'id="system-status"', 'id="cmdk"', 'id="more-sheet"', 'id="push-banner"', ">SMC</a>", ">Bewijs</a>",
                        "data-more-toggle"]:
             self.assertIn(needle, html, needle)
@@ -133,10 +133,12 @@ class BaseShellTests(unittest.TestCase):
         css = open(os.path.join(os.path.dirname(main.__file__), "static", "style.css"), encoding="utf-8").read()
         for token in ("--glow-top-peak:", "--glow-top-mid:", "--glow-top-shoulder:"):
             self.assertIn(token, css)
-        blok = css[css.index(".top-glow {"):]
+        blok = css[css.index("html.has-glow {"):]
         blok = blok[:blok.index("}")]
-        self.assertIn("top: 0", blok)
+        self.assertIn("--glow-top-peak", blok)
+        self.assertIn("background-color: var(--bg)", blok)
         self.assertNotIn("animation", blok)
+        self.assertIn("html.has-glow body { background: none; }", css)
         html = self.client.get("/vandaag").text
         self.assertIn("viewport-fit=cover", html)
         self.assertIn('content="black-translucent"', html)
@@ -144,7 +146,7 @@ class BaseShellTests(unittest.TestCase):
     def test_login_blijft_zonder_schil(self):
         html = TestClient(main.app).get("/login").text
         self.assertNotIn("fsearch", html)
-        self.assertNotIn("top-glow", html)
+        self.assertNotIn("has-glow", html)
 
 
 class VandaagLayoutTests(BaseShellTests):

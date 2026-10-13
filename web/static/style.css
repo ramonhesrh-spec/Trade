@@ -2128,7 +2128,6 @@ html { -webkit-tap-highlight-color: transparent; }
 .setup-card.is-kept::before { content: "Bewaard"; display: inline-block; margin-bottom: var(--space-3); font-size: var(--text-2xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent); }
 
 /* Marktsessie: een zachte tint onder de inhoud. Azië koel, Londen neutraal, New York warm, nacht donker. */
-html[data-session] body { background-color: var(--bg); }
 html[data-session="azie"] .glow-accent { background: #4aa3ff; opacity: 0.12; }
 html[data-session="londen"] .glow-accent { opacity: 0.10; }
 html[data-session="newyork"] .glow-accent { background: #ffb347; opacity: 0.12; }
@@ -2259,12 +2258,20 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
 /* ===== Indeling (plan 2026-10-13) =====
    Overgenomen van een referentie-app: veel lucht, grote cijfers, dunne lijnen en geen zware kaarten. Kleuren blijven de tokens hierboven. */
 
-/* Gloed bovenaan: statisch, één laag achter alles. Een vaste laag en geen body-achtergrond, omdat html[data-session] de body-kleur zet. */
-.top-glow {
-  position: absolute; top: 0; left: 0; right: 0; height: var(--glow-top-height); z-index: 0; pointer-events: none;
-  background: radial-gradient(ellipse 130% 100% at 50% 0%, var(--glow-top-peak) 0%, var(--glow-top-shoulder) 24%, var(--glow-top-mid) 42%, transparent 100%);
+/* Gloed bovenaan: statisch, geschilderd op het canvas (html) en niet in een element in de body. De gloed moet boven de veilige rand
+   (statusbalk, Dynamic Island) beginnen: een laag in de body begint pas waar de body begint en liet daarboven een vlakke zwarte band
+   staan. Het canvas wordt over het hele scherm geschilderd, dus ook onder de klok, en vult ook bij overscroll boven en onder. */
+html.has-glow {
+  background-image:
+    radial-gradient(ellipse 130% 100% at 50% 0%, var(--glow-top-peak) 0%, var(--glow-top-shoulder) 24%, var(--glow-top-mid) 42%, transparent 100%),
+    linear-gradient(rgba(234, 241, 240, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(234, 241, 240, 0.035) 1px, transparent 1px);
+  background-size: 100% var(--glow-top-height), 32px 32px, 32px 32px;
+  background-repeat: no-repeat, repeat, repeat;
+  background-color: var(--bg);
 }
-/* Niet z-index -1: html en body hebben allebei een eigen achtergrond, en de body-achtergrond zou een negatieve laag afdekken. */
+html.has-glow body { background: none; }
+/* Niet z-index -1: de body-achtergrond van pagina's zonder glow zou een negatieve laag afdekken. */
 main { position: relative; z-index: 1; }
 
 /* Kop */
