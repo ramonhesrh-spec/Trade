@@ -1789,12 +1789,13 @@ main + .footer { border-top: 1px solid var(--border); }
 /* Meldingen: per dag gegroepeerd, met een label per soort en een gelezen-streepje. */
 .nf-day { margin: var(--space-10) 0 var(--space-5); font-size: var(--text-xs); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
 .nf-day:first-child { margin-top: 0; }
-.nf-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-4); }
-.nf-item { border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-elevated); border-left: 3px solid transparent; }
-.nf-unread { border-left-color: var(--accent); background: linear-gradient(90deg, var(--accent-bg), transparent 40%), var(--bg-elevated); }
-.nf-link { display: grid; grid-template-columns: auto 1fr auto; gap: var(--space-6); align-items: start; padding: var(--space-6) var(--space-7); color: inherit; text-decoration: none; }
-a.nf-link:hover { background: var(--panel-hover); border-radius: var(--radius-sm); }
-.nf-chip { padding: 2px 10px; border-radius: 999px; font-size: var(--text-2xs); letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap; margin-top: 2px; }
+.nf-list { list-style: none; margin: 0; padding: 0; }
+.nf-item { border-top: var(--sep); border-left: 3px solid transparent; }
+.nf-unread { border-left-color: var(--accent); padding-left: var(--space-5); }
+.nf-link { display: grid; grid-template-columns: var(--icon-row) minmax(0, 1fr) auto; column-gap: var(--space-6); align-items: start; min-height: var(--row-h); padding: var(--space-4) 0; color: inherit; text-decoration: none; }
+a.nf-link:hover { background: var(--panel-hover); }
+/* Een rond icoon met de afgekorte soort: past er een woord niet in 36px, dan wordt het afgekapt in plaats van de rij te rekken. */
+.nf-chip { width: var(--icon-row); height: var(--icon-row); border-radius: 50%; display: grid; place-items: center; overflow: hidden; font-size: 9px; letter-spacing: 0; text-transform: uppercase; white-space: nowrap; }
 .chip-new { background: var(--accent-bg); color: var(--accent); }
 .chip-report { background: var(--green-bg); color: var(--green); }
 .chip-muted { background: var(--bg); color: var(--muted); border: 1px solid var(--border); }
@@ -1802,12 +1803,6 @@ a.nf-link:hover { background: var(--panel-hover); border-radius: var(--radius-sm
 .nf-unread .nf-title { font-weight: 700; }
 .nf-body { margin: var(--space-3) 0 0; font-size: var(--text-base); line-height: 1.5; color: var(--text-dim); white-space: pre-line; }
 .nf-time { font-size: var(--text-xs); white-space: nowrap; margin-top: 3px; }
-@media (max-width: 560px) {
-  .nf-link { grid-template-columns: 1fr auto; }
-  .nf-chip { grid-column: 1; justify-self: start; }
-  .nf-main { grid-column: 1 / -1; }
-  .nf-time { grid-column: 2; grid-row: 1; }
-}
 
 /* Een melding opent de pagina op de kans zelf: scroll weg van de vaste kop en markeer de kaart. */
 .signal-card, .radar-card { scroll-margin-top: 80px; }
@@ -2433,6 +2428,9 @@ main { position: relative; z-index: 1; }
 }
 .ut-menu a { padding: var(--space-5) var(--space-6); border-radius: 10px; color: var(--text); text-decoration: none; }
 .ut-menu a:active, .ut-menu a:hover { background: var(--panel-hover); }
+.ut-form { margin: 0; }
+.ut-form button { width: 100%; text-align: left; padding: var(--space-5) var(--space-6); border: 0; border-radius: 10px; background: none; color: var(--text); font: inherit; cursor: pointer; }
+.ut-form button:hover { background: var(--panel-hover); }
 /* utabs.js zet .is-js op de groep: pas dan verdwijnen de niet-actieve panelen. Zonder JS staat alles onder elkaar. */
 .ut-panels.is-js > [data-utab-panel]:not(.is-shown) { display: none; }
 

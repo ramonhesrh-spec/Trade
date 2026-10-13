@@ -1,5 +1,7 @@
 {% extends "base.html" %}
+{% import "_macros.html" as macros %}
 {% block title %}Meldingen — HesPulse{% endblock %}
+{% block page_title %}Meldingen{% endblock %}
 {% block content %}
 
 {% macro feed(groups, clickable) %}
@@ -9,7 +11,7 @@
     {% for n in g["items"] %}
     <li class="nf-item{{ ' nf-unread' if n.unread else '' }}" {% if clickable %}data-notification-id="{{ n.id }}"{% endif %}>
       {% if clickable and n.url %}<a href="{{ n.url }}" class="mark-read-link nf-link">{% else %}<div class="nf-link">{% endif %}
-        <span class="nf-chip {{ n.chip_class }}">{{ n.chip }}</span>
+        <span class="nf-chip {{ n.chip_class }}" title="{{ n.chip }}">{{ n.chip[:4] }}</span>
         <div class="nf-main">
           <strong class="nf-title">{{ n.title }}</strong>
           <p class="nf-body">{{ n.body }}</p>
@@ -22,27 +24,32 @@
   {% endfor %}
 {% endmacro %}
 
-<div class="page-head">
-  <h2>Meldingen</h2>
-  {% if unread_count %}
-  <form method="post" action="/meldingen/alles-gelezen" class="inline-form"
-        onsubmit="return confirm('Alle meldingen als gelezen markeren?');">
-    <button type="submit" class="button-link">alles gelezen ({{ unread_count }})</button>
-  </form>
-  {% endif %}
-</div>
-<p class="page-intro">Wat niet als push binnenkomt: updates, het weekrapport en kansen die vervielen.</p>
+{{ macros.headline("Updates, weekrapport en vervallen kansen", unread_count, "ongelezen") }}
 
+{% set tabs = [{"key": "jij", "label": "Meldingen", "href": "#tab-meldingen"}] %}
+{% if admin_groups is not none %}{% set tabs = tabs + [{"key": "systeem", "label": "Systeem", "href": "#tab-systeem"}] %}{% endif %}
+{% if unread_count %}
+{% call macros.utabs(tabs, "jij", "meldingen") %}
+  <form method="post" action="/meldingen/alles-gelezen" class="ut-form"
+        onsubmit="return confirm('Alle meldingen als gelezen markeren?');">
+    <button type="submit">alles gelezen ({{ unread_count }})</button>
+  </form>
+{% endcall %}
+{% else %}
+{{ macros.utabs(tabs, "jij", "meldingen") }}
+{% endif %}
+
+<div class="ut-panels" data-utabs-panels="meldingen">
+<section id="tab-meldingen" data-utab-panel class="flat is-shown">
+  {% if notification_groups %}{{ feed(notification_groups, true) }}{% else %}<p class="muted empty">Nog geen meldingen.</p>{% endif %}
+</section>
 {% if admin_groups is not none %}
-<section class="card" style="--i: 0">
+<section id="tab-systeem" data-utab-panel class="flat">
   <h3>Systeem (alleen jij)</h3>
   {% if admin_groups %}{{ feed(admin_groups, false) }}{% else %}<p class="muted empty">Geen systeemmeldingen.</p>{% endif %}
 </section>
 {% endif %}
-
-<section class="card" style="--i: 1">
-  {% if notification_groups %}{{ feed(notification_groups, true) }}{% else %}<p class="muted empty">Nog geen meldingen.</p>{% endif %}
-</section>
+</div>
 
 <script>
 document.querySelectorAll(".mark-read-link").forEach(function (link) {

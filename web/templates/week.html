@@ -1,20 +1,20 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 {% block title %}Jouw week — HesPulse{% endblock %}
+{% block page_title %}Kwartaalcijfers{% endblock %}
 {% block content %}
+{% set tabs = [] %}
+{% for d, label in ranges.items() %}{% set _ = tabs.append({"key": d, "label": label, "href": "/week?dagen=" ~ d}) %}{% endfor %}
 <article class="week-card kans-card">
-  <header class="setup-head"><h2>Kwartaalcijfers van de CEO</h2><span class="muted">laatste {{ dagen }} dagen</span></header>
-  <p class="filter-chips">{% for d, label in ranges.items() %}<a class="chip{% if d == dagen %} is-active{% endif %}" href="/week?dagen={{ d }}">{{ label }}</a>{% endfor %}</p>
-  <p class="kans-outcome {{ 'is-win' if week.net_r > 0 else 'is-loss' if week.net_r < 0 }}">{{ "%+.1f"|format(week.net_r) }}R na kosten</p>
+  {{ macros.headline("Resultaat, laatste " ~ dagen ~ " dagen", "%+.1f"|format(week.net_r), "R na kosten", spark=spark) }}
+  {{ macros.utabs(tabs, dagen, "week") }}
   <p class="ceo-headline">{{ headline }}</p>
-  {{ spark }}
   <p class="muted vd-fine">Cumulatief resultaat in R per dag.{% if week.resolved %} Hoogste punt {{ "%+.1f"|format(week.cumulative|max) }}R, laagste {{ "%+.1f"|format(week.cumulative|min) }}R.{% endif %}</p>
-  <dl class="kans-facts">
-    <div><dt>Kansen gemeld</dt><dd>{{ week.signals }}</dd></div>
-    <div><dt>Afgerond</dt><dd>{{ week.resolved }}</dd></div>
-    <div><dt>Winst</dt><dd>{{ week.wins }}</dd></div>
-    <div><dt>Verlies</dt><dd>{{ week.resolved - week.wins }}</dd></div>
-  </dl>
+  {{ macros.keylines([
+    {"label": "Kansen gemeld", "value": week.signals},
+    {"label": "Afgerond", "value": week.resolved},
+    {"label": "Winst", "value": week.wins},
+    {"label": "Verlies", "value": week.resolved - week.wins}], "wk") }}
   {% if week.best %}<p>Deal van de week: <a href="/kans/{{ week.best.id }}">{{ week.best.coin }} {{ week.best.direction }}</a>, {{ "%+.1f"|format(week.best.net_r) }}R.</p>{% endif %}
   {% if week.worst %}<p>Fusie die mislukte: <a href="/kans/{{ week.worst.id }}">{{ week.worst.coin }} {{ week.worst.direction }}</a>, {{ "%+.1f"|format(week.worst.net_r) }}R.</p>{% endif %}
   {% if not week.resolved %}<p class="muted">Nog geen afgeronde kansen deze week. Open en vervallen kansen tellen niet mee in R.</p>{% endif %}

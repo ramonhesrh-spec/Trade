@@ -259,3 +259,42 @@ class BewijsLayoutTests(BaseShellTests):
     def test_lege_staat(self):
         html = self.client.get("/bewijs").text
         self.assertIn("Nog geen signalen om te meten.", html)
+
+
+class ListPagesLayoutTests(BaseShellTests):
+    def seed_signal(self):
+        user = repo.get_user_by_username("tester")
+        sid = repo.insert_signal({"coin": "BTC", "direction": "long", "category": "x", "confidence": "hoog", "technical_confirmed": 1, "hard_gates_ok": 1, "price": 100.0,
+                                  "stop_loss": 99.0, "take_profit": 102.0, "trade_type": "smc"})
+        repo.create_journal_entry(sid, user["id"], 10.0)
+        return user
+
+    def test_signalen_linktabs_en_menu_met_formulier(self):
+        self.seed_signal()
+        html = self.client.get("/signalen").text
+        self.assertIn('class="ph"', html)
+        self.assertRegex(html, r'class="ut-tab[^"]*" href="/signalen\?alles=1"')
+        menu = html[html.index('class="ut-menu'):]
+        self.assertIn('action="/signalen/verbergen-alles"', menu[:menu.index("</details>")])
+        self.assertNotIn("view-toggle", html)
+
+    def test_signalen_alles_heeft_geen_verbergen_formulier(self):
+        self.seed_signal()
+        html = self.client.get("/signalen?alles=1").text
+        self.assertNotIn("verbergen-alles", html)
+        self.assertIn('class="ut-tab is-active" href="/signalen?alles=1"', html)
+
+    def test_meldingen_groot_getal_en_hooks_blijven(self):
+        user = repo.get_user_by_username("tester")
+        repo.create_notification(user["id"], "update", "Nieuw", "Tekst", "/vandaag")
+        html = self.client.get("/meldingen").text
+        self.assertIn('class="hl-num">1</span><span class="hl-unit">ongelezen', html)
+        self.assertIn("data-notification-id", html)
+        self.assertIn('action="/meldingen/alles-gelezen"', html)
+
+    def test_week_in_de_nieuwe_indeling(self):
+        html = self.client.get("/week?dagen=30").text
+        self.assertRegex(html, r'class="ut-tab is-active" href="/week\?dagen=30"[^>]*>1M<')
+        for needle in ['class="ph"', "data-share-chart", "laatste 30 dagen", 'class="hl-num"', 'class="kl"', "ceo-headline"]:
+            self.assertIn(needle, html, needle)
+        self.assertNotIn("kans-outcome", html)

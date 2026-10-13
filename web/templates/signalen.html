@@ -1,26 +1,26 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 {% block title %}Signalen — HesPulse{% endblock %}
+{% block page_title %}Journaal{% endblock %}
 {% block content %}
 
-<div class="page-head">
-  <h2>Signalen</h2>
-  <div class="view-toggle">
-    <a href="/signalen" class="{{ 'active' if not showing_all }}">Open</a>
-    <a href="/signalen?alles=1" class="{{ 'active' if showing_all }}">Alle</a>
-  </div>
-</div>
-{% if not showing_all and entries %}
-<form method="post" action="/signalen/verbergen-alles" class="inline-form"
-      onsubmit="return confirm('Alle {{ entries|length }} open signalen als niet interessant markeren?');">
-  <button type="submit" class="button-link">alles niet interessant</button>
-</form>
-{% endif %}
-<p class="page-intro">
-  {% if showing_all %}Alle signalen, nieuwste eerst.{% else %}Open signalen, nieuwste eerst.{% endif %}
-</p>
+{{ macros.headline("Signalen, nieuwste eerst", entries|length, "signalen" if showing_all else "open") }}
 
-<section class="card" style="--i: 0">
+{% set tabs = [
+  {"key": "open", "label": "Open", "href": "/signalen"},
+  {"key": "alle", "label": "Alle", "href": "/signalen?alles=1"}] %}
+{% if not showing_all and entries %}
+{% call macros.utabs(tabs, "open", "journaal") %}
+  <form method="post" action="/signalen/verbergen-alles" class="ut-form"
+        onsubmit="return confirm('Alle {{ entries|length }} open signalen als niet interessant markeren?');">
+    <button type="submit">alles niet interessant</button>
+  </form>
+{% endcall %}
+{% else %}
+{{ macros.utabs(tabs, "alle" if showing_all else "open", "journaal") }}
+{% endif %}
+
+<section class="flat">
   {% if not entries %}
   <p class="muted empty">{% if showing_all %}Nog geen signalen.{% else %}Geen open signalen. <a href="/signalen?alles=1">Bekijk afgeronde signalen</a>.{% endif %}</p>
   {% else %}
