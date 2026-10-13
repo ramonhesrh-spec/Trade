@@ -150,6 +150,20 @@ class BaseShellTests(unittest.TestCase):
         self.assertIn("viewport-fit=cover", html)
         self.assertIn('content="black-translucent"', html)
 
+    def test_randkleur_element_voor_statusbalk(self):
+        html = self.client.get("/vandaag").text
+        self.assertIn('class="glow-edge-tint"', html)
+        self.assertIn('content="#0a0e0f"', html)
+        css = open(os.path.join(os.path.dirname(main.__file__), "static", "style.css"), encoding="utf-8").read()
+        blok = css[css.index(".glow-edge-tint {"):]
+        blok = blok[:blok.index("}")]
+        self.assertIn("background-color: var(--glow-edge)", blok)
+        self.assertIn("position: fixed", blok)
+        self.assertIn("-webkit-mask-image", blok)
+        self.assertNotIn("radial", blok)
+        self.assertIn("--glow-edge: #0e5753;", css)
+        self.assertNotIn("glow-edge-tint", TestClient(main.app).get("/login").text)
+
     def test_login_blijft_zonder_schil(self):
         html = TestClient(main.app).get("/login").text
         self.assertNotIn("fsearch", html)

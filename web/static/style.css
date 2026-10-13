@@ -74,7 +74,10 @@
   --radius-dock: 22px;
   /* Gloed bovenaan, achter statusbalk en eiland. Piek en middenstop zijn instelbaar. De tekst begint onder het veilige gebied (rond 60 tot 120px),
      daar moet de gloed <= 0,10 zijn: zie het contrastverslag (.superpowers/sdd/2026-10-13-indeling-nieuw-ontwerp/glow-search-report.md). */
-  --glow-top-peak: rgba(23, 229, 214, 0.34);
+  --glow-top-peak: rgba(23, 229, 214, 0.12);
+  /* Dekkende kleur van de gloed op de bovenrand: rgba(23, 229, 214, 0.34) over de basis #0a0e0f. Bij een andere gloedkleur hier opnieuw uitrekenen en de eerste stop van de lineaire laag in html.has-glow meenemen. */
+  --glow-edge: #0e5753;
+  --glow-edge-height: 140px;
   --glow-top-mid: rgba(60, 140, 255, 0.05);
   --glow-top-shoulder: rgba(23, 229, 214, 0.09);
   --glow-top-height: 320px;
@@ -2263,14 +2266,25 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
    staan. Het canvas wordt over het hele scherm geschilderd, dus ook onder de klok, en vult ook bij overscroll boven en onder. */
 html.has-glow {
   background-image:
+    linear-gradient(var(--glow-edge), rgba(14, 87, 83, 0) var(--glow-edge-height)),
     radial-gradient(ellipse 130% 100% at 50% 0%, var(--glow-top-peak) 0%, var(--glow-top-shoulder) 24%, var(--glow-top-mid) 42%, transparent 100%),
     linear-gradient(rgba(234, 241, 240, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(234, 241, 240, 0.035) 1px, transparent 1px);
-  background-size: 100% var(--glow-top-height), 32px 32px, 32px 32px;
-  background-repeat: no-repeat, repeat, repeat;
+  background-size: 100% var(--glow-edge-height), 100% var(--glow-top-height), 32px 32px, 32px 32px;
+  background-repeat: no-repeat, no-repeat, repeat, repeat;
   background-color: var(--bg);
 }
 html.has-glow body { background: none; }
+/* iOS 26 in een geinstalleerde webapp: de webview begint onder de statusbalk (safe-area-inset-top is 0) en CSS kan daar niet schilderen.
+   iOS vult die strook zelf met de background-color van een position:fixed element dat de bovenrand raakt (de kleur wordt dus uit
+   background-color gelezen, niet uit gradienten of opacity). Daarom een vol-brede, vlakke, dekkende kleur; de mask laat hem in beeld
+   uitlopen in het canvas, dat op y=0 dezelfde kleur heeft, zodat er geen naad is. */
+.glow-edge-tint {
+  position: fixed; top: 0; left: 0; right: 0; height: var(--glow-edge-height); z-index: 0; pointer-events: none;
+  background-color: var(--glow-edge);
+  -webkit-mask-image: linear-gradient(to bottom, #000, transparent);
+  mask-image: linear-gradient(to bottom, #000, transparent);
+}
 /* Niet z-index -1: de body-achtergrond van pagina's zonder glow zou een negatieve laag afdekken. */
 main { position: relative; z-index: 1; }
 

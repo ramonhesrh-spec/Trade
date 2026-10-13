@@ -28,6 +28,7 @@
 {# Zoekveld alleen op pagina's die het blok dock_search vullen; de body-klasse laat de CSS de onderruimte aanpassen. #}
 {% set _fs %}{% block dock_search %}{% endblock %}{% endset %}
 <body{% if user and _fs|trim %} class="has-fsearch"{% endif %}>
+{% if user %}<div class="glow-edge-tint" aria-hidden="true"></div>{% endif %}
 <div id="page-progress" aria-hidden="true"></div>
 <div class="page-ambient" aria-hidden="true">
   <span class="ambient-glow glow-accent"></span>
