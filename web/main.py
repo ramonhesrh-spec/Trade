@@ -674,7 +674,11 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
         rule_statuses.append({**status, "label": track_record.rule_label(trade_type), "css": status["status"].lower().replace(" ", "-"),
                               "lab_line": track_record.lab_line(lab_types.get(trade_type))})
     other_rules = track_record.other_rule_rows(lab_types, other_types)
+    curves = track_record.equity_curves(rows, config.TRACK_RECORD_COST_PCT)
+    for c in curves:
+        c["svg"] = Markup(track_record.equity_svg(c["cumulative"], c["drawdown"]))
     return templates.TemplateResponse(request, "bewijs.html", {
+        "curves": curves,
         "rule_statuses": rule_statuses, "other_rules": other_rules, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
         "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,
         "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,

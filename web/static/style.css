@@ -2303,3 +2303,14 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
 .vd-budget-bg { stroke: var(--border-strong); }
 .vd-budget-fill { stroke: var(--accent); stroke-linecap: round; }
 .vd-budget.is-full .vd-budget-fill { stroke: var(--amber); }
+
+/* Resultaatcurve op Bewijs (track_record.equity_svg). De schaduw is de gemeten terugval, geen versiering. */
+.equity-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: var(--space-7); }
+.equity-card { margin: 0; display: flex; flex-direction: column; gap: var(--space-4); }
+.equity-card figcaption { display: flex; flex-direction: column; gap: var(--space-2); font-size: var(--text-sm); }
+.equity { width: 100%; height: 90px; display: block; }
+.equity-line { fill: none; stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.equity-up .equity-line { stroke: var(--green); }
+.equity-down .equity-line { stroke: var(--red); }
+.equity-dd { fill: var(--red-bg); stroke: none; }
+.equity-zero { stroke: var(--border-strong); stroke-width: 1; stroke-dasharray: 3 3; vector-effect: non-scaling-stroke; }

@@ -191,5 +191,19 @@ class SparklineRouteTest(WebCase):
         self.assertIn(self.client.get("/api/sparklines?coins=BTC", follow_redirects=False).status_code, (302, 303, 401))
 
 
+class BewijsCurveTest(WebCase):
+    def test_curve_section_shows_per_type_with_excluded_count(self):
+        with db.session() as conn:
+            for outcome in ("take_profit", "stop_loss", None):
+                conn.execute("""INSERT INTO signals (message_id, coin, direction, category, confidence, technical_confirmed, price, stop_loss,
+                                take_profit, trade_type, auto_outcome, auto_outcome_at, created_at)
+                                VALUES (NULL, 'BTC', 'long', 'x', 'hoog', 1, 100, 99, 102, 'smc', ?, ?, ?)""",
+                             (outcome, db.now_iso() if outcome else None, db.now_iso()))
+        r = self.client.get("/bewijs")
+        self.assertIn("Resultaatcurve per soort", r.text)
+        self.assertIn('class="equity-dd"', r.text)
+        self.assertIn("1 open of vervallen, niet meegeteld", r.text)
+
+
 if __name__ == "__main__":
     unittest.main()

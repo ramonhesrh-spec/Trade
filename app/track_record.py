@@ -314,6 +314,55 @@ def live_net_r(rows: list[dict], trade_type: str, round_trip_cost_pct: float) ->
     return [g - _cost_r(r, round_trip_cost_pct) for r, g in done]
 
 
+def equity_curves(rows: list[dict], round_trip_cost_pct: float) -> list[dict]:
+    """Per soort de cumulatieve netto R na elke afgeronde trade (take of stop), oudste afronding eerst, met de terugval vanaf de hoogste
+    stand tot dan (start is 0, dus een eerste verlies telt als terugval). Open en vervallen tellen niet mee maar staan als aantal ernaast."""
+    by_type: dict[str, list[dict]] = defaultdict(list)
+    for r in rows:
+        by_type[r["trade_type"]].append(r)
+    out = []
+    for trade_type, items in by_type.items():
+        net = live_net_r(items, trade_type, round_trip_cost_pct)
+        if not net:
+            continue
+        cumulative, drawdown, running, peak = [], [], 0.0, 0.0
+        for n in net:
+            running += n
+            peak = max(peak, running)
+            cumulative.append(running)
+            drawdown.append(running - peak)
+        out.append({"trade_type": trade_type, "label": TYPE_LABELS.get(trade_type, trade_type), "n": len(net), "cumulative": cumulative,
+                    "drawdown": drawdown, "max_drawdown": min(drawdown), "total": running, "excluded": len(items) - len(net),
+                    "total_text": fmt_r(running), "dd_text": fmt_r(min(drawdown))})
+    out.sort(key=lambda c: -c["n"])
+    return out
+
+
+def equity_svg(cumulative: list[float], drawdown: list[float], width: int = 320, height: int = 90) -> str:
+    """Lijn van de cumulatieve R vanaf 0, met als schaduw het vlak tussen de hoogste stand tot dan en de lijn (de terugval)."""
+    if not cumulative:
+        return ""
+    values = [0.0] + list(cumulative)
+    peaks = [0.0] + [c - d for c, d in zip(cumulative, drawdown)]
+    lo, hi = min(min(values), 0.0), max(max(peaks), 0.0)
+    span = hi - lo or 1.0
+    pad = 4
+    step = (width - 2 * pad) / max(1, len(values) - 1)
+
+    def pt(i: int, v: float) -> str:
+        return f"{pad + i * step:.1f},{pad + (hi - v) / span * (height - 2 * pad):.1f}"
+
+    line = " ".join(pt(i, v) for i, v in enumerate(values))
+    shade = " ".join([pt(i, p) for i, p in enumerate(peaks)] + [pt(i, values[i]) for i in range(len(values) - 1, -1, -1)])
+    zero = pad + hi / span * (height - 2 * pad)
+    trend = "up" if values[-1] >= 0 else "down"
+    return (f'<svg class="equity equity-{trend}" viewBox="0 0 {width} {height}" preserveAspectRatio="none" role="img" '
+            f'aria-label="Cumulatief resultaat in R per afgeronde trade, met terugval">'
+            f'<polygon class="equity-dd" points="{shade}"/>'
+            f'<line class="equity-zero" x1="{pad}" x2="{width - pad}" y1="{zero:.1f}" y2="{zero:.1f}"/>'
+            f'<polyline class="equity-line" points="{line}"/></svg>')
+
+
 def sparkline_svg(values: list[float], width: int = 300, height: int = 56) -> str:
     """Lijn van het cumulatieve resultaat in R over de laatste weken, met een nullijn. Lege of vlakke reeksen
     geven een vlakke lijn in plaats van een fout."""

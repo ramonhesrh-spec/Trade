@@ -102,6 +102,43 @@ class SparklineTests(unittest.TestCase):
         self.assertEqual(tr.sparkline_svg([]), "")
 
 
+class EquityTests(unittest.TestCase):
+    def rows(self):
+        return [
+            row(outcome="take_profit", done="2026-09-20T10:00:00+00:00"),            # +2R
+            row(outcome="stop_loss", done="2026-09-21T10:00:00+00:00"),              # -1R
+            row(outcome="stop_loss", done="2026-09-22T10:00:00+00:00"),              # -1R
+            row(outcome="take_profit", done="2026-09-23T10:00:00+00:00"),            # +2R
+            row(outcome="vervallen"), row(outcome=None),
+            row(trade_type="structuur", outcome="stop_loss"),
+        ]
+
+    def test_curve_counts_only_take_and_stop_in_order_of_outcome(self):
+        curves = tr.equity_curves(list(reversed(self.rows())), 0.0)
+        smc = curves[0]
+        self.assertEqual(smc["trade_type"], "smc")
+        self.assertEqual(smc["cumulative"], [2.0, 1.0, 0.0, 2.0])
+        self.assertEqual(smc["drawdown"], [0.0, -1.0, -2.0, 0.0])
+        self.assertEqual(smc["max_drawdown"], -2.0)
+        self.assertEqual((smc["n"], smc["excluded"]), (4, 2))
+        self.assertEqual(smc["total_text"], "+2,00R")
+        self.assertEqual(curves[1]["drawdown"], [-1.0])                         # een eerste verlies is al terugval vanaf 0
+
+    def test_costs_come_off_every_trade(self):
+        smc = tr.equity_curves(self.rows()[:1], 0.1)[0]
+        self.assertAlmostEqual(smc["cumulative"][0], 2.0 - 0.1 / 1.0)            # stop op 1% afstand: 0,1R kosten
+
+    def test_type_without_resolved_trades_has_no_curve(self):
+        self.assertEqual(tr.equity_curves([row(outcome=None)], 0.0), [])
+
+    def test_svg_has_line_and_drawdown_shade(self):
+        svg = tr.equity_svg([2.0, 1.0, 0.0, 2.0], [0.0, -1.0, -2.0, 0.0], width=108, height=40)
+        self.assertIn('class="equity-dd"', svg)
+        self.assertIn('class="equity-line"', svg)
+        self.assertEqual(svg.count(",", svg.index('class="equity-line" points="')), 5)       # 0 plus vier trades
+        self.assertEqual(tr.equity_svg([], []), "")
+
+
 if __name__ == "__main__":
     unittest.main()
 

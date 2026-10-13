@@ -45,6 +45,26 @@
 </section>
 {% endif %}
 
+{% if curves %}
+<section class="card" style="--i: 0">
+  <details class="stats-collapse js-accordion">
+    <summary class="stats-summary">
+      <span>Resultaatcurve per soort</span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+    </summary>
+    <p class="muted">Elke afgeronde trade (doel of stop) schuift de lijn op, in R na kosten. De schaduw is de terugval vanaf de hoogste stand. Open en vervallen signalen tellen niet mee en staan ernaast.</p>
+    <div class="equity-grid">
+      {% for c in curves %}
+      <figure class="equity-card">
+        <figcaption><strong>{{ c.label }}</strong><span class="muted">{{ c.n }} afgerond, {{ c.total_text }}, grootste terugval {{ c.dd_text }}. {{ c.excluded }} open of vervallen, niet meegeteld.</span></figcaption>
+        {{ c.svg }}
+      </figure>
+      {% endfor %}
+    </div>
+  </details>
+</section>
+{% endif %}
+
 {% if not summary %}
 <section class="card" style="--i: 0"><p class="muted empty">Nog geen signalen om te meten.</p></section>
 {% else %}
