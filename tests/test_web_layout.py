@@ -325,3 +325,37 @@ class CoinLayoutTests(BaseShellTests):
         html = self.client.get("/coins/BTC").text
         self.assertIn("Plan voor BTC", html)
         self.assertIn("verlies je ongeveer € 25", html)
+
+
+class RestLayoutTests(BaseShellTests):
+    def test_account(self):
+        html = self.client.get("/account").text
+        for needle in ['class="ph"', ">Account<", 'class="hl-num"', 'class="kl"',
+                       "Nieuwe kansen", "Drempel", "Maximaal aantal pushes per dag"]:
+            self.assertIn(needle, html, needle)
+        self.assertNotIn("summary-strip", html)
+
+    def test_ceo(self):
+        repo.create_user("leerling1", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        html = self.client.get("/ceo").text
+        for needle in ['class="ph"', ">De CEO<", 'class="kl"', "Dagen in functie", "Chief Executive Officer", "De leerlingen", "Leerling van de maand", "Aanwezigheid"]:
+            self.assertIn(needle, html, needle)
+
+    def test_kans(self):
+        sid = repo.insert_signal({"coin": "BTC", "direction": "long", "category": "x", "confidence": "hoog", "technical_confirmed": 1,
+                                  "hard_gates_ok": 1, "price": 100.0, "stop_loss": 99.0, "take_profit": 102.0, "trade_type": "smc"})
+        r = self.client.get("/kans/%d" % sid)
+        self.assertEqual(r.status_code, 200)
+        for needle in ['class="ph"', ">BTC long<", 'class="kl"', "Instap", "R:R"]:
+            self.assertIn(needle, r.text, needle)
+
+    def test_uitleg_en_keten_hebben_een_kop(self):
+        self.assertIn('class="ph"', self.client.get("/uitleg").text)
+        self.assertIn(">Handleiding<", self.client.get("/uitleg").text)
+        anon = TestClient(main.app).get("/keten")
+        self.assertIn('class="ph"', anon.text)
+        self.assertIn(">Ketting<", anon.text)
+
+    def test_meer_blad_en_uitloggen(self):
+        for path in ("/account", "/ceo", "/uitleg"):
+            self.assertIn('action="/logout"', self.client.get(path).text)

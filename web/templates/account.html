@@ -1,9 +1,9 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 {% block title %}Mijn account — HesPulse{% endblock %}
+{% block page_title %}Account{% endblock %}
 {% block content %}
 
-<h2>Mijn account</h2>
 <p class="page-intro">{% if is_ceo(user) %}Welkom terug, CEO {{ user.username }}.{% else %}Welkom, leerling {{ user.username }}. De CEO kijkt mee.{% endif %} Journaal, instellingen en winrate.</p>
 
 {% if not onboarding_complete %}
@@ -24,16 +24,11 @@
 </section>
 {% endif %}
 
-<section class="summary-strip" style="--i: 0">
-  <div class="summary-stat">
-    <span class="summary-value">{{ pending_entries|length }}</span>
-    <span class="summary-label">nieuwe kans{{ "en" if pending_entries|length != 1 else "" }}</span>
-  </div>
-  <div class="summary-stat">
-    <span class="summary-value">{{ taken_entries|length }}</span>
-    <span class="summary-label">open positie{{ "s" if taken_entries|length != 1 else "" }}</span>
-  </div>
-</section>
+{{ macros.headline("Open posities", taken_entries|length) }}
+{{ macros.keylines([
+  {"label": "Nieuwe kansen", "value": pending_entries|length},
+  {"label": "Winrate", "value": ("%.0f"|format(winrate.winrate_pct) if winrate.winrate_pct is not none else "-"), "unit": ("%" if winrate.winrate_pct is not none else ""), "explain": "Eigen trades, oefentrades niet meegeteld."},
+  {"label": "Drempel", "value": user.confirm_threshold_pct, "unit": "%"}], "ac") }}
 
 {% if unclear_messages %}
 <details class="stats-collapse js-accordion" style="--i: 1">

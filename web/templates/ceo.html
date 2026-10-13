@@ -1,5 +1,7 @@
 {% extends "base.html" %}
 {% block title %}De CEO — HesPulse{% endblock %}
+{% import "_macros.html" as macros %}
+{% block page_title %}De CEO{% endblock %}
 {% block content %}
 <article class="ceo-page" data-rain="{{ rain }}">
   <section class="ceo-hero">
@@ -59,16 +61,15 @@
 
   <p class="ceo-divider" aria-hidden="true"><span></span><i>◆</i><span></span></p>
 
-  <section class="ceo-stats" aria-label="Prestaties van de CEO">
-    <div><dt>Dagen in functie</dt><dd>{{ days_in_office }}</dd></div>
-    <div><dt>Leerlingen in dienst</dt><dd>{{ students|length }}</dd></div>
-    <div><dt>Rendement volgens de CEO</dt><dd>+∞%</dd></div>
-    <div><dt>Rendement volgens Bewijs</dt><dd class="ceo-small"><a href="/bewijs">Kijk zelf</a></dd></div>
-    <div><dt>Jachten</dt><dd>1 <span class="ceo-sub">gehuurd</span></dd></div>
-    <div><dt>Lambo's</dt><dd>1 <span class="ceo-sub">op huur</span></dd></div>
-    <div><dt>Passief inkomen</dt><dd class="ceo-small">Gisteren</dd></div>
-    <div><dt>Bonuspool</dt><dd class="ceo-small">Onbetaalbaar</dd></div>
-  </section>
+  {{ macros.keylines([
+    {"label": "Dagen in functie", "value": days_in_office},
+    {"label": "Leerlingen in dienst", "value": students|length},
+    {"label": "Rendement volgens de CEO", "value": "+∞%"},
+    {"label": "Rendement volgens Bewijs", "value": "Kijk zelf", "href": "/bewijs"},
+    {"label": "Jachten", "value": "1", "unit": "gehuurd"},
+    {"label": "Lambo's", "value": "1", "unit": "op huur"},
+    {"label": "Passief inkomen", "value": "Gisteren"},
+    {"label": "Bonuspool", "value": "Onbetaalbaar"}], "ceo") }}
 
   <section class="ceo-card" aria-label="Visitekaartje">
     <p><span>Kantoor</span>Dek, voorste ligstoel</p>
