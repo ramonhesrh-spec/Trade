@@ -140,5 +140,11 @@ class WebRadarTests(unittest.TestCase):
         self.assertIn("copy.js", r.text)
 
 
+    def test_afstandsbalk_op_de_kaart(self):
+        r = self.client.get("/smc")
+        self.assertIn('data-radar="approach"', r.text)
+        self.assertIn("left: 33.3%", r.text)                                 # XRP: koers 102, limiet 100, 2% van 3%
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -19,7 +19,7 @@ def setup_card(setup: dict, price: Optional[float]) -> Optional[dict]:
     return {
         "key": f"setup:{setup['id']}", "kind": "setup", "coin": setup["coin"], "direction": setup["direction"],
         "plan": plan, "price": price, "state": state, "state_label": tp.STATE_LABELS.get(state, "Koers wordt opgehaald"),
-        "distance_pct": distance, "live_r": None,
+        "distance_pct": distance, "approach_pct": tp.approach_pct(distance), "live_r": None,
         "chart": None if moot else tp.chart_spec(setup["direction"], plan.stop, plan.take, plan.limit, price, setup["zone_low"], setup["zone_high"]),
         "created_at": setup["created_at"], "setup": setup,
         "steps": [] if moot else chance_steps.smc_steps(plan, setup["zone_low"], setup["zone_high"], price, distance, setup["coin"]),
@@ -60,7 +60,7 @@ def signal_card(signal: dict, price: Optional[float]) -> Optional[dict]:
     return {
         "key": f"signal:{signal['id']}", "kind": "signal", "coin": signal["coin"], "direction": signal["direction"],
         "plan": None, "price": price, "state": "open", "state_label": "Open trade",
-        "distance_pct": None, "live_r": r,
+        "distance_pct": None, "approach_pct": None, "live_r": r,
         "chart": tp.chart_spec(signal["direction"], stop, take, entry, price, entry=entry),
         "created_at": signal["created_at"], "signal": signal,
         "rr": abs(take - entry) / abs(entry - stop),
@@ -73,7 +73,7 @@ def live_payload(cards: list[dict]) -> dict:
     return {
         c["key"]: {
             "state": c["state"], "label": c["state_label"], "price": c["price"],
-            "distance_pct": c["distance_pct"], "live_r": c["live_r"], "chart": c["chart"],
+            "distance_pct": c["distance_pct"], "approach_pct": c["approach_pct"], "live_r": c["live_r"], "chart": c["chart"],
         }
         for c in cards
     }

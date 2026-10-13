@@ -61,6 +61,19 @@ def distance_to_limit_pct(plan: TradePlan, price: float) -> float:
     return (price - plan.limit) / plan.limit * 100 if plan.direction == "long" else (plan.limit - price) / plan.limit * 100
 
 
+APPROACH_SCALE_PCT = 3.0
+
+
+def approach_pct(distance_pct: Optional[float], scale_pct: float = APPROACH_SCALE_PCT) -> Optional[float]:
+    """Plek van de koers op de afstandsbalk: 0 (scale_pct of verder weg) tot 100 (op de instap). Zelfde schaal als de afstandsring op de
+    Setups-kaarten (ring.js, RING_SCALE_PCT = 3), zodat ring en balk hetzelfde zeggen. Voorbij de limiet is vol."""
+    if distance_pct is None:
+        return None
+    if distance_pct <= 0:
+        return 100.0
+    return max(0.0, 100.0 - distance_pct / scale_pct * 100.0)
+
+
 def live_r(direction: str, entry: float, stop: float, price: float) -> Optional[float]:
     """Huidig resultaat in R voor een open trade; 1R is de afstand van entry tot stop."""
     risk = abs(entry - stop)

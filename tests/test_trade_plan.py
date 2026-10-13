@@ -96,3 +96,13 @@ class ChartSpecTests(unittest.TestCase):
         self.assertNotIn("Limiet", spec["label"])
         self.assertNotIn("Nu", spec["label"])
         self.assertIsNone(spec["price"])
+
+
+class ApproachTest(unittest.TestCase):
+    def test_position_from_far_to_at_the_entry(self):
+        self.assertIsNone(tp.approach_pct(None))
+        self.assertEqual(tp.approach_pct(0.0), 100.0)
+        self.assertEqual(tp.approach_pct(-0.4), 100.0)                       # al voorbij de limiet: vol
+        self.assertAlmostEqual(tp.approach_pct(1.5), 50.0)
+        self.assertEqual(tp.approach_pct(3.0), 0.0)
+        self.assertEqual(tp.approach_pct(8.0), 0.0)

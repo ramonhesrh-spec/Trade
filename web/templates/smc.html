@@ -23,6 +23,11 @@
         <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
       </header>
       <div class="radar-state radar-state-{{ c.state or 'laden' }}" data-radar="state">{{ c.state_label }}</div>
+      <div class="approach" role="img" aria-label="Afstand van de koers tot je instap"{% if c.approach_pct is none %} hidden{% endif %}>
+        <span class="approach-track"></span>
+        <span class="approach-dot" data-radar="approach" style="left: {{ "%.1f"|format(c.approach_pct or 0) }}%"></span>
+        <span class="approach-end">Instap</span>
+      </div>
       {% if c.chart %}{{ macros.level_chart(c.coin, c.chart) }}{% endif %}
       {{ macros.level_chips(c.coin, c.levels, "/smc#radar-" ~ c.key|replace(':', '-')) }}
       {{ macros.steps_list(c.steps, user.risk_per_trade_eur) }}

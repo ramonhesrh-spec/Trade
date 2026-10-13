@@ -25,6 +25,12 @@
       if (!(window.hesLiveFresh && window.hesLiveFresh()) && data.distance_pct !== null && data.distance_pct !== undefined) {
         setText(card, "distance", (data.distance_pct >= 0 ? "+" : "") + data.distance_pct.toFixed(2) + "%");
       }
+      var approach = card.querySelector(".approach"), dot = card.querySelector('[data-radar="approach"]');
+      if (approach && dot) {
+        var has = data.approach_pct !== null && data.approach_pct !== undefined;
+        approach.hidden = !has;
+        if (has) dot.style.left = data.approach_pct.toFixed(1) + "%";
+      }
       var r = card.querySelector('[data-radar="live_r"]');
       if (r && data.live_r !== null && data.live_r !== undefined) {
         r.textContent = (data.live_r >= 0 ? "+" : "") + data.live_r.toFixed(2) + "R";

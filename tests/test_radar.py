@@ -78,6 +78,14 @@ class RadarTests(unittest.TestCase):
         self.assertEqual(radar.setup_card(SETUP, 107.0)["levels"], [])           # doel al gehaald: niets meer te kopiëren
         self.assertEqual([c["value"] for c in radar.signal_card(SIGNAL, 99.0)["levels"]], [100.0, 103.0, 94.0])
 
+    def test_afstandsbalk_volgt_de_afstand_tot_de_limiet(self):
+        card = radar.setup_card(SETUP, 102.0)                                # 2% van de limiet 100
+        self.assertAlmostEqual(card["approach_pct"], 100 - 2 / 3 * 100)
+        self.assertIsNone(radar.setup_card(SETUP, None)["approach_pct"])
+        self.assertIsNone(radar.signal_card(SIGNAL, 99.0)["approach_pct"])
+        payload = radar.live_payload([card])
+        self.assertAlmostEqual(payload["setup:7"]["approach_pct"], card["approach_pct"])
+
     def test_in_zone_count_telt_alleen_setups_met_koers_in_de_zone(self):
         other = {**SETUP, "id": 8, "coin": "ETH"}
         self.assertEqual(radar.in_zone_count([SETUP, other], {"XRP": 99.5, "ETH": 102.0}), 1)
