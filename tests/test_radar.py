@@ -86,6 +86,12 @@ class RadarTests(unittest.TestCase):
         payload = radar.live_payload([card])
         self.assertAlmostEqual(payload["setup:7"]["approach_pct"], card["approach_pct"])
 
+    def test_ongeldig_plan_verbergt_de_afstandsbalk(self):
+        card = radar.setup_card(SETUP, 96.0)                                 # long, koers onder de stop 97
+        self.assertEqual(card["state"], "ongeldig")
+        self.assertIsNone(card["approach_pct"])
+        self.assertIsNone(radar.live_payload([card])["setup:7"]["approach_pct"])
+
     def test_in_zone_count_telt_alleen_setups_met_koers_in_de_zone(self):
         other = {**SETUP, "id": 8, "coin": "ETH"}
         self.assertEqual(radar.in_zone_count([SETUP, other], {"XRP": 99.5, "ETH": 102.0}), 1)

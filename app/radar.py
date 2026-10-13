@@ -15,11 +15,13 @@ def setup_card(setup: dict, price: Optional[float]) -> Optional[dict]:
     state = setup_state(setup, price)
     moot = state == "doel_geraakt"
     distance = tp.distance_to_limit_pct(plan, price) if price and not moot else None
+    # Bij een ongeldig plan (koers voorbij de stop) is de afstand tot de instap negatief en zou de balk "vol" tonen terwijl de kaart zegt dat het plan vervalt.
+    approach = None if state == "ongeldig" else tp.approach_pct(distance)
     # Een moot plan krijgt geen grafiek en geen stappen: er is niets meer te doen, alleen de uitkomst blijft staan.
     return {
         "key": f"setup:{setup['id']}", "kind": "setup", "coin": setup["coin"], "direction": setup["direction"],
         "plan": plan, "price": price, "state": state, "state_label": tp.STATE_LABELS.get(state, "Koers wordt opgehaald"),
-        "distance_pct": distance, "approach_pct": tp.approach_pct(distance), "live_r": None,
+        "distance_pct": distance, "approach_pct": approach, "live_r": None,
         "chart": None if moot else tp.chart_spec(setup["direction"], plan.stop, plan.take, plan.limit, price, setup["zone_low"], setup["zone_high"]),
         "created_at": setup["created_at"], "setup": setup,
         "steps": [] if moot else chance_steps.smc_steps(plan, setup["zone_low"], setup["zone_high"], price, distance, setup["coin"]),

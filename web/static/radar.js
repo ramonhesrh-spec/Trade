@@ -29,7 +29,10 @@
       if (approach && dot) {
         var has = data.approach_pct !== null && data.approach_pct !== undefined;
         approach.hidden = !has;
-        if (has) dot.style.left = data.approach_pct.toFixed(1) + "%";
+        if (has) {
+          dot.style.left = data.approach_pct.toFixed(1) + "%";
+          approach.setAttribute("aria-label", "Koers op " + data.approach_pct.toFixed(0) + "% van de weg naar je instap");
+        }
       }
       var r = card.querySelector('[data-radar="live_r"]');
       if (r && data.live_r !== null && data.live_r !== undefined) {

@@ -9,5 +9,10 @@ console.log(JSON.stringify({
   setup: areas({ entry: null, limit: 100, stop: 97, take: 106 }),
   short: areas({ entry: null, limit: 100, stop: 103, take: 94 }),
   noStop: areas({ entry: null, limit: 100, stop: null, take: 106 }),
+  wrongSide: areas({ entry: null, limit: 100, stop: 103, take: 106 }),
+  longStopAbove: areas({ entry: null, limit: 100, stop: 103, take: 94, direction: "long" }),
+  rgbaHex: ctx.window.hesLevelChart.rgba("#f2685c", 0.1),
+  rgbaOther: ctx.window.hesLevelChart.rgba("rgb(1,2,3)", 0.1, "rgba(242,104,92,0.1)"),
+  rgbaNone: ctx.window.hesLevelChart.rgba("", 0.1),
   nothing: areas({ entry: null, limit: null, stop: 97, take: 106 }),
 }));

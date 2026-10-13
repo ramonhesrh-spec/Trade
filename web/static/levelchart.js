@@ -16,6 +16,7 @@
   var api = { update: function () {}, screenshot: function () { return Promise.resolve(null); } };
   window.hesLevelChart = api;
   api.areas = areas;
+  api.rgba = rgba;
   var els = document.querySelectorAll("[data-levelchart]");
   if (!LC || !els.length) return;
 
@@ -43,23 +44,30 @@
   }
 
   // Risico en beloning van het plan zelf: van instap (of limiet) tot stop, en van instap tot doel. Geen schatting, alleen de niveaus.
+  function num(v) { return typeof v === "number" && isFinite(v); }
+
   function areas(s) {
     var base = typeof s.entry === "number" && isFinite(s.entry) ? s.entry : s.limit;
     if (typeof base !== "number" || !isFinite(base)) return [];
-    var out = [];
-    if (typeof s.stop === "number" && isFinite(s.stop) && s.stop !== base) out.push({ key: "risk", base: base, value: s.stop });
-    if (typeof s.take === "number" && isFinite(s.take) && s.take !== base) out.push({ key: "reward", base: base, value: s.take });
+    var out = [], hasStop = num(s.stop), hasTake = num(s.take);
+    // Een stop of doel aan de verkeerde kant van de instap zou een vlak tekenen dat het plan tegenspreekt (bijvoorbeeld bij een verouderd of omgekeerd plan): dan liever geen vlak.
+    var opposite = hasStop && hasTake && (s.stop - base) * (s.take - base) < 0;
+    var lossSide = s.direction === "long" ? s.stop < base : s.direction === "short" ? s.stop > base : true;
+    var winSide = s.direction === "long" ? s.take > base : s.direction === "short" ? s.take < base : true;
+    if (hasStop && s.stop !== base && lossSide && (!hasTake || opposite)) out.push({ key: "risk", base: base, value: s.stop });
+    if (hasTake && s.take !== base && winSide && (!hasStop || opposite)) out.push({ key: "reward", base: base, value: s.take });
     return out;
   }
 
-  function rgba(hex, a) {
+  // De themakleur kan een ander formaat zijn dan 6-cijferige hex (rgb(), hsl(), leeg); de aanroeper geeft dan een vaste rgba mee in plaats van dat de invoer ongewijzigd terugkomt, want dat zou een dekkend vlak over de candles leggen.
+  function rgba(hex, a, fallback) {
     var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex).trim());
-    return m ? "rgba(" + parseInt(m[1], 16) + "," + parseInt(m[2], 16) + "," + parseInt(m[3], 16) + "," + a + ")" : hex;
+    return m ? "rgba(" + parseInt(m[1], 16) + "," + parseInt(m[2], 16) + "," + parseInt(m[3], 16) + "," + a + ")" : (fallback || "transparent");
   }
 
   // Een baselineserie met een prijsgrondlijn blijft aan de prijzen vastzitten als de schaal verschuift of de grafiek van maat wisselt.
-  function areaSeries(chart, color) {
-    var fill = rgba(color, 0.1), none = "rgba(0,0,0,0)";
+  function areaSeries(chart, color, fallback) {
+    var fill = rgba(color, 0.1, fallback), none = "rgba(0,0,0,0)";
     return chart.addBaselineSeries({
       baseValue: { type: "price", price: 0 },
       topLineColor: none, bottomLineColor: none,
@@ -174,8 +182,8 @@
     });
     var lc = { el: el, chart: chart, lines: {}, candles: [], dead: false, areas: {} };
     // Eerst toegevoegd, dus onderop: zone en candles blijven er leesbaar overheen.
-    lc.areas.risk = areaSeries(chart, red);
-    lc.areas.reward = areaSeries(chart, green);
+    lc.areas.risk = areaSeries(chart, red, "rgba(242,104,92,0.1)");
+    lc.areas.reward = areaSeries(chart, green, "rgba(51,214,159,0.1)");
     // De zone eerst: een baselineserie met als grondlijn zone_low en overal zone_high als waarde vult precies het vlak ertussen.
     lc.band = chart.addBaselineSeries({
       baseValue: { type: "price", price: s.zone_low != null ? s.zone_low : 0 },

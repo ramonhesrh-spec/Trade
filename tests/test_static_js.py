@@ -28,6 +28,17 @@ class LevelChartAreasTest(unittest.TestCase):
         self.assertEqual(out["noStop"], [{"key": "reward", "base": 100, "value": 106}])
         self.assertEqual(out["nothing"], [])
 
+    def test_vlak_aan_de_verkeerde_kant_wordt_weggelaten(self):
+        out = run_node("levelchart_harness.js", "levelchart.js")
+        self.assertEqual(out["wrongSide"], [])                              # stop en doel aan dezelfde kant van de instap
+        self.assertEqual(out["longStopAbove"], [])                          # long met stop boven de instap
+
+    def test_rgba_geeft_nooit_de_invoer_terug(self):
+        out = run_node("levelchart_harness.js", "levelchart.js")
+        self.assertEqual(out["rgbaHex"], "rgba(242,104,92,0.1)")
+        self.assertEqual(out["rgbaOther"], "rgba(242,104,92,0.1)")
+        self.assertEqual(out["rgbaNone"], "transparent")
+
 
 if __name__ == "__main__":
     unittest.main()

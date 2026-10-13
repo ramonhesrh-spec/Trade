@@ -144,6 +144,7 @@ class WebRadarTests(unittest.TestCase):
         r = self.client.get("/smc")
         self.assertIn('data-radar="approach"', r.text)
         self.assertIn("left: 33.3%", r.text)                                 # XRP: koers 102, limiet 100, 2% van 3%
+        self.assertIn('aria-label="Koers op 33% van de weg naar je instap"', r.text)
 
 
 if __name__ == "__main__":
