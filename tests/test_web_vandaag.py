@@ -90,7 +90,8 @@ class WebVandaagTests(unittest.TestCase):
                 "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "Reden.", "features": "{}", "state": "waiting",
                 "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
         text = self.client.get("/vandaag").text
-        self.assertIn("3 open:", text)
+        self.assertIn("3 Structuur wacht op de terugkeer", text)          # de telling staat achter de uitleg van Kansen open
+        self.assertIn("de rest staat op Radar en Setups", text)
         self.assertIn("alle 3 setups", text)                              # het paneel toont er twee, de koptekst zegt het echte aantal
 
     def test_tabbar_filters_and_empty_state_invite_the_user(self):

@@ -4,10 +4,6 @@
 {% block page_title %}Account{% endblock %}
 {% block content %}
 
-<p class="page-intro">{% if is_ceo(user) %}Welkom terug, CEO {{ user.username }}.{% else %}Welkom, leerling {{ user.username }}. De CEO kijkt mee.{% endif %} Journaal, instellingen en winrate.</p>
-
-<p class="muted" style="margin:var(--space-5) 0"><a href="/static/diag.html">Schermcontrole</a> toont hoe jouw telefoon de bovenrand doorgeeft.</p>
-
 {% if not onboarding_complete %}
 <section class="card onboarding-checklist" style="--i: 0">
   <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9,11 12,14 20,6"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Instellen</h3>
@@ -26,7 +22,8 @@
 </section>
 {% endif %}
 
-{{ macros.headline("Open posities", taken_entries|length) }}
+{{ macros.headline("Open posities", taken_entries|length,
+     explain=(("Welkom terug, CEO " ~ user.username ~ ".") if is_ceo(user) else ("Welkom, leerling " ~ user.username ~ ". De CEO kijkt mee.")) ~ " Journaal, instellingen en winrate.") }}
 {{ macros.keylines([
   {"label": "Nieuwe kansen", "value": pending_entries|length},
   {"label": "Winrate", "value": ("%.0f"|format(winrate.winrate_pct) if winrate.winrate_pct is not none else "-"), "unit": ("%" if winrate.winrate_pct is not none else ""), "explain": "Eigen trades, oefentrades niet meegeteld."},
@@ -463,6 +460,8 @@
   </table>
   </div>
 </section>
+
+<p class="muted tab-meta"><a href="/static/diag.html">Schermcontrole</a> toont hoe jouw telefoon de bovenrand doorgeeft.</p>
 
 <script defer src="/static/dashboard.js"></script>
 

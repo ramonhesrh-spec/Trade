@@ -4,11 +4,13 @@
 {% block page_title %}Setups{% endblock %}
 {% block content %}
 
+{% set fresh = engine_on and engine_minutes is not none and engine_minutes <= 15 %}
 {{ macros.headline("Plannen die klaarstaan", structure_cards|length, "klaar",
-     delta=(("Laatste controle " ~ engine_minutes ~ " min geleden") if engine_on and engine_minutes is not none else "")) }}
+     delta=(("Laatste controle " ~ engine_minutes ~ " min geleden") if engine_on and engine_minutes is not none else ""),
+     explain="Kansen die klaarstaan, met instap, stop en doelen. De motor kijkt elke 5 minuten. De score per soort staat op Bewijs.") }}
 
 {{ macros.keylines([
-  {"label": "Gezien, 24 uur", "value": counts.total},
+  {"label": "Gezien, 24 uur", "value": counts.total, "explain": "Laatste 24 uur: " ~ counts.total ~ " " ~ ("kans" if counts.total == 1 else "kansen") ~ " gezien, " ~ (counts.goedgekeurd + counts.afgekeurd) ~ " beoordeeld, " ~ counts.geen_plan ~ " zonder plan."},
   {"label": "Beoordeeld", "value": counts.goedgekeurd + counts.afgekeurd},
   {"label": "Zonder plan", "value": counts.geen_plan}], "st") }}
 
@@ -20,19 +22,17 @@
 <div class="ut-panels" data-utabs-panels="setups">
 
 <section id="tab-klaarstaand" data-utab-panel class="is-shown">
-<p class="page-intro">Kansen die klaarstaan, met instap, stop en doelen. De score per soort staat op <a href="/bewijs">Bewijs</a>.</p>
-<p class="engine-status {% if not engine_on %}is-off{% elif engine_minutes is none or engine_minutes > 15 %}is-stale{% endif %}">
+{# Alleen een waarschuwing krijgt een eigen balk; de gewone stand staat al onder het grote getal en in de kernregels. #}
+{% if not fresh %}
+<p class="engine-status {% if not engine_on %}is-off{% else %}is-stale{% endif %}">
   {% if is_ceo(user) %}
     {% if not engine_on %}De motor staat uit (STRUCTURE_ENABLED=false).
     {% elif engine_minutes is none %}De motor heeft nog niet gedraaid. Hij start in de eerstvolgende scan van 5 minuten, na een herstart van de bot.
-    {% elif engine_minutes > 15 %}Let op: de motor draaide {{ engine_minutes }} minuten geleden voor het laatst. Controleer crypto-market-scan-smc.timer.
-    {% else %}Laatste controle {{ engine_minutes }} min geleden.{% endif %}
-  {% elif engine_on and engine_minutes is not none and engine_minutes <= 15 %}Laatste controle {{ engine_minutes }} min geleden.
+    {% else %}Let op: de motor draaide {{ engine_minutes }} minuten geleden voor het laatst. Controleer crypto-market-scan-smc.timer.{% endif %}
   {% else %}Controle tijdelijk niet actueel.{% endif %}
-  Laatste 24 uur: {{ counts.total }} {{ "kans" if counts.total == 1 else "kansen" }} gezien, {{ counts.goedgekeurd + counts.afgekeurd }} beoordeeld, {{ counts.geen_plan }} zonder plan.
 </p>
+{% endif %}
 
-  <h3 class="vd-section-title">Klaarstaand</h3>
   <p class="filter-chips">
     <a class="chip{% if not only_ab and not side %} is-active{% endif %}" href="/structuur">Alles</a>
     <a class="chip{% if only_ab %} is-active{% endif %}" href="/structuur?alleen=ab">Alleen sterk en redelijk</a>
@@ -60,12 +60,11 @@
 </section>
 
 <section id="tab-trend" data-utab-panel>
-  <h3 class="vd-section-title">Trend</h3>
-  <p class="engine-status {% if trend_minutes is none or trend_minutes > 15 %}is-stale{% endif %}">
-    {% if trend_minutes is none %}Nog geen controle gedraaid.
-    {% elif trend_minutes > 15 %}Laatste controle {{ trend_minutes }} minuten geleden.
-    {% else %}Laatste controle {{ trend_minutes }} min geleden.{% endif %}
-  </p>
+  {% if trend_minutes is none or trend_minutes > 15 %}
+  <p class="engine-status is-stale">{% if trend_minutes is none %}Nog geen controle gedraaid.{% else %}Laatste controle {{ trend_minutes }} minuten geleden.{% endif %}</p>
+  {% else %}
+  <p class="muted tab-meta">Laatste controle {{ trend_minutes }} min geleden</p>
+  {% endif %}
   {% if not trend_on %}
   <p class="muted empty">Staat uit.</p>
   {% elif not trend_signals %}
@@ -81,11 +80,10 @@
 </section>
 
 <section id="tab-eerder" data-utab-panel>
-  <h3 class="vd-section-title">Eerder, laatste 7 dagen</h3>
   {% if not history %}
-  <p class="muted empty">Nog geen afgeronde setups.</p>
+  <p class="muted empty">Nog geen afgeronde setups in de laatste 7 dagen.</p>
   {% else %}
-  {{ macros.row_head("Markten", "", "Oordeel") }}
+  {{ macros.row_head("Laatste 7 dagen", "", "Oordeel") }}
   {% for h in history %}
   <div class="mrow-wrap">
     {{ macros.market_row(h.coin, h.coin, chip=h.direction, chip_tone=("pos" if h.direction == "long" else "neg"), subtitle=h.state_label,

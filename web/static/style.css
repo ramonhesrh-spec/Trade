@@ -2490,3 +2490,63 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 #tab-soort .proof-source { display: block; margin-bottom: var(--space-3); }
 .hl + .kl + .proof-footnote { margin: var(--space-5) 0 var(--space-8); }
 .onboarding-checklist { margin-bottom: var(--space-9); }
+
+/* ===== Rust (tweede ronde, 2026-10-13) =====
+   Na het eerste ontwerp op een echte iPhone: te veel tekst en te veel blokken. Cijfers in de schreefloze letter met vaste breedte,
+   zoals in de referentie; de monoletter maakte elk getal zwaar. Meer lucht rond het grote getal, lijsten zonder kaders. */
+.hl { margin-bottom: var(--space-11); }
+.hl-label { margin-bottom: var(--space-4); }
+.hl-num { font-family: var(--sans); font-weight: 500; letter-spacing: -0.03em; font-size: calc(var(--num-hero) * 1.08); }
+.hl-unit { font-family: var(--sans); font-weight: 400; font-size: var(--text-xl); }
+.hl-delta { font-family: var(--sans); font-weight: 500; font-size: var(--text-md); margin-top: var(--space-4); }
+.kl-num, .kl-unit, .mrow-title, .mrow-price, .mrow-chg, .ut-count { font-family: var(--sans); font-variant-numeric: tabular-nums; }
+.kl-num { font-weight: 600; }
+.kl-unit { font-weight: 500; }
+.mrow-title { font-weight: 600; letter-spacing: 0; }
+.mrow-price, .mrow-chg { font-weight: 500; }
+.kl { margin-bottom: var(--space-10); }
+.ut { margin-bottom: var(--space-8); }
+
+/* Kleine regel in een tabpaneel (stand van een motor, klok en sessie): gedempt, geen kader. */
+.tab-meta { margin: 0 0 var(--space-7); font-size: var(--text-sm); }
+.flat > h3 .kl-term { font-weight: inherit; }
+
+/* Een lege staat is een rustige regel tekst, geen gestippeld kader. */
+.empty-state { padding: var(--space-6) 0; text-align: left; align-items: flex-start; border: 0; }
+.empty-state strong { font-family: var(--sans); font-size: var(--text-lg); font-weight: 600; letter-spacing: 0; text-transform: none; }
+.empty-state p { margin: var(--space-3) 0 var(--space-6); max-width: 46ch; }
+
+/* Bewijsregel: alleen het label, de uitleg zit achter een tik erop. */
+.proof-term { padding: 0; background: none; border: 0; cursor: help; font: inherit; color: inherit; }
+.proof-term:hover { background: none; }
+.proof-term:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 999px; }
+.proof-line { margin: 0; }
+
+/* Waarom (kenmerken en toelichting) en Zo lees je dit: dicht tot je erop tikt. */
+.setup-why { border-top: var(--sep); padding-top: var(--space-5); }
+.setup-why > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--space-4); min-height: 36px; color: var(--text-dim); font-size: var(--text-md); }
+.setup-why > summary::-webkit-details-marker { display: none; }
+.setup-why > summary::after { content: ""; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform 0.2s ease; }
+.setup-why[open] > summary::after { transform: rotate(225deg); }
+.setup-why > summary .muted { font-size: var(--text-sm); }
+.proof-read { border-top: 0; padding-top: 0; }
+
+/* Filters op Setups: één rij, klein en stil. */
+.filter-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.filter-chips::-webkit-scrollbar { display: none; }
+.filter-chips .chip { flex: 0 0 auto; padding: 5px 12px; font-size: var(--text-sm); border-color: var(--border); }
+.filter-chips .chip.is-active { border-color: var(--accent); }
+
+@media (max-width: 760px) {
+  /* Kaarten worden rijen met een dunne lijn ertussen, zoals de radarkaarten al waren. */
+  .setup-grid { gap: 0; }
+  .setup-card { background: none; border: 0; border-bottom: var(--sep); border-radius: 0; box-shadow: none; padding: var(--space-8) 0 var(--space-9); }
+  .setup-card.is-weak { border-style: solid; }
+  .setup-card:first-child { padding-top: var(--space-4); }
+  .setup-card:last-child { border-bottom: 0; }
+  .setup-card::after, .setup-card:not(.is-kept)::before { display: none; }
+  .signal-list { gap: 0; }
+  .signal-card, .signal-card.is-confirmed { background: none; border: 0; border-bottom: var(--sep); border-left: 2px solid transparent; border-radius: 0; box-shadow: none; padding: var(--space-7) 0 var(--space-7) var(--space-5); }
+  .signal-card.is-confirmed { border-left-color: var(--green); }
+  .signal-card:last-child { border-bottom: 0; }
+}

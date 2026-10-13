@@ -6,10 +6,10 @@
 {% set tabs = [] %}
 {% for d, label in ranges.items() %}{% set _ = tabs.append({"key": d, "label": label, "href": "/week?dagen=" ~ d}) %}{% endfor %}
 <article class="week-card kans-card">
-  {{ macros.headline("Resultaat, laatste " ~ dagen ~ " dagen", "%+.1f"|format(week.net_r), "R na kosten", spark=spark) }}
+  {{ macros.headline("Resultaat, laatste " ~ dagen ~ " dagen", "%+.1f"|format(week.net_r), "R na kosten", spark=spark,
+       explain="Cumulatief resultaat in R per dag." ~ ((" Hoogste punt " ~ "%+.1f"|format(week.cumulative|max) ~ "R, laagste " ~ "%+.1f"|format(week.cumulative|min) ~ "R.") if week.resolved else "")) }}
   {{ macros.utabs(tabs, dagen, "week") }}
   <p class="ceo-headline">{{ headline }}</p>
-  <p class="muted vd-fine">Cumulatief resultaat in R per dag.{% if week.resolved %} Hoogste punt {{ "%+.1f"|format(week.cumulative|max) }}R, laagste {{ "%+.1f"|format(week.cumulative|min) }}R.{% endif %}</p>
   {{ macros.keylines([
     {"label": "Kansen gemeld", "value": week.signals},
     {"label": "Afgerond", "value": week.resolved},

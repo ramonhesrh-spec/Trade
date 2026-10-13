@@ -6,7 +6,8 @@
 {% block content %}
 
 {# Een telling heeft geen reeks, dus geen lijntje bij het getal. #}
-{{ macros.headline("Setups die wachten", setup_cards|length, "wachten", delta=(signal_cards|length ~ " open trades")) }}
+{{ macros.headline("Setups die wachten", setup_cards|length, "wachten",
+     explain="SMC-setups die op hun zone wachten: structuur brak, een sweep pakte de liquiditeit en er ligt een zone om op te wachten. Je krijgt een melding zodra de zone een afwijzende candle geeft.") }}
 
 {% set smc_proof = proof("smc") %}
 {{ macros.keylines([
@@ -23,7 +24,6 @@
 
 <section id="tab-wachten" data-utab-panel class="is-shown">
 <div class="flat">
-  <h3>Wachten op de zone</h3>
   {% if not setup_cards %}
   {{ macros.empty_state("Nog geen bouwende setup", "De CEO zit in een vergadering. Een SMC-setup verschijnt hier zodra structuur breekt, een sweep de liquiditeit pakt en er een zone ontstaat om op te wachten. Je krijgt dan een melding.", "Bekijk de Setups", "/structuur") }}
   {% else %}
@@ -78,7 +78,6 @@
 
 <section id="tab-open" data-utab-panel>
 <div class="flat">
-  <h3>Open trades</h3>
   {% if not signal_cards %}
   {{ macros.empty_state("Geen open trades", "De CEO is aan het golfen. Een open SMC-trade toont hier zijn voortgang tussen stop en doel, live.") }}
   {% else %}
@@ -110,7 +109,6 @@
 
 <section id="tab-afgerond" data-utab-panel>
 <div class="flat">
-  <h3>Afgeronde signalen</h3>
   {% if not entries %}
   <p class="muted empty">Nog geen afgeronde SMC-signalen.</p>
   {% else %}

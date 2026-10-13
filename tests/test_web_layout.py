@@ -223,7 +223,7 @@ class RadarLayoutTests(BaseShellTests):
                        "Wacht op de zone", "Koers op ", "SMC-radar", "<title>SMC-radar"]:
             self.assertIn(needle, html, needle)
         self.assertRegex(html, r'class="hl-num">1</span><span class="hl-unit">wachten')
-        self.assertIn("1 open trades", html)
+        self.assertRegex(html, r"<dt>Open trades</dt>\s*<dd[^>]*><span class=\"kl-num\">1</span>")
         self.assertNotIn('class="radar-head"', html)
 
     def test_radar_kernregels_en_zoekveld(self):

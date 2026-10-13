@@ -4,18 +4,19 @@
 {% block page_title %}Bewijs{% endblock %}
 {% block content %}
 
-<p class="page-intro">Wat elke soort melding echt opleverde, automatisch gemeten uit de uitkomsten van alle signalen. Geen selectie, geen beste maanden: wat hier staat, staat er voor iedereen.{% if ceo_view %} Jij ziet ook de regels in proef; die tellen mee in jouw totalen, leerlingen zien ze niet.{% endif %}</p>
-
+{% set intro = "Wat elke soort melding echt opleverde, automatisch gemeten uit de uitkomsten van alle signalen. Geen selectie, geen beste maanden: wat hier staat, staat er voor iedereen." ~ (" Jij ziet ook de regels in proef; die tellen mee in jouw totalen, leerlingen zien ze niet." if ceo_view else "") %}
 {% if total %}
 {{ macros.headline(total.label, ("%+.2f"|format(total.avg_net)) if total.avg_net is not none else "-", "R per trade, na kosten", spark=total.spark,
      delta=(("%+.2f"|format(total.recent_avg_net) ~ "R laatste " ~ recent_days ~ " dagen") if total.recent_avg_net is not none else ""),
-     tone=("pos" if total.recent_avg_net and total.recent_avg_net > 0 else "neg" if total.recent_avg_net and total.recent_avg_net < 0 else "")) }}
+     tone=("pos" if total.recent_avg_net and total.recent_avg_net > 0 else "neg" if total.recent_avg_net and total.recent_avg_net < 0 else ""), explain=intro) }}
+{# Winst en verlies staan naast de winrate, niet in een losse alinea: open en vervallen blijven zichtbaar in de derde regel. #}
 {{ macros.keylines([
-  {"label": "Afgeronde trades", "value": total.resolved},
+  {"label": "Afgeronde trades", "value": total.resolved, "explain": total.wins ~ " winst, " ~ total.losses ~ " verlies. " ~ total.open_or_expired ~ " nog open of vervallen, die tellen niet mee in winrate en R."},
   {"label": "Winrate", "value": (("%.0f"|format(total.winrate * 100)) if total.winrate is not none else "-"), "unit": ("%" if total.winrate is not none else ""),
    "explain": "Alleen doel en stop tellen. Open en vervallen staan ernaast."},
   {"label": "Open of vervallen", "value": total.open_or_expired, "explain": "Tellen niet mee in winrate en R."}], "bw") }}
-<p class="proof-footnote muted">{{ total.wins }} winst, {{ total.losses }} verlies. {{ total.open_or_expired }} nog open of vervallen, die tellen niet mee in winrate en R.</p>
+{% else %}
+<p class="muted tab-meta">{{ intro }}</p>
 {% endif %}
 
 {{ macros.utabs([
@@ -67,13 +68,15 @@
 </div>
 
 <div class="flat">
-  <h3>Zo lees je dit</h3>
+  <details class="setup-why proof-read">
+  <summary>Zo lees je dit</summary>
   <div class="proof-notes">
     <p><strong>R</strong> is de winst als veelvoud van het risico. Een take van 2 keer de stop is +2R, een stop is -1R. Een gemiddelde van +0,20R betekent dat een trade gemiddeld een vijfde van het risico opleverde.</p>
     <p><strong>Na kosten:</strong> per trade gaan de kosten ({{ "%.2f"|format(cost_pct) }}% per rondreis, een aanname) af, gedeeld door de stopafstand. Een strakke stop maakt de kosten zwaarder.</p>
     <p><strong>De status</strong> is een vaste regel, geen oordeel: onder {{ min_status }} afgeronde trades staat er "Nog te weinig data". Daarboven telt het gemiddelde na kosten: positief of negatief. Pas bij {{ min_proven }} afgeronde trades en een positief gemiddelde staat er "Voordeel gemeten". Dat is gemeten, niet beloofd.</p>
     <p><strong>Wat ontbreekt bewust niet:</strong> vervallen en open signalen staan er per soort bij, zodat je ziet hoeveel er buiten de winrate valt.</p>
   </div>
+  </details>
 </div>
 {% endif %}
 </section>
@@ -81,8 +84,7 @@
 <section id="tab-regels" data-utab-panel>
 {% if rule_statuses or other_rules %}
 <div class="flat">
-  <h3>Status per regel</h3>
-  <p class="muted">Eerlijk: 50 live trades kunnen een voordeel van 0,1R per trade niet bewijzen. Het bewijs komt uit de test op historische data; live is een controle of de werkelijkheid daarvan afwijkt.</p>
+  <h3>{{ macros.term("Status per regel", "Eerlijk: 50 live trades kunnen een voordeel van 0,1R per trade niet bewijzen. Het bewijs komt uit de test op historische data; live is een controle of de werkelijkheid daarvan afwijkt.", "bw-regels-pop") }}</h3>
   {% for r in rule_statuses %}
   <div class="proof-card proof-rule-{{ r.css }}">
     <header class="proof-head">

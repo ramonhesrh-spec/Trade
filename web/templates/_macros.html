@@ -322,13 +322,19 @@
     <span class="setup-grade setup-grade-{{ (c.grade or 'c')|lower }}" title="Oordeel van de CEO">{{ c.grade | grade_word }}</span>
     <span class="muted setup-age">{{ c.created_at | age }}</span>
   </header>
-  {{ proof_line("structuur") }}
-  {% if c.checks %}<ul class="setup-checks" aria-label="Wat er klopt en wat niet">{% for label, ok in c.checks %}<li class="{{ 'is-ok' if ok else 'is-no' }}"><span aria-hidden="true">{{ "✓" if ok else "✗" }}</span> {{ label }}</li>{% endfor %}</ul>{% endif %}
+  {{ proof_line("structuur", "s" ~ c.id) }}
   {{ c.chart }}
   {{ steps_list(c.steps, risk_eur) }}
   {{ r_bars(c.targets) }}
   {{ share_button(c.coin, c.direction, c.steps) }}
-  {% if c.reason %}<p class="setup-reason"><span class="muted">Toelichting:</span> {{ c.reason }}</p>{% endif %}
+  {# Kenmerken en toelichting achter één tik: ze beschrijven de kans, de stappen hierboven zijn wat je doet. #}
+  {% if c.checks or c.reason %}
+  <details class="setup-why">
+    <summary>Waarom{% if c.checks %} <span class="muted">{{ c.checks|selectattr(1)|list|length }} van {{ c.checks|length }} kenmerken</span>{% endif %}</summary>
+    {% if c.checks %}<ul class="setup-checks" aria-label="Wat er klopt en wat niet">{% for label, ok in c.checks %}<li class="{{ 'is-ok' if ok else 'is-no' }}"><span aria-hidden="true">{{ "✓" if ok else "✗" }}</span> {{ label }}</li>{% endfor %}</ul>{% endif %}
+    {% if c.reason %}<p class="setup-reason"><span class="muted">Toelichting:</span> {{ c.reason }}</p>{% endif %}
+  </details>
+  {% endif %}
 </article>
 {% endmacro %}
 
@@ -348,10 +354,13 @@
 
 
 {# Bewijsregel onder een kans: wat deze soort tot nu toe deed, met aantallen, en een balk naar de 50 trades waarna we oordelen. #}
-{% macro proof_line(trade_type) %}
+{% macro proof_line(trade_type, uid="") %}
 {% set p = proof(trade_type) %}
+{% set pid = "pl-" ~ trade_type ~ "-" ~ (uid or "x") %}
 <p class="proof-line is-{{ p.state }}" title="Uit afgeronde trades van deze soort. Bewijs toont de details.">
-  <strong>{{ p.label }}</strong> <span>{{ p.text }}</span>
+  {# De uitleg staat achter een tik op het label: dezelfde zin op elke kaart maakte de lijst druk. #}
+  <button type="button" class="proof-term" popovertarget="{{ pid }}"><strong>{{ p.label }}</strong></button>
+  <span class="kl-pop" id="{{ pid }}" popover>{{ p.text }}</span>
   {% if p.state == "proef" %}<span class="proof-bar" aria-hidden="true"><i style="width: {{ (p.progress * 100)|round(0) }}%"></i></span>{% endif %}
   <a href="/bewijs">Bewijs</a>
 </p>
@@ -375,13 +384,17 @@
 </div>
 {% endmacro %}
 
+{# Een woord met stippellijn dat een uitleg opent (native popover, geen JS). Uitleg die eerst als losse alinea op de pagina stond, staat
+   hier: bereikbaar met één tik, zonder dat de pagina er druk van wordt. #}
+{% macro term(label, text, id) %}<button type="button" class="kl-term" popovertarget="{{ id }}">{{ label }}</button><span class="kl-pop" id="{{ id }}" popover>{{ text }}</span>{% endmacro %}
+
 {# Eén groot meetgetal. `spark` is kant-en-klare SVG (track_record.sparkline_svg) of leeg; `spark_coin` tekent de live koerslijn via
    spark.js. `delta` is tekst met `tone` pos/neg; `delta_coin` laat spark.js de 24u-verandering invullen. `attrs` komt op het getal,
    zodat live.js of coin.js het kan bijwerken (bv. {"id": "coin-price", "data-symbol": "BTC"}). #}
-{% macro headline(label, value, unit="", spark=none, spark_coin=none, delta=none, tone="", delta_coin=none, href=none, attrs={}) %}
+{% macro headline(label, value, unit="", spark=none, spark_coin=none, delta=none, tone="", delta_coin=none, href=none, attrs={}, explain=none) %}
 <section class="hl">
   <div class="hl-text">
-    <p class="hl-label">{% if href %}<a href="{{ href }}">{{ label }}</a>{% else %}{{ label }}{% endif %}</p>
+    <p class="hl-label">{% if explain %}{{ term(label, explain, "hl-pop") }}{% elif href %}<a href="{{ href }}">{{ label }}</a>{% else %}{{ label }}{% endif %}</p>
     <p class="hl-value"><span class="hl-num"{{ attrs|xmlattr }}>{{ value }}</span>{% if unit %}<span class="hl-unit">{{ unit }}</span>{% endif %}</p>
     {% if delta_coin %}<p class="hl-delta" data-spark-chg="{{ delta_coin }}"></p>
     {% elif delta %}<p class="hl-delta {{ tone }}">{{ delta }}</p>{% endif %}
@@ -398,8 +411,7 @@
 <dl class="kl">
   {% for r in rows %}
   <div class="kl-row">
-    <dt>{% if r.explain %}<button type="button" class="kl-term" popovertarget="{{ id_prefix }}-{{ loop.index }}">{{ r.label }}</button>
-        <span class="kl-pop" id="{{ id_prefix }}-{{ loop.index }}" popover>{{ r.explain }}</span>{% else %}{{ r.label }}{% endif %}</dt>
+    <dt>{% if r.explain %}{{ term(r.label, r.explain, id_prefix ~ "-" ~ loop.index) }}{% else %}{{ r.label }}{% endif %}</dt>
     <dd class="{{ r.tone or '' }}">{% if r.href %}<a href="{{ r.href }}">{% endif %}{{ r.html or "" }}<span class="kl-num">{{ r.value }}</span>{% if r.unit %}<span class="kl-unit">{{ r.unit }}</span>{% endif %}{% if r.href %}</a>{% endif %}</dd>
   </div>
   {% endfor %}
