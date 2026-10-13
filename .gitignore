@@ -13,3 +13,4 @@ venv/
 
 .superpowers/
 scratchpad/
+.claude/worktrees/
