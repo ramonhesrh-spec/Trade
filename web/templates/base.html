@@ -8,6 +8,12 @@
 <meta name="theme-color" content="#0a0e0f">
 <meta name="color-scheme" content="dark">
 <style>html{background:#0a0e0f}</style>
+<script>
+  // Met minder beweging aangevraagd slaat de overgang tussen pagina's helemaal over, ook het vastleggen van de oude pagina.
+  window.addEventListener("pagereveal", function (e) {
+    if (e.viewTransition && window.matchMedia("(prefers-reduced-motion: reduce)").matches) e.viewTransition.skipTransition();
+  });
+</script>
 <title>{% block title %}HesPulse{% endblock %}</title>
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/static/icon-192.png">
@@ -93,13 +99,18 @@
     var timer = null;
     var width = 0;
 
+    // Kan de browser zelf tussen pagina's overvloeien (view transitions over documenten, herkenbaar aan pagereveal), dan doet hij
+    // dat; de eigen uitfade zou de oude pagina als leeg plaatje vastleggen en dan flitsen. Eén mechanisme, nooit twee.
+    var nativeTransition = "onpagereveal" in window;
     function start() {
       // Zelfde moment als de voortgangsbalk zelf: content vervaagt terwijl
       // de nieuwe pagina laadt, geen tweede losse click-listener nodig
       // met dezelfde origin/target-checks als hieronder.
-      document.documentElement.classList.add("page-transition-out");
-      // Een navigatie die niet doorgaat (download, geannuleerd) mag de pagina niet onzichtbaar laten.
-      setTimeout(function () { document.documentElement.classList.remove("page-transition-out"); }, 4000);
+      if (!nativeTransition) {
+        document.documentElement.classList.add("page-transition-out");
+        // Een navigatie die niet doorgaat (download, geannuleerd) mag de pagina niet onzichtbaar laten.
+        setTimeout(function () { document.documentElement.classList.remove("page-transition-out"); }, 4000);
+      }
       if (bar.classList.contains("is-active")) return;
       width = 0;
       bar.style.width = "0%";

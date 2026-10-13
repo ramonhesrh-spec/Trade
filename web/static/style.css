@@ -97,12 +97,16 @@
    laten hangen als iets misgaat. (2) de boot-pulse: een eenmalige,
    JS-gestuurde intro op het dashboard, additief boven de content (de
    content zelf is nooit van die JS afhankelijk om zichtbaar te worden). */
-main > section, main > .stats-collapse {
-  animation: section-reveal 0.22s ease-out both;
-  animation-delay: calc(var(--i, 0) * 25ms);
+/* Alle blokken direct in main komen na elkaar binnen: kop, groot getal, kernregels, tabs, lijst. De volgorde komt uit de plek in
+   de pagina (--n), niet uit de oude --i per sectie, zodat ook de nieuwe indeling (dl, div) meedoet. Eén keer per paginalaad. */
+main > * {
+  animation: section-reveal 0.26s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  animation-delay: calc(var(--n, 6) * 35ms);
 }
+main > :nth-child(1) { --n: 0; } main > :nth-child(2) { --n: 1; } main > :nth-child(3) { --n: 2; }
+main > :nth-child(4) { --n: 3; } main > :nth-child(5) { --n: 4; } main > :nth-child(6) { --n: 5; }
 @keyframes section-reveal {
-  from { opacity: 0; transform: translateY(4px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: none; }
 }
 
@@ -1899,7 +1903,7 @@ main > section + section { margin-top: var(--space-10); }
 .coin-menu-list a { font-family: var(--display); font-weight: 700; font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; }
 .engine-status { margin: var(--space-6) 0 var(--space-9); padding: var(--space-5) var(--space-7); font-size: var(--text-sm); color: var(--text-dim); background: var(--panel); border: 1px solid var(--border); border-left: 3px solid var(--green); border-radius: var(--radius-sm); }
 .engine-status.is-stale, .engine-status.is-off { border-left-color: var(--red); color: var(--text); }
-html.reveal-done main > section, html.reveal-done main > .stats-collapse { animation: none; opacity: 1; transform: none; }
+html.reveal-done main > * { animation: none; opacity: 1; transform: none; }
 
 /* Scenario in drie stappen: wat je nu doet staat vet en met accent, wat nog volgt staat gedempt. */
 .vd-steps { list-style: none; margin: var(--space-4) 0; padding: 0; display: grid; gap: var(--space-3); }
@@ -1973,14 +1977,16 @@ html { -webkit-tap-highlight-color: transparent; }
 @view-transition { navigation: auto; }
 /* De balken kregen eerst een eigen view-transition-name zodat ze bleven staan terwijl de inhoud overvloeide. Op iOS kan een vaste balk met zo'n naam na het openen
    vanuit een andere app (een link uit Discord) midden in het scherm blijven hangen; nu vloeit de hele pagina over, ook de balken, die toch identiek zijn. */
-::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.18s; animation-timing-function: ease-out; }
+/* Alleen de standaard root-overvloeier (die mengt met plus-lighter en kan dus niet donker flitsen), korter en met een rustige curve.
+   base.html zet de eigen uitfade uit waar de browser dit zelf doet: die legde de oude pagina als leeg plaatje vast. */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.18s; animation-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1); }
 @media (prefers-reduced-motion: reduce) {
   ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) { animation: none !important; }
 }
 
 /* Aanraking voelt direct: kaarten en knoppen drukken licht in. */
 .setup-card, .radar-card, .vd-scenario, .vd-score, .proof-card, .tab, .chip, .share-btn { transition: transform 0.12s ease, background-color 0.18s ease, border-color 0.18s ease; }
-.vd-score:active, .tab:active, .chip:active, .share-btn:active { transform: scale(0.96); }
+.vd-score:active, .tab:active, .chip:active, .share-btn:active { transform: scale(0.97); }
 
 /* Onderbalk met tabs op een telefoon, zoals in een app. Bovenaan blijft alleen het logo. */
 .tabbar, .more-sheet { display: none; }
@@ -1991,7 +1997,7 @@ html { -webkit-tap-highlight-color: transparent; }
     display: grid; grid-template-columns: repeat(6, 1fr); position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 500;
     padding: 6px; background: rgba(19, 26, 27, 0.86); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
     border: 1px solid var(--border-strong); border-radius: 22px; box-shadow: var(--shadow-md);
-    transition: transform 0.22s ease-out;
+    transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .tabbar.is-hidden { transform: translateY(calc(100% + 24px + env(safe-area-inset-bottom))); }
   .tab { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 8px 0 6px; background: none; border: 0; border-radius: 16px;
@@ -2412,7 +2418,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 @media (max-width: 760px) {
   .dock {
     display: flex; flex-direction: column; gap: var(--space-5); position: fixed; left: 12px; right: 12px;
-    bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 500; transition: transform 0.22s ease-out;
+    bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 500; transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
   .dock.is-hidden { transform: translateY(calc(100% + 24px + env(safe-area-inset-bottom))); }
   .dock .tabbar { position: static; left: auto; right: auto; bottom: auto; transition: none; }
@@ -2568,4 +2574,28 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
   .signal-card, .signal-card.is-confirmed { background: none; border: 0; border-bottom: var(--sep); border-left: 2px solid transparent; border-radius: 0; box-shadow: none; padding: var(--space-7) 0 var(--space-7) var(--space-5); }
   .signal-card.is-confirmed { border-left-color: var(--green); }
   .signal-card:last-child { border-bottom: 0; }
+}
+
+/* ===== Soepel (2026-10-13) =====
+   Beweging alleen als antwoord op een handeling: een tik, een tabwissel, scrollen. Niets loopt vanzelf door. */
+/* Indrukken: rij of tab geeft meteen mee, een fractie kleiner en iets lichter. */
+.mrow, .ut-tab { transition: transform 0.12s ease, background-color 0.12s ease; }
+.mrow { border-radius: 12px; }
+.ut-tab { border-radius: 8px 8px 0 0; }
+.mrow:active, .ut-tab:active, .tab:active { transform: scale(0.97); background-color: rgba(234, 241, 240, 0.04); }
+.tab.is-active:active { background-color: var(--accent-bg); }
+
+/* Tabpanelen vloeien in bij een wissel (utabs.js zet .is-shown); de streep schuift naar de gekozen tab. */
+.ut-panels.is-js > [data-utab-panel].is-shown { animation: ut-panel-in 0.12s ease-out; }
+@keyframes ut-panel-in { from { opacity: 0; } to { opacity: 1; } }
+.ut-list.has-ink { position: relative; }
+.ut-list.has-ink .ut-tab.is-active, .ut-list.has-ink .ut-tab[aria-selected="true"] { border-bottom-color: transparent; }
+.ut-ink {
+  position: absolute; left: 0; bottom: 0; height: 2px; width: 0; border-radius: 2px; background: var(--text); pointer-events: none;
+  transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1), width 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+@media (prefers-reduced-motion: reduce) {
+  main > *, .ut-panels.is-js > [data-utab-panel].is-shown { animation: none; }
+  .mrow, .ut-tab, .ut-ink, .dock, .tabbar { transition: none; }
+  .mrow:active, .ut-tab:active, .tab:active { transform: none; }
 }

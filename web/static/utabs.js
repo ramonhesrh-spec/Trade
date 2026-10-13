@@ -7,15 +7,33 @@
     if (!panels) return;
     var tabs = Array.prototype.filter.call(group.querySelectorAll(".ut-tab"), function (t) { return t.getAttribute("href").charAt(0) === "#"; });
     if (!tabs.length) return;
+    // Eén streep die naar de gekozen tab schuift, in plaats van een rand die per tab aan en uit springt.
+    var list = group.querySelector(".ut-list"), ink = null, current = null, ownResize = false;
+    if (list && document.createElement) {
+      ink = document.createElement("span");
+      ink.className = "ut-ink";
+      ink.setAttribute("aria-hidden", "true");
+      list.appendChild(ink);
+      list.classList.add("has-ink");
+    }
+    function moveInk(instant) {
+      if (!ink || !current) return;
+      if (instant) ink.style.transition = "none";
+      ink.style.width = current.offsetWidth + "px";
+      ink.style.transform = "translateX(" + current.offsetLeft + "px)";
+      if (instant) { void ink.offsetWidth; ink.style.transition = ""; }
+    }
     function show(id, push) {
       var found = false;
       tabs.forEach(function (t) {
         var on = t.getAttribute("href") === "#" + id;
         found = found || on;
+        if (on) current = t;
         t.classList.toggle("is-active", on);
         t.setAttribute("aria-selected", on ? "true" : "false");
       });
       if (!found) return false;
+      moveInk(!push);
       panels.querySelectorAll("[data-utab-panel]").forEach(function (p) {
         p.classList.toggle("is-shown", p.id === id);
         // Pas met het script zijn dit echte tabpanelen; zonder staan ze gewoon onder elkaar.
@@ -23,7 +41,9 @@
       });
       if (push) history.replaceState(null, "", "#" + id);
       // levelchart.js tekent pas als een grafiek in beeld komt; een net getoond paneel moet dat zelf kunnen melden.
+      ownResize = true;
       window.dispatchEvent(new Event("resize"));
+      ownResize = false;
       return true;
     }
     // Een hash kan ook een element in een niet-getoond paneel zijn (alarm.js linkt naar /smc#radar-signal-N): toon dan dat paneel.
@@ -43,6 +63,11 @@
       show((tabs.indexOf(active) === -1 ? tabs[0] : active).getAttribute("href").slice(1), false);
     }
     window.addEventListener("hashchange", reveal);
+    // Tabbreedtes veranderen als het lettertype binnenkomt of het scherm draait: de streep springt dan mee, zonder schuiven.
+    if (ink) {
+      window.addEventListener("resize", function () { if (!ownResize) moveInk(true); });
+      if (document.fonts && document.fonts.ready) document.fonts.ready.then(function () { moveInk(true); });
+    }
     group.addEventListener("click", function (e) {
       var t = e.target.closest && e.target.closest(".ut-tab");
       if (!t || tabs.indexOf(t) === -1) return;
