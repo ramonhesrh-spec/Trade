@@ -40,5 +40,24 @@ class NotificationClickTest(unittest.TestCase):
         self.assertEqual(TestClient(app).get("/service-worker.js").headers["cache-control"], "no-cache")
 
 
+@unittest.skipUnless(shutil.which("node"), "node ontbreekt")
+class PushBadgeTest(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        out = subprocess.run(["node", str(ROOT / "tests/js/sw_push_harness.js"), str(ROOT / "web/static/service-worker.js")],
+                             capture_output=True, text=True, check=True)
+        cls.result = json.loads(out.stdout)
+
+    def test_badge_number_is_set_and_zero_clears_it(self):
+        self.assertEqual(self.result["three"]["badge"], [["set", 3]])
+        self.assertEqual(self.result["zero"]["badge"], [["clear"]])
+
+    def test_without_badge_or_without_api_only_the_notification_is_shown(self):
+        self.assertEqual(self.result["none"]["badge"], [])
+        self.assertEqual(self.result["noApi"]["shown"], 1)
+        for scenario in ("three", "zero", "none"):
+            self.assertEqual(self.result[scenario]["shown"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()

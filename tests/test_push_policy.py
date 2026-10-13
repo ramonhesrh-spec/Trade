@@ -133,6 +133,12 @@ class PauseSendTest(DbCase):
         self.assertIn("push_paused_until", cols)
         db.init_db()                                                             # tweede keer: idempotent
 
+    def test_badge_travels_in_the_payload_only_when_given(self):
+        asyncio.run(push_notify.send_push(self.uid, "t", "b", "/x", badge=3))
+        asyncio.run(push_notify.send_push(self.uid, "t", "b", "/x"))
+        self.assertEqual(self.sent[0]["badge"], 3)
+        self.assertNotIn("badge", self.sent[1])
+
 
 if __name__ == "__main__":
     unittest.main()

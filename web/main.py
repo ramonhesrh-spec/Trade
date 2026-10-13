@@ -1155,12 +1155,15 @@ async def api_system_status(user: dict = Depends(require_login)):
             "received_at": s["created_at"],
         }
 
+    forming = [_with_preview(s) for s in repo.list_forming_smc_setups()]
+    zone_prices = await _cached_prices({s["coin"] for s in forming}) if forming else {}
     return {
         "exchange_ok": exchange_ok,
         "last_message_at": repo.last_message_received_at(),
         "server_started_at": SERVER_STARTED_AT,
         "checked_at": db.now_iso(),
         "pending_count": repo.count_pending_signals(user["id"]),
+        "in_zone": radar.in_zone_count(forming, zone_prices),
         "unread_notifications": repo.count_unread_notifications(user["id"]),
         "week_result_pct": repo.week_result_pct(user["id"]),
         "volatility_ratio": repo.largest_open_position_volatility(user["id"]),

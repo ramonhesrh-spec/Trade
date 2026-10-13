@@ -45,6 +45,12 @@ def waiting_count(setups: list[dict], prices: dict) -> int:
     return sum(1 for s in setups if setup_state(s, prices.get(s["coin"])) != "doel_geraakt")
 
 
+def in_zone_count(setups: list[dict], prices: dict) -> int:
+    """Bouwende setups waarvan de koers nu in de zone staat, voor het getal op het appicoon. Zonder koers telt een setup niet mee:
+    het icoon zou anders iets beloven wat niet gemeten is."""
+    return sum(1 for s in setups if setup_state(s, prices.get(s["coin"])) == "in_zone")
+
+
 def signal_card(signal: dict, price: Optional[float]) -> Optional[dict]:
     """Een open SMC-signaal: de grafiek toont de werkelijke entry, het resultaat loopt live mee in R."""
     entry, stop, take = signal["price"], signal["stop_loss"], signal["take_profit"]

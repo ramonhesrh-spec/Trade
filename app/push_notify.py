@@ -55,7 +55,8 @@ def _send_one(subscription: dict, payload: dict) -> None:
     )
 
 
-async def send_push(user_id: int, title: str, body: str, url: str, silent: bool = False, tag: Optional[str] = None) -> None:
+async def send_push(user_id: int, title: str, body: str, url: str, silent: bool = False, tag: Optional[str] = None,
+                    badge: Optional[int] = None) -> None:
     """Stuurt naar elk geregistreerd apparaat van deze gebruiker. Een
     apparaat dat de browser/OS niet meer kent (404/410 terug) wordt
     meteen verwijderd, anders blijft push_subscriptions vervuild raken
@@ -77,6 +78,8 @@ async def send_push(user_id: int, title: str, body: str, url: str, silent: bool 
         return
 
     payload = {"title": title, "body": body, "url": url, "icon": "/static/icon-192.png", "silent": silent, "tag": tag}
+    if badge is not None:
+        payload["badge"] = badge
     for sub in subscriptions:
         try:
             await asyncio.to_thread(_send_one, sub, payload)
@@ -91,7 +94,8 @@ async def send_push(user_id: int, title: str, body: str, url: str, silent: bool 
             logger.exception("Pushmelding naar abonnement %s mislukt", sub["id"])
 
 
-async def send_kans_push(user_id: int, coin: str, direction: str, title: str, body: str, url: str, silent: bool = False, tag: Optional[str] = None) -> bool:
+async def send_kans_push(user_id: int, coin: str, direction: str, title: str, body: str, url: str, silent: bool = False,
+                         tag: Optional[str] = None, badge: Optional[int] = None) -> bool:
     """Push voor een nieuwe kans, met de regels van app/push_policy.py: geen tegenstrijdige richting kort na elkaar op dezelfde coin en een dagbudget per
     gebruiker. Een geweerde kans wordt een rustige melding op de meldingenpagina, dus niets verdwijnt. Geeft True als er een push is gestuurd.
     Updates van een lopende trade, stop en doel en de agenda gaan rechtstreeks via send_push en komen altijd."""
@@ -106,7 +110,7 @@ async def send_kans_push(user_id: int, coin: str, direction: str, title: str, bo
         repo.create_notification(user_id, "kans", title, f"{body}\n{reason}", url)
         return False
     repo.record_push(user_id, coin, direction, now.isoformat())
-    await send_push(user_id, title, body, url, silent=silent, **({"tag": tag} if tag else {}))
+    await send_push(user_id, title, body, url, silent=silent, **({"tag": tag} if tag else {}), **({"badge": badge} if badge is not None else {}))
     return True
 
 

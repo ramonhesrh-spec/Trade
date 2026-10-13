@@ -57,7 +57,7 @@ self.addEventListener("fetch", (event) => {
 self.addEventListener("push", (event) => {
   if (!event.data) return;
   const data = event.data.json();
-  event.waitUntil(
+  const tasks = [
     self.registration.showNotification(data.title, {
       body: data.body,
       icon: data.icon,
@@ -66,8 +66,17 @@ self.addEventListener("push", (event) => {
       tag: data.tag || undefined,
       renotify: !!data.tag && !data.silent,
       data: { url: data.url },
-    })
-  );
+    }),
+  ];
+  // Het getal op het appicoon (kansen in de zone) komt alleen mee bij een zone-melding. Zonder Badging API (oudere browsers, iOS buiten
+  // een geïnstalleerde app) blijft het bij de melding.
+  const nav = self.navigator;
+  if (typeof data.badge === "number" && nav && "setAppBadge" in nav) {
+    try {
+      tasks.push((data.badge > 0 ? nav.setAppBadge(data.badge) : nav.clearAppBadge()).catch(() => {}));
+    } catch (e) {}
+  }
+  event.waitUntil(Promise.all(tasks));
 });
 
 const NAV_CACHE = "hespulse-nav";

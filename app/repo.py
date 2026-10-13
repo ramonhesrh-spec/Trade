@@ -2459,6 +2459,14 @@ def mark_smc_zone_alert_sent(setup_id: int) -> None:
         conn.execute("UPDATE smc_setups SET zone_alert_sent = 1 WHERE id = ?", (setup_id,))
 
 
+def count_zone_alerted_setups() -> int:
+    """Bouwende setups waarvoor de zone-melding al uitging: het getal op het appicoon terwijl de app dicht is. Een setup die daarna weer
+    uit de zone liep telt hier nog mee; de pagina zet het exacte getal (radar.in_zone_count) zodra de app opent."""
+    with db.session() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM smc_setups WHERE signal_id IS NULL AND invalidated_at IS NULL AND zone_alert_sent = 1").fetchone()["n"]
+
+
 def mark_smc_alert_sent(setup_id: int) -> None:
     with db.session() as conn:
         conn.execute("UPDATE smc_setups SET alert_sent = 1 WHERE id = ?", (setup_id,))

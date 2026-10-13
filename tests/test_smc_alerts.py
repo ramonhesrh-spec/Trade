@@ -61,6 +61,10 @@ class ZoneTouchTests(unittest.TestCase):
         with db.session() as conn:
             return conn.execute("SELECT zone_alert_sent FROM smc_setups WHERE coin = ?", (coin,)).fetchone()[0]
 
+    def test_zone_melding_zet_het_getal_op_het_appicoon(self):
+        self.run_touch("XRP", 99.5)
+        self.assertEqual(self.send.await_args_list[0].kwargs.get("badge"), 1)
+
     def test_melding_zodra_de_koers_in_de_zone_staat_en_maar_een_keer(self):
         self.run_touch("XRP", 99.5)
         self.assertEqual(self.send.await_count, 2)                     # twee gebruikers

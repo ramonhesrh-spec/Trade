@@ -78,6 +78,11 @@ class RadarTests(unittest.TestCase):
         self.assertEqual(radar.setup_card(SETUP, 107.0)["levels"], [])           # doel al gehaald: niets meer te kopiëren
         self.assertEqual([c["value"] for c in radar.signal_card(SIGNAL, 99.0)["levels"]], [100.0, 103.0, 94.0])
 
+    def test_in_zone_count_telt_alleen_setups_met_koers_in_de_zone(self):
+        other = {**SETUP, "id": 8, "coin": "ETH"}
+        self.assertEqual(radar.in_zone_count([SETUP, other], {"XRP": 99.5, "ETH": 102.0}), 1)
+        self.assertEqual(radar.in_zone_count([SETUP], {}), 0)                    # zonder koers niets beloven
+
 
 if __name__ == "__main__":
     unittest.main()

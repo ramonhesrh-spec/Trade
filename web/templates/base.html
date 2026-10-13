@@ -805,15 +805,15 @@
           }
           lastPendingCount = s.pending_count;
 
-          // App-icoon badge: aantal meldingen dat nog op een keuze wacht.
-          // Werkt alleen zolang deze pagina ergens open staat (tab of
-          // geïnstalleerde app), geen vervanging van de pushmelding zelf
-          // die ook bereikt als alles dicht is.
-          if ("setAppBadge" in navigator) {
-            var badgeTotal = s.pending_count + s.unread_notifications;
-            if (badgeTotal > 0) navigator.setAppBadge(badgeTotal).catch(function () {});
-            else navigator.clearAppBadge().catch(function () {});
-          }
+          // App-icoon: aantal kansen waarvan de koers nu in de zone staat (radar.in_zone_count). Dit verving het oude getal
+          // (wachtende meldingen plus ongelezen); die tellers staan nog in de API voor de rest van de pagina. De service worker zet een
+          // benadering bij een zone-melding als de app dicht is; deze pagina zet het exacte getal zodra hij open is.
+          try {
+            if ("setAppBadge" in navigator) {
+              if (s.in_zone > 0) navigator.setAppBadge(s.in_zone).catch(function () {});
+              else navigator.clearAppBadge().catch(function () {});
+            }
+          } catch (e) {}
         })
         .catch(function () {
           dot.classList.remove("status-ok");

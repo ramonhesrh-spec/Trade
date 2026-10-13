@@ -111,5 +111,13 @@ class PriceAlertRouteTest(WebCase):
         self.assertIn("alarm.js", r.text)
 
 
+class SystemStatusBadgeTest(WebCase):
+    def test_in_zone_counts_forming_setups_with_the_price_in_the_zone(self):
+        with db.session() as conn:
+            conn.execute("""INSERT INTO smc_setups (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, atr,
+                            created_at, updated_at) VALUES ('XRP', 'long', 99.0, 101.0, 102.0, 97.0, 110.0, 1.0, ?, ?)""", (db.now_iso(), db.now_iso()))
+        self.assertEqual(self.client.get("/api/system_status").json()["in_zone"], 1)       # koers 100 ligt in 99-101
+
+
 if __name__ == "__main__":
     unittest.main()

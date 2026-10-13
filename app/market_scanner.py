@@ -795,13 +795,14 @@ async def _notify_zone_touches(coin: str) -> None:
         if plan is None or trade_plan.plan_state(direction, setup["zone_low"], setup["zone_high"], stop_loss, price, take=take_profit) != "in_zone":
             continue
         repo.mark_smc_zone_alert_sent(setup["id"])
+        badge = repo.count_zone_alerted_setups()
         title = push_notify.alert_title(coin, direction, "in de zone")
         body = push_notify.trade_body("Limietorder", plan.limit, stop_loss, take_profit, plan.rr,
                                       "Waarschijnlijk geraakt. Een signaal volgt bij een afwijzende candle.")
         for user in repo.list_users():
             quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
             try:
-                await push_notify.send_kans_push(user["id"], coin, direction, title, body, f"/smc#radar-setup-{setup['id']}", silent=quiet, tag=f"smc-zone-{coin}")
+                await push_notify.send_kans_push(user["id"], coin, direction, title, body, f"/smc#radar-setup-{setup['id']}", silent=quiet, tag=f"smc-zone-{coin}", badge=badge)
             except Exception:
                 logger.exception("Zone-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
