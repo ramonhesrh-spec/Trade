@@ -23,7 +23,10 @@
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ asset('style.css') }}">
 </head>
+{% import "_macros.html" as macros %}
+{% set _pt %}{% block page_title %}{% endblock %}{% endset %}
 <body>
+{% if user %}<div class="top-glow" aria-hidden="true"></div>{% endif %}
 <div id="page-progress" aria-hidden="true"></div>
 <div class="page-ambient" aria-hidden="true">
   <span class="ambient-glow glow-accent"></span>
@@ -235,7 +238,7 @@
     new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
   })();
 </script>
-<header class="topbar">
+<header class="topbar{% if not (user and _pt|trim) %} topbar-flow{% endif %}">
   <div class="topbar-watermark-clip" aria-hidden="true">
     <div class="topbar-watermark">
       <svg viewBox="0 0 320 60" preserveAspectRatio="none"><path d="M0 30h40l8-22 16 44 8-22h40l8-14 16 30 8-16h176" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
@@ -322,10 +325,13 @@
 </header>
 
 <main>
+{% if user and _pt|trim %}{{ macros.page_header(user, _pt|trim) }}{% endif %}
 {% block content %}{% endblock %}
 </main>
 {% if user %}
 {% set here = request.url.path %}
+<div class="dock">
+{{ macros.float_search() }}
 <nav class="tabbar" aria-label="Hoofdmenu">
   <a class="tab tab-ceo{% if here == '/ceo' %} is-active{% endif %}" href="/ceo"{% if here == '/ceo' %} aria-current="page"{% endif %}>
     <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z"/></svg><span>CEO</span></a>
@@ -339,9 +345,10 @@
     {% if nav_counts and nav_counts.radar %}<i class="tab-badge">{{ nav_counts.radar }}</i>{% endif %}</a>
   <a class="tab{% if here == '/bewijs' %} is-active{% endif %}" href="/bewijs"{% if here == '/bewijs' %} aria-current="page"{% endif %}>
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Bewijs</span></a>
-  <button class="tab" type="button" id="more-toggle" aria-expanded="false" aria-controls="more-sheet">
+  <button class="tab" type="button" id="more-toggle" data-more-toggle aria-expanded="false" aria-controls="more-sheet">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>Meer</span></button>
 </nav>
+</div>
 <div class="more-sheet" id="more-sheet" hidden>
   <div class="more-sheet-panel" role="dialog" aria-label="Meer">
     <div class="more-links">
@@ -576,6 +583,12 @@
 
     function buildItems() {
       var list = [
+        { label: "Vandaag", href: "/vandaag", hint: "pagina" },
+        { label: "Setups", href: "/structuur", hint: "pagina" },
+        { label: "Radar", href: "/smc", hint: "pagina" },
+        { label: "Bewijs", href: "/bewijs", hint: "pagina" },
+        { label: "Meldingen", href: "/meldingen", hint: "pagina" },
+        { label: "Kwartaalcijfers", href: "/week", hint: "pagina" },
         { label: "Signalen", href: "/signalen", hint: "pagina" },
         { label: "Mijn account", href: "/account", hint: "pagina" },
         { label: "Handleiding", href: "/uitleg", hint: "pagina" },
@@ -675,6 +688,10 @@
     overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
     var cmdkHint = document.getElementById("cmdk-hint");
     if (cmdkHint) cmdkHint.addEventListener("click", open);
+    var fsearch = document.getElementById("fsearch");
+    if (fsearch) fsearch.addEventListener("click", open);
+    window.HP = window.HP || {};
+    window.HP.openSearch = open;
   })();
 
   // Systeemstatus: is de exchange nu bereikbaar, wanneer kwam het laatste

@@ -38,7 +38,7 @@
   // Geen trek-om-te-verversen in de grafiek (die pant zelf), in een invoerveld of bij een open blad of venster.
   function pullBlocked(target) {
     if (!target || !target.closest) return false;
-    return !!target.closest("[data-levelchart], .chart, input, textarea, select, dialog[open], #more-sheet.is-open, .cmdk");
+    return !!target.closest("[data-levelchart], .chart, input, textarea, select, dialog[open], #more-sheet.is-open, .cmdk-overlay:not([hidden]), .fsearch");
   }
   var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)");
   var startX = 0, busy = false;

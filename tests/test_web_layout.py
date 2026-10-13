@@ -1,5 +1,11 @@
+import os
+import tempfile
 import unittest
+from unittest import mock
 
+from fastapi.testclient import TestClient
+
+from app import config, db, repo, security
 from web import main
 
 
@@ -43,3 +49,34 @@ class LayoutMacroTests(unittest.TestCase):
         new = src.split("===== Indeling", 1)[1]
         self.assertNotIn("—", new)
         self.assertNotIn("–", new)
+
+
+class BaseShellTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.patch = mock.patch.object(config, "DATABASE_PATH", os.path.join(self.tmp.name, "w.db"))
+        self.patch.start()
+        db.init_db()
+        main._price_cache.clear()
+        self.client = TestClient(main.app)
+        user_id = repo.create_user("tester", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        self.client.cookies.set(main.SESSION_COOKIE, security.create_session_token(user_id))
+        self.prices = mock.patch.object(main.exchange, "fetch_last_price", side_effect=lambda coin: 100.0)
+        self.prices.start()
+
+    def tearDown(self):
+        self.prices.stop()
+        self.patch.stop()
+        self.tmp.cleanup()
+
+    def test_vandaag_heeft_de_schil(self):
+        html = self.client.get("/vandaag").text
+        for needle in ['class="top-glow"', 'id="fsearch"', 'class="dock"', 'class="tabbar"', 'id="push-pause"', 'id="price-dot"',
+                       'id="system-status"', 'id="cmdk"', 'id="more-sheet"', 'id="push-banner"', ">SMC</a>", ">Bewijs</a>",
+                       "data-more-toggle"]:
+            self.assertIn(needle, html, needle)
+
+    def test_login_blijft_zonder_schil(self):
+        html = TestClient(main.app).get("/login").text
+        self.assertNotIn("fsearch", html)
+        self.assertNotIn("top-glow", html)

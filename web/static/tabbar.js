@@ -1,13 +1,15 @@
 // Menu "Meer" als blad onderaan. Sluit bij een tik ernaast, op Escape en bij het openen van een link.
 (function () {
-  var toggle = document.getElementById("more-toggle"), sheet = document.getElementById("more-sheet");
-  if (!toggle || !sheet) return;
+  var toggles = document.querySelectorAll("#more-toggle, [data-more-toggle]"), sheet = document.getElementById("more-sheet");
+  if (!toggles.length || !sheet) return;
   function setOpen(open) {
-    toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    toggles.forEach(function (t) { t.setAttribute("aria-expanded", open ? "true" : "false"); });
     if (open) { sheet.hidden = false; requestAnimationFrame(function () { sheet.classList.add("is-open"); }); }
     else { sheet.classList.remove("is-open"); setTimeout(function () { if (!sheet.classList.contains("is-open")) sheet.hidden = true; }, 220); }
   }
-  toggle.addEventListener("click", function () { setOpen(toggle.getAttribute("aria-expanded") !== "true"); });
+  toggles.forEach(function (t) {
+    t.addEventListener("click", function () { setOpen(t.getAttribute("aria-expanded") !== "true"); });
+  });
   sheet.addEventListener("click", function (e) { if (e.target === sheet || e.target.closest("a")) setOpen(false); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") setOpen(false); });
 })();
@@ -16,7 +18,7 @@
 // Een drempel van 4px voorkomt flikkeren door iOS-rubberband. Onderaan de pagina komt de balk niet terug: op korte pagina's
 // lag het scrollbereik zo klein dat de balk direct weer verscheen en het weglopen nooit te zien was.
 (function () {
-  var bar = document.querySelector(".tabbar");
+  var bar = document.querySelector(".dock") || document.querySelector(".tabbar");
   if (!bar) return;
   var last = window.scrollY, ticking = false;
   function update() {
