@@ -2574,6 +2574,8 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
   .signal-card, .signal-card.is-confirmed { background: none; border: 0; border-bottom: var(--sep); border-left: 2px solid transparent; border-radius: 0; box-shadow: none; padding: var(--space-7) 0 var(--space-7) var(--space-5); }
   .signal-card.is-confirmed { border-left-color: var(--green); }
   .signal-card:last-child { border-bottom: 0; }
+  /* Een scenario in een uitgeklapte rij: geen kader in een rij, alleen een dunne lijn links. */
+  .mrow-body .vd-scenario { background: none; border: 0; border-left: 2px solid var(--border-strong); border-radius: 0; padding: 0 0 0 var(--space-6); }
 }
 
 /* ===== Soepel (2026-10-13) =====
