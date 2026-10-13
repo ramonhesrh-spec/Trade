@@ -119,6 +119,20 @@ class SparkTests(unittest.TestCase):
         self.assertIsNone(radar.spark([100.0]))
         self.assertIsNone(radar.spark([0.0, 1.0]))
 
+    def test_spark_weigert_niet_eindige_koersen(self):
+        for bad in (float("nan"), float("inf")):
+            self.assertIsNone(radar.spark([100.0, bad, 101.0]))
+
+    def test_spark_afgerond_nul_krijgt_geen_teken_en_geen_kleur(self):
+        for last in (100.04, 99.96):
+            s = radar.spark([100.0, last])
+            self.assertEqual(s["change_text"], "0,0% 24u")
+            self.assertEqual(s["change_pct"], 0)
+        self.assertEqual(radar.spark([100.0, 99.0])["change_text"], "-1,0% 24u")
+
+    def test_spark_venster_is_vijfentwintig_slotkoersen(self):
+        self.assertEqual(radar.SPARK_HOURS, 24)
+
 
 if __name__ == "__main__":
     unittest.main()

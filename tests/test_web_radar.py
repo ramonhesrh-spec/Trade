@@ -87,31 +87,31 @@ class WebRadarTests(unittest.TestCase):
         times = pd.date_range("2026-10-09 00:00", periods=120, freq="15min", tz="UTC")
         df = pd.DataFrame({"timestamp": times, "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.5, "volume": 1.0})
         with mock.patch.object(main.exchange, "fetch_ohlcv", return_value=df) as fetch:
-            r = self.client.get("/api/radar_candles/xrp?tf=15m&limit=96")
+            r = self.client.get("/api/radar_candles/sol?tf=15m&limit=96")
             self.assertEqual(r.status_code, 200)
             body = r.json()
-            self.assertEqual((body["coin"], body["tf"], len(body["candles"])), ("XRP", "15m", 96))
+            self.assertEqual((body["coin"], body["tf"], len(body["candles"])), ("SOL", "15m", 96))
             self.assertEqual(body["candles"][-1], [int(times[-1].timestamp()), 100.0, 101.0, 99.0, 100.5])
             self.assertEqual(body["candles"][0][0], int(times[-96].timestamp()))
-            self.client.get("/api/radar_candles/XRP?tf=15m&limit=50")                 # andere limit, zelfde cache-regel
+            self.client.get("/api/radar_candles/SOL?tf=15m&limit=50")                 # andere limit, zelfde cache-regel
             self.assertEqual(fetch.call_count, 1)
-            self.client.get("/api/radar_candles/XRP?tf=1h")
+            self.client.get("/api/radar_candles/SOL?tf=1h")
             self.assertEqual(fetch.call_count, 2)
-            main._candle_cache[("XRP", "15m")] = (0.0, main._candle_cache[("XRP", "15m")][1])     # verlopen
-            self.client.get("/api/radar_candles/XRP?tf=15m")
+            main._candle_cache[("SOL", "15m")] = (0.0, main._candle_cache[("SOL", "15m")][1])     # verlopen
+            self.client.get("/api/radar_candles/SOL?tf=15m")
             self.assertEqual(fetch.call_count, 3)
 
     def test_radar_candles_valt_terug_op_oude_stand_en_weigert_rommel(self):
         main = self.main
         main._candle_cache.clear()
-        main._candle_cache[("XRP", "15m")] = (0.0, [[1, 1.0, 2.0, 0.5, 1.5]])
+        main._candle_cache[("SOL", "15m")] = (0.0, [[1, 1.0, 2.0, 0.5, 1.5]])
         with mock.patch.object(main.exchange, "fetch_ohlcv", side_effect=RuntimeError("storing")):
-            self.assertEqual(self.client.get("/api/radar_candles/XRP").json()["candles"], [[1, 1.0, 2.0, 0.5, 1.5]])
+            self.assertEqual(self.client.get("/api/radar_candles/SOL").json()["candles"], [[1, 1.0, 2.0, 0.5, 1.5]])
             self.assertEqual(self.client.get("/api/radar_candles/ETH").status_code, 503)    # niets onthouden
-        self.assertEqual(self.client.get("/api/radar_candles/XRP?tf=7m").status_code, 422)
+        self.assertEqual(self.client.get("/api/radar_candles/SOL?tf=7m").status_code, 422)
         self.assertEqual(self.client.get("/api/radar_candles/XR-P").status_code, 422)
         anon = TestClient(main.app, follow_redirects=False)
-        self.assertIn(anon.get("/api/radar_candles/XRP").status_code, (302, 303, 401, 403))
+        self.assertIn(anon.get("/api/radar_candles/SOL").status_code, (302, 303, 401, 403))
 
     def test_bewijs_pagina_met_eerlijke_cijfers(self):
         r = self.client.get("/bewijs")

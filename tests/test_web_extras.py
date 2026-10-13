@@ -216,13 +216,20 @@ class SparklineRouteTest(WebCase):
         self.assertEqual(set(data), {"BTC", "ETH"})
         self.assertEqual(fetch.call_count, 2)                                 # de tweede aanroep komt uit de cache
         self.assertTrue(data["BTC"]["path"].startswith("M"))
-        self.assertAlmostEqual(data["BTC"]["change_pct"], (299.0 - 276.0) / 276.0 * 100)     # laatste 24 slotkoersen
+        self.assertAlmostEqual(data["BTC"]["change_pct"], round((299.0 - 275.0) / 275.0 * 100, 1))     # 25 slotkoersen is 24 uur
 
     def test_candle_route_still_works_from_the_shared_cache(self):
         self.main._candle_cache.clear()
         with mock.patch.object(self.main.exchange, "fetch_ohlcv", return_value=self.frame()):
             body = self.client.get("/api/radar_candles/BTC?tf=1h&limit=10").json()
         self.assertEqual(len(body["candles"]), 10)
+
+    def test_candle_route_only_accepts_listed_coins(self):
+        self.main._candle_cache.clear()
+        with mock.patch.object(self.main.exchange, "fetch_ohlcv", return_value=self.frame()) as fetch:
+            self.assertEqual(self.client.get("/api/radar_candles/ZZZZ?tf=1h").status_code, 404)
+        self.assertEqual(fetch.call_count, 0)
+        self.assertEqual(self.main._candle_cache, {})
 
     def test_failing_exchange_gives_no_sparkline_not_an_error(self):
         self.main._candle_cache.clear()

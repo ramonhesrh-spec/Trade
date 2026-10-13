@@ -1,6 +1,7 @@
 """Kaarten voor de Trade Radar: elke bouwende SMC-setup en elk open SMC-signaal als handelsplan met candlegrafiek, status
 en afstand tot de limietorder. Pure functies zonder database of netwerk; de route haalt setups, signalen en koersen op en
 geeft ze hier door. Dezelfde kaarten voeden de eerste paginaweergave en de live-verversing (/api/radar)."""
+import math
 from typing import Optional
 
 from app import chance_steps, trade_plan as tp
@@ -100,8 +101,10 @@ def spark_path(closes: list[float], width: float = 120, height: float = 28) -> s
 
 
 def spark(closes: list[float]) -> Optional[dict]:
-    """Wat spark.js per coin invult: het pad en de verandering over de periode."""
-    if len(closes) < 2 or not closes[0]:
+    """Wat spark.js per coin invult: het pad en de verandering over de periode. Geeft SPARK_HOURS + 1 slotkoersen, want 24 uur zijn 25 meetpunten.
+    De verandering is op één decimaal afgerond voordat kleur en tekst eruit volgen, zodat "+0,0%" nooit groen of rood kleurt."""
+    if len(closes) < 2 or not all(math.isfinite(c) for c in closes) or closes[0] <= 0:
         return None
-    change = (closes[-1] - closes[0]) / closes[0] * 100
-    return {"path": spark_path(closes), "change_pct": change, "change_text": f"{change:+.1f}".replace(".", ",") + "% 24u"}
+    change = round((closes[-1] - closes[0]) / closes[0] * 100, 1) + 0.0     # + 0.0 maakt van -0.0 een gewone nul
+    text = "0,0" if change == 0 else f"{change:+.1f}".replace(".", ",")
+    return {"path": spark_path(closes), "change_pct": change, "change_text": f"{text}% 24u"}

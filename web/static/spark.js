@@ -11,7 +11,7 @@
       var d = data[svg.getAttribute("data-spark-coin")], path = svg.querySelector("path");
       if (!d || !path) return;
       path.setAttribute("d", d.path);
-      svg.classList.toggle("is-up", d.change_pct >= 0);
+      svg.classList.toggle("is-up", d.change_pct > 0);   // change_pct is al op één decimaal afgerond: 0 is neutraal
       svg.classList.toggle("is-down", d.change_pct < 0);
       svg.classList.add("has-data");
     });

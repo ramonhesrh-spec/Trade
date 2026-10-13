@@ -636,6 +636,9 @@ async def api_radar_candles(coin: str, tf: str = "15m", limit: int = 96, user: d
     coin = coin.upper()
     if not re.fullmatch(r"[A-Z0-9]{2,12}", coin) or tf not in RADAR_TIMEFRAMES:
         raise HTTPException(status_code=422)
+    # Alleen coins uit de lijst: anders groeit de candlecache met willekeurige symbolen en gaat elk daarvan naar de beurs.
+    if coin not in {c["symbol"] for c in repo.list_coins()}:
+        raise HTTPException(status_code=404)
     limit = max(10, min(limit, RADAR_CANDLE_FETCH))
     rows = await _cached_candles(coin, tf)
     if rows is None:
@@ -651,7 +654,7 @@ async def api_sparklines(coins: str = "", user: dict = Depends(require_login)):
     wanted = [c for c in dict.fromkeys(x.strip().upper() for x in coins.split(",")) if c in active]
     out = {}
     for coin, rows in zip(wanted, await asyncio.gather(*[_cached_candles(c, "1h") for c in wanted])):
-        item = radar.spark([r[4] for r in rows[-radar.SPARK_HOURS:]]) if rows else None
+        item = radar.spark([r[4] for r in rows[-(radar.SPARK_HOURS + 1):]]) if rows else None
         if item:
             out[coin] = item
     return out
