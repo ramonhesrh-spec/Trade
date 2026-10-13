@@ -96,7 +96,8 @@ class WebVandaagTests(unittest.TestCase):
     def test_tabbar_filters_and_empty_state_invite_the_user(self):
         text = self.client.get("/vandaag").text
         self.assertIn('class="tabbar"', text)                              # onderbalk met tabs voor de telefoon
-        self.assertIn("quick-actions", text)
+        self.assertIn('<nav class="ut-menu">', text)                      # drie-puntjesmenu met Mijn week, Beste setups en Instellingen
+        self.assertNotIn("quick-actions", text)
         self.assertIn("Geen plan klaar", self.client.get("/structuur").text)   # lege staat met uitleg en een knop
         self.assertIn("Alleen sterk en redelijk", self.client.get("/structuur?kant=short").text)
 

@@ -175,7 +175,7 @@ class VandaagLayoutTests(BaseShellTests):
                                   (datetime.now(timezone.utc) + timedelta(hours=10)).isoformat())
         html = self.client.get("/vandaag").text
         for needle in ['data-utabs="vandaag"', 'data-utabs-panels="vandaag"', 'id="tab-kansen"', 'id="tab-markt"', 'id="tab-agenda"',
-                       'id="tab-score"', 'class="mrow-wrap', "quick-actions", "data-spark-chg", 'data-vd-price="BTC"']:
+                       'id="tab-score"', 'class="mrow-wrap', '<nav class="ut-menu">', ">Mijn week</a>", "data-spark-chg", 'data-vd-price="BTC"']:
             self.assertIn(needle, html, needle)
         self.assertNotIn('class="quick-action"', html)
 
@@ -390,4 +390,6 @@ class RestLayoutTests(BaseShellTests):
 
     def test_meer_blad_en_uitloggen(self):
         for path in ("/account", "/ceo", "/uitleg"):
-            self.assertIn('action="/logout"', self.client.get(path).text)
+            html = self.client.get(path).text
+            sheet = html[html.index('id="more-sheet"'):]
+            self.assertIn('<form action="/logout" method="post" class="more-logout">', sheet, path)

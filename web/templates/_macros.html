@@ -406,7 +406,7 @@
 {# Tekst-tabs met streep. items: lijst van {"key", "label", "href", "count"?}. Een href die met # begint is een paneeltab (utabs.js
    toont alleen dat paneel); anders is het een gewone link. `menu` is een lijst {"label", "href"} achter de drie puntjes; met {% call %} komt er vrije inhoud bij (een POST-formulier kan
    geen link zijn). Roep alleen met {% call %} aan als er iets in het menu hoort: een lege caller geeft lege puntjes. #}
-{% macro utabs(items, active, group="main", menu=none, menu_class="") %}
+{% macro utabs(items, active, group="main", menu=none) %}
 <div class="ut" data-utabs="{{ group }}">
   {% set ns = namespace(all_panels=true) %}{% for t in items %}{% if not t.href.startswith('#') %}{% set ns.all_panels = false %}{% endif %}{% endfor %}
   <div class="ut-list"{% if ns.all_panels %} role="tablist"{% endif %} aria-label="Onderdelen">
@@ -423,7 +423,7 @@
   {% if menu or caller %}
   <details class="ut-more">
     <summary aria-label="Meer opties"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></summary>
-    <nav class="ut-menu {{ menu_class }}">{% for m in (menu or []) %}<a href="{{ m.href }}">{{ m.label }}</a>{% endfor %}{{ caller() if caller }}</nav>
+    <nav class="ut-menu">{% for m in (menu or []) %}<a href="{{ m.href }}">{{ m.label }}</a>{% endfor %}{{ caller() if caller }}</nav>
   </details>
   {% endif %}
 </div>
