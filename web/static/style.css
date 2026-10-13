@@ -2527,3 +2527,12 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .ut-panels > [data-utab-panel] { min-width: 0; }
 .vd-greeting { font-family: var(--sans); font-size: var(--text-md); letter-spacing: 0; text-transform: none; margin: 0; }
 .vd-meta { margin: 0 0 var(--space-6); font-size: var(--text-sm); }
+
+/* Radar in de nieuwe indeling: op de telefoon geen kaart meer, alleen een dunne lijn tussen de setups. */
+@media (max-width: 760px) {
+  .radar-grid { gap: var(--space-9); }
+  .radar-card { background: none; border: 0; border-bottom: var(--sep); border-radius: 0; box-shadow: none; padding: 0 0 var(--space-9); }
+  .radar-card::before, .radar-card::after { display: none; }
+  .radar-card:last-child { border-bottom: 0; }
+}
+.radar-card > .mrow { padding-top: 0; }

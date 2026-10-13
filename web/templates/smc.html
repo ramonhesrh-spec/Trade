@@ -1,17 +1,28 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 {% block title %}SMC-radar — HesPulse{% endblock %}
+{% block page_title %}Radar{% endblock %}
 {% block dock_search %}{{ macros.float_search() }}{% endblock %}
 {% block content %}
 
-<div class="page-head">
-  <h2>SMC-radar</h2>
-</div>
-<p class="page-intro">Setups die zich opbouwen, met instap, stop, doel en R:R. De status loopt live mee met de koers.</p>
+{# Een telling heeft geen reeks, dus geen lijntje bij het getal. #}
+{{ macros.headline("Setups die wachten", setup_cards|length, "wachten", delta=(signal_cards|length ~ " open trades")) }}
 
+{% set smc_proof = proof("smc") %}
+{{ macros.keylines([
+  {"label": "Open trades", "value": signal_cards|length},
+  {"label": "Doel gehaald zonder vulling", "value": moot_cards|length},
+  {"label": "SMC per trade, na kosten", "value": smc_proof.label, "explain": smc_proof.text ~ " Gemeten op afgeronde SMC-trades. Bewijs toont de details."}], "rd") }}
 
+{{ macros.utabs([
+  {"key": "wachten", "label": "Wachten", "href": "#tab-wachten", "count": setup_cards|length},
+  {"key": "open", "label": "Open", "href": "#tab-open", "count": signal_cards|length},
+  {"key": "afgerond", "label": "Afgerond", "href": "#tab-afgerond"}], "wachten", "radar") }}
 
-<section class="card" style="--i: 0">
+<div class="ut-panels" data-utabs-panels="radar">
+
+<section id="tab-wachten" data-utab-panel class="is-shown">
+<div class="flat">
   <h3>Wachten op de zone</h3>
   {% if not setup_cards %}
   {{ macros.empty_state("Nog geen bouwende setup", "De CEO zit in een vergadering. Een SMC-setup verschijnt hier zodra structuur breekt, een sweep de liquiditeit pakt en er een zone ontstaat om op te wachten. Je krijgt dan een melding.", "Bekijk de Setups", "/structuur") }}
@@ -19,12 +30,8 @@
   <div class="radar-grid">
     {% for c in setup_cards %}
     <article class="radar-card" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
-      <header class="radar-head">
-        <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
-        <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
-        <svg class="radar-spark" data-spark-coin="{{ c.coin }}" viewBox="0 0 120 28" preserveAspectRatio="none" role="img" aria-label="Koers {{ c.coin }}, laatste 24 uur"><path d=""/></svg>
-        <span class="radar-spark-chg" data-spark-chg="{{ c.coin }}"></span>
-      </header>
+      {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
+           price_coin=c.coin, chg_coin=c.coin, href="/coins/" ~ c.coin, el="div") }}
       <div class="radar-state radar-state-{{ c.state or 'laden' }}" data-radar="state">{{ c.state_label }}</div>
       <div class="approach" role="img" aria-label="Koers op {{ "%.0f"|format(c.approach_pct or 0) }}% van de weg naar je instap"{% if c.approach_pct is none %} hidden{% endif %}>
         <span class="approach-track"></span>
@@ -50,27 +57,27 @@
     {% endfor %}
   </div>
   {% endif %}
-</section>
+</div>
 
 {% if moot_cards %}
-<section class="card" style="--i: 0">
+<div class="flat">
   <h3>Doel gehaald zonder vulling</h3>
   <div class="radar-grid">
     {% for c in moot_cards %}
     <article class="radar-card is-moot" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
-      <header class="radar-head">
-        <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
-        <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
-      </header>
+      {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
+           price_coin=c.coin, chg_coin=c.coin, href="/coins/" ~ c.coin, el="div") }}
       <div class="radar-state radar-state-{{ c.state }}" data-radar="state">{{ c.state_label }}</div>
       <div class="radar-meta muted">{{ c.created_at | age }}</div>
     </article>
     {% endfor %}
   </div>
-</section>
+</div>
 {% endif %}
+</section>
 
-<section class="card" style="--i: 1">
+<section id="tab-open" data-utab-panel>
+<div class="flat">
   <h3>Open trades</h3>
   {% if not signal_cards %}
   {{ macros.empty_state("Geen open trades", "De CEO is aan het golfen. Een open SMC-trade toont hier zijn voortgang tussen stop en doel, live.") }}
@@ -78,12 +85,8 @@
   <div class="radar-grid">
     {% for c in signal_cards %}
     <article class="radar-card" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
-      <header class="radar-head">
-        <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
-        <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
-        <svg class="radar-spark" data-spark-coin="{{ c.coin }}" viewBox="0 0 120 28" preserveAspectRatio="none" role="img" aria-label="Koers {{ c.coin }}, laatste 24 uur"><path d=""/></svg>
-        <span class="radar-spark-chg" data-spark-chg="{{ c.coin }}"></span>
-      </header>
+      {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
+           price_coin=c.coin, chg_coin=c.coin, href="/coins/" ~ c.coin, el="div") }}
       <div class="radar-state radar-state-open" data-radar="state">{{ c.state_label }}</div>
       {% if c.chart %}{{ macros.level_chart(c.coin, c.chart) }}{% endif %}
       {{ macros.level_chips(c.coin, c.levels, "/smc#radar-" ~ c.key|replace(':', '-')) }}
@@ -102,9 +105,11 @@
     {% endfor %}
   </div>
   {% endif %}
+</div>
 </section>
 
-<section class="card" style="--i: 2">
+<section id="tab-afgerond" data-utab-panel>
+<div class="flat">
   <h3>Afgeronde signalen</h3>
   {% if not entries %}
   <p class="muted empty">Nog geen afgeronde SMC-signalen.</p>
@@ -115,7 +120,10 @@
     {% endfor %}
   </div>
   {% endif %}
+</div>
 </section>
+
+</div>
 <script defer src="{{ asset('vendor/lightweight-charts-4.2.0.standalone.production.js') }}"></script>
 <script defer src="{{ asset('levelchart.js') }}"></script>
 <script defer src="/static/radar.js"></script>

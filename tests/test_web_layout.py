@@ -162,3 +162,33 @@ class VandaagLayoutTests(BaseShellTests):
                        'id="tab-score"', 'class="mrow-wrap', "quick-actions", "data-spark-chg", 'data-vd-price="BTC"']:
             self.assertIn(needle, html, needle)
         self.assertNotIn('class="quick-action"', html)
+
+
+class RadarLayoutTests(BaseShellTests):
+    def setUp(self):
+        super().setUp()
+        with db.session() as conn:
+            conn.execute(
+                """INSERT INTO smc_setups (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, atr,
+                   created_at, updated_at) VALUES ('XRP', 'long', 95.0, 96.0, 101.0, 94.0, 110.0, 1.0, ?, ?)""",
+                (db.now_iso(), db.now_iso()))
+            conn.execute(
+                """INSERT INTO signals (message_id, coin, direction, category, confidence, technical_confirmed, price, stop_loss,
+                   take_profit, trade_type, created_at) VALUES (NULL, 'ETH', 'long', 'x', 'hoog', 1, 100, 97, 106, 'smc', ?)""",
+                (db.now_iso(),))
+
+    def test_radar_in_de_nieuwe_indeling(self):
+        html = self.client.get("/smc").text
+        for needle in ['data-utabs="radar"', 'id="tab-wachten"', 'id="tab-open"', 'id="tab-afgerond"', 'class="mrow"',
+                       'data-vd-price="XRP"', 'data-vd-price="ETH"', "data-radar-key", 'data-radar="state"', "r-progress",
+                       "Wacht op de zone", "Koers op ", "SMC-radar", "<title>SMC-radar"]:
+            self.assertIn(needle, html, needle)
+        self.assertRegex(html, r'class="hl-num">1</span><span class="hl-unit">wachten')
+        self.assertIn("1 open trades", html)
+        self.assertNotIn('class="radar-head"', html)
+
+    def test_radar_kernregels_en_zoekveld(self):
+        html = self.client.get("/smc").text
+        self.assertIn('class="kl"', html)
+        self.assertIn("Doel gehaald zonder vulling", html)
+        self.assertIn('id="fsearch"', html)
