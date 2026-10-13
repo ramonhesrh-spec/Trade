@@ -101,6 +101,18 @@ class BaseShellTests(unittest.TestCase):
         self.assertIn('<form action="/logout" method="post" class="more-logout">', sheet)
         self.assertIn("Uitloggen", sheet)
 
+    def test_zoekveld_alleen_op_vandaag_en_radar(self):
+        for pad in ("/vandaag", "/smc"):
+            html = self.client.get(pad).text
+            self.assertIn('id="fsearch"', html, pad)
+            self.assertIn('<body class="has-fsearch">', html, pad)
+        for pad in ("/bewijs", "/structuur"):
+            html = self.client.get(pad).text
+            self.assertNotIn('id="fsearch"', html, pad)
+            self.assertNotIn("has-fsearch", html, pad)
+            self.assertIn('class="dock"', html, pad)
+            self.assertIn('id="cmdk"', html, pad)
+
     def test_login_blijft_zonder_schil(self):
         html = TestClient(main.app).get("/login").text
         self.assertNotIn("fsearch", html)

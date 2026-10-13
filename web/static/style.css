@@ -2479,10 +2479,12 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
   .dock.is-hidden { transform: translateY(calc(100% + 24px + env(safe-area-inset-bottom))); }
   .dock .tabbar { position: static; left: auto; right: auto; bottom: auto; transition: none; }
   .dock .tabbar.is-hidden { transform: none; }
-  main { padding: calc(var(--space-6) + env(safe-area-inset-top)) var(--gutter) calc(150px + env(safe-area-inset-bottom)); }
+  main { padding: calc(var(--space-6) + env(safe-area-inset-top)) var(--gutter) calc(96px + env(safe-area-inset-bottom)); }
+  body.has-fsearch main { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
   .tab.is-active { box-shadow: var(--glow-tab); }
   .more-logout { margin: var(--space-6) 0 0; }
-  .more-sheet-panel { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+  .more-sheet-panel { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+  body.has-fsearch .more-sheet-panel { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
   .fsearch {
     display: flex; align-items: center; gap: var(--space-6); width: 100%; min-height: 52px; padding: 0 var(--space-8);
     background: rgba(19, 26, 27, 0.86); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
