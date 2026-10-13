@@ -963,7 +963,7 @@ main h3 { font-size: var(--text-md); gap: var(--space-4); }
 .offline-banner {
   position: sticky; top: 0; z-index: 70; display: block;
   background: #3a2a0f; color: #f2b03e; border-bottom: 1px solid #5a4419;
-  font-size: var(--text-base); text-align: center; padding: var(--space-4) var(--space-7);
+  font-size: var(--text-base); text-align: center; padding: calc(var(--space-4) + env(safe-area-inset-top)) var(--space-7) var(--space-4);
 }
 .offline-banner[hidden] { display: none; }
 
@@ -2441,6 +2441,9 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
   .dock .tabbar.is-hidden { transform: none; }
   main { padding: calc(var(--space-6) + env(safe-area-inset-top)) var(--gutter) calc(96px + env(safe-area-inset-bottom)); }
   body.has-fsearch main { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
+  /* Een zichtbare banner staat boven main en vangt de notch al op; main telt de inset er niet nog eens bij. */
+  body:has(.offline-banner:not([hidden])) main, body:has(.push-banner:not([hidden])) main { padding-top: var(--space-6); }
+  body:has(.offline-banner:not([hidden])) .push-banner { margin-top: var(--space-4); }
   .tab.is-active { box-shadow: var(--glow-tab); }
   .more-logout { margin: var(--space-6) 0 0; }
   .more-logout button { display: flex; width: 100%; align-items: center; min-height: 44px; padding: var(--space-4) var(--space-2); border: 0; border-top: 1px solid var(--border); background: none; color: var(--text); font: inherit; font-size: 1.05rem; text-align: left; cursor: pointer; }

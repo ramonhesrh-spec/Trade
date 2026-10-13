@@ -38,6 +38,22 @@ class LayoutMacroTests(unittest.TestCase):
         self.assertIn('class="ut-tab is-active"', html)
         self.assertEqual(html.count("aria-controls"), 1)
 
+    def test_utabs_linktabs_zijn_geen_tabs(self):
+        html = render('{{ m.utabs([{"key": "a", "label": "Week", "href": "/week"}, {"key": "b", "label": "Maand", "href": "/week?m=1"}], "a") }}')
+        self.assertNotIn('role="tab"', html)
+        self.assertNotIn("aria-selected", html)
+        self.assertNotIn('role="tablist"', html)
+        self.assertEqual(html.count('aria-current="page"'), 1)
+        self.assertRegex(html, r'class="ut-tab is-active" href="/week" aria-current="page"')
+
+    def test_utabs_paneeltabs_zijn_echte_tabs_met_id(self):
+        html = render('{{ m.utabs([{"key": "a", "label": "Kansen", "href": "#tab-a"}, {"key": "b", "label": "Markt", "href": "#tab-b"}], "a") }}')
+        self.assertIn('role="tablist"', html)
+        self.assertEqual(html.count('role="tab"'), 2)
+        self.assertIn('id="tab-a-tab"', html)
+        self.assertIn('aria-selected="true"', html)
+        self.assertNotIn("aria-current", html)
+
     def test_market_row_live_hooks(self):
         html = render('{{ m.market_row("BTC", "BTC", chip="long", chip_tone="pos", price_coin="BTC", chg_coin="BTC", el="summary") }}')
         self.assertTrue(html.strip().startswith('<summary class="mrow"'))

@@ -408,10 +408,16 @@
    geen link zijn). Roep alleen met {% call %} aan als er iets in het menu hoort: een lege caller geeft lege puntjes. #}
 {% macro utabs(items, active, group="main", menu=none, menu_class="") %}
 <div class="ut" data-utabs="{{ group }}">
-  <div class="ut-list" role="tablist" aria-label="Onderdelen">
+  {% set ns = namespace(all_panels=true) %}{% for t in items %}{% if not t.href.startswith('#') %}{% set ns.all_panels = false %}{% endif %}{% endfor %}
+  <div class="ut-list"{% if ns.all_panels %} role="tablist"{% endif %} aria-label="Onderdelen">
+    {# Een #-href wisselt een paneel en is een echte tab; elke andere href navigeert en is een gewone link met aria-current. #}
     {% for t in items %}
-    <a class="ut-tab{% if t.key == active %} is-active{% endif %}" href="{{ t.href }}" role="tab" aria-selected="{{ 'true' if t.key == active else 'false' }}"
-       {% if t.href.startswith('#') %}aria-controls="{{ t.href[1:] }}"{% endif %}>{{ t.label }}{% if t.count %} <i class="ut-count">{{ t.count }}</i>{% endif %}</a>
+    {% if t.href.startswith('#') %}
+    <a class="ut-tab{% if t.key == active %} is-active{% endif %}" id="{{ t.href[1:] }}-tab" href="{{ t.href }}" role="tab" aria-selected="{{ 'true' if t.key == active else 'false' }}"
+       aria-controls="{{ t.href[1:] }}">{{ t.label }}{% if t.count %} <i class="ut-count">{{ t.count }}</i>{% endif %}</a>
+    {% else %}
+    <a class="ut-tab{% if t.key == active %} is-active{% endif %}" href="{{ t.href }}"{% if t.key == active %} aria-current="page"{% endif %}>{{ t.label }}{% if t.count %} <i class="ut-count">{{ t.count }}</i>{% endif %}</a>
+    {% endif %}
     {% endfor %}
   </div>
   {% if menu or caller %}

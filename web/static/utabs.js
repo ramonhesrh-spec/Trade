@@ -16,7 +16,11 @@
         t.setAttribute("aria-selected", on ? "true" : "false");
       });
       if (!found) return false;
-      panels.querySelectorAll("[data-utab-panel]").forEach(function (p) { p.classList.toggle("is-shown", p.id === id); });
+      panels.querySelectorAll("[data-utab-panel]").forEach(function (p) {
+        p.classList.toggle("is-shown", p.id === id);
+        // Pas met het script zijn dit echte tabpanelen; zonder staan ze gewoon onder elkaar.
+        if (document.getElementById(p.id + "-tab")) { p.setAttribute("role", "tabpanel"); p.setAttribute("aria-labelledby", p.id + "-tab"); }
+      });
       if (push) history.replaceState(null, "", "#" + id);
       // levelchart.js tekent pas als een grafiek in beeld komt; een net getoond paneel moet dat zelf kunnen melden.
       window.dispatchEvent(new Event("resize"));
