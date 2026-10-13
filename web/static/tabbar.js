@@ -13,16 +13,17 @@
 })();
 
 // De onderbalk schuift weg bij omlaag scrollen en komt terug bij omhoog scrollen of bovenaan.
-// De drempel van 8px voorkomt dat iOS-rubberband en kleine trillingen de balk laten flikkeren.
+// Een drempel van 4px voorkomt flikkeren door iOS-rubberband. Onderaan de pagina komt de balk niet terug: op korte pagina's
+// lag het scrollbereik zo klein dat de balk direct weer verscheen en het weglopen nooit te zien was.
 (function () {
   var bar = document.querySelector(".tabbar");
   if (!bar) return;
   var last = window.scrollY, ticking = false;
   function update() {
     ticking = false;
-    var y = window.scrollY, max = document.documentElement.scrollHeight - window.innerHeight;
-    if (y <= 0 || y >= max - 2) { bar.classList.remove("is-hidden"); last = y; return; }
-    if (Math.abs(y - last) < 8) return;
+    var y = window.scrollY;
+    if (y <= 0) { bar.classList.remove("is-hidden"); last = y; return; }
+    if (Math.abs(y - last) < 4) return;
     bar.classList.toggle("is-hidden", y > last);
     last = y;
   }
