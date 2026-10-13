@@ -11,3 +11,22 @@
   sheet.addEventListener("click", function (e) { if (e.target === sheet || e.target.closest("a")) setOpen(false); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") setOpen(false); });
 })();
+
+// De onderbalk schuift weg bij omlaag scrollen en komt terug bij omhoog scrollen of bovenaan.
+// De drempel van 8px voorkomt dat iOS-rubberband en kleine trillingen de balk laten flikkeren.
+(function () {
+  var bar = document.querySelector(".tabbar");
+  if (!bar) return;
+  var last = window.scrollY, ticking = false;
+  function update() {
+    ticking = false;
+    var y = window.scrollY, max = document.documentElement.scrollHeight - window.innerHeight;
+    if (y <= 0 || y >= max - 2) { bar.classList.remove("is-hidden"); last = y; return; }
+    if (Math.abs(y - last) < 8) return;
+    bar.classList.toggle("is-hidden", y > last);
+    last = y;
+  }
+  window.addEventListener("scroll", function () {
+    if (!ticking) { ticking = true; requestAnimationFrame(update); }
+  }, { passive: true });
+})();
