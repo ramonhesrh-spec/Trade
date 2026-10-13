@@ -31,7 +31,7 @@ from markupsafe import Markup
 from app import advice as advice_module
 from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
-from app import ceo, chance_checks, chance_steps, kans_view, rule_live, trust
+from app import ceo, chance_checks, freshness, chance_steps, kans_view, rule_live, trust
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 
@@ -113,6 +113,7 @@ templates.env.globals["live_exchange"] = config.EXCHANGE_ID
 templates.env.globals["live_quote"] = config.QUOTE_CURRENCY.lower()
 templates.env.globals["pause_minutes_left"] = lambda u: push_policy.pause_minutes_left((u or {}).get("push_paused_until"), datetime.now(timezone.utc))
 templates.env.globals["pause_text"] = push_policy.pause_text
+templates.env.globals["stale_after_s"] = freshness.STALE_AFTER_S
 
 
 def _age_label(iso: str | None) -> str:
@@ -348,6 +349,7 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
 
 PRICE_TTL_SECONDS = 10
 _price_cache: dict[str, tuple[float, Optional[float]]] = {}
+_price_fetched_at: dict[str, float] = {}       # wandklok (time.time) van de laatste geslaagde ophaal per coin, zie app/freshness.py
 
 
 async def _cached_prices(coins) -> dict[str, Optional[float]]:
@@ -370,6 +372,8 @@ async def _cached_prices(coins) -> dict[str, Optional[float]]:
             return None
 
     for coin, price in zip(stale, await asyncio.gather(*[fetch(c) for c in stale])):
+        if price is not None:
+            _price_fetched_at[coin] = time.time()
         # Een mislukte ophaal (None) vervangt een eerdere goede koers niet: liever een koers van een minuut
         # geleden dan een kaart zonder koers.
         if price is None and coin in _price_cache:
@@ -525,16 +529,22 @@ async def vandaag_page(request: Request, user: dict = Depends(require_login)):
     return templates.TemplateResponse(request, "vandaag.html", {"user": user, "greeting": greeting, **ctx})
 
 
+def _age_header(coins) -> dict:
+    age = freshness.oldest_age(_price_fetched_at, coins, time.time())
+    return {} if age is None else {"X-Price-Age": str(age)}
+
+
 @app.get("/api/vandaag")
 async def api_vandaag(user: dict = Depends(require_login)):
     """Live koersen en afstand tot de voorwaarde per scenario, voor vandaag.js."""
     ctx = await _vandaag_context(user)
-    return {
+    payload = {
         "prices": ctx["prices"],
         "scenarios": {str(sc["id"]): {"state": sc["state"], "label": sc["state_label"], "to_trigger_pct": sc["to_trigger_pct"],
                                        "hours_left": sc["hours_left"], "chart": sc["chart"]}
                       for s in ctx["scripts"] for sc in s["scenarios"]},
     }
+    return JSONResponse(payload, headers=_age_header(ctx["prices"].keys()))
 
 
 KANS_TIMEFRAMES = ("5m", "15m", "30m", "4h")
@@ -590,8 +600,10 @@ async def api_kansen(user: dict = Depends(require_login)):
 
 @app.get("/api/radar")
 async def api_radar(user: dict = Depends(require_login)):
-    """Live status per radar-kaart, voor radar.js: nieuwe koers, afstand tot de limietorder, live R en de niveaus voor de grafiek."""
-    return radar.live_payload(await _radar_cards())
+    """Live status per radar-kaart, voor radar.js: nieuwe koers, afstand tot de limietorder, live R en de niveaus voor de grafiek.
+    De leeftijd van de oudste koers staat in de header X-Price-Age, zodat de vorm van de payload per kaart gelijk blijft."""
+    cards = await _radar_cards()
+    return JSONResponse(radar.live_payload(cards), headers=_age_header({c["coin"] for c in cards}))
 
 
 RADAR_TIMEFRAMES = ("5m", "15m", "1h", "4h")

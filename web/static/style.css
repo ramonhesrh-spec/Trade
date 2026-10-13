@@ -2266,3 +2266,8 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
 .level-bell.is-on { color: var(--accent); }
 .level-bell.is-on svg { fill: currentColor; }
 .level-bell:disabled { opacity: 0.5; }
+
+/* Versheid van de koersen (stale.js): groen is gemeten en vers, oranje betekent dat je naar een oude koers kijkt. Geen animatie. */
+.price-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
+.price-dot[hidden] { display: none; }
+.price-dot.is-stale { background: var(--amber); }

@@ -33,14 +33,19 @@
     });
   }
 
-  function refresh() {
-    if (document.hidden) return;
-    fetch("/api/vandaag", { cache: "no-store", credentials: "same-origin" })
-      .then(function (resp) { return resp.ok ? resp.json() : null; })
-      .then(function (payload) { if (payload) apply(payload); })
-      .catch(function () { /* een mislukte verversing laat de laatste stand staan */ });
+  function refresh(force) {
+    if (document.hidden && !force) return Promise.resolve(false);
+    return fetch("/api/vandaag", { cache: "no-store", credentials: "same-origin" })
+      .then(function (resp) {
+        if (!resp.ok) return false;
+        var age = resp.headers.get("X-Price-Age");
+        if (age !== null && window.hesPriceSeen) window.hesPriceSeen(age);
+        return resp.json().then(function (payload) { apply(payload); return true; });
+      })
+      .catch(function () { return false; /* een mislukte verversing laat de laatste stand staan */ });
   }
 
+  refresh();
   setInterval(refresh, INTERVAL_MS);
   document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
 })();

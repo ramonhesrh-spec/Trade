@@ -119,5 +119,31 @@ class SystemStatusBadgeTest(WebCase):
         self.assertEqual(self.client.get("/api/system_status").json()["in_zone"], 1)       # koers 100 ligt in 99-101
 
 
+class PriceAgeTest(WebCase):
+    def setUp(self):
+        super().setUp()
+        self.main._price_fetched_at.clear()
+        with db.session() as conn:
+            conn.execute("""INSERT INTO smc_setups (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, atr,
+                            created_at, updated_at) VALUES ('XRP', 'long', 99.0, 101.0, 102.0, 97.0, 110.0, 1.0, ?, ?)""", (db.now_iso(), db.now_iso()))
+
+    def test_fresh_fetch_gives_a_small_age(self):
+        r = self.client.get("/api/radar")
+        self.assertLessEqual(int(r.headers["X-Price-Age"]), 1)
+
+    def test_failed_fetch_keeps_the_old_price_but_the_age_grows(self):
+        import time
+        self.client.get("/api/radar")
+        self.main._price_fetched_at["XRP"] = time.time() - 300
+        self.main._price_cache["XRP"] = (0.0, 100.0)                         # verlopen: er wordt opnieuw opgehaald
+        with mock.patch.object(self.main.exchange, "fetch_last_price", side_effect=RuntimeError("storing")):
+            r = self.client.get("/api/radar")
+        self.assertGreaterEqual(int(r.headers["X-Price-Age"]), 300)
+
+    def test_dot_carries_the_threshold(self):
+        self.assertIn('data-stale-after="120"', self.client.get("/smc").text)
+        self.assertIn("X-Price-Age", self.client.get("/api/vandaag").headers)
+
+
 if __name__ == "__main__":
     unittest.main()

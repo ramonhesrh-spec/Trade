@@ -255,6 +255,7 @@
         <span id="push-pause-label">{{ pause_text(pause_left) }}</span>
       </button>
       {% endif %}
+      <span id="price-dot" class="price-dot" data-stale-after="{{ stale_after_s }}" hidden role="img" aria-label="Koersen zijn actueel" title="Koersen zijn actueel"></span>
       <span class="live-pill"><span class="ping"></span><span id="live-clock">--:--:--</span></span>
       <button type="button" id="system-status" class="system-status" title="Systeemstatus" aria-label="Systeemstatus tonen" aria-expanded="false" aria-controls="system-status-popover">
         <span class="status-dot"></span><span class="status-label">systeem</span>
@@ -936,5 +937,6 @@
 <script src="{{ asset('pause.js') }}" defer></script>
 <script src="{{ asset('copy.js') }}" defer></script>
 <script src="{{ asset('alarm.js') }}" defer></script>
+<script src="{{ asset('stale.js') }}" defer></script>
 </body>
 </html>
