@@ -24,7 +24,10 @@
     }
     panels.classList.add("is-js");
     var start = location.hash.slice(1);
-    if (!start || !show(start, false)) show(tabs[0].getAttribute("href").slice(1), false);
+    if (!start || !show(start, false)) {
+      var active = group.querySelector(".ut-tab.is-active");
+      show((tabs.indexOf(active) === -1 ? tabs[0] : active).getAttribute("href").slice(1), false);
+    }
     group.addEventListener("click", function (e) {
       var t = e.target.closest && e.target.closest(".ut-tab");
       if (!t || tabs.indexOf(t) === -1) return;

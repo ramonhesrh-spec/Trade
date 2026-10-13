@@ -21,6 +21,7 @@ const panelA = node({ id: "tab-a" }), panelB = node({ id: "tab-b" });
 const listeners = {};
 const group = node({ "data-utabs": "main" });
 group.querySelectorAll = () => [tabA, tabB];
+group.querySelector = () => null;
 group.addEventListener = (type, fn) => { listeners[type] = fn; };
 const panels = node({});
 panels.querySelectorAll = () => [panelA, panelB];
@@ -39,10 +40,20 @@ ctx.dispatchEvent = () => {};
 vm.createContext(ctx);
 vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), ctx);
 
+// Zonder hash en met tab B al als actief gemarkeerd (server-rendered): B blijft staan, niet A.
+const noHash = (() => {
+  tabA._c.delete("is-active"); tabB._c.add("is-active"); ctx.location.hash = "";
+  panelA._c.delete("is-shown"); panelB._c.delete("is-shown");
+  group.querySelector = (sel) => (sel === ".ut-tab.is-active" ? tabB : null);
+  vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), ctx);
+  return panelB._c.has("is-shown") && !panelA._c.has("is-shown") ? "tab-b" : "fout";
+})();
+tabA._c.add("is-active"); tabB._c.delete("is-active");
 listeners.click({ target: { closest: () => tabB }, preventDefault() {} });
 const shown = [panelA, panelB].filter((p) => p._c.has("is-shown")).map((p) => p.id);
 console.log(JSON.stringify({
   shown: shown.length === 1 ? shown[0] : shown,
   selected: [tabA.getAttribute("aria-selected"), tabB.getAttribute("aria-selected")],
   hash: ctx.location.hash,
+  noHashActive: noHash,
 }));

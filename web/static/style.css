@@ -72,7 +72,7 @@
   --sep: 1px solid var(--border);
   --radius-pill: 999px;
   --radius-dock: 22px;
-  /* Gloed bovenaan. Maximaal 8% teal: daarboven zakt --muted onder 4,5:1 (rekensom in 1.4). Niet verhogen zonder die som opnieuw. */
+  /* Gloed bovenaan. Maximaal 8% teal: daarboven zakt --muted onder 4,5:1 (gemeten 4,7:1 bij 0,06, rekensom plan 1.5). Niet verhogen zonder die som opnieuw. */
   --glow-top: rgba(23, 229, 214, 0.06);
   --glow-top-height: 320px;
   --glow-tab: 0 0 18px -2px rgba(23, 229, 214, 0.35);
@@ -2374,6 +2374,8 @@ main { position: relative; z-index: 1; }
 .ph-title:hover { background: none; border-color: transparent; }
 .ph-title svg { color: var(--muted); }
 .ph-title[aria-expanded="true"] svg { transform: rotate(180deg); }
+/* De globale button:focus-visible geeft alleen een zwakke schaduw; deze twee zijn kaal en hebben een echte ring nodig. */
+.ph-title:focus-visible, .kl-term:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 6px; }
 .ph-right { margin-left: auto; display: flex; align-items: center; gap: var(--space-5); }
 
 /* Groot getal */
@@ -2479,6 +2481,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
   .dock .tabbar.is-hidden { transform: none; }
   main { padding: calc(var(--space-6) + env(safe-area-inset-top)) var(--gutter) calc(150px + env(safe-area-inset-bottom)); }
   .tab.is-active { box-shadow: var(--glow-tab); }
+  .more-logout { margin: var(--space-6) 0 0; }
   .more-sheet-panel { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
   .fsearch {
     display: flex; align-items: center; gap: var(--space-6); width: 100%; min-height: 52px; padding: 0 var(--space-8);
@@ -2493,16 +2496,20 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
      blijven voor pause.js, stale.js en het statusscript). De balk is een rij van hoogte nul direct boven main, dus onder een zichtbare
      pushbanner en niet erover; de knoppen hangen er absoluut aan en komen zo op de hoogte van .ph te staan. */
   .topbar { position: relative; top: auto; right: auto; left: auto; height: 0; padding: 0; background: none; border: 0; backdrop-filter: none; z-index: 20; }
-  .topbar-top { position: absolute; top: calc(var(--space-6) + env(safe-area-inset-top)); right: var(--gutter); }
+  .topbar-top { position: absolute; top: calc(var(--space-6) + env(safe-area-inset-top)); right: var(--gutter); min-height: var(--avatar); }
   /* Pagina zonder .ph (nog niet omgezet, of uitgelogd): de knoppen krijgen een eigen rij, anders liggen ze over de paginakop. */
-  .topbar.topbar-flow { height: auto; padding: var(--space-5) var(--gutter) 0; }
+  .topbar.topbar-flow { height: auto; padding: max(var(--space-5), env(safe-area-inset-top)) var(--gutter) 0; }
   .topbar-flow .topbar-top { position: static; justify-content: flex-end; min-height: 0; }
   .topbar .brand, .topbar-watermark-clip, .logout-form, .shortcuts-hint, .topbar-ticker, .last-signal-pill, .live-pill { display: none; }
-  .topbar-top { min-height: var(--avatar); }
   .ph-title { max-width: calc(100% - 170px); }
   .ph-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .cmdk-overlay { align-items: flex-start; padding: max(var(--space-8), env(safe-area-inset-top)) var(--gutter) 0; }
+  /* Boven het Meer-blad (450) en de dock (500), anders staat de zoekbalk erachter. */
+  .cmdk-overlay { z-index: 600; align-items: flex-start; padding: max(var(--space-8), env(safe-area-inset-top)) var(--gutter) 0; }
   .cmdk-panel { width: 100%; border-radius: 18px; }
 }
-@media (min-width: 761px) { .fsearch, .ph-title svg { display: none; } .ph-title { cursor: default; } }
+@media (min-width: 761px) { .fsearch, .ph-title svg { display: none; } .ph-title { cursor: default; pointer-events: none; } }
+@media (max-width: 760px) {
+  /* De dock is hier ongeveer 138px hoog; lagere meldingen verdwijnen erachter. */
+  .copy-toast, .ceo-toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
+}
 @media (prefers-reduced-motion: reduce) { .dock, .ph-title svg { transition: none; } }

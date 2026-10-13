@@ -356,6 +356,7 @@
     </div>
     <p class="muted more-label">Coins</p>
     <div class="more-coins">{% for c in coins %}<a href="/coins/{{ c.symbol }}">{{ c.symbol }}</a>{% endfor %}</div>
+    <form action="/logout" method="post" class="more-logout"><button type="submit">Uitloggen</button></form>
   </div>
 </div>
 {% endif %}
@@ -642,6 +643,7 @@
     var openedFrom = null;
 
     function open() {
+      document.dispatchEvent(new Event("hp:close-more"));
       openedFrom = document.activeElement;
       items = buildItems();
       overlay.hidden = false;

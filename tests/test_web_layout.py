@@ -76,6 +76,31 @@ class BaseShellTests(unittest.TestCase):
                        "data-more-toggle"]:
             self.assertIn(needle, html, needle)
 
+    def test_pagina_met_page_title_krijgt_ph_en_geen_topbar_flow(self):
+        from fastapi import Depends
+        from fastapi.responses import HTMLResponse
+
+        tpl = main.templates.env.from_string('{% extends "base.html" %}{% block page_title %}Proef{% endblock %}{% block content %}x{% endblock %}')
+
+        def proef(request: main.Request, user: dict = Depends(main.require_login)):
+            return HTMLResponse(tpl.render(request=request, user=user, **main._nav_context(request)))
+
+        main.app.add_api_route("/__proef_ph", proef)
+        try:
+            html = self.client.get("/__proef_ph").text
+        finally:
+            main.app.router.routes.pop()
+        self.assertIn('class="ph"', html)
+        self.assertIn('class="topbar"', html)
+        self.assertNotIn("topbar-flow", html)
+
+    def test_meer_blad_bevat_het_uitlogformulier(self):
+        html = self.client.get("/vandaag").text
+        sheet = html[html.index('id="more-sheet"'):]
+        sheet = sheet[:sheet.index("<footer")]
+        self.assertIn('<form action="/logout" method="post" class="more-logout">', sheet)
+        self.assertIn("Uitloggen", sheet)
+
     def test_login_blijft_zonder_schil(self):
         html = TestClient(main.app).get("/login").text
         self.assertNotIn("fsearch", html)

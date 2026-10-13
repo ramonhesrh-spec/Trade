@@ -40,12 +40,15 @@ class LevelChartAreasTest(unittest.TestCase):
         self.assertEqual(out["rgbaNone"], "transparent")
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 @unittest.skipUnless(shutil.which("node"), "node ontbreekt")
 class UtabsTest(unittest.TestCase):
     def test_klik_toont_alleen_het_gekozen_paneel(self):
         out = run_node("utabs_harness.js", "utabs.js")
-        self.assertEqual(out, {"shown": "tab-b", "selected": ["false", "true"], "hash": "#tab-b"})
+        self.assertEqual({k: out[k] for k in ("shown", "selected", "hash")}, {"shown": "tab-b", "selected": ["false", "true"], "hash": "#tab-b"})
+
+    def test_zonder_hash_wint_de_actieve_tab_boven_de_eerste(self):
+        self.assertEqual(run_node("utabs_harness.js", "utabs.js")["noHashActive"], "tab-b")
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -7,9 +7,20 @@
     if (open) { sheet.hidden = false; requestAnimationFrame(function () { sheet.classList.add("is-open"); }); }
     else { sheet.classList.remove("is-open"); setTimeout(function () { if (!sheet.classList.contains("is-open")) sheet.hidden = true; }, 220); }
   }
+  // Op desktop (de dock en het blad bestaan daar niet) is .ph-title geen knop: niet focusbaar en een klik doet niets.
+  var phone = window.matchMedia("(max-width: 760px)");
+  function syncPhone() {
+    document.querySelectorAll(".ph-title[data-more-toggle]").forEach(function (t) {
+      if (phone.matches) t.removeAttribute("tabindex"); else t.setAttribute("tabindex", "-1");
+    });
+  }
+  syncPhone();
+  if (phone.addEventListener) phone.addEventListener("change", syncPhone);
   toggles.forEach(function (t) {
-    t.addEventListener("click", function () { setOpen(t.getAttribute("aria-expanded") !== "true"); });
+    t.addEventListener("click", function () { if (phone.matches) setOpen(t.getAttribute("aria-expanded") !== "true"); });
   });
+  // De zoekpalette sluit het blad eerst, zodat die er niet achter opent.
+  document.addEventListener("hp:close-more", function () { setOpen(false); });
   sheet.addEventListener("click", function (e) { if (e.target === sheet || e.target.closest("a")) setOpen(false); });
   document.addEventListener("keydown", function (e) { if (e.key === "Escape") setOpen(false); });
 })();
