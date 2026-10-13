@@ -2281,6 +2281,9 @@ main { position: relative; z-index: 1; }
   display: grid; place-items: center; background: var(--panel); border: var(--sep); box-shadow: var(--shadow-sm);
   color: var(--text); font-family: var(--display); font-size: 20px; font-weight: 700; text-decoration: none;
 }
+.ph-main { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; }
+/* Het woordmerk staat boven de titel omdat het oude merk op de telefoon wijkt voor deze kop; weg laten zou de app naamloos maken. */
+.ph-brand { font: 600 var(--text-2xs) / 1 var(--display); letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-dim); margin-bottom: -2px; }
 .ph-title {
   display: inline-flex; align-items: center; gap: var(--space-3); min-height: 44px; padding: 0; background: none; border: 0; cursor: pointer;
   color: var(--text); font: 700 var(--text-xl) / 1.2 var(--sans); letter-spacing: -0.01em;
@@ -2426,7 +2429,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
   .topbar.topbar-flow { height: auto; padding: max(var(--space-5), env(safe-area-inset-top)) var(--gutter) 0; }
   .topbar-flow .topbar-top { position: static; justify-content: flex-end; min-height: 0; }
   .topbar .brand, .topbar-watermark-clip, .logout-form, .shortcuts-hint, .topbar-ticker, .last-signal-pill, .live-pill { display: none; }
-  .ph-title { max-width: calc(100% - 170px); }
+  .ph-main { max-width: calc(100% - 170px); }
   .ph-title span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   /* Boven het Meer-blad (450) en de dock (500), anders staat de zoekbalk erachter. */
   .cmdk-overlay { z-index: 600; align-items: flex-start; padding: max(var(--space-8), env(safe-area-inset-top)) var(--gutter) 0; }

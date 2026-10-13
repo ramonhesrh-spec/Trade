@@ -364,10 +364,13 @@
 {% macro page_header(user, title) %}
 <div class="ph">
   <a class="ph-avatar" href="/account" aria-label="Mijn account">{{ (user.username or "?")[0]|upper }}</a>
-  <button type="button" class="ph-title" data-more-toggle aria-controls="more-sheet" aria-expanded="false">
-    <span>{{ title }}</span>
-    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
-  </button>
+  <div class="ph-main">
+    <span class="ph-brand">HesPulse</span>
+    <button type="button" class="ph-title" data-more-toggle aria-controls="more-sheet" aria-expanded="false">
+      <span>{{ title }}</span>
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+    </button>
+  </div>
   {{ caller() if caller }}
 </div>
 {% endmacro %}

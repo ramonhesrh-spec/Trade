@@ -110,6 +110,13 @@ class BaseShellTests(unittest.TestCase):
         self.assertIn('class="topbar"', html)
         self.assertNotIn("topbar-flow", html)
 
+    def test_kop_toont_het_woordmerk_op_elke_omgezette_pagina(self):
+        for pad in ("/vandaag", "/smc", "/bewijs", "/structuur", "/coins/BTC"):
+            html = self.client.get(pad).text
+            kop = html[html.index('class="ph"'):]
+            kop = kop[:kop.index('data-more-toggle')]
+            self.assertIn('<span class="ph-brand">HesPulse</span>', kop, pad)
+
     def test_meer_blad_bevat_het_uitlogformulier(self):
         html = self.client.get("/vandaag").text
         sheet = html[html.index('id="more-sheet"'):]
