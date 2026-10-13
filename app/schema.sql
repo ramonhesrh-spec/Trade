@@ -23,6 +23,8 @@ CREATE TABLE IF NOT EXISTS users (
     -- Eigen bedrag in euro dat jij per trade riskeert (de waarde van 1R). Alleen voor weergave op de kaarten, nooit voor orders. NULL = niet ingevuld.
     risk_per_trade_eur REAL,
     push_budget INTEGER,
+    -- Pauzeknop (F3): tot dit moment (ISO, UTC) gaan er geen pushes naar deze gebruiker. NULL = geen pauze. Signalen en het journaal lopen gewoon door.
+    push_paused_until TEXT,
     -- Drempel (percentage) waarboven de gepoolde factoren voor DEZE
     -- gebruiker als "bevestigd" tellen. De twee harde eisen (Uitgerektheid,
     -- BTC-trend) blijven voor iedereen hard, dit percentage geldt alleen

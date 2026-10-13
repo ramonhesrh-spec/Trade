@@ -6,13 +6,13 @@ de payload zelf."""
 import asyncio
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
 from pywebpush import WebPushException, webpush
 
-from app import config, repo
+from app import config, push_policy, repo
 
 logger = logging.getLogger("push_notify")
 
@@ -67,6 +67,11 @@ async def send_push(user_id: int, title: str, body: str, url: str, silent: bool 
         logger.warning("VAPID_PRIVATE_KEY ontbreekt, pushmelding niet verstuurd")
         return
 
+    user = repo.get_user(user_id) or {}
+    if push_policy.pause_minutes_left(user.get("push_paused_until"), datetime.now(timezone.utc)):
+        logger.info("Push voor gebruiker %s overgeslagen: meldingen staan op pauze", user_id)
+        return
+
     subscriptions = repo.list_push_subscriptions(user_id)
     if not subscriptions:
         return
@@ -90,10 +95,12 @@ async def send_kans_push(user_id: int, coin: str, direction: str, title: str, bo
     """Push voor een nieuwe kans, met de regels van app/push_policy.py: geen tegenstrijdige richting kort na elkaar op dezelfde coin en een dagbudget per
     gebruiker. Een geweerde kans wordt een rustige melding op de meldingenpagina, dus niets verdwijnt. Geeft True als er een push is gestuurd.
     Updates van een lopende trade, stop en doel en de agenda gaan rechtstreeks via send_push en komen altijd."""
-    from datetime import timedelta, timezone
-    from app import push_policy
     now = datetime.now(timezone.utc)
     user = repo.get_user(user_id) or {}
+    if push_policy.pause_minutes_left(user.get("push_paused_until"), now):
+        # Telt niet mee voor het dagbudget: wie pauzeert, heeft na de pauze zijn volle budget nog.
+        repo.create_notification(user_id, "kans", title, f"{body}\nMeldingen stonden op pauze, daarom geen push.", url)
+        return False
     allowed, reason = push_policy.decide(repo.list_recent_pushes(user_id, (now - timedelta(hours=24)).isoformat()), coin, direction, user.get("push_budget"), now)
     if not allowed:
         repo.create_notification(user_id, "kans", title, f"{body}\n{reason}", url)

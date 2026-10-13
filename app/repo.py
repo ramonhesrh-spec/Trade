@@ -1806,6 +1806,11 @@ def set_push_budget(user_id: int, budget: Optional[int]) -> None:
         conn.execute("UPDATE users SET push_budget = ? WHERE id = ?", (budget, user_id))
 
 
+def set_push_pause(user_id: int, until: Optional[str]) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE users SET push_paused_until = ? WHERE id = ?", (until, user_id))
+
+
 def list_expired_signals_with_levels() -> list[dict]:
     """Signalen die als 'vervallen' zijn afgesloten, voor een herbeoordeling op candles sinds hun aanmaakmoment (scripts/backfill_signal_outcomes.py)."""
     with db.session() as conn:
