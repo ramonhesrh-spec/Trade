@@ -8,6 +8,7 @@ import csv
 import io
 import json
 import logging
+import math
 import re
 import sys
 import time
@@ -29,7 +30,7 @@ from markupsafe import Markup
 
 from app import advice as advice_module
 from app import patterns as chart_patterns
-from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, radar, repo, risk, security, setup_chart, today, track_record
+from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app import ceo, chance_checks, chance_steps, kans_view, rule_live, trust
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
@@ -1207,6 +1208,48 @@ async def api_push_pause_toggle(user: dict = Depends(require_login)):
     else:
         repo.set_push_pause(user["id"], push_policy.pause_until(now).isoformat())
     return _pause_state(repo.get_user(user["id"]))
+
+
+@app.get("/api/prijsalarm")
+async def api_price_alerts(user: dict = Depends(require_login)):
+    return {"alerts": [{"id": a["id"], "coin": a["coin"], "price": a["price"], "label": a["label"]} for a in repo.list_price_alerts(user["id"])]}
+
+
+@app.post("/api/prijsalarm")
+async def api_price_alert_create(request: Request, user: dict = Depends(require_login)):
+    """Alarm op een niveau van een kaart. De kant (boven of onder de koers) ligt vast bij het aanmaken; level_check toetst elke 15 minuten."""
+    try:
+        data = await request.json()
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        return JSONResponse({"error": "Ongeldig alarm"}, status_code=400)
+    # create_price_alert slaat de coin op zoals hij komt, dus hier normaliseren en tegen de lijst toetsen.
+    coin = str(data.get("coin", "")).strip().upper()
+    raw_price = data.get("price")
+    try:
+        price = float(raw_price)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "Ongeldige prijs"}, status_code=400)
+    if isinstance(raw_price, bool) or not math.isfinite(price) or price <= 0 or coin not in {c["symbol"] for c in repo.list_coins()}:
+        return JSONResponse({"error": "Ongeldig alarm"}, status_code=400)
+    if repo.count_open_price_alerts(user["id"]) >= price_alerts.MAX_OPEN_PER_USER:
+        return JSONResponse({"error": f"Maximaal {price_alerts.MAX_OPEN_PER_USER} alarmen tegelijk"}, status_code=409)
+    current = (await _cached_prices({coin})).get(coin)
+    if current is None:
+        return JSONResponse({"error": "Geen koers, probeer het zo opnieuw"}, status_code=503)
+    raw_url = str(data.get("url") or "")
+    url = raw_url if raw_url.startswith("/") and not raw_url.startswith("//") else "/smc"
+    side = price_alerts.side_for(price, current)
+    alert_id = repo.create_price_alert(user["id"], coin, price, side, str(data.get("label") or "Niveau")[:20], url)
+    return {"id": alert_id, "side": side, "message": f"Alarm staat op {chance_steps.fmt(price)}. Melding binnen 15 minuten na het raken."}
+
+
+@app.delete("/api/prijsalarm/{alert_id}")
+async def api_price_alert_delete(alert_id: int, user: dict = Depends(require_login)):
+    if not repo.delete_price_alert(alert_id, user["id"]):
+        raise HTTPException(status_code=404)
+    return {"ok": True}
 
 
 @app.post("/api/push/debug-log")

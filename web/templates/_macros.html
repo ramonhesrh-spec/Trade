@@ -266,13 +266,14 @@
 
 
 {# Instap, stop en doel als knoppen: een tik zet het getal op het klembord (web/static/copy.js). `levels` komt uit chance_steps.level_chips;
-   `url` is waar een prijsalarm later naartoe linkt. #}
+   `url` is waar een prijsalarm naartoe linkt (web/static/alarm.js zet de bel). #}
 {% macro level_chips(coin, levels, url="") %}
 {% if levels %}
 <div class="level-chips" data-chips-coin="{{ coin }}" data-chips-url="{{ url }}">
   {% for l in levels %}
   <span class="level-chip level-chip-{{ l.key }}">
     <button type="button" class="level-copy" data-copy="{{ l.text }}" aria-label="Kopieer {{ l.label|lower }} {{ l.text }}"><span class="level-chip-label">{{ l.label }}</span> {{ l.text }}</button>
+    <button type="button" class="level-bell" data-alarm-price="{{ l.value }}" data-alarm-label="{{ l.label }}" aria-pressed="false" aria-label="Prijsalarm op {{ l.label|lower }} {{ l.text }}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
   </span>
   {% endfor %}
 </div>

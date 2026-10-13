@@ -2259,3 +2259,10 @@ html.is-scrolling .ambient-glow { animation-play-state: paused; }
               opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
 .copy-toast.is-on { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .copy-toast { transition: none; } }
+
+/* Bel naast een niveau (alarm.js): gevuld zodra er een alarm op staat. */
+.level-bell { min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0;
+              border-left: 1px solid var(--border); color: var(--muted); cursor: pointer; }
+.level-bell.is-on { color: var(--accent); }
+.level-bell.is-on svg { fill: currentColor; }
+.level-bell:disabled { opacity: 0.5; }

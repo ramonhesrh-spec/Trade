@@ -51,5 +51,65 @@ class PauseRouteTest(WebCase):
         self.assertIn("pause.js", r.text)
 
 
+class PriceAlertRouteTest(WebCase):
+    def post(self, **body):
+        return self.client.post("/api/prijsalarm", json={"coin": "BTC", "price": 105.0, "label": "Doel", "url": "/smc#radar-setup-1", **body})
+
+    def test_create_list_and_delete(self):
+        r = self.post()
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["side"], "above")                       # koers 100, niveau 105
+        self.assertIn("15 minuten", r.json()["message"])
+        alerts = self.client.get("/api/prijsalarm").json()["alerts"]
+        self.assertEqual([(a["coin"], a["price"]) for a in alerts], [("BTC", 105.0)])
+        self.assertEqual(self.client.delete(f"/api/prijsalarm/{alerts[0]['id']}").status_code, 200)
+        self.assertEqual(self.client.get("/api/prijsalarm").json()["alerts"], [])
+        self.assertEqual(self.client.delete(f"/api/prijsalarm/{alerts[0]['id']}").status_code, 404)
+
+    def test_rejects_unknown_coin_bad_price_and_foreign_url(self):
+        self.assertEqual(self.post(coin="NOPE").status_code, 400)
+        self.assertEqual(self.post(price="abc").status_code, 400)
+        self.assertEqual(self.post(price=-1).status_code, 400)
+        r = self.post(url="https://evil.test/")
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(repo.list_price_alerts(self.uid)[0]["url"], "/smc")
+
+    def test_coin_is_normalised_and_bad_bodies_are_400(self):
+        self.assertEqual(self.post(coin="  btc ").status_code, 200)
+        self.assertEqual(repo.list_price_alerts(self.uid)[0]["coin"], "BTC")
+        self.assertEqual(self.client.post("/api/prijsalarm", content=b'{"coin": "BTC", "price": Infinity}',
+                                          headers={"Content-Type": "application/json"}).status_code, 400)
+        self.assertEqual(self.post(price=True).status_code, 400)
+        self.assertEqual(self.client.post("/api/prijsalarm", json=[1]).status_code, 400)
+        self.assertEqual(self.client.post("/api/prijsalarm", content=b"nope").status_code, 400)
+
+    def test_alerts_are_per_user(self):
+        self.post()
+        other = repo.create_user("other", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        aid = repo.list_price_alerts(self.uid)[0]["id"]
+        self.client.cookies.set(self.main.SESSION_COOKIE, security.create_session_token(other))
+        self.assertEqual(self.client.get("/api/prijsalarm").json()["alerts"], [])
+        self.assertEqual(self.client.delete(f"/api/prijsalarm/{aid}").status_code, 404)
+
+    def test_requires_login(self):
+        self.client.cookies.clear()
+        self.assertIn(self.client.get("/api/prijsalarm", follow_redirects=False).status_code, (302, 303, 401))
+
+    def test_cap_on_open_alerts(self):
+        from app import price_alerts
+        for i in range(price_alerts.MAX_OPEN_PER_USER):
+            self.assertEqual(self.post(price=101.0 + i).status_code, 200)
+        self.assertEqual(self.post(price=200.0).status_code, 409)
+
+    def test_radar_card_has_a_bell_per_level(self):
+        with db.session() as conn:
+            conn.execute("""INSERT INTO smc_setups (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, atr,
+                            created_at, updated_at) VALUES ('BTC', 'long', 99.0, 100.0, 101.0, 98.0, 110.0, 1.0, ?, ?)""", (db.now_iso(), db.now_iso()))
+        r = self.client.get("/smc")
+        self.assertIn('class="level-bell"', r.text)
+        self.assertIn('data-alarm-price="100.0"', r.text)
+        self.assertIn("alarm.js", r.text)
+
+
 if __name__ == "__main__":
     unittest.main()
