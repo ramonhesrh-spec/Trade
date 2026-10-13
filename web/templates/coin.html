@@ -7,7 +7,7 @@
 {# De koers is het grote getal; coin.js-script onderaan werkt #coin-price elke 10 seconden bij. #}
 <div class="coin-head coin-masthead">
 {{ macros.headline("Koers", (price|nl_price) if price else "-", live_quote|upper,
-     spark_coin=symbol, delta_coin=symbol, attrs={"id": "coin-price", "data-symbol": symbol}) }}
+     spark_coin=symbol, delta_coin=symbol, attrs={"id": "coin-price", "data-symbol": symbol}, icon_coin=symbol) }}
 {{ macros.keylines([
   {"label": "Signalen deze week", "value": recent_activity.count if recent_activity else 0},
   {"label": "Hoog vertrouwen", "value": recent_activity.hoog if recent_activity else 0}]

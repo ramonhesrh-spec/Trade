@@ -319,7 +319,7 @@
       </summary>
       <div class="coin-menu-list">
         {% for c in coins %}
-          <a href="/coins/{{ c.symbol }}" data-symbol="{{ c.symbol }}">{{ c.symbol }}</a>
+          <a href="/coins/{{ c.symbol }}" data-symbol="{{ c.symbol }}">{{ macros.coin_avatar(c.symbol, 20) }}{{ c.symbol }}</a>
         {% endfor %}
       </div>
     </details>
@@ -357,7 +357,7 @@
       <a href="/week">Kwartaalcijfers</a><a href="/signalen">Journaal</a><a href="/meldingen">Meldingen</a><a href="/account">Account</a><a href="/uitleg">Handleiding</a>
     </div>
     <p class="muted more-label">Coins</p>
-    <div class="more-coins">{% for c in coins %}<a href="/coins/{{ c.symbol }}">{{ c.symbol }}</a>{% endfor %}</div>
+    <div class="more-coins">{% for c in coins %}<a href="/coins/{{ c.symbol }}">{{ macros.coin_avatar(c.symbol, 22) }}{{ c.symbol }}</a>{% endfor %}</div>
     <form action="/logout" method="post" class="more-logout"><button type="submit">Uitloggen</button></form>
   </div>
 </div>
@@ -597,7 +597,7 @@
         { label: "Handleiding", href: "/uitleg", hint: "pagina" },
       ];
       document.querySelectorAll(".coin-menu-list a").forEach(function (a) {
-        list.push({ label: a.textContent.trim(), href: a.getAttribute("href"), hint: "coin" });
+        list.push({ label: a.getAttribute("data-symbol") || a.textContent.trim(), href: a.getAttribute("href"), hint: "coin" });
       });
       return list;
     }

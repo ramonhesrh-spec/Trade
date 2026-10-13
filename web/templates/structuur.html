@@ -74,7 +74,7 @@
   {% for s in trend_signals %}
   {{ macros.market_row(s.coin, s.coin, chip=s.direction, chip_tone=("pos" if s.direction == "long" else "neg"),
        subtitle="Instap " ~ "%.4f"|format(s.price) ~ ", stop " ~ "%.4f"|format(s.stop_loss) ~ ", doel " ~ "%.4f"|format(s.take_profit),
-       right_text=(s.auto_outcome | outcome_word), href="/coins/" ~ s.coin ~ "#signal-" ~ s.id) }}
+       right_text=(s.auto_outcome | outcome_word), href="/coins/" ~ s.coin ~ "#signal-" ~ s.id, coin=s.coin) }}
   {% endfor %}
   {% endif %}
 </section>
@@ -87,7 +87,7 @@
   {% for h in history %}
   <div class="mrow-wrap">
     {{ macros.market_row(h.coin, h.coin, chip=h.direction, chip_tone=("pos" if h.direction == "long" else "neg"), subtitle=h.state_label,
-         right_text=(h.grade | grade_word), el="div") }}
+         right_text=(h.grade | grade_word), el="div", coin=h.coin) }}
     {% if h.state == "geen_plan" and h.reason %}<p class="muted mrow-reason">{{ h.reason }}</p>{% endif %}
   </div>
   {% endfor %}

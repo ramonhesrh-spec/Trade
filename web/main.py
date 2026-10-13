@@ -82,6 +82,20 @@ def asset(path: str) -> str:
     return f"/static/{path}?v={version}"
 
 
+# Eén keer bij het starten gelezen: een coin zonder bestand krijgt meteen zijn letters, zonder een 404-verzoek per rij.
+COIN_LOGOS = frozenset(p.stem for p in (BASE_DIR / "static" / "coins").glob("*.svg"))
+# Gemeten op een contactblad tegen #0a0e0f: bij deze logo's is meer dan 40% van het beeld te donker voor de donkere chip
+# (zwarte of marineblauwe cirkels). Zij krijgen een licht rond plaatje erachter.
+DARK_COIN_LOGOS = frozenset({"ada", "apt", "atom", "hbar", "wld", "xlm", "xrp"})
+
+
+def coin_logo(coin: str | None) -> dict | None:
+    sym = (coin or "").strip().lower()
+    if sym not in COIN_LOGOS:
+        return None
+    return {"src": asset(f"coins/{sym}.svg"), "dark": sym in DARK_COIN_LOGOS}
+
+
 _proof_cache = {"at": 0.0, "map": {}, "labs": {}, "rows": []}
 
 
@@ -106,6 +120,7 @@ def proof(trade_type: str) -> dict:
 
 templates.env.globals["proof"] = proof
 templates.env.globals["asset"] = asset
+templates.env.globals["coin_logo"] = coin_logo
 templates.env.filters["grade_word"] = lambda g: {"A": "Sterk", "B": "Redelijk", "C": "Zwak"}.get(g, "Geen oordeel")
 def _nl_price(v: float) -> str:
     """Zelfde notatie als de live koers in coin.html (toLocaleString nl-NL): punt voor duizendtallen, komma voor decimalen."""

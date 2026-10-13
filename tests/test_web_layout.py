@@ -203,6 +203,24 @@ class VandaagLayoutTests(BaseShellTests):
         self.assertNotIn('class="quick-action"', html)
 
 
+    def test_coinlogo_met_letters_als_terugval(self):
+        from datetime import datetime, timedelta, timezone
+        for coin in ("BTC", "ZZQX"):
+            repo.insert_market_script(coin, "x", "long", "m", [], 0, (datetime.now(timezone.utc) + timedelta(hours=10)).isoformat())
+        html = self.client.get("/vandaag").text
+        self.assertRegex(html, r'<span class="coin-av mrow-icon has-logo"[^>]*><img src="/static/coins/btc\.svg\?v=\d+" alt="" width="36" height="36" loading="lazy" decoding="async"')
+        zz = html[html.index('<span class="coin-av mrow-icon"'):]
+        self.assertTrue(zz.startswith('<span class="coin-av mrow-icon" style="--av: 36px" aria-hidden="true"><span class="coin-av-txt">ZZQX</span>'), zz[:200])
+        self.assertNotIn("/static/coins/zzqx.svg", html)        # geen verzoek naar een bestand dat er niet is
+
+    def test_elk_coinlogo_heeft_een_bron(self):
+        bronnen = (main.BASE_DIR / "static" / "coins" / "SOURCES.md").read_text(encoding="utf-8")
+        self.assertIn("btc", main.COIN_LOGOS)
+        for sym in main.COIN_LOGOS:
+            self.assertRegex(bronnen, r"[ ,]%s[,\s]" % sym, sym)
+        self.assertLessEqual(main.DARK_COIN_LOGOS, main.COIN_LOGOS)
+
+
 class RadarLayoutTests(BaseShellTests):
     def setUp(self):
         super().setUp()

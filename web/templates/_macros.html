@@ -142,7 +142,7 @@
 {% set anchor_id = entry.signal_id if entry.signal_id is defined and entry.signal_id else entry.id %}
 <div class="signal-card {{ 'is-confirmed' if entry.user_confirmed else 'is-rejected' }}" id="signal-{{ anchor_id }}">
   <div class="signal-card-head">
-    <a class="coin-symbol" href="/coins/{{ entry.coin }}#signal-{{ anchor_id }}">{{ entry.coin }}</a>
+    {{ coin_avatar(entry.coin, 22) }}<a class="coin-symbol" href="/coins/{{ entry.coin }}#signal-{{ anchor_id }}">{{ entry.coin }}</a>
     <span class="direction {{ entry.direction }}">{{ entry.direction|upper }}</span>
     {% if entry.trade_type == "swing" %}
     <span class="badge badge-swing" title="Bevestigd op een bewaakt steun/weerstand-niveau, geen gepoold percentage">swing</span>
@@ -316,7 +316,7 @@
 {% macro setup_card(c, risk_eur=none) %}
 <article class="setup-card{% if c.grade is none or c.grade == 'C' %} is-weak{% endif %}" id="structuur-{{ c.id }}">
   <header class="setup-head">
-    <svg class="dist-ring" viewBox="0 0 40 40" aria-hidden="true" title="Hoe dichter de koers bij je limiet, hoe voller de ring"><circle class="dist-ring-bg" cx="20" cy="20" r="17"/><circle class="dist-ring-fill" cx="20" cy="20" r="17" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg>
+    <span class="ring-av"><svg class="dist-ring" viewBox="0 0 40 40" aria-hidden="true" title="Hoe dichter de koers bij je limiet, hoe voller de ring"><circle class="dist-ring-bg" cx="20" cy="20" r="17"/><circle class="dist-ring-fill" cx="20" cy="20" r="17" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg>{{ coin_avatar(c.coin, 24) }}</span>
     <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
     <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
     <span class="setup-grade setup-grade-{{ (c.grade or 'c')|lower }}" title="Oordeel van de CEO">{{ c.grade | grade_word }}</span>
@@ -384,6 +384,10 @@
 </div>
 {% endmacro %}
 
+{# Rond coinplaatje: het echte logo uit web/static/coins (zie SOURCES.md), anders de letters. Of er een logo is weet de server al
+   (coin_logo); laadt het toch niet, dan haalt onerror het weg en blijven de letters staan. #}
+{% macro coin_avatar(coin, size=36, extra="") %}{% set logo = coin_logo(coin) %}<span class="coin-av {{ extra }}{% if logo %} has-logo{% if logo.dark %} is-dark{% endif %}{% endif %}" style="--av: {{ size }}px" aria-hidden="true">{% if logo %}<img src="{{ logo.src }}" alt="" width="{{ size }}" height="{{ size }}" loading="lazy" decoding="async" onerror="this.parentNode.classList.remove('has-logo');this.remove()">{% endif %}<span class="coin-av-txt">{{ (coin or "?")[:4] }}</span></span>{% endmacro %}
+
 {# Een woord met stippellijn dat een uitleg opent (native popover, geen JS). Uitleg die eerst als losse alinea op de pagina stond, staat
    hier: bereikbaar met één tik, zonder dat de pagina er druk van wordt. #}
 {% macro term(label, text, id) %}<button type="button" class="kl-term" popovertarget="{{ id }}">{{ label }}</button><span class="kl-pop" id="{{ id }}" popover>{{ text }}</span>{% endmacro %}
@@ -391,10 +395,10 @@
 {# Eén groot meetgetal. `spark` is kant-en-klare SVG (track_record.sparkline_svg) of leeg; `spark_coin` tekent de live koerslijn via
    spark.js. `delta` is tekst met `tone` pos/neg; `delta_coin` laat spark.js de 24u-verandering invullen. `attrs` komt op het getal,
    zodat live.js of coin.js het kan bijwerken (bv. {"id": "coin-price", "data-symbol": "BTC"}). #}
-{% macro headline(label, value, unit="", spark=none, spark_coin=none, delta=none, tone="", delta_coin=none, href=none, attrs={}, explain=none) %}
+{% macro headline(label, value, unit="", spark=none, spark_coin=none, delta=none, tone="", delta_coin=none, href=none, attrs={}, explain=none, icon_coin=none) %}
 <section class="hl">
   <div class="hl-text">
-    <p class="hl-label">{% if explain %}{{ term(label, explain, "hl-pop") }}{% elif href %}<a href="{{ href }}">{{ label }}</a>{% else %}{{ label }}{% endif %}</p>
+    <p class="hl-label">{% if icon_coin %}{{ coin_avatar(icon_coin, 28, "hl-coin") }}{% endif %}{% if explain %}{{ term(label, explain, "hl-pop") }}{% elif href %}<a href="{{ href }}">{{ label }}</a>{% else %}{{ label }}{% endif %}</p>
     <p class="hl-value"><span class="hl-num"{{ attrs|xmlattr }}>{{ value }}</span>{% if unit %}<span class="hl-unit">{{ unit }}</span>{% endif %}</p>
     {% if delta_coin %}<p class="hl-delta" data-spark-chg="{{ delta_coin }}"></p>
     {% elif delta %}<p class="hl-delta {{ tone }}">{{ delta }}</p>{% endif %}
@@ -451,9 +455,9 @@
 
 {# Eén rij per coin of soort. `el` is a, div of summary (in een <details> voor een uitklapbare rij). `price_coin` laat live.js de koers
    bijwerken; `chg_coin` laat spark.js de 24u-verandering invullen. Zonder die twee tonen `price_text`/`right_text` vaste tekst. #}
-{% macro market_row(icon, title, chip=none, chip_tone="", subtitle="", price_coin=none, price_text="", chg_coin=none, right_text=none, right_tone="", href=none, el="a", attrs={}) %}
+{% macro market_row(icon, title, chip=none, chip_tone="", subtitle="", price_coin=none, price_text="", chg_coin=none, right_text=none, right_tone="", href=none, el="a", attrs={}, coin=none) %}
 <{{ el }} class="mrow"{% if el == "a" and href %} href="{{ href }}"{% endif %}{{ attrs|xmlattr }}>
-  <span class="mrow-icon" aria-hidden="true">{{ icon[:4] }}</span>
+  {% if coin %}{{ coin_avatar(coin, 36, "mrow-icon") }}{% else %}<span class="mrow-icon" aria-hidden="true">{{ icon[:4] }}</span>{% endif %}
   <span class="mrow-main">
     <span class="mrow-title">{% if href and el != "a" %}<a class="mrow-link" href="{{ href }}">{{ title }}</a>{% else %}{{ title }}{% endif %}{% if chip %} <i class="mrow-chip {{ chip_tone }}">{{ chip }}</i>{% endif %}</span>
     {% if subtitle %}<span class="mrow-sub">{{ subtitle }}</span>{% endif %}

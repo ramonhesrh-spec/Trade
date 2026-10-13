@@ -45,7 +45,7 @@
   <details class="mrow-wrap vd-bias-{{ s.bias }}"{% if s.scenarios|selectattr("state", "equalto", "waiting")|list %} open{% endif %}>
     {{ macros.market_row(s.coin, s.coin, chip=s.bias, chip_tone=("pos" if s.bias == "long" else "neg" if s.bias == "short" else ""),
          subtitle=((s.scenarios|length ~ " scenario" ~ ("'s" if s.scenarios|length != 1 else "")) if s.scenarios else "Geen scenario"),
-         price_coin=s.coin, price_text=(fmt(s.price) if s.price else ""), chg_coin=s.coin, el="summary") }}
+         price_coin=s.coin, price_text=(fmt(s.price) if s.price else ""), chg_coin=s.coin, el="summary", coin=s.coin) }}
     <div class="mrow-body">
       <p class="vd-summary"><a class="vd-coin" href="/coins/{{ s.coin }}">{{ s.coin }}</a> {{ s.summary or "Geen duiding." }}</p>
       {% if not s.scenarios %}

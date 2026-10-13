@@ -2494,7 +2494,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 /* ===== Rust (tweede ronde, 2026-10-13) =====
    Na het eerste ontwerp op een echte iPhone: te veel tekst en te veel blokken. Cijfers in de schreefloze letter met vaste breedte,
    zoals in de referentie; de monoletter maakte elk getal zwaar. Meer lucht rond het grote getal, lijsten zonder kaders. */
-.hl { margin-bottom: var(--space-11); }
+.hl { margin-bottom: var(--space-10); }
 .hl-label { margin-bottom: var(--space-4); }
 .hl-num { font-family: var(--sans); font-weight: 500; letter-spacing: -0.03em; font-size: calc(var(--num-hero) * 1.08); }
 .hl-unit { font-family: var(--sans); font-weight: 400; font-size: var(--text-xl); }
@@ -2504,7 +2504,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .kl-unit { font-weight: 500; }
 .mrow-title { font-weight: 600; letter-spacing: 0; }
 .mrow-price, .mrow-chg { font-weight: 500; }
-.kl { margin-bottom: var(--space-10); }
+.kl { margin-bottom: var(--space-9); }
 .ut { margin-bottom: var(--space-8); }
 
 /* Kleine regel in een tabpaneel (stand van een motor, klok en sessie): gedempt, geen kader. */
@@ -2536,6 +2536,25 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .filter-chips::-webkit-scrollbar { display: none; }
 .filter-chips .chip { flex: 0 0 auto; padding: 5px 12px; font-size: var(--text-sm); border-color: var(--border); }
 .filter-chips .chip.is-active { border-color: var(--accent); }
+
+/* Coinlogo's (web/static/coins, coin_avatar): zelfde ronde chip als de letters, zodat maat en vorm niet veranderen. */
+.coin-av {
+  --av: 36px; flex: 0 0 var(--av); width: var(--av); height: var(--av); border-radius: 50%; display: inline-grid; place-items: center; overflow: hidden;
+  background: var(--panel-hover); border: var(--sep); color: var(--text-dim); font: 700 calc(var(--av) * 0.28) / 1 var(--sans); letter-spacing: -0.02em; vertical-align: middle;
+}
+.coin-av img { grid-area: 1 / 1; width: 100%; height: 100%; display: block; }
+.coin-av.has-logo { background: none; border-color: transparent; }
+.coin-av.has-logo .coin-av-txt { display: none; }
+/* Zwarte en marineblauwe logo's verdwijnen op de donkere achtergrond: een licht plaatje erachter. */
+.coin-av.is-dark { background: #dfe8e7; padding: 2px; }
+.mrow-icon.coin-av { font-size: 10px; }
+.ring-av { position: relative; display: inline-grid; place-items: center; width: 34px; height: 34px; flex: none; }
+.ring-av .dist-ring { grid-area: 1 / 1; }
+.ring-av .coin-av { grid-area: 1 / 1; --av: 24px; font-size: 7px; }
+.hl-coin { margin-right: var(--space-4); vertical-align: -8px; }
+.signal-card-head .coin-av { margin-right: calc(-1 * var(--space-3)); }
+.coin-menu-list a .coin-av, .more-coins a .coin-av { margin-right: var(--space-3); vertical-align: -5px; font-size: 7px; }
+.more-coins a { display: inline-flex; align-items: center; padding-left: 6px; }
 
 @media (max-width: 760px) {
   /* Kaarten worden rijen met een dunne lijn ertussen, zoals de radarkaarten al waren. */

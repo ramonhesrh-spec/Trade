@@ -31,7 +31,7 @@
     {% for c in setup_cards %}
     <article class="radar-card" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
       {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
-           price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div") }}
+           price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div", coin=c.coin) }}
       <div class="radar-state radar-state-{{ c.state or 'laden' }}" data-radar="state">{{ c.state_label }}</div>
       <div class="approach" role="img" aria-label="Koers op {{ "%.0f"|format(c.approach_pct or 0) }}% van de weg naar je instap"{% if c.approach_pct is none %} hidden{% endif %}>
         <span class="approach-track"></span>
@@ -66,7 +66,7 @@
     {% for c in moot_cards %}
     <article class="radar-card is-moot" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
       {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
-           price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div") }}
+           price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div", coin=c.coin) }}
       <div class="radar-state radar-state-{{ c.state }}" data-radar="state">{{ c.state_label }}</div>
       <div class="radar-meta muted">{{ c.created_at | age }}</div>
     </article>
@@ -85,7 +85,7 @@
     {% for c in signal_cards %}
     <article class="radar-card" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
       {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
-           price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div") }}
+           price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div", coin=c.coin) }}
       <div class="radar-state radar-state-open" data-radar="state">{{ c.state_label }}</div>
       {% if c.chart %}{{ macros.level_chart(c.coin, c.chart) }}{% endif %}
       {{ macros.level_chips(c.coin, c.levels, "/smc#radar-" ~ c.key|replace(':', '-')) }}
