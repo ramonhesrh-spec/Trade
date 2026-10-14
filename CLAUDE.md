@@ -149,8 +149,10 @@ itself) — not what the code does; keep that ratio, don't add narration
 comments. Confidence/signal UI text distinguishes what was *measured* (the
 ✓/✗ technical factors) from what is *estimated* (historical win-rate
 percentages) — don't blur that line when adding new signal metadata.
-Decorative motion (the ambient background, heartbeat pulse, etc. in
-`base.html`/`style.css`) is always tied to a real, live value (time since
-last message, this week's result, volatility of open positions) and
-always respects `prefers-reduced-motion` — never add animation that's
-purely decorative.
+The page background is flat on purpose: the base colour plus the static
+top glow (`html.has-glow`, `.glow-edge-tint`), with no grid, drifting blobs
+or outline shapes behind the content; don't add background layers. Any
+remaining motion (the live-pill heartbeat, the logo's breathing glow in
+`base.html`/`style.css`) is tied to a real, live value (time since last
+message, volatility of open positions) and always respects
+`prefers-reduced-motion`; never add animation that's purely decorative.

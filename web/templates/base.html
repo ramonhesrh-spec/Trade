@@ -36,16 +36,6 @@
 <body{% if user and _fs|trim %} class="has-fsearch"{% endif %}>
 {% if user %}<div class="glow-edge-tint" aria-hidden="true"></div>{% endif %}
 <div id="page-progress" aria-hidden="true"></div>
-<div class="page-ambient" aria-hidden="true">
-  <span class="ambient-glow glow-accent"></span>
-  <span class="ambient-glow glow-green"></span>
-  <span class="ambient-glow glow-red"></span>
-  <div class="ambient-pulse-line">
-    <svg viewBox="0 0 640 120" preserveAspectRatio="none"><path d="M0 60h80l16-44 32 88 16-44h80l16-28 32 60 16-32h352" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
-    <svg viewBox="0 0 640 120" preserveAspectRatio="none"><path d="M0 60h80l16-44 32 88 16-44h80l16-28 32 60 16-32h352" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
-  </div>
-  <div id="signal-wave" class="signal-wave"></div>
-</div>
 <div id="offline-banner" class="offline-banner" hidden role="status">Geen internetverbinding. Koersen en meldingen worden niet bijgewerkt tot je weer online bent.</div>
 {% if user %}
 <div id="push-banner" class="push-banner" hidden role="status">
@@ -252,12 +242,6 @@
   })();
 </script>
 <header class="topbar{% if not (user and _pt|trim) %} topbar-flow{% endif %}">
-  <div class="topbar-watermark-clip" aria-hidden="true">
-    <div class="topbar-watermark">
-      <svg viewBox="0 0 320 60" preserveAspectRatio="none"><path d="M0 30h40l8-22 16 44 8-22h40l8-14 16 30 8-16h176" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
-      <svg viewBox="0 0 320 60" preserveAspectRatio="none"><path d="M0 30h40l8-22 16 44 8-22h40l8-14 16 30 8-16h176" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
-    </div>
-  </div>
   <div class="topbar-top">
     <a href="/ceo" class="brand">
       <span class="brand-logo-wrap">
@@ -744,30 +728,6 @@
       return "3.6s";
     }
 
-    // Dezelfde gedachte, maar voor de trage achtergrond-puls: hoe recenter
-    // er echt iets binnenkwam, hoe levendiger de achtergrond meebeweegt.
-    // Nooit snel genoeg om af te leiden van de cijfers erboven.
-    function ambientScrollDuration(iso) {
-      if (!iso) return "46s";
-      var mins = (Date.now() - new Date(iso).getTime()) / 60000;
-      if (mins < 15) return "22s";
-      if (mins < 60) return "32s";
-      if (mins < 360) return "46s";
-      return "64s";
-    }
-
-    // Kleurbalans van de ambient gloed volgt hoe de week gaat: bij een
-    // positief weekresultaat iets meer teal/groen, bij een negatief iets
-    // meer rood. Subtiel (zie de calc() in style.css), geen fel wisselende
-    // kleur, en bij "geen data" (nog niets gesloten deze week) blijft de
-    // balans precies zoals hij al was: 0.
-    function portfolioGlow(weekResultPct) {
-      if (weekResultPct === null || weekResultPct === undefined) return 0;
-      if (weekResultPct > 0) return 1;
-      if (weekResultPct < 0) return -1;
-      return 0;
-    }
-
     // Het logo ademt sneller naarmate de markt onder je open posities
     // heftiger beweegt dan zijn eigen 20-daags gemiddelde (atr/atr_avg20).
     // Zonder open posities of zonder die data: de neutrale basissnelheid.
@@ -787,16 +747,7 @@
     var lastSignalId = null;
     var lastKnownMessageAt = null;
 
-    function triggerSignalWave() {
-      var wave = document.getElementById("signal-wave");
-      if (wave) {
-        wave.classList.remove("is-active");
-        // Force reflow zodat de animatie ook afgaat als hij kort na elkaar
-        // twee keer wordt getriggerd (anders blijft de class gewoon staan
-        // en speelt de animatie niet opnieuw af).
-        void wave.offsetWidth;
-        wave.classList.add("is-active");
-      }
+    function boostHeartbeat() {
       // Kortstondige hartslag-boost op het exacte moment van een nieuw signaal,
       // in plaats van te wachten tot de eerstvolgende minuten-drempel van
       // heartbeatDuration. Na 3 seconden valt de eerstvolgende refresh()-cyclus
@@ -818,8 +769,6 @@
           document.getElementById("status-message").textContent = timeAgo(s.last_message_at);
           document.getElementById("status-uptime").textContent = timeAgo(s.server_started_at);
           document.documentElement.style.setProperty("--heartbeat-duration", heartbeatDuration(s.last_message_at));
-          document.documentElement.style.setProperty("--ambient-scroll-duration", ambientScrollDuration(s.last_message_at));
-          document.documentElement.style.setProperty("--portfolio-glow", portfolioGlow(s.week_result_pct));
           document.documentElement.style.setProperty("--brand-breathe-duration", brandBreatheDuration(s.volatility_ratio));
           lastKnownMessageAt = s.last_message_at;
 
@@ -837,12 +786,12 @@
                   banner.style.opacity = 1;
                 }, 300);
               }
-              triggerSignalWave();
+              boostHeartbeat();
             }
           }
 
           if (lastPendingCount !== null && s.pending_count > lastPendingCount) {
-            triggerSignalWave();
+            boostHeartbeat();
           }
           lastPendingCount = s.pending_count;
 

@@ -150,6 +150,16 @@ class BaseShellTests(unittest.TestCase):
         self.assertIn("viewport-fit=cover", html)
         self.assertIn('content="black-translucent"', html)
 
+    def test_achtergrond_is_vlak_zonder_raster_of_zwevende_lagen(self):
+        css = open(os.path.join(os.path.dirname(main.__file__), "static", "style.css"), encoding="utf-8").read()
+        for pad in ("/vandaag", "/login"):
+            html = TestClient(main.app).get(pad).text if pad == "/login" else self.client.get(pad).text
+            for weg in ("page-ambient", "ambient-glow", "topbar-watermark", "signal-wave"):
+                self.assertNotIn(weg, html, pad)
+        self.assertNotIn("32px 32px", css)
+        self.assertNotIn("ambient", css)
+        self.assertNotIn("topbar-watermark", css)
+
     def test_randkleur_element_voor_statusbalk(self):
         html = self.client.get("/vandaag").text
         self.assertIn('class="glow-edge-tint"', html)

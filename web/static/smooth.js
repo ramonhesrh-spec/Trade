@@ -1,22 +1,7 @@
-// Vloeiendheid en spaarzaamheid, vier dingen die samen het verschil maken op een telefoon:
-// (1) tijdens het scrollen staan de zwevende achtergrondvlakken stil, zodat de GPU alleen scrolt;
-// (2) een tik op een tab kleurt hem meteen, nog voor de pagina geladen is;
-// (3) trek de pagina bovenaan omlaag om te verversen, zoals in een app (Radar en Vandaag zonder herlaadslag), en de tabtitel toont de dichtstbijzijnde kans.
+// Vloeiendheid op een telefoon, drie dingen:
+// (1) een tik op een tab kleurt hem meteen, nog voor de pagina geladen is;
+// (2) trek de pagina bovenaan omlaag om te verversen, zoals in een app (Radar en Vandaag zonder herlaadslag), en de tabtitel toont de dichtstbijzijnde kans.
 (function () {
-  var root = document.documentElement, ticking = false, idle = null;
-
-  function onScroll() {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(function () {
-      root.classList.add("is-scrolling");
-      clearTimeout(idle);
-      idle = setTimeout(function () { root.classList.remove("is-scrolling"); }, 160);
-      ticking = false;
-    });
-  }
-  window.addEventListener("scroll", onScroll, { passive: true });
-
   document.addEventListener("pointerdown", function (e) {
     var tab = e.target.closest && e.target.closest("a.tab");
     if (!tab) return;
