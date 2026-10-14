@@ -91,7 +91,7 @@ class WebVandaagTests(unittest.TestCase):
                 "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
         text = self.client.get("/vandaag").text
         self.assertEqual(text.count('class="setup-card'), 3)              # geen afkapping: alles wat geteld wordt staat er
-        self.assertRegex(text, r'<dt>.*?Kansen open.*?</dt>\s*<dd[^>]*><span class="kl-num">3</span>')
+        self.assertRegex(text, r'(?s)Open kansen nu.*?hl-num">3</span><span class="hl-unit">kansen<')
         self.assertIn('<i class="ut-count">3</i>', text)
 
     def test_tabbar_filters_and_empty_state_invite_the_user(self):
@@ -155,7 +155,7 @@ class WebVandaagTests(unittest.TestCase):
 
     def test_board_counts_open_chances_of_every_kind_not_only_structure_plans(self):
         r = self.client.get("/vandaag")
-        self.assertIn("Er staat niets open", r.text)
+        self.assertIn("Je krijgt een melding zodra er een staat.", r.text)
         self.assertIn("Geen open kansen. Je krijgt een melding zodra er een staat.", r.text)
         self.assertNotIn('class="ut-count"', r.text)                      # geen badge met 0
         signal = {"message_id": None, "coin": "BTC", "direction": "long", "category": "day_trading", "trade_type": "trend", "pattern_name": "Trend-pullback",
@@ -199,7 +199,7 @@ class WebVandaagTests(unittest.TestCase):
         import re
         text = self.client.get("/vandaag").text
         shown = text.count('class="setup-card') + len(re.findall(r'<a class="mrow"', text))
-        count = int(re.search(r'Kansen open.*?<span class="kl-num">(\d+)</span>', text, re.S).group(1))
+        count = int(re.search(r'Open kansen nu.*?<span class="hl-num">(\d+)</span>', text, re.S).group(1))
         return text, count, shown
 
     def test_count_equals_rendered_rows_for_a_leerling_and_the_ceo_sees_the_proefsoort(self):
@@ -215,11 +215,28 @@ class WebVandaagTests(unittest.TestCase):
         self.assertNotIn("Proefmotor", text)
         self.assertIn('<i class="ut-count">2</i>', text)
 
-    def test_het_eerst_aan_de_beurt_komt_uit_dezelfde_lijst(self):
+    def test_ondertitel_noemt_de_dichtstbijzijnde_kans_uit_dezelfde_lijst(self):
         self.seed_chances()
         text = self.client.get("/vandaag").text
-        self.assertIn('<span class="kl-num">BTC short', text.split("Het eerst aan de beurt")[1])
-        self.assertNotIn("ETH short", text.split("Het eerst aan de beurt")[1].split("</dl>")[0])
+        head = text[text.index('class="hl"'):text.index('class="kl"')]
+        self.assertIn("BTC short", head)
+        self.assertNotIn("ETH short", head)
+
+    def test_eenheid_enkelvoud_en_meervoud_en_badge_gelijk(self):
+        self.seed_chances()
+        text = self.client.get("/vandaag").text
+        self.assertRegex(text, r'hl-num">3</span><span class="hl-unit">kansen<')
+        self.assertIn('<i class="ut-count">3</i>', text)
+        self.assertEqual(self.main.today.chances_unit(1), "kans")
+        self.assertEqual(self.main.today.chances_unit(0), "kansen")
+
+    def test_de_drie_kernregels_komen_uit_gemeten_data(self):
+        text = self.client.get("/vandaag").text
+        kl = text[text.index('class="kl"'):text.index('</dl>', text.index('class="kl"'))]
+        for label in ("Meldingen, 24 uur", "Laatste melding", "Laatste controle"):
+            self.assertIn(label, kl)
+        self.assertEqual(kl.count('class="kl-row"'), 3)
+        self.assertNotIn("Kansen open", kl)
 
     def test_nav_badges_follow_the_same_validity(self):
         self.seed_chances()

@@ -176,6 +176,25 @@ def nearest_chance(chances: list[dict]) -> Optional[dict]:
     return {"name": f"{first['coin']} {first['direction']}", "dist": first["dist_text"], "url": first["url"]}
 
 
+def chances_unit(n: int) -> str:
+    return "kans" if n == 1 else "kansen"
+
+
+def ago_text(iso: Optional[str], now: datetime) -> str:
+    """Hoe lang geleden een opgeslagen tijdstip was, in dezelfde woorden als de tijdlabels in base.html; '-' zonder tijdstip."""
+    if not iso:
+        return "-"
+    at = datetime.fromisoformat(iso)
+    mins = int((now - (at if at.tzinfo else at.replace(tzinfo=timezone.utc))).total_seconds() // 60)
+    if mins < 1:
+        return "net nu"
+    if mins < 60:
+        return f"{mins} min geleden"
+    if mins < 60 * 24:
+        return f"{mins // 60} uur geleden"
+    return f"{mins // 1440} dgn geleden"
+
+
 def script_view(script: dict, price: Optional[float], now: datetime) -> dict:
     created = datetime.fromisoformat(script["created_at"])
     created = created if created.tzinfo else created.replace(tzinfo=timezone.utc)

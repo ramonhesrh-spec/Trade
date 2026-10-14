@@ -156,3 +156,13 @@ class BudgetRingTest(unittest.TestCase):
         ring = today.budget_ring(1, 0)
         self.assertTrue(ring["off"])
         self.assertEqual(ring["label"], "1 melding in 24 uur, geen budget")
+
+
+class AgoTextTest(unittest.TestCase):
+    def test_ago_text(self):
+        now = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
+        self.assertEqual(today.ago_text(None, now), "-")
+        self.assertEqual(today.ago_text("2026-01-01T11:59:30+00:00", now), "net nu")
+        self.assertEqual(today.ago_text("2026-01-01T11:40:00+00:00", now), "20 min geleden")
+        self.assertEqual(today.ago_text("2026-01-01T09:00:00+00:00", now), "3 uur geleden")
+        self.assertEqual(today.ago_text("2025-12-30T12:00:00+00:00", now), "2 dgn geleden")
