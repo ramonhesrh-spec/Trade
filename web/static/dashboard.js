@@ -57,7 +57,7 @@ function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
     const total = real.reduce((sum, p) => sum + p.pnl_pct, 0);
     const sign = total >= 0 ? "+" : "";
     document.title = `${sign}${total.toFixed(1)}% · HesPulse`;
-    setFavicon(total > 0 ? "%2333d69f" : total < 0 ? "%23f2685c" : "%2317e5d6");
+    setFavicon(total > 0 ? "%2333d69f" : total < 0 ? "%23f2685c" : "%230ABAB5");
   }
 
   // Korte triltik op het moment dat een echte trade zijn stop loss of

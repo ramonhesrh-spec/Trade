@@ -120,7 +120,7 @@
   function applyLevels(lc) {
     var s = spec(lc.el);
     if (!s) return;
-    var green = css("--green", "#33d69f"), red = css("--red", "#f2685c"), accent = css("--accent", "#17e5d6");
+    var green = css("--green", "#33d69f"), red = css("--red", "#f2685c"), accent = css("--accent", "#0ABAB5");
     var bg = css("--panel", "#131a1b");
     setLine(lc, "take", s.take, { color: green, title: "Doel", axisLabelTextColor: bg });
     setLine(lc, "stop", s.stop, { color: red, title: "Stop", axisLabelTextColor: bg });
@@ -187,7 +187,7 @@
     // De zone eerst: een baselineserie met als grondlijn zone_low en overal zone_high als waarde vult precies het vlak ertussen.
     lc.band = chart.addBaselineSeries({
       baseValue: { type: "price", price: s.zone_low != null ? s.zone_low : 0 },
-      topLineColor: "rgba(0,0,0,0)", topFillColor1: "rgba(23,229,214,0.16)", topFillColor2: "rgba(23,229,214,0.16)",
+      topLineColor: "rgba(0,0,0,0)", topFillColor1: "rgba(10,186,181,0.16)", topFillColor2: "rgba(10,186,181,0.16)",
       bottomLineColor: "rgba(0,0,0,0)", bottomFillColor1: "rgba(0,0,0,0)", bottomFillColor2: "rgba(0,0,0,0)",
       lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
       autoscaleInfoProvider: function () { return null; },
