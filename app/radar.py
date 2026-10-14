@@ -35,17 +35,22 @@ def setup_state(setup: dict, price: Optional[float]) -> Optional[str]:
                          take=setup["preview_take_profit"]) if price else None
 
 
+OPEN_STATES = (None, "wacht", "in_zone")        # dezelfde stand-keuze als today.OPEN_PLAN_STATES: wat nog kan vullen
+
+
 def waiting_cards(cards: list[dict]) -> list[dict]:
-    return [c for c in cards if c["kind"] == "setup" and c["state"] != "doel_geraakt"]
+    return [c for c in cards if c["kind"] == "setup" and c["state"] in OPEN_STATES]
 
 
 def moot_cards(cards: list[dict]) -> list[dict]:
-    return [c for c in cards if c["kind"] == "setup" and c["state"] == "doel_geraakt"]
+    """Setups waar niets meer op te wachten valt: doel gehaald zonder vulling, koers door de zone of stop geraakt."""
+    return [c for c in cards if c["kind"] == "setup" and c["state"] not in OPEN_STATES]
 
 
 def waiting_count(setups: list[dict], prices: dict) -> int:
-    """Aantal bouwende setups voor het menu-getal; een setup waarvan het doel al gehaald is zonder dat de order vulde wacht op niets."""
-    return sum(1 for s in setups if setup_state(s, prices.get(s["coin"])) != "doel_geraakt")
+    """Aantal bouwende setups voor het menu-getal: precies wat de tab Wachten als kaart toont (met geldig limietplan en nog te vullen)."""
+    return sum(1 for s in setups if setup_state(s, prices.get(s["coin"])) in OPEN_STATES
+               and tp.limit_plan(s["direction"], s["zone_low"], s["zone_high"], s["preview_stop_loss"], s["preview_take_profit"]) is not None)
 
 
 def in_zone_count(setups: list[dict], prices: dict) -> int:

@@ -106,25 +106,74 @@ def scenario_view(s: dict, price: Optional[float], now: datetime, coin: str = ""
     return view
 
 
-def nearest_chance(structure_cards: list[dict], scripts: list[dict], smc_cards: list[dict]) -> Optional[dict]:
-    """De kans die het eerst aan de beurt is: de kleinste afstand in procent van de koers tot stap 1, over alle soorten heen.
-    Alleen kansen met een bekende koers doen mee."""
-    found = []
+OPEN_SIGNAL_HOURS = 6
+SIGNAL_LABELS = {"structuur": "Structuur gevuld", "structuur_c": "Structuur C gevuld", "trend": "Trend", "rejectie": "Rejectie", "smc": "SMC",
+                 "smc_waarschuwing": "SMC met waarschuwing", "script": "Markt-script", "don55_trend": "Proefmotor"}
+OPEN_PLAN_STATES = (None, "wacht", "in_zone")        # None: koers onbekend, dan is er niets dat het plan ongeldig maakt
+
+
+def _aware(iso: str) -> datetime:
+    at = datetime.fromisoformat(iso)
+    return at if at.tzinfo else at.replace(tzinfo=timezone.utc)
+
+
+def structure_state(setup: dict, plan: dict, price: Optional[float], now: datetime) -> Optional[str]:
+    """Stand van een wachtend Structuur-plan: 'verlopen' na zijn eigen tijdstip, anders tp.plan_state op het retest-niveau
+    (de engine zet de rij pas bij zijn volgende scan op expired, tot dan staat hij nog op waiting)."""
+    if setup.get("expires_at") and _aware(setup["expires_at"]) <= now:
+        return "verlopen"
+    if not price:
+        return None
+    level = plan["level"]
+    return tp.plan_state(setup["direction"], level, level, plan["stop"], price, take=plan["targets"][0])
+
+
+def signal_is_open(signal: dict, price: Optional[float]) -> bool:
+    """Een melding zonder uitkomst telt alleen mee zolang de koers nog tussen stop en doel staat; level_check sluit hem pas bij zijn volgende ronde."""
+    stop, take = signal.get("stop_loss"), signal.get("take_profit")
+    if not price or not stop or not take:
+        return True
+    return stop < price < take if signal["direction"] == "long" else take < price < stop
+
+
+def open_chances(structure_cards: list[dict], scripts: list[dict], smc_cards: list[dict], signals: list[dict],
+                 prices: dict, now: datetime) -> list[dict]:
+    """De enige definitie van een open kans, voor het getal bij Kansen open, de tabteller, de ondertitel en de lijst die Vandaag toont.
+    Alles wat hier binnenkomt is al door de kijker te zien (rule_live.for_viewer) en door het plan zelf als geldig bevonden:
+    structuurkaarten komen uit web.main._structure_cards (niet verlopen, niet voorbij stop of doel), SMC-kaarten tellen alleen
+    in 'wacht' of 'in_zone', scenario's alleen wachtend en niet vervallen, meldingen alleen zonder uitkomst en binnen OPEN_SIGNAL_HOURS.
+    Gesorteerd op afstand tot de instap; zonder koers staat een kans achteraan."""
+    items = []
     for c in structure_cards:
-        step = c["steps"][0]
-        if step["dist"] != "-":
-            found.append((abs(float(step["dist"].rstrip("%"))), f"{c['coin']} {c['direction']}", step["dist"], "tot het niveau", "/structuur"))
+        step = c["steps"][0]["dist"] if c.get("steps") else "-"
+        items.append({"kind": "structure", "coin": c["coin"], "direction": c["direction"], "soort": "Structuur", "state": "Wacht op de terugkeer",
+                      "dist": abs(float(step.rstrip("%"))) if step != "-" else None, "dist_text": step if step != "-" else "", "url": "/structuur", "card": c})
+    for c in smc_cards:
+        if c["kind"] == "setup" and c["state"] in OPEN_PLAN_STATES:
+            d = c["distance_pct"]
+            items.append({"kind": "smc", "coin": c["coin"], "direction": c["direction"], "soort": "SMC-zone", "state": c["state_label"],
+                          "dist": abs(d) if d is not None else None, "dist_text": f"{d:+.2f}%" if d is not None else "", "url": "/smc", "card": None})
     for s in scripts:
         for sc in s["scenarios"]:
-            if sc["state"] == "waiting" and sc["to_trigger_pct"] is not None:
-                found.append((abs(sc["to_trigger_pct"]), f"{s['coin']} {sc['direction']}", f"{sc['to_trigger_pct']:+.2f}%", "tot de voorwaarde", "/vandaag"))
-    for c in smc_cards:
-        if c["kind"] == "setup" and c["distance_pct"] is not None:
-            found.append((abs(c["distance_pct"]), f"{c['coin']} {c['direction']}", f"{c['distance_pct']:+.2f}%", "tot de zone", "/smc"))
-    if not found:
+            if sc["state"] == "waiting" and sc["hours_left"] > 0:
+                d = sc["to_trigger_pct"]
+                items.append({"kind": "scenario", "coin": s["coin"], "direction": sc["direction"], "soort": "Markt-script", "state": "Wacht op de voorwaarde",
+                              "dist": abs(d) if d is not None else None, "dist_text": f"{d:+.2f}%" if d is not None else "", "url": "/vandaag#scripts", "card": None})
+    since = now - timedelta(hours=OPEN_SIGNAL_HOURS)
+    for g in signals:
+        if g.get("auto_outcome") or g["trade_type"] not in SIGNAL_LABELS or _aware(g["created_at"]) < since or not signal_is_open(g, prices.get(g["coin"])):
+            continue
+        items.append({"kind": "signal", "coin": g["coin"], "direction": g["direction"], "soort": SIGNAL_LABELS[g["trade_type"]],
+                      "state": "Open, gemeld", "dist": None, "dist_text": "", "url": f"/kans/{g['id']}", "card": None})
+    return sorted(items, key=lambda i: (i["dist"] is None, i["dist"] or 0))
+
+
+def nearest_chance(chances: list[dict]) -> Optional[dict]:
+    """Het eerste van de lijst open kansen (die staat op afstand gesorteerd); '-' op de pagina alleen als de lijst leeg is."""
+    if not chances:
         return None
-    _, name, dist, what, url = min(found, key=lambda f: f[0])
-    return {"name": name, "dist": dist, "what": what, "url": url}
+    first = chances[0]
+    return {"name": f"{first['coin']} {first['direction']}", "dist": first["dist_text"], "url": first["url"]}
 
 
 def script_view(script: dict, price: Optional[float], now: datetime) -> dict:

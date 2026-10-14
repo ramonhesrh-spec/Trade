@@ -1,4 +1,5 @@
 import unittest
+from datetime import datetime, timezone
 
 from app import radar
 
@@ -62,7 +63,14 @@ class RadarTests(unittest.TestCase):
 
     def test_doel_gehaald_telt_niet_mee_voor_dichtstbijzijnde_kans(self):
         from app import today
-        self.assertIsNone(today.nearest_chance([], [], [radar.setup_card(SETUP, 107.0)]))
+        self.assertEqual(today.open_chances([], [], [radar.setup_card(SETUP, 107.0)], [], {}, datetime.now(timezone.utc)), [])
+
+    def test_vervallen_en_doorgelopen_plannen_staan_niet_onder_wachten(self):
+        stopped = radar.setup_card(SETUP, 90.0)         # voorbij de stop
+        self.assertEqual(stopped["state"], "ongeldig")
+        self.assertEqual(radar.waiting_cards([stopped]), [])
+        self.assertEqual([c["key"] for c in radar.moot_cards([stopped])], ["setup:7"])
+        self.assertEqual(radar.waiting_count([SETUP], {"XRP": 90.0}), 0)
 
     def test_live_payload(self):
         cards = [radar.setup_card(SETUP, 102.0), radar.signal_card(SIGNAL, 97.0)]

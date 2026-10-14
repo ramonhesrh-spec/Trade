@@ -68,7 +68,10 @@ def _nav_context(request: Request) -> dict:
     # Alleen de koersen uit de cache: het menu mag geen Binance-aanroep per paginaweergave doen. Zonder koers telt een setup mee.
     cached = {coin: hit[1] for coin, hit in _price_cache.items() if hit[1]}
     radar_count = radar.waiting_count([_with_preview(s) for s in repo.list_forming_smc_setups()], cached)
-    return {"coins": repo.list_coins(), "nav_counts": {"setups": len(repo.list_structure_setups(("waiting",), 50)), "radar": radar_count}}
+    now = datetime.now(timezone.utc)
+    setups = sum(1 for r in repo.list_structure_setups(("waiting",), 50)
+                 if today.structure_state(r, json.loads(r["plan"]), cached.get(r["coin"]), now) in today.OPEN_PLAN_STATES)
+    return {"coins": repo.list_coins(), "nav_counts": {"setups": setups, "radar": radar_count}}
 
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context])
@@ -428,12 +431,16 @@ async def _radar_cards() -> list[dict]:
 
 
 async def _structure_cards() -> list[dict]:
-    """Wachtende structuur-setups met hun plan, voor de Radar (app/structure_live.py)."""
+    """Wachtende structuur-setups met hun plan (app/structure_live.py). Een plan dat verlopen is of waarvan de koers al voorbij stop of doel
+    staat, valt weg: de engine zet de rij pas bij zijn volgende scan om, en tot dan mag hij nergens meetellen of staan."""
     setups = repo.list_structure_setups(("waiting",), 12)
     prices = await _cached_prices({s["coin"] for s in setups}) if setups else {}
+    now = datetime.now(timezone.utc)
     cards = []
     for s in setups:
         plan = json.loads(s["plan"])
+        if today.structure_state(s, plan, prices.get(s["coin"]), now) not in today.OPEN_PLAN_STATES:
+            continue
         targets = list(zip(plan["targets"], plan["targets_r"]))
         checks = chance_checks.structure_checks(chance_checks.parse_features(s.get("features")), plan, s["grade"])
         cards.append({**s, "plan": plan, "targets": targets, "checks": [c for c in checks if not c[0].startswith("De CEO")],
@@ -494,20 +501,13 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     })
 
 
-OPEN_SIGNAL_HOURS = 6
-OPEN_SIGNAL_LABELS = (("structuur", "Structuur gevuld"), ("structuur_c", "Structuur C gevuld"), ("trend", "Trend"), ("rejectie", "Rejectie"), ("smc", "SMC"),
-                      ("smc_waarschuwing", "SMC met waarschuwing"), ("script", "Markt-script"))
-
-
-def _open_chances(now: datetime, waiting_plans: int) -> list[tuple[int, str]]:
-    """Alle kansen die nu open staan, per soort: wachtende Structuur-plannen, bouwende SMC-zones en signalen van de laatste uren
-    zonder uitkomst. Het bord op Vandaag telde eerst alleen de Structuur-plannen en liet zo meldingen van andere soorten onzichtbaar."""
-    since = (now - timedelta(hours=OPEN_SIGNAL_HOURS)).isoformat()
-    parts = [(waiting_plans, "Structuur wacht op de terugkeer"), (len(repo.list_forming_smc_setups()), "SMC-zone bouwt")]
-    for trade_type, label in OPEN_SIGNAL_LABELS:
-        open_now = [s for s in repo.list_recent_signals_of_type(trade_type, since) if not s["auto_outcome"]]
-        parts.append((len(open_now), f"{label}, laatste {OPEN_SIGNAL_HOURS} uur"))
-    return [(n, label) for n, label in parts if n]
+async def _open_chances(user: dict, structure_cards: list[dict], scripts: list[dict], prices: dict, now: datetime) -> list[dict]:
+    """De open kansen die deze kijker ziet, volgens today.open_chances: een proefsoort telt niet mee voor een leerling."""
+    since = (now - timedelta(hours=today.OPEN_SIGNAL_HOURS)).isoformat()
+    signals = [g for t in today.SIGNAL_LABELS for g in repo.list_recent_signals_of_type(t, since) if not g["is_practice"]]
+    signals = rule_live.for_viewer(signals, is_ceo(user))
+    prices = {**prices, **await _cached_prices({g["coin"] for g in signals} - prices.keys())}
+    return today.open_chances(structure_cards, scripts, await _radar_cards(), signals, prices, now)
 
 
 async def _vandaag_context(user: dict) -> dict:
@@ -524,8 +524,7 @@ async def _vandaag_context(user: dict) -> dict:
         at = datetime.fromisoformat(e["at"])
         events.append({**e, "time": today.local(at if at.tzinfo else at.replace(tzinfo=timezone.utc)).strftime("%H:%M")})
     structure_cards = await _structure_cards()
-    open_parts = _open_chances(now, len(structure_cards))
-    nearest = today.nearest_chance(structure_cards, scripts, await _radar_cards())
+    chances = await _open_chances(user, structure_cards, scripts, prices, now)
     rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
     week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
     summary = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT)
@@ -540,7 +539,8 @@ async def _vandaag_context(user: dict) -> dict:
         "structure_cards": structure_cards,
         "week": week, "week_spark": Markup(track_record.sparkline_svg(week["cumulative"], width=132, height=44)),
         "today_r": week["days"][-1][1] if week["days"] else 0.0,
-        "plans_ready": sum(n for n, _ in open_parts), "open_parts": open_parts, "nearest": nearest,
+        "chances": chances, "nearest": today.nearest_chance(chances),
+        "chance_plans": [c["card"] for c in chances if c["card"]], "chance_rows": [c for c in chances if not c["card"]],
         "scenarios_waiting": sum(1 for sc in scripts for x in sc["scenarios"] if x["state"] == "waiting"),
         "budget": today.budget_ring(len(repo.list_recent_pushes(user["id"], (now - timedelta(hours=24)).isoformat())), user.get("push_budget")),
     }

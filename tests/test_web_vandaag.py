@@ -6,7 +6,7 @@ from unittest import mock
 
 from fastapi.testclient import TestClient
 
-from app import config, db, repo, security
+from app import config, db, repo, rule_live, security
 
 
 def scenario_row(**kw):
@@ -90,9 +90,9 @@ class WebVandaagTests(unittest.TestCase):
                 "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "Reden.", "features": "{}", "state": "waiting",
                 "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
         text = self.client.get("/vandaag").text
-        self.assertIn("3 Structuur wacht op de terugkeer", text)          # de telling staat achter de uitleg van Kansen open
-        self.assertIn("de rest staat op Radar en Setups", text)
-        self.assertIn("alle 3 setups", text)                              # het paneel toont er twee, de koptekst zegt het echte aantal
+        self.assertEqual(text.count('class="setup-card'), 3)              # geen afkapping: alles wat geteld wordt staat er
+        self.assertRegex(text, r'<dt>.*?Kansen open.*?</dt>\s*<dd[^>]*><span class="kl-num">3</span>')
+        self.assertIn('<i class="ut-count">3</i>', text)
 
     def test_tabbar_filters_and_empty_state_invite_the_user(self):
         text = self.client.get("/vandaag").text
@@ -156,6 +156,8 @@ class WebVandaagTests(unittest.TestCase):
     def test_board_counts_open_chances_of_every_kind_not_only_structure_plans(self):
         r = self.client.get("/vandaag")
         self.assertIn("Er staat niets open", r.text)
+        self.assertIn("Geen open kansen. Je krijgt een melding zodra er een staat.", r.text)
+        self.assertNotIn('class="ut-count"', r.text)                      # geen badge met 0
         signal = {"message_id": None, "coin": "BTC", "direction": "long", "category": "day_trading", "trade_type": "trend", "pattern_name": "Trend-pullback",
                   "price": 100.0, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None, "atr": None,
                   "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Trend-pullback",
@@ -163,9 +165,67 @@ class WebVandaagTests(unittest.TestCase):
                   "suggested_entry_low": None, "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None}
         repo.insert_signal(signal)
         text = self.client.get("/vandaag").text
-        self.assertIn("1 Trend, laatste 6 uur", text)
+        self.assertIn("Trend · Open, gemeld", text)                       # een soort zonder kaart krijgt een compacte rij
         self.assertNotIn("Er staat niets open", text)
+        self.assertNotIn("Geen open kansen", text)
         self.assertNotIn("jaar candles", text)
+
+    def seed_chances(self):
+        """Een gemengde stand: een geldig plan, een verlopen plan, een plan voorbij zijn stop, meldingen van een leerling-soort en een CEO-soort."""
+        import json
+        now = datetime.now(timezone.utc)
+        candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
+
+        def structure(coin, hours, stop=101.0):
+            plan = {"level": 100.0, "stop": stop, "risk_pct": 1.0, "targets": [98.0, 97.0], "targets_r": [2.0, 3.0], "candles": candles}
+            repo.insert_structure_setup({
+                "coin": coin, "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
+                "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "Reden.", "features": "{}", "state": "waiting",
+                "expires_at": (now + timedelta(hours=hours)).isoformat(), "plan": json.dumps(plan)})
+        structure("BTC", 3)
+        structure("ETH", -1)                    # verlopen, de engine heeft hem nog niet omgezet
+        structure("SOL", 3, stop=99.5)          # koers (100) staat al voorbij de stop
+        base = {"message_id": None, "coin": "BTC", "direction": "long", "category": "day_trading", "trade_type": "trend", "pattern_name": "x",
+                "price": 100.0, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None, "atr": None,
+                "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "x",
+                "reason": "test", "stop_loss": 99.0, "take_profit": 102.0, "context_note": None, "is_practice": 0, "plain_explanation": None,
+                "suggested_entry_low": None, "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None}
+        repo.insert_signal(dict(base, trade_type="rejectie"))
+        repo.insert_signal(dict(base, trade_type=rule_live.RULE), chain_it=False)
+        repo.insert_signal(dict(base, trade_type="trend", stop_loss=100.5))      # voorbij de stop
+        repo.insert_market_script("ETH", "x", "long", "m", [scenario_row()], 0, (now - timedelta(hours=1)).isoformat())     # script verlopen
+
+    def count_and_rows(self):
+        import re
+        text = self.client.get("/vandaag").text
+        shown = text.count('class="setup-card') + len(re.findall(r'<a class="mrow"', text))
+        count = int(re.search(r'Kansen open.*?<span class="kl-num">(\d+)</span>', text, re.S).group(1))
+        return text, count, shown
+
+    def test_count_equals_rendered_rows_for_a_leerling_and_the_ceo_sees_the_proefsoort(self):
+        self.seed_chances()
+        _, count, shown = self.count_and_rows()                           # tester is de eerst aangemaakte gebruiker, dus de CEO
+        self.assertEqual((count, shown), (3, 3))                          # BTC-plan, rejectie en de proefsoort; verlopen en doorgelopen niet
+        leerling = repo.create_user("leerling", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        self.client.cookies.set(self.main.SESSION_COOKIE, security.create_session_token(leerling))
+        self.main._ceo_cache.update(at=0.0)
+        text, count, shown = self.count_and_rows()
+        self.assertEqual((count, shown), (2, 2))
+        self.assertIn("Rejectie", text)
+        self.assertNotIn("Proefmotor", text)
+        self.assertIn('<i class="ut-count">2</i>', text)
+
+    def test_het_eerst_aan_de_beurt_komt_uit_dezelfde_lijst(self):
+        self.seed_chances()
+        text = self.client.get("/vandaag").text
+        self.assertIn('<span class="kl-num">BTC short', text.split("Het eerst aan de beurt")[1])
+        self.assertNotIn("ETH short", text.split("Het eerst aan de beurt")[1].split("</dl>")[0])
+
+    def test_nav_badges_follow_the_same_validity(self):
+        self.seed_chances()
+        self.client.get("/vandaag")                                       # warmt de koerscache, die het menu leest
+        text = self.client.get("/bewijs").text
+        self.assertRegex(text, r'<span>Setups</span>\s*<i class="tab-badge">1</i>')        # alleen het geldige BTC-plan, niet verlopen of voorbij de stop
 
     def test_coin_page_shows_the_signal_a_notification_links_to_even_when_it_is_old(self):
         base = {"message_id": None, "coin": "BTC", "direction": "long", "category": "day_trading", "trade_type": "trend", "pattern_name": "Trend-pullback",

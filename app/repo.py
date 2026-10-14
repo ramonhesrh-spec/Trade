@@ -2943,7 +2943,7 @@ def count_trend_since(since_iso: str) -> int:
 def list_recent_signals_of_type(trade_type: str, since_iso: str, limit: int = 30) -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT id, coin, direction, price, stop_loss, take_profit, created_at, auto_outcome FROM signals
+            """SELECT id, coin, direction, price, stop_loss, take_profit, created_at, auto_outcome, trade_type, is_practice FROM signals
                WHERE trade_type = ? AND created_at >= ? ORDER BY id DESC LIMIT ?""", (trade_type, since_iso, limit)).fetchall()
         return [dict(r) for r in rows]
 

@@ -257,7 +257,7 @@ class RadarLayoutTests(BaseShellTests):
     def test_radar_kernregels_en_zoekveld(self):
         html = self.client.get("/smc").text
         self.assertIn('class="kl"', html)
-        self.assertIn("Doel gehaald zonder vulling", html)
+        self.assertIn("Niet meer actief", html)
         self.assertIn('id="fsearch"', html)
 
 
@@ -271,10 +271,11 @@ class SetupsLayoutTests(BaseShellTests):
             "coin": "BTC", "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
             "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "Schone range.", "features": "{}", "state": "waiting",
             "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
+        long_plan = {"level": 100.0, "stop": 99.0, "risk_pct": 1.0, "targets": [102.0, 103.0], "targets_r": [2.0, 3.0], "candles": candles}
         repo.insert_structure_setup({
             "coin": "SOL", "direction": "long", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
             "line_slope": 0.0, "atr": 0.5, "grade": "B", "reason": "Tweede range.", "features": "{}", "state": "waiting",
-            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(long_plan)})
         repo.insert_structure_setup({
             "coin": "ETH", "direction": "long", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
             "line_slope": 0.0, "atr": 0.5, "grade": "B", "reason": "Geen ruimte.", "features": "{}", "state": "geen_plan", "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": None})

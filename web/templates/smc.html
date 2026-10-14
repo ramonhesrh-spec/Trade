@@ -12,7 +12,7 @@
 {% set smc_proof = proof("smc") %}
 {{ macros.keylines([
   {"label": "Open trades", "value": signal_cards|length},
-  {"label": "Doel gehaald zonder vulling", "value": moot_cards|length},
+  {"label": "Niet meer actief", "value": moot_cards|length},
   {"label": "SMC per trade, na kosten", "value": smc_proof.label, "explain": smc_proof.text ~ " Gemeten op afgeronde SMC-trades. Bewijs toont de details."}], "rd") }}
 
 {{ macros.utabs([
@@ -61,7 +61,7 @@
 
 {% if moot_cards %}
 <div class="flat">
-  <h3>Doel gehaald zonder vulling</h3>
+  <h3>Niet meer actief</h3>
   <div class="radar-grid">
     {% for c in moot_cards %}
     <article class="radar-card is-moot" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">

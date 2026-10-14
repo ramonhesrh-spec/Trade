@@ -97,18 +97,49 @@ class AgendaTest(unittest.TestCase):
         self.assertEqual(kinds, ["vs_open", "macro"])
 
 
-class NearestChanceTest(unittest.TestCase):
-    def test_picks_the_smallest_distance_over_all_kinds(self):
-        structure = [{"coin": "BTC", "direction": "short", "steps": [{"dist": "+1.50%"}]}]
-        scripts = [{"coin": "DOGE", "scenarios": [{"state": "waiting", "direction": "short", "to_trigger_pct": 0.9},
-                                                   {"state": "fired", "direction": "long", "to_trigger_pct": 0.1}]}]
-        smc = [{"kind": "setup", "coin": "SOL", "direction": "long", "distance_pct": -2.0}]
-        best = today.nearest_chance(structure, scripts, smc)
-        self.assertEqual((best["name"], best["dist"], best["what"]), ("DOGE short", "+0.90%", "tot de voorwaarde"))
+class OpenChancesTest(unittest.TestCase):
+    def card(self, dist="+1.50%", **kw):
+        return {"coin": "BTC", "direction": "short", "steps": [{"dist": dist}], **kw}
 
-    def test_no_price_or_nothing_open_gives_none(self):
-        self.assertIsNone(today.nearest_chance([{"coin": "BTC", "direction": "long", "steps": [{"dist": "-"}]}], [], []))
-        self.assertIsNone(today.nearest_chance([], [], []))
+    def smc(self, state="wacht", dist=-2.0, **kw):
+        return {"kind": "setup", "coin": "SOL", "direction": "long", "distance_pct": dist, "state": state, "state_label": state, **kw}
+
+    def sig(self, **kw):
+        return {"id": 5, "coin": "ETH", "direction": "long", "trade_type": "trend", "stop_loss": 99.0, "take_profit": 105.0,
+                "created_at": (NOW - timedelta(hours=1)).isoformat(), "auto_outcome": None, **kw}
+
+    def test_sorted_by_distance_and_nearest_is_the_first_of_the_same_list(self):
+        scripts = [{"coin": "DOGE", "scenarios": [{"state": "waiting", "direction": "short", "to_trigger_pct": 0.9, "hours_left": 5},
+                                                   {"state": "fired", "direction": "long", "to_trigger_pct": 0.1, "hours_left": 5}]}]
+        chances = today.open_chances([self.card()], scripts, [self.smc()], [], {}, NOW)
+        self.assertEqual([(c["coin"], c["kind"]) for c in chances], [("DOGE", "scenario"), ("BTC", "structure"), ("SOL", "smc")])
+        best = today.nearest_chance(chances)
+        self.assertEqual((best["name"], best["dist"]), ("DOGE short", "+0.90%"))
+
+    def test_invalid_things_do_not_count(self):
+        scripts = [{"coin": "DOGE", "scenarios": [{"state": "waiting", "direction": "short", "to_trigger_pct": 0.9, "hours_left": 0.0}]}]
+        smc = [self.smc(state=st) for st in ("ongeldig", "door_zone", "doel_geraakt")]
+        signals = [self.sig(auto_outcome="stop_loss"), self.sig(created_at=(NOW - timedelta(hours=7)).isoformat()), self.sig(trade_type="swing"),
+                   self.sig(stop_loss=99.0), self.sig(take_profit=105.0)]
+        self.assertEqual(today.open_chances([], scripts, smc, signals[:3], {}, NOW), [])
+        self.assertEqual(today.open_chances([], [], [], [signals[3]], {"ETH": 98.0}, NOW), [])        # voorbij de stop
+        self.assertEqual(today.open_chances([], [], [], [signals[4]], {"ETH": 106.0}, NOW), [])       # voorbij het doel
+
+    def test_a_chance_without_price_still_counts_and_nearest_is_dash_only_when_empty(self):
+        chances = today.open_chances([self.card("-")], [], [], [self.sig()], {}, NOW)
+        self.assertEqual(len(chances), 2)
+        self.assertEqual(today.nearest_chance(chances)["name"], "BTC short")
+        self.assertIsNone(today.nearest_chance([]))
+
+    def test_structure_state_expiry_and_price(self):
+        setup = {"direction": "short", "expires_at": (NOW + timedelta(hours=1)).isoformat()}
+        plan = {"level": 100.0, "stop": 101.0, "targets": [98.0]}
+        self.assertEqual(today.structure_state(setup, plan, 99.0, NOW), "wacht")
+        self.assertEqual(today.structure_state(setup, plan, 100.0, NOW), "in_zone")
+        self.assertEqual(today.structure_state(setup, plan, 102.0, NOW), "ongeldig")
+        self.assertEqual(today.structure_state(setup, plan, 97.0, NOW), "doel_geraakt")
+        self.assertIsNone(today.structure_state(setup, plan, None, NOW))
+        self.assertEqual(today.structure_state(dict(setup, expires_at=(NOW - timedelta(minutes=1)).isoformat()), plan, 99.0, NOW), "verlopen")
 
 
 class BudgetRingTest(unittest.TestCase):
