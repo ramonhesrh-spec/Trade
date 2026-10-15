@@ -100,7 +100,7 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn('<nav class="ut-menu">', text)                      # drie-puntjesmenu met Mijn week, Beste setups en Instellingen
         self.assertNotIn("quick-actions", text)
         self.assertIn("Geen plan klaar", self.client.get("/structuur").text)   # lege staat met uitleg en een knop
-        self.assertIn("Alleen sterk en redelijk", self.client.get("/structuur?kant=short").text)
+        self.assertIn("Sterk en redelijk</a>", self.client.get("/structuur?kant=short").text)
 
     def test_grade_c_card_is_muted_and_shows_facts_not_a_verdict(self):
         import json

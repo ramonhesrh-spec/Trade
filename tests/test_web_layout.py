@@ -287,12 +287,65 @@ class SetupsLayoutTests(BaseShellTests):
             conn.execute("""INSERT INTO signals (message_id, coin, direction, category, confidence, technical_confirmed, price, stop_loss,
                             take_profit, trade_type, created_at) VALUES (NULL, 'SOL', 'long', 'x', 'hoog', 1, 100, 99, 102, 'trend', ?)""", (db.now_iso(),))
         html = self.client.get("/structuur").text
-        for needle in ['data-utabs="setups"', 'id="tab-klaarstaand"', 'id="tab-trend"', 'id="tab-eerder"', 'class="kl"',
-                       "Laatste 24 uur: 3 kansen gezien, 2 beoordeeld", "Alleen sterk en redelijk", "stack-toggle", 'class="mrow"',
+        for needle in ['data-utabs="setups"', 'id="tab-klaarstaand"', 'id="tab-trend"', 'id="tab-eerder"', 'class="st-meta"',
+                       "Laatste 24 uur: 3 kansen gezien, 2 beoordeeld", "Sterk en redelijk</a>", "stack-toggle", 'class="mrow"',
                        "Instap 100.0000, stop 99.0000, doel 102.0000", "Geen ruimte."]:
             self.assertIn(needle, html, needle)
         self.assertRegex(html, r'class="hl-num">2</span><span class="hl-unit">klaar')
         self.assertNotIn("·</span>", html[html.index('id="tab-trend"'):html.index('id="tab-eerder"')])
+
+    def test_tellingen_staan_in_een_stille_regel(self):
+        self.seed_waiting()
+        html = self.client.get("/structuur").text
+        meta = html[html.index('class="st-meta"'):html.index('data-utabs="setups"')]
+        self.assertRegex(meta, r"<b>3</b> gezien</span><span><b>2</b> beoordeeld</span><span><b>1</b> zonder plan")
+        self.assertNotIn('class="kl"', html[:html.index('data-utabs="setups"')])
+
+    def test_stille_bediening_zonder_gevulde_pillen(self):
+        self.seed_waiting()
+        html = self.client.get("/structuur").text
+        row = html[html.index('class="filter-row"'):html.index('id="stack-bar"')]
+        self.assertIn('class="filter-chips"', row)
+        self.assertRegex(row, r'<button type="button" class="stack-toggle" id="stack-toggle" aria-pressed="false">Stapel</button>')
+        self.assertNotIn("Toon als stapel", html)
+        self.assertNotIn('class="chip" id="stack-', html)
+        bar = html[html.index('id="stack-bar"'):html.index('class="setup-grid"')]
+        self.assertIn(" hidden>", bar[:60])
+        for needle in ['id="stack-prev" aria-label="Vorige kaart"', 'id="stack-count"', 'id="stack-next" aria-label="Volgende kaart"',
+                       'class="stack-actions" role="group"']:
+            self.assertIn(needle, bar, needle)
+        self.assertRegex(bar, r'class="stack-act" id="stack-skip">.*Negeer</button>')
+        self.assertRegex(bar, r'class="stack-act is-keep" id="stack-keep">.*Bewaar</button>')
+        self.assertRegex(bar, r'class="stack-act" id="stack-reset">.*Opnieuw</button>')
+
+    def test_een_kaart_geeft_geen_stapelbediening(self):
+        self.seed_waiting()
+        html = self.client.get("/structuur?kant=long").text
+        self.assertEqual(html.count('class="setup-card'), 1)
+        self.assertNotIn('id="stack-toggle"', html)
+        self.assertNotIn('id="stack-bar"', html)
+
+    def test_kaartkop_met_logo_en_bewijs_achter_een_tik(self):
+        self.seed_waiting()
+        html = self.client.get("/structuur").text
+        card = html[html.index('class="setup-card'):html.index("</article>")]
+        head = card[card.index('class="setup-head"'):card.index("</header>")]
+        self.assertIn('class="coin-av setup-av', head)
+        self.assertNotIn("dist-ring", card)
+        self.assertNotIn('class="proof-line', card)
+        self.assertRegex(head, r'class="radar-dir radar-dir-(long|short)">')
+        self.assertRegex(head, r'class="setup-grade setup-grade-[abc]" title="Oordeel van de CEO">(Sterk|Redelijk|Zwak)</span>')
+        self.assertRegex(head, r'class="proof-tag is-proef"><button type="button" class="kl-term" popovertarget="pt-structuur-s\d+">In proef</button>')
+        pop = head[head.index("popover>"):]
+        self.assertIn('<a class="proof-pop-link" href="/bewijs">Bekijk Bewijs</a>', pop)
+
+    def test_stap_een_heeft_een_afstandsbalk(self):
+        self.seed_waiting()
+        with mock.patch.object(main, "_cached_prices", new=mock.AsyncMock(return_value={"BTC": 99.0, "SOL": 101.0})):
+            html = self.client.get("/structuur").text
+        step = html[html.index('class="vd-step is-now"'):]
+        step = step[:step.index("</li>")]
+        self.assertRegex(step, r'<span class="muted step-dist"><span class="step-approach" aria-hidden="true"><i style="width: \d+%"></i></span>Nog <span data-vd="distance"')
 
     def test_lege_staat_blijft(self):
         html = self.client.get("/structuur").text

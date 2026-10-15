@@ -3,6 +3,8 @@
 import math
 from typing import Optional
 
+from app import trade_plan
+
 DIST_KEYS = {"vandaag": "data-vd", "radar": "data-radar"}
 
 
@@ -43,8 +45,11 @@ def structure_steps(plan: dict, targets: list[tuple[float, float]], price: Optio
     wait = f"Wacht tot de koers terugkeert naar {fmt(level)}"
     dist = (level - price) / price * 100 if price else None
     texts = ", ".join(f"{fmt(t)} ({r:.1f}R)" for t, r in targets)
-    return plan_steps(wait, level, plan["stop"], f"doelen {texts}", risk_pct, rr, distance_pct=dist, page="vandaag",
-                      live=(coin, level, "lp") if coin else None)
+    steps = plan_steps(wait, level, plan["stop"], f"doelen {texts}", risk_pct, rr, distance_pct=dist, page="vandaag",
+                       live=(coin, level, "lp") if coin else None)
+    # Het teken van dist is hier de richting van de koers, niet hoe ver je nog moet: de balk kijkt alleen naar de afstand.
+    steps[0]["approach"] = trade_plan.approach_pct(None if dist is None else abs(dist))
+    return steps
 
 
 def smc_steps(plan, zone_low: float, zone_high: float, price: Optional[float], distance_pct: Optional[float], coin: str = "") -> list[dict]:

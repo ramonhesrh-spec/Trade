@@ -9,10 +9,9 @@
      delta=(("Laatste controle " ~ engine_minutes ~ " min geleden") if engine_on and engine_minutes is not none else ""),
      explain="Kansen die klaarstaan, met instap, stop en doelen. De motor kijkt elke 5 minuten. De score per soort staat op Bewijs.") }}
 
-{{ macros.keylines([
-  {"label": "Gezien, 24 uur", "value": counts.total, "explain": "Laatste 24 uur: " ~ counts.total ~ " " ~ ("kans" if counts.total == 1 else "kansen") ~ " gezien, " ~ (counts.goedgekeurd + counts.afgekeurd) ~ " beoordeeld, " ~ counts.geen_plan ~ " zonder plan."},
-  {"label": "Beoordeeld", "value": counts.goedgekeurd + counts.afgekeurd},
-  {"label": "Zonder plan", "value": counts.geen_plan}], "st") }}
+{# De tellingen van 24 uur in één stille regel: als drie kernregels kostten ze een heel scherm voor het eerste plan. #}
+<p class="st-meta">{{ macros.term("24 uur", "Laatste 24 uur: " ~ counts.total ~ " " ~ ("kans" if counts.total == 1 else "kansen") ~ " gezien, " ~ (counts.goedgekeurd + counts.afgekeurd) ~ " beoordeeld, " ~ counts.geen_plan ~ " zonder plan.", "st-24") }}
+  <span><b>{{ counts.total }}</b> gezien</span><span><b>{{ counts.goedgekeurd + counts.afgekeurd }}</b> beoordeeld</span><span><b>{{ counts.geen_plan }}</b> zonder plan</span></p>
 
 {{ macros.utabs([
   {"key": "klaarstaand", "label": "Klaarstaand", "href": "#tab-klaarstaand", "count": structure_cards|length},
@@ -33,24 +32,31 @@
 </p>
 {% endif %}
 
-  <p class="filter-chips">
-    <a class="chip{% if not only_ab and not side %} is-active{% endif %}" href="/structuur">Alles</a>
-    <a class="chip{% if only_ab %} is-active{% endif %}" href="/structuur?alleen=ab">Alleen sterk en redelijk</a>
-    <a class="chip{% if side == 'long' %} is-active{% endif %}" href="/structuur?kant=long">Long</a>
-    <a class="chip{% if side == 'short' %} is-active{% endif %}" href="/structuur?kant=short">Short</a>
-  </p>
+  {% set stackable = structure_cards|length > 1 %}
+  <div class="filter-row">
+    <p class="filter-chips">
+      <a class="chip{% if not only_ab and not side %} is-active{% endif %}" href="/structuur">Alles</a>
+      <a class="chip{% if only_ab %} is-active{% endif %}" href="/structuur?alleen=ab">Sterk en redelijk</a>
+      <a class="chip{% if side == 'long' %} is-active{% endif %}" href="/structuur?kant=long">Long</a>
+      <a class="chip{% if side == 'short' %} is-active{% endif %}" href="/structuur?kant=short">Short</a>
+    </p>
+    {% if stackable %}<button type="button" class="stack-toggle" id="stack-toggle" aria-pressed="false">Stapel</button>{% endif %}
+  </div>
   {% if not structure_cards %}
   {{ macros.empty_state("Geen plan klaar", "De CEO neemt koffie. Zodra een lijn of range breekt en het plan genoeg ruimte heeft, krijg je een melding en staat hier de kaart met de grafiek. De motor kijkt elke 5 minuten.", "Bekijk de Radar", "/smc") }}
   {% else %}
-  {% if structure_cards|length > 1 %}
-  <div class="stack-controls">
-    <button type="button" class="chip" id="stack-toggle" aria-pressed="false">Toon als stapel</button>
-    <span id="stack-bar" class="stack-bar" hidden>
-      <button type="button" class="chip" id="stack-skip">Negeer</button>
-      <span id="stack-count" class="muted"></span>
-      <button type="button" class="chip" id="stack-keep">Bewaar</button>
-      <button type="button" class="chip" id="stack-reset">Opnieuw</button>
-    </span>
+  {% if stackable %}
+  <div id="stack-bar" class="stack-bar" hidden>
+    <div class="stack-nav">
+      <button type="button" class="stack-icon" id="stack-prev" aria-label="Vorige kaart"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15,6 9,12 15,18"/></svg></button>
+      <span id="stack-count" class="stack-count" aria-live="polite"></span>
+      <button type="button" class="stack-icon" id="stack-next" aria-label="Volgende kaart"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="9,6 15,12 9,18"/></svg></button>
+    </div>
+    <div class="stack-actions" role="group" aria-label="Wat doe je met deze kaart">
+      <button type="button" class="stack-act" id="stack-skip"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>Negeer</button>
+      <button type="button" class="stack-act is-keep" id="stack-keep"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M6 3h12v18l-6-4-6 4z"/></svg>Bewaar</button>
+      <button type="button" class="stack-act" id="stack-reset"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="4,5 4,10 9,10"/><path d="M5 15a7.5 7.5 0 1 0 1.3-8.1L4 10"/></svg>Opnieuw</button>
+    </div>
   </div>
   {% endif %}
   <div class="setup-grid">
