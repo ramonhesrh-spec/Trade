@@ -7,6 +7,7 @@ from typing import Optional
 
 W, H = 560, 320
 PAD_L, PAD_R, PAD_T, PAD_B = 6, 132, 14, 14
+LABEL_CHAR_W = 8.0        # breedte van een teken in .sc-label (13px monospace is 7,8); de rechtermarge groeit mee met het langste label
 LABEL_GAP = 16            # minimale afstand tussen twee labels, zodat dicht bij elkaar liggende doelen leesbaar blijven
 SHOWN_BARS = 44           # genoeg om de structuur te zien, weinig genoeg om leesbaar te blijven op een telefoon
 FUTURE_BARS = 9          # lege ruimte rechts voor stopzone en doelen
@@ -31,7 +32,14 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
     n = len(candles)
     times = [_ts(c[0]) for c in candles]
     slots = n + FUTURE_BARS
-    plot_w, plot_h = W - PAD_L - PAD_R, H - PAD_T - PAD_B
+    marks = [(plan["level"], "sc-limit", f"{plan.get('level_label', 'Limiet')} {_fmt(plan['level'])}"), (plan["stop"], "sc-stop", f"Stop {_fmt(plan['stop'])}")]
+    target_name = (lambda k: "Doel") if plan.get("level_label") else (lambda k: f"T{k}")
+    marks += [(t, "sc-target", f"{target_name(k)} {_fmt(t)} · {r:.1f}R") for k, (t, r) in enumerate(zip(plan["targets"], plan["targets_r"]), 1)]
+    if price:
+        marks.append((price, "sc-price", f"Nu {_fmt(price)}"))
+    # Een vaste marge sneed "T3 2453.4 · 10.2R" rechts af: vier cijfers voor de punt plus een R van twee cijfers past niet in 132.
+    pad_r = max(PAD_R, int(max(len(m[2]) for m in marks) * LABEL_CHAR_W + 10))
+    plot_w, plot_h = W - PAD_L - pad_r, H - PAD_T - PAD_B
     step = plot_w / slots
     levels = [plan["level"], plan["stop"], *plan["targets"], *([price] if price else [])]
     lo = min([c[3] for c in candles] + levels)
@@ -83,11 +91,6 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
         arrow_y = y(candles[int(break_i)][2]) - 8 if setup["direction"] == "short" else y(candles[int(break_i)][3]) + 8
         out.append(f'<text class="sc-break" x="{bx:.1f}" y="{arrow_y:.1f}" text-anchor="middle">{"▼" if setup["direction"] == "short" else "▲"}</text>')
 
-    marks = [(plan["level"], "sc-limit", f"{plan.get('level_label', 'Limiet')} {_fmt(plan['level'])}"), (plan["stop"], "sc-stop", f"Stop {_fmt(plan['stop'])}")]
-    target_name = (lambda k: "Doel") if plan.get("level_label") else (lambda k: f"T{k}")
-    marks += [(t, "sc-target", f"{target_name(k)} {_fmt(t)} · {r:.1f}R") for k, (t, r) in enumerate(zip(plan["targets"], plan["targets_r"]), 1)]
-    if price:
-        marks.append((price, "sc-price", f"Nu {_fmt(price)}"))
     placed, last_y = [], -1e9
     for v, cls, text in sorted(marks, key=lambda m: y(m[0])):
         label_y = max(y(v), last_y + LABEL_GAP)

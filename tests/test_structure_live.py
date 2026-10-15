@@ -46,6 +46,19 @@ class ChartTest(unittest.TestCase):
         self.assertEqual(svg.count("sc-body"), 10)
         self.assertEqual(setup_chart.setup_svg([], setup, plan), "")
 
+    def test_long_labels_stay_inside_the_chart(self):
+        import re
+        from app import setup_chart
+        candles = [[f"2026-03-02T{h:02d}:00:00+00:00", 2440 - h, 2446 - h, 2434 - h, 2439 - h] for h in range(20)]
+        setup = {"coin": "ETH", "direction": "long", "kind": "RANGE", "line_a": 2420.0, "line_slope": 0.0,
+                 "p1_at": "2026-03-02T01:00:00+00:00", "break_at": "2026-03-02T15:00:00+00:00"}
+        plan = {"level": 2356.88, "stop": 2347.45, "targets": [2388.61, 2429.41, 2453.40], "targets_r": [3.4, 7.7, 10.2]}
+        svg = setup_chart.setup_svg(candles, setup, plan, price=2377.08)
+        labels = re.findall(r'<text class="sc-label [^"]+" x="([\d.]+)"[^>]*>([^<]+)</text>', svg)
+        self.assertIn("T3 2453.4 · 10.2R", [t for _, t in labels])
+        for x, text in labels:
+            self.assertLessEqual(float(x) + len(text) * setup_chart.LABEL_CHAR_W, setup_chart.W, text)
+
 
 class LiveTest(DbCase):
     def setUp(self):
