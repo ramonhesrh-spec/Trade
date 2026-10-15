@@ -2029,20 +2029,12 @@ html { -webkit-tap-highlight-color: transparent; }
 .ceo-presence td { text-align: right; padding: var(--space-3); border-top: 1px solid rgba(90, 71, 16, 0.5); font-variant-numeric: tabular-nums; }
 .ceo-presence th:first-child, .ceo-presence td:first-child { text-align: left; overflow-wrap: anywhere; }
 
-/* Afstandsring rond de kaart: loopt vol zodra de koers het limietniveau nadert (ring.js). */
-.dist-ring { width: 34px; height: 34px; flex: none; transform: rotate(-90deg); }
-.dist-ring circle { fill: none; stroke-width: 3.5; }
-.dist-ring-bg { stroke: var(--border-strong); }
-.dist-ring-fill { stroke: var(--accent); stroke-linecap: round; transition: stroke-dashoffset 0.8s ease-out; }
-.setup-card.is-ringfull .dist-ring-fill { stroke: var(--green); }
 /* Live grafiek: de limietlijn pulseert zodra de koers binnen 0,3% komt. Alleen bij een echte nadering, niet als versiering. */
 @media (prefers-reduced-motion: no-preference) { svg.sc.is-near .sc-limit { animation: limit-pulse 1.4s ease-in-out infinite; } }
 @keyframes limit-pulse { 50% { opacity: 0.35; } }
 .sc-price { transition: none; }
 
 /* Kaartenstapel */
-.stack-controls { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; margin-bottom: var(--space-4); }
-.stack-bar { display: flex; flex: 1; gap: var(--space-3); align-items: center; justify-content: space-between; flex-wrap: wrap; }
 .setup-grid.is-stack { display: block; touch-action: pan-y; }
 .setup-grid.is-stack .setup-card { will-change: transform; user-select: none; }
 .setup-card.is-swipe-keep { outline: 2px solid var(--green); }
@@ -2454,9 +2446,6 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 /* Zwarte en marineblauwe logo's verdwijnen op de donkere achtergrond: een licht plaatje erachter. */
 .coin-av.is-dark { background: #dfe8e7; padding: 2px; }
 .mrow-icon.coin-av { font-size: 10px; }
-.ring-av { position: relative; display: inline-grid; place-items: center; width: 34px; height: 34px; flex: none; }
-.ring-av .dist-ring { grid-area: 1 / 1; }
-.ring-av .coin-av { grid-area: 1 / 1; --av: 24px; font-size: 7px; }
 .hl-coin { margin-right: var(--space-4); vertical-align: -8px; }
 .signal-card-head .coin-av { margin-right: calc(-1 * var(--space-3)); }
 .coin-menu-list a .coin-av, .more-coins a .coin-av { margin-right: var(--space-3); vertical-align: -5px; font-size: 7px; }
@@ -2501,3 +2490,76 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
   .mrow, .ut-tab, .ut-ink, .dock, .tabbar { transition: none; }
   .mrow:active, .ut-tab:active, .tab:active { transform: none; }
 }
+
+/* ===== Setups rustig (2026-10-15) =====
+   Eén stille regel met filters, de stapelbediening alleen als de stapel aan staat, en kaarten zonder pillen en balken in de kop.
+   De knoppen hier zetten de algemene button-stijl (gevuld accent) bewust terug: vier gevulde pillen naast elkaar lazen als lawaai. */
+.st-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-6); margin: calc(-1 * var(--space-8)) 0 var(--space-8); color: var(--muted); font-size: var(--text-md); }
+.st-meta b { font-family: var(--mono); font-weight: 600; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.st-meta .kl-term { color: var(--text-dim); }
+
+.filter-row { display: flex; align-items: center; gap: var(--space-4); margin: 0 0 var(--space-6); }
+.filter-row .filter-chips { flex: 1; min-width: 0; margin: 0; gap: var(--space-3);
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent); }
+.filter-chips .chip { padding: 5px 12px; border: 1px solid var(--border-strong); color: var(--text-dim); font-size: var(--text-sm); line-height: 1.4; }
+.filter-chips .chip.is-active { background: var(--accent-bg); border-color: rgba(10, 186, 181, 0.45); color: var(--accent); }
+.stack-toggle, .stack-icon, .stack-act { font: inherit; font-weight: 500; cursor: pointer; }
+.stack-toggle { flex: none; padding: 5px 2px; background: none; border: 0; color: var(--accent); font-size: var(--text-sm); }
+.stack-toggle:hover, .stack-toggle:active { background: none; color: var(--accent); }
+
+.stack-bar { display: grid; gap: var(--space-5); margin: 0 0 var(--space-6); }
+.stack-bar[hidden] { display: none; }
+.stack-nav { display: flex; align-items: center; justify-content: center; gap: var(--space-6); }
+.stack-count { min-width: 8.5em; text-align: center; color: var(--text-dim); font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+.stack-icon { display: inline-grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 50%; background: none; border: 1px solid var(--border); color: var(--text-dim); }
+.stack-icon:hover { background: var(--panel-hover); border-color: var(--border-strong); color: var(--text); }
+.stack-icon:disabled { opacity: 0.35; cursor: default; }
+.stack-icon:disabled:hover { background: none; border-color: var(--border); color: var(--text-dim); }
+.stack-actions { display: grid; grid-template-columns: repeat(3, 1fr); border: 1px solid var(--border-strong); border-radius: 10px; overflow: hidden; }
+.stack-act { display: inline-flex; align-items: center; justify-content: center; gap: var(--space-3); min-height: 38px; padding: 0 var(--space-4);
+  background: none; border: 0; border-radius: 0; color: var(--text-dim); font-size: var(--text-md); white-space: nowrap; }
+.stack-act + .stack-act { border-left: 1px solid var(--border-strong); }
+.stack-act:hover { background: var(--panel-hover); color: var(--text); }
+.stack-act.is-keep { background: var(--accent-bg); color: var(--accent); }
+.stack-act.is-keep:hover { background: rgba(10, 186, 181, 0.22); color: var(--accent); }
+.stack-act:disabled { opacity: 0.4; cursor: default; }
+.stack-toggle:focus-visible, .stack-icon:focus-visible, .stack-act:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* Kaartkop zoals een marktrij: logo, coin met richting, eronder oordeel en bewijsstand klein, rechts de leeftijd. */
+.setup-head { flex-wrap: nowrap; gap: var(--space-6); align-items: center; }
+.setup-id { min-width: 0; display: grid; gap: 1px; }
+.setup-title { display: flex; align-items: center; gap: var(--space-4); margin: 0; }
+.setup-title .radar-dir { font-size: var(--text-2xs); padding: 1px 7px; }
+.setup-sub { display: flex; align-items: baseline; gap: var(--space-3); margin: 0; color: var(--muted); font-size: var(--text-sm); white-space: nowrap; }
+.setup-grade, .setup-grade-a, .setup-grade-b, .setup-grade-c { padding: 0; border: 0; border-radius: 0; background: none; font-family: var(--sans); font-weight: 500; font-size: var(--text-sm); color: var(--muted); }
+.setup-grade-a { color: var(--accent); }
+.setup-card.is-weak .setup-grade { opacity: 1; }
+.setup-age { align-self: flex-start; padding-top: 3px; white-space: nowrap; }
+.proof-tag::before { content: "·"; margin-right: var(--space-3); color: var(--muted); }
+.proof-tag .kl-term { color: var(--muted); text-underline-offset: 4px; }
+.proof-tag.is-bewezen .kl-term { color: var(--green); }
+.proof-tag.is-negatief .kl-term { color: var(--red); }
+.proof-pop { white-space: normal; }
+.proof-pop > * { display: block; }
+.proof-pop-title { margin-bottom: var(--space-3); font-weight: 600; }
+.proof-pop-text { color: var(--text-dim); }
+.proof-pop .proof-bar { max-width: none; margin: var(--space-6) 0 0; }
+.proof-pop-link { margin-top: var(--space-6); font-weight: 500; }
+.setup-card > .share-btn { align-self: flex-start; }
+.setup-card .r-bars { gap: var(--space-3); }
+.setup-card .r-bar-track { height: 4px; border-radius: 2px; }
+.setup-card .r-bar-track i { border-radius: 2px; opacity: 0.85; }
+
+/* Stappen: lichter. Het nummer in een klein rondje, alleen de huidige stap met accent; de uitleg gedempt. */
+.vd-steps { gap: var(--space-6); }
+.vd-step { grid-template-columns: 22px 1fr; gap: var(--space-5); opacity: 1; }
+.vd-step-n { width: 22px; height: 22px; margin-top: 1px; border-color: var(--border-strong); color: var(--muted); font-size: var(--text-2xs); }
+.vd-step.is-now .vd-step-n { background: var(--accent-bg); border-color: rgba(10, 186, 181, 0.5); color: var(--accent); }
+.vd-step-text strong { font-weight: 500; color: var(--text-dim); }
+.vd-step.is-now .vd-step-text strong { color: var(--text); }
+.vd-step-text .muted { font-size: var(--text-sm); }
+.step-dist { margin-top: 2px; }
+.step-approach { display: inline-block; position: relative; width: 64px; height: 3px; margin-right: var(--space-4); vertical-align: middle; border-radius: 2px; background: var(--border-strong); overflow: hidden; }
+.step-approach i { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--accent); transition: width 0.4s ease; }
+.step-approach.is-full i { background: var(--green); }
+@media (prefers-reduced-motion: reduce) { .step-approach i { transition: none; } }

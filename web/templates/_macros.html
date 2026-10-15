@@ -242,7 +242,8 @@
   <li class="vd-step{% if s.state == 'now' %} is-now{% elif s.state == 'done' %} is-done{% endif %}">
     <span class="vd-step-n">{{ loop.index }}</span>
     <span class="vd-step-text"><strong>{{ s.title }}</strong>
-      {% if s.dist is defined %}<span class="muted"{% if s.dist == "-" %} hidden{% endif %}>Nog <span {{ s.dist_key }}="distance"{% if s.live_coin is defined %} data-live-coin="{{ s.live_coin }}" data-live-level="{{ s.live_level }}" data-live-mode="{{ s.live_mode }}"{% endif %}>{{ s.dist }}</span> te gaan.</span>{% endif %}
+      {# De balk staat in dezelfde span als de afstand: live.js en kansen.js halen het hidden van de ouder weg zodra er een koers is. #}
+      {% if s.dist is defined %}<span class="muted step-dist"{% if s.dist == "-" %} hidden{% endif %}>{% if s.approach is defined %}<span class="step-approach" aria-hidden="true"><i style="width: {{ "%.0f"|format(s.approach or 0) }}%"></i></span>{% endif %}Nog <span {{ s.dist_key }}="distance"{% if s.live_coin is defined %} data-live-coin="{{ s.live_coin }}" data-live-level="{{ s.live_level }}" data-live-mode="{{ s.live_mode }}"{% endif %}>{{ s.dist }}</span> te gaan.</span>{% endif %}
       {% if s.sub and s.dist is not defined %}<span class="muted">{{ s.sub }}</span>{% endif %}
       {% if s.rr is defined and risk_eur %}<span class="steps-money">Raakt de stop, dan verlies je ongeveer € {{ "%.0f"|format(risk_eur) }}. Het doel levert ongeveer € {{ "%.0f"|format(risk_eur * s.rr) }}.</span>{% endif %}
     </span>
@@ -316,13 +317,13 @@
 {% macro setup_card(c, risk_eur=none) %}
 <article class="setup-card{% if c.grade is none or c.grade == 'C' %} is-weak{% endif %}" id="structuur-{{ c.id }}">
   <header class="setup-head">
-    <span class="ring-av"><svg class="dist-ring" viewBox="0 0 40 40" aria-hidden="true" title="Hoe dichter de koers bij je limiet, hoe voller de ring"><circle class="dist-ring-bg" cx="20" cy="20" r="17"/><circle class="dist-ring-fill" cx="20" cy="20" r="17" pathLength="100" stroke-dasharray="100" stroke-dashoffset="100"/></svg>{{ coin_avatar(c.coin, 24) }}</span>
-    <a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a>
-    <span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span>
-    <span class="setup-grade setup-grade-{{ (c.grade or 'c')|lower }}" title="Oordeel van de CEO">{{ c.grade | grade_word }}</span>
+    {{ coin_avatar(c.coin, 36, "setup-av") }}
+    <div class="setup-id">
+      <p class="setup-title"><a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a><span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span></p>
+      <p class="setup-sub"><span class="setup-grade setup-grade-{{ (c.grade or 'c')|lower }}" title="Oordeel van de CEO">{{ c.grade | grade_word }}</span>{{ proof_tag("structuur", "s" ~ c.id) }}</p>
+    </div>
     <span class="muted setup-age">{{ c.created_at | age }}</span>
   </header>
-  {{ proof_line("structuur", "s" ~ c.id) }}
   {{ c.chart }}
   {{ steps_list(c.steps, risk_eur) }}
   {{ r_bars(c.targets) }}
@@ -364,6 +365,19 @@
   {% if p.state == "proef" %}<span class="proof-bar" aria-hidden="true"><i style="width: {{ (p.progress * 100)|round(0) }}%"></i></span>{% endif %}
   <a href="/bewijs">Bewijs</a>
 </p>
+{% endmacro %}
+
+{# Bewijsstand als stil woord onder de coin: de uitleg, de voortgang naar een oordeel en de link naar Bewijs zitten achter een tik.
+   Een pil met balk op elke kaart las als rommel. #}
+{% macro proof_tag(trade_type, uid="") %}
+{% set p = proof(trade_type) %}
+{% set pid = "pt-" ~ trade_type ~ "-" ~ (uid or "x") %}
+<span class="proof-tag is-{{ p.state }}"><button type="button" class="kl-term" popovertarget="{{ pid }}">{{ p.label }}</button><span class="kl-pop proof-pop" id="{{ pid }}" popover>
+  <strong class="proof-pop-title">{{ p.label }}</strong>
+  <span class="proof-pop-text">{{ p.text }}</span>
+  {% if p.state == "proef" %}<span class="proof-bar" aria-hidden="true"><i style="width: {{ (p.progress * 100)|round(0) }}%"></i></span>{% endif %}
+  <a class="proof-pop-link" href="/bewijs">Bekijk Bewijs</a>
+</span></span>
 {% endmacro %}
 
 {# ===== Indeling (plan 2026-10-13). Kop, groot getal, kernregels, tabs, rijen en zoekveld: elke pagina bouwt hiermee,

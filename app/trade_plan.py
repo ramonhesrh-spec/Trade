@@ -65,8 +65,8 @@ APPROACH_SCALE_PCT = 3.0
 
 
 def approach_pct(distance_pct: Optional[float], scale_pct: float = APPROACH_SCALE_PCT) -> Optional[float]:
-    """Plek van de koers op de afstandsbalk: 0 (scale_pct of verder weg) tot 100 (op de instap). Dezelfde schaal van 3% als de afstandsring op de
-    Setups-kaarten (ring.js), maar die ring loopt voorbij de limiet door (1 - abs(v)/3) en deze balk niet: voorbij de limiet is hij vol."""
+    """Plek van de koers op de afstandsbalk: 0 (scale_pct of verder weg) tot 100 (op de instap). Dezelfde schaal van 3% als de balk in stap 1 op de
+    Setups-kaarten (ring.js, die met de absolute afstand rekent)."""
     if distance_pct is None:
         return None
     if distance_pct <= 0:
