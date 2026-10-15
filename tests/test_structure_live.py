@@ -100,14 +100,46 @@ class LiveTest(DbCase):
         self.run_live(BREAK_BAR + 4)
         self.assertEqual(len(self.graded), 1)                 # dezelfde breuk wordt niet opnieuw beoordeeld
 
-    def test_grade_c_gets_no_push_but_stays_on_the_page(self):
+    def test_grade_c_pushes_quietly_labelled_zwak_and_stays_on_the_page(self):
         self.run_live(BREAK_BAR + 4, grade="C")
-        self.assertEqual(len(self.pushed), 0)
+        self.assertEqual(len(self.pushed), 1)
+        title, _, _, silent = self.pushed[0]
+        self.assertIn("Structuur wacht", title)
+        self.assertIn("Zwak", title)
+        self.assertTrue(silent)
         self.assertEqual(len(repo.list_structure_setups(("waiting",))), 1)
+
+    def test_grade_a_is_loud_and_not_labelled_zwak(self):
+        self.run_live(BREAK_BAR + 4, grade="A")
+        self.assertFalse(self.pushed[0][3])
+        self.assertNotIn("Zwak", self.pushed[0][0])
 
     def test_grade_b_is_silent(self):
         self.run_live(BREAK_BAR + 4, grade="B")
         self.assertTrue(self.pushed[0][3])
+        self.assertNotIn("Zwak", self.pushed[0][0])
+
+    def test_grade_c_respects_budget_and_conflict_rule(self):
+        user_id = repo.list_users()[0]["id"]
+        now = datetime.now(timezone.utc).isoformat()
+        repo.record_push(user_id, "BTC", "long", now)           # tegenstrijdig met de short van de kans
+        self.run_live(BREAK_BAR + 4, grade="C")
+        self.assertEqual(self.pushed, [])
+        self.assertTrue(any("Tegenstrijdig" in n["body"] for n in repo.list_notifications(user_id)))
+
+    def test_grade_c_respects_daily_budget(self):
+        user_id = repo.list_users()[0]["id"]
+        now = datetime.now(timezone.utc).isoformat()
+        for coin in ("ETH", "SOL", "XRP", "ADA", "DOGE", "LINK"):
+            repo.record_push(user_id, coin, "long", now)
+        self.run_live(BREAK_BAR + 4, grade="C")
+        self.assertEqual(self.pushed, [])
+
+    def test_grade_c_respects_daily_structure_cap(self):
+        with mock.patch.object(config, "STRUCTURE_MAX_ALERTS_PER_DAY", 0):
+            self.run_live(BREAK_BAR + 4, grade="C")
+        self.assertEqual(self.pushed, [])
+        self.assertEqual(self.graded, [])
 
     def test_retest_fills_and_becomes_a_tracked_signal(self):
         self.run_live(BREAK_BAR + 4)

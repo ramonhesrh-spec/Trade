@@ -77,8 +77,8 @@ def open_chances(now: datetime) -> list[dict]:
     for s in safe("structuurplannen", lambda: repo.list_structure_setups(("waiting",), 50), []):
         expired = s.get("expires_at") and datetime.fromisoformat(s["expires_at"]) <= now
         out.append({"soort": "Structuur", "coin": s["coin"], "direction": s["direction"], "state": "verlopen" if expired else f"wacht, oordeel {s['grade'] or 'geen'}",
-                    "at": s["created_at"], "flag": "aanmaak-push alleen bij oordeel A/B; niet apart bij het bereiken van de limiet" if s["grade"] != "C" else "oordeel C: nooit een push",
-                    "skip": bool(expired) or s["grade"] == "C"})
+                    "at": s["created_at"], "flag": "aanmaak-push bij elk oordeel (A luid, B, C 'Zwak' en geen oordeel stil); bij het bereiken van de limiet volgt 'Structuur gevuld'",
+                    "skip": bool(expired)})
     for s in safe("smc-setups", repo.list_forming_smc_setups, []):
         out.append({"soort": "SMC-zone", "coin": s["coin"], "direction": s["direction"], "state": "bouwend", "at": s["created_at"],
                     "flag": f"zone gezet-push verstuurd: {'ja' if s['alert_sent'] else 'nee'}; in-de-zone-push verstuurd: {'ja' if s['zone_alert_sent'] else 'nee'}", "skip": False})

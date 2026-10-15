@@ -387,7 +387,7 @@ sudo systemctl start crypto-news.service crypto-script.service
   scenario's samen negatief zijn. `SCRIPT_ENABLED=false` zet het uit. Model: `SCRIPT_MODEL` (standaard `claude-haiku-5-5`).
 - `app/structure_live.py`: breuk van een lijn of range op 30m (detector uit `app/replay/breakretest.py`, alleen gesloten candles).
   Claude geeft een oordeel A, B of C; de code berekent niveau, stop en doelen. Elke breuk met een plan wordt gemeld: A luid, B en C
-  stil, zonder oordeel (Claude antwoordt niet) ook stil. Het oordeel staat in de titel. Het plan staat in de melding en op de pagina Setups (`/structuur#structuur-<id>`), vóórdat de limiet vult. Raakt de koers het niveau,
+  stil, zonder oordeel (Claude antwoordt niet) ook stil. Een C heeft 'Zwak' in de titel. Het oordeel staat bij de melding. Het plan staat in de melding en op de pagina Setups (`/structuur#structuur-<id>`), vóórdat de limiet vult. Raakt de koers het niveau,
   dan volgt een signaal met `trade_type = 'structuur'` (label ongetest, score op Bewijs). Max `STRUCTURE_MAX_ALERTS_PER_DAY` (30)
   per dag. Gaat vanzelf uit na `STRUCTURE_MAX_NEGATIVE` (30) afgeronde signalen die samen negatief zijn. `STRUCTURE_ENABLED=false`
   zet het uit. De mechanische versie scoorde -0,16R netto op een jaar candles (`scripts/breakretest_scan.py`): het oordeel van

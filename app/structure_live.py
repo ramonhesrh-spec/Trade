@@ -240,14 +240,15 @@ async def _discover(coin: str, now: datetime) -> None:
                 grade, reason = parse_grade(await asyncio.to_thread(call_claude, judge_context(coin, ev, b, plan)))
             except Exception:
                 logger.exception("Oordeel van Claude voor %s is mislukt", coin)
-        # Elke breuk met een plan staat op de pagina, ook C en een breuk zonder oordeel: jij beslist, het oordeel staat erbij. Alleen A en B geven een
-        # melding (A luid): een C vult de pagina, niet je vergrendelscherm. Bewijs houdt C apart (trade_type 'structuur_c').
+        # Elke breuk met een plan staat op de pagina en krijgt een melding: A luid, de rest stil. Een C meldt zich stil met 'Zwak' in de titel, zodat
+        # je ziet dat het oordeel laag is. Bewijs houdt C apart (trade_type 'structuur_c').
         state = "niet_gemeld" if capped else "waiting"
         repo.update_structure_judgement(setup_id, grade, reason, state)
         logger.info("Structuur %s %s %s: oordeel %s (%s)", coin, ev.direction, ev.kind, grade, state)
-        if state == "waiting" and grade != "C":
+        if state == "waiting":
             setup = {**row, "id": setup_id, "reason": reason}
-            await _push_all(push_notify.alert_title(coin, ev.direction, "Structuur wacht"), alert_body(setup, plan),
+            label = "Structuur wacht · Zwak" if grade == "C" else "Structuur wacht"
+            await _push_all(push_notify.alert_title(coin, ev.direction, label), alert_body(setup, plan),
                             f"/structuur#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A", coin=coin, direction=ev.direction)
 
 
