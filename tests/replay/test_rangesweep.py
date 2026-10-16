@@ -2,6 +2,7 @@ import json
 import os
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import numpy as np
 import pandas as pd
@@ -524,3 +525,54 @@ class SplitStopSideTest(unittest.TestCase):
         s = {"direction": "short", "zone_low": 105.0, "zone_high": 105.6, "extreme": None, "atr_t": 0.1, "range_high": 106.3, "range_low": 99.0,
              "legs": [(0.4, 106.3), (0.6, 105.2)]}
         self.assertGreater(rs.final_stop(s, "zone_025"), 106.3)
+
+
+class ChochApproachTest(unittest.TestCase):
+    """Zone-retest met choch15: de eerste nadering waarop alle voorwaarden kloppen telt, ook als een eerdere geen CHoCH had."""
+
+    def setUp(self):
+        self.f = rs.build_frames(*frames())
+
+    def run_with(self, fake):
+        with mock.patch.object(rs, "choch_index", fake):
+            return rs.find_setups(self.f, "1h", "zone", "zone", "choch15", use_htf=False)
+
+    def test_a_missing_choch_does_not_kill_the_zone(self):
+        starts = []
+
+        def fake(b15, k, start, direction, extreme):
+            starts.append((start, direction))
+            if len([x for x in starts if x[1] == direction]) == 1:
+                return None
+            # een 15m-slot voorbij de limiet (105,375 short, 100,625 long), zoals een echte CHoCH die zou geven
+            cl = b15["close"].to_numpy(float)
+            return next(m for m in range(start, len(cl)) if (cl[m] < 105.3 if direction == "short" else cl[m] > 100.7))
+
+        setups, refused = self.run_with(fake)
+        first = {}
+        for st, d in starts:
+            first.setdefault(d, st)
+        self.assertGreater(len(starts), 2)
+        for d in ("short", "long"):
+            mine = [s for s in setups if s["direction"] == d]
+            self.assertTrue(mine, d)
+            self.assertGreater(mine[0]["place_idx15"], first[d] + 1, "de setup komt bij de tweede nadering, niet de eerste")
+        self.assertEqual(sum(r["reason"] == "geen CHoCH op 15m binnen 6 uur" for r in refused), 2)
+
+    def test_an_approach_inside_the_same_visit_never_counts_twice(self):
+        starts = []
+
+        def fake(b15, k, start, direction, extreme):
+            starts.append((start, direction))
+            return None
+
+        self.run_with(fake)
+        self.assertGreater(len(starts), 2)
+        b = add_indicators(frames()[1]).reset_index(drop=True)
+        zones = rs.find_zones(b)
+        for start, d in starts:
+            i = start // 4 - 1
+            inner = [z.inner(d) for z in zones if z.kind == ("bear" if d == "short" else "bull") and rs.zone_active(z, i)]
+            touched = lambda j: any((b["high"].iloc[j] >= x) if d == "short" else (b["low"].iloc[j] <= x) for x in inner)
+            self.assertTrue(touched(i))
+            self.assertFalse(touched(i - 1), "dezelfde nadering telde twee keer")

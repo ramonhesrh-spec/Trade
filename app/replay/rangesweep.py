@@ -390,6 +390,8 @@ def _sweep_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dic
 
 
 def _zone_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dict], list[dict]]:
+    """Per zone de eerste nadering waarop alle voorwaarden kloppen. Een nadering zonder CHoCH of zonder geldige limiet is geen setup maar sluit de
+    zone niet af: pas als de koers de zone weer verlaten heeft telt de volgende aanraking als een nieuwe nadering (in_visit)."""
     b15 = frames["15m"]
     b, rlist = ranges
     hi, lo, cl, atr = (b[c].to_numpy(float) for c in ("high", "low", "close", "atr"))
@@ -399,12 +401,16 @@ def _zone_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dict
     for z in find_zones(b):
         d = SHORT if z.kind == "bear" else LONG
         inner = z.inner(d)
+        in_visit = False
         for i in range(z.known_idx + 1, min(len(b), z.known_idx + 1 + ZONE_MAX_AGE)):
             if not zone_active(z, i):
                 break
             near = (inner - APPROACH_ATR * atr[i] <= cl[i] < inner and hi[i] < inner) if d == SHORT else (inner < cl[i] <= inner + APPROACH_ATR * atr[i] and lo[i] > inner)
             touched = (hi[i] >= inner) if d == SHORT else (lo[i] <= inner)
             if not (near if confirm == "slot" else touched):
+                in_visit = False
+                continue
+            if in_visit:
                 continue
             at, r = ts.iloc[i] + TF_DELTA[tf], rlist[i]
             if r is None:
@@ -425,14 +431,16 @@ def _zone_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dict
                 m = None if k is None else choch_index(b15, k, start15, d, extreme)
                 if m is None:
                     refused.append({"at": at, "direction": d, "reason": "geen CHoCH op 15m binnen 6 uur"})
-                    break
+                    in_visit = True
+                    continue
                 placed_at, place_idx, ref_price = ts15.iloc[m] + TF_DELTA["15m"], m + 1, float(cl15[m])
             else:
                 placed_at, place_idx, ref_price = at, start15, float(cl[i])
             legs = legs_for(entry, d, r, inner, ref_price)
             if not legs:
                 refused.append({"at": placed_at, "direction": d, "reason": "geen geldige limiet: de zone ligt aan de verkeerde kant van de koers"})
-                break
+                in_visit = True
+                continue
             features = {**_range_features(r, ts.iloc[i], tf), "ob_opposite": z.disp_bars <= 2, "displacement_atr": z.disp_atr,
                         "zone_fresh": retests_before(z, b, i) <= 1, "zone_atr": (z.high - z.low) / atr[i]}
             setups.append(_setup(d, "zone", tf, r, z.low, z.high, ts.iloc[z.ob_idx], None, None, None, placed_at, place_idx, ref_price, legs,
