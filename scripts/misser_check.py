@@ -94,6 +94,10 @@ def window_for(coin: str, at: pd.Timestamp) -> tuple[pd.DataFrame, pd.DataFrame,
     return df, closed, int((closed["timestamp"] <= at).sum()) - 1
 
 
+def _g(value) -> str:
+    return "-" if value is None else f"{value:g}"
+
+
 def run_csv(path: str, only_parse: bool, fetch=None) -> dict | None:
     fetch = fetch or window_for
     try:
@@ -104,7 +108,7 @@ def run_csv(path: str, only_parse: bool, fetch=None) -> dict | None:
     for r in rows:
         when = f"{today.local(r['at']):%Y-%m-%d %H:%M}"
         if only_parse:
-            print(f"{r['coin']} {r['direction']} {when} instap {r['entry']:g} stop {r['stop']:g} doel {r['target']:g} uitkomst {r['outcome']}")
+            print(f"{r['coin']} {r['direction']} {when} instap {r['entry']:g} stop {_g(r['stop'])} doel {_g(r['target'])} uitkomst {r['outcome']}")
             continue
         try:
             _, closed, idx = fetch(r["coin"], pd.Timestamp(r["at"]))

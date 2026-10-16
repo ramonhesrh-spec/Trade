@@ -64,6 +64,32 @@ class ParseRowsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             misser.parse_rows("\n\n")
 
+    def test_empty_stop_and_target_become_none(self):
+        rows = misser.parse_rows(HEAD + "DOGE,short,2026-10-15 17:20,0.199,,,\n")
+        self.assertIsNone(rows[0]["stop"])
+        self.assertIsNone(rows[0]["target"])
+        self.assertEqual(rows[0]["entry"], 0.199)
+
+    def test_extra_columns_are_kept(self):
+        text = "coin,richting,tijd,instap,stop,doel,uitkomst,bron,notitie,tf\nARB,short,2026-10-16 17:52,0.19903,0.20446,0.16254,,arb.webp,top,2h\n"
+        r = misser.parse_rows(text)[0]
+        self.assertEqual((r["source"], r["note"], r["tf"]), ("arb.webp", "top", "2h"))
+
+    def test_missing_extra_columns_are_empty(self):
+        r = misser.parse_rows(HEAD + "BTC,long,2026-10-08 14:30,100,95,115,winst\n")[0]
+        self.assertEqual((r["source"], r["note"], r["tf"]), ("", "", ""))
+
+    def test_bad_tf_names_the_line(self):
+        text = "coin,richting,tijd,instap,stop,doel,uitkomst,tf\nBTC,long,2026-10-08 14:30,100,,,,3h\n"
+        with self.assertRaisesRegex(ValueError, "regel 2: tf"):
+            misser.parse_rows(text)
+
+    def test_seed_csv_parses(self):
+        rows = misser.parse_rows((ROOT / "docs" / "onderzoek" / "range-sweep" / "handtrades.csv").read_text(encoding="utf-8"))
+        self.assertEqual([r["coin"] for r in rows], ["ARB", "APT", "APT", "WLD", "AAVE"])
+        self.assertEqual(rows[4]["at"].isoformat(), "2026-10-15T21:42:00+00:00")
+        self.assertEqual({r["tf"] for r in rows}, {"30m", "1h", "2h"})
+
 
 class CsvFormatTest(unittest.TestCase):
     def test_bom_header(self):
@@ -190,6 +216,17 @@ class RunCsvTest(unittest.TestCase):
             with contextlib.redirect_stdout(out):
                 misser_check.run_csv(str(f), True)
         self.assertIn("1 rijen gelezen", out.getvalue())
+
+
+class DraftRowsTest(unittest.TestCase):
+    def test_draft_takes_coin_direction_time_and_first_price(self):
+        msgs = [{"id": 7, "received_at": "2026-10-15T15:28:00+00:00", "raw_text": "Entry was up top 0.19900 Now 0.19550", "coin": "ARB", "direction": "short"}]
+        r = misser.draft_rows(msgs)[0]
+        self.assertEqual((r["coin"], r["richting"], r["tijd"], r["instap"]), ("ARB", "short", "2026-10-15 17:28", "0.199"))
+        self.assertEqual(r["bron"], "bericht 7")
+
+    def test_draft_skips_messages_without_coin_or_direction(self):
+        self.assertEqual(misser.draft_rows([{"id": 1, "received_at": "2026-10-15T15:28:00+00:00", "raw_text": "gm", "coin": None, "direction": None}]), [])
 
 
 if __name__ == "__main__":

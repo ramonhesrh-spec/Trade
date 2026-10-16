@@ -1,16 +1,25 @@
 """Zuivere logica voor de misser-controle op een lijst handtrades: de CSV lezen en de uitkomsten samenvatten. Geen netwerk, geen drempels."""
 import csv
 import io
+import re
 from collections import Counter
 from datetime import datetime, timezone
 from zoneinfo import ZoneInfo
 
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 COLUMNS = ["coin", "richting", "tijd", "instap", "stop", "doel", "uitkomst"]
+OPTIONAL = ["bron", "notitie", "tf"]
+TIMEFRAMES = ("", "30m", "1h", "2h", "4h")
+_PRICE = re.compile(r"\d+(?:[.,]\d+)?")
 
 
 def _number(raw: str) -> float:
     return float(raw.strip().replace(",", "."))
+
+
+def _maybe_number(raw: str):
+    """Leeg veld: None. Voorbeelden uit de community hebben vaak alleen een instap; een verzonnen stop zou de misser-controle vervuilen."""
+    return None if not raw.strip() else _number(raw)
 
 
 def _local_to_utc(raw: str) -> datetime:
@@ -23,7 +32,7 @@ def _local_to_utc(raw: str) -> datetime:
 
 
 def parse_rows(text: str) -> list[dict]:
-    """CSV met de kolommen coin,richting,tijd,instap,stop,doel,uitkomst. Elke fout noemt het regelnummer (de kopregel is regel 1)."""
+    """CSV met de kolommen coin,richting,tijd,instap,stop,doel,uitkomst (stop en doel mogen leeg zijn) en optioneel bron,notitie,tf. Elke fout noemt het regelnummer (de kopregel is regel 1)."""
     text = text.lstrip("\ufeff")                                 # Excel zet een BOM voor de eerste kolomnaam
     first = next((ln for ln in text.splitlines() if ln.strip()), "")
     delimiter = ";" if ";" in first and "," not in first else ","      # Nederlandse Excel slaat op met puntkomma
@@ -41,6 +50,7 @@ def parse_rows(text: str) -> list[dict]:
     if dupes:
         raise ValueError(f"regel {head_no}: kolom komt dubbel voor in de kopregel: {', '.join(dupes)}")
     pos = {c: names.index(c) for c in COLUMNS}
+    opt = {c: names.index(c) for c in OPTIONAL if c in names}
     rows = []
     for n, cells in numbered[1:]:
         while len(cells) > len(names) and not cells[-1].strip():       # Excel zet soms lege velden achteraan
@@ -55,10 +65,14 @@ def parse_rows(text: str) -> list[dict]:
             coin = cells[pos["coin"]].strip().upper()
             if not coin:
                 raise ValueError("coin is leeg")
+            tf = cells[opt["tf"]].strip().lower() if "tf" in opt else ""
+            if tf not in TIMEFRAMES:
+                raise ValueError(f"tf moet leeg of een van 30m, 1h, 2h, 4h zijn, kreeg '{tf}'")
             rows.append({
                 "coin": coin, "direction": direction, "at": _local_to_utc(cells[pos["tijd"]]),
-                "entry": _number(cells[pos["instap"]]), "stop": _number(cells[pos["stop"]]), "target": _number(cells[pos["doel"]]),
+                "entry": _number(cells[pos["instap"]]), "stop": _maybe_number(cells[pos["stop"]]), "target": _maybe_number(cells[pos["doel"]]),
                 "outcome": cells[pos["uitkomst"]].strip(),
+                "source": cells[opt["bron"]].strip() if "bron" in opt else "", "note": cells[opt["notitie"]].strip() if "notitie" in opt else "", "tf": tf,
             })
         except ValueError as exc:
             raise ValueError(f"regel {n}: {exc}") from None
@@ -78,3 +92,17 @@ def summarize(results: list[dict]) -> dict:
         elif r.get("blocker"):
             by_blocker[r["blocker"]] += 1
     return {"n": len(results), "seen": seen, "by_engine": dict(by_engine), "by_blocker": dict(by_blocker)}
+
+
+def draft_rows(messages: list[dict]) -> list[dict]:
+    """Conceptregels voor de handtrades-CSV uit opgeslagen berichten: coin en kant zoals de pipeline ze las, tijd in Nederlandse tijd, de eerste
+    prijs uit de tekst als instap. Stop, doel en uitkomst blijven leeg: die vult de gebruiker, wij raden niet."""
+    out = []
+    for m in messages:
+        if not m.get("coin") or m.get("direction") not in ("long", "short"):
+            continue
+        at = datetime.fromisoformat(m["received_at"]).astimezone(LOCAL_TZ)
+        price = _PRICE.search(m.get("raw_text") or "")
+        out.append({"coin": m["coin"].upper(), "richting": m["direction"], "tijd": at.strftime("%Y-%m-%d %H:%M"),
+                    "instap": f"{_number(price.group(0)):g}" if price else "", "bron": f"bericht {m['id']}", "notitie": (m.get("raw_text") or "")[:120]})
+    return out
