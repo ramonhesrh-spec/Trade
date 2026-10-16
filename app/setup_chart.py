@@ -5,6 +5,8 @@ from datetime import datetime
 from html import escape
 from typing import Optional
 
+import pandas as pd
+
 W, H = 560, 320
 PAD_L, PAD_R, PAD_T, PAD_B = 6, 132, 14, 14
 LABEL_CHAR_W = 8.0        # breedte van een teken in .sc-label (13px monospace is 7,8); de rechtermarge groeit mee met het langste label
@@ -12,6 +14,7 @@ LABEL_GAP = 16            # minimale afstand tussen twee labels, zodat dicht bij
 SHOWN_BARS = 44           # genoeg om de structuur te zien, weinig genoeg om leesbaar te blijven op een telefoon
 FUTURE_BARS = 9          # lege ruimte rechts voor stopzone en doelen
 BAR_SECONDS = 30 * 60
+MAX_RS_BARS = 240         # een range beslaat tot 120 candles plus de aanloop en de afloop; meer maakt een candle dunner dan een pixel
 
 
 def _fmt(x: float) -> str:
@@ -115,6 +118,90 @@ def trade_svg(candles: list[list], direction: str, coin: str, entry: float, stop
     r = abs(take - entry) / risk if risk else 0.0
     plan = {"level": entry, "stop": stop, "targets": [take], "targets_r": [r], "level_label": "Instap"}
     return setup_svg(candles, {"coin": coin, "direction": direction}, plan, price)
+
+
+def _epoch(value) -> float:
+    """Candles zijn iso-tekst, de setups van rangesweep zijn Timestamps; zonder tijdzone geldt UTC, voor allebei op dezelfde manier."""
+    t = pd.Timestamp(value)
+    return (t.tz_localize("UTC") if t.tzinfo is None else t).timestamp()
+
+
+def range_sweep_svg(candles: list[list], setup: dict, stop: float, price: Optional[float] = None, zones: Optional[list[dict]] = None) -> str:
+    """Een range sweep-setup zoals de trader hem tekent: de range als vak, de zone van de setup, eventuele andere zones gedempt, de wick van de sweep,
+    de limiet(en), de stop en het midden en de overkant van de range als referentie (er is geen doel). candles: [[iso, o, h, l, c], ...] oud naar nieuw,
+    de aanroeper kiest het venster; setup: een element uit rangesweep.find_setups. Geeft '' zonder candles."""
+    if not candles:
+        return ""
+    candles = candles[-MAX_RS_BARS:]
+    n = len(candles)
+    times = [_epoch(c[0]) for c in candles]
+    diffs = sorted(b - a for a, b in zip(times, times[1:]))
+    bar_seconds = diffs[len(diffs) // 2] if diffs else BAR_SECONDS
+    short = setup["direction"] == "short"
+    legs = setup["legs"]
+    rng_hi, rng_lo = setup["range_high"], setup["range_low"]
+    ref = [((rng_hi + rng_lo) / 2, "Midden (ref.)"), (rng_lo if short else rng_hi, "Overkant (ref.)")]
+    marks = [(p, "sc-limit", (f"Limiet {round(w * 100):d}%" if len(legs) > 1 else "Limiet") + f" {_fmt(p)}") for w, p in legs]
+    marks += [(stop, "sc-stop", f"Stop {_fmt(stop)}")] + [(v, "sc-target", f"{name} {_fmt(v)}") for v, name in ref]
+    if price:
+        marks.append((price, "sc-price", f"Nu {_fmt(price)}"))
+    pad_r = max(PAD_R, int(max(len(m[2]) for m in marks) * LABEL_CHAR_W + 10))
+    plot_w, plot_h = W - PAD_L - pad_r, H - PAD_T - PAD_B
+    step = plot_w / (n + FUTURE_BARS)
+    shown = candles
+    values = [c[3] for c in shown] + [c[2] for c in shown] + [m[0] for m in marks] + [setup["zone_low"], setup["zone_high"]]
+    if setup.get("extreme") is not None:
+        values.append(setup["extreme"])
+    lo, hi = min(values), max(values)
+    span = (hi - lo) or 1.0
+    lo, hi = lo - span * 0.05, hi + span * 0.05
+
+    def y(v: float) -> float:
+        return PAD_T + (hi - v) / (hi - lo) * plot_h
+
+    def x(i: float) -> float:
+        return PAD_L + (i + 0.5) * step
+
+    def idx(value) -> float:
+        return (_epoch(value) - times[0]) / bar_seconds
+
+    right = PAD_L + plot_w
+    left = float(PAD_L)
+
+    def clamp_x(i: float) -> float:
+        return min(right, max(left, x(i)))
+
+    def box(x0: float, x1: float, v_hi: float, v_lo: float, cls: str, label: str = "", label_below: bool = False) -> str:
+        top, bottom = max(PAD_T, y(v_hi)), min(PAD_T + plot_h, y(v_lo))
+        out = f'<rect class="{cls}" x="{x0:.1f}" y="{top:.1f}" width="{max(1.0, x1 - x0):.1f}" height="{max(1.0, bottom - top):.1f}"/>'
+        return out + (f'<text class="sc-box-label" x="{x0 + 3:.1f}" y="{(bottom - 4 if label_below else top + 11):.1f}">{label}</text>' if label else "")
+
+    out = [f'<svg class="sc" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(setup["family"])} setup {escape(setup["direction"])}">']
+    for z in zones or []:
+        out.append(box(clamp_x(idx(z["from"])), right, z["high"], z["low"], "sc-zone is-other"))
+    out.append(box(clamp_x(idx(setup["range_first_at"])), clamp_x(idx(setup["placed_at"])), rng_hi, rng_lo, "sc-range", "Range", label_below=True))
+    own = "Order block" if setup["family"] == "sweep" else ("Aanbod" if short else "Vraag")
+    out.append(box(clamp_x(idx(setup["zone_at"])), right, setup["zone_high"], setup["zone_low"], "sc-zone", own))
+
+    for i, (_, o, h, low, c) in enumerate(shown):
+        cls = "sc-up" if c >= o else "sc-down"
+        out.append(f'<line class="sc-wick {cls}" x1="{x(i):.1f}" x2="{x(i):.1f}" y1="{y(h):.1f}" y2="{y(low):.1f}"/>'
+                   f'<rect class="sc-body {cls}" x="{x(i) - step * 0.34:.1f}" y="{min(y(o), y(c)):.1f}" width="{step * 0.68:.1f}" height="{max(1.0, abs(y(o) - y(c))):.1f}"/>')
+    if setup.get("sweep_at") is not None and setup.get("extreme") is not None:
+        sx, sy = clamp_x(idx(setup["sweep_at"])), y(setup["extreme"])
+        out.append(f'<line class="sc-sweep" x1="{sx - 5:.1f}" x2="{sx + 5:.1f}" y1="{sy:.1f}" y2="{sy:.1f}"/>'
+                   f'<text class="sc-box-label" x="{sx + 7:.1f}" y="{sy + 4:.1f}">Sweep</text>')
+
+    placed, last_y = [], -1e9
+    for v, cls, text in sorted(marks, key=lambda m: y(m[0])):
+        label_y = max(y(v), last_y + LABEL_GAP)
+        placed.append((v, cls, text, label_y))
+        last_y = label_y
+    for v, cls, text, label_y in placed:
+        out.append(f'<line class="sc-line {cls}" x1="{x(n - 1):.1f}" x2="{right:.1f}" y1="{y(v):.1f}" y2="{y(v):.1f}"/>'
+                   f'<text class="sc-label {cls}" x="{right + 6:.1f}" y="{label_y + 4:.1f}">{escape(text)}</text>')
+    out.append("</svg>")
+    return "".join(out)
 
 
 def demo_svg() -> str:
