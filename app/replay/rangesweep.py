@@ -46,6 +46,12 @@ def resample(bars: pd.DataFrame, tf: str) -> pd.DataFrame:
     return out[count == int(delta / step)].dropna().reset_index()
 
 
+def closed_only(df: pd.DataFrame, now: pd.Timestamp, tf: str) -> pd.DataFrame:
+    """Alleen candles die op `now` gesloten zijn. De live motor moet elk frame hiermee voeden: range-, zone- en setupdetectie gaan uit van
+    gesloten candles en zouden op een candle die nog vormt een range of CHoCH zien die bij het sluiten verdwijnt. Het lab heeft alleen gesloten candles."""
+    return df[df["timestamp"] + TF_DELTA[tf] <= now].reset_index(drop=True)
+
+
 def build_frames(b15: pd.DataFrame, b1h: pd.DataFrame, b4h: pd.DataFrame) -> dict[str, pd.DataFrame]:
     return {"15m": b15.reset_index(drop=True), "30m": resample(b15, "30m"), "1h": b1h.reset_index(drop=True), "2h": resample(b1h, "2h"),
             "4h": b4h.reset_index(drop=True)}
@@ -477,7 +483,8 @@ def _zone_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dict
 
 def find_setups(frames: dict, tf: str, family: str, entry: str, confirm: str, use_htf: bool,
                 ranges: Optional[tuple[pd.DataFrame, list]] = None) -> tuple[list[dict], list[dict]]:
-    """frames: uitvoer van build_frames. ranges: uitvoer van range_series voor tf (het lab rekent die één keer per coin)."""
+    """frames: uitvoer van build_frames, met uitsluitend gesloten candles (live: elk frame door closed_only). ranges: uitvoer van range_series voor tf
+    (het lab rekent die één keer per coin)."""
     ranges = ranges if ranges is not None else range_series(frames[tf], tf)
     if family == "zone":
         return _zone_setups(frames, tf, entry, confirm, use_htf, ranges)

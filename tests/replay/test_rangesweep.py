@@ -709,3 +709,84 @@ class ZoneDisplacementTest(unittest.TestCase):
         self.assertAlmostEqual(rs.zone_displacement(bear, np.array([99.0, 98.5])), 1.5)
         self.assertAlmostEqual(rs.zone_displacement(bear, np.array([99.0, 98.5]), np.array([97.0, 98.0])), 3.0)
         self.assertAlmostEqual(rs.zone_displacement(bull, np.array([102.0]), np.array([104.5])), 3.5)
+
+
+class ClosedOnlyTest(unittest.TestCase):
+    def test_drops_the_candle_that_is_still_forming(self):
+        _, b1h, _ = frames()
+        last = b1h["timestamp"].iloc[-1]
+        self.assertEqual(len(rs.closed_only(b1h, last + pd.Timedelta(hours=1), "1h")), len(b1h))
+        self.assertEqual(len(rs.closed_only(b1h, last + pd.Timedelta(minutes=59), "1h")), len(b1h) - 1)
+        self.assertEqual(len(rs.closed_only(b1h, last, "1h")), len(b1h) - 1)
+
+    def test_timeframe_decides_when_a_candle_is_closed(self):
+        b15, _, b4h = frames()
+        now = b4h["timestamp"].iloc[-1] + pd.Timedelta(hours=3)
+        self.assertEqual(len(rs.closed_only(b4h, now, "4h")), len(b4h) - 1)
+        self.assertGreater(len(rs.closed_only(b15, now, "15m")), len(b15) - 12)
+
+    def test_a_forming_candle_cannot_change_a_setup(self):
+        b15, b1h, b4h = frames()
+        now = b1h["timestamp"].iloc[SWEEP_HOUR] + pd.Timedelta(hours=3)
+        cut = lambda df, tf: rs.closed_only(df, now, tf)
+        base = rs.find_setups(rs.build_frames(cut(b15, "15m"), cut(b1h, "1h"), cut(b4h, "4h")), "1h", "sweep", "ob", "slot", use_htf=False)[0]
+        forming = b15.iloc[:4 * (SWEEP_HOUR + 3) + 2].copy()
+        forming.loc[forming.index[-1], "high"] = 120.0
+        again = rs.find_setups(rs.build_frames(cut(forming, "15m"), cut(rs.resample(forming, "1h"), "1h"), cut(b4h, "4h")), "1h", "sweep", "ob", "slot",
+                               use_htf=False)[0]
+        self.assertEqual(base, again)
+
+
+_VARIANTS = [("zone", "zone", "slot"), ("zone", "split", "slot"), ("zone", "zone", "choch15"), ("sweep", "ob", "slot"), ("sweep", "ob", "choch15")]
+
+
+def _mirror(df: pd.DataFrame, c: float) -> pd.DataFrame:
+    d = df.copy()
+    d["high"], d["low"], d["open"], d["close"] = c - df["low"], c - df["high"], c - df["open"], c - df["close"]
+    return d
+
+
+class MirrorTest(unittest.TestCase):
+    """Een gespiegelde markt geeft gespiegelde setups: short en long gebruiken dezelfde regels."""
+
+    def check(self, b15, b1h, b4h, c, tfs):
+        f = rs.build_frames(b15, b1h, b4h)
+        fm = rs.build_frames(_mirror(b15, c), _mirror(b1h, c), _mirror(b4h, c))
+        total = 0
+        for tf in tfs:
+            for fam, entry, conf in _VARIANTS:
+                a = rs.find_setups(f, tf, fam, entry, conf, use_htf=False)[0]
+                m = rs.find_setups(fm, tf, fam, entry, conf, use_htf=False)[0]
+                key = lambda s, mir: (("long" if s["direction"] == "short" else "short") if mir else s["direction"], str(s["placed_at"]),
+                                      tuple((w, round(c - p if mir else p, 6)) for w, p in s["legs"]),
+                                      tuple(sorted(round(c - v if mir else v, 6) for v in rs.raw_stops(s).values())))
+                self.assertEqual(sorted(key(s, False) for s in a), sorted(key(s, True) for s in m), (tf, fam, entry, conf))
+                total += len(a)
+        return total
+
+    def test_fixture_market(self):
+        self.assertGreater(self.check(*frames(), 206.0, ("1h", "2h")), 5)
+
+    def test_random_market(self):
+        self.assertGreater(self.check(*_random_market(seed=4), 200.0, ("1h", "2h")), 5)
+
+
+class CutLookaheadTest(unittest.TestCase):
+    """Op een willekeurig moment T de toekomst wegsnijden mag geen setup of weigering tot T veranderen (de lab-check van de reviewer)."""
+
+    def test_cut_at_several_moments(self):
+        b15, b1h, b4h = _random_market(n=6000, seed=2)
+        full = rs.build_frames(b15, b1h, b4h)
+        norm = lambda s: {k: v for k, v in s.items() if k != "features"}
+        refs = lambda rr, T: sorted((str(x["at"]), x["direction"], x["reason"]) for x in rr if x["at"] <= T)
+        compared = 0
+        for T in pd.date_range("2024-01-20", "2024-02-20", freq="11D", tz="UTC") + pd.Timedelta("7h15min"):
+            cut = rs.build_frames(rs.closed_only(b15, T, "15m"), rs.closed_only(b1h, T, "1h"), rs.closed_only(b4h, T, "4h"))
+            for tf in ("1h", "2h"):
+                for fam, entry, conf in _VARIANTS:
+                    S, R = rs.find_setups(full, tf, fam, entry, conf, use_htf=True)
+                    s, r = rs.find_setups(cut, tf, fam, entry, conf, use_htf=True)
+                    self.assertEqual([norm(x) for x in S if x["placed_at"] <= T], [norm(x) for x in s if x["placed_at"] <= T], (T, tf, fam, entry, conf))
+                    self.assertEqual(refs(R, T), refs(r, T), (T, tf, fam, entry, conf))
+                    compared += len(s) + len(r)
+        self.assertGreater(compared, 20)
