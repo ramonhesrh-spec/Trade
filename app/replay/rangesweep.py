@@ -240,7 +240,9 @@ def find_sweeps(b: pd.DataFrame, active: list[Optional[Range]]) -> tuple[list[Sw
                 continue
             key = (direction, r.first_at, r.high, r.low)
             # Na een sweep vormt de prik vaak een nieuwe range met bijna dezelfde randen: binnen SWEEP_COOLDOWN telt dezelfde kant één keer.
-            if key in used or j - last_start.get(direction, -10**9) < SWEEP_COOLDOWN:
+            skip = "al een sweep op deze rand" if key in used else ("cooldown na eerdere prik" if j - last_start.get(direction, -10**9) < SWEEP_COOLDOWN else "")
+            if skip:
+                refused.append({"at": ts.iloc[j], "direction": direction, "reason": skip})
                 continue
             used.add(key)
             last_start[direction] = j
@@ -401,7 +403,7 @@ def _zone_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dict
     for z in find_zones(b):
         d = SHORT if z.kind == "bear" else LONG
         inner = z.inner(d)
-        in_visit = False
+        in_visit, done_at = False, None
         for i in range(z.known_idx + 1, min(len(b), z.known_idx + 1 + ZONE_MAX_AGE)):
             if not zone_active(z, i):
                 break
@@ -413,6 +415,10 @@ def _zone_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dict
             if in_visit:
                 continue
             at, r = ts.iloc[i] + TF_DELTA[tf], rlist[i]
+            if done_at is not None:
+                refused.append({"at": at, "direction": d, "reason": f"zone had al een setup op {done_at:%Y-%m-%d %H:%M}"})
+                in_visit = True
+                continue
             if r is None:
                 refused.append({"at": at, "direction": d, "reason": f"geen range op {tf} bij de nadering van de zone"})
                 continue
@@ -445,7 +451,7 @@ def _zone_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dict
                         "zone_fresh": retests_before(z, b, i) <= 1, "zone_atr": (z.high - z.low) / atr[i]}
             setups.append(_setup(d, "zone", tf, r, z.low, z.high, ts.iloc[z.ob_idx], None, None, None, placed_at, place_idx, ref_price, legs,
                                  float(atr[i]), trend[i], hh[i], ll[i], ok, features))
-            break
+            done_at, in_visit = placed_at, True
     return setups, refused
 
 

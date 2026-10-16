@@ -576,3 +576,47 @@ class ChochApproachTest(unittest.TestCase):
             touched = lambda j: any((b["high"].iloc[j] >= x) if d == "short" else (b["low"].iloc[j] <= x) for x in inner)
             self.assertTrue(touched(i))
             self.assertFalse(touched(i - 1), "dezelfde nadering telde twee keer")
+
+
+class DiagnoseReasonTest(unittest.TestCase):
+    """Elke weigering schrijft haar eigen reden, zodat de misser-controle niet 'geen prik voorbij de rand' meldt terwijl er wel een prik was."""
+
+    def second_prick(self, hour=SWEEP_HOUR + 2):
+        b15, _, b4h = frames()
+        b15 = b15.copy()
+        b15.loc[4 * hour + 1, "high"] = 106.4
+        b1h = rs.resample(b15, "1h")
+        return rs.build_frames(b15, b1h, rs.resample(b15, "4h")), b1h["timestamp"].iloc[hour]
+
+    def why(self, f, at, family="sweep", entry="ob"):
+        d = rs.diagnose(f, at, "short", "1h", family, entry, "slot", False, window=pd.Timedelta(minutes=30))
+        self.assertFalse(d["seen"])
+        return d["reason"]
+
+    def test_prick_inside_the_cooldown(self):
+        f, at = self.second_prick()
+        self.assertEqual(self.why(f, at), "cooldown na eerdere prik")
+
+    def test_second_prick_on_the_same_range_side(self):
+        f, at = self.second_prick(SWEEP_HOUR + 1)
+        with mock.patch.object(rs, "SWEEP_COOLDOWN", 1):
+            _, refused = rs.find_setups(f, "1h", "sweep", "ob", "slot", use_htf=False)
+        self.assertIn((at, "al een sweep op deze rand"), [(r["at"], r["reason"]) for r in refused])
+
+    def test_later_approach_of_a_zone_that_already_had_a_setup(self):
+        b15, b1h, b4h = frames()
+        f = rs.build_frames(b15, b1h, b4h)
+        setups, refused = rs.find_setups(f, "1h", "zone", "zone", "slot", use_htf=False)
+        short = [s for s in setups if s["direction"] == "short"][0]
+        later = [r for r in refused if r["direction"] == "short" and r["reason"].startswith("zone had al een setup op ")]
+        self.assertTrue(later)
+        self.assertEqual(later[0]["reason"], f"zone had al een setup op {short['placed_at']:%Y-%m-%d %H:%M}")
+        self.assertGreater(later[0]["at"], short["placed_at"])
+        self.assertEqual(self.why(f, later[0]["at"], "zone", "zone"), later[0]["reason"])
+
+    def test_no_refusal_inside_the_visit_that_made_the_setup(self):
+        f = rs.build_frames(*frames())
+        setups, refused = rs.find_setups(f, "1h", "zone", "zone", "slot", use_htf=False)
+        short = [s for s in setups if s["direction"] == "short"][0]
+        first = min(r["at"] for r in refused if r["reason"].startswith("zone had al een setup op "))
+        self.assertGreater(first - short["placed_at"], pd.Timedelta(hours=5))
