@@ -452,13 +452,16 @@ def find_setups(frames: dict, tf: str, family: str, entry: str, confirm: str, us
 
 def raw_stops(setup: dict) -> dict[str, float]:
     """Ruwe stops: buitenkant van de zone (of het uiterste van de sweep) plus een buffer in ATR. Bij de zone-retest is er geen wick."""
-    side = 1 if setup["direction"] == SHORT else -1
-    outer = setup["zone_high"] if setup["direction"] == SHORT else setup["zone_low"]
+    short = setup["direction"] == SHORT
+    side, far = (1, max) if short else (-1, min)
+    # Bij split ligt het randbeen op de rand van de range, en die kan voorbij de zone liggen: dan zou het been nooit vullen vóór de stop.
+    legs = [p for _, p in setup["legs"]]
+    outer = far([setup["zone_high"] if short else setup["zone_low"], *legs])
     out = {}
     for name, (base, buf) in STOP_BUFFER.items():
         ref = outer if base == "zone" else setup.get("extreme")
         if ref is not None:
-            out[name] = ref + side * buf * setup["atr_t"]
+            out[name] = far(ref, *legs) + side * buf * setup["atr_t"]
     return out
 
 

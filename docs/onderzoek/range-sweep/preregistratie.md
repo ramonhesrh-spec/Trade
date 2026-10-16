@@ -36,7 +36,7 @@ Cos867 schreef vijf regels. We wachten niet op uitleg van hem: we leggen zelf va
 
 **Limiet die niet geldig is.** Een limiet aan de verkeerde kant van de koers bij het plaatsen (short: op of onder het laatste slot) vervalt; geen geldige limiet, geen setup.
 
-**Stops.** `zone_025` en `zone_05`: buitenkant van de zone plus 0,25 of 0,5 maal de ATR (van T bij zone-retest, van de triggerframe bij sweep). `wick_025`: uiterste van de sweep plus 0,25 ATR (alleen sweep). `zone_0`: buitenkant zonder buffer, alleen ter vergelijking. Daarna `smc_eval.floor_stop(direction, geplande instap, stop, min_pct=0.4)`.
+**Stops.** `zone_025` en `zone_05`: buitenkant van de zone plus 0,25 of 0,5 maal de ATR (van T bij zone-retest, van de triggerframe bij sweep). `wick_025`: uiterste van de sweep plus 0,25 ATR (alleen sweep). `zone_0`: buitenkant zonder buffer, alleen ter vergelijking. Bij de split (`RZ_2H_SPLIT`) telt als buitenkant de verste van de zonerand en de beenprijzen (het randbeen ligt op de rand van de range, vaak voorbij de zone), zodat elk been aan de winstkant van de definitieve stop ligt. Daarna `smc_eval.floor_stop(direction, geplande instap, stop, min_pct=0.4)`.
 
 **Vulling en verval (op 15m).** Short-limiet vult als het hoog de limiet raakt, tegen de limietprijs; long gespiegeld. De order staat 96 15m-candles (24 uur). Vervalt eerder als een candle al voorbij de stop opent ("stop voor vulling") of als de koers het midden van de range raakt ("weggelopen").
 
@@ -129,6 +129,7 @@ Taken 13 tot 17 mogen naast fase 2 gebouwd worden (de code laat zonder geslaagde
 - **Verval.** Een niet gevulde limiet vervalt na 24 uur (96 15m-candles, `stopquality.TTL_15M`).
 - **Datums.** De datums van de vijf voorbeelden komen van de gebruiker en staan op "te bevestigen" (AAVE 2026-10-15 23:42 CEST, de andere vier 2026-10-16).
 - **Zonedetector.** De naam van de TradingView-indicator is onbekend; we gebruiken onze eigen zonedetector zoals hierboven gedefinieerd.
+- **Stop bij de split (2026-10-16, vóór de eerste labrun).** De stop gebruikte alleen de buitenkant van de zone, maar het randbeen (40%) ligt op de rand van de range en kon voorbij die stop liggen (58 van 897 stopberekeningen in een controlerun): dat been kon nooit vullen. De buitenkant is nu de verste van zonerand en beenprijzen. Reden: een been voorbij de stop is geen limietorder met een stop erachter maar een fout in de definitie.
 - **Meer voorbeelden.** De gebruiker stuurt later 5 of meer voorbeelden. Dat blokkeert niets en telt mee voor S0 vanaf 10 voorbeelden.
 
 ## Constanten

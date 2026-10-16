@@ -479,3 +479,48 @@ class ChochAndLimitTest(unittest.TestCase):
         self.assertEqual(rs.legs_for("zone", "long", r, 102.0, 102.0), [])
         self.assertEqual(rs.legs_for("split", "short", r, 108.0, 109.0), [(0.4, 110.0)])
         self.assertEqual(rs.legs_for("split", "long", r, 102.0, 101.0), [(0.4, 100.0)])
+
+
+def _random_market(n: int = 9000, seed: int = 1):
+    """Een terugkerende markt (naar een langzaam verschuivend gemiddelde) die genoeg ranges en zones geeft voor eigenschapstoetsen."""
+    rng = np.random.default_rng(seed)
+    x, lvl, mu = np.zeros(n), 100.0, 100.0
+    for t in range(1, n):
+        if t % 1500 == 0:
+            mu *= np.exp(rng.normal(0, 0.08))
+        lvl = lvl + 0.02 * (mu - lvl) + rng.normal(0, 0.35) * lvl / 100
+        x[t] = lvl
+    x[0] = 100
+    op = np.r_[x[0], x[:-1]]
+    hi = np.maximum(op, x) + np.abs(rng.normal(0, 0.15, n))
+    lo = np.minimum(op, x) - np.abs(rng.normal(0, 0.15, n))
+    b15 = pd.DataFrame({"timestamp": pd.date_range("2024-01-01", periods=n, freq="15min", tz="UTC"), "open": op, "high": hi, "low": lo,
+                        "close": x, "volume": 1.0})
+    return b15, rs.resample(b15, "1h"), rs.resample(b15, "4h")
+
+
+class SplitStopSideTest(unittest.TestCase):
+    def test_every_leg_is_on_the_profit_side_of_every_final_stop(self):
+        checked = 0
+        for seed in (1, 2, 3):
+            f = rs.build_frames(*_random_market(seed=seed))
+            for tf in ("1h", "2h"):
+                setups, _ = rs.find_setups(f, tf, "zone", "split", "slot", use_htf=False)
+                for s in setups:
+                    for name in rs.raw_stops(s):
+                        stop = rs.final_stop(s, name)
+                        for _, p in s["legs"]:
+                            # zone_0 heeft geen buffer: een randbeen op de zonerand zelf is daar gelijk aan de stop, en dat is alleen ter vergelijking.
+                            strict = name != "zone_0"
+                            ok = (p < stop if strict else p <= stop) if s["direction"] == "short" else (p > stop if strict else p >= stop)
+                            self.assertTrue(ok, (s["direction"], s["legs"], name, stop))
+                            checked += 1
+        self.assertGreater(checked, 50)
+
+    def test_edge_leg_beyond_the_zone_pulls_the_stop_outwards(self):
+        s = {"direction": "long", "zone_low": 98.0, "zone_high": 98.6, "extreme": None, "atr_t": 0.1, "range_high": 106.0, "range_low": 97.7,
+             "legs": [(0.4, 97.739), (0.6, 98.523)]}
+        self.assertLess(rs.final_stop(s, "zone_025"), 97.739)
+        s = {"direction": "short", "zone_low": 105.0, "zone_high": 105.6, "extreme": None, "atr_t": 0.1, "range_high": 106.3, "range_low": 99.0,
+             "legs": [(0.4, 106.3), (0.6, 105.2)]}
+        self.assertGreater(rs.final_stop(s, "zone_025"), 106.3)
