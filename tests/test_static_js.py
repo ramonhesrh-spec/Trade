@@ -65,3 +65,24 @@ class SparkChangeTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class WinMemeToastTest(unittest.TestCase):
+    def test_bestand_bestaat_en_is_klein(self):
+        f = ROOT / "web/static/meme-geld.webp"
+        self.assertTrue(f.exists())
+        self.assertLess(f.stat().st_size, 20000)
+
+    def test_meme_alleen_in_het_winstpad(self):
+        base = (ROOT / "web/templates/base.html").read_text()
+        dash = (ROOT / "web/static/dashboard.js").read_text()
+        self.assertEqual(base.count("meme-geld.webp"), 1)
+        self.assertIn("Geld aan de telefoon", base)
+        # De toast wordt alleen aangeroepen waar ook de winst-confetti hangt.
+        self.assertEqual(base.count("winToast(url"), 1)
+        self.assertEqual(dash.count("winToast("), 1)
+        self.assertLess(dash.index('closed_win=1'), dash.index("winToast("))
+        main = (ROOT / "web/main.py").read_text()
+        self.assertLess(main.index("if won:"), main.index('"closed_pct"'))
+        css = (ROOT / "web/static/style.css").read_text()
+        self.assertNotIn("animation", css[css.index(".win-toast {"):css.index(".win-toast img")])

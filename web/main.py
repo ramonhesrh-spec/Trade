@@ -1463,9 +1463,11 @@ async def close_journal(
     user: dict = Depends(require_login),
 ):
     won = False
+    won_pct = 0.0
     eval_flag = None
     try:
         result_pct, is_practice = repo.close_journal_trade(entry_id, user["id"], exit_price, exit_time)
+        won_pct = result_pct
         won = (not is_practice) and result_pct > 0
     except ValueError:
         # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
@@ -1475,6 +1477,7 @@ async def close_journal(
     extra_query = []
     if won:
         extra_query.append(("closed_win", "1"))
+        extra_query.append(("closed_pct", f"{won_pct:.2f}"))
     if eval_flag:
         extra_query.append((eval_flag, "1"))
     if extra_query:

@@ -150,6 +150,29 @@
   // niet-oefentrade, zie /journal/{id}/close), niet decoratief op een timer.
   (function () {
     var COLORS = ["#0ABAB5", "#33d69f", "#f2c94c", "#eaf1f0"];
+    // Meme-toast bij dezelfde echte winst: stil en statisch, ook bij
+    // prefers-reduced-motion, en weg na 3s of op een tik.
+    function winToast(pct) {
+      var old = document.querySelector(".win-toast");
+      if (old) old.remove();
+      var n = parseFloat(pct);
+      var el = document.createElement("div");
+      el.className = "win-toast";
+      el.setAttribute("role", "status");
+      var img = document.createElement("img");
+      img.src = "/static/meme-geld.webp";
+      img.alt = "Geld aan de telefoon";
+      img.width = 96;
+      var txt = document.createElement("span");
+      txt.textContent = isFinite(n) && pct !== "" && pct != null ? "Binnen! +" + n.toFixed(2).replace(".", ",") + "%" : "Binnen!";
+      el.appendChild(img);
+      el.appendChild(txt);
+      function gone() { el.remove(); }
+      el.addEventListener("click", gone);
+      document.body.appendChild(el);
+      setTimeout(gone, 3000);
+    }
+    window.HP.winToast = winToast;
     function fireConfetti() {
       if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
       var container = document.createElement("div");
@@ -173,7 +196,9 @@
     if (location.search.indexOf("closed_win=1") !== -1) {
       fireConfetti();
       var url = new URL(location.href);
+      winToast(url.searchParams.get("closed_pct"));
       url.searchParams.delete("closed_win");
+      url.searchParams.delete("closed_pct");
       history.replaceState(null, "", url.pathname + url.search + url.hash);
     }
   })();

@@ -291,6 +291,7 @@ function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
       // dus alleen via resp.url te herkennen, niet via location.search.
       if (resp.url.indexOf("closed_win=1") !== -1 && window.HP && window.HP.confetti) {
         window.HP.confetti();
+        if (window.HP.winToast) window.HP.winToast(new URL(resp.url).searchParams.get("closed_pct"));
       }
     } catch (err) {
       if (btn) { btn.disabled = false; btn.textContent = originalLabel; }

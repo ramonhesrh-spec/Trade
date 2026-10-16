@@ -2092,6 +2092,9 @@ html { -webkit-tap-highlight-color: transparent; }
               opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
 .copy-toast.is-on { opacity: 1; }
 @media (prefers-reduced-motion: reduce) { .copy-toast { transition: none; } }
+.win-toast { position: fixed; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 960; display: flex; align-items: center; gap: var(--space-4);
+             padding: 6px 16px 6px 6px; border-radius: 18px; background: var(--panel); border: 1px solid var(--border-strong); color: var(--text); font-weight: 600; cursor: pointer; }
+.win-toast img { width: 96px; height: auto; border-radius: 12px; display: block; }
 
 /* Bel naast een niveau (alarm.js): gevuld zodra er een alarm op staat. */
 .level-bell { min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0;
@@ -2353,7 +2356,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 @media (min-width: 761px) { .fsearch, .ph-title svg { display: none; } .ph-title { cursor: default; pointer-events: none; } }
 @media (max-width: 760px) {
   /* De dock is hier ongeveer 138px hoog; lagere meldingen verdwijnen erachter. */
-  .copy-toast, .ceo-toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
+  .copy-toast, .ceo-toast, .win-toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
 }
 @media (prefers-reduced-motion: reduce) { .dock, .ph-title svg { transition: none; } }
 
