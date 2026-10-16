@@ -218,6 +218,110 @@ class RunCsvTest(unittest.TestCase):
         self.assertIn("1 rijen gelezen", out.getvalue())
 
 
+class RangeSweepJudgeTest(unittest.TestCase):
+    def frames(self):
+        from app.replay import rangesweep as rs
+        from tests.replay.rangesweep_fixtures import frames
+        b15, b1h, b4h = frames()
+        return rs.build_frames(b15, b1h, b4h), b1h
+
+    def test_fixture_short_zone_retest_is_seen_without_htf(self):
+        from tests.replay.rangesweep_fixtures import FIRST_SHORT_ZONE_SETUP_HOUR
+        f, b1h = self.frames()
+        at = b1h["timestamp"].iloc[FIRST_SHORT_ZONE_SETUP_HOUR] + pd.Timedelta(hours=1)
+        r = misser_check.judge_rangesweep(f, at, "short", tf_hint="1h")
+        self.assertIn("range_sweep:RZ_1H_ZONDERHTF", r["engines"])
+        self.assertTrue(all("_1H" in k for k in r["per_variant"]))
+
+    def test_fixture_sweep_is_seen(self):
+        from tests.replay.rangesweep_fixtures import SWEEP_HOUR
+        f, b1h = self.frames()
+        at = b1h["timestamp"].iloc[SWEEP_HOUR] + pd.Timedelta(hours=1)
+        self.assertIn("range_sweep:RS_1H_ZONDERHTF", misser_check.judge_rangesweep(f, at, "short")["engines"])
+
+    def test_blocker_is_the_reason_of_the_furthest_variant(self):
+        f, b1h = self.frames()
+        r = misser_check.judge_rangesweep(f, b1h["timestamp"].iloc[30], "short")
+        self.assertEqual(r["engines"], [])
+        self.assertTrue(r["blocker"].startswith("range_sweep: "))
+
+    def test_only_without_htf_is_flagged_and_the_blocker_prefers_the_deepest_stage(self):
+        self.assertTrue(misser_check._stage("geen geldige limiet: x") > misser_check._stage("HTF-filter: x") > misser_check._stage("range op 1h gevonden, maar x")
+                        > misser_check._stage("geen range op 1h: te weinig candles"))
+        self.assertEqual(misser_check._stage("iets onbekends"), 0)
+
+    def test_every_diag_only_name_is_a_without_htf_twin(self):
+        names = [c[0] for c in misser_check.RS_COMBOS]
+        self.assertEqual(len(names), len(set(names)))
+        self.assertTrue(all(n.endswith("_ZONDERHTF") and not c[4] for c in misser_check.RS_DIAG_ONLY for n in (c[0],)))
+        self.assertFalse({c[0] for c in misser_check.RS_DIAG_ONLY} & set(names))
+
+    def test_price_far_from_the_setup_is_not_seen(self):
+        from tests.replay.rangesweep_fixtures import FIRST_SHORT_ZONE_SETUP_HOUR
+        f, b1h = self.frames()
+        at = b1h["timestamp"].iloc[FIRST_SHORT_ZONE_SETUP_HOUR] + pd.Timedelta(hours=1)
+        r = misser_check.judge_rangesweep(f, at, "short", tf_hint="1h", price=50.0)
+        self.assertEqual(r["engines"], [])
+
+
+class CandleCacheTest(unittest.TestCase):
+    def test_cache_fetch_reads_the_csv_per_coin_and_timeframe_and_honours_since_and_limit(self):
+        with tempfile.TemporaryDirectory() as d:
+            ts = pd.date_range("2026-01-01", periods=10, freq="1h", tz="UTC")
+            pd.DataFrame({"timestamp": ts, "open": 1.0, "high": 2.0, "low": 0.5, "close": 1.5, "volume": 1.0}).to_csv(Path(d) / "ARB_1h.csv", index=False)
+            fetch = misser_check.cache_fetch(d)
+            df = fetch("arb", timeframe="1h", limit=3, since=int(ts[4].timestamp() * 1000))
+            self.assertEqual(list(df["timestamp"]), list(ts[4:7]))
+            with self.assertRaises(FileNotFoundError):
+                fetch("ARB", timeframe="4h", limit=3, since=0)
+
+    def test_fetch_rangesweep_builds_all_four_frames_from_an_injected_source(self):
+        from tests.replay.rangesweep_fixtures import frames
+        b15, b1h, b4h = frames()
+        src = {"15m": b15, "1h": b1h, "4h": b4h}
+        calls = []
+
+        def fetch(coin, timeframe, limit, since):
+            calls.append(timeframe)
+            return src[timeframe][src[timeframe]["timestamp"] >= pd.Timestamp(since, unit="ms", tz="UTC")]
+        f = misser_check.fetch_rangesweep("ARB", b1h["timestamp"].iloc[150], fetch=fetch)
+        self.assertEqual(sorted(calls), ["15m", "1h", "4h"])
+        self.assertEqual(set(f), {"15m", "30m", "1h", "2h", "4h"})
+        self.assertLessEqual(f["15m"]["timestamp"].max(), b1h["timestamp"].iloc[150] + pd.Timedelta(hours=14))
+
+
+class RunCsvRangeSweepTest(unittest.TestCase):
+    def test_motor_rangesweep_prints_per_variant_lines_and_counts_seen(self):
+        from app.replay import rangesweep as rs
+        from tests.replay.rangesweep_fixtures import frames, FIRST_SHORT_ZONE_SETUP_HOUR, START
+        b15, b1h, b4h = frames()
+        fr = rs.build_frames(b15, b1h, b4h)
+        at_utc = START + pd.Timedelta(hours=FIRST_SHORT_ZONE_SETUP_HOUR + 1)
+        local = at_utc.tz_convert("Europe/Amsterdam").strftime("%Y-%m-%d %H:%M")
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "t.csv"
+            f.write_text(HEAD.strip() + ",bron,notitie,tf\n" + f"ARB,short,{local},105.4,106.4,100,,x.webp,n,1h\n" + f"ARB,short,{local},105.4,106.4,100,,y.webp,n,4h\n", encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                s = misser_check.run_csv(str(f), False, motor="rangesweep", window_hours=12, fetch_rs=lambda coin, at: fr)
+        text = out.getvalue()
+        self.assertIn("RZ_1H_ZONDERHTF: gezien", text)
+        self.assertIn("RZ_1H: ", text)
+        self.assertEqual(s["n"], 2)
+        self.assertGreaterEqual(s["seen"], 1)
+
+    def test_motor_rangesweep_fetch_failure_is_geen_data(self):
+        def boom(coin, at):
+            raise RuntimeError("geen verbinding")
+        with tempfile.TemporaryDirectory() as d:
+            f = Path(d) / "t.csv"
+            f.write_text(HEAD + "BTC,long,2026-10-08 14:30,1,0.9,1.3,x\n", encoding="utf-8")
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                s = misser_check.run_csv(str(f), False, motor="rangesweep", fetch_rs=boom)
+        self.assertEqual(s["by_blocker"], {"geen data": 1})
+
+
 class DraftRowsTest(unittest.TestCase):
     def test_draft_takes_coin_direction_time_and_first_price(self):
         msgs = [{"id": 7, "received_at": "2026-10-15T15:28:00+00:00", "raw_text": "Entry was up top 0.19900 Now 0.19550", "coin": "ARB", "direction": "short"}]
