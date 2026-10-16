@@ -1,0 +1,6 @@
+coin,richting,tijd,instap,stop,doel,uitkomst,bron,notitie,tf
+ARB,short,2026-10-16 17:52,0.19903,0.20446,0.16254,,arb-2u-short.webp,"datum van de gebruiker, te bevestigen; Bear OB 0.1990-0.2045; range 0.17-0.20; perp",2h
+APT,short,2026-10-16 14:37,0.8861,0.9077,0.7191,,apt-1u-short.webp,"datum te bevestigen; pomp tegen een bearish vak; vraagzone 0.7350-0.7472; perp",1h
+APT,short,2026-10-16 13:45,0.8729,0.8868,0.6813,,apt-2u-long-en-short.webp,"datum te bevestigen; Bear OB 0.8729-0.8868; doel Bull-zone; perp",2h
+WLD,long,2026-10-16 11:45,0.4681,0.4513,0.56,,wld-1u-long.webp,"datum te bevestigen; spot; sweep onder de Bullish-zone tot ca. 0.452; trade liep al, instap ca. 15-10",1h
+AAVE,short,2026-10-15 23:42,157.01,161.16,136.64,,aave-30m-short-plan.webp,"datum te bevestigen; terugkeer naar gebroken steun ca. 157; perp",30m
