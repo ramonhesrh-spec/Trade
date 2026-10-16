@@ -185,6 +185,13 @@ def find_zones(b: pd.DataFrame) -> list[Zone]:
     return out
 
 
+def zone_displacement(z: Zone, closes: np.ndarray, closes15: Optional[np.ndarray] = None) -> float:
+    """Grootste slot weg van de zone (in prijs) tot de bevestiging: de kaart van de nadering, bij choch15 ook de 15m-candles tot en met de CHoCH.
+    Preregistratie: 'tot de bevestiging', niet tot het ontstaan van de zone. Gedeeld door lab en live."""
+    c = closes if closes15 is None else np.r_[closes, closes15]
+    return float((z.low - c.min()) if z.kind == "bear" else (c.max() - z.high))
+
+
 def retests_before(z: Zone, b: pd.DataFrame, i: int) -> int:
     """Hoe vaak de koers tussen het ontstaan en candle i (exclusief) de zone binnenkwam: elke overgang van erbuiten naar erin telt één keer."""
     hi, lo = b["high"].to_numpy(float), b["low"].to_numpy(float)
@@ -459,7 +466,8 @@ def _zone_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dict
                 refused.append(_refusal(placed_at, d, "geen geldige limiet: de zone ligt aan de verkeerde kant van de koers", z.low, z.high, atr[i]))
                 in_visit = True
                 continue
-            features = {**_range_features(r, ts.iloc[i], tf), "ob_opposite": z.disp_bars <= 2, "displacement_atr": z.disp_atr,
+            away = zone_displacement(z, cl[z.ob_idx + 1:i + 1], cl15[start15:m + 1] if confirm == "choch15" else None)
+            features = {**_range_features(r, ts.iloc[i], tf), "ob_opposite": z.disp_bars <= 2, "displacement_atr": float(away / atr[z.known_idx]),
                         "zone_fresh": retests_before(z, b, i) <= 1, "zone_atr": (z.high - z.low) / atr[i]}
             setups.append(_setup(d, "zone", tf, r, z.low, z.high, ts.iloc[z.ob_idx], None, None, None, placed_at, place_idx, ref_price, legs,
                                  float(atr[i]), trend[i], hh[i], ll[i], ok, features))

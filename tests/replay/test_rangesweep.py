@@ -186,6 +186,15 @@ class PreregTest(unittest.TestCase):
                 checked += 1
         self.assertGreaterEqual(checked, 10)
 
+    def test_tables_equal_the_preregistration_prose(self):
+        text = (Path(__file__).resolve().parents[2] / "docs/onderzoek/range-sweep/preregistratie.md").read_text()
+        self.assertIn("laatste 120 candles (30m, 1u) of 90 (2u, 4u)", text)
+        self.assertEqual(rs.RANGE_LOOKBACK, {"30m": 120, "1h": 120, "2h": 90, "4h": 90})
+        self.assertIn("minstens 48 candles oud (30m, 1u) of 36 (2u, 4u)", text)
+        self.assertEqual(rs.AGE_MIN, {"30m": 48, "1h": 48, "2h": 36, "4h": 36})
+        self.assertIn("plus 0,25 of 0,5 maal de ATR", text)
+        self.assertEqual(rs.STOP_BUFFER, {"zone_0": ("zone", 0.0), "zone_025": ("zone", 0.25), "zone_05": ("zone", 0.5), "wick_025": ("wick", 0.25)})
+
 
 GOLDEN = Path(__file__).resolve().parent.parent / "golden" / "range_sweep_setup.json"
 
@@ -647,3 +656,56 @@ class DiagnosePriceTest(unittest.TestCase):
         self.assertEqual(near["reason"], "geen CHoCH op 15m binnen 6 uur")
         far = self.diag(112.0, confirm="choch15")
         self.assertNotEqual(far["reason"], "geen CHoCH op 15m binnen 6 uur")
+
+
+class ZoneDisplacementTest(unittest.TestCase):
+    """displacement_atr meet tot de bevestiging, niet alleen tot het ontstaan van de zone."""
+
+    def setUp(self):
+        b15, b1h, b4h = frames()
+        self.b15, self.f = b15, rs.build_frames(b15, b1h, b4h)
+        self.b = add_indicators(b1h).reset_index(drop=True)
+        self.zones = rs.find_zones(self.b)
+
+    def expected(self, s, i=None, extra15=None):
+        z = next(z for z in self.zones if (z.low, z.high) == (s["zone_low"], s["zone_high"]))
+        i = int(self.b["timestamp"].searchsorted(s["placed_at"] - pd.Timedelta(hours=1))) if i is None else i
+        closes = self.b["close"].to_numpy(float)[z.ob_idx + 1:i + 1]
+        if extra15 is not None:
+            closes = np.r_[closes, extra15]
+        away = (z.low - closes.min()) if z.kind == "bear" else (closes.max() - z.high)
+        return z, away / self.b["atr"].iloc[z.known_idx]
+
+    def test_slot_measures_up_to_the_approach_candle(self):
+        setups, _ = rs.find_setups(self.f, "1h", "zone", "zone", "slot", use_htf=False)
+        grown = 0
+        for s in setups:
+            z, want = self.expected(s)
+            self.assertAlmostEqual(s["features"]["displacement_atr"], want, places=9)
+            self.assertGreaterEqual(s["features"]["displacement_atr"], z.disp_atr - 1e-9)
+            grown += s["features"]["displacement_atr"] > z.disp_atr + 1e-9
+        self.assertGreater(grown, 0, "de beweging na het ontstaan hoort mee te tellen")
+
+    def test_choch15_adds_the_15m_closes_up_to_the_choch(self):
+        cl15 = self.b15["close"].to_numpy(float)
+        starts = {}
+
+        def fake(b15, k, start, direction, extreme):
+            m = next(m for m in range(start + 12, len(cl15)) if (cl15[m] < 105.3 if direction == "short" else cl15[m] > 100.7))
+            starts[m] = start
+            return m
+
+        with mock.patch.object(rs, "choch_index", fake):
+            setups, _ = rs.find_setups(self.f, "1h", "zone", "zone", "choch15", use_htf=False)
+        self.assertTrue(setups)
+        for s in setups:
+            m = s["place_idx15"] - 1
+            start15 = starts[m]
+            z, want = self.expected(s, i=start15 // 4 - 1, extra15=cl15[start15:m + 1])
+            self.assertAlmostEqual(s["features"]["displacement_atr"], want, places=9)
+
+    def test_the_15m_closes_extend_the_measurement(self):
+        bear, bull = rs.Zone("bear", 100.0, 101.0, 0, 2, None, 2, 1.0), rs.Zone("bull", 100.0, 101.0, 0, 2, None, 2, 1.0)
+        self.assertAlmostEqual(rs.zone_displacement(bear, np.array([99.0, 98.5])), 1.5)
+        self.assertAlmostEqual(rs.zone_displacement(bear, np.array([99.0, 98.5]), np.array([97.0, 98.0])), 3.0)
+        self.assertAlmostEqual(rs.zone_displacement(bull, np.array([102.0]), np.array([104.5])), 3.5)
