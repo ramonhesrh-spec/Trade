@@ -620,3 +620,30 @@ class DiagnoseReasonTest(unittest.TestCase):
         short = [s for s in setups if s["direction"] == "short"][0]
         first = min(r["at"] for r in refused if r["reason"].startswith("zone had al een setup op "))
         self.assertGreater(first - short["placed_at"], pd.Timedelta(hours=5))
+
+
+class DiagnosePriceTest(unittest.TestCase):
+    """De trader noemt ook zijn instapprijs: een setup of weigering van een ander niveau binnen 12 uur telt dan niet."""
+
+    def setUp(self):
+        b15, self.b1h, b4h = frames()
+        self.f = rs.build_frames(b15, self.b1h, b4h)
+        self.at = self.b1h["timestamp"].iloc[SWEEP_HOUR] + pd.Timedelta(hours=1)
+
+    def diag(self, price, confirm="slot"):
+        return rs.diagnose(self.f, self.at, "short", "1h", "sweep", "ob", confirm, False, price=price)
+
+    def test_setup_near_the_price_is_seen(self):
+        self.assertTrue(self.diag(106.2)["seen"])
+        self.assertTrue(self.diag(None)["seen"])
+
+    def test_setup_far_from_the_price_is_not_this_trade(self):
+        d = self.diag(112.0)
+        self.assertFalse(d["seen"])
+        self.assertNotEqual(d["reason"], "")
+
+    def test_refusal_far_from_the_price_is_not_reported(self):
+        near = self.diag(106.2, confirm="choch15")
+        self.assertEqual(near["reason"], "geen CHoCH op 15m binnen 6 uur")
+        far = self.diag(112.0, confirm="choch15")
+        self.assertNotEqual(far["reason"], "geen CHoCH op 15m binnen 6 uur")

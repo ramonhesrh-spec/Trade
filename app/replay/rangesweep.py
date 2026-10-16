@@ -225,6 +225,15 @@ class Sweep:
     atr: float
 
 
+def _refusal(at, direction: str, reason: str, lo: float, hi: float, atr: float) -> dict:
+    """lo en hi: het prijsgebied waar de weigering over ging (zone of rand), atr: de maat voor 'dichtbij' in diagnose."""
+    return {"at": at, "direction": direction, "reason": reason, "span": (float(lo), float(hi)), "atr": float(atr)}
+
+
+def _near(price: float, lo: float, hi: float, atr: float) -> bool:
+    return lo - atr <= price <= hi + atr
+
+
 def find_sweeps(b: pd.DataFrame, active: list[Optional[Range]]) -> tuple[list[Sweep], list[dict]]:
     """b: triggercandles met atr. Een prik voorbij een rand met een slot terug binnen in RETURN_MAX_BARS candles; dieper dan SWEEP_MAX_ATR is een uitbraak."""
     hi, lo, cl, atr = (b[c].to_numpy(float) for c in ("high", "low", "close", "atr"))
@@ -240,9 +249,10 @@ def find_sweeps(b: pd.DataFrame, active: list[Optional[Range]]) -> tuple[list[Sw
                 continue
             key = (direction, r.first_at, r.high, r.low)
             # Na een sweep vormt de prik vaak een nieuwe range met bijna dezelfde randen: binnen SWEEP_COOLDOWN telt dezelfde kant één keer.
+            edge = r.high if direction == SHORT else r.low
             skip = "al een sweep op deze rand" if key in used else ("cooldown na eerdere prik" if j - last_start.get(direction, -10**9) < SWEEP_COOLDOWN else "")
             if skip:
-                refused.append({"at": ts.iloc[j], "direction": direction, "reason": skip})
+                refused.append(_refusal(ts.iloc[j], direction, skip, edge, edge, r.atr))
                 continue
             used.add(key)
             last_start[direction] = j
@@ -256,7 +266,7 @@ def find_sweeps(b: pd.DataFrame, active: list[Optional[Range]]) -> tuple[list[Sw
                     ret = k
                     break
             if ret is None:
-                refused.append({"at": ts.iloc[j], "direction": direction, "reason": reason})
+                refused.append(_refusal(ts.iloc[j], direction, reason, edge, edge, r.atr))
                 continue
             out.append(Sweep(direction, r, j, ret, float(extreme), float(atr[ret])))
     return out, refused
@@ -363,26 +373,28 @@ def _sweep_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dic
     for sw in sweeps:
         r, d, at = sw.rng, sw.direction, ts.iloc[sw.ret] + dt
         ok = htf_ok(d, int(trend[sw.ret]), float(hh[sw.ret]), float(ll[sw.ret]), r)
+        edge = r.high if d == SHORT else r.low
         if use_htf and not ok:
-            refused.append({"at": at, "direction": d, "reason": "HTF-filter: tegen de 4u-trend en aan de verkeerde kant van de grotere range"})
+            refused.append(_refusal(at, d, "HTF-filter: tegen de 4u-trend en aan de verkeerde kant van de grotere range", edge, edge, sw.atr))
             continue
         k = _extreme_15m(b15, ts.iloc[sw.start], at, d)
         if k is None:
-            refused.append({"at": at, "direction": d, "reason": "geen 15m-candles bij de prik"})
+            refused.append(_refusal(at, d, "geen 15m-candles bij de prik", edge, edge, sw.atr))
             continue
         ob_low, ob_high, ob_idx, ob_real = order_block(b15, k, d)
         start15 = int(ts15.searchsorted(at))
+        span = (min(edge, ob_low), max(edge, ob_high))
         if confirm == "choch15":
             m = choch_index(b15, k, start15, d, sw.extreme)
             if m is None:
-                refused.append({"at": at, "direction": d, "reason": "geen CHoCH op 15m binnen 6 uur"})
+                refused.append(_refusal(at, d, "geen CHoCH op 15m binnen 6 uur", *span, sw.atr))
                 continue
             placed_at, place_idx, ref_price = ts15.iloc[m] + TF_DELTA["15m"], m + 1, float(cl15[m])
         else:
             placed_at, place_idx, ref_price = at, start15, float(clt[sw.ret])
         legs = legs_for(entry, d, r, (ob_low + ob_high) / 2, ref_price)
         if not legs:
-            refused.append({"at": placed_at, "direction": d, "reason": "geen geldige limiet: het order block ligt aan de verkeerde kant van de koers"})
+            refused.append(_refusal(placed_at, d, "geen geldige limiet: het order block ligt aan de verkeerde kant van de koers", *span, sw.atr))
             continue
         features = {**_range_features(r, ts.iloc[sw.start], tf), "ob_opposite": ob_real, "displacement_atr": abs(sw.extreme - ref_price) / sw.atr,
                     "zone_fresh": _ob_unmitigated(b15, ob_idx, place_idx, d, ob_low, ob_high), "zone_atr": (ob_high - ob_low) / sw.atr}
@@ -416,19 +428,19 @@ def _zone_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dict
                 continue
             at, r = ts.iloc[i] + TF_DELTA[tf], rlist[i]
             if done_at is not None:
-                refused.append({"at": at, "direction": d, "reason": f"zone had al een setup op {done_at:%Y-%m-%d %H:%M}"})
+                refused.append(_refusal(at, d, f"zone had al een setup op {done_at:%Y-%m-%d %H:%M}", z.low, z.high, atr[i]))
                 in_visit = True
                 continue
             if r is None:
-                refused.append({"at": at, "direction": d, "reason": f"geen range op {tf} bij de nadering van de zone"})
+                refused.append(_refusal(at, d, f"geen range op {tf} bij de nadering van de zone", z.low, z.high, atr[i]))
                 continue
             in_band = (inner >= r.high - EDGE_BAND * r.width) if d == SHORT else (inner <= r.low + EDGE_BAND * r.width)
             if not in_band:
-                refused.append({"at": at, "direction": d, "reason": "zone ligt niet aan de rand van de range"})
+                refused.append(_refusal(at, d, "zone ligt niet aan de rand van de range", z.low, z.high, atr[i]))
                 continue
             ok = htf_ok(d, int(trend[i]), float(hh[i]), float(ll[i]), r)
             if use_htf and not ok:
-                refused.append({"at": at, "direction": d, "reason": "HTF-filter: tegen de 4u-trend en aan de verkeerde kant van de grotere range"})
+                refused.append(_refusal(at, d, "HTF-filter: tegen de 4u-trend en aan de verkeerde kant van de grotere range", z.low, z.high, atr[i]))
                 continue
             start15 = int(ts15.searchsorted(at))
             if confirm == "choch15":
@@ -436,7 +448,7 @@ def _zone_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dict
                 extreme = float(hi[i] if d == SHORT else lo[i])
                 m = None if k is None else choch_index(b15, k, start15, d, extreme)
                 if m is None:
-                    refused.append({"at": at, "direction": d, "reason": "geen CHoCH op 15m binnen 6 uur"})
+                    refused.append(_refusal(at, d, "geen CHoCH op 15m binnen 6 uur", z.low, z.high, atr[i]))
                     in_visit = True
                     continue
                 placed_at, place_idx, ref_price = ts15.iloc[m] + TF_DELTA["15m"], m + 1, float(cl15[m])
@@ -444,7 +456,7 @@ def _zone_setups(frames, tf, entry, confirm, use_htf, ranges) -> tuple[list[dict
                 placed_at, place_idx, ref_price = at, start15, float(cl[i])
             legs = legs_for(entry, d, r, inner, ref_price)
             if not legs:
-                refused.append({"at": placed_at, "direction": d, "reason": "geen geldige limiet: de zone ligt aan de verkeerde kant van de koers"})
+                refused.append(_refusal(placed_at, d, "geen geldige limiet: de zone ligt aan de verkeerde kant van de koers", z.low, z.high, atr[i]))
                 in_visit = True
                 continue
             features = {**_range_features(r, ts.iloc[i], tf), "ob_opposite": z.disp_bars <= 2, "displacement_atr": z.disp_atr,
@@ -486,14 +498,19 @@ def final_stop(setup: dict, name: str) -> float:
 
 
 def diagnose(frames: dict, at: pd.Timestamp, direction: str, tf: str, family: str, entry: str, confirm: str, use_htf: bool,
-             window: pd.Timedelta = pd.Timedelta(hours=12), ranges: Optional[tuple[pd.DataFrame, list]] = None) -> dict:
+             window: pd.Timedelta = pd.Timedelta(hours=12), ranges: Optional[tuple[pd.DataFrame, list]] = None, price: Optional[float] = None) -> dict:
     """Voor de misser-controle: zag deze variant een setup rond `at`, en zo niet, welke regel weigerde. Volgorde: setup, weigering, en anders
-    waarom er geen range of geen zone was op het laatste slot vóór `at`."""
+    waarom er geen range of geen zone was op het laatste slot vóór `at`. price: de instapprijs van de trader; met price telt alleen een setup of
+    weigering waarvan zone, rand of been binnen 1 ATR van die prijs ligt."""
     setups, refused = find_setups(frames, tf, family, entry, confirm, use_htf, ranges)
-    near = [s for s in setups if s["direction"] == direction and abs(s["placed_at"] - at) <= window]
+    def setup_near(s):
+        prices = [p for _, p in s["legs"]] + [s["zone_low"], s["zone_high"]]
+        return price is None or _near(price, min(prices), max(prices), s["atr_t"])
+
+    near = [s for s in setups if s["direction"] == direction and abs(s["placed_at"] - at) <= window and setup_near(s)]
     if near:
         return {"seen": True, "reason": "", "setup": min(near, key=lambda s: abs(s["placed_at"] - at))}
-    ref = [r for r in refused if r["direction"] == direction and abs(r["at"] - at) <= window]
+    ref = [r for r in refused if r["direction"] == direction and abs(r["at"] - at) <= window and (price is None or _near(price, *r["span"], r["atr"]))]
     if ref:
         return {"seen": False, "reason": min(ref, key=lambda r: abs(r["at"] - at))["reason"], "setup": None}
     b = add_indicators(frames[tf]).reset_index(drop=True)
