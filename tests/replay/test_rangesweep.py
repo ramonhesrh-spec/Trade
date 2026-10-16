@@ -1,4 +1,7 @@
+import json
+import os
 import unittest
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -6,7 +9,8 @@ import pandas as pd
 from app.replay import rangesweep as rs
 from app.replay import trendlab as tl
 from app.replay.lab import add_indicators
-from tests.replay.rangesweep_fixtures import FIRST_PEAK_HOUR, SWEEP_HOUR, frames
+from tests.replay.rangesweep_fixtures import (FIRST_LONG_ZONE_SETUP_HOUR, FIRST_PEAK_HOUR, FIRST_SHORT_ZONE_SETUP_HOUR, SWEEP_HOUR,
+                                              frames)
 
 
 class ResampleTest(unittest.TestCase):
@@ -180,3 +184,298 @@ class PreregTest(unittest.TestCase):
                 self.assertEqual(getattr(rs, m.group(1)), float(m.group(2).replace(",", ".")), m.group(1))
                 checked += 1
         self.assertGreaterEqual(checked, 10)
+
+
+GOLDEN = Path(__file__).resolve().parent.parent / "golden" / "range_sweep_setup.json"
+
+
+class SweepSetupTest(unittest.TestCase):
+    def setUp(self):
+        b15, b1h, b4h = frames()
+        self.f, self.b1h = rs.build_frames(b15, b1h, b4h), b1h
+
+    def setups(self, entry="ob", confirm="slot"):
+        return rs.find_setups(self.f, "1h", "sweep", entry, confirm, use_htf=False)
+
+    def test_one_short_setup_at_the_sweep(self):
+        setups, _ = self.setups()
+        self.assertEqual(len(setups), 1)
+        s = setups[0]
+        self.assertEqual((s["direction"], s["family"]), ("short", "sweep"))
+        self.assertAlmostEqual(s["extreme"], 106.5)
+        self.assertEqual(s["sweep_at"], self.b1h["timestamp"].iloc[SWEEP_HOUR])
+        self.assertEqual(s["placed_at"], self.b1h["timestamp"].iloc[SWEEP_HOUR] + pd.Timedelta(hours=1))
+        self.assertEqual(s["place_idx15"], 4 * (SWEEP_HOUR + 1))
+        self.assertAlmostEqual(s["ref_price"], 105.6)
+
+    def test_order_block_is_the_last_green_15m_candle_at_the_top(self):
+        s = self.setups()[0][0]
+        self.assertAlmostEqual(s["zone_low"], 105.875)
+        self.assertAlmostEqual(s["zone_high"], 106.5)
+        self.assertEqual(s["legs"], [(1.0, (105.875 + 106.5) / 2)])
+
+    def test_features(self):
+        f = self.setups()[0][0]["features"]
+        self.assertEqual((f["touches_high"], f["touches_low"]), (6, 6))
+        self.assertEqual(f["age_bars"], SWEEP_HOUR - FIRST_PEAK_HOUR)
+        self.assertTrue(f["ob_opposite"])
+        self.assertTrue(f["zone_fresh"])
+        self.assertLess(f["displacement_atr"], 1.5)
+        self.assertLessEqual(f["zone_atr"], 1.5)
+
+    def test_choch_is_missing_here_and_says_why(self):
+        setups, refused = self.setups(confirm="choch15")
+        self.assertEqual(setups, [])
+        self.assertIn("geen CHoCH op 15m binnen 6 uur", [r["reason"] for r in refused])
+
+    def test_breakout_is_not_a_sweep(self):
+        b15, _, b4h = frames()
+        b15 = b15.copy()
+        b15.loc[4 * SWEEP_HOUR + 1, "high"] = 108.0
+        b1h = rs.resample(b15, "1h")
+        setups, refused = rs.find_setups(rs.build_frames(b15, b1h, b4h), "1h", "sweep", "ob", "slot", use_htf=False)
+        self.assertEqual(setups, [])
+        self.assertIn("prik te diep, dit is een uitbraak", [r["reason"] for r in refused])
+
+    def test_stops(self):
+        s = self.setups()[0][0]
+        raw = rs.raw_stops(s)
+        self.assertEqual(set(raw), {"zone_0", "zone_025", "zone_05", "wick_025"})
+        self.assertAlmostEqual(raw["zone_0"], 106.5)
+        self.assertAlmostEqual(raw["wick_025"], 106.5 + 0.25 * s["atr_t"])
+        self.assertGreaterEqual(rs.final_stop(s, "zone_025"), raw["zone_025"])
+
+    def test_golden(self):
+        s = self.setups()[0][0]
+        got = json.loads(json.dumps({k: (str(v) if isinstance(v, pd.Timestamp) else v) for k, v in s.items()}, default=float))
+        if os.environ.get("REGEN_GOLDEN"):
+            GOLDEN.write_text(json.dumps(got, indent=2, sort_keys=True))
+        if not GOLDEN.exists():
+            self.fail(f"maak {GOLDEN} met REGEN_GOLDEN=1 en controleer hem met de hand tegen de definities")
+        want = json.loads(GOLDEN.read_text())
+        self.assertEqual(set(got), set(want))
+        for k in want:
+            if isinstance(want[k], float):
+                self.assertAlmostEqual(got[k], want[k], places=6, msg=k)
+            else:
+                self.assertEqual(got[k], want[k], msg=k)
+
+
+class ZoneSetupTest(unittest.TestCase):
+    def setUp(self):
+        b15, b1h, b4h = frames()
+        self.f, self.b1h = rs.build_frames(b15, b1h, b4h), b1h
+        self.setups, self.refused = rs.find_setups(self.f, "1h", "zone", "zone", "slot", use_htf=False)
+
+    def test_first_short_is_the_first_approach_with_a_known_range(self):
+        short = [s for s in self.setups if s["direction"] == "short"][0]
+        self.assertEqual(short["placed_at"], self.b1h["timestamp"].iloc[FIRST_SHORT_ZONE_SETUP_HOUR] + pd.Timedelta(hours=1))
+        self.assertEqual(short["legs"], [(1.0, 105.375)])
+        self.assertAlmostEqual(short["zone_high"], 106.025)
+        self.assertIsNone(short["extreme"])
+
+    def test_first_long_mirrors(self):
+        long_ = [s for s in self.setups if s["direction"] == "long"][0]
+        self.assertEqual(long_["placed_at"], self.b1h["timestamp"].iloc[FIRST_LONG_ZONE_SETUP_HOUR] + pd.Timedelta(hours=1))
+        self.assertEqual(long_["legs"], [(1.0, 100.625)])
+
+    def test_earlier_approaches_were_refused_for_lack_of_a_range(self):
+        self.assertTrue(any(r["reason"].startswith("geen range op 1h") for r in self.refused))
+
+    def test_one_setup_per_zone(self):
+        keys = [(s["direction"], s["zone_low"], s["zone_high"]) for s in self.setups]
+        self.assertEqual(len(keys), len(set(keys)))
+
+    def test_zone_stops_have_no_wick(self):
+        s = self.setups[0]
+        self.assertEqual(set(rs.raw_stops(s)), {"zone_0", "zone_025", "zone_05"})
+
+    def test_htf_ok(self):
+        r = rs.Range("1h", pd.Timestamp("2025-01-01", tz="UTC"), 110.0, 100.0, 3, 3, 0.0, 0.0, pd.Timestamp("2025-01-01", tz="UTC"), 1.0)
+        self.assertTrue(rs.htf_ok("short", -1, 200.0, 0.0, r))
+        self.assertFalse(rs.htf_ok("short", 1, 300.0, 0.0, r))
+        self.assertTrue(rs.htf_ok("short", 1, 120.0, 80.0, r))
+        self.assertTrue(rs.htf_ok("long", 1, 120.0, 80.0, r))
+        self.assertFalse(rs.htf_ok("long", 0, float("nan"), float("nan"), r))
+
+    def test_diagnose(self):
+        at = self.b1h["timestamp"].iloc[FIRST_SHORT_ZONE_SETUP_HOUR] + pd.Timedelta(hours=1)
+        self.assertTrue(rs.diagnose(self.f, at, "short", "1h", "zone", "zone", "slot", False)["seen"])
+        early = self.b1h["timestamp"].iloc[30]
+        d = rs.diagnose(self.f, early, "short", "1h", "zone", "zone", "slot", False)
+        self.assertFalse(d["seen"])
+        self.assertIn("geen range op 1h", d["reason"])
+
+
+def _noisy_bars(n: int, seed: int = 1) -> pd.DataFrame:
+    rng = np.random.default_rng(seed)
+    c = 100 + np.cumsum(rng.normal(0, 0.3, n)) + 3 * np.sin(np.arange(n) / 40)
+    o = np.r_[c[0], c[:-1]]
+    return pd.DataFrame({"timestamp": pd.date_range("2022-01-01", periods=n, freq="30min", tz="UTC"), "open": o,
+                         "high": np.maximum(o, c) + abs(rng.normal(0, 0.15, n)), "low": np.minimum(o, c) - abs(rng.normal(0, 0.15, n)),
+                         "close": c, "volume": 1.0})
+
+
+def _simple_best_cluster(values, tol):
+    best = np.array([], dtype=int)
+    for a in range(len(values)):
+        group = np.flatnonzero(np.abs(values - values[a]) <= tol)
+        if len(group) > len(best) or (len(group) == len(best) and len(group) and group[-1] > best[-1]):
+            best = group
+    return best
+
+
+class SpeedTest(unittest.TestCase):
+    def test_best_cluster_equals_the_simple_version(self):
+        rng = np.random.default_rng(7)
+        for _ in range(300):
+            values = np.round(rng.uniform(0, 5, rng.integers(0, 14)), 1)
+            np.testing.assert_array_equal(rs._best_cluster(values, 0.5), _simple_best_cluster(values, 0.5))
+
+    def test_range_series_equals_range_at_per_candle(self):
+        b, ranges = rs.range_series(_noisy_bars(1500), "30m")
+        hi, lo = b["high"].to_numpy(float), b["low"].to_numpy(float)
+        ph, pl = tl._pivot_flags(-hi, rs.PIVOT_N), tl._pivot_flags(lo, rs.PIVOT_N)
+        self.assertGreater(sum(r is not None for r in ranges), 0)
+        self.assertEqual(ranges, [rs.range_at(b, i, "30m", ph, pl)[0] for i in range(len(b))])
+
+    def test_twenty_thousand_candles_in_a_few_seconds(self):
+        import time
+        bars = _noisy_bars(20000)
+        t0 = time.perf_counter()
+        rs.range_series(bars, "30m")
+        self.assertLess(time.perf_counter() - t0, 5.0)
+
+
+class SetupLookaheadTest(unittest.TestCase):
+    """Een setup is bekend op placed_at: veranderen of weglaten van candles vanaf placed_at mag hem niet veranderen."""
+
+    def setUp(self):
+        self.b15, self.b1h, self.b4h = frames()
+
+    def run_setups(self, b15, family, entry, confirm):
+        b1h = rs.resample(b15, "1h")
+        b4h = rs.resample(b15, "4h")
+        return rs.find_setups(rs.build_frames(b15, b1h, b4h), "1h", family, entry, confirm, use_htf=False)[0]
+
+    def check(self, family, entry, confirm):
+        base = self.run_setups(self.b15, family, entry, confirm)
+        self.assertGreater(len(base), 0)
+        for s in base:
+            cut = int(self.b15["timestamp"].searchsorted(s["placed_at"]))
+            changed = self.b15.copy()
+            changed.loc[cut:, ["open", "high", "low", "close"]] = changed.loc[cut:, ["open", "high", "low", "close"]].to_numpy()[::-1] * 1.3
+            again = self.run_setups(changed, family, entry, confirm)
+            same = [t for t in again if t["placed_at"] == s["placed_at"] and t["direction"] == s["direction"] and t["zone_low"] == s["zone_low"]]
+            self.assertEqual(len(same), 1, (family, entry, confirm, s["placed_at"]))
+            self.assertEqual({k: v for k, v in same[0].items() if k != "features"}, {k: v for k, v in s.items() if k != "features"})
+
+    def test_zone_slot(self):
+        self.check("zone", "zone", "slot")
+
+    def test_sweep_slot(self):
+        self.check("sweep", "ob", "slot")
+
+    def test_zone_split(self):
+        self.check("zone", "split", "slot")
+
+    def test_diagnose_sweep_sees_the_short_and_explains_the_long(self):
+        f = rs.build_frames(self.b15, self.b1h, self.b4h)
+        at = self.b1h["timestamp"].iloc[SWEEP_HOUR] + pd.Timedelta(hours=1)
+        self.assertTrue(rs.diagnose(f, at, "short", "1h", "sweep", "ob", "slot", False)["seen"])
+        d = rs.diagnose(f, at, "long", "1h", "sweep", "ob", "slot", False)
+        self.assertFalse(d["seen"])
+        self.assertIn("geen prik voorbij de rand", d["reason"])
+        d = rs.diagnose(f, at, "short", "1h", "sweep", "ob", "choch15", False)
+        self.assertEqual(d["reason"], "geen CHoCH op 15m binnen 6 uur")
+
+
+class StopSideTest(unittest.TestCase):
+    def setup_for(self, direction):
+        if direction == "short":
+            return {"direction": "short", "zone_low": 105.0, "zone_high": 106.0, "extreme": 106.5, "atr_t": 0.4, "legs": [(1.0, 105.5)]}
+        return {"direction": "long", "zone_low": 100.0, "zone_high": 101.0, "extreme": 99.5, "atr_t": 0.4, "legs": [(1.0, 100.5)]}
+
+    def test_stop_is_beyond_the_outer_edge_for_both_sides_in_atr_units(self):
+        short, long_ = self.setup_for("short"), self.setup_for("long")
+        self.assertAlmostEqual(rs.raw_stops(short)["zone_05"], 106.0 + 0.5 * 0.4)
+        self.assertAlmostEqual(rs.raw_stops(long_)["zone_05"], 100.0 - 0.5 * 0.4)
+        self.assertAlmostEqual(rs.raw_stops(short)["wick_025"], 106.5 + 0.1)
+        self.assertAlmostEqual(rs.raw_stops(long_)["wick_025"], 99.5 - 0.1)
+
+    def test_floor_widens_a_tight_stop_and_never_refuses(self):
+        s = self.setup_for("short")
+        s["atr_t"], s["zone_high"] = 0.001, 105.6
+        planned = 105.5
+        self.assertAlmostEqual(rs.final_stop(s, "zone_0"), planned * 1.004)
+        s = self.setup_for("long")
+        s["atr_t"], s["zone_low"] = 0.001, 100.4
+        self.assertAlmostEqual(rs.final_stop(s, "zone_0"), 100.5 * 0.996)
+
+    def test_floor_leaves_a_wide_stop_alone(self):
+        s = self.setup_for("short")
+        self.assertAlmostEqual(rs.final_stop(s, "zone_05"), 106.2)
+
+    def test_floor_uses_the_weighted_entry_of_a_split(self):
+        s = self.setup_for("short")
+        s["atr_t"], s["zone_high"] = 0.001, 105.6
+        s["legs"] = [(0.4, 105.0), (0.6, 105.5)]
+        self.assertAlmostEqual(rs.final_stop(s, "zone_0"), 105.3 * 1.004)
+
+
+def _bars15(rows):
+    b = pd.DataFrame(rows, columns=["open", "high", "low", "close"])
+    b.insert(0, "timestamp", pd.date_range("2025-01-01", periods=len(rows), freq="15min", tz="UTC"))
+    return b
+
+
+class ChochAndLimitTest(unittest.TestCase):
+    # Short: een zwaaidal op 10 (laag 99), daarna een prik naar 106 op 14, en een slot onder 99 op m.
+    def short_bars(self, close_below_at=22, new_high_at=None):
+        rows = []
+        for q in range(30):
+            c = 100.0
+            lo, hi = 99.5, 100.5
+            if q == 10:
+                lo = 99.0
+            if q == 14:
+                hi = 106.0
+            if q == close_below_at:
+                c, lo = 98.5, 98.4
+            if q == new_high_at:
+                hi = 107.0
+            rows.append((100.0, hi, lo, c))
+        return _bars15(rows)
+
+    def test_choch_short_is_the_first_close_below_the_last_swing_low(self):
+        b = self.short_bars()
+        self.assertEqual(rs.choch_index(b, 14, 16, "short", 106.0), 22)
+
+    def test_a_new_extreme_first_cancels_the_choch(self):
+        b = self.short_bars(new_high_at=18)
+        self.assertIsNone(rs.choch_index(b, 14, 16, "short", 106.0))
+
+    def test_no_choch_without_a_known_swing(self):
+        b = self.short_bars()
+        self.assertIsNone(rs.choch_index(b, 14, 11, "short", 106.0))
+
+    def test_choch_long_mirrors(self):
+        rows = [(100.0, 100.5, 99.5, 100.0) for _ in range(30)]
+        rows[10] = (100.0, 101.0, 99.5, 100.0)
+        rows[14] = (100.0, 100.5, 94.0, 100.0)
+        rows[22] = (100.0, 101.6, 99.5, 101.5)
+        self.assertEqual(rs.choch_index(_bars15(rows), 14, 16, "long", 94.0), 22)
+
+    def test_order_block_is_the_last_opposite_candle_and_falls_back_to_the_extreme(self):
+        rows = [(100.0, 101.0, 99.0, 100.5), (100.5, 102.0, 100.0, 101.0), (101.0, 106.0, 100.5, 100.8)]
+        self.assertEqual(rs.order_block(_bars15(rows), 2, "short")[:3], (100.0, 102.0, 1))
+        red = [(101.0, 102.0, 100.0, 100.5)] * 3
+        self.assertEqual(rs.order_block(_bars15(red), 2, "short"), (100.0, 102.0, 2, False))
+
+    def test_limit_on_the_wrong_side_of_the_price_is_dropped(self):
+        r = rs.Range("1h", pd.Timestamp("2025-01-01", tz="UTC"), 110.0, 100.0, 3, 3, 0.0, 0.0, pd.Timestamp("2025-01-01", tz="UTC"), 1.0)
+        self.assertEqual(rs.legs_for("zone", "short", r, 108.0, 107.0), [(1.0, 108.0)])
+        self.assertEqual(rs.legs_for("zone", "short", r, 108.0, 108.0), [])
+        self.assertEqual(rs.legs_for("zone", "long", r, 102.0, 102.0), [])
+        self.assertEqual(rs.legs_for("split", "short", r, 108.0, 109.0), [(0.4, 110.0)])
+        self.assertEqual(rs.legs_for("split", "long", r, 102.0, 101.0), [(0.4, 100.0)])
