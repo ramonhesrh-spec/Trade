@@ -7,6 +7,8 @@ Bewijs kan zo tonen of een hogere score ook echt vaker wint, in plaats van dat w
 import json
 from typing import Optional
 
+from app.replay.rangesweep import AGE_MIN
+
 Check = tuple[str, bool]
 
 
@@ -68,3 +70,33 @@ def smc_checks(rr: float, risk_pct: float, has_sniper: bool, warning: bool) -> l
         ("Stopafstand minstens 0,3%", risk_pct >= 0.3),
         ("Sniper-prijs gevonden", has_sniper),
     ]
+
+
+WeightedCheck = tuple[str, bool, int]
+GRADE_A, GRADE_B = 80.0, 60.0
+
+
+def range_sweep_checks(f: dict, tf: str) -> list[WeightedCheck]:
+    """Onze lezing van "Range 40% order block 60%" (docs/onderzoek/range-sweep/preregistratie.md): 40 punten voor de range, 60 voor de zone.
+    Elk kenmerk is gemeten bij het plaatsen van de order. Het lab en Bewijs tonen per graad of een hoge score een betere stop geeft; aangenomen wordt het niet."""
+    age_min = AGE_MIN[tf]
+    return [
+        ("Beide randen minstens 4 keer aangeraakt", min(int(f["touches_high"]), int(f["touches_low"])) >= 4, 10),
+        ("Breedte tussen 4 en 10 ATR", 4.0 <= float(f["width_atr"]) <= 10.0, 10),
+        (f"Range minstens {age_min} candles oud", int(f["age_bars"]) >= age_min, 10),
+        ("Schone randen (spreiding hooguit 0,25 ATR)", float(f["edge_spread_atr"]) <= 0.25, 10),
+        ("Echte tegenkaars vlak voor de beweging", bool(f["ob_opposite"]), 15),
+        ("Sterke beweging weg van de zone (minstens 1,5 ATR)", float(f["displacement_atr"]) >= 1.5, 15),
+        ("Zone vers (hooguit één eerdere aanraking)", bool(f["zone_fresh"]), 15),
+        ("Zone dun (hooguit 1,5 ATR)", float(f["zone_atr"]) <= 1.5, 15),
+    ]
+
+
+def weighted_finish(checks: list[WeightedCheck]) -> tuple[str, float]:
+    """Zelfde reason-vorm als finish, maar de score telt punten in plaats van het aandeel kenmerken."""
+    reason = " | ".join(("✓ " if ok else "✗ ") + label for label, ok, _ in checks)
+    return reason, float(sum(w for _, ok, w in checks if ok)) * 100.0 / sum(w for _, _, w in checks)
+
+
+def grade_of(score: float) -> str:
+    return "A" if score >= GRADE_A else "B" if score >= GRADE_B else "C"

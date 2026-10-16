@@ -31,5 +31,34 @@ class ChanceChecksTests(unittest.TestCase):
         self.assertFalse(cc.smc_checks(1.0, 0.1, False, warning=True)[1][1])
 
 
+class RangeSweepScoreTest(unittest.TestCase):
+    F = {"touches_high": 6, "touches_low": 6, "width_atr": 9.3, "age_bars": 120, "edge_spread_atr": 0.0, "ob_opposite": True,
+         "displacement_atr": 1.3, "zone_fresh": True, "zone_atr": 0.9}
+
+    def test_fixture_scores_85_and_is_strong(self):
+        reason, score = cc.weighted_finish(cc.range_sweep_checks(self.F, "1h"))
+        self.assertEqual(score, 85.0)
+        self.assertEqual(cc.grade_of(score), "A")
+        self.assertIn("✗ Sterke beweging weg van de zone (minstens 1,5 ATR)", reason)
+
+    def test_weights_are_forty_and_sixty(self):
+        checks = cc.range_sweep_checks(self.F, "1h")
+        self.assertEqual(sum(w for _, _, w in checks[:4]), 40)
+        self.assertEqual(sum(w for _, _, w in checks[4:]), 60)
+
+    def test_age_minimum_depends_on_timeframe(self):
+        f = {**self.F, "age_bars": 40}
+        by_label = lambda tf: {l: ok for l, ok, _ in cc.range_sweep_checks(f, tf)}
+        self.assertFalse(by_label("30m")["Range minstens 48 candles oud"])
+        self.assertTrue(by_label("2h")["Range minstens 36 candles oud"])
+
+    def test_grades(self):
+        self.assertEqual([cc.grade_of(s) for s in (80, 79.9, 60, 59.9)], ["A", "B", "B", "C"])
+
+    def test_constants_follow_the_preregistration(self):
+        from app.replay import rangesweep as rs
+        self.assertEqual(cc.AGE_MIN, rs.AGE_MIN)
+
+
 if __name__ == "__main__":
     unittest.main()
