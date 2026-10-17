@@ -381,6 +381,32 @@ class TrackTest(EngineCase):
         self.assertIn("Limiet geraakt op 105.38", filled[0]["body"].replace("105.3750", "105.38").replace("105.375", "105.38"))
         self.assertEqual(filled[0]["tag"], f"range-sweep-{s['id']}")
 
+    def test_a_crash_mid_fill_rolls_everything_back_and_the_retry_fills_once(self):
+        self.scan(SHORT_PLACED + pd.Timedelta(minutes=5))
+        with mock.patch.object(repo, "_journal_in", side_effect=RuntimeError("crash")):
+            self.track(SHORT_PLACED + pd.Timedelta(hours=1, minutes=5))
+        self.assertEqual(self.signals(), [])
+        self.assertEqual(repo.list_open_range_sweep_trades(), [])
+        self.assertEqual([r["state"] for r in self.setups()], ["waiting"])
+        self.assertEqual([p for p in self.pushed if "gevuld" in p["title"]], [])
+        self.track(SHORT_PLACED + pd.Timedelta(hours=1, minutes=10))
+        self.assertEqual(len(self.signals()), 1)
+        self.assertEqual(len(repo.list_open_range_sweep_trades()), 1)
+        self.assertEqual(len([p for p in self.pushed if "gevuld" in p["title"]]), 1)
+
+    def test_filling_an_already_filled_setup_is_refused(self):
+        s = self.fill_short()
+        again = repo.fill_range_sweep_setup(s["id"], {"coin": "BTC", "direction": "short", "category": "day_trading", "trade_type": live.TRADE_TYPE, "price": 1.0},
+                                            "[]", 1.0, 2.0, "2025-03-08T00:00:00+00:00", "2025-03-08T00:00:00+00:00", [self.ceo])
+        self.assertIsNone(again)
+        self.assertEqual(len(self.signals()), 1)
+
+    def test_a_second_trade_for_one_setup_is_blocked_by_the_database(self):
+        import sqlite3
+        s = self.fill_short()
+        with self.assertRaises(sqlite3.IntegrityError):
+            repo.insert_range_sweep_trade(999, s["id"], "[]", 1.0, 2.0, "2025-03-08T00:00:00+00:00")
+
     def test_a_weak_chance_still_gets_its_fill_notification(self):
         with mock.patch.object(chance_checks, "grade_of", return_value="C"):
             self.scan(SHORT_PLACED + pd.Timedelta(minutes=5))

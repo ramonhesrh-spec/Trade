@@ -291,6 +291,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "ON sr_zone_failures (coin, direction, failed_at)"
     )
     _migrate_rule_trades(conn)
+    # Hier en niet in schema.sql: op een bestaande database met dubbele rijen zou de index het opstarten breken, en een tweede trade per setup is
+    # precies de fout die hij moet voorkomen.
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_range_sweep_trades_setup ON range_sweep_trades (setup_id)")
 
 
 def _migrate_rule_trades(conn: sqlite3.Connection) -> None:

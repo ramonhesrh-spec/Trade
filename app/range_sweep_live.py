@@ -341,17 +341,14 @@ async def _fill(setup: dict, filled: list[list], now: pd.Timestamp) -> None:
     first_at = min(pd.Timestamp(leg[2]) for leg in filled)
     fam = FAMILY_LABEL[setup["family"]]
     # Geen schakel in de openbare ketting: /keten is zonder login en de proef is alleen voor de CEO.
-    signal_id = repo.insert_signal({
+    signal_id = repo.fill_range_sweep_setup(setup["id"], {
         "message_id": None, "coin": setup["coin"], "direction": setup["direction"], "category": "day_trading", "trade_type": TRADE_TYPE,
         "pattern_name": setup["variant"], "price": entry, "stop_loss": setup["stop"], "take_profit": None, "confidence": f"{fam} {setup['grade']}",
         "reason": setup["reason"], "pass_pct": setup["score"], "technical_confirmed": 1, "hard_gates_ok": 1, "is_practice": 0,
-        "plain_explanation": f"{fam} {TF_LABEL[setup['range_tf']]}: limiet gevuld, stop voorbij de zone, doel kies je zelf."}, chain_it=False)
-    # Eerst de staat, dan de rest: lukt het vervolg niet, dan volgt er geen tweede signaal bij de volgende cyclus.
-    repo.set_range_sweep_setup_state(setup["id"], "filled", signal_id)
-    repo.insert_range_sweep_trade(signal_id, setup["id"], json.dumps(filled), entry, setup["stop"], first_at.isoformat())
-    repo.update_range_sweep_trade(signal_id, checked_until=(first_at - M15).isoformat())
-    for uid in viewers():
-        repo.create_journal_entry(signal_id, uid, None)
+        "plain_explanation": f"{fam} {TF_LABEL[setup['range_tf']]}: limiet gevuld, stop voorbij de zone, doel kies je zelf."},
+        json.dumps(filled), entry, setup["stop"], first_at.isoformat(), (first_at - M15).isoformat(), viewers())
+    if signal_id is None:
+        return
     mid = (setup["range_high"] + setup["range_low"]) / 2
     opp = setup["range_low"] if setup["direction"] == "short" else setup["range_high"]
     body = "\n".join([f"Limiet geraakt op {push_notify.fmt_price(entry)}, stop {push_notify.fmt_price(setup['stop'])}, doel kies je zelf",

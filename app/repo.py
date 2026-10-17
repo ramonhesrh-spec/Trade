@@ -998,6 +998,12 @@ def update_confirm_threshold(user_id: int, threshold_pct: float) -> None:
 
 def insert_signal(data: dict, chain_it: bool = True) -> int:
     """chain_it=False: geen schakel in de openbare ketting (/keten), voor de proefmotor die alleen de CEO ziet."""
+    with db.session() as conn:
+        return _insert_signal(conn, data, chain_it)
+
+
+def _insert_signal(conn, data: dict, chain_it: bool) -> int:
+    """Op een bestaande verbinding, zodat een aanroeper het signaal in zijn eigen transactie kan leggen."""
     fields = [
         "message_id", "coin", "direction", "category", "price", "rsi", "macd",
         "macd_signal", "volume_ratio", "ema9", "ema21", "atr", "atr_avg20", "adx",
@@ -1014,24 +1020,23 @@ def insert_signal(data: dict, chain_it: bool = True) -> int:
     ]
     placeholders = ", ".join("?" for _ in fields)
     created_at = db.now_iso()
-    with db.session() as conn:
-        cur = conn.execute(
-            f"""INSERT INTO signals ({", ".join(fields)}, created_at)
-                VALUES ({placeholders}, ?)""",
-            (*values, created_at),
-        )
-        if not chain_it:
-            return cur.lastrowid
-        # In dezelfde transactie als het signaal, zodat er nooit een signaal zonder schakel is. Een fout hier mag het melden niet blokkeren.
-        try:
-            signal = {**dict(zip(fields, values)), "id": cur.lastrowid, "created_at": created_at}
-            last = conn.execute("SELECT hash FROM signal_chain ORDER BY signal_id DESC LIMIT 1").fetchone()
-            prev = last["hash"] if last else None
-            body = chain.payload(signal)
-            conn.execute("INSERT INTO signal_chain (signal_id, prev, payload, hash) VALUES (?, ?, ?, ?)", (cur.lastrowid, prev, body, chain.link(prev, body)))
-        except Exception:
-            logger.exception("Schakel voor signaal %s niet vastgelegd", cur.lastrowid)
+    cur = conn.execute(
+        f"""INSERT INTO signals ({", ".join(fields)}, created_at)
+            VALUES ({placeholders}, ?)""",
+        (*values, created_at),
+    )
+    if not chain_it:
         return cur.lastrowid
+    # In dezelfde transactie als het signaal, zodat er nooit een signaal zonder schakel is. Een fout hier mag het melden niet blokkeren.
+    try:
+        signal = {**dict(zip(fields, values)), "id": cur.lastrowid, "created_at": created_at}
+        last = conn.execute("SELECT hash FROM signal_chain ORDER BY signal_id DESC LIMIT 1").fetchone()
+        prev = last["hash"] if last else None
+        body = chain.payload(signal)
+        conn.execute("INSERT INTO signal_chain (signal_id, prev, payload, hash) VALUES (?, ?, ?, ?)", (cur.lastrowid, prev, body, chain.link(prev, body)))
+    except Exception:
+        logger.exception("Schakel voor signaal %s niet vastgelegd", cur.lastrowid)
+    return cur.lastrowid
 
 
 def list_chain(limit: int = 500, newest_first: bool = False) -> list[dict]:
@@ -3103,6 +3108,27 @@ def insert_range_sweep_trade(signal_id: int, setup_id: int, legs_filled_json: st
     with db.session() as conn:
         conn.execute("""INSERT INTO range_sweep_trades (signal_id, setup_id, legs_filled, entry, stop, filled_at, checked_until, ref_stop, ref_extreme)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", (signal_id, setup_id, legs_filled_json, entry, stop, filled_at, filled_at, stop, entry))
+
+
+def _journal_in(conn, signal_id: int, user_id: int) -> None:
+    conn.execute("INSERT INTO journal_entries (signal_id, user_id, risk_eur, created_at) VALUES (?, ?, NULL, ?)", (signal_id, user_id, db.now_iso()))
+
+
+def fill_range_sweep_setup(setup_id: int, signal: dict, legs_filled_json: str, entry: float, stop: float, filled_at: str, checked_until: str,
+                           user_ids: list[int]) -> Optional[int]:
+    """Alles van een vulling in een transactie: de staat, het signaal (buiten de openbare ketting), de trade en het dagboek. De staatswissel komt
+    eerst en geldt alleen vanuit waiting of niet_gemeld: een tweede cyclus of een crash halverwege geeft nooit twee signalen of een gevulde setup
+    zonder trade. None als de setup al gevuld of vervallen was."""
+    with db.session() as conn:
+        if conn.execute("UPDATE range_sweep_setups SET state = 'filled' WHERE id = ? AND state IN ('waiting', 'niet_gemeld')", (setup_id,)).rowcount != 1:
+            return None
+        signal_id = _insert_signal(conn, signal, False)
+        conn.execute("UPDATE range_sweep_setups SET signal_id = ? WHERE id = ?", (signal_id, setup_id))
+        conn.execute("""INSERT INTO range_sweep_trades (signal_id, setup_id, legs_filled, entry, stop, filled_at, checked_until, ref_stop, ref_extreme)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", (signal_id, setup_id, legs_filled_json, entry, stop, filled_at, checked_until, stop, entry))
+        for uid in user_ids:
+            _journal_in(conn, signal_id, uid)
+        return signal_id
 
 
 _TRADE_FIELDS = frozenset({"legs_filled", "entry", "stop", "checked_until", "mae_r", "mfe_r", "reached_1r_at", "reached_2r_at", "reached_3r_at",
