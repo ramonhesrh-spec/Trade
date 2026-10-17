@@ -51,6 +51,19 @@ class PreregTest(unittest.TestCase):
             mod, attr = name.split(".")
             self.assertAlmostEqual(float(getattr(mods[mod], attr)), float(value), msg=name)
 
+    def test_code_only_constants_are_in_the_constants_block(self):
+        block = re.search(r"```prereg-constants\n(.*?)```", PREREG.read_text(encoding="utf-8"), re.S).group(1)
+        for name in ("rangesweep_lab.PLACEBO_DRAWS = 20", "rangesweep_lab.PLACEBO_SEED = 7", "stopquality.KILL_TESTS = 30"):
+            self.assertIn(name, block)
+
+    def test_selection_rule_and_placebo_entry_are_written_in_the_preregistration(self):
+        text = PREREG.read_text(encoding="utf-8")
+        decision = text[text.index("**Keuze voor de proef"):]
+        decision = decision[:decision.index("\n- **")]
+        for part in ("geslaagd zijn op stopkwaliteit", "meeste vullingen", "laagste mediane kosten", "bredere stop", "mediane stopafstand", "naam van de variant", "naam van de stop"):
+            self.assertIn(part, decision)
+        self.assertIn("sluitkoers van de triggercandle", text)
+
     def test_every_variant_is_preregistered(self):
         text = PREREG.read_text(encoding="utf-8")
         for v in rl.VARIANTS:
@@ -265,6 +278,17 @@ class SelectTest(unittest.TestCase):
         res = [(a, {"zone_025": ok(400, 0.05), "zone_05": ok(400, 0.05)}), (b, {"zone_025": bad, "wick_025": ok(350, 0.04)})]
         self.assertEqual(rl.select_live(res), (a, "zone_05"))
         self.assertIsNone(rl.select_live([(a, {"zone_025": bad, "zone_05": bad})]))
+
+    def test_ties_break_on_median_stop_pct_then_variant_name_then_stop_name(self):
+        a = next(v for v in rl.VARIANTS if v.name == "RS_1H")
+        b = next(v for v in rl.VARIANTS if v.name == "RS_2H")
+        cell = lambda pct: {"quality": {"passes": True}, "summary": {"n": 400, "median_cost_r": 0.05, "median_stop_pct": pct}}
+        self.assertEqual(rl.select_live([(a, {"zone_025": cell(2.0)}), (b, {"zone_025": cell(3.0)})]), (b, "zone_025"))
+        self.assertEqual(rl.select_live([(b, {"zone_025": cell(2.0)}), (a, {"zone_025": cell(2.0)})]), (a, "zone_025"))
+        self.assertEqual(rl.select_live([(a, {"wick_025": cell(2.0), "zone_025": cell(2.0)})]), (a, "wick_025"))
+        # een bredere buffer gaat voor op de mediane stopafstand
+        z = next(v for v in rl.VARIANTS if v.name == "RZ_2H")
+        self.assertEqual(rl.select_live([(z, {"zone_025": cell(9.0), "zone_05": cell(1.0)})])[1], "zone_05")
 
     def test_choice_does_not_depend_on_the_order_of_the_results(self):
         a = next(v for v in rl.VARIANTS if v.name == "RS_1H")
