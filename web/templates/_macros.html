@@ -151,7 +151,10 @@
     {% elif entry.trade_type == "smc" %}
     <span class="badge badge-swing" title="Autonoom herkend door HesPulse: structuurbreuk + liquidity sweep op 30m, afwijzing in de terugtrek-zone op 15m — geen gepoold percentage">SMC</span>
     {% endif %}
-    {% if entry.auto_outcome == "take_profit" %}<span class="badge badge-outcome-win">✓ take profit</span>
+    {# Een range sweep heeft geen doel: de uitkomst is de referentie-uitgang en leest nooit als een geraakt doel. #}
+    {% if entry.trade_type == "range_sweep" and entry.auto_outcome in ("take_profit", "stop_loss") %}
+    <span class="badge {{ 'badge-outcome-win' if entry.auto_outcome == 'take_profit' else 'badge-outcome-loss' }}" title="Uitgang volgens de referentie (meelopende stop), geen doel">referentie {{ ('%+.2f'|format(entry.ref_r))|replace('.', ',') if entry.ref_r is defined and entry.ref_r is not none else '' }}R</span>
+    {% elif entry.auto_outcome == "take_profit" %}<span class="badge badge-outcome-win">✓ take profit</span>
     {% elif entry.auto_outcome == "stop_loss" %}<span class="badge badge-outcome-loss">✗ stop loss</span>
     {% elif entry.auto_outcome == "vervallen" %}<span class="badge badge-outcome-expired">vervallen</span>
     {% endif %}

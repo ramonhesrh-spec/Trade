@@ -1087,7 +1087,7 @@ def list_recent_signals(coin: str, limit: int = 3, exclude_types: tuple[str, ...
     signaal heeft geen message_id, zie app/market_scanner.py."""
     with db.session() as conn:
         rows = conn.execute(
-            f"""SELECT s.*,
+            f"""SELECT s.*, (SELECT r_value FROM trade_results WHERE signal_id = s.id) AS ref_r,
                       COALESCE(mcr.message_summary, m.message_summary, 'Zelf gedetecteerd door HesPulse')
                           AS message_summary
                FROM signals s
@@ -1219,6 +1219,7 @@ _JOURNAL_SELECT = """
         s.confidence AS confidence, s.technical_confirmed AS technical_confirmed,
         s.pass_pct AS pass_pct, s.hard_gates_ok AS hard_gates_ok,
         s.auto_outcome AS auto_outcome,
+        (SELECT r_value FROM trade_results WHERE signal_id = s.id) AS ref_r,
         s.rsi AS rsi, s.ema9 AS ema9, s.ema21 AS ema21,
         s.macd AS macd, s.macd_signal AS macd_signal, s.volume_ratio AS volume_ratio,
         s.atr_avg20 AS atr_avg20, s.adx AS adx,

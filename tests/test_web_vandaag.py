@@ -274,6 +274,19 @@ class WebVandaagTests(unittest.TestCase):
         self.assertEqual((badge, headline), (0, 0))
         self.assertNotIn("range-sweep", setups + radar_page)
 
+    def test_a_positive_range_sweep_reference_never_reads_as_a_hit_target(self):
+        self.seed_range_sweeps()
+        uid = repo.get_user_by_username("tester")["id"]
+        with db.session() as conn:
+            sid = conn.execute("SELECT id FROM signals WHERE coin = 'XRP'").fetchone()["id"]
+        repo.create_journal_entry(sid, uid, None)
+        repo.set_trade_result(sid, 1.5, datetime.now(timezone.utc).isoformat())
+        repo.mark_signal_auto_outcome(sid, "take_profit", datetime.now(timezone.utc).isoformat())
+        for url in ("/signalen?alles=1", "/coins/XRP"):
+            text = self.client.get(url).text
+            self.assertIn("referentie +1,50R", text)
+            self.assertNotIn("✓ take profit", text)
+
     def test_range_sweep_next_to_other_chances_keeps_the_count_equal_and_sorted(self):
         self.seed_chances()
         range_seed.seed_setup(coin="ARB")
