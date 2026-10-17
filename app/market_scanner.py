@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import calendar_alerts, chance_checks, config, exchange, indicators, market_script, trend_live, rejection_live, patterns, push_notify, repo, risk, rule_live, samenval, structure_live, trade_plan
+from app import calendar_alerts, chance_checks, config, exchange, indicators, market_script, trend_live, rejection_live, patterns, push_notify, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
@@ -1249,6 +1249,10 @@ async def scan_smc_fast() -> None:
         await rule_live.scan()
     except Exception:
         logger.exception("Proefmotor is mislukt")
+    try:
+        await range_watch.run()
+    except Exception:
+        logger.exception("Range-watch is mislukt")
     try:
         await structure_live.run()
     except Exception:
