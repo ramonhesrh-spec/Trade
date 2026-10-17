@@ -44,7 +44,7 @@ Beide pagina's zijn statisch. De VPS heeft geen browser: maak de bestanden en ha
 # poort 0b: jouw voorbeelden met onze ranges en zones op dat moment
 .venv/bin/python3 scripts/range_sweep_gallery.py --csv docs/onderzoek/range-sweep/handtrades.csv --uit /tmp/range_sweep_voorbeelden.html
 # poort 1: 30 willekeurige setups uit de historie (vaste seed 7)
-.venv/bin/python3 scripts/range_sweep_gallery.py --coins BTC,ETH,SOL,ARB,APT,AAVE --n 30 --uit /tmp/range_sweep_galerij.html
+.venv/bin/python3 scripts/range_sweep_gallery.py --coins BTC,ETH,SOL,ARB,APT,AAVE --n 30 --jaren 3 --uit /tmp/range_sweep_galerij.html
 ```
 
 Op je eigen computer (nieuw terminalvenster, niet op de VPS), open daarna de bestanden in je browser:
@@ -60,12 +60,12 @@ Pas als poort 1 gehaald is, wordt de pre-registratie bevroren: vul in `preregist
 
 ## 4. Poort 2: de volledige labrun
 
-Alleen op de bevroren commit. De volgorde: eerst de candles (eenmalig, de cache in `data/candles/` blijft staan), dan de run.
+Alleen op de bevroren commit. De volgorde: eerst de candles, dan de run. De cache in `data/candles/` wordt gedeeld met andere scripts en `ensure_candles` geeft een bestaande cache terug zonder naar het aantal jaren te kijken; daarom haalt de lus hieronder alles met `refresh=True` opnieuw op (ook de zes coins die de galerij van stap 3 al vulde), en weigert het labscript een cache die meer dan 14 dagen korter dekt dan `--jaren` (foutmelding "dekt maar ... dagen").
 
 ```bash
 # candles ophalen: 20 coins maal 3 timeframes, enkele minuten
 for c in BTC ETH SOL BNB XRP ADA DOGE AVAX LINK DOT LTC BCH NEAR ATOM UNI AAVE SUI INJ APT ARB; do
-  .venv/bin/python3 -c "from app.replay import candles as cc; [cc.ensure_candles('$c', 3, timeframe=t) for t in ('15m','1h','4h')]" && echo "$c klaar"
+  .venv/bin/python3 -c "from app.replay import candles as cc; [cc.ensure_candles('$c', 3, refresh=True, timeframe=t) for t in ('15m','1h','4h')]" && echo "$c klaar"
 done
 
 # de run: hervatbaar per coin, rapport tussen de markers van resultaten.md

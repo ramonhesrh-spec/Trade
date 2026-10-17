@@ -50,6 +50,16 @@ def coverage_warning(tf: str, first: pd.Timestamp, last: pd.Timestamp, jaren: fl
     return None
 
 
+def check_coverage(coin: str, frames: dict, jaren: float) -> None:
+    """Stopt als een van de timeframes meer dan 14 dagen korter dekt dan --jaren. ensure_candles geeft een bestaande cache terug zonder naar de jaren te
+    kijken (de galerij vult hem met 1 jaar), dus zonder deze controle rekent een lab-run met 3 jaar stil op 1 jaar, en --alleen-volledig laat dan
+    precies de coins vallen met de kortste cache."""
+    short = [w for tf in ("15m", "1h", "4h") if len(frames[tf]) and (w := coverage_warning(tf, frames[tf]["timestamp"].iloc[0], frames[tf]["timestamp"].iloc[-1], jaren))]
+    if short:
+        sys.exit(f"{coin}: {'; '.join(short)}. De cache in data/candles/ is korter dan --jaren {jaren:g}: haal hem opnieuw op met refresh "
+                 f"(docs/onderzoek/range-sweep/vps-protocol.md, stap 4) of kies minder --jaren.")
+
+
 def select_variants(familie: str):
     if familie == "kanteling":
         return tuple(v for v in tl.VARIANTS if v.family == "kanteling")
@@ -215,6 +225,7 @@ def _run_one_coin(coin: str, a, ensure, positioning_fn) -> tuple[dict, dict, lis
     if any(frames[tf].empty for tf in ("15m", "1h", "4h")):
         print(f"{coin}: te weinig candles", flush=True)
         return {}, {}, []
+    check_coverage(coin, frames, a.jaren)
     span = [frames["15m"]["timestamp"].iloc[0], frames["15m"]["timestamp"].iloc[-1]]
     metrics = None
     try:
@@ -243,7 +254,11 @@ def run_rangesweep(a, ensure=candle_cache.ensure_candles, positioning_fn=positio
             sys.exit(f"--rapport {report}: {exc}")
     coins = a.coins.split(",")
     if a.alleen_volledig:
-        firsts = {c: ensure(c, a.jaren, timeframe="15m").head(1) for c in coins}
+        full = {c: ensure(c, a.jaren, timeframe="15m") for c in coins}
+        for c, df in full.items():
+            if len(df):
+                check_coverage(c, {"15m": df, "1h": df, "4h": df}, a.jaren)
+        firsts = {c: df.head(1) for c, df in full.items()}
         coins = [c for c in coins if c in set(tl.full_history(firsts))]
         print(f"{len(coins)} coins met volle historie", flush=True)
     outdir = Path(a.hervat) if a.hervat else None

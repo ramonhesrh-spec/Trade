@@ -142,7 +142,7 @@ def no_oi(coin, start, end):
 
 
 def args(**kw):
-    base = dict(coins="AAA,BBB,CCC", jaren=1.0, kosten=0.12, familie="rangesweep", alleen_volledig=False, opslaan=False, rapport=None, hervat=None)
+    base = dict(coins="AAA,BBB,CCC", jaren=0.1, kosten=0.12, familie="rangesweep", alleen_volledig=False, opslaan=False, rapport=None, hervat=None)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -239,6 +239,33 @@ class RangeSweepCliTest(unittest.TestCase):
         save.assert_called_once()
         self.assertEqual(save.call_args.args[1], choice)
         self.assertIn("17 regels opgeslagen", text)
+
+    def test_short_cache_stops_the_run_with_a_clear_message(self):
+        # De synthetische cache dekt ~42 dagen terwijl een jaar gevraagd wordt: de situatie van een galerij-run met 1 jaar voor de lab-run met 3.
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out), self.assertRaises(SystemExit) as cm:
+            strategy_lab.run_rangesweep(args(coins="AAA", jaren=1.0), ensure=synthetic_ensure(), positioning_fn=no_oi)
+        self.assertIn("AAA", str(cm.exception))
+        self.assertIn("dekt maar", str(cm.exception))
+        self.assertIn("refresh", str(cm.exception))
+
+    def test_short_cache_is_caught_before_alleen_volledig_drops_coins(self):
+        calls = []
+        with self.assertRaises(SystemExit) as cm:
+            run(args(coins="AAA,BBB", jaren=1.0, alleen_volledig=True), synthetic_ensure(calls))
+        self.assertIn("dekt maar", str(cm.exception))
+        self.assertEqual({t for _, t in calls}, {"15m"})
+
+    def test_cache_that_covers_the_request_runs(self):
+        self.assertIn("15 varianten", run(args(coins="AAA", jaren=0.1), synthetic_ensure()))
+
+    def test_check_coverage_names_every_short_timeframe(self):
+        ens = synthetic_ensure()
+        frames = {tf: ens("AAA", 1, timeframe=tf) for tf in ("15m", "1h", "4h")}
+        with self.assertRaises(SystemExit) as cm:
+            strategy_lab.check_coverage("AAA", frames, 1.0)
+        self.assertTrue(all(tf in str(cm.exception) for tf in ("15m", "1h", "4h")))
+        strategy_lab.check_coverage("AAA", frames, 0.1)
 
     def test_other_families_still_parse(self):
         parser = strategy_lab.build_parser()
