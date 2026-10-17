@@ -27,6 +27,7 @@ TYPE_LABELS = {
     "trend": "Trend (ongetest)",
     "rejectie": "Rejectie op een niveau (ongetest)",
     "don55_trend": "Trend 4u met meelopende stop",
+    "range_sweep": "Range sweep (ongetest)",
 }
 # Leesbare namen voor de labvarianten (sleutel: Variant.name.lower()); alleen de CEO ziet ze. Onbekend: de ruwe naam.
 LAB_LABELS = {
@@ -50,6 +51,11 @@ LAB_LABELS = {
     "kant_2_15m": "Kanteling dubbel, 15m",
     "kant_1_1h": "Kanteling enkel, 1u",
     "kant_2_1h": "Kanteling dubbel, 1u",
+    "rz_30m": "Zone-retest 30m", "rz_1h": "Zone-retest 1u", "rz_2h": "Zone-retest 2u", "rz_4h": "Zone-retest 4u",
+    "rz_1h_choch": "Zone-retest 1u, CHoCH 15m", "rz_2h_choch": "Zone-retest 2u, CHoCH 15m", "rz_2h_zonderhtf": "Zone-retest 2u zonder HTF",
+    "rz_2h_split": "Zone-retest 2u, 40/60 verdeeld", "rs_30m": "Range sweep 30m", "rs_1h": "Range sweep 1u", "rs_2h": "Range sweep 2u",
+    "rs_4h": "Range sweep 4u", "rs_1h_choch": "Range sweep 1u, CHoCH 15m", "rs_1h_zonderhtf": "Range sweep 1u zonder HTF",
+    "rs_1h_oiflush": "Range sweep 1u met OI-daling", "range_sweep_stop": "Range sweep, stopkwaliteit",
 }
 SOURCE_LABELS = {"scan": "Door HesPulse gevonden", "community": "Via de community"}
 STATUS_LABELS = {
