@@ -49,6 +49,15 @@ class RangeWatchTest(unittest.TestCase):
         self.assertFalse(ok)
         self.assertIn("budget", why)
 
+    def test_small_timeframe_edges_leave_the_last_slot_for_2h_and_4h(self):
+        self.assertTrue(rw.should_push("rand_high", "1h", 1, 3)[0])
+        ok, why = rw.should_push("rand_high", "30m", 2, 3)
+        self.assertFalse(ok)
+        self.assertIn("2u en 4u", why)
+        self.assertTrue(rw.should_push("rand_high", "2h", 2, 3)[0])
+        self.assertTrue(rw.should_push("gevonden", "4h", 2, 3)[0])
+        self.assertTrue(rw.should_push("rand_low", "30m", 50, 0)[0])        # budget 0 is onbeperkt
+
     def test_body_is_measured_only(self):
         body = rw.watch_body("ARB", "2h", rng(0.2045, 0.17, 0.003), 0.1988)
         self.assertIn("Range 2u", body)
@@ -141,6 +150,19 @@ class RunTest(DbCase):
         self.run_at(130, 5)
         self.run_at(131)
         self.assertEqual(len(self.kinds()), 5)
+
+    def test_one_failing_viewer_does_not_block_the_next(self):
+        self.known_coin()
+        other = repo.create_user("b", "x", 0, 1)
+        calls = []
+
+        async def flaky(uid, *a, **k):
+            calls.append(uid)
+            if len(calls) == 1:
+                raise RuntimeError("push stuk")
+        with mock.patch.object(rw, "viewers", return_value=[self.ceo, other]), mock.patch.object(push_notify, "send_push", flaky):
+            asyncio.run(rw._warn(1, "4h", "gevonden", "t", "b", self.at(130)))
+        self.assertEqual(calls, [self.ceo, other])
 
     def test_budget_frees_up_after_24_hours(self):
         self.known_coin()

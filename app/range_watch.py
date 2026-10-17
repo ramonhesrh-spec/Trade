@@ -61,6 +61,10 @@ def events(watch: dict, price: float, rng_now: Optional[rs.Range]) -> list[str]:
 def should_push(kind: str, tf: str, sent_24h: int, budget: int) -> tuple[bool, str]:
     if kind == "gevonden" and tf not in PUSH_TFS:
         return False, "Ranges op 30m en 1u staan alleen op de pagina."
+    # Plan: de rand-push geldt voor alle timeframes. Maar 30m en 1u leveren er tientallen per dag; zij laten de laatste plek vrij, anders is het
+    # budget op voordat een 2u- of 4u-range gevonden wordt.
+    if budget and tf not in PUSH_TFS and sent_24h >= budget - 1 and budget > 1:
+        return False, f"Range-watch: budget van {budget} per 24 uur, de laatste plek is voor ranges op 2u en 4u, daarom geen push."
     if budget and sent_24h >= budget:
         return False, f"Range-watch: budget van {budget} per 24 uur bereikt, daarom geen push."
     return True, ""
@@ -81,15 +85,18 @@ async def _warn(watch_id: int, tf: str, kind: str, title: str, body: str, now: d
         return
     since = (now - timedelta(hours=24)).isoformat()
     for uid in viewers():
-        ok, why = should_push(kind, tf, repo.count_range_watch_pushes(uid, since), config.RANGE_WATCH_MAX_PER_DAY)
-        if ok and push_policy.pause_minutes_left((repo.get_user(uid) or {}).get("push_paused_until"), now):
-            # Zoals send_kans_push: wie pauzeert houdt na de pauze zijn volle budget, dus deze telt niet mee.
-            ok, why = False, "Meldingen stonden op pauze, daarom geen push."
-        repo.log_range_watch_push(uid, watch_id, kind, now.isoformat(), ok)
-        if ok:
-            await push_notify.send_push(uid, title, body, WATCH_URL, silent=True, tag=f"range-{watch_id}")
-        else:
-            repo.create_notification(uid, "range", title, f"{body}\n{why}", WATCH_URL)
+        try:
+            ok, why = should_push(kind, tf, repo.count_range_watch_pushes(uid, since), config.RANGE_WATCH_MAX_PER_DAY)
+            if ok and push_policy.pause_minutes_left((repo.get_user(uid) or {}).get("push_paused_until"), now):
+                # Zoals send_kans_push: wie pauzeert houdt na de pauze zijn volle budget, dus deze telt niet mee.
+                ok, why = False, "Meldingen stonden op pauze, daarom geen push."
+            repo.log_range_watch_push(uid, watch_id, kind, now.isoformat(), ok)
+            if ok:
+                await push_notify.send_push(uid, title, body, WATCH_URL, silent=True, tag=f"range-{watch_id}")
+            else:
+                repo.create_notification(uid, "range", title, f"{body}\n{why}", WATCH_URL)
+        except Exception:
+            logger.exception("Range-watchmelding %s naar gebruiker %s is mislukt", watch_id, uid)
 
 
 def _same_range(a: dict, rng: rs.Range) -> bool:
