@@ -3027,3 +3027,112 @@ def get_trade_result(signal_id: int) -> Optional[dict]:
     with db.session() as conn:
         row = conn.execute("SELECT signal_id, r_value, closed_at FROM trade_results WHERE signal_id = ?", (signal_id,)).fetchone()
         return dict(row) if row else None
+
+
+def upsert_range_watch(row: dict) -> tuple[int, bool]:
+    """(id, nieuw). Bestaat de range al (zelfde coin, timeframe en eerste zwaaipunt), dan schuiven alleen de randen en de ATR bij, en alleen zolang hij
+    actief is: een geëindigde range komt nooit terug, anders meldt een volgende cyclus hem opnieuw."""
+    with db.session() as conn:
+        cur = conn.execute("""INSERT OR IGNORE INTO range_watches (coin, tf, range_high, range_low, first_at, found_at, atr)
+                              VALUES (:coin, :tf, :range_high, :range_low, :first_at, :found_at, :atr)""", row)
+        if cur.rowcount:
+            return cur.lastrowid, True
+        conn.execute("""UPDATE range_watches SET range_high = :range_high, range_low = :range_low, atr = :atr
+                        WHERE coin = :coin AND tf = :tf AND first_at = :first_at AND state = 'actief'""", row)
+        rid = conn.execute("SELECT id FROM range_watches WHERE coin = ? AND tf = ? AND first_at = ?", (row["coin"], row["tf"], row["first_at"])).fetchone()["id"]
+        return rid, False
+
+
+def list_range_watches(states: tuple[str, ...] = ("actief",)) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"SELECT * FROM range_watches WHERE state IN ({marks}) ORDER BY id", states).fetchall()]
+
+
+def set_range_watch_state(watch_id: int, state: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE range_watches SET state = ?, ended_at = CASE WHEN ? = 'actief' THEN NULL ELSE COALESCE(ended_at, ?) END WHERE id = ?",
+                     (state, state, db.now_iso(), watch_id))
+
+
+def mark_range_watch_edge(watch_id: int, edge: str) -> bool:
+    """Eén waarschuwing per rand: markeer vóór het versturen, zoals price_alerts, zodat een herstart niet dubbel meldt."""
+    col = {"high": "edge_high_at", "low": "edge_low_at"}[edge]
+    with db.session() as conn:
+        return conn.execute(f"UPDATE range_watches SET {col} = ? WHERE id = ? AND {col} IS NULL", (db.now_iso(), watch_id)).rowcount == 1
+
+
+def log_range_watch_push(user_id: int, watch_id: int, kind: str, at: str, pushed: bool) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT INTO range_watch_log (user_id, watch_id, kind, at, pushed) VALUES (?, ?, ?, ?, ?)", (user_id, watch_id, kind, at, 1 if pushed else 0))
+        conn.execute("DELETE FROM range_watch_log WHERE at < ?", ((datetime.fromisoformat(at) - timedelta(days=3)).isoformat(),))
+
+
+def count_range_watch_pushes(user_id: int, since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM range_watch_log WHERE user_id = ? AND pushed = 1 AND at >= ?", (user_id, since_iso)).fetchone()[0]
+
+
+_SETUP_COLS = ("coin", "direction", "variant", "family", "stop_name", "range_tf", "range_high", "range_low", "range_first_at", "zone_low", "zone_high",
+               "zone_at", "sweep_at", "extreme", "placed_at", "legs", "stop", "atr_t", "score", "grade", "reason", "features", "liq_json", "expires_at", "plan")
+
+
+def insert_range_sweep_setup(row: dict) -> Optional[int]:
+    """None als dezelfde setup al bestaat: de motor draait elke cyclus over dezelfde candles en mag er niet twee van maken."""
+    with db.session() as conn:
+        cur = conn.execute(f"INSERT OR IGNORE INTO range_sweep_setups ({', '.join(_SETUP_COLS)}) VALUES ({', '.join(':' + c for c in _SETUP_COLS)})",
+                           {c: row[c] for c in _SETUP_COLS})
+        return cur.lastrowid if cur.rowcount else None
+
+
+def list_range_sweep_setups(states: tuple[str, ...], since_iso: Optional[str] = None) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        rows = conn.execute(f"SELECT * FROM range_sweep_setups WHERE state IN ({marks}) AND (? IS NULL OR placed_at >= ?) ORDER BY id", (*states, since_iso, since_iso)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_range_sweep_setup_state(setup_id: int, state: str, signal_id: Optional[int] = None) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE range_sweep_setups SET state = ?, signal_id = COALESCE(?, signal_id) WHERE id = ?", (state, signal_id, setup_id))
+
+
+def insert_range_sweep_trade(signal_id: int, setup_id: int, legs_filled_json: str, entry: float, stop: float, filled_at: str) -> None:
+    """De referentie-uitgang begint op de echte stop en de instap; checked_until op het vulmoment, zodat de eerste 15m-candle na de vulling de eerste is
+    die de meting verwerkt."""
+    with db.session() as conn:
+        conn.execute("""INSERT INTO range_sweep_trades (signal_id, setup_id, legs_filled, entry, stop, filled_at, checked_until, ref_stop, ref_extreme)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", (signal_id, setup_id, legs_filled_json, entry, stop, filled_at, filled_at, stop, entry))
+
+
+_TRADE_FIELDS = frozenset({"legs_filled", "entry", "stop", "checked_until", "mae_r", "mfe_r", "reached_1r_at", "reached_2r_at", "reached_3r_at",
+                           "reached_4r_at", "reached_5r_at", "reached_6r_at", "stop_hit_at", "ref_stop", "ref_extreme", "ref_r", "ref_closed_at", "closed_at"})
+
+
+def update_range_sweep_trade(signal_id: int, **fields) -> None:
+    unknown = set(fields) - _TRADE_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor range_sweep_trades: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE range_sweep_trades SET {', '.join(f + ' = ?' for f in fields)} WHERE signal_id = ?", (*fields.values(), signal_id))
+
+
+_TRADE_SELECT = """SELECT rt.*, s.coin, s.direction, s.price, s.created_at, s.auto_outcome, st.variant, st.family, st.stop_name, st.range_tf, st.grade, st.score
+                   FROM range_sweep_trades rt JOIN signals s ON s.id = rt.signal_id JOIN range_sweep_setups st ON st.id = rt.setup_id"""
+
+
+def list_open_range_sweep_trades() -> list[dict]:
+    """Open is: de meting is nog niet afgesloten (closed_at leeg). Voor de motor, niet voor het signaal: een signaal kan zijn uitkomst eerder krijgen."""
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"{_TRADE_SELECT} WHERE rt.closed_at IS NULL ORDER BY rt.signal_id").fetchall()]
+
+
+def list_range_sweep_trades(limit: int) -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"{_TRADE_SELECT} ORDER BY rt.signal_id DESC LIMIT ?", (limit,)).fetchall()]
+
+
+def set_signal_price(signal_id: int, price: float) -> None:
+    """De instapprijs van een signaal dat eerst als wachtende limiet bestond en bij de vulling zijn gewogen instap krijgt."""
+    with db.session() as conn:
+        conn.execute("UPDATE signals SET price = ? WHERE id = ?", (price, signal_id))
