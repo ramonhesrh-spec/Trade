@@ -698,6 +698,93 @@ CREATE TABLE IF NOT EXISTS rule_trades (
     UNIQUE (rule, coin, entered_at)
 );
 
+-- Range-watch (app/range_watch.py): een coin die in een geldige range ligt, zodat je weet waar een sweep of retest kan komen. Eén rij per coin,
+-- timeframe en eerste zwaaipunt; de randen mogen bijschuiven. edge_high_at/edge_low_at: wanneer "koers bij de rand" ging (één keer per rand,
+-- gezet vóór het versturen). state is actief, gesweept, gebroken of verlopen; een geëindigde range gaat nooit terug naar actief.
+CREATE TABLE IF NOT EXISTS range_watches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    tf TEXT NOT NULL,
+    range_high REAL NOT NULL,
+    range_low REAL NOT NULL,
+    first_at TEXT NOT NULL,
+    found_at TEXT NOT NULL,
+    atr REAL NOT NULL,
+    state TEXT NOT NULL DEFAULT 'actief',
+    edge_high_at TEXT,
+    edge_low_at TEXT,
+    ended_at TEXT,
+    UNIQUE (coin, tf, first_at)
+);
+-- Elke waarschuwing van de range-watch per gebruiker, ook als hij geen push werd: het eigen dagbudget telt de rijen met pushed = 1.
+CREATE TABLE IF NOT EXISTS range_watch_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    watch_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    at TEXT NOT NULL,
+    pushed INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_range_watch_log_user ON range_watch_log(user_id, at);
+-- Range sweep-setups (app/range_sweep_live.py), beide families: wachtend op de limiet. Wordt een signaal (trade_type 'range_sweep') zodra een limiet vult.
+CREATE TABLE IF NOT EXISTS range_sweep_setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    variant TEXT NOT NULL,
+    family TEXT NOT NULL,
+    stop_name TEXT NOT NULL,
+    range_tf TEXT NOT NULL,
+    range_high REAL NOT NULL,
+    range_low REAL NOT NULL,
+    range_first_at TEXT NOT NULL,
+    zone_low REAL NOT NULL,
+    zone_high REAL NOT NULL,
+    zone_at TEXT NOT NULL,
+    sweep_at TEXT,
+    extreme REAL,
+    placed_at TEXT NOT NULL,
+    legs TEXT NOT NULL,
+    stop REAL NOT NULL,
+    atr_t REAL NOT NULL,
+    score REAL NOT NULL,
+    grade TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    features TEXT NOT NULL,
+    liq_json TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    plan TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    signal_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (coin, direction, variant, zone_at, placed_at)
+);
+-- Gevulde range sweep-trades. signals.stop_loss is de stop; deze rij houdt de meting bij die Bewijs toont (stopkwaliteit) en de referentie-uitgang
+-- (meelopende stop 3 ATR op 1u) die de R in trade_results geeft. checked_until: openmoment van de laatst verwerkte 15m-candle.
+CREATE TABLE IF NOT EXISTS range_sweep_trades (
+    signal_id INTEGER PRIMARY KEY,
+    setup_id INTEGER NOT NULL,
+    legs_filled TEXT NOT NULL,
+    entry REAL NOT NULL,
+    stop REAL NOT NULL,
+    filled_at TEXT NOT NULL,
+    checked_until TEXT NOT NULL,
+    mae_r REAL NOT NULL DEFAULT 0,
+    mfe_r REAL NOT NULL DEFAULT 0,
+    reached_1r_at TEXT,
+    reached_2r_at TEXT,
+    reached_3r_at TEXT,
+    reached_4r_at TEXT,
+    reached_5r_at TEXT,
+    reached_6r_at TEXT,
+    stop_hit_at TEXT,
+    ref_stop REAL NOT NULL,
+    ref_extreme REAL NOT NULL,
+    ref_r REAL,
+    ref_closed_at TEXT,
+    closed_at TEXT
+);
+
 -- Prijsalarm dat een gebruiker zelf op een niveau van een kaart zet (app/price_alerts.py). side ligt vast bij het aanmaken ('above' of
 -- 'below' de koers van dat moment). sent_at gezet = afgegaan; een alarm gaat precies één keer af (level_check markeert vóór het versturen).
 CREATE TABLE IF NOT EXISTS price_alerts (

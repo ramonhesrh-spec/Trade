@@ -158,5 +158,13 @@ REJECTION_ENABLED = _get("REJECTION_ENABLED", "true").lower() == "true"
 REJECTION_MAX_PER_DAY = int(_get("REJECTION_MAX_PER_DAY", "8"))
 REJECTION_MAX_NEGATIVE = int(_get("REJECTION_MAX_NEGATIVE", "30"))
 
-# Range sweep (docs/onderzoek/range-sweep/): alleen de CEO ziet de proef tot hij beslist (poort 4). Zet op true om leerlingen de kansen en cijfers te tonen.
+# Range sweep (app/range_sweep_live.py) en range-watch (app/range_watch.py): onze lezing van de strategie van Cos867, zie
+# docs/onderzoek/range-sweep/preregistratie.md. Standaard uit: de setupmotor gaat pas aan na een geslaagde toets op stopkwaliteit
+# (rule_status 'range_sweep_stop'), de range-watch na de keuring met het oog (poort 1). Alleen de CEO ziet de proef tot hij beslist (poort 4):
+# zet RANGE_SWEEP_PUBLIC op true om leerlingen de kansen en cijfers te tonen.
+RANGE_SWEEP_ENABLED = _get("RANGE_SWEEP_ENABLED", "false").lower() == "true"
+RANGE_WATCH_ENABLED = _get("RANGE_WATCH_ENABLED", "false").lower() == "true"
 RANGE_SWEEP_PUBLIC = _get("RANGE_SWEEP_PUBLIC", "false").lower() == "true"
+RANGE_WATCH_MAX_PER_DAY = int(_get("RANGE_WATCH_MAX_PER_DAY", "3"))
+RANGE_SWEEP_MAX_PER_DAY = int(_get("RANGE_SWEEP_MAX_PER_DAY", "6"))
+RANGE_SWEEP_MAX_NEGATIVE = int(_get("RANGE_SWEEP_MAX_NEGATIVE", "30"))
