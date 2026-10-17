@@ -219,10 +219,17 @@ class RangeSweepCliTest(unittest.TestCase):
                 run(args(rapport=str(p)), synthetic_ensure(calls))
             self.assertEqual(calls, [])
 
+    def lab_protocol(self):
+        """De drie coins van de test spelen de 20 van het lab, de korte synthetische cache telt als drie jaar: alleen het opslaan-pad wordt zo getoetst."""
+        stack = contextlib.ExitStack()
+        stack.enter_context(mock.patch.object(strategy_lab.tl, "LAB_COINS", ("AAA", "BBB", "CCC")))
+        stack.enter_context(mock.patch.object(strategy_lab, "coverage_warning", return_value=None))
+        return stack
+
     def test_opslaan_is_refused_without_a_pass_and_writes_nothing(self):
-        with mock.patch.object(strategy_lab.repo, "set_rule_lab") as s, mock.patch.object(strategy_lab.db, "init_db"):
+        with self.lab_protocol(), mock.patch.object(strategy_lab.repo, "set_rule_lab") as s, mock.patch.object(strategy_lab.db, "init_db"):
             with self.assertRaises(SystemExit):
-                run(args(coins="AAA", opslaan=True), synthetic_ensure())
+                run(args(opslaan=True, jaren=3.0, alleen_volledig=True), synthetic_ensure())
         s.assert_not_called()
 
     def test_opslaan_with_low_costs_stops_before_loading(self):
@@ -233,12 +240,42 @@ class RangeSweepCliTest(unittest.TestCase):
 
     def test_opslaan_saves_when_the_verdict_is_a_pass(self):
         choice = (rl.VARIANTS[9], "zone_025")
-        with mock.patch.object(strategy_lab.rl, "select_live", return_value=choice), \
+        with self.lab_protocol(), mock.patch.object(strategy_lab.rl, "select_live", return_value=choice), \
                 mock.patch.object(strategy_lab, "save_rangesweep", return_value=17) as save:
-            text = run(args(coins="AAA", opslaan=True), synthetic_ensure())
+            text = run(args(opslaan=True, jaren=3.0, alleen_volledig=True), synthetic_ensure())
         save.assert_called_once()
         self.assertEqual(save.call_args.args[1], choice)
         self.assertIn("17 regels opgeslagen", text)
+
+    def test_opslaan_refuses_a_subset_of_the_lab_coins_before_loading(self):
+        calls = []
+        with self.lab_protocol(), self.assertRaises(SystemExit) as cm:
+            run(args(coins="AAA,BBB", opslaan=True, jaren=3.0, alleen_volledig=True), synthetic_ensure(calls))
+        self.assertIn("LAB_COINS", str(cm.exception))
+        self.assertEqual(calls, [])
+
+    def test_opslaan_refuses_other_years_and_missing_alleen_volledig(self):
+        for kw in ({"jaren": 1.0, "alleen_volledig": True}, {"jaren": 3.0, "alleen_volledig": False}):
+            with self.lab_protocol(), self.assertRaises(SystemExit) as cm:
+                strategy_lab.check_rangesweep_protocol(args(opslaan=True, **kw))
+            self.assertRegex(str(cm.exception), r"--jaren 3|--alleen-volledig")
+        with self.lab_protocol():
+            strategy_lab.check_rangesweep_protocol(args(opslaan=True, jaren=3.0, alleen_volledig=True, coins="CCC,AAA,BBB"))
+            strategy_lab.check_rangesweep_protocol(args(opslaan=False, coins="AAA"))
+
+    def test_opslaan_refuses_duplicated_coins(self):
+        with self.lab_protocol(), self.assertRaises(SystemExit):
+            strategy_lab.check_rangesweep_protocol(args(opslaan=True, jaren=3.0, alleen_volledig=True, coins="AAA,AAA,BBB,CCC"))
+
+    def test_state_file_pins_coins_years_and_alleen_volledig(self):
+        with tempfile.TemporaryDirectory() as d:
+            run(args(hervat=d, coins="AAA"), synthetic_ensure())
+            meta = json.loads((Path(d) / "instellingen.json").read_text(encoding="utf-8"))
+            self.assertEqual((meta["coins"], meta["jaren"], meta["alleen_volledig"]), (["AAA"], 0.1, False))
+            with self.assertRaises(SystemExit):
+                run(args(hervat=d, coins="AAA,BBB"), synthetic_ensure())
+            with self.assertRaises(SystemExit):
+                run(args(hervat=d, coins="AAA", alleen_volledig=True), synthetic_ensure())
 
     def test_short_cache_stops_the_run_with_a_clear_message(self):
         # De synthetische cache dekt ~42 dagen terwijl een jaar gevraagd wordt: de situatie van een galerij-run met 1 jaar voor de lab-run met 3.

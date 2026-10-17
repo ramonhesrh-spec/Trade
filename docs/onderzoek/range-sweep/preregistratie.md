@@ -134,6 +134,7 @@ Taken 13 tot 17 mogen naast fase 2 gebouwd worden (de code laat zonder geslaagde
 - **Beweging tot de bevestiging (2026-10-16, vóór de eerste labrun).** De score-tabel zegt "grootste slot weg van de zone tot de bevestiging", maar de code mat tot het ontstaan van de zone. Nu gemeten tot en met de candle van de nadering (slot) of de 15m-candle van de CHoCH (choch15), in de ATR van het ontstaan van de zone. Alleen een scorekenmerk, geen regel van de motor.
 - **Geweigerde prik (2026-10-16).** Een geweigerde prik gebruikt de kant van de range op en start de wachttijd. Dit was al het gedrag van de code; nu staat het als regel in de sweepdefinitie.
 - **Constanten uit de tekst.** `RANGE_LOOKBACK` (120, 120, 90, 90), `AGE_MIN` (48, 48, 36, 36) en `STOP_BUFFER` (0, 0,25, 0,5 maal de ATR; wick 0,25) komen uit de tekst hierboven en staan niet als regel in het constantenblok (het zijn tabellen); een test toetst ze tegen de code.
+- **Opslaan alleen voor het volledige protocol (2026-10-17, vóór de eerste labrun).** `--opslaan` weigert tenzij `--coins` precies de 20 van `trendlab.LAB_COINS` zijn, `--jaren 3` (`rangesweep_lab.LAB_YEARS`) en `--alleen-volledig`; de tussenmap legt coins, jaren en alleen-volledig vast. Reden: een PASS uit een deelverzameling of een kortere periode mag nooit de database in; de horde van t ≥ 3,4 geldt voor dit protocol.
 - **Meer voorbeelden.** De gebruiker stuurt later 5 of meer voorbeelden. Dat blokkeert niets en telt mee voor S0 vanaf 10 voorbeelden.
 
 ## Constanten
@@ -180,4 +181,5 @@ stopquality.MAX_TIGHT_RATE = 0.25
 rangesweep_lab.PRIOR_VARIANTS = 34
 rangesweep_lab.EDGE_T_MIN = 3.4
 rangesweep_lab.LAB_COST_PCT = 0.12
+rangesweep_lab.LAB_YEARS = 3
 ```

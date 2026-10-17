@@ -77,7 +77,7 @@ Verwachte duur: ongeveer 40 minuten (circa 2 minuten per coin, 20 coins; dit is 
 
 De run schrijft niets in de database. De uitvoer begint met het aantal varianten en toetsen (15 varianten, 30 toetsen, 64 in het register): dat is de horde voor meervoudig toetsen uit de pre-registratie (voordeel pas bij t van minstens 3,4).
 
-**Onderbroken?** Een verbroken verbinding, herstart of Ctrl+C is geen ramp. Dezelfde opdracht opnieuw uitvoeren (met dezelfde `--hervat` map) slaat de klare coins over (`COIN: uit data/replay/rangesweep_012/COIN_rows.pkl`) en rekent alleen de rest. Het resultaat is gelijk aan een run zonder onderbreking. Het script weigert een map die met andere `--kosten`, `--jaren` of varianten is gemaakt; gebruik dan een nieuwe map. Een klare coin opnieuw laten rekenen: verwijder `data/replay/rangesweep_012/COIN_*.pkl`.
+**Onderbroken?** Een verbroken verbinding, herstart of Ctrl+C is geen ramp. Dezelfde opdracht opnieuw uitvoeren (met dezelfde `--hervat` map) slaat de klare coins over (`COIN: uit data/replay/rangesweep_012/COIN_rows.pkl`) en rekent alleen de rest. Het resultaat is gelijk aan een run zonder onderbreking. Het script weigert een map die met andere `--kosten`, `--jaren`, `--coins`, `--alleen-volledig` of varianten is gemaakt; gebruik dan een nieuwe map. Een klare coin opnieuw laten rekenen: verwijder `data/replay/rangesweep_012/COIN_*.pkl`.
 
 **Rapport.** Het rapport komt in `docs/onderzoek/range-sweep/resultaten.md`, tussen `<!-- resultaten:begin -->` en `<!-- resultaten:end -->`. Alleen die ruimte wordt overschreven; de tekst erbuiten (hoe te lezen, jouw oordeel) blijft staan. Ontbreken de markers, dan stopt het script direct, voordat er iets gerekend wordt.
 
@@ -110,7 +110,7 @@ Alleen als stap 5 een gekozen variant gaf. Dit leest de tussenresultaten van sta
   --hervat data/replay/rangesweep_012 --opslaan
 ```
 
-Het script weigert `--opslaan` bij `--kosten` onder 0,12 en bij een oordeel zonder geslaagde toets (er wordt dan niets geschreven). Daarna het rapport terug naar de repo:
+Het script weigert `--opslaan` bij `--kosten` onder 0,12, bij minder dan de 20 coins van het lab, bij een andere `--jaren` dan 3, zonder `--alleen-volledig`, en bij een oordeel zonder geslaagde toets (er wordt dan niets geschreven). Daarna het rapport terug naar de repo:
 
 ```bash
 git add docs/onderzoek/range-sweep/resultaten.md docs/onderzoek/range-sweep/missers.md

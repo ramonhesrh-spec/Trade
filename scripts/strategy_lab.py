@@ -102,6 +102,20 @@ def check_rangesweep_costs(kosten: float, opslaan: bool) -> None:
         sys.exit(f"--opslaan voor rangesweep vraagt --kosten {rl.LAB_COST_PCT} of hoger (gekozen {kosten})")
 
 
+def check_rangesweep_protocol(a) -> None:
+    """Opslaan mag alleen voor het bevroren protocol (alle LAB_COINS, 3 jaar, --alleen-volledig): een PASS uit een deelverzameling coins of een kortere
+    periode zegt niets over de 64 toetsen waarop de horde van t \u2265 3,4 gebaseerd is."""
+    if not a.opslaan:
+        return
+    coins = a.coins.split(",")
+    if len(coins) != len(set(coins)) or set(coins) != set(tl.LAB_COINS):
+        sys.exit(f"--opslaan voor rangesweep vraagt precies de {len(tl.LAB_COINS)} coins van trendlab.LAB_COINS (de standaard van --coins), geen deelverzameling")
+    if a.jaren != rl.LAB_YEARS:
+        sys.exit(f"--opslaan voor rangesweep vraagt --jaren {rl.LAB_YEARS:g} (gekozen {a.jaren:g})")
+    if not a.alleen_volledig:
+        sys.exit("--opslaan voor rangesweep vraagt --alleen-volledig (de overlevingscontrole hoort bij het bevroren protocol)")
+
+
 def check_rangesweep_verdict(choice, opslaan: bool) -> None:
     """Opslaan mag alleen bij een geslaagde toets op stopkwaliteit (poort 3, S2): bij geen keuze blijft de database zoals hij was."""
     if opslaan and choice is None:
@@ -122,11 +136,12 @@ def _atomic_write(path: Path, data: bytes) -> None:
 
 def _check_part_settings(outdir: Path, a) -> None:
     """Tussenresultaten gelden alleen voor dezelfde kosten, jaren en varianten; anders zou een hervatte run oude en nieuwe coins stil mengen."""
-    want = {"versie": PART_VERSION, "kosten": a.kosten, "jaren": a.jaren, "varianten": [v.name for v in rl.VARIANTS]}
+    want = {"versie": PART_VERSION, "kosten": a.kosten, "jaren": a.jaren, "varianten": [v.name for v in rl.VARIANTS],
+            "coins": a.coins.split(","), "alleen_volledig": bool(a.alleen_volledig)}
     meta = outdir / "instellingen.json"
     if meta.exists():
         if json.loads(meta.read_text(encoding="utf-8")) != want:
-            sys.exit(f"{outdir} bevat tussenresultaten van andere instellingen (kosten, jaren of varianten); kies een andere map of verwijder deze")
+            sys.exit(f"{outdir} bevat tussenresultaten van andere instellingen (kosten, jaren, coins, alleen-volledig of varianten); kies een andere map of verwijder deze")
     else:
         _atomic_write(meta, json.dumps(want).encode("utf-8"))
 
@@ -246,6 +261,7 @@ def _run_one_coin(coin: str, a, ensure, positioning_fn) -> tuple[dict, dict, lis
 def run_rangesweep(a, ensure=candle_cache.ensure_candles, positioning_fn=positioning.ensure_positioning) -> None:
     """`ensure` en `positioning_fn` zijn de naad voor de tests: kunstmatige candles zonder beurs."""
     check_rangesweep_costs(a.kosten, a.opslaan)
+    check_rangesweep_protocol(a)
     report = Path(a.rapport) if a.rapport else None
     if report:
         try:  # faalt nu, niet pas na 40 minuten rekenen

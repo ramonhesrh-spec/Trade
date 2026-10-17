@@ -55,6 +55,7 @@ PRIOR_VARIANTS = 34
 TESTED_TOTAL = PRIOR_VARIANTS + sum(len(v.stops) for v in VARIANTS)
 EDGE_T_MIN = 3.4
 LAB_COST_PCT = 0.12
+LAB_YEARS = 3.0
 # Dezelfde drempel en vertraging als replay.lab (pre-registratie, 'OI-daling'): een daling van minstens OI_MOVE_PCT procent.
 OI_FLUSH_PCT = -OI_MOVE_PCT
 OI_LAG = SAMPLE_LAG
