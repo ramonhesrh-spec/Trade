@@ -61,6 +61,22 @@ class RangeSweepReportTest(unittest.TestCase):
         self.assertIn("2 van 30 toetsen slagen", md)
         self.assertNotIn("geen enkele toets slaagt", md)
 
+    def test_report_prints_the_stop_criteria_s2_and_s3(self):
+        md = strategy_lab.render_rangesweep([(v, fake_result(v)) for v in rl.VARIANTS], META)
+        self.assertIn("S2 (geen enkele toets geslaagd): ja", md)
+        self.assertIn("S3 (mediane kosten boven 0,10R bij alle toetsen): nee", md)
+        results = [(v, fake_result(v, passes=(v.name == "RS_1H"))) for v in rl.VARIANTS]
+        self.assertIn("S2 (geen enkele toets geslaagd): nee", strategy_lab.render_rangesweep(results, META))
+        costly = [(v, fake_result(v)) for v in rl.VARIANTS]
+        for _, r in costly:
+            for name in _.stops:
+                r[name]["summary"]["median_cost_r"] = 0.2
+        self.assertIn("S3 (mediane kosten boven 0,10R bij alle toetsen): ja", strategy_lab.render_rangesweep(costly, META))
+
+    def test_report_says_when_the_stop_criteria_cannot_be_judged(self):
+        md = strategy_lab.render_rangesweep([(rl.VARIANTS[0], fake_result(rl.VARIANTS[0]))], META)
+        self.assertIn("S2 en S3 niet beoordeeld: 2 van 30 toetsen", md)
+
     def test_report_copes_with_variants_without_fills(self):
         empty = {"zone_0": {"summary": {"setups": 0, "n": 0}}, **{s: {"summary": {"setups": 0, "n": 0}, "quality": {"passes": False}, "edge": {}, "doelkans": []} for s in rl.VARIANTS[0].stops}}
         md = strategy_lab.render_rangesweep([(rl.VARIANTS[0], empty)], META)
@@ -165,6 +181,7 @@ class RangeSweepCliTest(unittest.TestCase):
         self.assertIn("30 toetsen in deze familie, 64 in het register", text)
         self.assertIn("15 varianten", text)
         self.assertRegex(text, r"Geen variant gekozen|Gekozen voor de proef")
+        self.assertRegex(text, r"Stopcriteria: S2 \(geen enkele toets geslaagd\): (ja|nee)")
 
     def test_resume_gives_the_same_result_as_an_uninterrupted_run(self):
         full = run(args(), synthetic_ensure())

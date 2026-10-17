@@ -26,7 +26,7 @@ import pandas as pd  # noqa: E402
 from app import config, db, repo  # noqa: E402
 from app.replay import candles as candle_cache  # noqa: E402
 from app.replay import positioning, rangesweep as rs, rangesweep_lab as rl  # noqa: E402
-from app.replay import trendlab as tl  # noqa: E402
+from app.replay import stopquality as sq, trendlab as tl  # noqa: E402
 
 SUMMARY_KEYS = ("n", "avg", "ci", "week_ci", "train", "test", "placebo", "winrate", "gross", "median_risk_pct")
 LAB_COINS = ",".join(tl.LAB_COINS)
@@ -228,6 +228,16 @@ def _pct(x) -> str:
     return "-" if x is None else f"{x * 100:.0f}%"
 
 
+def kill_line(results) -> str:
+    """S2 en S3 van de pre-registratie via stopquality.kill_check, zodat de uitvoer het besluit noemt en niet alleen de aantallen."""
+    kill = sq.kill_check([{"summary": r[n]["summary"], "accept": r[n]["quality"]} for v, r in results for n in v.stops])
+    if kill["status"] != "volledig":
+        return f"Stopcriteria: S2 en S3 niet beoordeeld: {kill['tests']} van {sq.KILL_TESTS} toetsen."
+    yn = lambda x: "ja" if x else "nee"
+    return (f"Stopcriteria: S2 (geen enkele toets geslaagd): {yn(kill['S2'])}. "
+            f"S3 (mediane kosten boven {sq.MAX_MEDIAN_COST_R:.2f}R bij alle toetsen): {yn(kill['S3'])}.".replace(".10R", ",10R"))
+
+
 def render_rangesweep(results, meta: dict) -> str:
     n_tests = sum(len(v.stops) for v, _ in results)
     lines = [f"Run: {meta['first']} tot {meta['last']}, {meta['coins']} coins, kosten {meta['kosten']}% per rondreis, {meta['jaren']} jaar.",
@@ -247,7 +257,8 @@ def render_rangesweep(results, meta: dict) -> str:
             lines.append(f"| {v.name} | {name} | {s['setups']} | {s['n']} | {s['median_stop_pct']:.2f}% | {s['median_cost_r']:.3f} | {_pct(s['stop_hit']['p'])} | "
                          f"{_pct(s['reach'][1]['p'])} ({ci[0] * 100:.0f} tot {ci[1] * 100:.0f}%) | {_pct(s['reach'][2]['p'])} | {_pct(s['reach'][3]['p'])} | "
                          f"{_pct(s['reach'][6]['p'])} | {_pct(s['tight_rate'])} | {q['placebo_diff'] * 100:+.1f} pp | {'SLAAGT' if q['passes'] else q['reason']} |")
-    lines += ["", f"{passed} van {n_tests} toetsen slagen op stopkwaliteit." + (" Stopcriterium S2: geen enkele toets slaagt." if not passed else ""), "",
+    lines += ["", f"{passed} van {n_tests} toetsen slagen op stopkwaliteit." + (" Stopcriterium S2: geen enkele toets slaagt." if not passed else ""),
+              kill_line(results), "",
               "### Netto R bij de referentie-uitgangen (ernaast, nooit de kop)", "",
               "| Variant | Stop | Midden | Overkant | Meelopend (3 ATR 1u) | t per week | Strenge toets |", "|---|---|---|---|---|---|---|"]
     for v, r in results:
