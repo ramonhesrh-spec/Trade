@@ -26,9 +26,10 @@ De voorbeelden staan in `docs/onderzoek/range-sweep/handtrades.csv`. Eerst allee
 .venv/bin/python3 scripts/misser_check.py --csv docs/onderzoek/range-sweep/handtrades.csv --alleen-parsen
 ```
 
-Dan de echte controle per variant:
+Dan de echte controle per variant (de map voor de uitvoer bestaat nog niet op een verse VPS):
 
 ```bash
+mkdir -p data/replay
 .venv/bin/python3 scripts/misser_check.py --csv docs/onderzoek/range-sweep/handtrades.csv --motor rangesweep --venster-uren 12 | tee data/replay/misser_rangesweep.txt
 ```
 
@@ -69,6 +70,7 @@ for c in BTC ETH SOL BNB XRP ADA DOGE AVAX LINK DOT LTC BCH NEAR ATOM UNI AAVE S
 done
 
 # de run: hervatbaar per coin, rapport tussen de markers van resultaten.md
+mkdir -p data/replay
 .venv/bin/python3 scripts/strategy_lab.py --familie rangesweep --jaren 3 --kosten 0.12 --alleen-volledig \
   --hervat data/replay/rangesweep_012 --rapport docs/onderzoek/range-sweep/resultaten.md | tee data/replay/rangesweep_012.log
 ```
