@@ -118,6 +118,35 @@ class MeasureTest(unittest.TestCase):
         self.assertFalse(m["reach_1r"])
         self.assertAlmostEqual(m["mfe_r"], 0.5)
 
+    def test_split_counts_favourable_moves_only_after_the_last_leg_filled(self):
+        # Been A (0,4) vult op kandel 0, been B (0,6) pas op kandel 3. De duik op kandel 1 trof alleen been A; de hele positie heeft hem nooit gehad.
+        b = frame([(103.5, 104.2, 103.0, 103.9), (103.9, 104.0, 99.0, 99.5), (99.5, 105.0, 99.4, 104.9), (104.9, 106.2, 104.0, 105.0),
+                   (105.0, 105.1, 104.5, 104.8)])
+        legs = [(0.4, 104.0, 0), (0.6, 106.0, 3)]
+        m = sq.measure("short", legs, 108.0, b, np.ones(5), 108.0, 98.0, 0.12)
+        self.assertAlmostEqual(m["entry"], 105.2)
+        self.assertFalse(m["reach_1r"])
+        self.assertAlmostEqual(m["mfe_r"], (105.2 - 104.5) / 2.8)
+        self.assertAlmostEqual(m["ref_mid"], (105.2 - 104.8) / 2.8)
+        self.assertAlmostEqual(m["mae_r"], (106.2 - 105.2) / 2.8)
+
+    def test_split_stop_before_the_last_leg_is_a_stop_for_every_reference(self):
+        b = frame([(103.5, 104.2, 103.0, 103.9), (103.9, 108.5, 99.0, 99.5), (99.5, 100.0, 98.0, 98.5)])
+        m = sq.measure("short", [(0.4, 104.0, 0), (0.6, 106.0, 1)], 108.0, b, np.ones(3), 108.0, 98.0, 0.12)
+        self.assertTrue(m["stop_hit"])
+        self.assertAlmostEqual(m["ref_trail"], m["stop_r"])
+        self.assertAlmostEqual(m["ref_mid"], m["stop_r"])
+        self.assertFalse(m["reach_1r"])
+
+    def test_split_long_is_the_mirror_of_short(self):
+        b = frame([(103.5, 104.2, 103.0, 103.9), (103.9, 104.0, 99.0, 99.5), (99.5, 105.0, 99.4, 104.9), (104.9, 106.2, 104.0, 105.0),
+                   (105.0, 105.1, 104.5, 104.8)])
+        short = sq.measure("short", [(0.4, 104.0, 0), (0.6, 106.0, 3)], 108.0, b, np.ones(5), 108.0, 98.0, 0.12)
+        mb = mirror(b)
+        long_ = sq.measure("long", [(0.4, 96.0, 0), (0.6, 94.0, 3)], 92.0, mb, np.ones(5), 102.0, 92.0, 0.12)
+        for k in ("mfe_r", "mae_r", "reach_1r", "stop_hit"):
+            self.assertEqual(short[k], long_[k], k)
+
     def test_gap_through_stop_fills_on_the_open(self):
         b = frame([(104.5, 105.1, 104.4, 104.8), (106.5, 106.8, 106.3, 106.6)])
         self.assertAlmostEqual(sq.measure("short", [(1.0, 105.0, 0)], 106.0, b, np.ones(2), 105.5, 100.0, 0.12)["stop_r"], -1.5)

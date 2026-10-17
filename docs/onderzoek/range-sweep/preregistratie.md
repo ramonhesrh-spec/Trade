@@ -40,7 +40,7 @@ Cos867 schreef vijf regels. We wachten niet op uitleg van hem: we leggen zelf va
 
 **Vulling en verval (op 15m).** Short-limiet vult als het hoog de limiet raakt, tegen de limietprijs; long gespiegeld. De order staat 96 15m-candles (24 uur). Vervalt eerder als een candle al voorbij de stop opent ("stop voor vulling") of als de koers het midden van de range raakt ("weggelopen").
 
-**Meting na de vulling (zonder doel).** Tot de stop of 672 15m-candles (7 dagen). In de vulcandle telt alleen het nadeel. Een candle die stop en een R-niveau raakt telt als stop. Een gat door de stop vult op de open. R-eenheid: het risico dat echt genomen is (gewogen instap tot de stop).
+**Meting na de vulling (zonder doel).** Tot de stop of 672 15m-candles (7 dagen). In de vulcandle telt alleen het nadeel (bij de split: tot en met de kandel van de laatste vulling). Een candle die stop en een R-niveau raakt telt als stop. Een gat door de stop vult op de open. R-eenheid: het risico dat echt genomen is (gewogen instap tot de stop).
 
 **Setupscore (100 punten, Besluit 1).**
 
@@ -135,6 +135,7 @@ Taken 13 tot 17 mogen naast fase 2 gebouwd worden (de code laat zonder geslaagde
 - **Geweigerde prik (2026-10-16).** Een geweigerde prik gebruikt de kant van de range op en start de wachttijd. Dit was al het gedrag van de code; nu staat het als regel in de sweepdefinitie.
 - **Constanten uit de tekst.** `RANGE_LOOKBACK` (120, 120, 90, 90), `AGE_MIN` (48, 48, 36, 36) en `STOP_BUFFER` (0, 0,25, 0,5 maal de ATR; wick 0,25) komen uit de tekst hierboven en staan niet als regel in het constantenblok (het zijn tabellen); een test toetst ze tegen de code.
 - **Opslaan alleen voor het volledige protocol (2026-10-17, vóór de eerste labrun).** `--opslaan` weigert tenzij `--coins` precies de 20 van `trendlab.LAB_COINS` zijn, `--jaren 3` (`rangesweep_lab.LAB_YEARS`) en `--alleen-volledig`; de tussenmap legt coins, jaren en alleen-volledig vast. Reden: een PASS uit een deelverzameling of een kortere periode mag nooit de database in; de horde van t ≥ 3,4 geldt voor dit protocol.
+- **Meting bij de split (2026-10-17, vóór de eerste labrun).** `measure` telde bij `RZ_2H_SPLIT` de gunstige beweging (+1R tot +6R, MFE, referentie-uitgangen) vanaf de eerste vulling met de gewogen instap van alle benen, ook in kandels waarin het tweede been nog niet gevuld was. Die beweging trof de volledige positie nooit. Nu telt een gunstige beweging pas vanaf de kandel na de laatste vulling (de vulkandel van het laatste been telt alleen het nadeel, zoals bij één been); nadeel en stop gelden vanaf de eerste vulling. Bij één been is er niets veranderd. Reden: dezelfde regel als "in de vulcandle telt alleen het nadeel", toegepast op de hele positie.
 - **Meer voorbeelden.** De gebruiker stuurt later 5 of meer voorbeelden. Dat blokkeert niets en telt mee voor S0 vanaf 10 voorbeelden.
 
 ## Constanten

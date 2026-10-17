@@ -63,8 +63,8 @@ def simulate_fills(direction: str, legs: list[tuple[float, float]], stop: float,
     return {"filled": filled, "first": filled[0][2], "cancel": ""}
 
 
-def _ref_target(direction, entry, risk, stop, b15, first, last, target) -> Optional[float]:
-    """Bruto R bij uitstappen op `target`, met de stop eerst als beide in een candle vallen; de vulcandle telt alleen tegen. Op het einde van de horizon op de close."""
+def _ref_target(direction, entry, risk, stop, b15, first, last, target, full) -> Optional[float]:
+    """Bruto R bij uitstappen op `target`, met de stop eerst als beide in een candle vallen; de vulcandle (bij een split tot en met de laatste vulling) telt alleen tegen. Op het einde van de horizon op de close."""
     short = direction == "short"
     if (target >= entry) if short else (target <= entry):
         return None
@@ -73,7 +73,7 @@ def _ref_target(direction, entry, risk, stop, b15, first, last, target) -> Optio
         if (hi[m] >= stop) if short else (lo[m] <= stop):
             fill = max(op[m], stop) if short else min(op[m], stop)
             return ((entry - fill) if short else (fill - entry)) / risk
-        if m > first and ((lo[m] <= target) if short else (hi[m] >= target)):
+        if m > full and ((lo[m] <= target) if short else (hi[m] >= target)):
             return abs(target - entry) / risk
     return ((entry - cl[last]) if short else (cl[last] - entry)) / risk
 
@@ -92,6 +92,9 @@ def measure(direction: str, filled: list[tuple[float, float, int]], stop: float,
     if risk <= 0:
         raise ValueError("de stop ligt niet voorbij de instap")
     first = filled[0][2]
+    # Bij een split bestaat de volledige positie pas na de laatste vulling: een gunstige beweging daarvoor trof maar een deel van de orders en telt niet,
+    # net als in de vulcandle zelf alleen het nadeel telt. De stop geldt wel vanaf de eerste vulling.
+    full = max(m for _, _, m in filled)
     op, hi, lo, cl = (b15[c].to_numpy(float) for c in ("open", "high", "low", "close"))
     last = min(len(cl), first + HORIZON_15M) - 1
     mae = mfe = 0.0
@@ -105,7 +108,7 @@ def measure(direction: str, filled: list[tuple[float, float, int]], stop: float,
             mae = max(mae, -stop_r)
             break
         mae = max(mae, adverse)
-        if m > first:
+        if m > full:
             fav = ((entry - lo[m]) if short else (hi[m] - entry)) / risk
             mfe = max(mfe, fav)
             for k in R_LEVELS:
@@ -118,18 +121,18 @@ def measure(direction: str, filled: list[tuple[float, float, int]], stop: float,
         ww = slice(stop_idx + 1, min(len(cl), stop_idx + 1 + TIGHT_WIN_15M))
         win_after = bool(((lo[ww] <= entry - risk) if short else (hi[ww] >= entry + risk)).any())
     mid, opp = (range_high + range_low) / 2, (range_low if short else range_high)
-    # De vulcandle is hierboven al tegen de stop getoetst; de meelopende stop begint op de candle erna.
-    if stop_idx == first:
+    # De vulcandle is hierboven al tegen de stop getoetst; de meelopende stop begint op de candle na de laatste vulling.
+    if stop_idx is not None and stop_idx <= full:
         trail = stop_r
     else:
-        trail = tl.exit_trail(b15.assign(atr=atr15), first + 1, -1 if short else 1, entry, stop, TRAIL_K, HORIZON_15M - 1)[0]
+        trail = tl.exit_trail(b15.assign(atr=atr15), full + 1, -1 if short else 1, entry, stop, TRAIL_K, HORIZON_15M - 1 - (full - first))[0]
     a0 = atr15[first] if np.isfinite(atr15[first]) and atr15[first] > 0 else float("nan")
     return {"entry": entry, "stop": stop, "weight": weight, "stop_pct": risk / entry * 100, "stop_atr": risk / a0, "cost_r": cost_pct / 100 * entry / risk,
             "stop_hit": stop_idx is not None, "stop_r": stop_r, "hours_to_stop": None if stop_idx is None else (stop_idx - first) / 4,
             "mae_r": mae, "mfe_r": mfe, **{f"reach_{k}r": reach[k] for k in R_LEVELS},
             "back_in_range": back, "win_after_stop": win_after, "tight": back and win_after,
-            "ref_mid": _ref_target(direction, entry, risk, stop, b15, first, last, mid),
-            "ref_opp": _ref_target(direction, entry, risk, stop, b15, first, last, opp), "ref_trail": float(trail)}
+            "ref_mid": _ref_target(direction, entry, risk, stop, b15, first, last, mid, full),
+            "ref_opp": _ref_target(direction, entry, risk, stop, b15, first, last, opp, full), "ref_trail": float(trail)}
 
 
 def _pp(x: float) -> str:
