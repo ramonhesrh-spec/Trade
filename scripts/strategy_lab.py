@@ -228,6 +228,11 @@ def _pct(x) -> str:
     return "-" if x is None else f"{x * 100:.0f}%"
 
 
+MULTIPLE_TESTING_NOTE = ("Let op: de toetsen op stopkwaliteit hebben geen correctie voor meervoudig toetsen. Bij 30 toetsen met een eenzijdige ondergrens van 2,5% op "
+                         "het verschil met willekeurige instappen is de kans groot dat minstens een toets die ene eis toevallig haalt. Een PASS is dus een screening-resultaat "
+                         "en moet vooruit bevestigd worden in de proef.")
+
+
 def kill_line(results) -> str:
     """S2 en S3 van de pre-registratie via stopquality.kill_check, zodat de uitvoer het besluit noemt en niet alleen de aantallen."""
     kill = sq.kill_check([{"summary": r[n]["summary"], "accept": r[n]["quality"]} for v, r in results for n in v.stops])
@@ -258,7 +263,7 @@ def render_rangesweep(results, meta: dict) -> str:
                          f"{_pct(s['reach'][1]['p'])} ({ci[0] * 100:.0f} tot {ci[1] * 100:.0f}%) | {_pct(s['reach'][2]['p'])} | {_pct(s['reach'][3]['p'])} | "
                          f"{_pct(s['reach'][6]['p'])} | {_pct(s['tight_rate'])} | {q['placebo_diff'] * 100:+.1f} pp | {'SLAAGT' if q['passes'] else q['reason']} |")
     lines += ["", f"{passed} van {n_tests} toetsen slagen op stopkwaliteit." + (" Stopcriterium S2: geen enkele toets slaagt." if not passed else ""),
-              kill_line(results), "",
+              kill_line(results), MULTIPLE_TESTING_NOTE, "",
               "### Netto R bij de referentie-uitgangen (ernaast, nooit de kop)", "",
               "| Variant | Stop | Midden | Overkant | Meelopend (3 ATR 1u) | t per week | Strenge toets |", "|---|---|---|---|---|---|---|"]
     for v, r in results:

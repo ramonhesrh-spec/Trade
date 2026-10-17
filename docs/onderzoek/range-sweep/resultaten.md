@@ -6,7 +6,7 @@ Pre-registratie: docs/onderzoek/range-sweep/preregistratie.md (bevroren op commi
 ## Hoe te lezen
 - De kop is de stopkwaliteit: hoe vaak de stop raakt, wat hij kost in R en hoe vaak +1R tot +6R vóór de stop kwamen.
 - De netto R bij de referentie-uitgangen staat ernaast. Geen van die uitgangen is jouw doel.
-- 30 toetsen in deze familie, 64 in het register. Eén geslaagde toets is nog geen bewijs.
+- 30 toetsen in deze familie, 64 in het register. Eén geslaagde toets is nog geen bewijs: de stopkwaliteit-toetsen hebben geen correctie voor meervoudig toetsen, dus een PASS is een screening-resultaat dat vooruit bevestigd moet worden in de proef.
 
 <!-- resultaten:begin -->
 (nog geen run)

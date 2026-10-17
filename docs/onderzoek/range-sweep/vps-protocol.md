@@ -89,7 +89,7 @@ Gevoeligheid (hogere kosten), nooit opslaan:
 
 ## 5. Poort 3: het oordeel lezen
 
-Onderaan de uitvoer staat een van twee regels:
+In het rapport staat ook de regel `Stopcriteria: S2 (...): ja/nee. S3 (...): ja/nee.` (uit `stopquality.kill_check`); die beslist over S2 en S3. Onderaan de uitvoer staat een van twee regels:
 
 - `Gekozen voor de proef: <VARIANT> met stop <STOP>`: PASS. Minstens een toets slaagde op stopkwaliteit (de kop). Gekozen wordt vooraf vastgelegd: geslaagd, dan de meeste vullingen, dan de laagste mediane kosten, dan de bredere stop.
 - `Geen variant gekozen voor de proef (S2).`: geen enkele van de 30 toetsen slaagt. Geen live setupmotor (taak 15 niet uitrollen); de range-watch uit taak 14 mag blijven als informatie. Bij mediane kosten boven 0,10R in alle 30 toetsen geldt S3: zelfde besluit.
@@ -98,7 +98,7 @@ Hoe je het rapport leest:
 
 1. Tabel "Stopkwaliteit" is de kop: stop geraakt, kosten in R, en hoe vaak +1R tot +6R vóór de stop kwamen. De kolom Oordeel zegt SLAAGT of welke eis faalde (bijvoorbeeld "genoeg vullingen (300)").
 2. "Netto R bij de referentie-uitgangen" staat ernaast. Geen van die uitgangen is jouw doel. Alleen de strenge toets daar (met t van minstens 3,4 per week) kan ooit "Bewezen" opleveren.
-3. Eén geslaagde toets van 30 (64 in het register) is nog geen bewijs. Controleer of de uitkomst niet aan een paar coins of een paar maanden hangt, en of de variant met en zonder HTF-filter niet tegenstrijdig is.
+3. Eén geslaagde toets van 30 (64 in het register) is nog geen bewijs. De toetsen op stopkwaliteit hebben geen correctie voor meervoudig toetsen: bij 30 toetsen met een eenzijdige ondergrens van 2,5% op het verschil met willekeurige instappen is de kans groot dat minstens één die ene eis toevallig haalt. Een PASS is een screening-resultaat dat vooruit bevestigd moet worden in de proef (de regel staat ook in het rapport). Controleer of de uitkomst niet aan een paar coins of een paar maanden hangt, en of de variant met en zonder HTF-filter niet tegenstrijdig is.
 4. Schrijf je oordeel onder "Oordeel (na de run, door een mens)" in `resultaten.md`: S2 en S3, en de gekozen variant en stop.
 
 ## 6. Opslaan, alleen bij PASS

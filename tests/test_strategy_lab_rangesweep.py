@@ -61,6 +61,13 @@ class RangeSweepReportTest(unittest.TestCase):
         self.assertIn("2 van 30 toetsen slagen", md)
         self.assertNotIn("geen enkele toets slaagt", md)
 
+    def test_report_states_that_the_stop_quality_checks_are_not_corrected_for_multiple_testing(self):
+        for results in ([(v, fake_result(v)) for v in rl.VARIANTS], [(v, fake_result(v, passes=(v.name == "RS_1H"))) for v in rl.VARIANTS]):
+            md = strategy_lab.render_rangesweep(results, META)
+            self.assertIn("geen correctie voor meervoudig toetsen", md)
+            self.assertIn("screening", md)
+            self.assertIn("vooruit bevestigd", md)
+
     def test_report_prints_the_stop_criteria_s2_and_s3(self):
         md = strategy_lab.render_rangesweep([(v, fake_result(v)) for v in rl.VARIANTS], META)
         self.assertIn("S2 (geen enkele toets geslaagd): ja", md)
