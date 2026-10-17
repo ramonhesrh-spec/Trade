@@ -756,6 +756,7 @@ CREATE TABLE IF NOT EXISTS range_sweep_setups (
     plan TEXT NOT NULL,
     state TEXT NOT NULL DEFAULT 'waiting',
     signal_id INTEGER,
+    push_sent INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     UNIQUE (coin, direction, variant, zone_at, placed_at)
 );

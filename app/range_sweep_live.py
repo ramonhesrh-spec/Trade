@@ -251,8 +251,9 @@ async def _announce(setup_id: int, row: dict, price: float) -> None:
         user = repo.get_user(uid) or {}
         quiet = push_notify.is_quiet_now(user.get("quiet_hours_start"), user.get("quiet_hours_end"))
         try:
-            await push_notify.send_kans_push(uid, row["coin"], row["direction"], title, body, _setup_url(setup_id),
-                                             silent=quiet if row["grade"] == "A" else True, tag=_tag(setup_id))
+            if await push_notify.send_kans_push(uid, row["coin"], row["direction"], title, body, _setup_url(setup_id),
+                                                silent=quiet if row["grade"] == "A" else True, tag=_tag(setup_id)):
+                repo.mark_range_sweep_push_sent(setup_id)
         except Exception:
             logger.exception("Setupmelding %s naar gebruiker %s is mislukt", setup_id, uid)
 
@@ -327,7 +328,7 @@ def _entry_of(filled: list) -> float:
 
 
 async def _cancel(setup: dict, state: str) -> None:
-    announced = setup["state"] == "waiting" and setup["grade"] in ("A", "B")
+    announced = setup["state"] == "waiting" and setup["grade"] in ("A", "B") and bool(setup.get("push_sent"))
     repo.set_range_sweep_setup_state(setup["id"], state)
     logger.info("Range sweep %s %s: %s", setup["coin"], setup["direction"], state)
     if not announced:

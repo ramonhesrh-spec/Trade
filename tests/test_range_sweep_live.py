@@ -456,6 +456,7 @@ class TrackTest(EngineCase):
 
     def test_unfilled_order_expires_after_24_hours_with_a_calm_notice(self):
         sid = self.insert_row()
+        repo.mark_range_sweep_push_sent(sid)
         self.track(pd.Timestamp("2025-03-08 23:00", tz="UTC"))
         self.assertEqual(repo.list_range_sweep_setups(("waiting",))[0]["id"], sid)         # nog geen 24 uur
         self.track(pd.Timestamp("2025-03-09 00:05", tz="UTC"))
@@ -466,6 +467,29 @@ class TrackTest(EngineCase):
         n = len(self.notifications())
         self.track(pd.Timestamp("2025-03-09 00:20", tz="UTC"))
         self.assertEqual(len(self.notifications()), n)
+
+    def test_a_setup_whose_push_was_held_back_expires_without_a_cancel_notice(self):
+        self.insert_row()                                           # push_sent staat op 0: het kansbudget of een conflict hield de melding vast
+        self.track(pd.Timestamp("2025-03-09 00:05", tz="UTC"))
+        self.assertEqual([r["state"] for r in self.setups()], ["verlopen"])
+        self.assertEqual(self.notifications(), [])
+
+    def test_the_push_flag_is_set_only_when_the_setup_push_went_out(self):
+        self.scan(SHORT_PLACED + pd.Timedelta(minutes=5))
+        self.assertEqual([r["push_sent"] for r in self.setups()], [1])
+
+    def test_the_push_flag_stays_off_when_the_policy_blocks_the_push(self):
+        with mock.patch.object(push_notify, "send_kans_push", mock.AsyncMock(return_value=False)):
+            self.scan(SHORT_PLACED + pd.Timedelta(minutes=5))
+        self.assertEqual([r["push_sent"] for r in self.setups()], [0])
+
+    def test_the_migration_adds_the_flag_to_an_existing_table_once(self):
+        with db.session() as conn:
+            conn.execute("ALTER TABLE range_sweep_setups DROP COLUMN push_sent")
+        db.init_db()
+        db.init_db()
+        with db.session() as conn:
+            self.assertIn("push_sent", [r["name"] for r in conn.execute("PRAGMA table_info(range_sweep_setups)")])
 
     def test_a_weak_or_unannounced_setup_that_expires_is_not_announced(self):
         self.insert_row(grade="C")

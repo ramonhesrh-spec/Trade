@@ -3091,6 +3091,11 @@ def insert_range_sweep_setup(row: dict) -> Optional[int]:
         return cur.lastrowid if cur.rowcount else None
 
 
+def mark_range_sweep_push_sent(setup_id: int) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE range_sweep_setups SET push_sent = 1 WHERE id = ?", (setup_id,))
+
+
 def list_range_sweep_setups(states: tuple[str, ...], since_iso: Optional[str] = None) -> list[dict]:
     marks = ", ".join("?" for _ in states)
     with db.session() as conn:

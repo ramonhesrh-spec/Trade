@@ -291,6 +291,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "ON sr_zone_failures (coin, direction, failed_at)"
     )
     _migrate_rule_trades(conn)
+    # push_sent: ging de setupmelding echt uit (het kansbudget of een tegenstrijdige richting kan hem houden)? Alleen dan meldt een vervallen setup dat.
+    if "push_sent" not in {row["name"] for row in conn.execute("PRAGMA table_info(range_sweep_setups)")}:
+        conn.execute("ALTER TABLE range_sweep_setups ADD COLUMN push_sent INTEGER NOT NULL DEFAULT 0")
     # Hier en niet in schema.sql: op een bestaande database met dubbele rijen zou de index het opstarten breken, en een tweede trade per setup is
     # precies de fout die hij moet voorkomen.
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_range_sweep_trades_setup ON range_sweep_trades (setup_id)")
