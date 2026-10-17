@@ -18,6 +18,44 @@ class RuleLabTest(DbCase):
         self.assertIsNone(repo.get_rule_lab("bestaat_niet"))
 
 
+class RangeSweepRuleStatusTest(DbCase):
+    """De labrijen zoals strategy_lab --opslaan ze schrijft, door rule_status gelezen: stopkwaliteit geslaagd en voordeel mislukt is de verwachte uitkomst."""
+
+    def labs(self):
+        return {r["rule"]: r for r in repo.list_rule_labs()}
+
+    def test_expected_case_stop_pass_edge_fail_is_in_proef(self):
+        from app import track_record
+        from tests import range_seed
+        range_seed.seed_labs(stop_passes=True, edge_passes=False)
+        labs = self.labs()
+        self.assertEqual(track_record.rule_status(labs["range_sweep"], [], stop_lab=labs["range_sweep_stop"])["status"], "In proef")
+
+    def test_no_stop_pass_means_negatief(self):
+        from app import track_record
+        from tests import range_seed
+        range_seed.seed_labs(stop_passes=False, edge_passes=False)
+        labs = self.labs()
+        self.assertEqual(track_record.rule_status(labs["range_sweep"], [], stop_lab=labs["range_sweep_stop"])["status"], "Negatief")
+
+    def test_both_pass_but_few_live_trades_is_still_in_proef(self):
+        from app import track_record
+        from tests import range_seed
+        range_seed.seed_labs(stop_passes=True, edge_passes=True)
+        labs = self.labs()
+        self.assertEqual(track_record.rule_status(labs["range_sweep"], [0.2] * 10, stop_lab=labs["range_sweep_stop"])["status"], "In proef")
+
+    def test_range_sweep_trades_come_through_the_repo_lists(self):
+        from tests import range_seed
+        sid = range_seed.seed_trade(stop_hit=True, ref_r=-1.0, closed=True)
+        range_seed.seed_trade(coin="APT", direction="long")
+        trade = repo.get_range_sweep_trade(sid)
+        self.assertEqual((trade["coin"], trade["direction"]), ("ARB", "short"))
+        self.assertEqual(repo.get_range_sweep_setup_by_signal(sid)["id"], trade["setup_id"])
+        self.assertEqual(repo.count_range_sweep_setups_by_state(), {"filled": 2})
+        self.assertIsNone(repo.get_range_sweep_trade(999))
+
+
 class TradeResultTest(DbCase):
     def test_override_reaches_both_queries_and_upserts(self):
         sid = self.insert_signal(trade_type="smc")

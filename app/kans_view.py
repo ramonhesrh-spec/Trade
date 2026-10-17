@@ -24,6 +24,35 @@ def trailing_outcome(signal: dict, r_value: Optional[float]) -> Optional[dict]:
     return {"win": win, "text": f"Afgesloten met {'winst' if win else 'verlies'}" + (f", {r_value:+.2f}R" if r_value is not None else "")}
 
 
+def reference_outcome(signal: dict, r_value: Optional[float]) -> Optional[dict]:
+    """Een range sweep heeft geen doel; de R op Bewijs komt van een referentie-uitgang. Dat moet op de kans staan, anders lijkt +1,4R jouw resultaat."""
+    if signal.get("auto_outcome") not in ("take_profit", "stop_loss") or r_value is None:
+        return None
+    r_text = f"{r_value:+.2f}".replace(".", ",")
+    return {"win": r_value > 0, "r": r_value, "text": f"Referentie-uitgang (meelopende stop 3 ATR op 1u): {r_text}R. Jouw trade beslis je zelf."}
+
+
+def range_sweep_events(setup: dict, trade: Optional[dict]) -> list[dict]:
+    """Wat er met een range sweep gebeurde, uit de meting van de motor: melding, elke vulling, elk R-niveau dat vóór de stop viel, de stop, de
+    referentie-uitgang en het einde van de meting. Alleen wat vaststaat; een niveau dat niet viel staat er niet."""
+    events = [{"at": setup["placed_at"], "text": "Plan gemeld, limietorder klaarzetten"}]
+    if not trade:
+        return events
+    raw = trade.get("legs_filled")
+    legs = (json.loads(raw) if isinstance(raw, str) else raw) or []
+    total = sum(leg[0] for leg in legs) or 1.0
+    events += [{"at": leg[2], "text": f"Limiet {i} gevuld ({round(leg[0] / total * 100)}%)" if len(legs) > 1 else "Limiet gevuld"} for i, leg in enumerate(legs, 1)]
+    events += [{"at": trade[f"reached_{k}r_at"], "text": f"+{k}R bereikt vóór de stop"} for k in range(1, 7) if trade.get(f"reached_{k}r_at")]
+    if trade.get("stop_hit_at"):
+        events.append({"at": trade["stop_hit_at"], "text": "Stop geraakt"})
+    if trade.get("ref_closed_at") and trade.get("ref_closed_at") != trade.get("stop_hit_at"):
+        events.append({"at": trade["ref_closed_at"], "text": "Referentie-uitgang bereikt"})
+    if trade.get("closed_at"):
+        events.append({"at": trade["closed_at"], "text": "Meting klaar"})
+    events.sort(key=lambda e: _parse(e["at"]))       # stabiel: bij gelijke tijd blijft de volgorde hierboven
+    return events
+
+
 def timeline(signal: dict, setup: Optional[dict], outcome_text: Optional[str] = None) -> list[dict]:
     """Gebeurtenissen oud naar nieuw: plan gemeld, limiet geraakt, doelen en stop (alleen Structuur kent die tijden), uitkomst."""
     events = []
@@ -37,7 +66,12 @@ def timeline(signal: dict, setup: Optional[dict], outcome_text: Optional[str] = 
     if outcome and not any(e["text"].startswith(("Stop", "T")) for e in events if setup):
         events.append({"at": signal.get("auto_outcome_at") or signal["created_at"], "text": outcome_text or OUTCOME_TEXT.get(outcome, outcome)})
     events.sort(key=lambda e: _parse(e["at"]))
-    return [{"at": today.local(_parse(e["at"])), "text": ceo.timeline_text(e["text"])} for e in events]    # Nederlandse tijd, zoals de rest van de site
+    return format_events(events)
+
+
+def format_events(events: list[dict]) -> list[dict]:
+    """Nederlandse tijd, zoals de rest van de site, en de tijdlijnregels in CEO-taal."""
+    return [{"at": today.local(_parse(e["at"])), "text": ceo.timeline_text(e["text"])} for e in events]
 
 
 def facts(signal: dict) -> dict:

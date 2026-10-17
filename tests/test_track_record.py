@@ -309,6 +309,125 @@ class RuleStatusTest(unittest.TestCase):
         self.assertNotEqual(tr.rule_status(self.PASS, series)["status"], "Bewezen")
 
 
+class RangeSweepStatusTest(unittest.TestCase):
+    """Besluit uit review: de proef van de range sweep draait om de stopkwaliteit; de strenge toets op een voordeel (t >= 3,4) hoort bij Bewezen, niet bij Negatief."""
+    STOP_PASS = {"lab_passes": True}
+    EDGE_FAIL = {"lab_passes": False}
+    EDGE_PASS = {"lab_passes": True}
+
+    def test_stop_quality_pass_and_edge_fail_is_in_proef_not_negatief(self):
+        out = tr.rule_status(self.EDGE_FAIL, [], stop_lab=self.STOP_PASS)
+        self.assertEqual(out["status"], "In proef")
+        self.assertIn("stopkwaliteit", out["reason"].lower())
+        self.assertEqual(tr.rule_status(self.EDGE_FAIL, [0.1] * 80, stop_lab=self.STOP_PASS)["status"], "In proef")   # nooit Bewezen zonder de strenge toets
+
+    def test_only_a_negative_live_series_makes_it_negatief(self):
+        self.assertEqual(tr.rule_status(self.EDGE_FAIL, [-0.5] * 30, stop_lab=self.STOP_PASS)["status"], "Negatief")
+        self.assertEqual(tr.rule_status(self.EDGE_FAIL, [-0.5] * 29, stop_lab=self.STOP_PASS)["status"], "In proef")
+
+    def test_failed_stop_quality_is_negatief(self):
+        out = tr.rule_status(self.EDGE_PASS, [], stop_lab={"lab_passes": False})
+        self.assertEqual(out["status"], "Negatief")
+        self.assertIn("stopkwaliteit", out["reason"].lower())
+
+    def test_bewezen_needs_both_tests_and_the_live_watch(self):
+        self.assertEqual(tr.rule_status(self.EDGE_PASS, [0.1] * 50, stop_lab=self.STOP_PASS)["status"], "Bewezen")
+        self.assertEqual(tr.rule_status(self.EDGE_PASS, [0.1] * 49, stop_lab=self.STOP_PASS)["status"], "In proef")
+
+    def test_without_a_stop_lab_nothing_changes(self):
+        self.assertEqual(tr.rule_status(self.EDGE_FAIL, [])["status"], "Negatief")
+
+    def test_rule_proof_uses_the_stop_lab_too(self):
+        self.assertEqual(tr.rule_proof(self.EDGE_FAIL, [], stop_lab=self.STOP_PASS)["label"], "In proef")
+        self.assertEqual(tr.rule_proof(self.EDGE_FAIL, [])["label"], "Negatief")
+
+
+class StopQualityLiveTest(unittest.TestCase):
+    def t(self, stop=False, r1=False, closed=True, **kw):
+        return {"entry": 100.0, "stop": 102.5, "stop_hit_at": "x" if stop else None, "closed_at": "x" if closed else None,
+                **{f"reached_{k}r_at": ("x" if (k == 1 and r1) else None) for k in range(1, 7)}, **kw}
+
+    def test_counts_only_finished_trades(self):
+        out = tr.stop_quality_live([self.t(stop=True), self.t(r1=True), self.t(closed=False)])
+        self.assertEqual((out["n"], out["open"]), (2, 1))
+        self.assertAlmostEqual(out["stop_hit"], 0.5)
+        self.assertAlmostEqual(out["reach"][1], 0.5)
+        self.assertFalse(out["enough"])
+        self.assertFalse(out["tight_known"])
+
+    def test_empty_has_no_numbers(self):
+        out = tr.stop_quality_live([])
+        self.assertEqual((out["n"], out["open"]), (0, 0))
+        self.assertIsNone(out["stop_hit"])
+        self.assertIsNone(out["median_stop_pct"])
+
+    def test_enough_at_thirty(self):
+        self.assertTrue(tr.stop_quality_live([self.t()] * 30)["enough"])
+        self.assertFalse(tr.stop_quality_live([self.t()] * 29)["enough"])
+
+    def test_quantiles_and_cost_in_r(self):
+        trades = [self.t(mae_r=m, mfe_r=f) for m, f in [(0.2, 1.0), (0.4, 2.0), (0.6, 3.0), (0.8, 4.0), (1.0, 5.0)]]
+        out = tr.stop_quality_live(trades, cost_pct=0.12)
+        self.assertAlmostEqual(out["mae_q"][1], 0.6)              # mediaan
+        self.assertAlmostEqual(out["mfe_q"][1], 3.0)
+        self.assertAlmostEqual(out["median_cost_r"], 0.12 / 2.5)   # stop 2,5% van de instap
+        self.assertIsNone(tr.stop_quality_live(trades)["median_cost_r"])
+
+    def test_rows_show_lab_beside_live(self):
+        lab = {"summary": {"n": 412, "stop_hit": {"p": 0.55}, "reach": {str(k): {"p": 0.5 / k} for k in range(1, 7)}, "median_stop_pct": 2.4, "median_cost_r": 0.05, "tight_rate": 0.18}}
+        rows = tr.stop_quality_rows(lab, tr.stop_quality_live([]))
+        self.assertEqual(rows[0], {"label": "Stop geraakt", "lab_text": "55%", "live_text": "-"})
+        self.assertEqual(rows[6]["label"], "+6R vóór de stop")
+        labels = [r["label"] for r in rows]
+        for needle in ("Stopafstand (mediaan)", "Te krappe stops"):
+            self.assertIn(needle, labels)
+        tight = next(r for r in rows if r["label"] == "Te krappe stops")
+        self.assertEqual((tight["lab_text"], tight["live_text"]), ("18%", "niet gemeten"))
+
+    def test_rows_without_a_lab_show_dashes_not_zeros(self):
+        rows = tr.stop_quality_rows(None, tr.stop_quality_live([self.t(stop=True)]))
+        self.assertEqual(rows[0]["lab_text"], "-")
+        self.assertEqual(rows[0]["live_text"], "100%")
+
+    def test_stored_lab_row_shape_is_unwrapped(self):
+        stored = {"rule": "range_sweep_stop", "lab_passes": True, "summary": {"variant": "RZ_2H", "summary": {"n": 412, "stop_hit": {"p": 0.55}}}}
+        view = tr.stop_lab_view(stored)
+        self.assertEqual(view["summary"]["n"], 412)
+        self.assertEqual(tr.stop_quality_rows(view, tr.stop_quality_live([]))[0]["lab_text"], "55%")
+        self.assertEqual(tr.stop_lab_view({"lab_passes": False, "summary": {"variant": None, "reason": "x"}})["summary"], {})
+        self.assertIsNone(tr.stop_lab_view(None))
+
+    def test_drift_warning_after_fifty(self):
+        lab = {"summary": {"reach": {"1": {"p": 0.48, "ci": [0.42, 0.54]}}}}
+        self.assertIn("wijkt af van het lab", tr.drift_warning(lab, {"n": 60, "reach": {1: 0.30}}))
+        self.assertIsNone(tr.drift_warning(lab, {"n": 20, "reach": {1: 0.30}}))
+        self.assertIsNone(tr.drift_warning(lab, {"n": 60, "reach": {1: 0.50}}))
+        self.assertIsNone(tr.drift_warning(None, {"n": 60, "reach": {1: 0.30}}))
+
+
+class ReferenceLiveTest(unittest.TestCase):
+    def test_mark_r_is_direction_aware(self):
+        long = {"direction": "long", "entry": 100.0, "stop": 98.0}
+        short = {"direction": "short", "entry": 100.0, "stop": 102.0}
+        self.assertAlmostEqual(tr.mark_r(long, 103.0), 1.5)
+        self.assertAlmostEqual(tr.mark_r(short, 103.0), -1.5)
+        self.assertIsNone(tr.mark_r(long, None))
+
+    def test_open_trades_are_shown_beside_the_finished_ones(self):
+        trades = [{"coin": "A", "ref_r": 1.0, "direction": "long", "entry": 100.0, "stop": 98.0},
+                  {"coin": "B", "ref_r": None, "direction": "long", "entry": 100.0, "stop": 98.0},
+                  {"coin": "C", "ref_r": None, "direction": "short", "entry": 100.0, "stop": 102.0}]
+        out = tr.reference_live(trades, [0.8, -1.1], {"B": 102.0, "C": 101.0})
+        self.assertEqual((out["n"], out["open"]), (2, 2))
+        self.assertAlmostEqual(out["avg_net"], -0.15)
+        self.assertEqual(out["marks"], [1.0, -0.5])        # alleen lopende trades, op de koers van nu
+
+    def test_no_finished_trades_gives_no_average(self):
+        out = tr.reference_live([], [], {})
+        self.assertIsNone(out["avg_net"])
+        self.assertEqual(out["marks"], [])
+
+
 class LabRuleHelpersTest(unittest.TestCase):
     def test_labels_cover_every_lab_variant_and_fall_back_to_the_raw_name(self):
         from app.replay import trendlab

@@ -482,6 +482,137 @@ class BewijsLayoutTests(BaseShellTests):
         self.assertIn("Nog geen signalen om te meten.", html)
 
 
+class RangeSweepPageMixin:
+    def as_leerling(self):
+        leerling = repo.create_user("leerling", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        self.client.cookies.set(main.SESSION_COOKIE, security.create_session_token(leerling))
+        main._ceo_cache.update(at=0.0)
+        main._proof_cache.update(at=0.0)
+
+    def seed_all(self):
+        range_seed.seed_labs()
+        self.stopped = range_seed.seed_trade(coin="ARB", stop_hit=True, ref_r=-1.0, closed=True)
+        self.won = range_seed.seed_trade(coin="APT", direction="long", ref_r=2.4, reached=3, stop_hit=False, closed=True)
+        self.running = range_seed.seed_trade(coin="WLD", direction="long")
+        range_seed.seed_setup(coin="AAVE")
+        for coin, state in (("OP", "verlopen"), ("LINK", "weggelopen"), ("SOL", "stop_voor_vulling")):
+            repo.set_range_sweep_setup_state(range_seed.seed_setup(coin=coin), state)
+
+
+class RangeSweepBewijsTests(RangeSweepPageMixin, BaseShellTests):
+    def test_de_ceo_ziet_stopkwaliteit_lab_naast_live_en_de_eerlijke_telling(self):
+        self.seed_all()
+        html = self.client.get("/bewijs").text
+        sec = html[html.index('id="range-sweep"'):]
+        sec = sec[:sec.index("</section>")]
+        for needle in ["Range sweep, stopkwaliteit", "ongetest", "Stop geraakt", "+1R vóór de stop", "+6R vóór de stop", "Kosten in R", "Te krappe stops", "niet gemeten",
+                       "R gemeten bij de referentie-uitgang", "Geen vast doel", "Stopkwaliteit: geslaagd", "Strenge toets op een voordeel: niet geslaagd", "30 toetsen", "64",
+                       "In proef", "2 afgeronde", "1 lopend", "3 niet gevuld", "1 verlopen", "1 weggelopen", "1 stop voor de vulling", "1 wachtend", "55%"]:
+            self.assertIn(needle, sec, needle)
+        self.assertNotIn("Negatief", sec)                       # de strenge toets alleen is geen reden voor Negatief
+        self.assertNotIn("Bewezen", sec.replace("niet bewezen", "").replace("Niets is bewezen", ""))
+
+    def test_de_score_en_de_doelkans_zijn_geen_voorspeller(self):
+        self.seed_all()
+        sec = self.client.get("/bewijs").text
+        sec = sec[sec.index('id="range-sweep"'):]
+        self.assertIn("geen voorspeller", sec)
+        self.assertIn("historisch", sec)
+        self.assertNotRegex(sec, r"kans op winst|win-?kans")
+
+    def test_lopende_trades_staan_ernaast_met_hun_stand_en_tellen_niet_mee(self):
+        self.seed_all()
+        sec = self.client.get("/bewijs").text
+        sec = sec[sec.index('id="range-sweep"'):]
+        self.assertRegex(sec, r"1 lopend.{0,200}geen uitkomst")
+        total = main.track_record.summarize(main.report_rows(repo.get_user_by_username("tester")), main.config.TRACK_RECORD_COST_PCT)
+        entry = next(e for e in total if e["trade_type"] == "range_sweep")
+        self.assertEqual((entry["resolved"], entry["open_or_expired"]), (2, 1))
+
+    def test_zonder_trades_een_lege_staat_zonder_verzonnen_getallen(self):
+        range_seed.seed_labs()
+        sec = self.client.get("/bewijs").text
+        sec = sec[sec.index('id="range-sweep"'):]
+        self.assertIn("Nog geen gevulde setups", sec)
+        self.assertIn("0 afgeronde", sec)
+
+    def test_een_leerling_ziet_niets_van_de_range_sweep_op_bewijs(self):
+        self.seed_all()
+        self.as_leerling()
+        html = self.client.get("/bewijs").text
+        for needle in ("range-sweep", "Range sweep", "stopkwaliteit", "referentie-uitgang", "Zone-retest", "range_sweep", "rs_1h", "rz_2h"):
+            self.assertNotIn(needle, html, needle)
+        self.assertIn("Nog geen signalen om te meten.", html)      # de proeftrades zitten niet in de totalen van een leerling
+
+    def test_openbaar_toont_de_sectie_aan_een_leerling(self):
+        self.seed_all()
+        self.as_leerling()
+        with mock.patch.object(main.rule_live, "CEO_ONLY_TYPES", main.rule_live.ceo_only_types(True)):
+            html = self.client.get("/bewijs").text
+        self.assertIn("Range sweep, stopkwaliteit", html)
+
+    def test_de_publieke_keten_noemt_de_range_sweep_niet(self):
+        self.seed_all()
+        self.client.cookies.clear()
+        for pad in ("/keten", "/keten.json"):
+            text = self.client.get(pad).text
+            self.assertNotIn("range_sweep", text, pad)
+            self.assertNotIn("Range sweep", text, pad)
+
+    def test_regels_toont_de_range_sweep_niet_als_regel_zonder_motor(self):
+        self.seed_all()
+        html = self.client.get("/bewijs").text
+        others = html[html.index("proof-others"):] if "proof-others" in html else ""
+        self.assertNotIn("range_sweep", others)
+        self.assertNotIn("Range sweep, stopkwaliteit", others.split("</details>")[0])
+
+
+class RangeSweepKansPageTests(RangeSweepPageMixin, BaseShellTests):
+    def test_de_kanspagina_toont_de_tekening_de_meting_en_de_referentie(self):
+        self.seed_all()
+        html = self.client.get(f"/kans/{self.stopped}").text
+        for needle in ["sc-range", "sc-zone", "sc-stop", "Stop geraakt", "Referentie-uitgang (meelopende stop 3 ATR op 1u): -1,00R", "Jouw trade beslis je zelf.",
+                       "Limiet 1 gevuld (40%)", "Limiet 2 gevuld (60%)", "Meting klaar", "ongetest", "Stopafstand", "Kosten in R"]:
+            self.assertIn(needle, html, needle)
+        self.assertNotIn("Doel geraakt", html)
+        self.assertNotIn("raakten het doel", html)
+        self.assertNotRegex(html, r"R:R")
+
+    def test_de_bewijsregel_onder_de_kans_is_in_proef_bij_geslaagde_stopkwaliteit_en_mislukt_voordeel(self):
+        self.seed_all()
+        main._proof_cache.update(at=0.0)
+        html = self.client.get(f"/kans/{self.stopped}").text
+        line = html[html.index('class="proof-line'):]
+        line = line[:line.index("</p>")]
+        self.assertIn("<strong>In proef</strong>", line)
+        self.assertNotIn("Negatief", line)
+
+    def test_een_gewonnen_referentie_staat_er_niet_als_doel(self):
+        self.seed_all()
+        html = self.client.get(f"/kans/{self.won}").text
+        self.assertIn("Referentie-uitgang (meelopende stop 3 ATR op 1u): +2,40R", html)
+        self.assertIn("+3R bereikt vóór de stop", html)
+        self.assertNotIn("Doel geraakt", html)
+        self.assertNotIn("✓ Referentie", html)
+
+    def test_een_lopende_trade_zegt_loopt_nog_zonder_referentie(self):
+        self.seed_all()
+        html = self.client.get(f"/kans/{self.running}").text
+        self.assertIn("Loopt nog", html)
+        self.assertNotIn("Referentie-uitgang (", html)
+
+    def test_een_leerling_krijgt_een_404(self):
+        self.seed_all()
+        self.as_leerling()
+        self.assertEqual(self.client.get(f"/kans/{self.stopped}").status_code, 404)
+
+    def test_openbaar_geeft_de_leerling_de_pagina(self):
+        self.seed_all()
+        self.as_leerling()
+        with mock.patch.object(main.rule_live, "CEO_ONLY_TYPES", main.rule_live.ceo_only_types(True)):
+            self.assertEqual(self.client.get(f"/kans/{self.stopped}").status_code, 200)
+
+
 class ListPagesLayoutTests(BaseShellTests):
     def seed_signal(self):
         user = repo.get_user_by_username("tester")

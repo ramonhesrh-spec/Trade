@@ -31,3 +31,44 @@ def seed_setup(**kw) -> int:
 
 def seed_lab(passes=True) -> None:
     repo.set_rule_lab("range_sweep_stop", passes, LAB, datetime.now(timezone.utc).isoformat())
+
+
+def seed_trade(coin="ARB", direction="short", ref_r=None, stop_hit=False, closed=False, reached=0, mae=0.0, mfe=0.0, **setup_kw) -> int:
+    """Een gevulde range sweep: setup in staat 'filled', signaal, meting en (met ref_r) de referentie-uitkomst zoals de motor ze schrijft. Geeft het signaal-id.
+    reached: tot en met welk R-niveau (1 tot 6) de koers vóór de stop kwam."""
+    now = datetime.now(timezone.utc)
+    setup_kw.setdefault("placed_at", (now - timedelta(hours=33)).isoformat())          # de limiet staat er vóór hij vult
+    setup_id = seed_setup(coin=coin, direction=direction, **setup_kw)
+    short = direction == "short"
+    entry, stop = (101.3, 103.0) if short else (98.7, 97.0)
+    filled_at = (now - timedelta(hours=30)).isoformat()
+    signal_id = repo.insert_signal({
+        "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "range_sweep", "pattern_name": "RZ_2H",
+        "price": entry, "stop_loss": stop, "take_profit": None, "confidence": "Zone-retest A", "reason": "✓ a | ✗ b", "pass_pct": 85.0,
+        "technical_confirmed": 1, "hard_gates_ok": 1, "is_practice": 0, "plain_explanation": "Zone-retest 2u: limiet gevuld."}, chain_it=False)
+    repo.set_range_sweep_setup_state(setup_id, "filled", signal_id)
+    repo.insert_range_sweep_trade(signal_id, setup_id, json.dumps([[0.4, 101.0, filled_at], [0.6, 101.5, (now - timedelta(hours=29)).isoformat()]]), entry, stop, filled_at)
+    fields = {"mae_r": mae, "mfe_r": mfe, **{f"reached_{k}r_at": (now - timedelta(hours=28 - k)).isoformat() for k in range(1, reached + 1)}}
+    if stop_hit:
+        fields["stop_hit_at"] = (now - timedelta(hours=5)).isoformat()
+    if closed or stop_hit:
+        fields["closed_at"] = (now - timedelta(hours=4)).isoformat()
+    if ref_r is not None:
+        fields.update(ref_r=ref_r, ref_closed_at=(now - timedelta(hours=5)).isoformat())
+        repo.set_trade_result(signal_id, ref_r, (now - timedelta(hours=5)).isoformat())
+        repo.mark_signal_auto_outcome(signal_id, "take_profit" if ref_r > 0 else "stop_loss", (now - timedelta(hours=5)).isoformat())
+    if fields:
+        repo.update_range_sweep_trade(signal_id, **fields)
+    return signal_id
+
+
+STOP_SUMMARY = {"n": 412, "weeks": 120, "stop_hit": {"p": 0.55, "ci": [0.5, 0.6]}, "reach": {str(k): {"p": 0.5 / k, "ci": [0.4 / k, 0.6 / k]} for k in range(1, 7)},
+                "median_stop_pct": 2.4, "median_cost_r": 0.05, "tight_rate": 0.18, "mae_q": [0.3, 0.6, 0.9, 1.0], "mfe_q": [0.4, 0.9, 1.8, 3.1]}
+
+
+def seed_labs(stop_passes=True, edge_passes=False) -> None:
+    """Zoals strategy_lab --opslaan ze schrijft: de stopkwaliteit (de kop van de proef) en de strenge toets ernaast. Verwacht: stop PASS, voordeel FAIL."""
+    now = datetime.now(timezone.utc).isoformat()
+    repo.set_rule_lab("range_sweep_stop", stop_passes, {**LAB, "quality": {"passes": stop_passes}, "summary": STOP_SUMMARY}, now)
+    repo.set_rule_lab("range_sweep", edge_passes, {"variant": "RZ_2H", "stop_name": "zone_05", "n": 412, "avg": 0.02, "t_week": 1.1,
+                                                   "reason": "t_week 1,1 onder de horde van 3,4"}, now)

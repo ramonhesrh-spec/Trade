@@ -31,7 +31,7 @@ from markupsafe import Markup
 from app import advice as advice_module
 from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
-from app.replay import rangesweep_lab
+from app.replay import rangesweep_lab, stopquality
 from app import ceo, chance_checks, freshness, chance_steps, kans_view, rule_live, trust
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
@@ -118,7 +118,9 @@ def proof(trade_type: str) -> dict:
     labs = _proof_cache["labs"]
     if trade_type in rule_live.CEO_ONLY_TYPES or trade_type in labs:
         # Eén betekenis van Bewezen: voor een regel met een labtoets dezelfde status als op Bewijs (labtoets, 50 live trades, bewaking).
-        return track_record.rule_proof(labs.get(trade_type), track_record.live_net_r(_proof_cache["rows"], trade_type, config.TRACK_RECORD_COST_PCT))
+        # De range sweep draait om de stopkwaliteit: zijn strenge toets op een voordeel mag Negatief niet veroorzaken (track_record.rule_status).
+        stop_lab = labs.get("range_sweep_stop") if trade_type == rule_live.RANGE_SWEEP else None
+        return track_record.rule_proof(labs.get(trade_type), track_record.live_net_r(_proof_cache["rows"], trade_type, config.TRACK_RECORD_COST_PCT), stop_lab=stop_lab)
     return trust.status(_proof_cache["map"].get(trade_type))
 
 
@@ -625,6 +627,8 @@ async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dic
     signal = repo.get_signal(signal_id)
     if not signal or signal["is_practice"] or (signal["trade_type"] in rule_live.CEO_ONLY_TYPES and not is_ceo(user)):
         raise HTTPException(status_code=404)
+    if signal["trade_type"] == rule_live.RANGE_SWEEP and (page := await _range_sweep_kans(request, signal, user)) is not None:
+        return page
     setup = repo.get_structure_setup_by_signal(signal_id)
     candles, price = None, None
     tf = tf if tf in KANS_TIMEFRAMES and not setup else "30m"        # Structuur tekent zijn eigen momentopname op 30 minuten
@@ -646,6 +650,34 @@ async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dic
         "tf": tf, "timeframes": KANS_TIMEFRAMES if not setup else (),
         "fingerprint": (repo.get_chain_link(signal["id"]) or {}).get("hash"),
     })
+
+
+async def _range_sweep_kans(request: Request, signal: dict, user: dict):
+    """De kanspagina van een gevulde range sweep: de getekende setup, wat de stop deed (uit de meting van de motor) en de referentie-uitgang die Bewijs telt.
+    Geen doel en geen R:R: er is er geen, en de referentie is niet jouw trade."""
+    setup = repo.get_range_sweep_setup_by_signal(signal["id"])
+    trade = repo.get_range_sweep_trade(signal["id"])
+    if not setup or not trade:
+        return None          # de motor schrijft het signaal vóór de meting; een signaal zonder meting krijgt de gewone pagina
+    price = (await _cached_prices({signal["coin"]})).get(signal["coin"])
+    plan = json.loads(setup["plan"]) if setup.get("plan") else {}
+    chart = setup_chart.range_sweep_svg(plan.get("candles", []), {**setup, "legs": chance_steps.range_legs(setup)}, setup["stop"], price, plan.get("zones"))
+    r_value = (repo.get_trade_result(signal["id"]) or {}).get("r_value")
+    ref = kans_view.reference_outcome(signal, r_value)
+    pct = abs(trade["entry"] - trade["stop"]) / trade["entry"] * 100
+    stopped = bool(trade["stop_hit_at"])
+    state = ("Stop geraakt" if stopped else "Meting klaar, de stop werd niet geraakt" if trade["closed_at"] else "Loopt nog")
+    reached = [k for k in track_record.RANGE_R_LEVELS if trade.get(f"reached_{k}r_at")]
+    return templates.TemplateResponse(request, "kans.html", {
+        "user": user, "signal": signal, "facts": kans_view.facts(signal), "trailing": None, "price": price, "setup": None, "tf": "30m", "timeframes": (),
+        "events": kans_view.format_events(kans_view.range_sweep_events(setup, trade)),
+        "chart": Markup(chart), "fingerprint": None,
+        "range_sweep": {"state": state, "stopped": stopped, "running": not trade["closed_at"] and not stopped, "reference": ref, "stop_pct": pct,
+                        "cost_r": rangesweep_lab.LAB_COST_PCT / pct if pct else None, "lab_cost_pct": rangesweep_lab.LAB_COST_PCT,
+                        "mae": trade["mae_r"], "mfe": trade["mfe_r"], "reached": reached, "score": setup["score"], "grade": setup["grade"],
+                        "family": {"zone": "Zone-retest", "sweep": "Range sweep"}.get(setup["family"], setup["family"]),
+                        "tf": {"30m": "30m", "1h": "1u", "2h": "2u", "4h": "4u"}.get(setup["range_tf"], setup["range_tf"]),
+                        }})
 
 
 WEEK_RANGES = {7: "1W", 14: "2W", 30: "1M", 90: "3M"}
@@ -728,6 +760,33 @@ async def api_sparklines(coins: str = "", user: dict = Depends(require_login)):
     return out
 
 
+RANGE_REGISTER_TESTS = 64       # docs/onderzoek/range-sweep/preregistratie.md, 'Register': 34 eerdere varianten plus de 30 toetsen van deze familie
+
+
+async def _range_sweep_proof(user: dict, rows: list[dict], labs: dict) -> Optional[dict]:
+    """De sectie 'Range sweep, stopkwaliteit' van Bewijs, of None als deze kijker de proef niet mag zien. Alles wat telt komt uit de afgeronde
+    metingen en de signalen van rows (al gefilterd op wat deze kijker ziet); lopende trades, niet gevulde setups en wachtende setups staan als aantal ernaast."""
+    if rule_live.RANGE_SWEEP not in track_record.visible_rule_types({rule_live.RANGE_SWEEP}, is_ceo(user), rule_live.CEO_ONLY_TYPES):
+        return None
+    lab_stop, lab_edge = labs.get("range_sweep_stop"), labs.get(rule_live.RANGE_SWEEP)
+    trades = repo.list_range_sweep_trades(1000)
+    live = track_record.stop_quality_live(trades, rangesweep_lab.LAB_COST_PCT)
+    net = track_record.live_net_r(rows, rule_live.RANGE_SWEEP, config.TRACK_RECORD_COST_PCT)
+    running = {t["coin"] for t in trades if t.get("ref_r") is None}
+    prices = await _cached_prices(running) if running else {}
+    states = repo.count_range_sweep_setups_by_state()
+    unfilled = {k: states.get(k, 0) for k in ("verlopen", "weggelopen", "stop_voor_vulling")}
+    lab_view = track_record.stop_lab_view(lab_stop)
+    return {"rows": track_record.stop_quality_rows(lab_view, live), "live": live, "drift": track_record.drift_warning(lab_view, live),
+            "status": track_record.rule_status(lab_edge, net, stop_lab=lab_stop),
+            "verdict": track_record.range_lab_verdict(lab_stop, lab_edge, stopquality.KILL_TESTS, RANGE_REGISTER_TESTS, rangesweep_lab.EDGE_T_MIN),
+            "variant": track_record.rule_label(variant.lower()) if (variant := ((lab_stop or {}).get("summary") or {}).get("variant")) else None,
+            "lab_n": (lab_view or {}).get("summary", {}).get("n"),
+            "reference": track_record.reference_live(trades, net, prices), "cost_pct": config.TRACK_RECORD_COST_PCT, "lab_cost_pct": rangesweep_lab.LAB_COST_PCT,
+            "setups": {"filled": states.get("filled", 0), "waiting": states.get("waiting", 0) + states.get("niet_gemeld", 0), "unfilled": unfilled,
+                       "unfilled_total": sum(unfilled.values()), "total": sum(states.values())}}
+
+
 @app.get("/bewijs")
 async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     """Eerlijk, automatisch gemeten trackrecord per soort melding in R na kosten (zie app/track_record.py)."""
@@ -740,7 +799,9 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     per_type = [e for e in summary if e["source"] != "alles"]
     lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
     visible = track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES)
-    engine_types, other_types = track_record.split_rule_types(visible, rule_live.ENGINE_TYPES)
+    # De range sweep heeft zijn eigen sectie met de stopmeting; als 'andere regel zonder motor' zou hij een live motor ontkennen die er wel is.
+    range_sweep = await _range_sweep_proof(user, rows, lab_types)
+    engine_types, other_types = track_record.split_rule_types([t for t in visible if t not in (rule_live.RANGE_SWEEP, "range_sweep_stop")], rule_live.ENGINE_TYPES)
     rule_statuses = []
     for trade_type in engine_types:
         status = track_record.rule_status(lab_types.get(trade_type), track_record.live_net_r(rows, trade_type, config.TRACK_RECORD_COST_PCT))
@@ -753,7 +814,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     return templates.TemplateResponse(request, "bewijs.html", {
         "curves": curves, "total": total, "per_type": per_type,
         "hours": track_record.hour_grid(rows, config.TRACK_RECORD_COST_PCT),
-        "rule_statuses": rule_statuses, "other_rules": other_rules, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
+        "rule_statuses": rule_statuses, "other_rules": other_rules, "range_sweep": range_sweep, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
         "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,
         "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,
     })

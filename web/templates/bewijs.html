@@ -61,6 +61,7 @@
       <p class="proof-footnote muted">Score van {{ "%.0f"|format(e.score_split.cut) }}% of hoger: {% if e.score_split.high_avg is not none %}{{ "%+.2f"|format(e.score_split.high_avg) }}R ({{ e.score_split.high_n }}){% else %}nog geen afgeronde kans{% endif %}.
         Lager: {% if e.score_split.low_avg is not none %}{{ "%+.2f"|format(e.score_split.low_avg) }}R ({{ e.score_split.low_n }}){% else %}nog geen afgeronde kans{% endif %}. Dit toont of de gemeten kenmerken iets zeggen.</p>
       {% endif %}
+      {% if e.trade_type == "range_sweep" %}<p class="proof-footnote muted">R gemeten bij de referentie-uitgang (meelopende stop 3 ATR op 1u), niet bij een doel; de stopkwaliteit staat onder Regels.</p>{% endif %}
       <p class="proof-footnote muted">{{ e.wins }} winst, {{ e.losses }} verlies. {{ e.open_or_expired }} nog open of vervallen, die tellen niet mee in winrate en R.</p>
     </div>
   </details>
@@ -82,6 +83,43 @@
 </section>
 
 <section id="tab-regels" data-utab-panel>
+{% if range_sweep %}
+{% set rs = range_sweep %}
+<div class="flat" id="range-sweep">
+  <div class="proof-card proof-rule-{{ rs.status.status.lower().replace(" ", "-") }}">
+    <header class="proof-head">
+      <div><h4>Range sweep, stopkwaliteit <span class="muted">ongetest</span></h4></div>
+      <span class="proof-chip proof-chip-{{ rs.status.status.lower().replace(" ", "-") }}">{{ rs.status.status }}</span>
+    </header>
+    <p class="muted proof-quote">{{ rs.status.reason }}</p>
+    <p class="muted proof-quote">Geen vast doel: deze proef meet wat de stop doet, niet of er winst in zit.{% if rs.variant %} Lab-variant: {{ rs.variant }}.{% endif %}
+      Stopkwaliteit: {{ rs.verdict.stop }}. Strenge toets op een voordeel: {{ rs.verdict.edge }}{% if rs.verdict.edge_detail %} ({{ rs.verdict.edge_detail }}){% endif %}. Getoetst: {{ rs.verdict.tests_text }}.</p>
+    {% if rs.drift %}<p class="tone-neg proof-quote">{{ rs.drift }}</p>{% endif %}
+    <div class="rs-doelkans-wrap">
+      <table class="rs-doelkans rs-bewijs" aria-label="Stopkwaliteit, lab naast live">
+        <caption class="muted">Lab ({% if rs.lab_n %}historisch, {{ rs.lab_n }} trades{% else %}geen labuitslag{% endif %}) naast live: {{ rs.live.n }} klaar, {{ rs.live.open }} lopend{% if not rs.live.enough %}, nog te weinig om te vergelijken{% endif %}.</caption>
+        <thead><tr><th scope="col"></th><th scope="col">Lab</th><th scope="col">Live</th></tr></thead>
+        <tbody>
+        {% for r in rs.rows %}<tr><th scope="row">{{ r.label }}</th><td>{{ r.lab_text }}</td><td>{{ r.live_text }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="proof-footnote muted">Een kans op +1R tot +6R vóór de stop is historisch en beschrijvend, geen voorspeller van jouw trade. Dat geldt ook voor de score van 40 of 60 op een kaart. Alleen trades waarvan de meting klaar is (stop geraakt of 7 dagen voorbij) tellen live mee; lopende staan ernaast, dus de eerste weken kleuren de cijfers naar wat snel klaar was.</p>
+    <dl class="proof-facts">
+      <div><dt>Gemeld</dt><dd>{{ rs.setups.total }} setups</dd></div>
+      <div><dt>Gevuld</dt><dd>{{ rs.setups.filled }}</dd></div>
+      <div><dt>Niet gevuld</dt><dd>{{ rs.setups.unfilled_total }}</dd></div>
+      <div><dt>Wachtend</dt><dd>{{ rs.setups.waiting }}</dd></div>
+    </dl>
+    <p class="proof-footnote muted">{{ rs.setups.unfilled_total }} niet gevuld: {{ rs.setups.unfilled.verlopen }} verlopen, {{ rs.setups.unfilled.weggelopen }} weggelopen, {{ rs.setups.unfilled.stop_voor_vulling }} stop voor de vulling. {{ rs.setups.waiting }} wachtend op de limiet.</p>
+    {% if rs.setups.filled == 0 %}<p class="muted proof-quote">Nog geen gevulde setups: er is nog niets live te meten.</p>{% endif %}
+    <p class="proof-footnote muted"><strong>R gemeten bij de referentie-uitgang</strong> (meelopende stop 3 ATR op 1u), niet bij jouw eigen doel en geen belofte. Alleen een afgeronde referentie-uitgang telt, na {{ "%.2f"|format(rs.cost_pct)|replace(".", ",") }}% kosten per rondreis:
+      {{ rs.reference.n }} afgeronde trades{% if rs.reference.avg_net is not none %}, gemiddeld {{ "%+.2f"|format(rs.reference.avg_net)|replace(".", ",") }}R per trade{% endif %}.
+      {{ rs.reference.open }} lopend, nog zonder referentie-uitgang, dus geen uitkomst{% if rs.reference.marks %}: stand op de koers van nu gemiddeld {{ "%+.2f"|format(rs.reference.marks|sum / rs.reference.marks|length)|replace(".", ",") }}R, een momentopname die nergens meetelt{% endif %}.</p>
+  </div>
+</div>
+{% endif %}
 {% if rule_statuses or other_rules %}
 <div class="flat">
   <h3>{{ macros.term("Status per regel", "Eerlijk: 50 live trades kunnen een voordeel van 0,1R per trade niet bewijzen. Het bewijs komt uit de test op historische data; live is een controle of de werkelijkheid daarvan afwijkt.", "bw-regels-pop") }}</h3>
@@ -115,7 +153,7 @@
   </details>
   {% endif %}
 </div>
-{% else %}
+{% elif not range_sweep %}
 <p class="muted empty">Nog geen regels getoetst.</p>
 {% endif %}
 

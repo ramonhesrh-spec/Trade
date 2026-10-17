@@ -44,5 +44,37 @@ class KansViewTests(unittest.TestCase):
         self.assertIn("Doel 102", svg)
 
 
+class RangeSweepKansTests(unittest.TestCase):
+    def test_reference_outcome_names_the_reference(self):
+        out = kans_view.reference_outcome({"trade_type": "range_sweep", "auto_outcome": "take_profit"}, 1.4)
+        self.assertIn("Referentie-uitgang", out["text"])
+        self.assertIn("+1,40R", out["text"])
+        self.assertIn("Jouw trade beslis je zelf.", out["text"])
+        self.assertIsNone(kans_view.reference_outcome({"trade_type": "range_sweep", "auto_outcome": None}, None))
+        self.assertIsNone(kans_view.reference_outcome({"trade_type": "range_sweep", "auto_outcome": "vervallen"}, 0.5))
+
+    def test_reference_outcome_negative(self):
+        out = kans_view.reference_outcome({"trade_type": "range_sweep", "auto_outcome": "stop_loss"}, -1.0)
+        self.assertIn("-1,00R", out["text"])
+
+    def test_events_follow_the_measurement_in_time_order(self):
+        setup = {"placed_at": "2026-10-16T10:00:00+00:00"}
+        trade = {"legs_filled": json.dumps([[0.4, 101.0, "2026-10-16T11:00:00+00:00"], [0.6, 101.5, "2026-10-16T12:00:00+00:00"]]),
+                 "reached_1r_at": "2026-10-16T13:00:00+00:00", "reached_2r_at": None, "stop_hit_at": "2026-10-16T14:00:00+00:00",
+                 "ref_closed_at": "2026-10-16T14:00:00+00:00", "ref_r": -1.0, "closed_at": "2026-10-16T14:05:00+00:00"}
+        texts = [e["text"] for e in kans_view.range_sweep_events(setup, trade)]
+        self.assertEqual(texts[0], "Plan gemeld, limietorder klaarzetten")
+        self.assertIn("Limiet 1 gevuld (40%)", texts)
+        self.assertIn("Limiet 2 gevuld (60%)", texts)
+        self.assertIn("+1R bereikt vóór de stop", texts)
+        self.assertNotIn("+2R bereikt vóór de stop", texts)
+        self.assertIn("Stop geraakt", texts)
+        self.assertEqual(texts[-1], "Meting klaar")
+
+    def test_events_of_a_setup_without_a_trade(self):
+        self.assertEqual([e["text"] for e in kans_view.range_sweep_events({"placed_at": "2026-10-16T10:00:00+00:00"}, None)],
+                         ["Plan gemeld, limietorder klaarzetten"])
+
+
 if __name__ == "__main__":
     unittest.main()

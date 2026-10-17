@@ -8,12 +8,14 @@
   <header class="setup-head">
     <a class="radar-coin" href="/coins/{{ signal.coin }}">{{ signal.coin }}</a>
     <span class="radar-dir radar-dir-{{ signal.direction }}">{{ signal.direction }}</span>
-    <span class="muted">{{ facts.label }}</span>
+    <span class="muted">{{ facts.label }}{% if range_sweep %} · ongetest{% endif %}</span>
     {% if signal.pass_pct is not none and signal.reason and signal.reason.startswith(("✓", "✗")) %}<span class="signal-pct" title="Aantal gemeten kenmerken dat klopt. Geen slagingskans.">{{ signal.reason.count("✓") }}/{{ signal.reason.split(" | ")|length }} kenmerken</span>{% endif %}
     <span class="muted setup-age">{{ signal.created_at | age }}</span>
   </header>
 
-  {% if trailing %}<p class="kans-outcome {{ 'is-win' if trailing.win else 'is-loss' }}"{% if trailing.win %} data-win="{{ signal.id }}"{% endif %}>{{ "✓" if trailing.win else "✗" }} {{ trailing.text }}</p>
+  {% if range_sweep %}<p class="kans-outcome {{ 'is-loss' if range_sweep.stopped else 'is-open' if range_sweep.running else '' }}">{{ "✗ " if range_sweep.stopped else "" }}{{ range_sweep.state }}{% if range_sweep.running and price %} · nu {{ fmt(price) }}{% endif %}</p>
+  {% if range_sweep.reference %}<p class="muted kans-reference">{{ range_sweep.reference.text }}</p>{% endif %}
+  {% elif trailing %}<p class="kans-outcome {{ 'is-win' if trailing.win else 'is-loss' }}"{% if trailing.win %} data-win="{{ signal.id }}"{% endif %}>{{ "✓" if trailing.win else "✗" }} {{ trailing.text }}</p>
   {% elif signal.auto_outcome == "take_profit" %}<p class="kans-outcome is-win" data-win="{{ signal.id }}">✓ Doel geraakt</p>
   {% elif signal.auto_outcome == "stop_loss" %}<p class="kans-outcome is-loss">✗ Stop geraakt</p>
   {% elif signal.auto_outcome == "vervallen" %}<p class="kans-outcome">Vervallen zonder uitkomst</p>
@@ -23,14 +25,31 @@
   {{ chart }}
   {% if timeframes %}<p class="filter-chips tf-chips">{% for t in timeframes %}<a class="chip{% if t == tf %} is-active{% endif %}" href="/kans/{{ signal.id }}?tf={{ t }}">{{ t|replace('h', 'u') }}</a>{% endfor %}</p>{% endif %}
 
+  {% if range_sweep %}
+  {{ macros.keylines([
+    {"label": "Instap", "value": fmt(facts.entry)},
+    {"label": "Stop", "value": fmt(facts.stop) if facts.stop else "-"},
+    {"label": "Stopafstand", "value": "%.2f"|format(range_sweep.stop_pct)|replace(".", ","), "unit": "%"},
+    {"label": "Kosten in R", "value": ("%.2f"|format(range_sweep.cost_r)|replace(".", ",")) if range_sweep.cost_r else "-", "explain": "Rondreiskosten van " ~ ("%.2f"|format(range_sweep.lab_cost_pct)|replace(".", ",")) ~ "% gedeeld door de stopafstand: wat de kosten van deze stop in R zijn."}], "kn") }}
+  <p class="muted">Geen doel: dat kies je zelf. {{ range_sweep.family }} {{ range_sweep.tf }}, score {{ "%.0f"|format(range_sweep.score) }} van 100: de score telt gemeten kenmerken van de setup en is geen voorspeller van deze trade.</p>
+  <h3 class="vd-section-title">Wat de stop deed</h3>
+  <dl class="proof-facts">
+    <div><dt>Tegenbeweging (MAE)</dt><dd>{{ "%.2f"|format(range_sweep.mae)|replace(".", ",") }}R</dd></div>
+    <div><dt>Meebeweging (MFE)</dt><dd>{{ "%.2f"|format(range_sweep.mfe)|replace(".", ",") }}R</dd></div>
+    <div><dt>Vóór de stop bereikt</dt><dd>{% if range_sweep.reached %}tot +{{ range_sweep.reached[-1] }}R{% else %}geen R-niveau{% endif %}</dd></div>
+    <div><dt>Stop geraakt</dt><dd>{{ "ja" if range_sweep.stopped else "nee" }}</dd></div>
+  </dl>
+  <p class="proof-footnote muted">Gemeten bij deze trade{% if range_sweep.running %}, de meting loopt nog (hooguit 7 dagen){% endif %}. Het lab-overzicht en de historische kans per R-niveau staan op <a href="/bewijs#range-sweep">Bewijs</a>.</p>
+  {% else %}
   {{ macros.keylines([
     {"label": "Instap", "value": fmt(facts.entry)},
     {"label": "Stop", "value": fmt(facts.stop) if facts.stop else "-"},
     {"label": "Doel", "value": fmt(facts.take) if facts.take else "-"},
     {"label": "R:R", "value": "%.1f"|format(facts.rr) if facts.rr else "-"}], "kn") }}
-  {% if facts.risk_pct is not none %}<p class="muted">De stop ligt {{ "%.2f"|format(facts.risk_pct) }}% van de instap.{% if user.risk_per_trade_eur and facts.rr %} Raakt de stop, dan verlies je ongeveer € {{ "%.0f"|format(user.risk_per_trade_eur) }}. Het doel levert ongeveer € {{ "%.0f"|format(user.risk_per_trade_eur * facts.rr) }}.{% endif %}</p>{% endif %}
+  {% endif %}
+  {% if facts.risk_pct is not none and not range_sweep %}<p class="muted">De stop ligt {{ "%.2f"|format(facts.risk_pct) }}% van de instap.{% if user.risk_per_trade_eur and facts.rr %} Raakt de stop, dan verlies je ongeveer € {{ "%.0f"|format(user.risk_per_trade_eur) }}. Het doel levert ongeveer € {{ "%.0f"|format(user.risk_per_trade_eur * facts.rr) }}.{% endif %}</p>{% endif %}
 
-  {% set share_steps = [{"title": "Instap " ~ fmt(facts.entry)}, {"title": "Stop " ~ (fmt(facts.stop) if facts.stop else "-")}, {"title": "Doel " ~ (fmt(facts.take) if facts.take else "-")}] %}
+  {% set share_steps = [{"title": "Instap " ~ fmt(facts.entry)}, {"title": "Stop " ~ (fmt(facts.stop) if facts.stop else "-")}] + ([] if range_sweep else [{"title": "Doel " ~ (fmt(facts.take) if facts.take else "-")}]) %}
   {{ macros.share_button(signal.coin, signal.direction, share_steps) }}
 
   <h3 class="vd-section-title">Wat er gebeurde</h3>

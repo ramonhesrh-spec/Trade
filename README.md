@@ -358,6 +358,34 @@ toetsen. Binance geeft maar ~30 dagen history; elke dag zonder verzamelaar is vo
 Herstart `crypto-bot` en `crypto-web` na een wijziging. De derivatenverzamelaar pakt de nieuwe coins vanzelf mee. Een coin
 weghalen kan door hem uit `EXTRA_COINS` te halen: de coin gaat op inactief, er gaat niets verloren.
 
+Voor de range sweep-proef (hieronder) moeten ARB, APT, AAVE en WLD in de coinlijst staan: `EXTRA_COINS=ARB,APT,AAVE,WLD`. Op een verse
+database bestaan alleen de vaste zeven, dus ARB ontbreekt; zonder de coin in de lijst bestaat zijn coinpagina niet (404) en weigert het
+prijsalarm hem. De range sweep-motor zelf scant de 20 coins van `trendlab.LAB_COINS` (daar staan ARB, APT en AAVE in, WLD niet) en
+gebruikt `EXTRA_COINS` niet om coins te kiezen; WLD krijgt dus een coinpagina en prijsalarm, maar geen automatische kaart.
+
+### Range sweep en range-watch (proef)
+
+Onze lezing van een range-sweep-strategie: een echte range, een zone als vak (aanbod of vraag), een limiet in de zone en een stop voorbij de
+buitenkant. Er is geen vast doel: de proef meet de kwaliteit van de stop (hoe vaak de stop raakt, hoe ver de koers meeliep, de kans op +1R
+tot +6R vóór de stop, de kosten in R). Alles staat vooraf vastgelegd in `docs/onderzoek/range-sweep/preregistratie.md`, de labrun op de VPS
+staat in `docs/onderzoek/range-sweep/vps-protocol.md`. De motor (`app/range_sweep_live.py`) en de range-watch (`app/range_watch.py`) draaien in
+de snelle SMC-check (`crypto-market-scan-smc`, zie hierboven); een extra systemd-unit is niet nodig. Beide zijn standaard uit:
+
+| Instelling | Standaard | Wat het doet |
+|---|---|---|
+| `RANGE_SWEEP_ENABLED` | `false` | Zoekt nieuwe setups. Pas aan na een geslaagde toets op stopkwaliteit (`scripts/strategy_lab.py --familie rangesweep --opslaan`); gemelde setups en open trades worden altijd afgemaakt. |
+| `RANGE_WATCH_ENABLED` | `false` | Volgt ranges en meldt stil dat een range gevonden is of de koers bij een rand komt. Informatie, geen kans. |
+| `RANGE_SWEEP_PUBLIC` | `false` | `false`: alleen de CEO ziet de kansen, de ranges, de kanspagina en de cijfers op Bewijs, en de signalen staan niet in de openbare `/keten`. `true`: ook leerlingen. Herstart `crypto-web` en `crypto-bot` na een wijziging. |
+| `RANGE_SWEEP_MAX_PER_DAY` | `6` | Hoeveel setups per 24 uur gemeld worden; de rest blijft zichtbaar als "niet gemeld". |
+| `RANGE_WATCH_MAX_PER_DAY` | `3` | Eigen budget voor stille range-meldingen per gebruiker per 24 uur, los van het kansbudget. |
+| `RANGE_SWEEP_MAX_NEGATIVE` | `30` | De motor zet zichzelf uit na zoveel afgeronde proeftrades die samen negatief zijn bij de referentie-uitgang. |
+
+Op Bewijs (tab Regels) staat de stopkwaliteit uit het lab naast dezelfde cijfers uit de live metingen, met het oordeel van het lab
+(stopkwaliteit geslaagd of niet, de strenge toets op een voordeel ernaast, 30 toetsen en een register van 64). De status is "In proef" zodra de
+stopkwaliteit geslaagd is; "Bewezen" vraagt ook de strenge toets en de live bewaking. De R die Bewijs telt is de R bij de referentie-uitgang
+(meelopende stop van 3 ATR op 1u), niet bij jouw eigen doel; lopende en niet gevulde setups staan als aantal ernaast. De score 40/60 op een
+kaart en de doelkans zijn historisch en beschrijvend, geen voorspeller.
+
 ### Marktbrein, deel A: liquidaties en kalender
 
 ```bash

@@ -229,9 +229,12 @@ RULE_MIN_LIVE_PROVEN = 50
 RULE_WATCH_LAST = 100
 
 
-def rule_status(lab: Optional[dict], live_r_net: list[float], has_engine: bool = True) -> dict:
+def rule_status(lab: Optional[dict], live_r_net: list[float], has_engine: bool = True, stop_lab: Optional[dict] = None) -> dict:
     """Status van één regel, elke keer opnieuw uit de data (niets opgeslagen, dus een Bewezen regel valt vanzelf terug). live_r_net: netto R
-    van de afgeronde live trades, oudste eerst. Volgorde: Negatief, Bewezen, anders In proef."""
+    van de afgeronde live trades, oudste eerst. Volgorde: Negatief, Bewezen, anders In proef.
+    stop_lab: de labrij van de stopkwaliteit voor een proef die daarom draait (de range sweep). Is die geslaagd, dan maakt een mislukte strenge
+    toets (`lab`, het voordeel) de regel niet Negatief: de proef bestaat juist om de stopkwaliteit live te meten. Bewezen vraagt nog steeds
+    de geslaagde toets op een voordeel; Negatief komt dan alleen van een mislukte stopkwaliteit of een negatieve live reeks."""
     from app import structure_review      # structure_review importeert dit module al: bovenaan importeren geeft een kringverwijzing
     n = len(live_r_net)
     last100 = live_r_net[-RULE_WATCH_LAST:]
@@ -244,12 +247,18 @@ def rule_status(lab: Optional[dict], live_r_net: list[float], has_engine: bool =
     last30 = live_r_net[-MIN_FOR_STATUS:]
     if n >= MIN_FOR_STATUS and sum(last30) / MIN_FOR_STATUS < 0:
         return out("Negatief", f"De laatste {MIN_FOR_STATUS} afgeronde trades samen onder nul na kosten.")
-    if lab is not None and not lab_passes:
+    stop_passes = bool(stop_lab and stop_lab.get("lab_passes"))
+    if stop_lab is not None:
+        if not stop_passes:
+            return out("Negatief", "Slaagde niet in de test op stopkwaliteit.")
+    elif lab is not None and not lab_passes:
         return out("Negatief", "Slaagde niet in de test op historische data.")
     if lab_passes and n >= RULE_MIN_LIVE_PROVEN and sum(live_r_net) / n >= 0:
         if n < RULE_WATCH_LAST or structure_review.bootstrap_mean(last100)[1] >= 0:
             return out("Bewezen", f"Slaagde in de test en houdt stand over {n} afgeronde trades.")
         return out("In proef", "De laatste 100 trades liggen duidelijk onder nul, de regel is niet langer bewezen.")
+    if stop_passes and not lab_passes:
+        return out("In proef", f"Stopkwaliteit geslaagd in het lab; de strenge toets op een voordeel slaagde niet, dus niets is bewezen. {n} afgeronde trades.")
     if not lab_passes:
         return out("In proef", f"Nog geen geslaagde test; {n} afgeronde trades.")
     return out("In proef", f"Geslaagde test; nog {max(0, RULE_MIN_LIVE_PROVEN - n)} afgeronde trades nodig voor bewezen.")
@@ -301,10 +310,10 @@ def other_rule_rows(labs: dict, types) -> list[dict]:
 PROOF_STATES = {"In proef": "proef", "Bewezen": "bewezen", "Negatief": "negatief", "Geen motor": "proef"}
 
 
-def rule_proof(lab: Optional[dict], live_r_net: list[float]) -> dict:
+def rule_proof(lab: Optional[dict], live_r_net: list[float], stop_lab: Optional[dict] = None) -> dict:
     """Bewijsregel onder een kans van een regel met een labtoets, in dezelfde vorm als trust.status maar met de status van rule_status: Bewezen
     vraagt dan ook de labtoets en de bewaking over de laatste 100. Zonder "doel": een meelopende stop heeft er geen, de uitkomst is R."""
-    st = rule_status(lab, live_r_net)
+    st = rule_status(lab, live_r_net, stop_lab=stop_lab)
     n = len(live_r_net)
     total = sum(live_r_net)
     text = (f"{n} afgeronde {'trade' if n == 1 else 'trades'}, netto {total:+.1f}R, gemiddeld {total / n:+.2f}R per trade. " if n else "Nog geen afgeronde trades. ")
@@ -436,3 +445,118 @@ def sparkline_svg(values: list[float], width: int = 300, height: int = 56) -> st
             f'aria-label="Cumulatief resultaat in R per week">'
             f'<line class="proof-zero" x1="{pad}" x2="{width - pad}" y1="{y(0):.1f}" y2="{y(0):.1f}"/>'
             f'<polyline points="{escape(points)}"/></svg>')
+
+
+RANGE_R_LEVELS = (1, 2, 3, 4, 5, 6)
+DRIFT_MIN_LIVE = 50
+QUANTILES = (0.25, 0.5, 0.75, 0.9)
+
+
+def _quantile(sorted_values: list[float], q: float) -> float:
+    """Lineair geïnterpoleerd, zoals pandas' quantile in het lab, zodat lab en live dezelfde maat gebruiken."""
+    pos = q * (len(sorted_values) - 1)
+    lo = int(pos)
+    hi = min(lo + 1, len(sorted_values) - 1)
+    return sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * (pos - lo)
+
+
+def stop_quality_live(trades: list[dict], cost_pct: Optional[float] = None) -> dict:
+    """Stopkwaliteit van de live range sweep-trades, zelfde maten als het lab (stopquality.summarize) behalve 'te krap': dat vraagt 48 uur na de stop
+    en meet de motor niet. Een trade telt pas als de meting klaar is (stop geraakt of 7 dagen voorbij); lopende staan als aantal ernaast. Dat kleurt
+    de eerste weken: wat snel op de stop liep is eerder klaar dan wat nog loopt."""
+    done = [t for t in trades if t.get("closed_at") or t.get("stop_hit_at")]
+    n = len(done)
+    share = lambda key: sum(1 for t in done if t.get(key)) / n if n else None
+    pcts = sorted(abs(t["entry"] - t["stop"]) / t["entry"] * 100 for t in done)
+    quant = lambda key: ([_quantile(v, q) for q in QUANTILES] if (v := sorted(t[key] for t in done if t.get(key) is not None)) else None)
+    median_pct = _quantile(pcts, 0.5) if n else None
+    return {"n": n, "open": len(trades) - n, "stop_hit": share("stop_hit_at"), "reach": {k: share(f"reached_{k}r_at") for k in RANGE_R_LEVELS},
+            "median_stop_pct": median_pct, "mae_q": quant("mae_r"), "mfe_q": quant("mfe_r"),
+            "median_cost_r": cost_pct / median_pct if cost_pct and median_pct else None, "enough": n >= MIN_FOR_STATUS, "tight_known": False}
+
+
+def _p(x) -> str:
+    return "-" if x is None else f"{x * 100:.0f}%"
+
+
+def _r2(x) -> str:
+    return f"{x:.2f}".replace(".", ",") + "R"
+
+
+def _q_text(q: Optional[list]) -> str:
+    """Mediaan en 90e percentiel; de rest van de kwantielen staat in het lab-rapport."""
+    return "-" if not q else f"{_r2(q[1])} en {_r2(q[3])}"
+
+
+def stop_lab_view(row: Optional[dict]) -> Optional[dict]:
+    """De labrij 'range_sweep_stop' zoals strategy_lab --opslaan hem bewaart ({variant, stop_name, quality, summary, doelkans}) in de vorm die
+    stop_quality_rows en drift_warning lezen: {"summary": <stopquality.summarize>}. Een rij zonder meting (geen toets slaagde) geeft een lege samenvatting."""
+    if row is None:
+        return None
+    return {**row, "summary": (row.get("summary") or {}).get("summary") or {}}
+
+
+def stop_quality_rows(lab: Optional[dict], live: dict) -> list[dict]:
+    """Rijen voor de tabel op Bewijs: lab naast live, zelfde maat per rij. Zonder live trades staat er een streepje, nooit een nul."""
+    s = (lab or {}).get("summary") or {}
+    reach = s.get("reach") or {}
+    lab_reach = lambda k: (reach.get(str(k)) or reach.get(k) or {}).get("p")
+    has_live = bool(live["n"])
+    rows = [("Stop geraakt", _p((s.get("stop_hit") or {}).get("p")), _p(live["stop_hit"]) if has_live else "-")]
+    rows += [(f"+{k}R vóór de stop", _p(lab_reach(k)), _p(live["reach"][k]) if has_live else "-") for k in RANGE_R_LEVELS]
+    rows += [
+        ("Stopafstand (mediaan)", f"{s['median_stop_pct']:.2f}%".replace(".", ",") if s.get("median_stop_pct") else "-",
+         f"{live['median_stop_pct']:.2f}%".replace(".", ",") if live.get("median_stop_pct") else "-"),
+        ("Tegenbeweging, MAE (mediaan en 90%)", _q_text(s.get("mae_q")), _q_text(live.get("mae_q"))),
+        ("Meebeweging, MFE (mediaan en 90%)", _q_text(s.get("mfe_q")), _q_text(live.get("mfe_q"))),
+        ("Kosten in R (mediaan)", _r2(s["median_cost_r"]) if s.get("median_cost_r") else "-", _r2(live["median_cost_r"]) if live.get("median_cost_r") else "-"),
+        ("Te krappe stops", _p(s.get("tight_rate")) if s.get("tight_rate") is not None else "-", "niet gemeten"),
+    ]
+    return [{"label": a, "lab_text": b, "live_text": c} for a, b, c in rows]
+
+
+def drift_warning(lab: Optional[dict], live: dict) -> Optional[str]:
+    """Stopcriterium S5: na DRIFT_MIN_LIVE afgeronde trades moet de live kans op +1R vóór de stop binnen het 95%-interval van het lab liggen."""
+    reach = ((lab or {}).get("summary") or {}).get("reach") or {}
+    one = reach.get("1") or reach.get(1)
+    if not one or live.get("n", 0) < DRIFT_MIN_LIVE or live["reach"].get(1) is None:
+        return None
+    lo, hi = one["ci"]
+    if lo <= live["reach"][1] <= hi:
+        return None
+    return f"Live wijkt af van het lab: +1R vóór de stop {live['reach'][1] * 100:.0f}% tegen {lo * 100:.0f} tot {hi * 100:.0f}% in het lab."
+
+
+def mark_r(trade: dict, price: Optional[float]) -> Optional[float]:
+    """R van een lopende trade als hij nu op deze koers zou sluiten. Een momentopname, geen uitkomst: ze telt nergens mee in winrate of gemiddelde."""
+    risk = abs(trade["entry"] - trade["stop"])
+    if not price or not risk:
+        return None
+    return ((trade["entry"] - price) if trade["direction"] == "short" else (price - trade["entry"])) / risk
+
+
+def reference_live(trades: list[dict], net_r: list[float], prices: dict) -> dict:
+    """R bij de referentie-uitgang (meelopende stop 3 ATR op 1u): afgeronde trades als netto gemiddelde, de lopende (nog geen referentie-uitgang)
+    als aantal met hun stand op de koers van nu ernaast. `prices` is {coin: koers}. De gemiddelde is geen verwachting voor jouw eigen trade."""
+    running = [t for t in trades if t.get("ref_r") is None]
+    marks = [m for t in running if (m := mark_r(t, prices.get(t["coin"]))) is not None]
+    return {"n": len(net_r), "avg_net": sum(net_r) / len(net_r) if net_r else None, "open": len(running), "marks": marks}
+
+
+def range_lab_verdict(stop_lab: Optional[dict], edge_lab: Optional[dict], tests_stop: int, tests_register: int, t_min: float) -> dict:
+    """Wat het lab over de range sweep zei, in woorden die bij elkaar horen: de stopkwaliteit (de kop van de proef) en ernaast de strenge toets op een
+    voordeel. Geen labrij is 'nog niet getoetst', nooit een stil 'niet geslaagd'. De aantallen komen van de aanroeper (stopquality.KILL_TESTS,
+    het register uit de pre-registratie, rangesweep_lab.EDGE_T_MIN), zodat er hier geen tweede kopie van staat."""
+    t_text = f"{t_min:.1f}".replace(".", ",")
+    stop = "nog niet getoetst" if stop_lab is None else ("geslaagd" if stop_lab.get("lab_passes") else "niet geslaagd")
+    edge = "nog niet getoetst" if edge_lab is None else ("geslaagd" if edge_lab.get("lab_passes") else "niet geslaagd")
+    e = (edge_lab or {}).get("summary") or {}
+    detail = []
+    if e.get("n") is not None:
+        detail.append(f"{e['n']} trades")
+    if e.get("avg") is not None:
+        detail.append(f"gemiddeld {fmt_r(e['avg'])} netto per trade")
+    if e.get("t_week") is not None:
+        detail.append(f"t {e['t_week']:.1f}".replace(".", ",") + f" per week, horde {t_text}")
+    return {"stop": stop, "edge": edge, "edge_detail": ", ".join(detail), "edge_reason": e.get("reason") or "",
+            "tests_text": f"{tests_stop} toetsen op stopkwaliteit, {tests_register} varianten in het register waarop de horde van t {t_text} rekent"}

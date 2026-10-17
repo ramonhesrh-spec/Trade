@@ -3132,6 +3132,24 @@ def list_range_sweep_trades(limit: int) -> list[dict]:
         return [dict(r) for r in conn.execute(f"{_TRADE_SELECT} ORDER BY rt.signal_id DESC LIMIT ?", (limit,)).fetchall()]
 
 
+def get_range_sweep_setup_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM range_sweep_setups WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_range_sweep_trade(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute(f"{_TRADE_SELECT} WHERE rt.signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def count_range_sweep_setups_by_state() -> dict[str, int]:
+    """Alle gemelde setups per staat, ook de niet gevulde: Bewijs laat zien hoeveel limieten verliepen of wegliepen, zodat een gevuld-percentage nooit stil ontbreekt."""
+    with db.session() as conn:
+        return {r["state"]: r["n"] for r in conn.execute("SELECT state, COUNT(*) AS n FROM range_sweep_setups GROUP BY state").fetchall()}
+
+
 def set_signal_price(signal_id: int, price: float) -> None:
     """De instapprijs van een signaal dat eerst als wachtende limiet bestond en bij de vulling zijn gewogen instap krijgt."""
     with db.session() as conn:
