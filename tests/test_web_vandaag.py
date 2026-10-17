@@ -248,6 +248,32 @@ class WebVandaagTests(unittest.TestCase):
         self.assertNotIn("Range sweep", text)
         self.assertIn("Geen open kansen", text)
 
+    def test_range_sweep_counts_agree_on_setups_radar_and_vandaag(self):
+        import re
+        range_seed.seed_lab()
+        range_seed.seed_setup(coin="ARB")
+        range_seed.seed_setup(coin="SOL", zone_at="2026-10-10T00:00:00+00:00")
+
+        def counts():
+            setups, radar_page = self.client.get("/structuur").text, self.client.get("/smc").text
+            badge = re.search(r'<span>Setups</span>\s*(?:<i class="tab-badge">(\d+)</i>)?', radar_page)
+            headline = int(re.search(r'Plannen die klaarstaan.*?<span class="hl-num">(\d+)</span>', setups, re.S).group(1))
+            return setups, radar_page, int(badge.group(1) or 0), headline
+
+        setups, radar_page, badge, headline = counts()
+        rows = setups.count('id="range-sweep-')
+        self.assertEqual((badge, headline, rows), (2, 2, 2))
+        self.assertNotIn("range-sweep", radar_page)
+        self.assertNotRegex(radar_page, r'<span>Radar</span>\s*<i class="tab-badge">')
+        self.assertRegex(radar_page, r'(?s)Setups die wachten.*?<span class="hl-num">0</span>')
+        self.assertEqual(self.count_and_rows()[1:], (2, 2))
+        leerling = repo.create_user("leerling", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        self.client.cookies.set(self.main.SESSION_COOKIE, security.create_session_token(leerling))
+        self.main._ceo_cache.update(at=0.0)
+        setups, radar_page, badge, headline = counts()
+        self.assertEqual((badge, headline), (0, 0))
+        self.assertNotIn("range-sweep", setups + radar_page)
+
     def test_range_sweep_next_to_other_chances_keeps_the_count_equal_and_sorted(self):
         self.seed_chances()
         range_seed.seed_setup(coin="ARB")

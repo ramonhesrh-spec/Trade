@@ -445,11 +445,11 @@ class RangeSweepLayoutTests(BaseShellTests):
         self.assertEqual(html.count('id="range-sweep-'), 1)
         self.assertIn("OP", html[html.index('id="range-sweep-'):])
 
-    def test_radar_toont_de_kaart_ook_en_telt_hem_mee(self):
+    def test_radar_toont_de_range_sweep_niet_meer(self):
         range_seed.seed_setup()
         html = self.client.get("/smc").text
-        self.assertEqual(html.count('id="range-sweep-'), 1)
-        self.assertRegex(html, r'class="hl-num">1</span><span class="hl-unit">wachten')
+        self.assertEqual(html.count('id="range-sweep-'), 0)
+        self.assertRegex(html, r'class="hl-num">0</span><span class="hl-unit">wachten')
 
 
 class BewijsLayoutTests(BaseShellTests):

@@ -63,6 +63,19 @@ def report_rows(user: Optional[dict]) -> list[dict]:
     return rule_live.for_viewer(repo.list_signals_for_quality_report(None), is_ceo(user))
 
 
+def _cookie_user(request: Request) -> Optional[dict]:
+    token = request.cookies.get(SESSION_COOKIE)
+    user_id = security.verify_session_token(token) if token else None
+    return repo.get_user(user_id) if user_id else None
+
+
+def _range_sweep_open_count(user: Optional[dict], prices: dict, now: datetime) -> int:
+    """Hetzelfde filter als _range_sweep_cards, maar met alleen de koerscache: het menu doet geen beursaanroep per pagina."""
+    if not user or not _sees_range_sweep(user):
+        return 0
+    return sum(1 for s in repo.list_range_sweep_setups(("waiting", "niet_gemeld")) if today.range_sweep_state(s, prices.get(s["coin"]), now) in today.OPEN_RANGE_STATES)
+
+
 def _nav_context(request: Request) -> dict:
     """De coinlijst in het menu staat in elke pagina. Zonder dit moest elke route `coins` zelf meegeven, en de nieuwere
     pagina's (Vandaag, Setups, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
@@ -72,6 +85,8 @@ def _nav_context(request: Request) -> dict:
     now = datetime.now(timezone.utc)
     setups = sum(1 for r in repo.list_structure_setups(("waiting",), 50)
                  if today.structure_state(r, json.loads(r["plan"]), cached.get(r["coin"]), now) in today.OPEN_PLAN_STATES)
+    # De range sweep hoort bij Setups (de melding en de kans wijzen naar /structuur), net als in today.open_chances.
+    setups += _range_sweep_open_count(_cookie_user(request), cached, now)
     return {"coins": repo.list_coins(), "nav_counts": {"setups": setups, "radar": radar_count}}
 
 
@@ -541,7 +556,6 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
         "setup_cards": radar.waiting_cards(cards),
         "moot_cards": radar.moot_cards(cards),
         "signal_cards": [c for c in cards if c["kind"] == "signal"],
-        "range_sweep_cards": await _range_sweep_cards(user),
         "entries": entries,
     })
 

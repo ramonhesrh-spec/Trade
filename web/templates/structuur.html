@@ -5,7 +5,7 @@
 {% block content %}
 
 {% set fresh = engine_on and engine_minutes is not none and engine_minutes <= 15 %}
-{{ macros.headline("Plannen die klaarstaan", structure_cards|length, "klaar",
+{{ macros.headline("Plannen die klaarstaan", structure_cards|length + range_sweep_cards|length, "klaar",
      delta=(("Laatste controle " ~ engine_minutes ~ " min geleden") if engine_on and engine_minutes is not none else ""),
      explain="Kansen die klaarstaan, met instap, stop en doelen. De motor kijkt elke 5 minuten. De score per soort staat op Bewijs.") }}
 
