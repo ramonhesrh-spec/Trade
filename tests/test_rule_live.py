@@ -41,6 +41,23 @@ def breakout(n=260):
     return append(flat(n - 1), [1.03])
 
 
+class CeoOnlyTypesTest(unittest.TestCase):
+    def test_range_sweep_is_ceo_only_unless_made_public(self):
+        self.assertEqual(rule_live.ceo_only_types(False), (rule_live.RULE, "range_sweep"))
+        self.assertEqual(rule_live.ceo_only_types(True), (rule_live.RULE,))
+        self.assertFalse(config.RANGE_SWEEP_PUBLIC)
+        self.assertIn("range_sweep", rule_live.CEO_ONLY_TYPES)
+
+    def test_for_viewer_and_visible_rule_types_hide_range_sweep_from_students(self):
+        rows = [{"trade_type": "range_sweep"}, {"trade_type": "day_trading"}]
+        self.assertEqual(rule_live.for_viewer(rows, False), [{"trade_type": "day_trading"}])
+        self.assertEqual(rule_live.for_viewer(rows, True), rows)
+        types = {"range_sweep", "rejectie", "don55_trend", "rs_1h"}
+        self.assertEqual(track_record.visible_rule_types(types, False, rule_live.CEO_ONLY_TYPES), ["rejectie"])
+        self.assertEqual(track_record.visible_rule_types(types, True, rule_live.CEO_ONLY_TYPES), sorted(types))
+        self.assertIn("range_sweep", track_record.visible_rule_types(types, False))     # zonder CEO-only zou het label hem tonen
+
+
 class NextStopTest(unittest.TestCase):
     def test_long_stop_only_moves_up(self):
         bars = pd.DataFrame({"high": [110.0, 120.0, 118.0], "low": [105.0, 112.0, 110.0]})
@@ -366,6 +383,29 @@ class WebVisibilityTest(DbCase):
         self.assertNotIn("meelopende stop", seen["leerling"]["/coins/ADA"].text)
         self.assertEqual(seen["ceo"]["/api/coin_menu_activity"].json(), ["ADA"])
         self.assertEqual(seen["leerling"]["/api/coin_menu_activity"].json(), [])
+
+    def test_range_sweep_signal_is_hidden_from_a_leerling_on_the_web(self):
+        from fastapi.testclient import TestClient
+        from app import security
+        from web import main
+        leerling = repo.create_user("b4", security.hash_password("wachtwoord-123456"), 0, 1)
+        ceo = repo.get_user_by_username("a")["id"]
+        sid = repo.insert_signal({"coin": "ADA", "direction": "short", "category": "day_trading", "trade_type": "range_sweep", "price": 100.0,
+                                  "stop_loss": 103.0, "take_profit": None, "technical_confirmed": 1, "hard_gates_ok": 1, "confidence": "Ongetest",
+                                  "reason": "Range sweep op 1u"})
+        main._ceo_cache.update(at=0.0, id=None)
+        seen = {}
+        with mock.patch.object(config, "CEO_USERNAME", ""), mock.patch.object(main.exchange, "fetch_ohlcv", side_effect=RuntimeError("geen netwerk")), \
+                mock.patch.object(main.exchange, "fetch_last_price", side_effect=RuntimeError("geen netwerk")):
+            for name, uid in (("ceo", ceo), ("leerling", leerling)):
+                client = TestClient(main.app)
+                client.cookies.set(main.SESSION_COOKIE, security.create_session_token(uid))
+                seen[name] = {p: client.get(p) for p in (f"/kans/{sid}", "/coins/ADA", "/api/coin_menu_activity")}
+        self.assertEqual(seen["ceo"][f"/kans/{sid}"].status_code, 200)
+        self.assertEqual(seen["leerling"][f"/kans/{sid}"].status_code, 404)
+        self.assertEqual(seen["ceo"]["/api/coin_menu_activity"].json(), ["ADA"])
+        self.assertEqual(seen["leerling"]["/api/coin_menu_activity"].json(), [])
+        self.assertNotIn("Range sweep op 1u", seen["leerling"]["/coins/ADA"].text)
 
     def test_rule_status_line_is_only_for_the_ceo(self):
         from fastapi.testclient import TestClient

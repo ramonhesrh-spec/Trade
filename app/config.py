@@ -157,3 +157,6 @@ TREND_RR = float(_get("TREND_RR", "2.0"))
 REJECTION_ENABLED = _get("REJECTION_ENABLED", "true").lower() == "true"
 REJECTION_MAX_PER_DAY = int(_get("REJECTION_MAX_PER_DAY", "8"))
 REJECTION_MAX_NEGATIVE = int(_get("REJECTION_MAX_NEGATIVE", "30"))
+
+# Range sweep (docs/onderzoek/range-sweep/): alleen de CEO ziet de proef tot hij beslist (poort 4). Zet op true om leerlingen de kansen en cijfers te tonen.
+RANGE_SWEEP_PUBLIC = _get("RANGE_SWEEP_PUBLIC", "false").lower() == "true"

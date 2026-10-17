@@ -3327,6 +3327,8 @@ git commit -m "feat: range-watch met eigen budget"
 
 ### Task 15: Proefmotor range sweep
 
+**Besluiten uit review (2026-10-17).** De poort voor nieuwe setups leest `repo.get_rule_lab("range_sweep_stop")["lab_passes"]` (de toets op stopkwaliteit, `STOP_KEY`), nooit de rij `range_sweep` (de strenge toets op een voordeel, t ≥ 3,4): die slaagt zelden en is geen voorwaarde voor een proef. Een test hoort hierbij: stopkwaliteit geslaagd en voordeel niet geslaagd geeft wel nieuwe setups; omgekeerd niet. Het type `range_sweep` staat al in `rule_live.CEO_ONLY_TYPES` (`config.RANGE_SWEEP_PUBLIC`, standaard uit). `level_check` slaat alleen `rule_live.RULE` over (regels 103 en 167): voeg `range_sweep` daar bij met een expliciet filter op `trade_type`, want de motor zet `auto_outcome` zelf.
+
 **Files:**
 - Create: `app/range_sweep_live.py`
 - Modify: `app/market_scanner.py`, `app/level_check.py`
@@ -3781,6 +3783,8 @@ git commit -m "feat: range sweep-kaart met stop als kop, ranges-tab en open kans
 ---
 
 ### Task 17: Bewijs, kanspagina en documentatie
+
+**Besluiten uit review (2026-10-17).** `track_record.rule_status` voor `range_sweep` toont "In proef" zodra `range_sweep_stop` (stopkwaliteit) geslaagd is, en nooit "Negatief" alleen omdat de strenge toets `range_sweep` (t ≥ 3,4) niet slaagde: de proef is er juist voor de stopkwaliteit. "Bewezen" blijft vragen om de geslaagde strenge toets plus de live bewaking. De tests hiervoor horen bij deze taak (`tests/test_track_record.py`, `tests/test_rule_status.py`): geslaagde stopkwaliteit zonder geslaagd voordeel geeft "In proef"; alleen een negatieve live reeks geeft "Negatief".
 
 **Files:**
 - Modify: `app/track_record.py`, `app/kans_view.py`, `web/main.py` (`/bewijs`, `/kans/{id}`), `web/templates/bewijs.html`, `web/templates/kans.html`, `CLAUDE.md`

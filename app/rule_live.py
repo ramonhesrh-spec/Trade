@@ -27,7 +27,16 @@ RULE_VARIANT = "DON55_TREND"
 RULE = RULE_VARIANT.lower()
 COINS = tl.LAB_COINS
 ENGINE_TYPES = (RULE,)       # regels uit het lab die een live motor hebben; de andere labvarianten tonen op Bewijs "Geen motor"
-CEO_ONLY_TYPES = (RULE,)     # soorten die alleen de CEO ziet: geen journaal, kans, cijfers of activiteit voor leerlingen
+RANGE_SWEEP = "range_sweep"
+
+
+def ceo_only_types(range_sweep_public: bool) -> tuple[str, ...]:
+    """Soorten die alleen de CEO ziet: geen journaal, kans, cijfers of activiteit voor leerlingen. De range sweep volgt `config.RANGE_SWEEP_PUBLIC`
+    (pre-registratie: eerst alleen de CEO, poort 4); track_record.TYPE_LABELS geeft hem een openbaar label, dus zonder dit zouden leerlingen hem zien."""
+    return (RULE,) + (() if range_sweep_public else (RANGE_SWEEP,))
+
+
+CEO_ONLY_TYPES = ceo_only_types(config.RANGE_SWEEP_PUBLIC)
 MAX_NEGATIVE = 30            # spec sectie 5: een regel zet zichzelf uit na 30 negatieve afgeronde trades
 FETCH_LIMIT = 1000           # het maximum van Binance per aanroep; de EMA van 200 heeft ruim aanloop nodig om op de labwaarde uit te komen
 # Een candle van 4 uur verandert maar één keer per 4 uur. Alleen in het eerste halfuur na een slot ophalen; daarna is een melding ook te laat,
