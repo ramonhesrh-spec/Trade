@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import calendar_alerts, chance_checks, config, exchange, indicators, market_script, trend_live, rejection_live, patterns, push_notify, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan
+from app import calendar_alerts, chance_checks, config, exchange, indicators, market_script, trend_live, rejection_live, patterns, push_notify, range_sweep_live, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
@@ -1253,6 +1253,12 @@ async def scan_smc_fast() -> None:
         await range_watch.run()
     except Exception:
         logger.exception("Range-watch is mislukt")
+    # Elke stap apart: een fout in het zoeken van nieuwe setups mag het volgen van wat al gemeld is niet stilleggen.
+    for step in (range_sweep_live.scan, range_sweep_live.track, range_sweep_live.follow):
+        try:
+            await step()
+        except Exception:
+            logger.exception("Range sweep-motor (%s) is mislukt", step.__name__)
     try:
         await structure_live.run()
     except Exception:
