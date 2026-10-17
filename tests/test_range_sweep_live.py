@@ -321,6 +321,16 @@ class ScanTest(EngineCase):
         self.assertEqual([r["direction"] for r in self.setups("niet_gemeld")], ["short"])
         self.assertEqual(len(self.pushed), before)
 
+    def test_the_daily_cap_counts_announced_setups_that_ran_away_or_expired(self):
+        states = ["weggelopen", "verlopen", "stop_voor_vulling", "weggelopen", "verlopen", "weggelopen"]
+        for i, st in enumerate(states):
+            sid = repo.insert_range_sweep_setup(setup_row(zone_at=f"2025-03-0{i + 1}T12:00:00+00:00", placed_at=(SHORT_PLACED - pd.Timedelta(hours=2 + i)).isoformat()))
+            repo.set_range_sweep_setup_state(sid, st)
+        with mock.patch.object(config, "RANGE_SWEEP_MAX_PER_DAY", 6):
+            self.scan(SHORT_PLACED + pd.Timedelta(minutes=5))
+        self.assertEqual([r["direction"] for r in self.setups("niet_gemeld")], ["short"])
+        self.assertEqual([p for p in self.pushed if "wacht" in p["title"]], [])
+
     def test_the_push_policy_applies_to_the_setup_push(self):
         # Pauze: geen push, wel een rustige melding (send_kans_push).
         with db.session() as conn:

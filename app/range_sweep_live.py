@@ -264,7 +264,8 @@ async def _register(coin: str, v: rl.RSVariant, stop_name: str, s: dict, frames:
     stop = rs.final_stop(s, stop_name)
     reason, score = chance_checks.weighted_finish(chance_checks.range_sweep_checks(s["features"], v.tf))
     grade = chance_checks.grade_of(score)
-    recent = repo.list_range_sweep_setups(("waiting", "filled"), since_iso=(now - TTL).isoformat())
+    # Elke gemelde setup telt, ook een die weglopen of verlopen is: de melding is al verstuurd.
+    recent = repo.list_range_sweep_setups(tuple(st for st in ALL_STATES if st != "niet_gemeld"), since_iso=(now - TTL).isoformat())
     capped = len(recent) >= config.RANGE_SWEEP_MAX_PER_DAY
     row = {"coin": coin, "direction": s["direction"], "variant": v.name, "family": s["family"], "stop_name": stop_name, "range_tf": v.tf,
            "range_high": s["range_high"], "range_low": s["range_low"], "range_first_at": s["range_first_at"].isoformat(),
