@@ -593,7 +593,8 @@ class FollowEngineTest(EngineCase):
         self.assertEqual(repo.list_open_range_sweep_trades(), [])
         calm = self.pushed[pushes:]
         self.assertEqual(len(calm), 1)
-        self.assertIn("Meting klaar", calm[0]["body"])
+        self.assertIn("Referentie-uitgang gesloten", calm[0]["body"])
+        self.assertNotIn("Meting klaar", calm[0]["body"] + calm[0]["title"])
         self.assertIn("beslis je zelf", calm[0]["body"])
         self.follow(pd.Timestamp("2025-03-15 00:20", tz="UTC"))
         self.assertEqual(len(self.pushed), pushes + 1)

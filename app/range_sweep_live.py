@@ -189,7 +189,7 @@ def fetch_bars(coin: str, timeframe: str, limit: int) -> pd.DataFrame:
 
 
 async def _tell(uid: int, title: str, body: str, url: str, tag: str) -> None:
-    """Een gebeurtenis bij een bestaande kans (gevuld, stop geraakt, meting klaar): altijd een melding, buiten het kansbudget. send_push slaat een pauze
+    """Een gebeurtenis bij een bestaande kans (gevuld, stop geraakt, referentie gesloten): altijd een melding, buiten het kansbudget. send_push slaat een pauze
     stilletjes over; dan blijft de melding hier op de pagina staan, anders zou een gevulde limiet spoorloos zijn."""
     user = repo.get_user(uid) or {}
     if push_policy.pause_minutes_left(user.get("push_paused_until"), datetime.now(timezone.utc)):
@@ -446,8 +446,8 @@ async def _follow_trade(t: dict, b15: pd.DataFrame, b1h: pd.DataFrame, now: pd.T
     fam = FAMILY_LABEL[t["family"]]
     url, tag = push_notify.signal_url(t["coin"], t["signal_id"]), _tag(t["setup_id"])
     if new_ref and out["ref_closed_at"] != out["stop_hit_at"]:
-        await _tell_all(push_notify.alert_title(t["coin"], t["direction"], f"{fam} · meting klaar"),
-                        f"Meting klaar: referentie-uitgang {fmt_r(out['ref_r'])}, jouw trade beslis je zelf\n"
+        await _tell_all(push_notify.alert_title(t["coin"], t["direction"], f"{fam} · referentie gesloten"),
+                        f"Referentie-uitgang gesloten: {fmt_r(out['ref_r'])}, jouw trade beslis je zelf\n"
                         "Dat is de R bij een meelopende stop van 3 ATR op 1u, niet bij jouw eigen doel.", url, tag)
     if new_stop:
         await _tell_all(push_notify.alert_title(t["coin"], t["direction"], f"{fam} · stop geraakt"),
