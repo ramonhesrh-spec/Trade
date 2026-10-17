@@ -10,10 +10,14 @@ en eigen opties: --hervat MAP (tussenresultaat per coin, een onderbroken run gaa
 import argparse
 import json
 import os
+import hashlib
 import pickle
+import re
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
@@ -86,7 +90,8 @@ def load_coin(coin: str, timeframes, jaren: float) -> dict[str, pd.DataFrame]:
 
 
 BEGIN, END = "<!-- resultaten:begin -->", "<!-- resultaten:end -->"
-PART_VERSION = 1
+PART_VERSION = 2
+PREREG = Path(__file__).resolve().parent.parent / "docs" / "onderzoek" / "range-sweep" / "preregistratie.md"
 
 
 def write_between_markers(text: str, block: str) -> str:
@@ -134,16 +139,71 @@ def _atomic_write(path: Path, data: bytes) -> None:
     os.replace(tmp, path)
 
 
-def _check_part_settings(outdir: Path, a) -> None:
-    """Tussenresultaten gelden alleen voor dezelfde kosten, jaren en varianten; anders zou een hervatte run oude en nieuwe coins stil mengen."""
-    want = {"versie": PART_VERSION, "kosten": a.kosten, "jaren": a.jaren, "varianten": [v.name for v in rl.VARIANTS],
-            "coins": a.coins.split(","), "alleen_volledig": bool(a.alleen_volledig)}
+def git_head() -> Optional[str]:
+    """Korte hash van de checkout, best effort: None als git of de map ontbreekt."""
+    try:
+        out = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=PREREG.parent, capture_output=True, text=True, timeout=10)
+        return out.stdout.strip() or None if out.returncode == 0 else None
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def prereg_hash() -> Optional[str]:
+    """Hash van het constantenblok van de pre-registratie: een wijziging van een drempel tussen twee coins van dezelfde run valt zo op."""
+    try:
+        block = re.search(r"```prereg-constants\n(.*?)```", PREREG.read_text(encoding="utf-8"), re.S).group(1)
+    except (OSError, AttributeError):
+        return None
+    return hashlib.sha256(block.encode("utf-8")).hexdigest()
+
+
+def cached_last_15m(coin: str) -> Optional[pd.Timestamp]:
+    """Laatste 15m-candle in de cache, zonder de rest te laden of te downloaden; None als er geen cache is."""
+    try:
+        return pd.to_datetime(pd.read_csv(candle_cache.cache_path(coin), usecols=["timestamp"])["timestamp"].iloc[-1], utc=True)
+    except Exception:
+        return None
+
+
+def _settings(a) -> dict:
+    return {"versie": PART_VERSION, "kosten": a.kosten, "jaren": a.jaren, "varianten": [v.name for v in rl.VARIANTS], "coins": a.coins.split(","),
+            "alleen_volledig": bool(a.alleen_volledig), "git": git_head(), "prereg": prereg_hash(), "placebo_draws": rl.PLACEBO_DRAWS,
+            "placebo_seed": rl.PLACEBO_SEED}
+
+
+def _check_part_settings(outdir: Path, a) -> dict:
+    """Tussenresultaten gelden alleen voor dezelfde kosten, jaren, coins, varianten, code (git), pre-registratie en placebo-instellingen; anders zou een
+    hervatte run oude en nieuwe coins stil mengen. Een onbekende git-hash (geen git) blokkeert niet. Geeft de opgeslagen instellingen terug."""
+    want = _settings(a)
     meta = outdir / "instellingen.json"
-    if meta.exists():
-        if json.loads(meta.read_text(encoding="utf-8")) != want:
-            sys.exit(f"{outdir} bevat tussenresultaten van andere instellingen (kosten, jaren, coins, alleen-volledig of varianten); kies een andere map of verwijder deze")
-    else:
-        _atomic_write(meta, json.dumps(want).encode("utf-8"))
+    if not meta.exists():
+        saved = {**want, "laatste_15m": {}}
+        _atomic_write(meta, json.dumps(saved).encode("utf-8"))
+        return saved
+    saved = json.loads(meta.read_text(encoding="utf-8"))
+    diff = [k for k in want if saved.get(k) != want[k] and not (k == "git" and None in (saved.get(k), want[k]))]
+    if diff:
+        sys.exit(f"{outdir} bevat tussenresultaten van andere instellingen ({', '.join(diff)}); kies een andere map, verwijder deze, of start opnieuw met "
+                 f"--hervat {outdir} --verse-start (dat wist de tussenresultaten)")
+    return saved
+
+
+def _wipe_parts(outdir: Path) -> None:
+    for f in (*outdir.glob("*_rows.pkl"), *outdir.glob("*_placebo.pkl"), outdir / "instellingen.json"):
+        f.unlink(missing_ok=True)
+
+
+def _pin_last_15m(outdir: Path, saved: dict, coin: str, ts) -> None:
+    saved["laatste_15m"][coin] = pd.Timestamp(ts).isoformat()
+    _atomic_write(outdir / "instellingen.json", json.dumps(saved).encode("utf-8"))
+
+
+def _check_cache_unchanged(outdir: Path, saved: dict, coin: str, last_15m) -> None:
+    """Een klare coin hoort bij de cache zoals die toen was: is er sindsdien een nieuwere 15m-candle bij gekomen, dan zou de run oude en nieuwe coins mengen."""
+    pinned, now = saved["laatste_15m"].get(coin), last_15m(coin)
+    if pinned and now is not None and pd.Timestamp(pinned) != now:
+        sys.exit(f"{coin}: de candlecache is ververst sinds het tussenresultaat in {outdir} (laatste 15m-candle {pinned}, nu {now.isoformat()}); "
+                 f"start opnieuw met --hervat {outdir} --verse-start")
 
 
 def _load_part(paths: tuple[Path, Path]):
@@ -258,10 +318,12 @@ def _run_one_coin(coin: str, a, ensure, positioning_fn) -> tuple[dict, dict, lis
     return rows, plac, span
 
 
-def run_rangesweep(a, ensure=candle_cache.ensure_candles, positioning_fn=positioning.ensure_positioning) -> None:
-    """`ensure` en `positioning_fn` zijn de naad voor de tests: kunstmatige candles zonder beurs."""
+def run_rangesweep(a, ensure=candle_cache.ensure_candles, positioning_fn=positioning.ensure_positioning, last_15m=cached_last_15m) -> None:
+    """`ensure`, `positioning_fn` en `last_15m` zijn de naad voor de tests: kunstmatige candles zonder beurs of schijf."""
     check_rangesweep_costs(a.kosten, a.opslaan)
     check_rangesweep_protocol(a)
+    if a.verse_start and not a.hervat:
+        sys.exit("--verse-start hoort bij --hervat MAP")
     report = Path(a.rapport) if a.rapport else None
     if report:
         try:  # faalt nu, niet pas na 40 minuten rekenen
@@ -280,7 +342,9 @@ def run_rangesweep(a, ensure=candle_cache.ensure_candles, positioning_fn=positio
     outdir = Path(a.hervat) if a.hervat else None
     if outdir:
         outdir.mkdir(parents=True, exist_ok=True)
-        _check_part_settings(outdir, a)
+        if a.verse_start:
+            _wipe_parts(outdir)
+        saved = _check_part_settings(outdir, a)
     all_rows = {v.name: [] for v in rl.VARIANTS}
     all_plac = {v.name: {n: [] for n in v.stops} for v in rl.VARIANTS}
     span = []
@@ -288,12 +352,14 @@ def run_rangesweep(a, ensure=candle_cache.ensure_candles, positioning_fn=positio
         paths = coin_part_paths(outdir, coin) if outdir else None
         part = _load_part(paths) if paths else None
         if part:
+            _check_cache_unchanged(outdir, saved, coin, last_15m)
             rows, plac, cspan = part
             print(f"{coin}: uit {paths[0]}", flush=True)
         else:
             rows, plac, cspan = _run_one_coin(coin, a, ensure, positioning_fn)
             if paths and cspan:
                 _save_part(paths, rows, plac, cspan)
+                _pin_last_15m(outdir, saved, coin, cspan[1])
         span += cspan
         for v in rl.VARIANTS:
             if len(rows.get(v.name, [])):
@@ -332,6 +398,7 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--opslaan", action="store_true", help="bewaar de uitkomst per regel in de database; zonder deze vlag schrijft het script niets")
     ap.add_argument("--rapport", help="rangesweep: schrijf de uitkomst tussen de markers van dit markdownbestand")
     ap.add_argument("--hervat", help="rangesweep: map voor tussenresultaten per coin; een tweede run slaat klare coins over")
+    ap.add_argument("--verse-start", action="store_true", help="rangesweep, met --hervat: wis de tussenresultaten en de vastgelegde instellingen en begin opnieuw")
     return ap
 
 

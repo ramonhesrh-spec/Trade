@@ -142,15 +142,15 @@ def no_oi(coin, start, end):
 
 
 def args(**kw):
-    base = dict(coins="AAA,BBB,CCC", jaren=0.1, kosten=0.12, familie="rangesweep", alleen_volledig=False, opslaan=False, rapport=None, hervat=None)
+    base = dict(coins="AAA,BBB,CCC", jaren=0.1, kosten=0.12, familie="rangesweep", alleen_volledig=False, opslaan=False, rapport=None, hervat=None, verse_start=False)
     base.update(kw)
     return argparse.Namespace(**base)
 
 
-def run(a, ensure):
+def run(a, ensure, last_15m=None):
     out = io.StringIO()
     with contextlib.redirect_stdout(out):
-        strategy_lab.run_rangesweep(a, ensure=ensure, positioning_fn=no_oi)
+        strategy_lab.run_rangesweep(a, ensure=ensure, positioning_fn=no_oi, **({"last_15m": last_15m} if last_15m else {}))
     return out.getvalue()
 
 
@@ -186,6 +186,61 @@ class RangeSweepCliTest(unittest.TestCase):
             run(args(hervat=d, coins="AAA"), synthetic_ensure())
             with self.assertRaises(SystemExit):
                 run(args(hervat=d, coins="AAA", kosten=0.16), synthetic_ensure())
+
+    def test_state_file_pins_code_prereg_placebo_and_last_candle(self):
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(strategy_lab, "git_head", return_value="abc1234"):
+            run(args(hervat=d, coins="AAA"), synthetic_ensure())
+            meta = json.loads((Path(d) / "instellingen.json").read_text(encoding="utf-8"))
+        self.assertEqual((meta["git"], meta["placebo_draws"], meta["placebo_seed"]), ("abc1234", rl.PLACEBO_DRAWS, rl.PLACEBO_SEED))
+        self.assertRegex(meta["prereg"], r"^[0-9a-f]{64}$")
+        self.assertEqual(list(meta["laatste_15m"]), ["AAA"])
+        self.assertTrue(meta["laatste_15m"]["AAA"].startswith("2024-02-11"))
+
+    def test_resume_refuses_other_code_prereg_or_placebo_settings(self):
+        changes = [("git_head", {"return_value": "def5678"}, "git"), ("prereg_hash", {"return_value": "0" * 64}, "prereg"),
+                   (None, {"attr": "PLACEBO_DRAWS", "new": 5}, "placebo_draws"), (None, {"attr": "PLACEBO_SEED", "new": 8}, "placebo_seed")]
+        for fn, kw, key in changes:
+            with self.subTest(key), tempfile.TemporaryDirectory() as d:
+                with mock.patch.object(strategy_lab, "git_head", return_value="abc1234"):
+                    run(args(hervat=d, coins="AAA"), synthetic_ensure())
+                with contextlib.ExitStack() as stack:
+                    stack.enter_context(mock.patch.object(strategy_lab, "git_head", return_value="abc1234"))
+                    stack.enter_context(mock.patch.object(strategy_lab, fn, **kw) if fn else mock.patch.object(strategy_lab.rl, kw["attr"], kw["new"]))
+                    with self.assertRaises(SystemExit) as cm:
+                        run(args(hervat=d, coins="AAA"), synthetic_ensure())
+                self.assertIn(key, str(cm.exception))
+                self.assertIn("--verse-start", str(cm.exception))
+
+    def test_unknown_git_head_does_not_block_a_resume(self):
+        with tempfile.TemporaryDirectory() as d:
+            with mock.patch.object(strategy_lab, "git_head", return_value="abc1234"):
+                run(args(hervat=d, coins="AAA"), synthetic_ensure())
+            with mock.patch.object(strategy_lab, "git_head", return_value=None):
+                run(args(hervat=d, coins="AAA"), synthetic_ensure())
+
+    def test_resume_refuses_a_part_when_the_candle_cache_moved_on(self):
+        with tempfile.TemporaryDirectory() as d:
+            run(args(hervat=d, coins="AAA"), synthetic_ensure())
+            with self.assertRaises(SystemExit) as cm:
+                run(args(hervat=d, coins="AAA"), synthetic_ensure(), last_15m=lambda c: pd.Timestamp("2030-01-01", tz="UTC"))
+            self.assertIn("AAA", str(cm.exception))
+            self.assertIn("--verse-start", str(cm.exception))
+            same = synthetic_ensure()("AAA", 1, timeframe="15m")["timestamp"].iloc[-1]
+            run(args(hervat=d, coins="AAA"), synthetic_ensure(), last_15m=lambda c: same)
+
+    def test_verse_start_wipes_the_state_and_recomputes(self):
+        with tempfile.TemporaryDirectory() as d:
+            with mock.patch.object(strategy_lab, "git_head", return_value="abc1234"):
+                run(args(hervat=d, coins="AAA"), synthetic_ensure())
+            calls = []
+            with mock.patch.object(strategy_lab, "git_head", return_value="def5678"):
+                run(args(hervat=d, coins="AAA", verse_start=True), synthetic_ensure(calls))
+            self.assertTrue(calls)
+            self.assertEqual(json.loads((Path(d) / "instellingen.json").read_text(encoding="utf-8"))["git"], "def5678")
+
+    def test_verse_start_needs_hervat(self):
+        with self.assertRaises(SystemExit):
+            run(args(verse_start=True), synthetic_ensure())
 
     def test_corrupt_part_is_recomputed(self):
         with tempfile.TemporaryDirectory() as d:
