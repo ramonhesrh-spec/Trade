@@ -42,3 +42,44 @@ class LevelChipsTest(unittest.TestCase):
 if __name__ == "__main__":
     unittest.main()
 
+
+
+class RangeSweepStepsTest(unittest.TestCase):
+    ROW = {"direction": "short", "family": "zone", "legs": "[[0.4, 0.2045], [0.6, 0.199]]", "stop": 0.2052, "range_high": 0.2045, "range_low": 0.17, "range_tf": "2h"}
+
+    def test_three_steps_and_no_target(self):
+        steps = cs.range_sweep_steps(self.ROW, 0.1985, "ARB")
+        self.assertEqual(len(steps), 3)
+        self.assertIn("zone", steps[0]["title"])
+        self.assertIn("40% op 0.2045", steps[1]["title"])
+        self.assertIn("60% op 0.199", steps[1]["title"])
+        self.assertIn("doel kies je zelf", steps[2]["title"])
+        self.assertIn("Overkant 0.17", steps[2]["sub"])
+        self.assertNotIn("rr", steps[2])
+
+    def test_first_step_follows_the_nearest_limit_live(self):
+        first = cs.range_sweep_steps(self.ROW, 0.1985, "ARB")[0]
+        self.assertEqual((first["live_coin"], first["live_level"], first["live_mode"]), ("ARB", 0.199, "lp"))
+        self.assertEqual(first["dist"], "+0.25%")                          # (0.199 - 0.1985) / 0.1985, the nearest limit for a short
+        self.assertNotIn("live_coin", cs.range_sweep_steps(self.ROW, 0.1985, "")[0])
+        self.assertEqual(cs.range_sweep_steps(self.ROW, None, "ARB")[0]["dist"], "-")
+
+    def test_sweep_family_speaks_of_the_order_block_and_one_leg_is_one_order(self):
+        row = dict(self.ROW, family="sweep", legs="[[1.0, 0.199]]")
+        steps = cs.range_sweep_steps(row, 0.1985, "ARB")
+        self.assertIn("order block", steps[0]["title"])
+        self.assertEqual(steps[1]["title"], "Zet een limietorder op 0.199")
+
+    def test_a_long_waits_on_the_highest_limit_and_names_the_high_as_far_edge(self):
+        row = dict(self.ROW, direction="long", legs="[[0.4, 0.172], [0.6, 0.176]]", stop=0.1705)
+        steps = cs.range_sweep_steps(row, 0.18, "ARB")
+        self.assertIn("0.176", steps[0]["title"])
+        self.assertIn("Overkant 0.2045", steps[2]["sub"])
+
+    def test_chips(self):
+        chips = cs.range_chips([(0.4, 0.2045), (0.6, 0.199)], 0.2052, 0.18725, 0.17)
+        self.assertEqual([c["label"] for c in chips], ["Limiet 40%", "Limiet 60%", "Stop", "Midden (ref.)", "Overkant (ref.)"])
+        self.assertEqual([c["text"] for c in chips], ["0.2045", "0.199", "0.2052", "0.18725", "0.17"])
+
+    def test_one_leg_gives_a_plain_limit_chip(self):
+        self.assertEqual(cs.range_chips([(1.0, 100.0)], 102.0, 95.0, 90.0)[0]["label"], "Limiet")

@@ -166,3 +166,71 @@ class AgoTextTest(unittest.TestCase):
         self.assertEqual(today.ago_text("2026-01-01T11:40:00+00:00", now), "20 min geleden")
         self.assertEqual(today.ago_text("2026-01-01T09:00:00+00:00", now), "3 uur geleden")
         self.assertEqual(today.ago_text("2025-12-30T12:00:00+00:00", now), "2 dgn geleden")
+
+
+class RangeSweepTodayTest(unittest.TestCase):
+    ROW = {"direction": "short", "family": "zone", "legs": "[[0.4, 101.0], [0.6, 101.5]]", "stop": 103.0, "range_high": 102.0, "range_low": 90.0,
+           "expires_at": "2026-10-16T18:00:00+00:00", "variant": "RZ_2H", "stop_name": "zone_05"}
+    AT = datetime(2026, 10, 16, 12, tzinfo=timezone.utc)
+
+    def test_range_sweep_card_counts_as_open_chance(self):
+        card = {"id": 3, "coin": "ARB", "direction": "short", "distance_pct": 0.12, "family": "zone"}
+        items = today.open_chances([], [], [], [], {}, datetime(2026, 10, 16, tzinfo=timezone.utc), range_cards=[card])
+        self.assertEqual([(i["kind"], i["soort"], i["url"]) for i in items], [("range_sweep", "Zone-retest", "/structuur#range-sweep-3")])
+
+    def test_sweep_family_is_named_range_sweep_and_sorting_uses_the_distance(self):
+        near = {"id": 1, "coin": "ARB", "direction": "short", "distance_pct": 0.1, "family": "sweep"}
+        far = {"id": 2, "coin": "OP", "direction": "long", "distance_pct": -2.5, "family": "zone"}
+        items = today.open_chances([], [], [], [], {}, self.AT, range_cards=[far, near])
+        self.assertEqual([(i["coin"], i["soort"], i["dist_text"]) for i in items], [("ARB", "Range sweep", "+0.10%"), ("OP", "Zone-retest", "-2.50%")])
+
+    def test_filled_range_sweep_without_target_stays_open_for_six_hours(self):
+        now = datetime(2026, 10, 16, 12, tzinfo=timezone.utc)
+        sig = {"id": 9, "coin": "ARB", "direction": "short", "trade_type": "range_sweep", "auto_outcome": None, "created_at": "2026-10-16T10:00:00+00:00",
+               "stop_loss": 0.2052, "take_profit": None}
+        self.assertEqual(today.open_chances([], [], [], [sig], {"ARB": 0.199}, now)[0]["soort"], "Range sweep gevuld")
+        old = dict(sig, created_at="2026-10-16T05:00:00+00:00")
+        self.assertEqual(today.open_chances([], [], [], [old], {"ARB": 0.199}, now), [])
+        self.assertEqual(today.open_chances([], [], [], [dict(sig, auto_outcome="stop_loss")], {"ARB": 0.199}, now), [])
+
+    def test_state_uses_the_engine_names_and_open_means_none(self):
+        s = today.range_sweep_state
+        self.assertIsNone(s(self.ROW, 100.0, self.AT))
+        self.assertIsNone(s(self.ROW, None, self.AT))
+        self.assertEqual(s(dict(self.ROW, expires_at="2026-10-16T12:00:00+00:00"), 100.0, self.AT), "verlopen")
+        self.assertEqual(s(self.ROW, 95.9, self.AT), "weggelopen")                  # het midden (96) is geraakt zonder de limiet
+        self.assertEqual(s(self.ROW, 103.0, self.AT), "stop_voor_vulling")
+        long = dict(self.ROW, direction="long", stop=89.0, legs="[[1.0, 91.0]]")
+        self.assertIsNone(s(long, 92.0, self.AT))
+        self.assertEqual(s(long, 96.0, self.AT), "weggelopen")
+        self.assertEqual(s(long, 88.9, self.AT), "stop_voor_vulling")
+        self.assertEqual(today.OPEN_RANGE_STATES, (None,))
+
+    def test_stop_headline_is_measured(self):
+        h = today.stop_headline({"direction": "short", "legs": "[[1.0, 100.0]]", "stop": 102.5}, {"doelkans": [{"r": 1, "p_text": "48%", "ci_text": "41 tot 55%", "n": 412}]}, 0.12)
+        self.assertEqual((h["value"], h["unit"]), ("2,50", "%"))
+        self.assertEqual(h["delta"], "kosten 0,05R")
+        self.assertEqual(h["doelkans"][0]["p_text"], "48%")
+
+    def test_stop_headline_without_a_lab_row_has_no_table(self):
+        h = today.stop_headline({"direction": "long", "legs": "[[0.4, 100.0], [0.6, 99.0]]", "stop": 98.0}, None, 0.12)
+        self.assertEqual(h["doelkans"], [])
+        self.assertEqual(h["value"], "1,41")                                          # (99.4 - 98) / 99.4
+
+    def test_the_target_table_only_shows_for_the_variant_the_lab_measured(self):
+        lab = {"summary": {"variant": "RZ_2H", "stop_name": "zone_05", "doelkans": [{"r": 1, "p_text": "48%", "ci_text": "41 tot 55%", "n": 412}]}}
+        self.assertEqual(today.lab_doelkans(lab, self.ROW)[0]["p_text"], "48%")
+        self.assertEqual(today.lab_doelkans(lab, dict(self.ROW, variant="RS_1H")), [])      # een ander lab dan dat van deze setup: geen cijfers lenen
+        self.assertEqual(today.lab_doelkans(lab, dict(self.ROW, stop_name="wick_025")), [])
+        self.assertEqual(today.lab_doelkans(None, self.ROW), [])
+
+    def test_range_watch_row_names_the_nearest_edge(self):
+        w = {"id": 4, "coin": "ARB", "tf": "2h", "range_high": 0.2040, "range_low": 0.17, "found_at": "2026-10-16T09:00:00+00:00", "state": "actief"}
+        row = today.range_watch_row(w, 0.2000, self.AT)
+        self.assertEqual((row["edge"], row["tf_label"], row["age"]), ("boven", "2u", "3 uur geleden"))
+        self.assertAlmostEqual(row["dist_pct"], 2.0, places=6)
+        self.assertEqual(row["dist_text"], "2,0% tot boven")
+        self.assertEqual(today.range_watch_row(w, 0.1720, self.AT)["edge"], "onder")
+        self.assertEqual(today.range_watch_row(w, 0.2100, self.AT)["dist_text"], "2,9% buiten boven")
+        none = today.range_watch_row(w, None, self.AT)
+        self.assertEqual((none["dist_pct"], none["dist_text"]), (None, ""))

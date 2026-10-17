@@ -2437,6 +2437,15 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .setup-why > summary .muted { font-size: var(--text-sm); }
 .proof-read { border-top: 0; padding-top: 0; }
 
+/* Range sweep-kaart: de doelkans uit het lab als zes kolommen. Past op 390 px; de wikkel scrolt binnen de kaart als het toch krap wordt, nooit de pagina. */
+.rs-card .setup-sub { flex-wrap: wrap; row-gap: 2px; }
+.rs-kind { font-size: var(--text-xs); }
+.rs-doelkans-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.rs-doelkans { width: 100%; table-layout: fixed; border-collapse: collapse; font-family: var(--mono); text-align: center; }
+.rs-doelkans caption { caption-side: top; text-align: left; padding-bottom: var(--space-3); font-family: var(--sans); font-size: var(--text-xs); }
+.rs-doelkans th { padding: 0 2px var(--space-2); font-size: var(--text-2xs); font-weight: 500; color: var(--muted); border-bottom: var(--sep); }
+.rs-doelkans td { padding: var(--space-3) 2px 0; font-size: var(--text-sm); color: var(--text); }
+
 /* Filters op Setups: één rij, klein en stil. */
 .filter-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
 .filter-chips::-webkit-scrollbar { display: none; }

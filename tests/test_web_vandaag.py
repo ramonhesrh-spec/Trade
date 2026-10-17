@@ -7,6 +7,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from app import config, db, repo, rule_live, security
+from tests import range_seed
 
 
 def scenario_row(**kw):
@@ -214,6 +215,47 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("Rejectie", text)
         self.assertNotIn("Proefmotor", text)
         self.assertIn('<i class="ut-count">2</i>', text)
+
+    def seed_range_sweeps(self):
+        """Een wachtende zone-retest, een verlopen, een voorbij zijn stop, en een gevulde met zijn signaal: alleen de eerste en de laatste zijn open."""
+        base = {"message_id": None, "coin": "SOL", "direction": "short", "category": "day_trading", "trade_type": "range_sweep", "pattern_name": "RZ_2H",
+                "price": 101.0, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None, "atr": None,
+                "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": 80.0, "hard_gates_ok": 1, "confidence": "Zone-retest A",
+                "reason": "test", "stop_loss": 103.0, "take_profit": None, "context_note": None, "is_practice": 0, "plain_explanation": None,
+                "suggested_entry_low": None, "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None}
+        range_seed.seed_lab()
+        range_seed.seed_setup(coin="ARB")
+        range_seed.seed_setup(coin="OP", hours_left=-1.0)
+        range_seed.seed_setup(coin="ETH", stop=99.9)
+        repo.insert_signal(dict(base), chain_it=False)
+        done = repo.insert_signal(dict(base, coin="XRP"), chain_it=False)
+        repo.mark_signal_auto_outcome(done, "stop_loss", datetime.now(timezone.utc).isoformat())
+
+    def test_range_sweep_count_equals_rendered_rows_for_the_ceo_and_a_leerling_sees_none(self):
+        self.seed_range_sweeps()
+        text, count, shown = self.count_and_rows()
+        self.assertEqual((count, shown), (2, 2))                          # ARB wacht, SOL is gevuld; verlopen, voorbij de stop en uitgespeeld niet
+        self.assertIn("Range sweep gevuld", text)
+        self.assertEqual(text.count('id="range-sweep-'), 1)
+        self.assertRegex(text, r'hl-num">2</span><span class="hl-unit">kansen<')
+        self.assertIn('<i class="ut-count">2</i>', text)
+        leerling = repo.create_user("leerling", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        self.client.cookies.set(self.main.SESSION_COOKIE, security.create_session_token(leerling))
+        self.main._ceo_cache.update(at=0.0)
+        text, count, shown = self.count_and_rows()
+        self.assertEqual((count, shown), (0, 0))
+        self.assertNotIn("range-sweep", text)
+        self.assertNotIn("Range sweep", text)
+        self.assertIn("Geen open kansen", text)
+
+    def test_range_sweep_next_to_other_chances_keeps_the_count_equal_and_sorted(self):
+        self.seed_chances()
+        range_seed.seed_setup(coin="ARB")
+        text, count, shown = self.count_and_rows()
+        self.assertEqual((count, shown), (4, 4))
+        head = text[text.index('class="hl"'):text.index('class="kl"')]
+        self.assertIn("BTC short", head)                                  # 0% tot het retest-niveau, ARB staat op 1,00% tot zijn eerste limiet
+        self.assertLess(text.index('id="structuur-'), text.index('id="range-sweep-'))
 
     def test_ondertitel_noemt_de_dichtstbijzijnde_kans_uit_dezelfde_lijst(self):
         self.seed_chances()

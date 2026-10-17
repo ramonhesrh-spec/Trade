@@ -9,6 +9,12 @@ class ChanceChecksTests(unittest.TestCase):
         self.assertEqual(reason, "✓ A | ✗ B | ✓ C | ✓ D")
         self.assertEqual(pct, 75.0)
 
+    def test_parse_reason_is_the_inverse_of_finish(self):
+        checks = [("A", True), ("Zone dun (hooguit 1,5 ATR)", False)]
+        self.assertEqual(cc.parse_reason(cc.finish(checks)[0]), checks)
+        self.assertEqual(cc.parse_reason(None), [])
+        self.assertEqual(cc.parse_reason("Toelichting zonder tekens"), [])
+
     def test_structure_checks_count_measured_features(self):
         plan = {"from_levels": True, "targets_r": [1.0, 2.0, 3.0]}
         full = cc.structure_checks({"vol_ratio": 2.0, "with_trend": True, "touches": 4, "span": 20}, plan, "A")

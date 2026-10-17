@@ -13,9 +13,12 @@
 <p class="st-meta">{{ macros.term("24 uur", "Laatste 24 uur: " ~ counts.total ~ " " ~ ("kans" if counts.total == 1 else "kansen") ~ " gezien, " ~ (counts.goedgekeurd + counts.afgekeurd) ~ " beoordeeld, " ~ counts.geen_plan ~ " zonder plan.", "st-24") }}
   <span><b>{{ counts.total }}</b> gezien</span><span><b>{{ counts.goedgekeurd + counts.afgekeurd }}</b> beoordeeld</span><span><b>{{ counts.geen_plan }}</b> zonder plan</span></p>
 
+{# De range sweep is een proef voor de CEO: een leerling krijgt zijn tabs en panelen niet eens te zien (range_visible). #}
 {{ macros.utabs([
-  {"key": "klaarstaand", "label": "Klaarstaand", "href": "#tab-klaarstaand", "count": structure_cards|length},
-  {"key": "trend", "label": "Trend", "href": "#tab-trend"},
+  {"key": "klaarstaand", "label": "Klaarstaand", "href": "#tab-klaarstaand", "count": structure_cards|length}]
+  + ([{"key": "range-sweep", "label": "Range sweep", "href": "#tab-range-sweep", "count": range_sweep_cards|length},
+      {"key": "ranges", "label": "Ranges", "href": "#tab-ranges", "count": range_watches|length}] if range_visible else [])
+  + [{"key": "trend", "label": "Trend", "href": "#tab-trend"},
   {"key": "eerder", "label": "Eerder", "href": "#tab-eerder"}], "klaarstaand", "setups") }}
 
 <div class="ut-panels" data-utabs-panels="setups">
@@ -64,6 +67,34 @@
   </div>
   {% endif %}
 </section>
+
+{% if range_visible %}
+<section id="tab-range-sweep" data-utab-panel>
+  {% if not range_sweep_on %}<p class="engine-status is-off">De range sweep-motor staat uit (RANGE_SWEEP_ENABLED=false).</p>{% endif %}
+  {% if not range_sweep_cards %}
+  {{ macros.empty_state("Geen setup klaar", "De motor wacht op een terugkeer in een zone aan de rand van een range, of een sweep met een slot terug binnen. In Ranges zie je waar dat kan komen.", "Bekijk de Ranges", "#tab-ranges") }}
+  {% else %}
+  <p class="muted tab-meta">Ongetest. De stop is het plan, het doel kies je zelf.</p>
+  <div class="setup-grid">
+    {% for c in range_sweep_cards %}{{ macros.range_sweep_card(c) }}{% endfor %}
+  </div>
+  {% endif %}
+</section>
+
+<section id="tab-ranges" data-utab-panel>
+  {% if not range_watch_on %}<p class="engine-status is-off">De range-watch staat uit (RANGE_WATCH_ENABLED=false).</p>{% endif %}
+  {% if not range_watches %}
+  <p class="muted empty">Geen actieve ranges.</p>
+  {% else %}
+  <p class="muted tab-meta">Ranges die de range-watch volgt. Aan de randen kan een retest of sweep komen; het is informatie, geen kans.</p>
+  {{ macros.row_head("Range", "", "Tot de rand") }}
+  {% for r in range_watches %}
+  {{ macros.market_row(r.coin, r.coin, chip=r.tf_label, subtitle=r.low_text ~ " tot " ~ r.high_text ~ " · " ~ r.age,
+       right_text=r.dist_text, href="/coins/" ~ r.coin, coin=r.coin) }}
+  {% endfor %}
+  {% endif %}
+</section>
+{% endif %}
 
 <section id="tab-trend" data-utab-panel>
   {% if trend_minutes is none or trend_minutes > 15 %}

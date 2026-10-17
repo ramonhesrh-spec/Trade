@@ -339,6 +339,42 @@
 </article>
 {% endmacro %}
 
+{# Een range sweep of zone-retest: de stop is het product, het doel kies je zelf. De kop is de stopafstand (gemeten uit het plan), de doelkans komt uit
+   het lab (historisch, geen belofte). Midden en overkant van de range staan als referentie in de grafiek, de stappen en de chips. #}
+{% macro range_sweep_card(c) %}
+<article class="setup-card rs-card{% if c.grade == 'C' %} is-weak{% endif %}" id="range-sweep-{{ c.id }}">
+  <header class="setup-head">
+    {{ coin_avatar(c.coin, 36, "setup-av") }}
+    <div class="setup-id">
+      <p class="setup-title"><a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a><span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span></p>
+      <p class="setup-sub"><span class="setup-grade setup-grade-{{ c.grade|lower }}" title="Score {{ "%.0f"|format(c.score) }} van 100">{{ c.grade | grade_word }}</span><span class="muted rs-kind">{{ "Zone-retest" if c.family == "zone" else "Range sweep" }} {{ c.range_tf|replace('h', 'u') }} · ongetest</span>{{ proof_tag("range_sweep", "rs" ~ c.id) }}</p>
+    </div>
+    <span class="muted setup-age">{{ c.created_at | age }}</span>
+  </header>
+  {{ headline(c.headline.label, c.headline.value, c.headline.unit, delta=c.headline.delta, pop_id="rs-hl-" ~ c.id,
+       explain="Afstand van je gemiddelde instap tot de stop, en wat een rondreis aan kosten is in R. Allebei gemeten uit dit plan.") }}
+  {{ c.chart }}
+  {{ steps_list(c.steps) }}
+  {{ level_chips(c.coin, c.chips, "/structuur#range-sweep-" ~ c.id) }}
+  {% if c.headline.doelkans %}
+  <div class="rs-doelkans-wrap">
+    <table class="rs-doelkans" aria-label="Historische kans uit het lab, geen belofte">
+      <caption class="muted">Historische kans (lab, {{ c.headline.doelkans[0].n }} trades): haalde de koers dit voor de stop? Gemeten op historie, geen belofte.</caption>
+      <tr>{% for d in c.headline.doelkans %}<th scope="col">+{{ d.r }}R</th>{% endfor %}</tr>
+      <tr>{% for d in c.headline.doelkans %}<td title="95%-interval {{ d.ci_text }}">{{ d.p_text }}</td>{% endfor %}</tr>
+    </table>
+  </div>
+  {% endif %}
+  {{ share_button(c.coin, c.direction, c.steps) }}
+  <details class="setup-why">
+    <summary>Waarom <span class="muted">score {{ "%.0f"|format(c.score) }} van 100</span></summary>
+    <ul class="setup-checks" aria-label="Wat er klopt en wat niet">{% for label, ok in c.checks %}<li class="{{ 'is-ok' if ok else 'is-no' }}"><span aria-hidden="true">{{ "✓" if ok else "✗" }}</span> {{ label }}</li>{% endfor %}
+      <li class="{{ 'is-ok' if c.liq.ok else 'is-no' }}"><span aria-hidden="true">{{ "✓" if c.liq.ok else "✗" }}</span> Liquidaties bij de prik <span class="muted">(niet getoetst, geen historie)</span></li></ul>
+    <p class="setup-reason muted">De score beschrijft de setup (40 punten voor de range, 60 voor de zone). Het is geen bewezen voorspeller: Bewijs toont per soort of een hoge score vaker wint.</p>
+  </details>
+</article>
+{% endmacro %}
+
 
 {# R-liniaal: waar een gemiddeld resultaat op de schaal van -1R (stop) tot +2R valt. De streep bij 0 is break-even. #}
 {% macro r_ruler(value) %}
@@ -409,10 +445,10 @@
 {# Eén groot meetgetal. `spark` is kant-en-klare SVG (track_record.sparkline_svg) of leeg; `spark_coin` tekent de live koerslijn via
    spark.js. `delta` is tekst met `tone` pos/neg; `delta_coin` laat spark.js de 24u-verandering invullen. `attrs` komt op het getal,
    zodat live.js of coin.js het kan bijwerken (bv. {"id": "coin-price", "data-symbol": "BTC"}). #}
-{% macro headline(label, value, unit="", spark=none, spark_coin=none, delta=none, tone="", delta_coin=none, href=none, attrs={}, explain=none, icon_coin=none) %}
+{% macro headline(label, value, unit="", spark=none, spark_coin=none, delta=none, tone="", delta_coin=none, href=none, attrs={}, explain=none, icon_coin=none, pop_id="hl-pop") %}
 <section class="hl">
   <div class="hl-text">
-    <p class="hl-label">{% if icon_coin %}{{ coin_avatar(icon_coin, 28, "hl-coin") }}{% endif %}{% if explain %}{{ term(label, explain, "hl-pop") }}{% elif href %}<a href="{{ href }}">{{ label }}</a>{% else %}{{ label }}{% endif %}</p>
+    <p class="hl-label">{% if icon_coin %}{{ coin_avatar(icon_coin, 28, "hl-coin") }}{% endif %}{% if explain %}{{ term(label, explain, pop_id) }}{% elif href %}<a href="{{ href }}">{{ label }}</a>{% else %}{{ label }}{% endif %}</p>
     <p class="hl-value"><span class="hl-num"{{ attrs|xmlattr }}>{{ value }}</span>{% if unit %}<span class="hl-unit">{{ unit }}</span>{% endif %}</p>
     {% if delta_coin %}<p class="hl-delta" data-spark-chg="{{ delta_coin }}"></p>
     {% elif delta %}<p class="hl-delta {{ tone }}">{{ delta }}</p>{% endif %}

@@ -6,7 +6,7 @@
 {% block content %}
 
 {# Een telling heeft geen reeks, dus geen lijntje bij het getal. #}
-{{ macros.headline("Setups die wachten", setup_cards|length, "wachten",
+{{ macros.headline("Setups die wachten", setup_cards|length + range_sweep_cards|length, "wachten",
      explain="SMC-setups die op hun zone wachten: structuur brak, een sweep pakte de liquiditeit en er ligt een zone om op te wachten. Je krijgt een melding zodra de zone een afwijzende candle geeft.") }}
 
 {% set smc_proof = proof("smc") %}
@@ -16,7 +16,7 @@
   {"label": "SMC per trade, na kosten", "value": smc_proof.label, "explain": smc_proof.text ~ " Gemeten op afgeronde SMC-trades. Bewijs toont de details."}], "rd") }}
 
 {{ macros.utabs([
-  {"key": "wachten", "label": "Wachten", "href": "#tab-wachten", "count": setup_cards|length},
+  {"key": "wachten", "label": "Wachten", "href": "#tab-wachten", "count": setup_cards|length + range_sweep_cards|length},
   {"key": "open", "label": "Open", "href": "#tab-open", "count": signal_cards|length},
   {"key": "afgerond", "label": "Afgerond", "href": "#tab-afgerond"}], "wachten", "radar") }}
 
@@ -24,9 +24,10 @@
 
 <section id="tab-wachten" data-utab-panel class="is-shown">
 <div class="flat">
-  {% if not setup_cards %}
+  {% if not setup_cards and not range_sweep_cards %}
   {{ macros.empty_state("Nog geen bouwende setup", "De CEO zit in een vergadering. Een SMC-setup verschijnt hier zodra structuur breekt, een sweep de liquiditeit pakt en er een zone ontstaat om op te wachten. Je krijgt dan een melding.", "Bekijk de Setups", "/structuur") }}
   {% else %}
+  {% if setup_cards %}
   <div class="radar-grid">
     {% for c in setup_cards %}
     <article class="radar-card" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
@@ -56,6 +57,13 @@
     </article>
     {% endfor %}
   </div>
+  {% endif %}
+  {% if range_sweep_cards %}
+  <h3>Range sweep <a class="vd-more" href="/structuur#range-sweep">alle ranges</a></h3>
+  <div class="setup-grid">
+    {% for c in range_sweep_cards %}{{ macros.range_sweep_card(c) }}{% endfor %}
+  </div>
+  {% endif %}
   {% endif %}
 </div>
 

@@ -1,5 +1,6 @@
 """Eén vorm voor elke kans die nog niet gevuld is: drie stappen met wat je nu doet. Pure functies, de templates tekenen alleen
 (macros.steps_list). Structuur, SMC en het markt-script gebruiken dezelfde stappen en dezelfde woorden."""
+import json
 import math
 from typing import Optional
 
@@ -70,3 +71,50 @@ def level_chips(entry: float, stop: float, take: float) -> list[dict]:
     decimaalteken, want dat accepteert elk orderveld van een beurs."""
     return [{"key": key, "label": label, "value": value, "text": fmt(value)}
             for key, label, value in (("entry", "Instap", entry), ("stop", "Stop", stop), ("take", "Doel", take))]
+
+
+FAMILY_WORD = {"zone": "de zone", "sweep": "het order block"}
+
+
+def range_legs(row: dict) -> list[tuple[float, float]]:
+    return [(float(w), float(p)) for w, p in json.loads(row["legs"])]
+
+
+def range_distance_pct(row: dict, price: Optional[float]) -> Optional[float]:
+    """Hoe ver de koers nog is van de eerste limiet die hij raakt: bij een short de laagste, bij een long de hoogste."""
+    if not price:
+        return None
+    prices = [p for _, p in range_legs(row)]
+    nearest = min(prices) if row["direction"] == "short" else max(prices)
+    return (nearest - price) / price * 100
+
+
+def range_sweep_steps(row: dict, price: Optional[float], coin: str) -> list[dict]:
+    """Zelfde drie stappen als elke kans, maar stap drie heeft geen doel: HesPulse levert de stop, het doel kies je zelf; midden en overkant
+    van de range staan erbij als referentie, niet als advies."""
+    legs = range_legs(row)
+    short = row["direction"] == "short"
+    planned = sum(w * p for w, p in legs) / sum(w for w, _ in legs)
+    nearest = min(p for _, p in legs) if short else max(p for _, p in legs)
+    dist = range_distance_pct(row, price)
+    mid, opp = (row["range_high"] + row["range_low"]) / 2, row["range_low"] if short else row["range_high"]
+    first = {"title": f"Wacht tot de koers terugkeert in {FAMILY_WORD[row['family']]} bij {fmt(nearest)}", "sub": "te gaan",
+             "dist": f"{dist:+.2f}%" if dist is not None else "-", "dist_key": DIST_KEYS["vandaag"], "state": "now",
+             "approach": trade_plan.approach_pct(None if dist is None else abs(dist))}
+    if coin:
+        first["live_coin"], first["live_level"], first["live_mode"] = coin, nearest, "lp"
+    if len(legs) > 1:
+        second = "Zet limietorders: " + " en ".join(f"{w * 100:.0f}% op {fmt(p)}" for w, p in legs)
+    else:
+        second = f"Zet een limietorder op {fmt(legs[0][1])}"
+    return [first,
+            {"title": second, "state": "next"},
+            {"title": f"Stop {fmt(row['stop'])}, doel kies je zelf", "state": "next",
+             "sub": f"De stop ligt {abs(planned - row['stop']) / planned * 100:.2f}% van je instap, voorbij de zone. Referentie, geen doel: Midden {fmt(mid)} · Overkant {fmt(opp)}."}]
+
+
+def range_chips(legs, stop: float, mid: float, opp: float) -> list[dict]:
+    names = ["Limiet"] if len(legs) == 1 else [f"Limiet {w * 100:.0f}%" for w, _ in legs]
+    items = [(f"limit{k}", n, p) for k, (n, (_, p)) in enumerate(zip(names, legs), 1)]
+    items += [("stop", "Stop", stop), ("mid", "Midden (ref.)", mid), ("opp", "Overkant (ref.)", opp)]
+    return [{"key": key, "label": label, "value": value, "text": fmt(value)} for key, label, value in items]

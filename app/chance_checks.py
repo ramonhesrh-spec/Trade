@@ -18,6 +18,15 @@ def finish(checks: list[Check]) -> tuple[str, float]:
     return reason, 100.0 * sum(1 for _, ok in checks if ok) / len(checks)
 
 
+def parse_reason(reason: Optional[str]) -> list[Check]:
+    """Terug van de ' | '-vorm van finish naar (label, klopt): wat bij het melden bewaard werd, wordt zo ongewijzigd op de kaart getoond."""
+    out = []
+    for part in (reason or "").split(" | "):
+        if part[:1] in ("✓", "✗"):
+            out.append((part[1:].strip(), part[0] == "✓"))
+    return out
+
+
 def structure_checks(features: Optional[dict], plan: dict, grade: Optional[str]) -> list[Check]:
     f = features or {}
     r_list = plan.get("targets_r") or []

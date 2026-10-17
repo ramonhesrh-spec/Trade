@@ -6,6 +6,7 @@ from unittest import mock
 from fastapi.testclient import TestClient
 
 from app import config, db, repo, security
+from tests import range_seed
 from web import main
 
 
@@ -351,6 +352,104 @@ class SetupsLayoutTests(BaseShellTests):
         html = self.client.get("/structuur").text
         self.assertIn("Geen plan klaar", html)
         self.assertRegex(html, r'class="hl-num">0</span><span class="hl-unit">klaar')
+
+
+class RangeSweepLayoutTests(BaseShellTests):
+    def as_leerling(self):
+        leerling = repo.create_user("leerling", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        self.client.cookies.set(main.SESSION_COOKIE, security.create_session_token(leerling))
+        main._ceo_cache.update(at=0.0)
+
+    def test_de_ceo_ziet_de_kaart_met_stop_als_kop_en_zonder_doel(self):
+        range_seed.seed_lab()
+        range_seed.seed_setup()
+        html = self.client.get("/structuur").text
+        card = html[html.index('id="range-sweep-'):html.index("</article>", html.index('id="range-sweep-'))]
+        for needle in ["doel kies je zelf", 'class="sc-zone', 'class="sc-range', "sc-limit", "sc-stop", "ongetest", "Zone-retest 2u",
+                       "Midden (ref.)", "Overkant (ref.)", "Historische kans (lab, 412 trades)", "+6R", "level-chips", "Zet limietorders: 40% op 101.00 en 60% op 101.50"]:
+            self.assertIn(needle, card, needle)
+        self.assertRegex(card, r'hl-label"><button[^>]*>Stop</button>')
+        self.assertRegex(card, r'class="hl-num">1,68</span><span class="hl-unit">%')            # (103 - 101.3) / 101.3, de gewogen instap
+        self.assertIn("kosten", card)
+        self.assertNotRegex(card, r"[Dd]oel \d")                                              # geen doelniveau, alleen de referenties
+        self.assertIn("geen belofte", card)
+
+    def test_de_score_is_een_beschrijving_en_geen_voorspeller(self):
+        range_seed.seed_setup()
+        card = self.client.get("/structuur").text
+        card = card[card.index('id="range-sweep-'):]
+        self.assertIn("score 85 van 100", card)
+        self.assertIn("geen bewezen voorspeller", card)
+        self.assertIn("Beide randen minstens 4 keer aangeraakt", card)
+        self.assertIn("Zone dun", card)
+
+    def test_zonder_labrij_geen_doelkanstabel_en_geen_verzonnen_getal(self):
+        range_seed.seed_setup()
+        card = self.client.get("/structuur").text
+        self.assertNotIn("Historische kans", card)
+        self.assertIn('id="range-sweep-', card)
+
+    def test_een_lab_van_een_andere_variant_leent_geen_cijfers(self):
+        range_seed.seed_lab()
+        range_seed.seed_setup(variant="RS_1H")
+        self.assertNotIn("Historische kans", self.client.get("/structuur").text)
+
+    def test_tabs_range_sweep_en_ranges_en_de_ranges_rijen(self):
+        range_seed.seed_setup()
+        repo.upsert_range_watch({"coin": "SOL", "tf": "2h", "range_high": 104.0, "range_low": 96.0, "first_at": "2026-10-10T00:00:00+00:00",
+                                 "found_at": "2026-10-10T04:00:00+00:00", "atr": 1.0})
+        repo.upsert_range_watch({"coin": "ETH", "tf": "4h", "range_high": 120.0, "range_low": 80.0, "first_at": "2026-10-09T00:00:00+00:00",
+                                 "found_at": "2026-10-09T04:00:00+00:00", "atr": 2.0})
+        repo.set_range_watch_state(repo.upsert_range_watch({"coin": "BNB", "tf": "1h", "range_high": 1.0, "range_low": 0.5, "first_at": "2026-10-08T00:00:00+00:00",
+                                                           "found_at": "2026-10-08T04:00:00+00:00", "atr": 0.1})[0], "gebroken")
+        html = self.client.get("/structuur").text
+        self.assertIn('id="tab-ranges"', html)
+        self.assertRegex(html, r'href="#tab-range-sweep"[^>]*>Range sweep <i class="ut-count">1</i>')
+        self.assertRegex(html, r'href="#tab-ranges"[^>]*>Ranges <i class="ut-count">2</i>')
+        panel = html[html.index('id="tab-ranges"'):]
+        panel = panel[:panel.index("</section>")]
+        self.assertEqual(panel.count('class="mrow"'), 2)                              # de gebroken range hoort niet bij wat gevolgd wordt
+        for needle in ["SOL", "ETH", "96.0000 tot 104.00", "tot boven", "2u", "4u"]:
+            self.assertIn(needle, panel, needle)
+        self.assertNotIn("BNB", panel)
+        self.assertLess(panel.index("SOL"), panel.index("ETH"))                       # SOL ligt dichter bij een rand (4%) dan ETH (20%)
+
+    def test_lege_staat_wijst_naar_de_ranges(self):
+        html = self.client.get("/structuur").text
+        self.assertIn("Geen setup klaar", html)
+        self.assertIn('href="#tab-ranges"', html)
+
+    def test_een_leerling_ziet_niets_van_de_range_sweep(self):
+        range_seed.seed_lab()
+        range_seed.seed_setup()
+        repo.upsert_range_watch({"coin": "SOL", "tf": "2h", "range_high": 104.0, "range_low": 96.0, "first_at": "2026-10-10T00:00:00+00:00",
+                                 "found_at": "2026-10-10T04:00:00+00:00", "atr": 1.0})
+        self.as_leerling()
+        for pad in ("/structuur", "/smc", "/vandaag"):
+            html = self.client.get(pad).text
+            for needle in ("range-sweep-", "Ranges", "Range sweep", "tab-ranges", "doel kies je zelf", "sc-zone"):
+                self.assertNotIn(needle, html, f"{pad}: {needle}")
+
+    def test_openbaar_zet_het_voor_iedereen_open(self):
+        range_seed.seed_setup()
+        self.as_leerling()
+        with mock.patch.object(main.rule_live, "CEO_ONLY_TYPES", main.rule_live.ceo_only_types(True)):
+            self.assertIn('id="range-sweep-', self.client.get("/structuur").text)
+
+    def test_verlopen_en_weggelopen_staan_niet_op_de_pagina(self):
+        range_seed.seed_setup(coin="ARB", hours_left=-1.0)                                            # verlopen
+        range_seed.seed_setup(coin="OP", range_low=90.0, range_high=99.0)                             # midden 94,5 ligt onder de koers: een short is niet weggelopen
+        range_seed.seed_setup(coin="SOL", direction="long", range_high=100.0, range_low=90.0)         # midden 95 < koers 100: weggelopen voor een long
+        range_seed.seed_setup(coin="ETH", stop=99.9)                                                  # koers voorbij de stop
+        html = self.client.get("/structuur").text
+        self.assertEqual(html.count('id="range-sweep-'), 1)
+        self.assertIn("OP", html[html.index('id="range-sweep-'):])
+
+    def test_radar_toont_de_kaart_ook_en_telt_hem_mee(self):
+        range_seed.seed_setup()
+        html = self.client.get("/smc").text
+        self.assertEqual(html.count('id="range-sweep-'), 1)
+        self.assertRegex(html, r'class="hl-num">1</span><span class="hl-unit">wachten')
 
 
 class BewijsLayoutTests(BaseShellTests):

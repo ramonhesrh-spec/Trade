@@ -32,7 +32,7 @@
 <div class="flat">
   <h3>Getekende plannen <a class="vd-more" href="/structuur">alle setups</a></h3>
   <div class="setup-grid">
-    {% for c in chance_plans %}{{ macros.setup_card(c, user.risk_per_trade_eur) }}{% endfor %}
+    {% for c in chance_plans %}{% if c.card_kind == "range_sweep" %}{{ macros.range_sweep_card(c) }}{% else %}{{ macros.setup_card(c, user.risk_per_trade_eur) }}{% endif %}{% endfor %}
   </div>
 </div>
 {% endif %}

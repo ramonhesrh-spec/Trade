@@ -1,11 +1,12 @@
 """Weergave voor de pagina Vandaag: tijdlijn van de komende 24 uur, scenario's uit het markt-script, liquidatiebalken
 en de marktstemming. Pure functies zonder database of netwerk, zodat ze met tests te controleren zijn."""
+import json
 from datetime import datetime, timedelta, timezone
 from html import escape
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from app import chance_steps
+from app import chance_checks, chance_steps, setup_chart
 from app import market_script as ms
 from app import push_policy
 from app import trade_plan as tp
@@ -108,7 +109,8 @@ def scenario_view(s: dict, price: Optional[float], now: datetime, coin: str = ""
 
 OPEN_SIGNAL_HOURS = 6
 SIGNAL_LABELS = {"structuur": "Structuur gevuld", "structuur_c": "Structuur C gevuld", "trend": "Trend", "rejectie": "Rejectie", "smc": "SMC",
-                 "smc_waarschuwing": "SMC met waarschuwing", "script": "Markt-script", "don55_trend": "Proefmotor"}
+                 "smc_waarschuwing": "SMC met waarschuwing", "script": "Markt-script", "don55_trend": "Proefmotor",
+                 "range_sweep": "Range sweep gevuld"}
 OPEN_PLAN_STATES = (None, "wacht", "in_zone")        # None: koers onbekend, dan is er niets dat het plan ongeldig maakt
 
 
@@ -128,6 +130,24 @@ def structure_state(setup: dict, plan: dict, price: Optional[float], now: dateti
     return tp.plan_state(setup["direction"], level, level, plan["stop"], price, take=plan["targets"][0])
 
 
+OPEN_RANGE_STATES = (None,)
+
+
+def range_sweep_state(setup: dict, price: Optional[float], now: datetime) -> Optional[str]:
+    """Stand van een wachtende range sweep, met de namen van de motor (app/range_sweep_live.py): 'verlopen' na zijn eigen tijdstip, 'stop_voor_vulling' als
+    de koers al voorbij de stop staat en 'weggelopen' als hij het midden van de range raakte zonder de limiet. De motor zet de rij pas bij zijn volgende
+    cyclus om; tot dan mag hij nergens meetellen of staan. Zonder koers is er niets dat het plan ongeldig maakt."""
+    if setup.get("expires_at") and _aware(setup["expires_at"]) <= now:
+        return "verlopen"
+    if not price:
+        return None
+    short = setup["direction"] == "short"
+    if (price >= setup["stop"]) if short else (price <= setup["stop"]):
+        return "stop_voor_vulling"
+    mid = (setup["range_high"] + setup["range_low"]) / 2
+    return "weggelopen" if ((price <= mid) if short else (price >= mid)) else None
+
+
 def signal_is_open(signal: dict, price: Optional[float]) -> bool:
     """Een melding zonder uitkomst telt alleen mee zolang de koers nog tussen stop en doel staat; level_check sluit hem pas bij zijn volgende ronde."""
     stop, take = signal.get("stop_loss"), signal.get("take_profit")
@@ -137,17 +157,24 @@ def signal_is_open(signal: dict, price: Optional[float]) -> bool:
 
 
 def open_chances(structure_cards: list[dict], scripts: list[dict], smc_cards: list[dict], signals: list[dict],
-                 prices: dict, now: datetime) -> list[dict]:
+                 prices: dict, now: datetime, range_cards: list[dict] = ()) -> list[dict]:
     """De enige definitie van een open kans, voor het getal bij Kansen open, de tabteller, de ondertitel en de lijst die Vandaag toont.
     Alles wat hier binnenkomt is al door de kijker te zien (rule_live.for_viewer) en door het plan zelf als geldig bevonden:
     structuurkaarten komen uit web.main._structure_cards (niet verlopen, niet voorbij stop of doel), SMC-kaarten tellen alleen
     in 'wacht' of 'in_zone', scenario's alleen wachtend en niet vervallen, meldingen alleen zonder uitkomst en binnen OPEN_SIGNAL_HOURS.
+    Range sweep-kaarten (web.main._range_sweep_cards: wachtend, niet verlopen, niet weggelopen, niet voorbij de stop) tellen mee zolang ze wachten; zodra
+    de limiet vult staat hij als melding 'Range sweep gevuld' in dezelfde lijst, zonder doel dus zonder test op het doel.
     Gesorteerd op afstand tot de instap; zonder koers staat een kans achteraan."""
     items = []
     for c in structure_cards:
         step = c["steps"][0]["dist"] if c.get("steps") else "-"
         items.append({"kind": "structure", "coin": c["coin"], "direction": c["direction"], "soort": "Structuur", "state": "Wacht op de terugkeer",
                       "dist": abs(float(step.rstrip("%"))) if step != "-" else None, "dist_text": step if step != "-" else "", "url": "/structuur", "card": c})
+    for c in range_cards:
+        d = c.get("distance_pct")
+        items.append({"kind": "range_sweep", "coin": c["coin"], "direction": c["direction"], "soort": "Zone-retest" if c.get("family") == "zone" else "Range sweep",
+                      "state": "Wacht op de limiet", "dist": abs(d) if d is not None else None, "dist_text": f"{d:+.2f}%" if d is not None else "",
+                      "url": f"/structuur#range-sweep-{c['id']}", "card": c})
     for c in smc_cards:
         if c["kind"] == "setup" and c["state"] in OPEN_PLAN_STATES:
             d = c["distance_pct"]
@@ -166,6 +193,54 @@ def open_chances(structure_cards: list[dict], scripts: list[dict], smc_cards: li
         items.append({"kind": "signal", "coin": g["coin"], "direction": g["direction"], "soort": SIGNAL_LABELS[g["trade_type"]],
                       "state": "Open, gemeld", "dist": None, "dist_text": "", "url": f"/kans/{g['id']}", "card": None})
     return sorted(items, key=lambda i: (i["dist"] is None, i["dist"] or 0))
+
+
+def lab_doelkans(lab: Optional[dict], row: dict) -> list[dict]:
+    """De doelkans-tabel uit het lab, alleen als het lab precies deze variant en stop mat: een andere uitkomst lenen zou een getal tonen dat niet bij deze
+    setup hoort (het lab kan sinds de melding opnieuw gedraaid zijn)."""
+    data = (lab or {}).get("summary") or {}
+    if data.get("variant") != row.get("variant") or data.get("stop_name") != row.get("stop_name"):
+        return []
+    return data.get("doelkans") or []
+
+
+def stop_headline(row: dict, lab: Optional[dict], cost_pct: float) -> dict:
+    """De kop van een range sweep-kaart: stopafstand en wat de stop kost in R, allebei gemeten uit het plan; de doelkans komt uit het lab en heet op
+    de kaart 'historische kans (lab)'. `lab` is {"doelkans": [...]} (zie lab_doelkans)."""
+    legs = json.loads(row["legs"])
+    planned = sum(w * p for w, p in legs) / sum(w for w, _ in legs)
+    pct = abs(planned - row["stop"]) / planned * 100
+    return {"label": "Stop", "value": f"{pct:.2f}".replace(".", ","), "unit": "%", "delta": f"kosten {cost_pct / pct:.2f}R".replace(".", ","),
+            "doelkans": (lab or {}).get("doelkans") or []}
+
+
+def range_sweep_view(s: dict, price: Optional[float], lab: Optional[dict], cost_pct: float) -> dict:
+    """Een wachtende range sweep als kaart voor macros.range_sweep_card. Alles is een gemeten waarde uit het plan (stop, afstand, kosten in R, ✓/✗ van de
+    score) of de historische doelkans van het lab, en die laatste alleen als het lab precies deze variant en stop mat. `chart` is een SVG-tekst. De leeftijd rekent vanaf placed_at: created_at van de tabel is een naïef SQLite-tijdstip, dat het age-filter niet leest."""
+    legs = chance_steps.range_legs(s)
+    short = s["direction"] == "short"
+    mid = (s["range_high"] + s["range_low"]) / 2
+    opp = s["range_low"] if short else s["range_high"]
+    plan = json.loads(s["plan"]) if s.get("plan") else {}
+    chart = setup_chart.range_sweep_svg(plan.get("candles", []), {**s, "legs": legs}, s["stop"], price, plan.get("zones"))
+    return {"id": s["id"], "coin": s["coin"], "direction": s["direction"], "grade": s["grade"], "score": s["score"], "family": s["family"],
+            "range_tf": s["range_tf"], "created_at": s["placed_at"], "card_kind": "range_sweep",
+            "headline": stop_headline(s, {"doelkans": lab_doelkans(lab, s)}, cost_pct), "chart": chart,
+            "steps": chance_steps.range_sweep_steps(s, price, s["coin"]), "chips": chance_steps.range_chips(legs, s["stop"], mid, opp),
+            "checks": chance_checks.parse_reason(s.get("reason")), "liq": json.loads(s.get("liq_json") or "{}"),
+            "distance_pct": chance_steps.range_distance_pct(s, price)}
+
+
+def range_watch_row(w: dict, price: Optional[float], now: datetime) -> dict:
+    """Een gevolgde range als rij: de dichtstbijzijnde rand en hoe ver de koers daar nog van is, in procenten van de koers (zoals de stappen op de kaarten)."""
+    base = {"id": w["id"], "coin": w["coin"], "tf_label": {"30m": "30m", "1h": "1u", "2h": "2u", "4h": "4u"}.get(w["tf"], w["tf"]),
+            "high": w["range_high"], "low": w["range_low"], "high_text": chance_steps.fmt(w["range_high"]), "low_text": chance_steps.fmt(w["range_low"]), "age": ago_text(w.get("found_at"), now)}
+    if not price:
+        return {**base, "edge": None, "dist_pct": None, "dist_text": ""}
+    up, down = (w["range_high"] - price) / price * 100, (price - w["range_low"]) / price * 100
+    edge, gap = ("boven", up) if abs(up) <= abs(down) else ("onder", down)
+    text = f"{abs(gap):.1f}%".replace(".", ",") + (f" tot {edge}" if gap >= 0 else f" buiten {edge}")
+    return {**base, "edge": edge, "dist_pct": abs(gap), "dist_text": text}
 
 
 def nearest_chance(chances: list[dict]) -> Optional[dict]:

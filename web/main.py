@@ -31,6 +31,7 @@ from markupsafe import Markup
 from app import advice as advice_module
 from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
+from app.replay import rangesweep_lab
 from app import ceo, chance_checks, freshness, chance_steps, kans_view, rule_live, trust
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
@@ -449,6 +450,45 @@ async def _structure_cards() -> list[dict]:
     return cards
 
 
+def _sees_range_sweep(user: dict) -> bool:
+    """De range sweep en de range-watch zijn proef: alleen de CEO, tot RANGE_SWEEP_PUBLIC aan staat (rule_live.CEO_ONLY_TYPES, dezelfde bron als voor de signalen)."""
+    return rule_live.RANGE_SWEEP not in rule_live.CEO_ONLY_TYPES or is_ceo(user)
+
+
+async def _range_sweep_cards(user: dict) -> list[dict]:
+    """Wachtende range sweeps met kaart, stappen en chips. Zoals _structure_cards valt een setup weg die verlopen is, waarvan de koers het midden van de
+    range al raakte of voorbij de stop staat: de motor zet de rij pas bij zijn volgende cyclus om, en tot dan mag hij nergens meetellen of staan.
+    Setups die de dagcap niet meldde ('niet_gemeld') staan wel op de pagina."""
+    if not _sees_range_sweep(user):
+        return []
+    setups = repo.list_range_sweep_setups(("waiting", "niet_gemeld"))
+    if not setups:
+        return []
+    prices = await _cached_prices({s["coin"] for s in setups})
+    now = datetime.now(timezone.utc)
+    lab = repo.get_rule_lab("range_sweep_stop")
+    cards = []
+    for s in setups:
+        if today.range_sweep_state(s, prices.get(s["coin"]), now) not in today.OPEN_RANGE_STATES:
+            continue
+        view = today.range_sweep_view(s, prices.get(s["coin"]), lab, rangesweep_lab.LAB_COST_PCT)
+        cards.append({**view, "chart": Markup(view["chart"])})
+    return cards
+
+
+async def _range_watch_rows(user: dict) -> list[dict]:
+    """De ranges die de range-watch nu volgt, dichtstbij een rand eerst; een range zonder koers staat achteraan."""
+    if not _sees_range_sweep(user):
+        return []
+    watches = repo.list_range_watches(("actief",))
+    if not watches:
+        return []
+    prices = await _cached_prices({w["coin"] for w in watches})
+    now = datetime.now(timezone.utc)
+    rows = [today.range_watch_row(w, prices.get(w["coin"]), now) for w in watches]
+    return sorted(rows, key=lambda r: (r["dist_pct"] is None, r["dist_pct"] or 0))
+
+
 STRUCTURE_STATE_LABELS = {"schaduw": "Oordeel C: stil gevolgd, wacht op de terugkeer", "geen_plan": "Geen plan: te weinig ruimte of stop buiten bereik", "fired": "Limiet geraakt, signaal gemeld", "expired": "Verlopen, koers kwam niet terug", "niet_gemeld": "De CEO keurde af (C)",
                           "overgeslagen": "Stop buiten het toegestane bereik", "geen_oordeel": "De CEO zat in een vergadering"}
 
@@ -472,7 +512,9 @@ async def structuur_page(request: Request, alleen: str = "", kant: str = "", use
                             if (alleen != "ab" or c["grade"] in ("A", "B")) and (kant not in ("long", "short") or c["direction"] == kant)],
         "only_ab": alleen == "ab", "side": kant if kant in ("long", "short") else "", "history": history,
         "engine_minutes": minutes, "counts": repo.structure_counts(since24), "engine_on": config.STRUCTURE_ENABLED,
-        "trend_signals": repo.list_recent_signals_of_type("trend", since24), "trend_on": config.TREND_ENABLED})
+        "trend_signals": repo.list_recent_signals_of_type("trend", since24), "trend_on": config.TREND_ENABLED,
+        "range_sweep_cards": await _range_sweep_cards(user), "range_watches": await _range_watch_rows(user), "range_visible": _sees_range_sweep(user),
+        "range_watch_on": config.RANGE_WATCH_ENABLED, "range_sweep_on": config.RANGE_SWEEP_ENABLED})
 
 
 @app.get("/smc")
@@ -497,6 +539,7 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
         "setup_cards": radar.waiting_cards(cards),
         "moot_cards": radar.moot_cards(cards),
         "signal_cards": [c for c in cards if c["kind"] == "signal"],
+        "range_sweep_cards": await _range_sweep_cards(user),
         "entries": entries,
     })
 
@@ -507,7 +550,7 @@ async def _open_chances(user: dict, structure_cards: list[dict], scripts: list[d
     signals = [g for t in today.SIGNAL_LABELS for g in repo.list_recent_signals_of_type(t, since) if not g["is_practice"]]
     signals = rule_live.for_viewer(signals, is_ceo(user))
     prices = {**prices, **await _cached_prices({g["coin"] for g in signals} - prices.keys())}
-    return today.open_chances(structure_cards, scripts, await _radar_cards(), signals, prices, now)
+    return today.open_chances(structure_cards, scripts, await _radar_cards(), signals, prices, now, range_cards=await _range_sweep_cards(user))
 
 
 async def _vandaag_context(user: dict) -> dict:
