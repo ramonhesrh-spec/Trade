@@ -41,9 +41,9 @@ def zones_at(frame: pd.DataFrame, at, tf: str) -> list[dict]:
             for z in rs.find_zones(b) if rs.zone_active(z, idx)]
 
 
-def card(title: str, frame: pd.DataFrame, setup: dict, zones: list[dict]) -> str:
+def card(title: str, frame: pd.DataFrame, setup: dict, zones: list[dict], after_hours: int = 24) -> str:
     span = setup["placed_at"] - setup["range_first_at"]
-    candles = _candles(frame, setup["range_first_at"] - span * 0.15, setup["placed_at"] + pd.Timedelta(hours=24))
+    candles = _candles(frame, setup["range_first_at"] - span * 0.15, setup["placed_at"] + pd.Timedelta(hours=after_hours))
     own = {(round(setup["zone_low"], 8), round(setup["zone_high"], 8)), }
     others = [z for z in zones if (round(z["low"], 8), round(z["high"], 8)) not in own]
     return (f"<section><h2>{escape(title)}</h2>{setup_chart.range_sweep_svg(candles, setup, rs.final_stop(setup, STOP), zones=others)}"
@@ -81,7 +81,7 @@ def random_cards(coins: list[str], n: int, years: float) -> list[str]:
             for family, entry, confirm in COMBOS:
                 pool += [(coin, tf, family, s, frames[tf]) for s in rs.find_setups(frames, tf, family, entry, confirm, use_htf=True)[0]]
     random.Random(SEED).shuffle(pool)
-    return [card(f"{k}. {coin} {s['direction']} · {tf} · {family} · {s['placed_at']:%Y-%m-%d %H:%M} UTC", fr, s, [])
+    return [card(f"{k}. {coin} {s['direction']} · {tf} · {family} · {s['placed_at']:%Y-%m-%d %H:%M} UTC", fr, s, [], after_hours=0)
             for k, (coin, tf, family, s, fr) in enumerate(pool[:n], 1)]
 
 
