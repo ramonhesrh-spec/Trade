@@ -237,3 +237,10 @@ class RunTest(DbCase):
         with mock.patch.object(rw, "COINS", ("ARB", "BTC")), mock.patch("app.exchange.fetch_ohlcv", side_effect=RuntimeError("beurs weg")):
             self.run_at(130)
         self.assertIsNotNone(repo.get_beat("range_watch"))
+
+
+class WatchUrlTest(unittest.TestCase):
+    def test_a_range_notification_opens_the_ranges_tab_of_setups(self):
+        # Radar (/smc) toont de ranges niet meer; een tik op de melding moet op het tabblad Ranges van Setups landen.
+        from app import range_watch
+        self.assertEqual(range_watch.WATCH_URL, "/structuur#tab-ranges")

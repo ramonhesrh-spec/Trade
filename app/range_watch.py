@@ -22,7 +22,7 @@ EDGE_NEAR_ATR = 0.25
 PUSH_TFS = ("2h", "4h")
 COINS = tl.LAB_COINS
 TF_LABEL = {"30m": "30m", "1h": "1u", "2h": "2u", "4h": "4u"}
-WATCH_URL = "/smc"
+WATCH_URL = "/structuur#tab-ranges"
 # Een range verandert alleen bij een gesloten candle van 30m of groter, en die sluiten op het hele en halve uur. Ranges zoeken we daarom alleen in
 # de eerste minuten daarna (ruim boven de 5 minuten van de cyclus, zodat een gemiste cyclus niets kost); de koers bij de rand volgen we elke cyclus.
 DETECT_WINDOW_MIN = 10
