@@ -32,6 +32,7 @@ from app import advice as advice_module
 from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
+from app import gallery_job
 from app import ceo, chance_checks, freshness, chance_steps, kans_view, rule_live, trust
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
@@ -532,6 +533,25 @@ async def structuur_page(request: Request, alleen: str = "", kant: str = "", use
         "trend_signals": repo.list_recent_signals_of_type("trend", since24), "trend_on": config.TREND_ENABLED,
         "range_sweep_cards": await _range_sweep_cards(user), "range_watches": await _range_watch_rows(user), "range_visible": _sees_range_sweep(user),
         "range_watch_on": config.RANGE_WATCH_ENABLED, "range_sweep_on": config.RANGE_SWEEP_ENABLED})
+
+
+@app.get("/galerij")
+async def galerij_page(request: Request, maak: str = "", user: dict = Depends(require_login)):
+    """Keuring van de range sweep met het oog (poort 0b en 1 van het VPS-protocol), alleen voor de CEO."""
+    if not is_ceo(user):
+        raise HTTPException(status_code=404)
+    if maak:
+        gallery_job.start(maak)
+        return RedirectResponse("/galerij", status_code=303)
+    kinds = [{"key": k, "title": t, **gallery_job.status(k)} for k, t in gallery_job.KINDS.items()]
+    return templates.TemplateResponse(request, "galerij.html", {"user": user, "kinds": kinds, "busy": any(k["busy"] for k in kinds)})
+
+
+@app.get("/galerij/{kind}")
+async def galerij_file(kind: str, user: dict = Depends(require_login)):
+    if not is_ceo(user) or kind not in gallery_job.KINDS or not gallery_job.path_of(kind).exists():
+        raise HTTPException(status_code=404)
+    return FileResponse(gallery_job.path_of(kind), media_type="text/html")
 
 
 @app.get("/smc")

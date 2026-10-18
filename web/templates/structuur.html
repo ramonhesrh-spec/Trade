@@ -70,6 +70,7 @@
 
 {% if range_visible %}
 <section id="tab-range-sweep" data-utab-panel>
+  {% if is_ceo(user) %}<p class="muted tab-meta"><a href="/galerij">Galerij: keur de getekende ranges en zones</a></p>{% endif %}
   {% if not range_sweep_on %}<p class="engine-status is-off">De range sweep-motor staat uit (RANGE_SWEEP_ENABLED=false).</p>{% endif %}
   {% if not range_sweep_cards %}
   {{ macros.empty_state("Geen setup klaar", "De motor wacht op een terugkeer in een zone aan de rand van een range, of een sweep met een slot terug binnen. In Ranges zie je waar dat kan komen.", "Bekijk de Ranges", "#tab-ranges") }}

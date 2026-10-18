@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}Galerij — HesPulse{% endblock %}
+{% block page_title %}Galerij{% endblock %}
+{% block content %}
+<p class="muted">Keuring van de range sweep met het oog. Open een galerij en geef per kaart aan of de getekende range en zones kloppen. Bij de willekeurige setups moeten er minstens 24 van de 30 kloppen.</p>
+{% for k in kinds %}
+<section class="card">
+  <h3>{{ k.title }}</h3>
+  {% if k.busy %}
+    <p>Bezig met maken. Dit duurt enkele minuten. De pagina ververst zelf.</p>
+  {% elif k.error %}
+    <p class="engine-status is-off">Mislukt: {{ k.error }}</p>
+    <p><a class="btn" href="/galerij?maak={{ k.key }}">Opnieuw proberen</a></p>
+  {% elif k.ready %}
+    <p class="muted">Gemaakt op {{ k.made_at.strftime("%d-%m-%Y %H:%M") }} UTC</p>
+    <p><a class="btn" href="/galerij/{{ k.key }}">Open</a> <a href="/galerij?maak={{ k.key }}">Opnieuw maken</a></p>
+  {% else %}
+    <p class="muted">Nog niet gemaakt.</p>
+    <p><a class="btn" href="/galerij?maak={{ k.key }}">Maak de galerij</a></p>
+  {% endif %}
+</section>
+{% endfor %}
+{% if busy %}<script>setTimeout(function () { location.reload(); }, 20000);</script>{% endif %}
+{% endblock %}
