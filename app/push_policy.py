@@ -2,15 +2,21 @@
 Twee regels, beide per gebruiker:
   1. Geen tegenstrijdige richting: ging er in de afgelopen CONFLICT_HOURS een push over dezelfde coin de andere kant op, dan komt de nieuwe niet als push.
      Long en short door elkaar op één coin is ruis die niemand kan opvolgen.
-  2. Dagbudget: na `budget` pushes in 24 uur komt de rest niet als push.
+  2. Dagbudget: na `budget` pushes in 24 uur komt de rest niet als push. Een herhaling op dezelfde coin en richting telt één keer: twee
+     pushes over DOGE long vraagt niet twee plekken van het budget.
 Wat geen push wordt, blijft op de meldingenpagina staan: niets verdwijnt, alleen het scherm blijft rustig.
 Alleen kansen met een coin en richting vallen hieronder. Updates van een lopende trade, stop- en doelmeldingen en de agenda blijven altijd komen."""
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-DEFAULT_BUDGET = 6
+DEFAULT_BUDGET = 15
 CONFLICT_HOURS = 6
+
+
+def used(recent: list[dict]) -> int:
+    """Plekken van het dagbudget die in `recent` gebruikt zijn: een coin en richting telt één keer."""
+    return len({(r["coin"], r["direction"]) for r in recent})
 
 
 def decide(recent: list[dict], coin: str, direction: str, budget: Optional[int], now: datetime) -> tuple[bool, str]:
@@ -20,7 +26,7 @@ def decide(recent: list[dict], coin: str, direction: str, budget: Optional[int],
     for r in recent:
         if r["coin"] == coin and r["direction"] != direction and datetime.fromisoformat(r["at"]) >= cut:
             return False, f"Tegenstrijdig met een eerdere melding op {coin} ({r['direction']}), daarom geen push."
-    if limit and len(recent) >= limit:
+    if limit and used(recent) >= limit and (coin, direction) not in {(r["coin"], r["direction"]) for r in recent}:
         return False, f"Dagbudget van {limit} pushes bereikt, daarom geen push."
     return True, ""
 

@@ -101,7 +101,7 @@ def per_user(now: datetime, vapid: bool, chances: list[dict]) -> None:
         print(f"Stille uren: {quiet_text(u)}")
         recent = safe("push_log", lambda: repo.list_recent_pushes(u["id"], since), [])
         limit = push_policy.DEFAULT_BUDGET if u.get("push_budget") is None else u["push_budget"]
-        print(f"Dagbudget laatste 24 uur: {len(recent)} van {limit if limit else 'onbeperkt'}" + ("  <-- OP, nieuwe kansen komen alleen als melding" if limit and len(recent) >= limit else ""))
+        print(f"Dagbudget laatste 24 uur: {push_policy.used(recent)} van {limit if limit else 'onbeperkt'}" + ("  <-- OP, nieuwe kansen komen alleen als melding" if limit and push_policy.used(recent) >= limit else ""))
         for r in list(reversed(recent))[:10]:
             print(f"   push {r['at'][:16]}  {r['coin']} {r['direction']}  ({age_text(r['at'], now)})")
         notes = safe("meldingen", lambda: repo.list_notifications(u["id"], 10), [])

@@ -22,12 +22,22 @@ class DecideTest(unittest.TestCase):
         self.assertTrue(push_policy.decide([push("BTC", "long", 2)], "ETH", "short", None, NOW)[0])      # andere coin
         self.assertTrue(push_policy.decide([push("BTC", "long", 2)], "BTC", "long", None, NOW)[0])       # zelfde richting
 
-    def test_daily_budget_defaults_to_six_and_zero_switches_it_off(self):
-        many = [push(f"C{i}", "long", 3) for i in range(6)]
+    def test_daily_budget_defaults_to_fifteen_and_zero_switches_it_off(self):
+        many = [push(f"C{i}", "long", 3) for i in range(15)]
         self.assertFalse(push_policy.decide(many, "NEW", "long", None, NOW)[0])
-        self.assertTrue(push_policy.decide(many[:5], "NEW", "long", None, NOW)[0])
+        self.assertTrue(push_policy.decide(many[:14], "NEW", "long", None, NOW)[0])
         self.assertTrue(push_policy.decide(many, "NEW", "long", 20, NOW)[0])
         self.assertTrue(push_policy.decide(many, "NEW", "long", 0, NOW)[0])
+
+    def test_a_repeat_on_the_same_coin_and_direction_costs_no_extra_place(self):
+        repeats = [push("DOGE", "long", 3), push("DOGE", "long", 4), push("BTC", "short", 5), push("BTC", "short", 6)]
+        self.assertEqual(push_policy.used(repeats), 2)
+        self.assertTrue(push_policy.decide(repeats, "NEW", "long", 3, NOW)[0])
+        self.assertFalse(push_policy.decide(repeats, "NEW", "long", 2, NOW)[0])
+
+    def test_a_coin_and_direction_already_pushed_may_repeat_even_with_a_full_budget(self):
+        full = [push(f"C{i}", "long", 3) for i in range(15)]
+        self.assertTrue(push_policy.decide(full, "C3", "long", None, NOW)[0])
 
 
 class SendKansPushTest(DbCase):

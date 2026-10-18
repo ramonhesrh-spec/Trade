@@ -17,7 +17,7 @@ class PushDiagTest(unittest.TestCase):
         self.assertIn("pauze", why)
 
     def test_budget_full(self):
-        recent = [{"coin": "BTC", "direction": "long", "at": (NOW - timedelta(hours=i)).isoformat()} for i in range(6)]
+        recent = [{"coin": f"C{i}", "direction": "long", "at": (NOW - timedelta(hours=i)).isoformat()} for i in range(15)]
         ok, why = pd.verdict({"push_budget": None}, 1, recent, "ETH", "long", True, NOW)
         self.assertFalse(ok)
         self.assertIn("Dagbudget", why)
