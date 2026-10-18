@@ -163,6 +163,8 @@ REJECTION_MAX_NEGATIVE = int(_get("REJECTION_MAX_NEGATIVE", "30"))
 # (rule_status 'range_sweep_stop'), de range-watch na de keuring met het oog (poort 1). Alleen de CEO ziet de proef tot hij beslist (poort 4):
 # zet RANGE_SWEEP_PUBLIC op true om leerlingen de kansen en cijfers te tonen.
 RANGE_SWEEP_ENABLED = _get("RANGE_SWEEP_ENABLED", "false").lower() == "true"
+# true: setups ook zonder geslaagde labtoets (altijd ongetest). Met RANGE_SWEEP_PUBLIC zien ook leerlingen ze.
+RANGE_SWEEP_UNTESTED = _get("RANGE_SWEEP_UNTESTED", "false").lower() == "true"
 RANGE_WATCH_ENABLED = _get("RANGE_WATCH_ENABLED", "false").lower() == "true"
 RANGE_SWEEP_PUBLIC = _get("RANGE_SWEEP_PUBLIC", "false").lower() == "true"
 RANGE_WATCH_MAX_PER_DAY = int(_get("RANGE_WATCH_MAX_PER_DAY", "3"))

@@ -59,6 +59,9 @@ def _jsonable(o):
     return o.item() if hasattr(o, "item") else str(o)
 
 
+UNTESTED_VARIANTS = ("RZ_1H", "RZ_2H", "RZ_4H")
+
+
 def fmt_r(r: float) -> str:
     return f"{r:+.2f}".replace(".", ",") + "R"
 
@@ -298,10 +301,13 @@ async def scan(now: Optional[datetime] = None) -> None:
     if stamp.minute % 15 >= 10:
         return
     choice = live_variant(repo.get_rule_lab(STOP_KEY))
-    if choice is None:
+    choices = [choice] if choice else []
+    if choice is None and config.RANGE_SWEEP_UNTESTED:
+        # Bewuste afwijking van de spec, op verzoek van de CEO: kansen tonen voor de lab-run slaagt. Ze blijven ongetest en tellen mee op Bewijs.
+        choices = [(x, x.stops[0]) for x in rl.VARIANTS if x.name in UNTESTED_VARIANTS]
+    if not choices:
         logger.info("Range sweep: geen geslaagde toets op stopkwaliteit (scripts/strategy_lab.py --opslaan), geen nieuwe setups")
         return
-    v, stop_name = choice
     if structure_live.should_disable(repo.list_type_results(TRADE_TYPE, config.RANGE_SWEEP_MAX_NEGATIVE), config.RANGE_SWEEP_MAX_NEGATIVE):
         repo.notify_engine_disabled("Range sweep", f"De laatste {config.RANGE_SWEEP_MAX_NEGATIVE} afgeronde proeftrades zijn samen negatief bij de referentie-uitgang. Zie Bewijs.")
         return
@@ -311,8 +317,9 @@ async def scan(now: Optional[datetime] = None) -> None:
     for coin in COINS:
         try:
             frames = await _frames(coin, stamp)
-            for s in fresh_setups(frames, v, stamp):
-                await _register(coin, v, stop_name, s, frames, stamp, known)
+            for v, stop_name in choices:
+                for s in fresh_setups(frames, v, stamp):
+                    await _register(coin, v, stop_name, s, frames, stamp, known)
         except Exception:
             logger.exception("Range sweep voor %s is mislukt", coin)
     repo.beat("range_sweep", f"{len(COINS)} coins gecontroleerd")

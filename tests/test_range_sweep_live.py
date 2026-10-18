@@ -234,6 +234,20 @@ class GateTest(EngineCase):
         self.scan(SHORT_PLACED + pd.Timedelta(minutes=5))
         self.assertEqual(len(self.setups("waiting")), 1)
 
+    def test_untested_flag_creates_setups_without_a_lab_row(self):
+        with db.session() as conn:
+            conn.execute("DELETE FROM rule_status")
+        with mock.patch.object(config, "RANGE_SWEEP_UNTESTED", True), mock.patch.object(live, "UNTESTED_VARIANTS", ("RZ_T",)):
+            self.scan(SHORT_PLACED + pd.Timedelta(minutes=5))
+        self.assertEqual(len(self.setups("waiting")), 1)
+
+    def test_untested_flag_off_keeps_the_gate_closed_without_a_lab_row(self):
+        with db.session() as conn:
+            conn.execute("DELETE FROM rule_status")
+        with mock.patch.object(config, "RANGE_SWEEP_UNTESTED", False):
+            self.scan(SHORT_PLACED + pd.Timedelta(minutes=5))
+        self.assertEqual(self.setups(), [])
+
     def test_the_flag_switches_the_engine_off(self):
         with mock.patch.object(config, "RANGE_SWEEP_ENABLED", False):
             self.scan(SHORT_PLACED + pd.Timedelta(minutes=5))
