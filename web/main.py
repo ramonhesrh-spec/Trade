@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.gzip import GZipMiddleware
 from fastapi.templating import Jinja2Templates
@@ -551,7 +551,7 @@ async def galerij_page(request: Request, maak: str = "", user: dict = Depends(re
 async def galerij_file(kind: str, user: dict = Depends(require_login)):
     if not is_ceo(user) or kind not in gallery_job.KINDS or not gallery_job.path_of(kind).exists():
         raise HTTPException(status_code=404)
-    return FileResponse(gallery_job.path_of(kind), media_type="text/html")
+    return HTMLResponse(gallery_job.decorate(gallery_job.path_of(kind).read_text(encoding="utf-8"), kind))
 
 
 @app.get("/smc")

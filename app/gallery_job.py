@@ -61,3 +61,50 @@ def start(kind: str) -> bool:
         _state[kind]["busy"] = True
     threading.Thread(target=_run, args=(kind,), daemon=True).start()
     return True
+
+
+PLACEHOLDER = "<p>klopt / klopt niet: ______</p>"
+_BUTTONS = '<div class="oordeel"><button type="button" data-v="ja">Klopt</button><button type="button" data-v="nee">Klopt niet</button></div>'
+_STYLE = ("<style>.oordeel{display:flex;gap:10px;margin:8px 0}.oordeel button{flex:1;min-height:44px;font:inherit;font-weight:600;border-radius:10px;"
+          "border:1px solid var(--border,#2a3b3d);background:transparent;color:inherit}.oordeel button.is-on[data-v=ja]{background:#0abab5;color:#041a1a;border-color:#0abab5}"
+          ".oordeel button.is-on[data-v=nee]{background:#e5534b;color:#fff;border-color:#e5534b}#oordeel-bar{position:sticky;bottom:0;padding:10px 0;"
+          "background:var(--bg,#0b1415);border-top:1px solid var(--border,#2a3b3d);font-size:14px}#oordeel-bar button{margin-left:8px;min-height:40px;font:inherit}</style>")
+_SCRIPT = r"""<div id=oordeel-bar><span id=oordeel-tel></span><button type=button id=oordeel-kopie>Kopieer uitslag</button></div><script>
+(function () {
+  var key = "galerij:" + KIND, saved = {};
+  try { saved = JSON.parse(localStorage.getItem(key) || "{}"); } catch (e) {}
+  var cards = Array.prototype.slice.call(document.querySelectorAll("section")).filter(function (s) { return s.querySelector(".oordeel"); });
+  function paint() {
+    var ja = 0, nee = 0;
+    cards.forEach(function (c, i) {
+      var v = saved[i];
+      if (v === "ja") ja++; if (v === "nee") nee++;
+      c.querySelectorAll(".oordeel button").forEach(function (b) { b.classList.toggle("is-on", b.getAttribute("data-v") === v); });
+    });
+    document.getElementById("oordeel-tel").textContent = "Klopt " + ja + " · Klopt niet " + nee + " · Open " + (cards.length - ja - nee) + " van " + cards.length;
+  }
+  cards.forEach(function (c, i) {
+    c.querySelectorAll(".oordeel button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        saved[i] = b.getAttribute("data-v");
+        try { localStorage.setItem(key, JSON.stringify(saved)); } catch (e) {}
+        paint();
+      });
+    });
+  });
+  document.getElementById("oordeel-kopie").addEventListener("click", function () {
+    var lines = cards.map(function (c, i) { return (saved[i] === "ja" ? "klopt" : saved[i] === "nee" ? "KLOPT NIET" : "open") + ": " + c.querySelector("h2").textContent; });
+    var text = KIND + "\n" + lines.join("\n");
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(text).catch(function () { window.prompt("Kopieer", text); });
+    else window.prompt("Kopieer", text);
+  });
+  paint();
+})();
+</script>"""
+
+
+def decorate(html: str, kind: str) -> str:
+    """Maakt van de statische kaarten een pagina waar je per kaart Klopt of Klopt niet aantikt (bewaard in de browser) met een telling."""
+    html = html.replace(PLACEHOLDER, _BUTTONS)
+    script = _SCRIPT.replace("KIND", repr(kind))
+    return html.replace("</body>", _STYLE + script + "</body>") if "</body>" in html else html + _STYLE + script

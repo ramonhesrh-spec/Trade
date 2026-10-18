@@ -41,8 +41,12 @@ class WebGalerijTests(unittest.TestCase):
 
     def test_klaar_bestand_wordt_geserveerd_aan_de_ceo_alleen(self):
         gallery_job.OUT_DIR.mkdir(parents=True)
-        gallery_job.path_of("voorbeelden").write_text("<p>kaart</p>", encoding="utf-8")
-        self.assertEqual(self.client(self.ceo).get("/galerij/voorbeelden").text, "<p>kaart</p>")
+        gallery_job.path_of("voorbeelden").write_text("<body><section><h2>1. ARB</h2>" + gallery_job.PLACEHOLDER + "</section></body>", encoding="utf-8")
+        text = self.client(self.ceo).get("/galerij/voorbeelden").text
+        self.assertIn("data-v=\"ja\"", text)
+        self.assertIn("Klopt niet", text)
+        self.assertNotIn("______", text)
+        self.assertIn("galerij:", text)
         self.assertEqual(self.client(self.pupil).get("/galerij/voorbeelden").status_code, 404)
         self.assertEqual(self.client(self.ceo).get("/galerij/onbekend").status_code, 404)
 
