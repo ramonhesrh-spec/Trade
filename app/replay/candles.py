@@ -57,7 +57,8 @@ def save_candles(coin: str, df: pd.DataFrame, timeframe: str = BASE_TIMEFRAME) -
 
 def load_candles(coin: str, timeframe: str = BASE_TIMEFRAME) -> pd.DataFrame:
     df = pd.read_csv(cache_path(coin, timeframe))
-    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True)
+    # Vaste resolutie: nieuwere pandas geeft ms of us, en merge_asof weigert twee verschillende.
+    df["timestamp"] = pd.to_datetime(df["timestamp"], utc=True).astype("datetime64[ns, UTC]")
     return df
 
 

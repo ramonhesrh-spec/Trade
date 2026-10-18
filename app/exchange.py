@@ -67,7 +67,7 @@ def fetch_ohlcv(
         f"fetch_ohlcv {symbol}", exchange.fetch_ohlcv, symbol, timeframe=timeframe, limit=limit, since=since,
     )
     df = pd.DataFrame(raw, columns=["timestamp", "open", "high", "low", "close", "volume"])
-    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+    df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True).astype("datetime64[ns, UTC]")
     return df
 
 
