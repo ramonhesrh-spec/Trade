@@ -43,8 +43,8 @@ class WebVandaagTests(unittest.TestCase):
         repo.record_push(uid, "BTC", "long", now.isoformat())
         repo.record_push(uid, "ETH", "long", (now - timedelta(hours=30)).isoformat())     # buiten het venster
         r = self.client.get("/vandaag")
-        self.assertIn("1 van 6 meldingen in 24 uur", r.text)
-        self.assertIn('stroke-dashoffset="83.3"', r.text)
+        self.assertIn("1 van 15 meldingen in 24 uur", r.text)
+        self.assertIn('stroke-dashoffset="93.3"', r.text)
 
     def test_setups_page_shows_waiting_structure_setup_with_chart(self):
         import json

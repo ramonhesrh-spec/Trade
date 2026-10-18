@@ -143,7 +143,7 @@ class LiveTest(DbCase):
     def test_grade_c_respects_daily_budget(self):
         user_id = repo.list_users()[0]["id"]
         now = datetime.now(timezone.utc).isoformat()
-        for coin in ("ETH", "SOL", "XRP", "ADA", "DOGE", "LINK"):
+        for coin in ("ETH", "SOL", "XRP", "ADA", "DOGE", "LINK", "BNB", "AVAX", "SUI", "DOT", "LTC", "BCH", "NEAR", "ATOM", "UNI"):
             repo.record_push(user_id, coin, "long", now)
         self.run_live(BREAK_BAR + 4, grade="C")
         self.assertEqual(self.pushed, [])
