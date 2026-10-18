@@ -1,7 +1,7 @@
 # Range sweep: pre-registratie
 
-Status: concept (definities mogen nog wijzigen op grond van de voorbeelden, niet op grond van resultaten)
-Bevroren op: (datum en commit-hash, in te vullen bij poort 1)
+Status: bevroren, de definities veranderen niet meer
+Bevroren op: 2026-10-18, code op commit 837bb2c (de detector met `CONTAIN_UNTIL_LAST_TOUCH = False`, zoals hieronder beschreven)
 
 ## Lezingen en besluiten
 
@@ -130,6 +130,7 @@ Taken 13 tot 17 mogen naast fase 2 gebouwd worden (de code laat zonder geslaagde
 - **Datums.** De datums van de vijf voorbeelden komen van de gebruiker en staan op "te bevestigen" (AAVE 2026-10-15 23:42 CEST, de andere vier 2026-10-16).
 - **Poort 1 gehouden, kaarten tot het plaatsmoment (2026-10-18, vóór de eerste labrun).** De gebruiker beoordeelde de 30 kaarten: 23 klopt, 7 klopt niet (77%, norm 80%). De kaarten toonden ook de 24 uur na het plaatsen, waardoor een verliezende uitkomst zichtbaar was bij de bijna alle kaarten die niet klopten. Een oordeel over de tekening hoort niet te weten hoe het afliep. De galerij toont daarom de candles tot en met het plaatsmoment (`after_hours=0`) en de gebruiker beoordeelt opnieuw. Dit telt niet als reparatieronde van de detector: er is niets aan de detector veranderd. De eerdere poort-1-uitkomst (23 van 30) wordt niet gebruikt. S1 blijft: minstens 24 van 30.
 - **Uitslag poort 1 (2026-10-18).** Kaarten tot het plaatsmoment, seed 7, 30 setups: 30 van 30 klopt volgens de gebruiker (S1 gehaald, norm 24). De pre-registratie wordt bevroren na poort 0a (misser-controle), omdat die nog definitierondes kan opleveren.
+- **Poort 0a vervalt (2026-10-18, vóór de eerste labrun).** De misser-controle zag 0 van de 7 handtrades (norm: 3 van de 5), ook met versoepelde instellingen niet meer dan 2 (`scripts/range_probe.py`). De 30 willekeurige getekende setups klopten wel allemaal (30 van 30). Besluit van de gebruiker: de labrun draait op de detector zoals hij is. Beperking, ook voor Bewijs: de uitkomst zegt iets over de setups die onze detector vindt (die kloppen volgens het oog) en niet over alle trades zoals de gebruiker of Cos867 ze ziet. Twee van de zeven voorbeelden (WLD, HYPE) zijn geen range maar een trend met zones. De instelling `CONTAIN_UNTIL_LAST_TOUCH` blijft uit.
 - **Zonedetector.** De naam van de TradingView-indicator is onbekend; we gebruiken onze eigen zonedetector zoals hierboven gedefinieerd.
 - **Stop bij de split (2026-10-16, vóór de eerste labrun).** De stop gebruikte alleen de buitenkant van de zone, maar het randbeen (40%) ligt op de rand van de range en kon voorbij die stop liggen (58 van 897 stopberekeningen in een controlerun): dat been kon nooit vullen. De buitenkant is nu de verste van zonerand en beenprijzen. Reden: een been voorbij de stop is geen limietorder met een stop erachter maar een fout in de definitie.
 - **Eerste nadering waarop alles klopt (2026-10-16, vóór de eerste labrun).** Bij zone-retest eindigde een ontbrekende CHoCH of een ongeldige limiet de zone (`break`), terwijl een ontbrekende range, een zone niet aan de rand en het HTF-filter doorgingen (`continue`). In een controlerun op 1u stierven 13 van 22 choch-zones bij de eerste aanraking. Nu `continue`, met overslaan tot de koers de zone verlaten heeft. Reden: de tekst zegt "eerste nadering waarop alle voorwaarden kloppen", en de CHoCH is een voorwaarde.
