@@ -26,6 +26,8 @@ RANGE_LOOKBACK = {"30m": 120, "1h": 120, "2h": 90, "4h": 90}
 RANGE_MIN_ATR = 3.0
 RANGE_MAX_ATR = 15.0
 CONTAIN_ATR = 0.25
+# False (de pre-registratie): geen slot buiten de range tot nu. True: alleen tot de laatste aanraking van een rand; de uitstap daarna naar de zone is de setup, geen range-fout.
+CONTAIN_UNTIL_LAST_TOUCH = False
 DISP_BARS = 5
 DISP_ATR = 1.0
 ZONE_MAX_AGE = 200
@@ -112,7 +114,8 @@ def range_at(b: pd.DataFrame, i: int, tf: str, ph: np.ndarray, pl: np.ndarray, c
     if top - bottom > RANGE_MAX_ATR * atr:
         return None, "range te breed"
     start = int(min(hc.min(), lc.min()))
-    inside = close[start:i + 1]
+    end = int(max(hc.max(), lc.max())) if CONTAIN_UNTIL_LAST_TOUCH else i
+    inside = close[start:end + 1]
     if (inside > top + CONTAIN_ATR * atr).any() or (inside < bottom - CONTAIN_ATR * atr).any():
         return None, "slot buiten de range sinds de eerste aanraking"
     return Range(tf, pd.Timestamp(ts[i]) + TF_DELTA[tf], top, bottom, len(hc), len(lc), float(high[hc].max() - high[hc].min()),

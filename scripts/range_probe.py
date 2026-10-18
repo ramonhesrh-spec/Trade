@@ -31,6 +31,11 @@ SETTINGS = {
     "cluster 1,0 ATR": {"CLUSTER_ATR": 1.0},
     "aanrakingen 2 + breedte 2": {"TOUCHES": 2, "RANGE_MIN_ATR": 2.0},
     "aanrakingen 2 + breedte 2 + slot 0,5": {"TOUCHES": 2, "RANGE_MIN_ATR": 2.0, "CONTAIN_ATR": 0.5},
+    "slot alleen tot laatste aanraking": {"CONTAIN_UNTIL_LAST_TOUCH": True},
+    "slot tot laatste aanraking + aanrakingen 2": {"CONTAIN_UNTIL_LAST_TOUCH": True, "TOUCHES": 2},
+    "slot tot laatste aanraking + breedte 2": {"CONTAIN_UNTIL_LAST_TOUCH": True, "RANGE_MIN_ATR": 2.0},
+    "slot tot laatste aanraking + cluster 0,75": {"CONTAIN_UNTIL_LAST_TOUCH": True, "CLUSTER_ATR": 0.75},
+    "slot tot laatste aanraking + aanrakingen 2 + breedte 2": {"CONTAIN_UNTIL_LAST_TOUCH": True, "TOUCHES": 2, "RANGE_MIN_ATR": 2.0},
     "aanrakingen 2 + breedte 2 + slot 1,0 + cluster 0,75": {"TOUCHES": 2, "RANGE_MIN_ATR": 2.0, "CONTAIN_ATR": 1.0, "CLUSTER_ATR": 0.75},
 }
 
@@ -52,8 +57,11 @@ def measure(frame: pd.DataFrame, at: pd.Timestamp, tf: str) -> dict:
         top, bottom = float(hi[hc].max()), float(lo[lc].min())
         start = int(min(hc.min(), lc.min()))
         inside = close[start:i + 1]
+        end = int(max(hc.max(), lc.max()))
+        until = close[start:end + 1]
         out.update({"breedte ATR": round((top - bottom) / a, 2),
-                    "grootste slot buiten ATR": round(float(max((inside - top).max(), (bottom - inside).max(), 0.0)) / a, 2)})
+                    "slot buiten tot nu ATR": round(float(max((inside - top).max(), (bottom - inside).max(), 0.0)) / a, 2),
+                    "slot buiten tot laatste aanraking ATR": round(float(max((until - top).max(), (bottom - until).max(), 0.0)) / a, 2)})
     return out
 
 
@@ -79,7 +87,7 @@ def main() -> None:
             except Exception as exc:
                 print("   ", tf, "niet te meten:", exc)
     print("\nper instelling: aantal voorbeelden dat minstens één variant zag")
-    base = {k: getattr(rs, k) for k in ("TOUCHES", "RANGE_MIN_ATR", "CONTAIN_ATR", "CLUSTER_ATR")}
+    base = {k: getattr(rs, k) for k in ("TOUCHES", "RANGE_MIN_ATR", "CONTAIN_ATR", "CLUSTER_ATR", "CONTAIN_UNTIL_LAST_TOUCH")}
     for name, change in SETTINGS.items():
         for k, v in {**base, **change}.items():
             setattr(rs, k, v)

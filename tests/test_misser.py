@@ -86,7 +86,7 @@ class ParseRowsTest(unittest.TestCase):
 
     def test_seed_csv_parses(self):
         rows = misser.parse_rows((ROOT / "docs" / "onderzoek" / "range-sweep" / "handtrades.csv").read_text(encoding="utf-8"))
-        self.assertEqual([r["coin"] for r in rows], ["ARB", "APT", "APT", "WLD", "AAVE"])
+        self.assertEqual([r["coin"] for r in rows], ["ARB", "APT", "APT", "WLD", "AAVE", "TIA", "HYPE"])
         self.assertEqual(rows[4]["at"].isoformat(), "2026-10-15T21:42:00+00:00")
         self.assertEqual({r["tf"] for r in rows}, {"30m", "1h", "2h"})
 
