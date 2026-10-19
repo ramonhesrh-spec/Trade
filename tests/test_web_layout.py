@@ -172,7 +172,7 @@ class BaseShellTests(unittest.TestCase):
         self.assertIn("position: fixed", blok)
         self.assertIn("-webkit-mask-image", blok)
         self.assertNotIn("radial", blok)
-        self.assertIn("--glow-edge: #0c2c2b;", css)
+        self.assertIn("--glow-edge: #0f3a38;", css)
         self.assertNotIn("glow-edge-tint", TestClient(main.app).get("/login").text)
 
     def test_login_blijft_zonder_schil(self):
