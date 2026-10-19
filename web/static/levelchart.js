@@ -171,6 +171,7 @@
     if (!s || el._lc) return el._lc ? el._lc.ready : Promise.resolve();
     el.classList.remove("is-failed");
     var panel = css("--panel", "#131a1b"), green = css("--green", "#33d69f"), red = css("--red", "#f2685c");
+    var up = css("--candle-up", "#0ABAB5"), down = css("--candle-down", "#f4f8f7");
     var chart = LC.createChart(el, {
       autoSize: true,
       layout: { background: { type: "solid", color: panel }, textColor: css("--muted", "#7d8c8a"), fontSize: 10, fontFamily: css("--mono", "monospace").replace(/"/g, "") },
@@ -193,7 +194,7 @@
       autoscaleInfoProvider: function () { return null; },
     });
     lc.series = chart.addCandlestickSeries({
-      upColor: green, downColor: red, borderVisible: false, wickUpColor: green, wickDownColor: red,
+      upColor: up, downColor: down, borderVisible: false, wickUpColor: up, wickDownColor: down,
       priceLineVisible: false, lastValueVisible: false,
       priceFormat: { type: "price", precision: precision(s), minMove: Math.pow(10, -precision(s)) },
       // Stop, limiet en doel horen er altijd op, naast de candles: de schaal is de unie van beide.

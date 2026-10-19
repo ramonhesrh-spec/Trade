@@ -23,8 +23,8 @@
   });
 
   const candleSeries = chart.addCandlestickSeries({
-    upColor: "#33d69f", downColor: "#f2685c",
-    borderVisible: false, wickUpColor: "#33d69f", wickDownColor: "#f2685c",
+    upColor: "#0ABAB5", downColor: "#f4f8f7",
+    borderVisible: false, wickUpColor: "#0ABAB5", wickDownColor: "#f4f8f7",
   });
 
   // Alle markers die permanent op de grafiek horen te staan: narrative-

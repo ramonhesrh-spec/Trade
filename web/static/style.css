@@ -22,6 +22,9 @@
   --accent-dark: #089a96;
   --accent-bg: rgba(10, 186, 181, 0.14);
   --on-accent: #052624;
+  --candle-up: #0ABAB5;      /* stijgend Tiffany, dalend wit: zoals de grafieken waar je zelf mee werkt */
+  --candle-down: #f4f8f7;
+  accent-color: var(--accent);
   --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
   --shadow-md: 0 4px 16px -4px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.4);
   --radius: 6px;
@@ -75,14 +78,14 @@
   /* Gloed bovenaan: een zachte, ronde vlek in Tiffany-blauw (#0ABAB5, kern #81D8D0). Veel stops met kleine stappen, zodat er nergens
      een rand te zien is; de eerste versie (alpha 0,34 aan de rand, in 140px naar nul) eindigde in een zichtbare donkere streep.
      Waar tekst over de gloed staat moet --muted minstens 4,5 contrast houden: scripts/layout_check.py meet dat. */
-  --glow-top-peak: rgba(129, 216, 208, 0.05);
-  --glow-top-shoulder: rgba(10, 186, 181, 0.10);
-  --glow-top-mid: rgba(10, 186, 181, 0.065);
-  --glow-top-tail: rgba(10, 186, 181, 0.025);
+  --glow-top-peak: rgba(129, 216, 208, 0.09);
+  --glow-top-shoulder: rgba(10, 186, 181, 0.17);
+  --glow-top-mid: rgba(10, 186, 181, 0.11);
+  --glow-top-tail: rgba(10, 186, 181, 0.045);
   --glow-top-height: 520px;
   /* Vlakke kleur op de bovenrand: iOS kleurt er de statusbalk mee. Donker, maar nog herkenbaar Tiffany (tint 178 graden). De lineaire laag
-     in html.has-glow en de mask van .glow-edge-tint gebruiken dezelfde kleur (12, 44, 43) met dalende alpha; bij een andere kleur beide meenemen. */
-  --glow-edge: #0c2c2b;
+     in html.has-glow en de mask van .glow-edge-tint gebruiken dezelfde kleur (15, 58, 56) met dalende alpha; bij een andere kleur beide meenemen. */
+  --glow-edge: #0f3a38;
   --glow-edge-height: 240px;
   --glow-tab: 0 0 18px -2px rgba(10, 186, 181, 0.35);
 }
@@ -1702,8 +1705,8 @@ a.nf-link:hover { background: var(--panel-hover); }
 .setup-reason { margin: 0; font-size: var(--text-sm); color: var(--text-dim); }
 .tag-untested { font-size: var(--text-2xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); border: 1px solid var(--border-strong); border-radius: 999px; padding: 1px 8px; vertical-align: middle; }
 .sc { width: 100%; height: auto; display: block; background: var(--bg); border-radius: var(--radius-sm); }
-.sc-up { fill: var(--green); stroke: var(--green); }
-.sc-down { fill: var(--red); stroke: var(--red); }
+.sc-up { fill: var(--candle-up); stroke: var(--candle-up); }
+.sc-down { fill: var(--candle-down); stroke: var(--candle-down); }
 .sc-wick { stroke-width: 1; }
 .sc-structure { fill: none; stroke: var(--text-dim); stroke-width: 1.5; stroke-dasharray: 5 4; }
 .sc-stopzone { fill: var(--red-bg); }
@@ -1833,9 +1836,9 @@ html.reveal-done main > * { animation: none; opacity: 1; transform: none; }
 .steps-money { color: var(--text); font-family: var(--mono); font-size: var(--text-sm, 0.875rem); }
 
 .hint-pop { position: absolute; z-index: 600; max-width: min(320px, calc(100vw - 24px)); padding: var(--space-3) var(--space-4); background: var(--panel); border: 1px solid var(--accent); border-radius: var(--radius-sm, 4px); font-size: var(--text-sm, 0.875rem); line-height: 1.4; }
-.share-btn { background: none; border: 1px solid var(--accent); color: var(--accent); border-radius: var(--radius-sm, 4px); padding: var(--space-2) var(--space-4); font: inherit; font-size: var(--text-sm, 0.875rem); cursor: pointer; }
+.share-btn { background: var(--accent); border: 1px solid var(--accent); color: var(--on-accent); border-radius: var(--radius-sm, 4px); padding: var(--space-2) var(--space-4); font: inherit; font-weight: 600; font-size: var(--text-sm, 0.875rem); cursor: pointer; }
 /* De algemene button:hover vult de knop met de accentkleur; op iOS blijft die hover na een tik staan en dan verdwijnt de tekst (accent op accent). */
-.share-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+.share-btn:hover { background: var(--accent-dark); color: var(--on-accent); border-color: var(--accent-dark); }
 
 
 /* Stoplicht naast de status: grijs = te weinig data, oranje = positief maar nog niet bewezen, groen = voordeel gemeten, rood = verlies. */
@@ -2177,7 +2180,7 @@ html { -webkit-tap-highlight-color: transparent; }
    staan. Het canvas wordt over het hele scherm geschilderd, dus ook onder de klok, en vult ook bij overscroll boven en onder. */
 html.has-glow {
   background-image:
-    linear-gradient(var(--glow-edge), rgba(12, 44, 43, 0.62) 8%, rgba(12, 44, 43, 0.32) 20%, rgba(12, 44, 43, 0.13) 36%, rgba(12, 44, 43, 0.04) 56%, rgba(12, 44, 43, 0) 80%),
+    linear-gradient(var(--glow-edge), rgba(15, 58, 56, 0.62) 8%, rgba(15, 58, 56, 0.32) 20%, rgba(15, 58, 56, 0.13) 36%, rgba(15, 58, 56, 0.04) 56%, rgba(15, 58, 56, 0) 80%),
     radial-gradient(ellipse 150% 100% at 50% 0%, var(--glow-top-peak) 0%, var(--glow-top-shoulder) 16%, var(--glow-top-mid) 38%, var(--glow-top-tail) 64%, rgba(10, 186, 181, 0.008) 84%, transparent 100%);
   background-size: 100% var(--glow-edge-height), 100% var(--glow-top-height);
   background-repeat: no-repeat;
@@ -2571,7 +2574,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .vd-steps { gap: var(--space-6); }
 .vd-step { grid-template-columns: 22px 1fr; gap: var(--space-5); opacity: 1; }
 .vd-step-n { width: 22px; height: 22px; margin-top: 1px; border-color: var(--border-strong); color: var(--muted); font-size: var(--text-2xs); }
-.vd-step.is-now .vd-step-n { background: var(--accent-bg); border-color: rgba(10, 186, 181, 0.5); color: var(--accent); }
+.vd-step.is-now .vd-step-n { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .vd-step-text strong { font-weight: 500; color: var(--text-dim); }
 .vd-step.is-now .vd-step-text strong { color: var(--text); }
 .vd-step-text .muted { font-size: var(--text-sm); }
