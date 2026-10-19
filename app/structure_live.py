@@ -22,6 +22,7 @@ import numpy as np
 import pandas as pd
 
 from app import chance_checks, config, repo, smc_eval
+from app import trade_plan as tp
 from app.replay import breakretest as br
 from app.replay.lab import add_indicators
 from app.track_record import signal_r
@@ -220,6 +221,18 @@ async def _discover(coin: str, now: datetime) -> None:
                 "line_a": ev.a, "line_slope": ev.slope, "atr": ev.atr, "grade": None,
                 "reason": explain_no_plan(ev, levels, level, extreme), "features": "{}", "state": "geen_plan",
                 "expires_at": break_at, "plan": None})
+            continue
+        # Een plan waarvan de koers al voorbij het eerste doel of de stop staat, valt op de pagina Setups direct weg (today.structure_state). Er valt
+        # niets meer te wachten, dus ook geen melding: anders krijg je een push voor een kans die je nergens kunt vinden.
+        price_now = float(b["close"].iloc[-1])
+        gone = tp.plan_state(ev.direction, plan["level"], plan["level"], plan["stop"], price_now, take=plan["targets"][0])
+        if gone in ("doel_geraakt", "ongeldig"):
+            repo.insert_structure_setup({
+                "coin": coin, "direction": ev.direction, "kind": ev.kind, "break_at": break_at, "p1_at": b.at[ev.p1, "timestamp"].isoformat(),
+                "line_a": ev.a, "line_slope": ev.slope, "atr": ev.atr, "grade": None,
+                "reason": "De koers stond al voorbij het eerste doel of de stop toen het plan klaar was." if gone == "doel_geraakt"
+                          else "De koers stond al voorbij de stop toen het plan klaar was.",
+                "features": "{}", "state": "geen_plan", "expires_at": break_at, "plan": None})
             continue
         row = {"coin": coin, "direction": ev.direction, "kind": ev.kind, "break_at": break_at,
                "p1_at": b.at[ev.p1, "timestamp"].isoformat(), "line_a": ev.a, "line_slope": ev.slope, "atr": ev.atr,

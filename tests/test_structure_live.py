@@ -113,6 +113,16 @@ class LiveTest(DbCase):
         self.run_live(BREAK_BAR + 4)
         self.assertEqual(len(self.graded), 1)                 # dezelfde breuk wordt niet opnieuw beoordeeld
 
+    def test_a_plan_the_price_already_passed_is_not_announced(self):
+        with mock.patch("app.trade_plan.plan_state", return_value="doel_geraakt"):
+            self.run_live(BREAK_BAR + 4, grade="A")
+        self.assertEqual(self.pushed, [])
+        self.assertEqual(self.graded, [])                              # ook geen Claude-aanroep voor een plan dat niemand ziet
+        self.assertEqual(repo.list_structure_setups(("waiting",)), [])
+        kept = repo.list_structure_setups(("geen_plan",))
+        self.assertEqual(len(kept), 1)
+        self.assertIn("al voorbij", kept[0]["reason"])
+
     def test_grade_c_pushes_quietly_labelled_zwak_and_stays_on_the_page(self):
         self.run_live(BREAK_BAR + 4, grade="C")
         self.assertEqual(len(self.pushed), 1)
@@ -212,7 +222,8 @@ class LiveTest(DbCase):
         self.assertEqual(fired["hits"], 2)
 
     def test_close_liquidity_falls_back_to_a_fixed_ladder_instead_of_dropping_the_setup(self):
-        with mock.patch.object(sl, "MIN_RR", 50.0):                # geen zwaaipunt ligt ver genoeg
+        # De synthetische koers ligt na de breuk al voorbij 1R; deze test gaat over de trap, niet over of het plan nog open is.
+        with mock.patch.object(sl, "MIN_RR", 50.0), mock.patch("app.trade_plan.plan_state", return_value="wacht"):    # geen zwaaipunt ligt ver genoeg
             self.run_live(BREAK_BAR + 4)
         rows = repo.list_structure_setups(("waiting",))
         self.assertEqual(len(rows), 1)
