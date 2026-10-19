@@ -93,7 +93,10 @@
     });
     if (navigator.serviceWorker.startMessages) navigator.serviceWorker.startMessages();
   }
-  if ("caches" in window) {
+  // De cache wordt niet alleen bij het laden gelezen: een app die op de achtergrond stond, laadt niet opnieuw als je op de melding tikt, en het bericht
+  // van de service worker gaat verloren als iOS de pagina bevroren had. Daarom ook bij terugkeer naar de app.
+  function checkPending() {
+    if (!("caches" in window)) return;
     caches.open("hespulse-nav").then(function (c) {
       return c.match("/__pending-nav").then(function (r) {
         if (!r) return;
@@ -102,4 +105,8 @@
       });
     }).catch(function () {});
   }
+  checkPending();
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") checkPending(); });
+  window.addEventListener("pageshow", checkPending);
+  window.addEventListener("focus", checkPending);
 })();

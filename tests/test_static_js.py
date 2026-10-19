@@ -86,3 +86,14 @@ class WinMemeToastTest(unittest.TestCase):
         self.assertLess(main.index("if won:"), main.index('"closed_pct"'))
         css = (ROOT / "web/static/style.css").read_text()
         self.assertNotIn("animation", css[css.index(".win-toast {"):css.index(".win-toast img")])
+
+
+@unittest.skipUnless(shutil.which("node"), "node ontbreekt")
+class NotificationNavigationTest(unittest.TestCase):
+    def test_a_tap_on_a_notification_navigates_on_load_and_when_the_app_returns(self):
+        out = run_node("smooth_nav_harness.js", "smooth.js")
+        self.assertEqual(out["onLoad"]["href"], "https://x.test/structuur#tab-ranges")
+        self.assertEqual(out["onLoad"]["left"], 0)                       # de bestemming is opgebruikt
+        self.assertEqual(out["afterBackground"]["href"], "https://x.test/structuur#tab-ranges")
+        self.assertEqual(out["onReturn"]["href"], "https://x.test/vandaag")  # niets te doen zonder bestemming
+        self.assertEqual(out["stale"]["href"], "https://x.test/vandaag")     # een bestemming ouder dan 2 minuten telt niet
