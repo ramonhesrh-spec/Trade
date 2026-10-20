@@ -131,6 +131,24 @@ def find_setups(frames: dict, tf: str, entry: str, use_htf: bool) -> tuple[list[
     return setups, refused
 
 
+def active_zones(frames: dict, tf: str, kind: str) -> list[Optional[rs.Zone]]:
+    """Voor de placebo van het lab: per 1u-triggercandle (dezelfde rijen als in find_setups) een actieve zone van soort `kind` op `tf` waarin het
+    slot ligt, anders None. Actief en bekend gelden zoals in find_setups (de laatste tf-candle die bij het openen gesloten was). Bij meerdere zones
+    de laatst bekende: die geldt ook voor find_zones als de nieuwste liquiditeit."""
+    b = add_indicators(frames[tf]).reset_index(drop=True)
+    bt = add_indicators(frames[TRIGGER_TF]).reset_index(drop=True)
+    known = (b["timestamp"] + rs.TF_DELTA[tf]).to_numpy()
+    pos_tf = np.searchsorted(known, bt["timestamp"].to_numpy(), side="right") - 1
+    cl = bt["close"].to_numpy(float)
+    out: list[Optional[rs.Zone]] = [None] * len(bt)
+    for z in sorted((z for z in rs.find_zones(b) if z.kind == kind), key=lambda z: z.known_idx):
+        hi_pos = z.known_idx + rs.ZONE_MAX_AGE if z.broken_idx is None else min(z.known_idx + rs.ZONE_MAX_AGE, z.broken_idx - 1)
+        lo_j, hi_j = int(np.searchsorted(pos_tf, z.known_idx, side="right")), int(np.searchsorted(pos_tf, hi_pos, side="right"))
+        for j in np.flatnonzero((cl[lo_j:hi_j] > z.low) & (cl[lo_j:hi_j] < z.high)) + lo_j:
+            out[j] = z
+    return out
+
+
 def raw_stops(setup: dict) -> dict[str, float]:
     """Ruwe stops: voorbij het uiterste van de prik plus een buffer in ATR."""
     side = 1 if setup["direction"] == SHORT else -1

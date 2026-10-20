@@ -60,3 +60,34 @@ De gebruiker liet zeven voorbeelden zien uit één nacht (19 en 20 oktober 2026)
 - **Poort 0a vervalt.** De misser-controle zag 2 van de 6 afleesbare voorbeelden (ETH en WLD, beide op 4u). De meting (`scripts/zone_probe.py`) liet zien dat de candles van de VPS en de grafieken van de gebruiker niet overeenkomen: de stop van ETH (2.308,59) en SUI (0,9203) lag onder het laagste punt in onze data (2.329 en 0,9372), en het plaatje dat ik als ARB las had geen coinnaam en een prijs die bij ARB niet past. Zonder tijd, beurs en instrument per voorbeeld is afstellen op deze zes zinloos. De gebruiker koos ervoor dat niet uit te zoeken. Beperking, ook voor Bewijs: de uitkomst zegt iets over de prikken die onze detector op onze candles vindt, niet over de trades van de gebruiker.
 - **Afstelling vermeden.** Dat meerdere zones van de voorbeelden weken oud zijn (onze zones vervallen na 200 candles) en dat sommige zones pas na de prik ontstaan, staat in `zone_probe` en is geen reden om de zone-regels nu aan te passen: we stellen niet af op voorbeelden waarvan de data niet klopt.
 - **Wel aangepast: de limiet (definitieronde 1).** Zie 'Instap' hierboven. Reden: een limiet boven de koers is een marktorder; de eerdere regel weigerde ZEC, OP en WLD (2u) om een fout in de regel, niet in de voorbeelden.
+
+## Lab (vastgelegd 2026-10-20, vóór de eerste labrun)
+
+De labfamilie staat in `app/replay/zonesweep_lab.py` en draait met `scripts/strategy_lab.py --familie zonesweep` (zie `vps-protocol.md`). Alles hieronder ligt vast vóór de eerste run en wordt na een run niet aangepast.
+
+- **Toetsen.** De 7 varianten uit de tabel hierboven, elk met de stops `wick_025` en `wick_05` (`zonesweep.raw_stops`, daarna `zonesweep.final_stop`): 14 toetsen. Zones op 1u, 2u of 4u, prik en herstel op 1u (`zonesweep.find_setups(frames, tf, entry, use_htf)`). Er is geen beschrijvende stop zonder buffer zoals `zone_0` bij de range sweep.
+- **Register.** 34 eerder bekeken varianten plus de 30 toetsen van de range sweep: 64 (`zonesweep_lab.PRIOR_VARIANTS` = `rangesweep_lab.TESTED_TOTAL`). Met deze 14 erbij staan er **78** toetsen in het register (`zonesweep_lab.TESTED_TOTAL`); de uitvoer van elke run noemt dat getal. De horde voor een voordeel blijft **t ≥ 3,4** per week (`zonesweep_lab.EDGE_T_MIN` = `rangesweep_lab.EDGE_T_MIN`): de verwachte beste van 78 onafhankelijke nulvarianten is ongeveer t ≈ 2,4 (gesimuleerd 2,42; bij 64 is dat 2,35), de marge van ongeveer 1 blijft dus staan.
+- **Machinerie.** Dezelfde als de range sweep, met dezelfde code: vulling en verval tegen het midden van het referentiekader (`range_high`/`range_low` van de setup) via `rangesweep_lab.stop_row`, meting met `stopquality.measure`, de toets op stopkwaliteit `stopquality.accept` met de bevroren drempels van de range sweep (`docs/onderzoek/range-sweep/preregistratie.md`, blok `prereg-constants`), de strenge toets `rangesweep_lab.edge_verdict` (`trendlab.evaluate` op de netto R bij de meelopende referentie-uitgang plus de week-geclusterde t). Kosten 0,12% per rondreis, 20 coins (`trendlab.LAB_COINS`), 3 jaar, `--alleen-volledig`.
+- **Clusters.** Week, zoals de machinerie van de range sweep. Een week bevat de kalenderdag, dus een marktbrede bounce op één dag (zoals de zeven voorbeelden) valt altijd in één cluster; een aparte dagcluster komt er niet bij.
+- **Placebo.** Per gevulde trade 20 willekeurige instappen (`stopquality.placebo_rows`, seed 7): een willekeurig slot van een 1u-candle waarvan het slot binnen een actieve zone van **dezelfde soort** ligt (vraagzone bij long, aanbodzone bij short), op het zone-timeframe van de variant, met actief en bekend zoals in de detector (`zonesweep.active_zones`), zonder prik of herstel. Instap op dat slot, stop op dezelfde afstand in 1u-ATR als de echte trade, daarna `floor_stop`, dezelfde meting. Reden: de range sweep vergelijkt met een willekeurige instap binnen een actieve range; voor de zone-sweep is de zone het equivalent, en de vraag is of de prik met herstel meer doet dan een gewone instap in dezelfde zone met dezelfde stop. Long trekt met seed 7, short met seed 8, elk uit de eigen kandidatenset. De placebo gebruikt van de echte trade alleen kant, stopafstand en id.
+- **Stopcriteria.** S2: geen van de 14 toetsen slaagt op stopkwaliteit, dan geen proefmotor. S3: bij alle 14 toetsen zijn de mediane kosten hoger dan 0,10R, zelfde besluit. `stopquality.kill_check(..., tests=zonesweep_lab.KILL_TESTS)` beslist alleen over een volledige set van 14.
+- **Keuze voor de proef.** Zoals bij de range sweep (`rangesweep_lab.select_live`): uit de toetsen die geslaagd zijn op stopkwaliteit de meeste vullingen, dan de laagste mediane kosten, dan de bredere stop (buffer uit `zonesweep.BUFFERS`, dan de mediane stopafstand), dan de naam van de variant en van de stop.
+- **Opslaan.** `--opslaan` alleen met `--kosten` 0,12 of hoger, precies de 20 coins, `--jaren 3`, `--alleen-volledig` en minstens één geslaagde toets. Per variant een regel in `rule_status` (`zs_1h` enz.), plus `zone_sweep_stop` (stopkwaliteit van de gekozen variant) en `zone_sweep` (de strenge toets). Er is geen proefmotor; opslaan zet niets live.
+
+```prereg-constants
+zonesweep.PRIK_MIN_ATR = 0.1
+zonesweep.PRIK_MAX_ATR = 2.5
+zonesweep.HERSTEL_BARS = 6
+zonesweep.COOLDOWN_BARS = 24
+zonesweep.REF_LOOKBACK = 60
+rangesweep.ZONE_MAX_AGE = 200
+rangesweep.MIN_STOP_PCT = 0.4
+zonesweep_lab.PRIOR_VARIANTS = 64
+zonesweep_lab.TESTED_TOTAL = 78
+zonesweep_lab.KILL_TESTS = 14
+zonesweep_lab.EDGE_T_MIN = 3.4
+zonesweep_lab.LAB_COST_PCT = 0.12
+zonesweep_lab.LAB_YEARS = 3
+zonesweep_lab.PLACEBO_DRAWS = 20
+zonesweep_lab.PLACEBO_SEED = 7
+```

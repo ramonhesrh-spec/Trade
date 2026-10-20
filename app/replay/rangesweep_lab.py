@@ -33,6 +33,10 @@ class RSVariant:
     def stops(self) -> tuple[str, ...]:
         return rs.TESTED_STOPS[self.family]
 
+    @property
+    def descriptive_stop(self) -> Optional[str]:
+        return rs.DESCRIPTIVE_STOP
+
 
 VARIANTS = (
     RSVariant("RZ_30M", "zone", "30m", "zone", "slot", True, False),
@@ -119,22 +123,24 @@ def run_coin(v: RSVariant, coin: str, frames: dict, cost_pct: float, cache: dict
             if change is None or change > OI_FLUSH_PCT:
                 continue
         _, score = chance_checks.weighted_finish(chance_checks.range_sweep_checks(s["features"], v.tf))
-        mid = (s["range_high"] + s["range_low"]) / 2
-        short = s["direction"] == "short"
-        for name in rs.raw_stops(s):
-            stop = rs.final_stop(s, name)
-            base = {"row_id": f"{coin}:{v.name}:{k}", "coin": coin, "variant": v.name, "stop_name": name, "placed_at": s["placed_at"],
-                    "direction": s["direction"], "grade": chance_checks.grade_of(score), "score": score}
-            if not all((stop > p) if short else (stop < p) for _, p in s["legs"]):
-                rows.append({**base, "at": s["placed_at"], "filled": False, "cancel": "stop binnen de instapzone"})
-                continue
-            fills = sq.simulate_fills(s["direction"], s["legs"], stop, mid, b15, s["place_idx15"])
-            if not fills["filled"]:
-                rows.append({**base, "at": s["placed_at"], "filled": False, "cancel": fills["cancel"]})
-                continue
-            m = sq.measure(s["direction"], fills["filled"], stop, b15, atr15, s["range_high"], s["range_low"], cost_pct)
-            rows.append({**base, "at": b15["timestamp"].iloc[fills["first"]], "filled": True, "cancel": "", **m})
+        extra = {"grade": chance_checks.grade_of(score), "score": score}
+        rows += [stop_row(s, name, rs.final_stop(s, name), f"{coin}:{v.name}:{k}", coin, v.name, b15, atr15, cost_pct, extra) for name in rs.raw_stops(s)]
     return pd.DataFrame(rows)
+
+
+def stop_row(s: dict, name: str, stop: float, row_id: str, coin: str, variant: str, b15: pd.DataFrame, atr15: np.ndarray, cost_pct: float,
+             extra: Optional[dict] = None) -> dict:
+    """Eén setup met één stop: vulling en verval tegen het midden van het referentiekader (range_high/range_low), daarna stopquality.measure.
+    Gedeeld door de range sweep en de zone-sweep, zodat beide families exact dezelfde regels voor vulling, verval en meting volgen."""
+    short = s["direction"] == "short"
+    base = {"row_id": row_id, "coin": coin, "variant": variant, "stop_name": name, "placed_at": s["placed_at"], "direction": s["direction"], **(extra or {})}
+    if not all((stop > p) if short else (stop < p) for _, p in s["legs"]):
+        return {**base, "at": s["placed_at"], "filled": False, "cancel": "stop binnen de instapzone"}
+    fills = sq.simulate_fills(s["direction"], s["legs"], stop, (s["range_high"] + s["range_low"]) / 2, b15, s["place_idx15"])
+    if not fills["filled"]:
+        return {**base, "at": s["placed_at"], "filled": False, "cancel": fills["cancel"]}
+    m = sq.measure(s["direction"], fills["filled"], stop, b15, atr15, s["range_high"], s["range_low"], cost_pct)
+    return {**base, "at": b15["timestamp"].iloc[fills["first"]], "filled": True, "cancel": "", **m}
 
 
 def placebo_coin(v: RSVariant, frames: dict, cache: dict, real: pd.DataFrame, cost_pct: float, seed: int = PLACEBO_SEED,
@@ -166,10 +172,11 @@ def edge_verdict(prim: pd.DataFrame, plac: pd.DataFrame) -> dict:
     return {**ev, "t_week": t, "checks": checks, "passes": passes, "reason": "" if passes else "faalt: " + ", ".join(k for k, ok in checks.items() if not ok)}
 
 
-def judge(rows: pd.DataFrame, placebo: dict, v: RSVariant) -> dict:
-    """rows: de rijen van alle coins samen voor deze variant. placebo: per getoetste stop de placeborijen van de gevulde rijen met die stop."""
+def judge(rows: pd.DataFrame, placebo: dict, v) -> dict:
+    """rows: de rijen van alle coins samen voor deze variant. placebo: per getoetste stop de placeborijen van de gevulde rijen met die stop.
+    `v` is een variant van deze familie of van de zone-sweep (zonesweep_lab): alleen `stops` en `descriptive_stop` worden gelezen."""
     part = lambda name: rows[rows["stop_name"] == name] if len(rows) else rows
-    out = {rs.DESCRIPTIVE_STOP: {"summary": sq.summarize(part(rs.DESCRIPTIVE_STOP))}}
+    out = {v.descriptive_stop: {"summary": sq.summarize(part(v.descriptive_stop))}} if v.descriptive_stop else {}
     for name in v.stops:
         p = part(name)
         summary = sq.summarize(p)
@@ -179,12 +186,13 @@ def judge(rows: pd.DataFrame, placebo: dict, v: RSVariant) -> dict:
     return out
 
 
-def select_live(results: list[tuple[RSVariant, dict]]) -> Optional[tuple[RSVariant, str]]:
+def select_live(results: list[tuple], buffer: Callable[[str], float] = lambda name: rs.STOP_BUFFER[name][1]) -> Optional[tuple]:
     """Vooraf vastgelegd: geslaagd op stopkwaliteit, dan de meeste vullingen, dan de laagste mediane kosten, dan de bredere stop (buffer, dan mediane
-    stopafstand). De laatste sleutels (namen) maken de keuze onafhankelijk van de volgorde van `results`."""
+    stopafstand). De laatste sleutels (namen) maken de keuze onafhankelijk van de volgorde van `results`. `buffer` geeft de buffer in ATR van een
+    stopnaam; de zone-sweep geeft die van zonesweep.BUFFERS."""
     cands = [(v, name, r[name]) for v, r in results for name in v.stops if r.get(name, {}).get("quality", {}).get("passes")]
     if not cands:
         return None
-    v, name, _ = min(cands, key=lambda c: (-c[2]["summary"]["n"], c[2]["summary"]["median_cost_r"], -rs.STOP_BUFFER[c[1]][1],
+    v, name, _ = min(cands, key=lambda c: (-c[2]["summary"]["n"], c[2]["summary"]["median_cost_r"], -buffer(c[1]),
                                            -c[2]["summary"].get("median_stop_pct", 0.0), c[0].name, c[1]))
     return v, name

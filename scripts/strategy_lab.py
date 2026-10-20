@@ -1,12 +1,13 @@
 """Strategie-lab: toetst kosten-robuuste regels op 1u en 4u (zie app/replay/trendlab.py). Draai op de VPS, de candles zijn klein en snel op te halen:
 
-  .venv/bin/python3 scripts/strategy_lab.py [--jaren 3] [--coins BTC,ETH,...] [--kosten 0.06] [--familie alle|kanteling|standaard|rangesweep] [--alleen-volledig] [--opslaan]
+  .venv/bin/python3 scripts/strategy_lab.py [--jaren 3] [--coins BTC,ETH,...] [--kosten 0.06] [--familie alle|kanteling|standaard|rangesweep|zonesweep] [--alleen-volledig] [--opslaan]
 
 Een variant slaagt alleen als beide helften positief zijn, de marge boven 0 ligt en hij beter is dan willekeurige instappen met dezelfde uitgang.
 Het aantal getoetste varianten staat in de uitvoer: hoe meer, hoe minder bijzonder een treffer is. Met --alleen-volledig tellen alleen coins mee die de hele periode bestaan (overlevingscontrole). Vertrouw alleen wat ook in de tweede helft overeind blijft.
 
 `alle` is alleen de trendlab-families; `--familie rangesweep` heeft een eigen register (app/replay/rangesweep_lab.py, pre-registratie in docs/onderzoek/range-sweep/)
-en eigen opties: --hervat MAP (tussenresultaat per coin, een onderbroken run gaat verder) en --rapport PAD (vult de tekst tussen de markers van het resultatenbestand)."""
+en eigen opties: --hervat MAP (tussenresultaat per coin, een onderbroken run gaat verder) en --rapport PAD (vult de tekst tussen de markers van het resultatenbestand).
+`--familie zonesweep` gebruikt dezelfde machinerie en opties met de varianten van app/replay/zonesweep_lab.py (pre-registratie in docs/onderzoek/zone-sweep/)."""
 import argparse
 import json
 import os
@@ -15,6 +16,7 @@ import pickle
 import re
 import subprocess
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -25,7 +27,7 @@ import pandas as pd  # noqa: E402
 
 from app import config, db, repo  # noqa: E402
 from app.replay import candles as candle_cache  # noqa: E402
-from app.replay import positioning, rangesweep as rs, rangesweep_lab as rl  # noqa: E402
+from app.replay import positioning, rangesweep_lab as rl, zonesweep_lab as zl  # noqa: E402
 from app.replay import stopquality as sq, trendlab as tl  # noqa: E402
 
 SUMMARY_KEYS = ("n", "avg", "ci", "week_ci", "train", "test", "placebo", "winrate", "gross", "median_risk_pct")
@@ -92,6 +94,20 @@ def load_coin(coin: str, timeframes, jaren: float) -> dict[str, pd.DataFrame]:
 BEGIN, END = "<!-- resultaten:begin -->", "<!-- resultaten:end -->"
 PART_VERSION = 2
 PREREG = Path(__file__).resolve().parent.parent / "docs" / "onderzoek" / "range-sweep" / "preregistratie.md"
+ZS_PREREG = PREREG.parent.parent / "zone-sweep" / "preregistratie.md"
+
+
+@dataclass(frozen=True)
+class SweepFamily:
+    """Een labfamilie met stopkwaliteit als kop. `lab` is de module (rangesweep_lab of zonesweep_lab); alles wordt bij gebruik van de module gelezen,
+    zodat een test die een attribuut van de module vervangt ook hier geldt."""
+    name: str
+    lab: object
+    prereg: Path
+
+
+RANGESWEEP = SweepFamily("rangesweep", rl, PREREG)
+ZONESWEEP = SweepFamily("zonesweep", zl, ZS_PREREG)
 
 
 def write_between_markers(text: str, block: str) -> str:
@@ -102,23 +118,23 @@ def write_between_markers(text: str, block: str) -> str:
     return f"{head}{BEGIN}\n{block}\n{END}{tail}"
 
 
-def check_rangesweep_costs(kosten: float, opslaan: bool) -> None:
-    if opslaan and kosten < rl.LAB_COST_PCT:
-        sys.exit(f"--opslaan voor rangesweep vraagt --kosten {rl.LAB_COST_PCT} of hoger (gekozen {kosten})")
+def check_rangesweep_costs(kosten: float, opslaan: bool, fam: SweepFamily = RANGESWEEP) -> None:
+    if opslaan and kosten < fam.lab.LAB_COST_PCT:
+        sys.exit(f"--opslaan voor {fam.name} vraagt --kosten {fam.lab.LAB_COST_PCT} of hoger (gekozen {kosten})")
 
 
-def check_rangesweep_protocol(a) -> None:
+def check_rangesweep_protocol(a, fam: SweepFamily = RANGESWEEP) -> None:
     """Opslaan mag alleen voor het bevroren protocol (alle LAB_COINS, 3 jaar, --alleen-volledig): een PASS uit een deelverzameling coins of een kortere
-    periode zegt niets over de 64 toetsen waarop de horde van t \u2265 3,4 gebaseerd is."""
+    periode zegt niets over de toetsen in het register waarop de horde van t \u2265 3,4 gebaseerd is."""
     if not a.opslaan:
         return
     coins = a.coins.split(",")
     if len(coins) != len(set(coins)) or set(coins) != set(tl.LAB_COINS):
-        sys.exit(f"--opslaan voor rangesweep vraagt precies de {len(tl.LAB_COINS)} coins van trendlab.LAB_COINS (de standaard van --coins), geen deelverzameling")
-    if a.jaren != rl.LAB_YEARS:
-        sys.exit(f"--opslaan voor rangesweep vraagt --jaren {rl.LAB_YEARS:g} (gekozen {a.jaren:g})")
+        sys.exit(f"--opslaan voor {fam.name} vraagt precies de {len(tl.LAB_COINS)} coins van trendlab.LAB_COINS (de standaard van --coins), geen deelverzameling")
+    if a.jaren != fam.lab.LAB_YEARS:
+        sys.exit(f"--opslaan voor {fam.name} vraagt --jaren {fam.lab.LAB_YEARS:g} (gekozen {a.jaren:g})")
     if not a.alleen_volledig:
-        sys.exit("--opslaan voor rangesweep vraagt --alleen-volledig (de overlevingscontrole hoort bij het bevroren protocol)")
+        sys.exit(f"--opslaan voor {fam.name} vraagt --alleen-volledig (de overlevingscontrole hoort bij het bevroren protocol)")
 
 
 def check_rangesweep_verdict(choice, opslaan: bool) -> None:
@@ -148,10 +164,10 @@ def git_head() -> Optional[str]:
         return None
 
 
-def prereg_hash() -> Optional[str]:
+def prereg_hash(path: Path = PREREG) -> Optional[str]:
     """Hash van het constantenblok van de pre-registratie: een wijziging van een drempel tussen twee coins van dezelfde run valt zo op."""
     try:
-        block = re.search(r"```prereg-constants\n(.*?)```", PREREG.read_text(encoding="utf-8"), re.S).group(1)
+        block = re.search(r"```prereg-constants\n(.*?)```", path.read_text(encoding="utf-8"), re.S).group(1)
     except (OSError, AttributeError):
         return None
     return hashlib.sha256(block.encode("utf-8")).hexdigest()
@@ -165,16 +181,18 @@ def cached_last_15m(coin: str) -> Optional[pd.Timestamp]:
         return None
 
 
-def _settings(a) -> dict:
-    return {"versie": PART_VERSION, "kosten": a.kosten, "jaren": a.jaren, "varianten": [v.name for v in rl.VARIANTS], "coins": a.coins.split(","),
-            "alleen_volledig": bool(a.alleen_volledig), "git": git_head(), "prereg": prereg_hash(), "placebo_draws": rl.PLACEBO_DRAWS,
-            "placebo_seed": rl.PLACEBO_SEED}
+def _settings(a, fam: SweepFamily = RANGESWEEP) -> dict:
+    # Geen eigen sleutel voor de familie: de namen van de varianten verschillen al per familie, en een extra sleutel zou bestaande mappen van de
+    # range sweep op de VPS ongeldig maken.
+    return {"versie": PART_VERSION, "kosten": a.kosten, "jaren": a.jaren, "varianten": [v.name for v in fam.lab.VARIANTS], "coins": a.coins.split(","),
+            "alleen_volledig": bool(a.alleen_volledig), "git": git_head(), "prereg": prereg_hash(fam.prereg), "placebo_draws": fam.lab.PLACEBO_DRAWS,
+            "placebo_seed": fam.lab.PLACEBO_SEED}
 
 
-def _check_part_settings(outdir: Path, a) -> dict:
+def _check_part_settings(outdir: Path, a, fam: SweepFamily = RANGESWEEP) -> dict:
     """Tussenresultaten gelden alleen voor dezelfde kosten, jaren, coins, varianten, code (git), pre-registratie en placebo-instellingen; anders zou een
     hervatte run oude en nieuwe coins stil mengen. Een onbekende git-hash (geen git) blokkeert niet. Geeft de opgeslagen instellingen terug."""
-    want = _settings(a)
+    want = _settings(a, fam)
     meta = outdir / "instellingen.json"
     if not meta.exists():
         saved = {**want, "laatste_15m": {}}
@@ -228,25 +246,30 @@ def _pct(x) -> str:
     return "-" if x is None else f"{x * 100:.0f}%"
 
 
-MULTIPLE_TESTING_NOTE = ("Let op: de toetsen op stopkwaliteit hebben geen correctie voor meervoudig toetsen. Bij 30 toetsen met een eenzijdige ondergrens van 2,5% op "
-                         "het verschil met willekeurige instappen is de kans groot dat minstens een toets die ene eis toevallig haalt. Een PASS is dus een screening-resultaat "
-                         "en moet vooruit bevestigd worden in de proef.")
+def multiple_testing_note(n_tests: int) -> str:
+    return (f"Let op: de toetsen op stopkwaliteit hebben geen correctie voor meervoudig toetsen. Bij {n_tests} toetsen met een eenzijdige ondergrens van 2,5% op "
+            "het verschil met willekeurige instappen is de kans groot dat minstens een toets die ene eis toevallig haalt. Een PASS is dus een screening-resultaat "
+            "en moet vooruit bevestigd worden in de proef.")
 
 
-def kill_line(results) -> str:
+MULTIPLE_TESTING_NOTE = multiple_testing_note(sq.KILL_TESTS)
+
+
+def kill_line(results, tests: int = sq.KILL_TESTS) -> str:
     """S2 en S3 van de pre-registratie via stopquality.kill_check, zodat de uitvoer het besluit noemt en niet alleen de aantallen."""
-    kill = sq.kill_check([{"summary": r[n]["summary"], "accept": r[n]["quality"]} for v, r in results for n in v.stops])
+    kill = sq.kill_check([{"summary": r[n]["summary"], "accept": r[n]["quality"]} for v, r in results for n in v.stops], tests)
     if kill["status"] != "volledig":
-        return f"Stopcriteria: S2 en S3 niet beoordeeld: {kill['tests']} van {sq.KILL_TESTS} toetsen."
+        return f"Stopcriteria: S2 en S3 niet beoordeeld: {kill['tests']} van {tests} toetsen."
     yn = lambda x: "ja" if x else "nee"
     return (f"Stopcriteria: S2 (geen enkele toets geslaagd): {yn(kill['S2'])}. "
             f"S3 (mediane kosten boven {sq.MAX_MEDIAN_COST_R:.2f}R bij alle toetsen): {yn(kill['S3'])}.".replace(".10R", ",10R"))
 
 
-def render_rangesweep(results, meta: dict) -> str:
+def render_rangesweep(results, meta: dict, fam: SweepFamily = RANGESWEEP) -> str:
     n_tests = sum(len(v.stops) for v, _ in results)
+    kill_tests = getattr(fam.lab, "KILL_TESTS", sq.KILL_TESTS)
     lines = [f"Run: {meta['first']} tot {meta['last']}, {meta['coins']} coins, kosten {meta['kosten']}% per rondreis, {meta['jaren']} jaar.",
-             f"{n_tests} toetsen in deze familie, {rl.TESTED_TOTAL} in het register sinds het begin; horde voor een voordeel t \u2265 {rl.EDGE_T_MIN}.", "",
+             f"{n_tests} toetsen in deze familie, {fam.lab.TESTED_TOTAL} in het register sinds het begin; horde voor een voordeel t \u2265 {fam.lab.EDGE_T_MIN}.", "",
              "### Stopkwaliteit (de kop)", "",
              "| Variant | Stop | Setups | Gevuld | Stop % | Kosten R | Stop geraakt | +1R vóór de stop | +2R | +3R | +6R | Te krap | Tegen willekeurig | Oordeel |",
              "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -263,7 +286,7 @@ def render_rangesweep(results, meta: dict) -> str:
                          f"{_pct(s['reach'][1]['p'])} ({ci[0] * 100:.0f} tot {ci[1] * 100:.0f}%) | {_pct(s['reach'][2]['p'])} | {_pct(s['reach'][3]['p'])} | "
                          f"{_pct(s['reach'][6]['p'])} | {_pct(s['tight_rate'])} | {q['placebo_diff'] * 100:+.1f} pp | {'SLAAGT' if q['passes'] else q['reason']} |")
     lines += ["", f"{passed} van {n_tests} toetsen slagen op stopkwaliteit." + (" Stopcriterium S2: geen enkele toets slaagt." if not passed else ""),
-              kill_line(results), MULTIPLE_TESTING_NOTE, "",
+              kill_line(results, kill_tests), multiple_testing_note(kill_tests), "",
               "### Netto R bij de referentie-uitgangen (ernaast, nooit de kop)", "",
               "| Variant | Stop | Midden | Overkant | Meelopend (3 ATR 1u) | t per week | Strenge toets |", "|---|---|---|---|---|---|---|"]
     for v, r in results:
@@ -273,20 +296,31 @@ def render_rangesweep(results, meta: dict) -> str:
                 continue
             ref = lambda k: "-" if s["ref"][k]["avg_net"] is None else f"{s['ref'][k]['avg_net']:+.3f}"
             lines.append(f"| {v.name} | {name} | {ref('mid')} | {ref('opp')} | {ref('trail')} | {e.get('t_week', 0):.2f} | {'SLAAGT' if e.get('passes') else e.get('reason', '')} |")
-    lines += ["", "### Score per graad (beschrijvend, geen poort)", "", "| Variant | Stop | Graad | n | +1R vóór de stop | Stop geraakt |", "|---|---|---|---|---|---|"]
-    for v, r in results:
-        for name in v.stops:
-            for g, x in sorted(r[name]["summary"].get("by_grade", {}).items()):
-                lines.append(f"| {v.name} | {name} | {g} | {x['n']} | {_pct(x['reach1'])} | {_pct(x['stop_hit'])} |")
-    lines += ["", "Ter vergelijking, stop op de buitenkant van de zone zonder buffer (geen toets):", ""]
-    for v, r in results:
-        w = r[rs.DESCRIPTIVE_STOP]["summary"]
+    grades = [f"| {v.name} | {name} | {g} | {x['n']} | {_pct(x['reach1'])} | {_pct(x['stop_hit'])} |"
+              for v, r in results for name in v.stops for g, x in sorted(r[name]["summary"].get("by_grade", {}).items())]
+    # De zone-sweep heeft geen score per kans (chance_checks kent alleen de range sweep): zonder graden geen lege tabel.
+    if grades:
+        lines += ["", "### Score per graad (beschrijvend, geen poort)", "", "| Variant | Stop | Graad | n | +1R vóór de stop | Stop geraakt |", "|---|---|---|---|---|---|",
+                  *grades]
+    descriptive = [(v, r[v.descriptive_stop]["summary"]) for v, r in results if v.descriptive_stop]
+    if descriptive:
+        lines += ["", "Ter vergelijking, stop op de buitenkant van de zone zonder buffer (geen toets):", ""]
+    for v, w in descriptive:
         if w.get("n"):
             lines.append(f"- {v.name}: {w['n']} gevuld, stop geraakt {_pct(w['stop_hit']['p'])}, te krap {_pct(w['tight_rate'])}, kosten {w['median_cost_r']:.3f}R")
     return "\n".join(lines)
 
 
 def save_rangesweep(results, live_choice, now_iso: str) -> int:
+    return save_sweep(results, live_choice, now_iso, "range_sweep_stop", "range_sweep")
+
+
+def save_zonesweep(results, live_choice, now_iso: str) -> int:
+    return save_sweep(results, live_choice, now_iso, zl.STOP_KEY, zl.EDGE_KEY)
+
+
+def save_sweep(results, live_choice, now_iso: str, stop_key: str, edge_key: str) -> int:
+    """Per variant een regel in rule_status, plus de toets op stopkwaliteit (`stop_key`) en de strenge toets (`edge_key`) van de gekozen variant."""
     db.init_db()
     saved = 0
     for v, r in results:
@@ -296,20 +330,21 @@ def save_rangesweep(results, live_choice, now_iso: str) -> int:
                                                                   "quality_passes": bool(r[best]["quality"]["passes"])}, now_iso)
         saved += 1
     if live_choice is None:
-        repo.set_rule_lab("range_sweep_stop", False, {"variant": None, "reason": "geen toets slaagde op stopkwaliteit"}, now_iso)
-        repo.set_rule_lab("range_sweep", False, {"variant": None}, now_iso)
+        repo.set_rule_lab(stop_key, False, {"variant": None, "reason": "geen toets slaagde op stopkwaliteit"}, now_iso)
+        repo.set_rule_lab(edge_key, False, {"variant": None}, now_iso)
         return saved + 2
     v, name = live_choice
     cell = next(r for vv, r in results if vv == v)[name]
-    repo.set_rule_lab("range_sweep_stop", True, {"variant": v.name, "stop_name": name, "quality": cell["quality"], "summary": cell["summary"],
+    repo.set_rule_lab(stop_key, True, {"variant": v.name, "stop_name": name, "quality": cell["quality"], "summary": cell["summary"],
                                                  "doelkans": cell["doelkans"]}, now_iso)
-    repo.set_rule_lab("range_sweep", bool(cell["edge"].get("passes")), {"variant": v.name, "stop_name": name, **{k: cell["edge"].get(k) for k in ("n", "avg", "t_week", "reason")}}, now_iso)
+    repo.set_rule_lab(edge_key, bool(cell["edge"].get("passes")), {"variant": v.name, "stop_name": name, **{k: cell["edge"].get(k) for k in ("n", "avg", "t_week", "reason")}}, now_iso)
     return saved + 2
 
 
-def _run_one_coin(coin: str, a, ensure, positioning_fn) -> tuple[dict, dict, list]:
+def _run_one_coin(coin: str, a, ensure, positioning_fn, fam: SweepFamily = RANGESWEEP) -> tuple[dict, dict, list]:
+    lab = fam.lab
     try:
-        frames = rl.load_frames(coin, a.jaren, ensure)
+        frames = lab.load_frames(coin, a.jaren, ensure)
     except Exception as exc:
         print(f"{coin}: geen candles ({exc})", flush=True)
         return {}, {}, []
@@ -319,25 +354,35 @@ def _run_one_coin(coin: str, a, ensure, positioning_fn) -> tuple[dict, dict, lis
     check_coverage(coin, frames, a.jaren)
     span = [frames["15m"]["timestamp"].iloc[0], frames["15m"]["timestamp"].iloc[-1]]
     metrics = None
-    try:
-        metrics, _ = positioning_fn(coin, span[0], span[1])
-        print(f"{coin}: OI vanaf {metrics['timestamp'].iloc[0]:%Y-%m-%d}" if len(metrics) else f"{coin}: geen OI", flush=True)
-    except Exception as exc:
-        print(f"{coin}: geen OI ({exc})", flush=True)
+    if any(v.oi_flush for v in lab.VARIANTS):
+        try:
+            metrics, _ = positioning_fn(coin, span[0], span[1])
+            print(f"{coin}: OI vanaf {metrics['timestamp'].iloc[0]:%Y-%m-%d}" if len(metrics) else f"{coin}: geen OI", flush=True)
+        except Exception as exc:
+            print(f"{coin}: geen OI ({exc})", flush=True)
     cache, rows, plac = {}, {}, {}
-    for v in rl.VARIANTS:
-        r = rl.run_coin(v, coin, frames, a.kosten, cache, metrics if v.oi_flush else None)
+    for v in lab.VARIANTS:
+        r = lab.run_coin(v, coin, frames, a.kosten, cache, metrics if v.oi_flush else None)
         rows[v.name] = r
         filled = r[r["filled"].astype(bool)] if len(r) else r
-        plac[v.name] = rl.placebo_by_stop(v, frames, cache, filled, a.kosten)
+        plac[v.name] = lab.placebo_by_stop(v, frames, cache, filled, a.kosten)
         print(f"{coin} {v.name}: {len(r)} rijen", flush=True)
     return rows, plac, span
 
 
 def run_rangesweep(a, ensure=candle_cache.ensure_candles, positioning_fn=positioning.ensure_positioning, last_15m=cached_last_15m) -> None:
     """`ensure`, `positioning_fn` en `last_15m` zijn de naad voor de tests: kunstmatige candles zonder beurs of schijf."""
-    check_rangesweep_costs(a.kosten, a.opslaan)
-    check_rangesweep_protocol(a)
+    run_sweep(RANGESWEEP, a, ensure, positioning_fn, last_15m)
+
+
+def run_zonesweep(a, ensure=candle_cache.ensure_candles, positioning_fn=positioning.ensure_positioning, last_15m=cached_last_15m) -> None:
+    run_sweep(ZONESWEEP, a, ensure, positioning_fn, last_15m)
+
+
+def run_sweep(fam: SweepFamily, a, ensure, positioning_fn, last_15m) -> None:
+    lab = fam.lab
+    check_rangesweep_costs(a.kosten, a.opslaan, fam)
+    check_rangesweep_protocol(a, fam)
     if a.verse_start and not a.hervat:
         sys.exit("--verse-start hoort bij --hervat MAP")
     report = Path(a.rapport) if a.rapport else None
@@ -360,9 +405,9 @@ def run_rangesweep(a, ensure=candle_cache.ensure_candles, positioning_fn=positio
         outdir.mkdir(parents=True, exist_ok=True)
         if a.verse_start:
             _wipe_parts(outdir)
-        saved = _check_part_settings(outdir, a)
-    all_rows = {v.name: [] for v in rl.VARIANTS}
-    all_plac = {v.name: {n: [] for n in v.stops} for v in rl.VARIANTS}
+        saved = _check_part_settings(outdir, a, fam)
+    all_rows = {v.name: [] for v in lab.VARIANTS}
+    all_plac = {v.name: {n: [] for n in v.stops} for v in lab.VARIANTS}
     span = []
     for coin in coins:
         paths = coin_part_paths(outdir, coin) if outdir else None
@@ -372,12 +417,12 @@ def run_rangesweep(a, ensure=candle_cache.ensure_candles, positioning_fn=positio
             rows, plac, cspan = part
             print(f"{coin}: uit {paths[0]}", flush=True)
         else:
-            rows, plac, cspan = _run_one_coin(coin, a, ensure, positioning_fn)
+            rows, plac, cspan = _run_one_coin(coin, a, ensure, positioning_fn, fam)
             if paths and cspan:
                 _save_part(paths, rows, plac, cspan)
                 _pin_last_15m(outdir, saved, coin, cspan[1])
         span += cspan
-        for v in rl.VARIANTS:
+        for v in lab.VARIANTS:
             if len(rows.get(v.name, [])):
                 all_rows[v.name].append(rows[v.name])
             for n in v.stops:
@@ -385,22 +430,24 @@ def run_rangesweep(a, ensure=candle_cache.ensure_candles, positioning_fn=positio
                 if p is not None and len(p):
                     all_plac[v.name][n].append(p)
     results = []
-    for v in rl.VARIANTS:
+    for v in lab.VARIANTS:
         r = pd.concat(all_rows[v.name], ignore_index=True) if all_rows[v.name] else pd.DataFrame(columns=["stop_name", "filled", "at", "cancel"])
-        results.append((v, rl.judge(r, {n: pd.concat(p, ignore_index=True) if p else pd.DataFrame() for n, p in all_plac[v.name].items()}, v)))
+        results.append((v, lab.judge(r, {n: pd.concat(p, ignore_index=True) if p else pd.DataFrame() for n, p in all_plac[v.name].items()}, v)))
     meta = {"kosten": a.kosten, "jaren": a.jaren, "coins": len(span) // 2, "first": f"{min(span):%Y-%m-%d}" if span else "-",
             "last": f"{max(span):%Y-%m-%d}" if span else "-"}
-    print(f"\n{len(rl.VARIANTS)} varianten, {sum(len(v.stops) for v in rl.VARIANTS)} toetsen; samen met eerder bekeken varianten {rl.TESTED_TOTAL} in het register: een toevallige treffer is dan normaal.")
-    md = render_rangesweep(results, meta)
+    print(f"\n{len(lab.VARIANTS)} varianten, {sum(len(v.stops) for v in lab.VARIANTS)} toetsen; samen met eerder bekeken varianten {lab.TESTED_TOTAL} in het register: een toevallige treffer is dan normaal.")
+    md = render_rangesweep(results, meta, fam)
     print(md)
-    choice = rl.select_live(results)
+    choice = lab.select_live(results)
     print(f"\nGekozen voor de proef: {choice[0].name} met stop {choice[1]}" if choice else "\nGeen variant gekozen voor de proef (S2).")
     if report:
         report.write_text(write_between_markers(report.read_text(encoding="utf-8"), md), encoding="utf-8")
         print(f"Rapport geschreven naar {report}")
     check_rangesweep_verdict(choice, a.opslaan)
     if a.opslaan:
-        print(f"{save_rangesweep(results, choice, datetime.now(timezone.utc).isoformat())} regels opgeslagen.")
+        # Bij aanroep opgezocht (niet in SweepFamily vastgelegd), zodat een test de opslagfunctie van de module kan vervangen.
+        save = {"rangesweep": save_rangesweep, "zonesweep": save_zonesweep}[fam.name]
+        print(f"{save(results, choice, datetime.now(timezone.utc).isoformat())} regels opgeslagen.")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -408,13 +455,13 @@ def build_parser() -> argparse.ArgumentParser:
     ap.add_argument("--coins", default=LAB_COINS)
     ap.add_argument("--jaren", type=float, default=3.0)
     ap.add_argument("--kosten", type=float, default=config.TRACK_RECORD_COST_PCT)
-    ap.add_argument("--familie", choices=("alle", "kanteling", "standaard", "rangesweep"), default="alle",
-                    help="welke varianten: alle (trendlab), alleen de kanteling, alleen de oudere, of de range sweep-familie")
+    ap.add_argument("--familie", choices=("alle", "kanteling", "standaard", "rangesweep", "zonesweep"), default="alle",
+                    help="welke varianten: alle (trendlab), alleen de kanteling, alleen de oudere, de range sweep- of de zone-sweep-familie")
     ap.add_argument("--alleen-volledig", action="store_true", help="alleen coins met candles over de volle periode (overlevingscontrole)")
     ap.add_argument("--opslaan", action="store_true", help="bewaar de uitkomst per regel in de database; zonder deze vlag schrijft het script niets")
-    ap.add_argument("--rapport", help="rangesweep: schrijf de uitkomst tussen de markers van dit markdownbestand")
-    ap.add_argument("--hervat", help="rangesweep: map voor tussenresultaten per coin; een tweede run slaat klare coins over")
-    ap.add_argument("--verse-start", action="store_true", help="rangesweep, met --hervat: wis de tussenresultaten en de vastgelegde instellingen en begin opnieuw")
+    ap.add_argument("--rapport", help="rangesweep en zonesweep: schrijf de uitkomst tussen de markers van dit markdownbestand")
+    ap.add_argument("--hervat", help="rangesweep en zonesweep: map voor tussenresultaten per coin; een tweede run slaat klare coins over")
+    ap.add_argument("--verse-start", action="store_true", help="rangesweep en zonesweep, met --hervat: wis de tussenresultaten en de vastgelegde instellingen en begin opnieuw")
     return ap
 
 
@@ -422,6 +469,8 @@ def main() -> None:
     a = build_parser().parse_args()
     if a.familie == "rangesweep":
         return run_rangesweep(a)
+    if a.familie == "zonesweep":
+        return run_zonesweep(a)
     variants = select_variants(a.familie)
     timeframes = needed_timeframes(variants)
     coins = a.coins.split(",")

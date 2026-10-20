@@ -56,6 +56,9 @@ LAB_LABELS = {
     "rz_2h_split": "Zone-retest 2u, 40/60 verdeeld", "rs_30m": "Range sweep 30m", "rs_1h": "Range sweep 1u", "rs_2h": "Range sweep 2u",
     "rs_4h": "Range sweep 4u", "rs_1h_choch": "Range sweep 1u, CHoCH 15m", "rs_1h_zonderhtf": "Range sweep 1u zonder HTF",
     "rs_1h_oiflush": "Range sweep 1u met OI-daling", "range_sweep_stop": "Range sweep, stopkwaliteit",
+    "zs_1h": "Zone-sweep 1u", "zs_2h": "Zone-sweep 2u", "zs_4h": "Zone-sweep 4u", "zs_1h_zonderhtf": "Zone-sweep 1u zonder HTF",
+    "zs_2h_zonderhtf": "Zone-sweep 2u zonder HTF", "zs_4h_zonderhtf": "Zone-sweep 4u zonder HTF", "zs_2h_midden": "Zone-sweep 2u, midden van de zone",
+    "zone_sweep_stop": "Zone-sweep, stopkwaliteit", "zone_sweep": "Zone-sweep, toets op een voordeel",
 }
 SOURCE_LABELS = {"scan": "Door HesPulse gevonden", "community": "Via de community"}
 STATUS_LABELS = {

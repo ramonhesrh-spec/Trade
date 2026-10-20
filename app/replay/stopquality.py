@@ -262,11 +262,12 @@ def accept(summary: dict, real: pd.DataFrame, placebo: pd.DataFrame) -> dict:
             "placebo_pairs": len(diff)}
 
 
-def kill_check(results: list[dict]) -> dict:
+def kill_check(results: list[dict], tests: int = KILL_TESTS) -> dict:
     """Stopcriteria S2 en S3 van de pre-registratie, vooraf vastgelegd. `results`: per toets {"summary": ..., "accept": ...}. S2: geen enkele
     toets slaagt op stopkwaliteit. S3: bij alle toetsen zijn de mediane kosten hoger dan het maximum; een toets zonder vullingen heeft geen
-    mediane kosten en houdt S3 dus tegen. Beslist pas over een volledige set van KILL_TESTS toetsen; anders status 'onvolledig' en geen van beide."""
-    if len(results) != KILL_TESTS:
+    mediane kosten en houdt S3 dus tegen. Beslist pas over een volledige set van `tests` toetsen (KILL_TESTS voor de range sweep, de zone-sweep geeft
+zonesweep_lab.KILL_TESTS); anders status 'onvolledig' en geen van beide."""
+    if len(results) != tests:
         return {"status": "onvolledig", "S2": False, "S3": False, "tests": len(results)}
     s2 = not any(r["accept"]["passes"] for r in results)
     costs = [r["summary"].get("median_cost_r") for r in results]
