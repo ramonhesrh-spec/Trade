@@ -20,7 +20,7 @@ De gebruiker liet zeven voorbeelden zien uit één nacht (19 en 20 oktober 2026)
 
 **Herstel.** Binnen 6 triggercandles sluit een candle weer boven de onderkant van de zone. Zonder herstel in 6 candles is het geen setup, en dezelfde zone telt 24 triggercandles niet.
 
-**Instap.** Limiet op de bovenkant van de zone (tweede variant: het midden van de zone), geplaatst na het herstel. Orders vervallen na 24 uur. Dezelfde regels voor vulling en verval als de range sweep.
+**Instap.** Limiet op de bovenkant van de zone (tweede variant: het midden van de zone), geplaatst na het herstel. Ligt die prijs boven het slot van de herstelcandle (long; bij short gespiegeld), dan is het slot zelf de limiet: de koers staat dan al in of onder de zone en de instap is meteen. Orders vervallen na 24 uur. Dezelfde regels voor vulling en verval als de range sweep.
 
 **Stop.** Onder het uiterste van de prik plus 0,25 ATR of 0,5 ATR (twee stops per variant). Daarna `smc_eval.floor_stop` met ondergrens 0,4%.
 
@@ -44,7 +44,7 @@ De gebruiker liet zeven voorbeelden zien uit één nacht (19 en 20 oktober 2026)
 
 ## Poorten
 
-1. Misser-controle op de voorbeelden: minstens 5 van de 7 gezien door minstens één variant.
+1. Misser-controle op de voorbeelden. VERVALLEN, zie 'Aanvullende besluiten'.
 2. Getekende setups: 30 willekeurige kaarten tot het plaatsmoment, minstens 80% klopt volgens de gebruiker (zoals poort 1 van de range sweep).
 3. Daarna bevriezen en één volledige labrun (20 coins, 3 jaar, kosten 0,12%).
 4. Pas bij een geslaagde labrun een proefmotor, eerst alleen voor de CEO.
@@ -54,3 +54,9 @@ De gebruiker liet zeven voorbeelden zien uit één nacht (19 en 20 oktober 2026)
 - De namen van de drie coins zonder naam (prijzen rond 1,05, rond 58 en rond 0,12).
 - Per voorbeeld de tijd van de prik en de instapprijs.
 - Minstens vijf voorbeelden van andere dagen, waarvan minstens twee waar de koers doorzakte en de stop raakte.
+
+## Aanvullende besluiten (2026-10-20, vóór de eerste labrun)
+
+- **Poort 0a vervalt.** De misser-controle zag 2 van de 6 afleesbare voorbeelden (ETH en WLD, beide op 4u). De meting (`scripts/zone_probe.py`) liet zien dat de candles van de VPS en de grafieken van de gebruiker niet overeenkomen: de stop van ETH (2.308,59) en SUI (0,9203) lag onder het laagste punt in onze data (2.329 en 0,9372), en het plaatje dat ik als ARB las had geen coinnaam en een prijs die bij ARB niet past. Zonder tijd, beurs en instrument per voorbeeld is afstellen op deze zes zinloos. De gebruiker koos ervoor dat niet uit te zoeken. Beperking, ook voor Bewijs: de uitkomst zegt iets over de prikken die onze detector op onze candles vindt, niet over de trades van de gebruiker.
+- **Afstelling vermeden.** Dat meerdere zones van de voorbeelden weken oud zijn (onze zones vervallen na 200 candles) en dat sommige zones pas na de prik ontstaan, staat in `zone_probe` en is geen reden om de zone-regels nu aan te passen: we stellen niet af op voorbeelden waarvan de data niet klopt.
+- **Wel aangepast: de limiet (definitieronde 1).** Zie 'Instap' hierboven. Reden: een limiet boven de koers is een marktorder; de eerdere regel weigerde ZEC, OP en WLD (2u) om een fout in de regel, niet in de voorbeelden.
