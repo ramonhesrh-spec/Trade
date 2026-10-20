@@ -107,13 +107,11 @@ class SetupTest(unittest.TestCase):
         self.assertEqual(len(setups), 1)
         self.assertTrue(any(r["reason"] == "zone had al een setup" for r in refused), refused)
 
-    def test_limit_on_the_wrong_side_is_refused(self):
+    def test_limit_on_the_wrong_side_becomes_a_market_entry(self):
         low_close = (100.8, 100.9, 99.2, 100.1)
-        setups, refused = find(base([low_close] + UP))
-        self.assertEqual(setups, [])
-        self.assertTrue(any(r["reason"].startswith("geen geldige limiet") for r in refused), refused)
-        mid, _ = find(base([low_close] + UP), entry="midden")
-        self.assertEqual(len(mid), 1)
+        setups, _ = find(base([low_close] + UP))
+        self.assertEqual(len(setups), 1)
+        self.assertAlmostEqual(setups[0]["legs"][0][1], 100.1)
 
     def test_htf_filter_refuses_a_prik_against_the_trend(self):
         rows = base([PRIK_HERSTEL] + UP)
@@ -186,11 +184,6 @@ class DiagnoseTest(unittest.TestCase):
         self.assertEqual(quiet["reason"], "wel een zone, maar geen prik eronder")
 
     def test_refusal_reason_is_reported(self):
-        low_close = (100.8, 100.9, 99.2, 100.1)
-        f = make_frames(base([low_close] + UP))
+        f = make_frames(base(UP))
         at = START + pd.Timedelta(hours=30 + len(ZONE) + len(DRIFT) + 1)
-        self.assertTrue(zs.diagnose(f, at, "long", "1h", "zone", False)["reason"].startswith("geen geldige limiet"))
-
-
-if __name__ == "__main__":
-    unittest.main()
+        self.assertTrue(zs.diagnose(f, at, "long", "1h", "zone", False)["reason"].startswith("wel een zone"))

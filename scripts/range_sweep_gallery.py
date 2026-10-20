@@ -19,7 +19,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 from app import misser, setup_chart  # noqa: E402
-from app.replay import candles as cc, rangesweep as rs  # noqa: E402
+from app.replay import candles as cc, rangesweep as rs, zonesweep as zs  # noqa: E402
 from app.replay.lab import add_indicators  # noqa: E402
 
 COMBOS = (("zone", "zone", "slot"), ("sweep", "ob", "slot"))
@@ -46,7 +46,8 @@ def card(title: str, frame: pd.DataFrame, setup: dict, zones: list[dict], after_
     candles = _candles(frame, setup["range_first_at"] - span * 0.15, setup["placed_at"] + pd.Timedelta(hours=after_hours))
     own = {(round(setup["zone_low"], 8), round(setup["zone_high"], 8)), }
     others = [z for z in zones if (round(z["low"], 8), round(z["high"], 8)) not in own]
-    return (f"<section><h2>{escape(title)}</h2>{setup_chart.range_sweep_svg(candles, setup, rs.final_stop(setup, STOP), zones=others)}"
+    stop = zs.final_stop(setup, "wick_025") if setup["family"] == "zonesweep" else rs.final_stop(setup, STOP)
+    return (f"<section><h2>{escape(title)}</h2>{setup_chart.range_sweep_svg(candles, setup, stop, zones=others)}"
             "<p>klopt / klopt niet: ______</p></section>")
 
 
@@ -73,10 +74,19 @@ def from_csv(path: str, fetch_frames) -> list[str]:
     return cards
 
 
-def random_cards(coins: list[str], n: int, years: float) -> list[str]:
+def random_cards(coins: list[str], n: int, years: float, familie: str = "rangesweep") -> list[str]:
     pool = []
     for coin in coins:
         frames = rs.build_frames(*(cc.ensure_candles(coin, years, timeframe=tf) for tf in ("15m", "1h", "4h")))
+        if familie == "zonesweep":
+            seen = set()
+            for tf in zs.TFS:
+                for s in zs.find_setups(frames, tf, "zone", True)[0]:
+                    key = (s["direction"], s["placed_at"], round(s["zone_low"], 8))
+                    if key not in seen:
+                        seen.add(key)
+                        pool.append((coin, tf, "zone-sweep", s, frames["1h"]))
+            continue
         for tf in rs.TFS:
             for family, entry, confirm in COMBOS:
                 pool += [(coin, tf, family, s, frames[tf]) for s in rs.find_setups(frames, tf, family, entry, confirm, use_htf=True)[0]]
@@ -92,6 +102,7 @@ def main() -> None:
     ap.add_argument("--n", type=int, default=30)
     ap.add_argument("--jaren", type=float, default=1.0)
     ap.add_argument("--candles-map", help="map met {COIN}_{tf}.csv in plaats van de beurs, alleen voor --csv")
+    ap.add_argument("--familie", choices=("rangesweep", "zonesweep"), default="rangesweep", help="voor de willekeurige kaarten (zonder --csv)")
     ap.add_argument("--uit", default="/tmp/range_sweep_galerij.html")
     a = ap.parse_args()
     if a.csv:
@@ -99,7 +110,7 @@ def main() -> None:
         fetch = misser_check.cache_fetch(a.candles_map) if a.candles_map else None
         cards = from_csv(a.csv, lambda coin, at: misser_check.fetch_rangesweep(coin, at, fetch=fetch))
     else:
-        cards = random_cards(a.coins.split(","), a.n, a.jaren)
+        cards = random_cards(a.coins.split(","), a.n, a.jaren, a.familie)
     Path(a.uit).write_text(page(cards), encoding="utf-8")
     print(f"{len(cards)} kaarten in {a.uit}")
 

@@ -111,9 +111,9 @@ def find_setups(frames: dict, tf: str, entry: str, use_htf: bool) -> tuple[list[
                 continue
             ref_price = float(cols[2][ret])
             price = mid if entry == "midden" else z.inner(d)
+            # Een limiet aan de verkeerde kant van de koers is een marktorder: het herstel sloot dan binnen de zone en de instap is meteen, op het slot.
             if not (price > ref_price if d == SHORT else price < ref_price):
-                refused.append(rs._refusal(at, d, "geen geldige limiet: de zone ligt aan de verkeerde kant van de koers", z.low, z.high, atr_t))
-                continue
+                price = ref_price
             # Referentiekader in plaats van een range: de lab-code leest range_high/range_low/range_first_at.
             first = max(0, int(pos_tf[j]) - REF_LOOKBACK + 1)
             last = max(int(pos_tf[j]), first)

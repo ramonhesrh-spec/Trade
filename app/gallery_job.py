@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parent.parent
 OUT_DIR = Path(config.DATABASE_PATH).parent / "galerij"
 CSV = ROOT / "docs" / "onderzoek" / "range-sweep" / "handtrades.csv"
-KINDS = {"voorbeelden": "Jouw voorbeelden", "willekeurig": "30 willekeurige setups"}
+KINDS = {"voorbeelden": "Jouw voorbeelden", "willekeurig": "30 willekeurige setups", "zonesweep": "Zone-sweep: 30 willekeurige setups"}
 _state: dict = {k: {"busy": False, "error": None} for k in KINDS}
 _lock = threading.Lock()
 
@@ -33,6 +33,8 @@ def _build(kind: str) -> str:
     import range_sweep_gallery as gal
     if kind == "voorbeelden":
         cards = gal.from_csv(str(CSV), lambda coin, at: misser_check.fetch_rangesweep(coin, at))
+    elif kind == "zonesweep":
+        cards = gal.random_cards(["BTC", "ETH", "SOL", "ARB", "APT", "AAVE", "NEAR", "SUI"], 30, 3.0, familie="zonesweep")
     else:
         cards = gal.random_cards(["BTC", "ETH", "SOL", "ARB", "APT", "AAVE"], 30, 3.0)
     return gal.page(cards)

@@ -140,7 +140,8 @@ def range_sweep_svg(candles: list[list], setup: dict, stop: float, price: Option
     short = setup["direction"] == "short"
     legs = setup["legs"]
     rng_hi, rng_lo = setup["range_high"], setup["range_low"]
-    ref = [((rng_hi + rng_lo) / 2, "Midden (ref.)"), (rng_lo if short else rng_hi, "Overkant (ref.)")]
+    # Een zone-sweep heeft geen range: zijn range_high en range_low zijn alleen het referentiekader van de uitkomstmeting, dus niet tekenen.
+    ref = [] if setup["family"] == "zonesweep" else [((rng_hi + rng_lo) / 2, "Midden (ref.)"), (rng_lo if short else rng_hi, "Overkant (ref.)")]
     marks = [(p, "sc-limit", (f"Limiet {round(w * 100):d}%" if len(legs) > 1 else "Limiet") + f" {_fmt(p)}") for w, p in legs]
     marks += [(stop, "sc-stop", f"Stop {_fmt(stop)}")] + [(v, "sc-target", f"{name} {_fmt(v)}") for v, name in ref]
     if price:
@@ -179,7 +180,8 @@ def range_sweep_svg(candles: list[list], setup: dict, stop: float, price: Option
     out = [f'<svg class="sc" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(setup["family"])} setup {escape(setup["direction"])}">']
     for z in zones or []:
         out.append(box(clamp_x(idx(z["from"])), right, z["high"], z["low"], "sc-zone is-other"))
-    out.append(box(clamp_x(idx(setup["range_first_at"])), clamp_x(idx(setup["placed_at"])), rng_hi, rng_lo, "sc-range", "Range", label_below=True))
+    if setup["family"] != "zonesweep":
+        out.append(box(clamp_x(idx(setup["range_first_at"])), clamp_x(idx(setup["placed_at"])), rng_hi, rng_lo, "sc-range", "Range", label_below=True))
     own = "Order block" if setup["family"] == "sweep" else ("Aanbod" if short else "Vraag")
     out.append(box(clamp_x(idx(setup["zone_at"])), right, setup["zone_high"], setup["zone_low"], "sc-zone", own))
 
