@@ -335,3 +335,23 @@ class DraftRowsTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ZoneSweepJudgeTest(unittest.TestCase):
+    def test_a_prik_with_herstel_is_seen_and_a_wrong_price_is_not(self):
+        import sys
+        from tests.replay.test_zonesweep import PRIK_HERSTEL, UP, base, make_frames
+        from app.replay import zonesweep as zs
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import misser_check
+        frames = make_frames(base([PRIK_HERSTEL] + UP))
+        setups, refused = zs.find_setups(frames, "1h", "zone", False)
+        self.assertEqual(len(setups), 1, refused)
+        at = setups[0]["placed_at"]
+        seen = misser_check.judge_zonesweep(frames, at, "long", "1h", 12, price=100.3)
+        self.assertIn("zone_sweep:ZS_1H_ZONDERHTF", seen["engines"])
+        wrong = misser_check.judge_zonesweep(frames, at, "long", "1h", 12, price=150.0)
+        self.assertEqual(wrong["engines"], [])
+        self.assertTrue(wrong["blocker"].startswith("zone_sweep:"))
+        short = misser_check.judge_zonesweep(frames, at, "short", "1h", 12, price=100.3)
+        self.assertEqual(short["engines"], [])

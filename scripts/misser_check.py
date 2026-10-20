@@ -4,6 +4,7 @@ zag en zo niet welke regel hem weigerde. Draait op de VPS (daar staat de geschie
   python3 scripts/misser_check.py --coin BTC --direction short --at "2026-10-08 02:30" --entry 86558.4 --stop 86742.5 --target 83928.2
   python3 scripts/misser_check.py --csv handtrades.csv      (kolommen coin,richting,tijd,instap,stop,doel,uitkomst; --alleen-parsen leest zonder netwerk)
 
+  python3 scripts/misser_check.py --csv docs/onderzoek/zone-sweep/handtrades.csv --motor zonesweep --venster-uren 72   (zone-sweep, zelfde uitvoer)
   python3 scripts/misser_check.py --csv handtrades.csv --motor rangesweep --venster-uren 12   (range sweep: per variant gezien of de weigerende regel;
       --candles-map MAP leest {COIN}_{15m,1h,4h}.csv uit een map in plaats van de beurs)
 
@@ -17,7 +18,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app import db, exchange, misser, today                                   # noqa: E402
-from app.replay import breakretest as br, rangesweep as rs, rejection as rj   # noqa: E402
+from app.replay import breakretest as br, rangesweep as rs, rejection as rj, zonesweep as zs   # noqa: E402
 
 BAR = pd.Timedelta(minutes=30)
 
@@ -158,6 +159,33 @@ def judge_rangesweep(frames: dict, at: pd.Timestamp, direction: str, tf_hint: st
     return {"engines": engines, "blocker": blocker, "per_variant": per, "htf_only": bool(engines) and all(e.endswith("ZONDERHTF") for e in engines)}
 
 
+# Varianten van de zone-sweep (docs/onderzoek/zone-sweep/preregistratie.md): naam, timeframe, instap, HTF-filter.
+ZS_COMBOS = (("ZS_1H", "1h", "zone", True), ("ZS_2H", "2h", "zone", True), ("ZS_4H", "4h", "zone", True), ("ZS_1H_ZONDERHTF", "1h", "zone", False),
+             ("ZS_2H_ZONDERHTF", "2h", "zone", False), ("ZS_4H_ZONDERHTF", "4h", "zone", False), ("ZS_2H_MIDDEN", "2h", "midden", True))
+ZS_STAGE = (("geen actieve", 0), ("wel een zone", 1), ("uitbraak", 2), ("geen herstel", 2), ("HTF-filter", 3), ("geen geldige limiet", 4), ("zone had al", 4))
+
+
+def _zs_stage(reason: str) -> int:
+    return max((v for k, v in ZS_STAGE if reason.startswith(k)), default=0)
+
+
+def judge_zonesweep(frames: dict, at: pd.Timestamp, direction: str, tf_hint: str = "", window_hours: float = 12, price: float | None = None) -> dict:
+    """Per variant van de zone-sweep: gezien, of de regel die weigerde (zonesweep.diagnose). Zelfde vorm als judge_rangesweep."""
+    per, engines = {}, []
+    for name, tf, entry, htf in ZS_COMBOS:
+        if tf_hint and tf != tf_hint:
+            continue
+        d = zs.diagnose(frames, at, direction, tf, entry, htf, pd.Timedelta(hours=window_hours), price=price)
+        per[name] = "gezien" if d["seen"] else d["reason"]
+        if d["seen"]:
+            engines.append(f"zone_sweep:{name}")
+    blocker = None
+    if not engines and per:
+        name = max(per, key=lambda n: _zs_stage(per[n]))
+        blocker = f"zone_sweep: {per[name]} ({name})"
+    return {"engines": engines, "blocker": blocker, "per_variant": per, "htf_only": bool(engines) and all(e.endswith("ZONDERHTF") for e in engines)}
+
+
 def _print_variants(res: dict) -> None:
     for name, reason in res["per_variant"].items():
         print(f"    {name}: {reason}")
@@ -176,9 +204,10 @@ def run_csv(path: str, only_parse: bool, fetch=None, motor: str = "alle", window
             print(f"{r['coin']} {r['direction']} {when} instap {r['entry']:g} stop {_g(r['stop'])} doel {_g(r['target'])} uitkomst {r['outcome']}")
             continue
         try:
-            if motor == "rangesweep":
+            if motor in ("rangesweep", "zonesweep"):
                 at = pd.Timestamp(r["at"])
-                res = judge_rangesweep((fetch_rs or fetch_rangesweep)(r["coin"], at), at, r["direction"], r["tf"], window_hours, price=r["entry"])
+                judge_fn = judge_rangesweep if motor == "rangesweep" else judge_zonesweep
+                res = judge_fn((fetch_rs or fetch_rangesweep)(r["coin"], at), at, r["direction"], r["tf"], window_hours, price=r["entry"])
             else:
                 _, closed, idx = fetch(r["coin"], pd.Timestamp(r["at"]))
                 res = judge(closed, idx, r["direction"])
@@ -212,7 +241,7 @@ def main() -> None:
     ap.add_argument("--stop", type=float)
     ap.add_argument("--target", type=float)
     ap.add_argument("--csv", help="lijst handtrades met de kolommen coin,richting,tijd,instap,stop,doel,uitkomst; sluit de losse opties uit")
-    ap.add_argument("--motor", choices=("alle", "rangesweep"), default="alle")
+    ap.add_argument("--motor", choices=("alle", "rangesweep", "zonesweep"), default="alle")
     ap.add_argument("--venster-uren", type=float, default=12.0)
     ap.add_argument("--candles-map", help="map met {COIN}_{tf}.csv (15m, 1h, 4h) in plaats van de beurs, alleen voor --motor rangesweep")
     ap.add_argument("--alleen-parsen", action="store_true", help="met --csv: alleen inlezen en tonen, zonder verbinding met de beurs")
@@ -227,9 +256,10 @@ def main() -> None:
         ap.error("geef --coin, --direction en --at, of --csv")
     coin = a.coin.upper()
     at = pd.Timestamp(datetime.strptime(a.at, "%Y-%m-%d %H:%M").replace(tzinfo=today.LOCAL_TZ)).tz_convert("UTC")
-    if a.motor == "rangesweep":
-        res = judge_rangesweep((_rs_fetcher(a.candles_map) or fetch_rangesweep)(coin, at), at, a.direction, window_hours=a.venster_uren, price=a.entry)
-        print(f"\n{coin} {a.direction} rond {a.at} (Nederlandse tijd), range sweep:")
+    if a.motor in ("rangesweep", "zonesweep"):
+        judge_fn = judge_rangesweep if a.motor == "rangesweep" else judge_zonesweep
+        res = judge_fn((_rs_fetcher(a.candles_map) or fetch_rangesweep)(coin, at), at, a.direction, window_hours=a.venster_uren, price=a.entry)
+        print(f"\n{coin} {a.direction} rond {a.at} (Nederlandse tijd), {'range sweep' if a.motor == 'rangesweep' else 'zone-sweep'}:")
         _print_variants(res)
         print("gezien door: " + (", ".join(res["engines"]) or "geen variant") + (f" | {res['blocker']}" if res["blocker"] else ""))
         return None
