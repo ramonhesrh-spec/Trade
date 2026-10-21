@@ -113,7 +113,8 @@ async def _zones(coin: str, now: pd.Timestamp) -> tuple[list[zr.ZoneLevel], Opti
     return zones, price
 
 
-async def _scan(coin: str, now: pd.Timestamp, waiting: list[dict]) -> None:
+async def _scan(coin: str, now: pd.Timestamp, waiting: list[dict]) -> list[dict]:
+    """Ruimt vervallen kaarten op en geeft de nieuwe plannen terug; `run` kiest daaruit, zodat de volgorde van de coins niet bepaalt wie binnen de dagcap valt."""
     zones, price = await _zones(coin, now)
     keys = {z.key for z in zones}
     mine = [c for c in waiting if c["coin"] == coin]
@@ -121,19 +122,9 @@ async def _scan(coin: str, now: pd.Timestamp, waiting: list[dict]) -> None:
         if card["zone_key"] not in keys:
             repo.end_zone_radar_setup(card["id"], "zone_weg")
     if not price:
-        return
+        return []
     busy = {c["direction"] for c in mine if c["zone_key"] in keys}
-    for plan in zr.plans(zones, price):
-        if plan["direction"] in busy:
-            continue
-        if repo.count_zone_radar_setups_since((now - pd.Timedelta(hours=24)).isoformat()) >= config.ZONE_RADAR_MAX_PER_DAY:
-            logger.info("Zone-radar %s %s: dagcap van %s kaarten bereikt", coin, plan["direction"], config.ZONE_RADAR_MAX_PER_DAY)
-            return
-        setup_id = repo.insert_zone_radar_setup({**plan, "coin": coin}, now.isoformat())
-        if setup_id is None:
-            continue
-        logger.info("Zone-radar %s %s: kaart %s, %s %s-%s, R:R %.1f", coin, plan["direction"], setup_id, plan["tf"], plan["zone_low"], plan["zone_high"], plan["rr"])
-        await _push_new_card({**plan, "coin": coin, "id": setup_id})
+    return [{**plan, "coin": coin, "distance": abs(plan["limit"] - price) / price} for plan in zr.plans(zones, price) if plan["direction"] not in busy]
 
 
 async def run(now: Optional[datetime] = None) -> None:
@@ -144,11 +135,22 @@ async def run(now: Optional[datetime] = None) -> None:
     await _track(repo.list_zone_radar_setups())
     waiting = repo.list_zone_radar_setups()
     coins = [c["symbol"] for c in repo.list_coins()]
+    found: list[dict] = []
     for coin in coins:
         try:
-            await _scan(coin, stamp, waiting)
+            found += await _scan(coin, stamp, waiting)
         except Exception:
             logger.exception("Zone-radar voor %s is mislukt", coin)
+    since = (stamp - pd.Timedelta(hours=24)).isoformat()
+    for plan in sorted(found, key=lambda p: (p["distance"], p["coin"], p["direction"])):
+        if repo.count_zone_radar_setups_since(since) >= config.ZONE_RADAR_MAX_PER_DAY:
+            logger.info("Zone-radar: dagcap van %s kaarten bereikt, %s %s wacht", config.ZONE_RADAR_MAX_PER_DAY, plan["coin"], plan["direction"])
+            break
+        setup_id = repo.insert_zone_radar_setup({k: v for k, v in plan.items() if k != "distance"}, stamp.isoformat())
+        if setup_id is None:
+            continue
+        logger.info("Zone-radar %s %s: kaart %s, %s %s-%s, R:R %.1f", plan["coin"], plan["direction"], setup_id, plan["tf"], plan["zone_low"], plan["zone_high"], plan["rr"])
+        await _push_new_card({**plan, "id": setup_id})
     repo.beat("zone_radar", f"{len(coins)} coins gecontroleerd")
 
 
