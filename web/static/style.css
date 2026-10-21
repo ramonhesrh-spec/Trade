@@ -2677,3 +2677,4 @@ html.lc-lock, html.lc-lock body { overflow: hidden; }
 .kans-card > .share-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
 .kans-card > .vd-section-title { margin-top: var(--space-6); }
 .kans-risk { font-size: var(--text-sm); }
+.tf-chips .chip { display: inline-flex; align-items: center; min-height: 44px; padding: 0 var(--space-7); }
