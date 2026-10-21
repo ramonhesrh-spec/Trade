@@ -3,7 +3,7 @@
    echte grafiek van lightweight-charts (vendor/lightweight-charts-4.2.0.*). De server stuurt getallen, hier wordt getekend.
    - Lazy: de grafiek wordt pas gemaakt als de kaart bijna in beeld komt en weer weggehaald als hij ver weg scrolt; nooit meer
      dan MAX_LIVE tegelijk, zodat een lange pagina op een telefoon soepel blijft.
-   - Geen gebaren: scrollen en zoomen staan uit, een veeg over de grafiek scrolt gewoon de pagina (iOS).
+   - Kaartgrafiek: geen gebaren, een veeg over de grafiek scrolt gewoon de pagina (iOS). Schermvullend: slepen en knijpen staan aan, met de volle historie.
    - Live: update(el, spec) verschuift de laatste candle en de Nu-lijn; de grafiek wordt niet opnieuw gemaakt.
    - Rood vlak van instap (of limiet) tot stop, groen van instap tot doel (areas): de niveaus van het plan, geen schatting.
    - Candles komen van /api/radar_candles (een minuut gecachet op de server en hier per coin+tijdframe gedeeld).
@@ -21,7 +21,7 @@
   var TF_SEC = { "15m": 900, "1h": 3600, "4h": 14400 };
   // Genoeg historie om een zone te zien ontstaan; de server levert er hooguit 200 (RADAR_CANDLE_FETCH in web/main.py).
   var FULL_BASE = { "15m": 160, "1h": 120, "4h": 120 };
-  var FULL_MAX = 200;
+  var FULL_MAX = 500;
   var LINE_LABEL_ROOM = 96;         // css-px aan de rechterkant van de grafiek waar de titels van de prijslijnen staan
   var LC = window.LightweightCharts;
   var api = { update: function () {}, screenshot: function () { return Promise.resolve(null); } };
@@ -282,13 +282,17 @@
   function load(lc) {
     var el = lc.el;
     var tf = el.getAttribute("data-tf") || "15m", s = spec(el);
-    var limit = lc.full ? candleLimit(tf, s && s.zone ? s.zone.origin : null, Date.now() / 1000) : CANDLE_LIMIT;
-    return fetchCandles(el.getAttribute("data-coin"), tf, limit).then(function (candles) {
+    // Schermvullend: altijd de volle historie, zodat je terug kunt scrollen; de eerste weergave toont wat candleLimit bepaalt.
+    var shown = lc.full ? candleLimit(tf, s && s.zone ? s.zone.origin : null, Date.now() / 1000) : CANDLE_LIMIT;
+    return fetchCandles(el.getAttribute("data-coin"), tf, lc.full ? FULL_MAX : shown).then(function (candles) {
       if (lc.dead) return;
       lc.candles = candles.map(function (c) { return Object.assign({}, c); });   // kopie: overlayPrice past de laatste aan
       lc.series.setData(lc.candles);
       overlayPrice(lc);
-      lc.chart.timeScale().fitContent();
+      if (lc.full) {
+        var n = lc.candles.length;
+        lc.chart.timeScale().setVisibleLogicalRange({ from: Math.max(-2, n - shown), to: n + 8 });
+      } else lc.chart.timeScale().fitContent();
       syncBand(lc);
       syncAreas(lc);
       if (lc.full) syncZones(lc);
@@ -306,9 +310,9 @@
       layout: { background: { type: "solid", color: panel }, textColor: css("--text-dim", "#b7c4c2"), fontSize: 12, fontFamily: css("--mono", "monospace").replace(/"/g, "") },
       grid: { vertLines: { visible: false }, horzLines: { color: "rgba(255,255,255,0.04)" } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.08 } },
-      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: full ? 8 : 12, fixLeftEdge: true, tickMarkFormatter: tickLabel },
+      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: full ? 8 : 12, fixLeftEdge: !full, tickMarkFormatter: tickLabel },
       crosshair: { vertLine: { visible: false, labelVisible: false }, horzLine: { visible: false, labelVisible: false } },
-      handleScroll: false, handleScale: false,
+      handleScroll: !!full, handleScale: !!full,
     });
     var lc = { el: el, chart: chart, lines: {}, candles: [], dead: false, areas: {}, full: !!full, tf: el.getAttribute("data-tf") || "15m",
                boxes: [], originBar: null, onNote: full ? full.onNote : null };

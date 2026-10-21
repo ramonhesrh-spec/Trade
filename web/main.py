@@ -758,7 +758,7 @@ async def api_radar(user: dict = Depends(require_login)):
 
 RADAR_TIMEFRAMES = ("5m", "15m", "1h", "4h")
 RADAR_CANDLE_TTL_SECONDS = 60
-RADAR_CANDLE_FETCH = 200            # altijd evenveel ophalen, zodat elke `limit` uit dezelfde cache-regel komt
+RADAR_CANDLE_FETCH = 500            # altijd evenveel ophalen, zodat elke `limit` uit dezelfde cache-regel komt
 _candle_cache: dict[tuple[str, str], tuple[float, list]] = {}
 
 

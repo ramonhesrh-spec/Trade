@@ -2623,7 +2623,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .lc-seg-btn:hover { background: none; color: var(--text); }
 .lc-seg-btn[aria-pressed="true"] { background: var(--accent); color: var(--bg); font-weight: 600; }
 .lc-seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.lc-full .level-chart { flex: 1; height: auto; min-height: 0; border-radius: 0; cursor: default; }
+.lc-full .level-chart { touch-action: none; flex: 1; height: auto; min-height: 0; border-radius: 0; cursor: default; }
 .lc-full .level-chart::before { content: none; }
 .lc-full-foot { flex: none; display: grid; gap: var(--space-2); padding: var(--space-4) var(--gutter); border-top: 1px solid var(--border); }
 .lc-full-note { margin: 0; color: var(--text); font-size: var(--text-md); line-height: 1.45; text-wrap: pretty; max-width: 68ch; }
