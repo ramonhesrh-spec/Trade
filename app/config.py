@@ -170,3 +170,8 @@ RANGE_SWEEP_PUBLIC = _get("RANGE_SWEEP_PUBLIC", "false").lower() == "true"
 RANGE_WATCH_MAX_PER_DAY = int(_get("RANGE_WATCH_MAX_PER_DAY", "3"))
 RANGE_SWEEP_MAX_PER_DAY = int(_get("RANGE_SWEEP_MAX_PER_DAY", "6"))
 RANGE_SWEEP_MAX_NEGATIVE = int(_get("RANGE_SWEEP_MAX_NEGATIVE", "30"))
+
+# Zone-radar (app/zone_radar.py, app/zone_radar_live.py): de dichtstbijzijnde actieve vraag- en aanbodzone op 1u en 4u als limietplan op de Radar,
+# met een melding bij een nieuwe kaart en bij de vulling. Voor iedereen, altijd ongetest: Bewijs telt hem apart (trade_type 'zone_radar').
+ZONE_RADAR_ENABLED = _get("ZONE_RADAR_ENABLED", "true").lower() == "true"
+ZONE_RADAR_MAX_PER_DAY = int(_get("ZONE_RADAR_MAX_PER_DAY", "12"))

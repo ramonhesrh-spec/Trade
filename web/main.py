@@ -33,7 +33,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import ceo, chance_checks, freshness, chance_steps, kans_view, rule_live, trust
+from app import ceo, chance_checks, freshness, chance_steps, kans_view, rule_live, trust, zone_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 
@@ -82,7 +82,7 @@ def _nav_context(request: Request) -> dict:
     pagina's (Vandaag, Setups, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
     # Alleen de koersen uit de cache: het menu mag geen Binance-aanroep per paginaweergave doen. Zonder koers telt een setup mee.
     cached = {coin: hit[1] for coin, hit in _price_cache.items() if hit[1]}
-    radar_count = radar.waiting_count([_with_preview(s) for s in repo.list_forming_smc_setups()], cached)
+    radar_count = radar.waiting_count(_forming_setups(), cached)
     now = datetime.now(timezone.utc)
     setups = sum(1 for r in repo.list_structure_setups(("waiting",), 50)
                  if today.structure_state(r, json.loads(r["plan"]), cached.get(r["coin"]), now) in today.OPEN_PLAN_STATES)
@@ -440,9 +440,14 @@ def _with_preview(setup: dict) -> dict:
     return setup
 
 
+def _forming_setups() -> list[dict]:
+    """Wat de Radar als wachtende kaart toont: bouwende SMC-setups en wachtende zone-radar-kaarten, in de vorm die radar.setup_card leest."""
+    return [_with_preview(s) for s in repo.list_forming_smc_setups()] + [zone_radar.radar_setup(r) for r in repo.list_zone_radar_setups()]
+
+
 async def _radar_cards() -> list[dict]:
-    forming = [_with_preview(s) for s in repo.list_forming_smc_setups()]
-    open_signals = repo.list_open_smc_signals()
+    forming = _forming_setups()
+    open_signals = repo.list_open_smc_signals(types=("smc", zone_radar.TRADE_TYPE))
     prices = await _cached_prices([s["coin"] for s in forming] + [s["coin"] for s in open_signals])
     cards = [c for s in forming if (c := radar.setup_card(s, prices.get(s["coin"])))]
     cards += [c for s in open_signals if (c := radar.signal_card(s, prices.get(s["coin"])))]
@@ -560,7 +565,7 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     staat op de zone-rand, zie app/trade_plan.py), daaronder de afgeronde signalen in dezelfde stijl als /signalen.
     Afgeronde signalen verschijnen ook op /signalen en het dashboard: deze pagina is een extra, gerichte weergave."""
     cards = await _radar_cards()
-    entries = [e for e in repo.list_signalen_for_user(user["id"]) if e["trade_type"] == "smc"]
+    entries = [e for e in repo.list_signalen_for_user(user["id"]) if e["trade_type"] in ("smc", zone_radar.TRADE_TYPE)]
     winrate = repo.winrate_stats(user["id"])
     pattern_winrate = repo.pattern_winrate_stats()
     entries = _add_signal_context(entries, winrate, pattern_winrate)
@@ -607,7 +612,7 @@ async def _vandaag_context(user: dict) -> dict:
     rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
     week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
     summary = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT)
-    score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing") or e["source"] == "alles"]
+    score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing", "zone_radar") or e["source"] == "alles"]
     for e in score:
         e["spark"] = Markup(track_record.sparkline_svg(e["cumulative"], width=180, height=36))
     return {
@@ -1363,7 +1368,7 @@ async def api_system_status(user: dict = Depends(require_login)):
             "received_at": s["created_at"],
         }
 
-    forming = [_with_preview(s) for s in repo.list_forming_smc_setups()]
+    forming = _forming_setups()
     # Alleen wat de radar al in de cache zette: deze poll mag niet trager worden door een beurs die net niet antwoordt.
     zone_prices = {c: hit[1] for c in {s["coin"] for s in forming} if (hit := _price_cache.get(c)) and hit[1]}
     return {

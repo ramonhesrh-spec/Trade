@@ -110,7 +110,7 @@ def scenario_view(s: dict, price: Optional[float], now: datetime, coin: str = ""
 OPEN_SIGNAL_HOURS = 6
 SIGNAL_LABELS = {"structuur": "Structuur gevuld", "structuur_c": "Structuur C gevuld", "trend": "Trend", "rejectie": "Rejectie", "smc": "SMC",
                  "smc_waarschuwing": "SMC met waarschuwing", "script": "Markt-script", "don55_trend": "Proefmotor",
-                 "range_sweep": "Range sweep gevuld"}
+                 "range_sweep": "Range sweep gevuld", "zone_radar": "Zone-radar gevuld"}
 OPEN_PLAN_STATES = (None, "wacht", "in_zone")        # None: koers onbekend, dan is er niets dat het plan ongeldig maakt
 
 
@@ -178,8 +178,10 @@ def open_chances(structure_cards: list[dict], scripts: list[dict], smc_cards: li
     for c in smc_cards:
         if c["kind"] == "setup" and c["state"] in OPEN_PLAN_STATES:
             d = c["distance_pct"]
-            items.append({"kind": "smc", "coin": c["coin"], "direction": c["direction"], "soort": "SMC-zone", "state": c["state_label"],
-                          "dist": abs(d) if d is not None else None, "dist_text": f"{d:+.2f}%" if d is not None else "", "url": "/smc", "card": None})
+            zone = (c.get("setup") or {}).get("source") == "zone_radar"
+            items.append({"kind": "smc", "coin": c["coin"], "direction": c["direction"], "soort": "Zone-radar" if zone else "SMC-zone", "state": c["state_label"],
+                          "dist": abs(d) if d is not None else None, "dist_text": f"{d:+.2f}%" if d is not None else "",
+                          "url": f"/smc#radar-zone-{c['setup']['id']}" if zone else "/smc", "card": None})
     for s in scripts:
         for sc in s["scenarios"]:
             if sc["state"] == "waiting" and sc["hours_left"] > 0:

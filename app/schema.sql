@@ -800,3 +800,30 @@ CREATE TABLE IF NOT EXISTS price_alerts (
     sent_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_price_alerts_open ON price_alerts(sent_at, coin);
+
+-- Zone-radar (app/zone_radar_live.py): de dichtstbijzijnde actieve vraag- of aanbodzone op 1u/4u als limietplan op de Radar. Eén rij per zone per coin
+-- (UNIQUE): dezelfde zone komt na vullen of vervallen nooit als nieuwe kaart terug. state: waiting, filled (signal_id gezet, trade_type 'zone_radar'),
+-- doel_geraakt of zone_weg. alert_sent: de melding van de nieuwe kaart ging één keer uit; de vulling meldt zich via de overgang waiting -> filled.
+CREATE TABLE IF NOT EXISTS zone_radar_setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    tf TEXT NOT NULL,
+    zone_key TEXT NOT NULL,
+    zone_low REAL NOT NULL,
+    zone_high REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL NOT NULL,
+    rr REAL NOT NULL,
+    atr REAL NOT NULL,
+    target_tf TEXT NOT NULL,
+    target_low REAL NOT NULL,
+    target_high REAL NOT NULL,
+    created_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    ended_at TEXT,
+    signal_id INTEGER REFERENCES signals(id),
+    alert_sent INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (coin, zone_key)
+);
+CREATE INDEX IF NOT EXISTS idx_zone_radar_setups_state ON zone_radar_setups(state);

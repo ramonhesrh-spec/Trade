@@ -263,6 +263,21 @@ class RadarLayoutTests(BaseShellTests):
         self.assertIn('id="fsearch"', html)
 
 
+class ZoneRadarLayoutTests(BaseShellTests):
+    def setUp(self):
+        super().setUp()
+        repo.insert_zone_radar_setup({"coin": "TIA", "direction": "long", "tf": "1h", "zone_key": "1h:bull:x", "zone_low": 95.0, "zone_high": 96.0,
+                                      "stop_loss": 94.5, "take_profit": 104.0, "rr": 5.3, "atr": 0.5, "target_tf": "4h", "target_low": 104.0,
+                                      "target_high": 105.0}, db.now_iso())
+
+    def test_zone_radar_kaart_op_de_radar_en_vandaag(self):
+        html = self.client.get("/smc").text
+        for needle in ['id="radar-zone-1"', 'data-radar-key="zone:1"', "Zone-radar · ongetest", "Vraagzone op 1u", "Wacht op de zone"]:
+            self.assertIn(needle, html, needle)
+        self.assertIn('"zone:1"', self.client.get("/api/radar").text)
+        self.assertIn("Zone-radar", self.client.get("/vandaag").text)
+
+
 class SetupsLayoutTests(BaseShellTests):
     def seed_waiting(self):
         import json

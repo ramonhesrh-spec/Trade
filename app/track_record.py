@@ -28,6 +28,7 @@ TYPE_LABELS = {
     "rejectie": "Rejectie op een niveau (ongetest)",
     "don55_trend": "Trend 4u met meelopende stop",
     "range_sweep": "Range sweep (ongetest)",
+    "zone_radar": "Zone-radar (ongetest)",
 }
 # Leesbare namen voor de labvarianten (sleutel: Variant.name.lower()); alleen de CEO ziet ze. Onbekend: de ruwe naam.
 LAB_LABELS = {

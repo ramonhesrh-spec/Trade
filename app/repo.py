@@ -2635,14 +2635,15 @@ def list_community_calls() -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def list_open_smc_signals(limit: int = 30) -> list[dict]:
+def list_open_smc_signals(limit: int = 30, types: tuple[str, ...] = ("smc",)) -> list[dict]:
     """Open SMC-signalen (nog geen take, stop of verloop), nieuwste eerst, voor de Trade Radar. Gedeeld over gebruikers:
-    signalen zijn globaal, alleen het journaal is per gebruiker."""
+    signalen zijn globaal, alleen het journaal is per gebruiker. `types`: de Radar toont ook de gevulde zone-radar ('zone_radar')."""
+    marks = ", ".join("?" for _ in types)
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT id, coin, direction, price, stop_loss, take_profit, created_at FROM signals
-               WHERE trade_type = 'smc' AND is_practice = 0 AND auto_outcome IS NULL
-               ORDER BY created_at DESC LIMIT ?""", (limit,),
+            f"""SELECT id, coin, direction, price, stop_loss, take_profit, created_at, trade_type FROM signals
+               WHERE trade_type IN ({marks}) AND is_practice = 0 AND auto_outcome IS NULL
+               ORDER BY created_at DESC LIMIT ?""", (*types, limit),
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -3186,3 +3187,57 @@ def set_signal_price(signal_id: int, price: float) -> None:
     """De instapprijs van een signaal dat eerst als wachtende limiet bestond en bij de vulling zijn gewogen instap krijgt."""
     with db.session() as conn:
         conn.execute("UPDATE signals SET price = ? WHERE id = ?", (price, signal_id))
+
+
+_ZONE_RADAR_COLS = ("coin", "direction", "tf", "zone_key", "zone_low", "zone_high", "stop_loss", "take_profit", "rr", "atr",
+                    "target_tf", "target_low", "target_high")
+
+
+def insert_zone_radar_setup(row: dict, created_at: str) -> Optional[int]:
+    """None als deze zone voor deze coin al eens een kaart had (UNIQUE coin, zone_key): wachtend, gevuld of vervallen, hij komt niet terug.
+    created_at met tijdzone (de klok van de motor): het age-filter leest het naïeve SQLite-tijdstip niet, en de vulling telt alleen candles daarna."""
+    with db.session() as conn:
+        cur = conn.execute(
+            f"INSERT OR IGNORE INTO zone_radar_setups ({', '.join(_ZONE_RADAR_COLS)}, created_at) VALUES ({', '.join('?' for _ in _ZONE_RADAR_COLS)}, ?)",
+            (*(row[c] for c in _ZONE_RADAR_COLS), created_at))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def list_zone_radar_setups(states: tuple[str, ...] = ("waiting",)) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"SELECT * FROM zone_radar_setups WHERE state IN ({marks}) ORDER BY id", states).fetchall()]
+
+
+def count_zone_radar_setups_since(since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) AS n FROM zone_radar_setups WHERE created_at >= ?", (since_iso,)).fetchone()["n"]
+
+
+def mark_zone_radar_alert_sent(setup_id: int) -> bool:
+    """True als deze aanroep de vlag zette: alleen die mag de melding van de nieuwe kaart sturen."""
+    with db.session() as conn:
+        return conn.execute("UPDATE zone_radar_setups SET alert_sent = 1 WHERE id = ? AND alert_sent = 0", (setup_id,)).rowcount == 1
+
+
+def end_zone_radar_setup(setup_id: int, state: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE zone_radar_setups SET state = ?, ended_at = ? WHERE id = ? AND state = 'waiting'", (state, db.now_iso(), setup_id))
+
+
+def fill_zone_radar_setup(setup_id: int, signal: dict) -> Optional[int]:
+    """Zet de kaart op gevuld en schrijft het signaal in één transactie. None als de kaart al niet meer wachtte: twee cycli die tegelijk dezelfde
+    vulling zien, maken zo nooit twee signalen of twee meldingen."""
+    with db.session() as conn:
+        if conn.execute("UPDATE zone_radar_setups SET state = 'filled', ended_at = ? WHERE id = ? AND state = 'waiting'",
+                        (db.now_iso(), setup_id)).rowcount != 1:
+            return None
+        signal_id = _insert_signal(conn, signal, True)
+        conn.execute("UPDATE zone_radar_setups SET signal_id = ? WHERE id = ?", (signal_id, setup_id))
+        return signal_id
+
+
+def get_zone_radar_setup_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM zone_radar_setups WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
