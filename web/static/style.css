@@ -2635,7 +2635,8 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
   .lc-full-head { padding-top: 0; padding-bottom: 0; }
   .lc-full-foot { grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding-top: var(--space-2); padding-bottom: var(--space-2); }
 }
-html.lc-lock, html.lc-lock body { overflow: hidden; }
+/* Geen overflow:hidden op html of body: op iOS blijft het dok (position: fixed) daarna op de verkeerde hoogte hangen. De modale dialog blokkeert de pagina al; contain stopt het doorscrollen. */
+.lc-full { overscroll-behavior: contain; }
 
 /* Het plan als blok: een regel per niveau, label links, getal rechts in vaste breedte, bel als eigen tikvlak. */
 .level-chips { display: grid; gap: var(--space-3); }
