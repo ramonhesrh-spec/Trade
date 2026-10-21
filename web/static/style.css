@@ -2610,14 +2610,31 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
   padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
 .lc-full[open] { display: flex; flex-direction: column; }
 .lc-full::backdrop { background: var(--bg); }
-.lc-full-head { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-2) var(--space-2) var(--space-2) var(--gutter); }
-.lc-full-title { flex: 1; min-width: 0; margin: 0; font-weight: 600; font-size: var(--text-lg); }
-.lc-full-cap { margin-left: var(--space-5); color: var(--muted); font-size: var(--text-sm); font-weight: 400; }
-.lc-full-close { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; background: none; border: 0; color: var(--text); cursor: pointer; }
+.lc-full-head { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-2) var(--space-2) var(--space-2) var(--gutter); border-bottom: 1px solid var(--border); }
+.lc-full-title { flex: 1; min-width: 0; margin: 0; font-weight: 600; font-size: var(--text-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-full-dir { margin-left: var(--space-2); color: var(--text-dim); font-weight: 400; }
+.lc-full-close { flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; background: none; border: 0; border-radius: var(--radius);
+  color: var(--text-dim); cursor: pointer; }
 .lc-full-close:hover { background: none; color: var(--text); }
-.lc-full .level-chart { flex: 1; height: auto; min-height: 0; border-radius: 0; }
+/* Tijdframekeuze: drie gelijke tikvlakken van 44px in een rustige schaal, het gekozen vak in de accentkleur. */
+.lc-seg { flex: none; display: inline-flex; padding: 2px; gap: 2px; background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); }
+.lc-seg-btn { min-width: 48px; min-height: 44px; padding: 0 var(--space-4); background: none; border: 0; border-radius: calc(var(--radius) - 2px);
+  color: var(--text-dim); font: inherit; font-family: var(--mono); font-size: var(--text-sm); font-variant-numeric: tabular-nums; cursor: pointer; }
+.lc-seg-btn:hover { background: none; color: var(--text); }
+.lc-seg-btn[aria-pressed="true"] { background: var(--accent); color: var(--bg); font-weight: 600; }
+.lc-seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.lc-full .level-chart { flex: 1; height: auto; min-height: 0; border-radius: 0; cursor: default; }
 .lc-full .level-chart::before { content: none; }
-.lc-full .lc-legend { flex: none; padding: var(--space-4) var(--gutter); }
+.lc-full-foot { flex: none; display: grid; gap: var(--space-2); padding: var(--space-4) var(--gutter); border-top: 1px solid var(--border); }
+.lc-full-note { margin: 0; color: var(--text); font-size: var(--text-md); line-height: 1.45; text-wrap: pretty; max-width: 68ch; }
+.lc-full-legend { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-6); color: var(--text-dim); font-size: var(--text-xs); line-height: 1.5; }
+.lc-key.is-zone::before, .lc-key.is-target::before { width: 12px; height: 8px; border-radius: 1px; }
+.lc-full .lc-key.is-zone::before { background: rgba(10, 186, 181, 0.12); box-shadow: inset 0 0 0 1px rgba(10, 186, 181, 0.6); }
+.lc-key.is-target::before { background: rgba(51, 214, 159, 0.07); box-shadow: inset 0 0 0 1px rgba(51, 214, 159, 0.45); }
+@media (orientation: landscape) and (max-height: 500px) {
+  .lc-full-head { padding-top: 0; padding-bottom: 0; }
+  .lc-full-foot { grid-template-columns: minmax(0, 1fr) auto; align-items: center; padding-top: var(--space-2); padding-bottom: var(--space-2); }
+}
 html.lc-lock, html.lc-lock body { overflow: hidden; }
 
 /* Het plan als blok: een regel per niveau, label links, getal rechts in vaste breedte, bel als eigen tikvlak. */

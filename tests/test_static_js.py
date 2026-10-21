@@ -41,6 +41,30 @@ class LevelChartAreasTest(unittest.TestCase):
 
 
 @unittest.skipUnless(shutil.which("node"), "node ontbreekt")
+class LevelChartFullTest(unittest.TestCase):
+    def test_genoeg_candles_om_de_zone_te_zien_ontstaan(self):
+        out = run_node("levelchart_harness.js", "levelchart.js")
+        self.assertEqual(out["limitBase"], 120)
+        self.assertEqual(out["limitOld"], 162)                             # 150 candles oud plus marge
+        self.assertEqual(out["limitCap"], 200)                             # nooit meer dan de server levert
+        self.assertEqual(out["limit15"], 160)
+
+    def test_markering_op_de_candle_waarin_de_zone_ontstond(self):
+        out = run_node("levelchart_harness.js", "levelchart.js")
+        self.assertEqual(out["barSame"], 3600)
+        self.assertEqual(out["barInside"], 14400)                          # 1u-zone op een 4u-grafiek
+        self.assertIsNone(out["barBefore"])
+        self.assertIsNone(out["barAfter"])
+        self.assertIsNone(out["barNone"])
+
+    def test_standaard_tijdframe_en_uitleg(self):
+        out = run_node("levelchart_harness.js", "levelchart.js")
+        self.assertEqual((out["tfZone"], out["tfPlain"]), ("4h", "1h"))
+        self.assertEqual((out["noteSame"], out["noteOther"], out["noteOutside"]), ("hier", "elders", "eerder"))
+        self.assertEqual((out["noteNoOrigin"], out["noteNoZone"]), ("", ""))
+
+
+@unittest.skipUnless(shutil.which("node"), "node ontbreekt")
 class UtabsTest(unittest.TestCase):
     def test_klik_toont_alleen_het_gekozen_paneel(self):
         out = run_node("utabs_harness.js", "utabs.js")

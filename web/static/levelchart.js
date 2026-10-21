@@ -7,17 +7,31 @@
    - Live: update(el, spec) verschuift de laatste candle en de Nu-lijn; de grafiek wordt niet opnieuw gemaakt.
    - Rood vlak van instap (of limiet) tot stop, groen van instap tot doel (areas): de niveaus van het plan, geen schatting.
    - Candles komen van /api/radar_candles (een minuut gecachet op de server en hier per coin+tijdframe gedeeld).
-   - Schermvullend: een tik op de grafiek of op "Groot" opent dezelfde grafiek in een dialoog (telt niet mee voor MAX_LIVE, weg bij sluiten).
+   - Schermvullend: een tik op de grafiek of op "Groot" opent een dialoog (telt niet mee voor MAX_LIVE, weg bij sluiten) op het tijdframe waar
+     het niveau vandaan komt (spec.zone.tf van de zone-radar, anders 1u), met een keuze 15m/1u/4u. Daar staan de zone en de doelzone als vlak
+     vanaf de candle waar de zone ontstond, met een markering en de uitleg uit zone_radar.chart_zone eronder.
    De lightweight-charts-bibliotheek tekent zonder animatie, dus er is niets dat prefers-reduced-motion hoeft te dempen. */
 (function () {
   var MAX_LIVE = 8;
   var CANDLE_LIMIT = 60;            // 60 candles: op een telefoon blijft elke candle zichtbaar breed genoeg
   var REFRESH_MS = 60000;
+  var AREA_ALPHA = 0.07;            // risico- en winstvlak: zacht, de candles en zones moeten erdoor leesbaar blijven
+  var FULL_TFS = ["15m", "1h", "4h"];
+  var TF_TEXT = { "15m": "15m", "1h": "1u", "4h": "4u" };
+  var TF_SEC = { "15m": 900, "1h": 3600, "4h": 14400 };
+  // Genoeg historie om een zone te zien ontstaan; de server levert er hooguit 200 (RADAR_CANDLE_FETCH in web/main.py).
+  var FULL_BASE = { "15m": 160, "1h": 120, "4h": 120 };
+  var FULL_MAX = 200;
+  var LINE_LABEL_ROOM = 96;         // css-px aan de rechterkant van de grafiek waar de titels van de prijslijnen staan
   var LC = window.LightweightCharts;
   var api = { update: function () {}, screenshot: function () { return Promise.resolve(null); } };
   window.hesLevelChart = api;
   api.areas = areas;
   api.rgba = rgba;
+  api.candleLimit = candleLimit;
+  api.originBar = originBar;
+  api.fullTf = fullTf;
+  api.fullNote = fullNote;
   var els = document.querySelectorAll("[data-levelchart]");
   if (!LC || !els.length) return;
 
@@ -41,7 +55,7 @@
 
   function precision(s) {
     var ref = Math.abs(s.entry != null ? s.entry : s.limit);
-    return ref >= 100 ? 2 : ref >= 1 ? 4 : 6;
+    return ref >= 100 ? 2 : ref >= 0.1 ? 4 : 6;
   }
 
   // Risico en beloning van het plan zelf: van instap (of limiet) tot stop, en van instap tot doel. Geen schatting, alleen de niveaus.
@@ -60,6 +74,35 @@
     return out;
   }
 
+  // Hoeveel candles de schermvullende grafiek vraagt: de basis per tijdframe, of meer als de zone ouder is, zodat de candle waar hij ontstond
+  // er nog op staat (plus een marge links); nooit meer dan de server levert.
+  function candleLimit(tf, origin, nowSec) {
+    var base = FULL_BASE[tf] || CANDLE_LIMIT, step = TF_SEC[tf];
+    if (!num(origin) || !step) return base;
+    return Math.min(FULL_MAX, Math.max(base, Math.ceil((nowSec - origin) / step) + 12));
+  }
+
+  // De candle (openmoment) waarin het ontstaansmoment valt, of null als het voor de eerste candle ligt of er geen candles zijn.
+  function originBar(times, origin, tf) {
+    if (!num(origin) || !times.length || origin < times[0]) return null;
+    var hit = null;
+    for (var i = 0; i < times.length && times[i] <= origin; i++) hit = times[i];
+    if (hit !== null && TF_SEC[tf] && origin >= hit + TF_SEC[tf]) return null;      // na de laatste candle: niet op deze grafiek
+    return hit;
+  }
+
+  function fullTf(s) {
+    return s && s.zone && TF_SEC[s.zone.tf] ? s.zone.tf : "1h";
+  }
+
+  // Welke uitleg onder de grafiek staat: alleen als de herkomst van de zone bekend is, en eerlijk over waar de markering staat.
+  function fullNote(s, tf, bar) {
+    var z = s && s.zone;
+    if (!z || !num(z.origin)) return "";
+    if (bar === null) return z.note_outside || "";
+    return tf === z.tf ? (z.note || "") : (z.note_other_tf || "");
+  }
+
   // De themakleur kan een ander formaat zijn dan 6-cijferige hex (rgb(), hsl(), leeg); de aanroeper geeft dan een vaste rgba mee in plaats van dat de invoer ongewijzigd terugkomt, want dat zou een dekkend vlak over de candles leggen.
   function rgba(hex, a, fallback) {
     var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex).trim());
@@ -67,13 +110,13 @@
   }
 
   // Een baselineserie met een prijsgrondlijn blijft aan de prijzen vastzitten als de schaal verschuift of de grafiek van maat wisselt.
-  function areaSeries(chart, color, fallback) {
-    var fill = rgba(color, 0.1, fallback), none = "rgba(0,0,0,0)";
+  function areaSeries(chart, color, fallback, priceFormat) {
+    var fill = rgba(color, AREA_ALPHA, fallback), none = "rgba(0,0,0,0)";
     return chart.addBaselineSeries({
       baseValue: { type: "price", price: 0 },
       topLineColor: none, bottomLineColor: none,
       topFillColor1: fill, topFillColor2: fill, bottomFillColor1: fill, bottomFillColor2: fill,
-      lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, priceFormat: priceFormat,
       autoscaleInfoProvider: function () { return null; },
     });
   }
@@ -89,10 +132,10 @@
     });
   }
 
-  function fetchCandles(coin, tf) {
-    var key = coin + "|" + tf, hit = memo[key];
+  function fetchCandles(coin, tf, limit) {
+    var key = coin + "|" + tf + "|" + limit, hit = memo[key];
     if (hit && Date.now() - hit.at < REFRESH_MS - 2000) return hit.promise;
-    var promise = fetch("/api/radar_candles/" + encodeURIComponent(coin) + "?tf=" + encodeURIComponent(tf) + "&limit=" + CANDLE_LIMIT, { credentials: "same-origin" })
+    var promise = fetch("/api/radar_candles/" + encodeURIComponent(coin) + "?tf=" + encodeURIComponent(tf) + "&limit=" + limit, { credentials: "same-origin" })
       .then(function (resp) { if (!resp.ok) throw new Error("candles " + resp.status); return resp.json(); })
       .then(function (body) {
         return body.candles.map(function (c) { return { time: c[0], open: c[1], high: c[2], low: c[3], close: c[4] }; });
@@ -132,13 +175,94 @@
     setLine(lc, "now", s.price, { color: css("--text-dim", "#b7c4c2"), lineStyle: 2, title: "Koers nu", axisLabelTextColor: bg });
     lc.el.setAttribute("aria-label", s.label || "");
     lc.band.applyOptions({ baseValue: { type: "price", price: s.zone_low != null ? s.zone_low : 0 } });
+    if (lc.full) syncZones(lc);
+  }
+
+  // Schermvullend: de zone en de doelzone als vlak met een dunne rand, getekend als primitive op de candleserie zodat ze aan prijs en tijd vastzitten
+  // en tot de rechterrand doorlopen (een serie stopt bij de laatste candle). De zone begint bij de candle waar hij ontstond als die op de grafiek staat.
+  function syncZones(lc) {
+    var s = spec(lc.el), z = s && s.zone, boxes = [];
+    var accent = css("--accent", "#0ABAB5"), green = css("--green", "#33d69f"), plate = rgba(css("--panel", "#131a1b"), 0.85, "rgba(19,26,27,0.85)");
+    var times = lc.candles.map(function (c) { return c.time; });
+    lc.originBar = z ? originBar(times, z.origin, lc.tf) : null;
+    if (z && num(s.zone_low) && num(s.zone_high)) {
+      boxes.push({ low: s.zone_low, high: s.zone_high, time: lc.originBar, label: z.label, text: accent, plate: plate,
+                   fill: rgba(accent, 0.12, "rgba(10,186,181,0.12)"), edge: rgba(accent, 0.6, "rgba(10,186,181,0.6)") });
+    }
+    if (z && num(z.target_low) && num(z.target_high)) {
+      boxes.push({ low: z.target_low, high: z.target_high, time: null, label: z.target_label, text: green, plate: plate,
+                   fill: rgba(green, 0.07, "rgba(51,214,159,0.07)"), edge: rgba(green, 0.45, "rgba(51,214,159,0.45)") });
+    }
+    lc.boxes = boxes;
+    var marks = [];
+    if (z && lc.originBar !== null) {
+      var bull = z.kind === "bull";
+      marks.push({ time: lc.originBar, position: bull ? "belowBar" : "aboveBar", shape: bull ? "arrowUp" : "arrowDown", color: accent, text: "Zone" });
+    }
+    lc.series.setMarkers(marks);
+    if (lc.onNote && lc.candles.length) lc.onNote(fullNote(s, lc.tf, lc.originBar));
+    if (lc.redraw) lc.redraw();
+  }
+
+  function zonePrimitive(lc) {
+    var font = css("--mono", "monospace").replace(/"/g, "");
+    // Twee lagen: de vlakken onder de candles, de labels erboven (anders lopen candles door de tekst).
+    function draw(target, labels) {
+      var boxes = lc.boxes || [];
+      if (!boxes.length) return;
+      target.useBitmapCoordinateSpace(function (scope) {
+        var ctx = scope.context, hr = scope.horizontalPixelRatio, vr = scope.verticalPixelRatio, W = scope.bitmapSize.width;
+        var ts = lc.chart.timeScale(), half = (ts.options().barSpacing || 6) / 2;
+        boxes.forEach(function (b) {
+          var y1 = lc.series.priceToCoordinate(b.high), y2 = lc.series.priceToCoordinate(b.low);
+          if (y1 === null || y2 === null) return;
+          var x = b.time !== null ? ts.timeToCoordinate(b.time) : null;
+          var left = x === null ? 0 : Math.max(0, Math.round((x - half) * hr));
+          var top = Math.round(Math.min(y1, y2) * vr), h = Math.max(Math.round(Math.abs(y2 - y1) * vr), Math.round(2 * vr));
+          var line = Math.max(1, Math.round(hr));
+          if (labels) { drawLabel(ctx, b, left, top, h, W, hr, vr); return; }
+          ctx.fillStyle = b.fill;
+          ctx.fillRect(left, top, W - left, h);
+          ctx.fillStyle = b.edge;
+          ctx.fillRect(left, top, W - left, line);
+          ctx.fillRect(left, top + h - line, W - left, line);
+          if (x !== null) ctx.fillRect(left, top, line, h);
+        });
+      });
+    }
+    function drawLabel(ctx, b, left, top, h, W, hr, vr) {
+      if (!b.label) return;
+      ctx.font = "500 " + Math.round(11 * vr) + "px " + font;
+      // Rechts staan de labels van Instap, Stop en Doel; begint het vlak daar te dichtbij, dan komt het label links van zijn begin.
+      var tw = ctx.measureText(b.label).width, gap = Math.round(6 * hr), lx = left + gap;
+      if (lx + tw > W - Math.round(LINE_LABEL_ROOM * hr)) lx = left - gap - tw >= 0 ? left - gap - tw : Math.min(lx, W - tw - gap);
+      // Past het label niet in het vlak, dan erboven; zo blijft het los van de candles in de zone.
+      var inside = h >= Math.round(20 * vr), lh = Math.round(15 * vr), pad = Math.round(4 * hr);
+      var ly = inside ? top + Math.round(3 * vr) : top - lh - Math.round(2 * vr);
+      lx = Math.max(0, lx);
+      // Een vlak in de achtergrondkleur achter het label: zo blijft het leesbaar boven candles die door de zone lopen.
+      ctx.fillStyle = b.plate;
+      ctx.fillRect(lx - pad, ly, tw + 2 * pad, lh);
+      ctx.fillStyle = b.text;
+      ctx.textBaseline = "middle";
+      ctx.fillText(b.label, lx, ly + lh / 2);
+    }
+    var below = { zOrder: function () { return "bottom"; }, renderer: function () { return { draw: function (t) { draw(t, false); } }; } };
+    var above = { zOrder: function () { return "top"; }, renderer: function () { return { draw: function (t) { draw(t, true); } }; } };
+    return {
+      paneViews: function () { return [below, above]; },
+      updateAllViews: function () {},
+      attached: function (p) { lc.redraw = p.requestUpdate; },
+      detached: function () { lc.redraw = null; },
+    };
   }
 
   // De zone als vlak tussen zone_low en zone_high. Is hij te dun om te zien (minder dan ZONE_MIN_PX hoog), dan toont de limietlijn alleen.
   function syncBand(lc) {
     var s = spec(lc.el);
     var show = false;
-    if (s && s.zone_low != null && s.zone_high != null && lc.candles.length) {
+    // Schermvullend met een zone-radar-zone tekent syncZones het vlak, met rand en vanaf zijn ontstaan.
+    if (s && !(lc.full && s.zone) && s.zone_low != null && s.zone_high != null && lc.candles.length) {
       var a = lc.series.priceToCoordinate(s.zone_low), b = lc.series.priceToCoordinate(s.zone_high);
       show = a !== null && b !== null && Math.abs(a - b) >= 6;
     }
@@ -157,7 +281,9 @@
 
   function load(lc) {
     var el = lc.el;
-    return fetchCandles(el.getAttribute("data-coin"), el.getAttribute("data-tf") || "15m").then(function (candles) {
+    var tf = el.getAttribute("data-tf") || "15m", s = spec(el);
+    var limit = lc.full ? candleLimit(tf, s && s.zone ? s.zone.origin : null, Date.now() / 1000) : CANDLE_LIMIT;
+    return fetchCandles(el.getAttribute("data-coin"), tf, limit).then(function (candles) {
       if (lc.dead) return;
       lc.candles = candles.map(function (c) { return Object.assign({}, c); });   // kopie: overlayPrice past de laatste aan
       lc.series.setData(lc.candles);
@@ -165,10 +291,11 @@
       lc.chart.timeScale().fitContent();
       syncBand(lc);
       syncAreas(lc);
+      if (lc.full) syncZones(lc);
     });
   }
 
-  function create(el, temp) {
+  function create(el, temp, full) {
     var s = spec(el);
     if (!s || el._lc) return el._lc ? el._lc.ready : Promise.resolve();
     el.classList.remove("is-failed");
@@ -179,36 +306,43 @@
       layout: { background: { type: "solid", color: panel }, textColor: css("--text-dim", "#b7c4c2"), fontSize: 12, fontFamily: css("--mono", "monospace").replace(/"/g, "") },
       grid: { vertLines: { visible: false }, horzLines: { color: "rgba(255,255,255,0.04)" } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.08 } },
-      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: 12, fixLeftEdge: true, tickMarkFormatter: tickLabel },
+      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: full ? 8 : 12, fixLeftEdge: true, tickMarkFormatter: tickLabel },
       crosshair: { vertLine: { visible: false, labelVisible: false }, horzLine: { visible: false, labelVisible: false } },
       handleScroll: false, handleScale: false,
     });
-    var lc = { el: el, chart: chart, lines: {}, candles: [], dead: false, areas: {} };
+    var lc = { el: el, chart: chart, lines: {}, candles: [], dead: false, areas: {}, full: !!full, tf: el.getAttribute("data-tf") || "15m",
+               boxes: [], originBar: null, onNote: full ? full.onNote : null };
     // Eerst toegevoegd, dus onderop: zone en candles blijven er leesbaar overheen.
-    lc.areas.risk = areaSeries(chart, red, "rgba(242,104,92,0.1)");
-    lc.areas.reward = areaSeries(chart, green, "rgba(51,214,159,0.1)");
+    // Elke serie op de schaal krijgt het prijsformaat van de candles: de schaal neemt het formaat van de eerst toegevoegde serie, en met de
+    // standaard van twee decimalen stond een instap van 0,162 als "0.16" op de as.
+    var pf = { type: "price", precision: precision(s), minMove: Math.pow(10, -precision(s)) };
+    lc.areas.risk = areaSeries(chart, red, "rgba(242,104,92,0.07)", pf);
+    lc.areas.reward = areaSeries(chart, green, "rgba(51,214,159,0.07)", pf);
     // De zone eerst: een baselineserie met als grondlijn zone_low en overal zone_high als waarde vult precies het vlak ertussen.
     lc.band = chart.addBaselineSeries({
       baseValue: { type: "price", price: s.zone_low != null ? s.zone_low : 0 },
       topLineColor: "rgba(0,0,0,0)", topFillColor1: "rgba(10,186,181,0.16)", topFillColor2: "rgba(10,186,181,0.16)",
       bottomLineColor: "rgba(0,0,0,0)", bottomFillColor1: "rgba(0,0,0,0)", bottomFillColor2: "rgba(0,0,0,0)",
-      lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+      lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, priceFormat: pf,
       autoscaleInfoProvider: function () { return null; },
     });
     lc.series = chart.addCandlestickSeries({
       upColor: up, downColor: down, borderVisible: false, wickUpColor: up, wickDownColor: down,
       priceLineVisible: false, lastValueVisible: false,
-      priceFormat: { type: "price", precision: precision(s), minMove: Math.pow(10, -precision(s)) },
+      priceFormat: pf,
       // Stop, limiet en doel horen er altijd op, naast de candles: de schaal is de unie van beide.
       autoscaleInfoProvider: function (original) {
         var r = original(), cur = spec(el);
         var lv = cur ? levels(cur) : [];
+        // Schermvullend horen de hele zone en doelzone in beeld, anders valt een rand van het vlak buiten de grafiek.
+        if (full && cur && cur.zone) lv = lv.concat([cur.zone.target_low, cur.zone.target_high].filter(num));
         if (!lv.length) return r;
         var lo = Math.min.apply(null, lv), hi = Math.max.apply(null, lv);
         if (r && r.priceRange) { lo = Math.min(lo, r.priceRange.minValue); hi = Math.max(hi, r.priceRange.maxValue); }
         return { priceRange: { minValue: lo, maxValue: hi }, margins: r ? r.margins : undefined };
       },
     });
+    if (full) lc.series.attachPrimitive(zonePrimitive(lc));
     el._lc = lc;
     if (!temp) live.add(el);
     applyLevels(lc);
@@ -272,39 +406,80 @@
     if (full && full.src === el) update(full.el, next);
   };
 
-  // Schermvullend: een eigen element met dezelfde gegevens, tijdelijk gemaakt (niet in `live`) en bij sluiten weer weggehaald.
+  // Schermvullend: een eigen element met dezelfde gegevens, tijdelijk gemaakt (niet in `live`) en bij sluiten weer weggehaald. Een ander tijdframe
+  // kiezen maakt de grafiek opnieuw op dat tijdframe; de niveaus blijven dezelfde.
   var full = null;
+
+  function node(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text) n.textContent = text;
+    return n;
+  }
+
+  function legendItem(cls, text) {
+    var item = node("span", "lc-key " + cls);
+    item.textContent = text;
+    return item;
+  }
+
   function openFull(src) {
     if (full || !spec(src)) return;
-    var s = spec(src), dlg = document.createElement("dialog");
-    dlg.className = "lc-full";
-    dlg.setAttribute("aria-label", "Grafiek " + src.getAttribute("data-coin"));
-    var head = document.createElement("div");
-    head.className = "lc-full-head";
-    var title = document.createElement("p");
-    title.className = "lc-full-title";
-    title.textContent = src.getAttribute("data-coin") + " " + (s.direction || "");
-    var cap = document.createElement("span");
-    cap.className = "lc-full-cap";
-    cap.textContent = src.getAttribute("data-caption") || "";
-    title.appendChild(cap);
-    var close = document.createElement("button");
+    var s = spec(src), coin = src.getAttribute("data-coin"), dlg = node("dialog", "lc-full");
+    dlg.setAttribute("aria-label", "Grafiek " + coin);
+    var head = node("div", "lc-full-head");
+    var title = node("p", "lc-full-title", coin + " ");
+    if (s.direction) title.appendChild(node("span", "lc-full-dir", s.direction === "long" ? "Long" : "Short"));
+    var seg = node("div", "lc-seg");
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", "Tijdframe van de candles");
+    var close = node("button", "lc-full-close");
     close.type = "button";
-    close.className = "lc-full-close";
     close.setAttribute("aria-label", "Grafiek sluiten");
-    close.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+    close.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
     head.appendChild(title);
+    head.appendChild(seg);
     head.appendChild(close);
-    var el = document.createElement("div");
-    el.className = "level-chart";
-    ["data-coin", "data-tf", "role", "aria-label"].forEach(function (a) { if (src.hasAttribute(a)) el.setAttribute(a, src.getAttribute(a)); });
+    var el = node("div", "level-chart");
+    ["data-coin", "role", "aria-label"].forEach(function (a) { if (src.hasAttribute(a)) el.setAttribute(a, src.getAttribute(a)); });
     el._spec = s;
+    var foot = node("div", "lc-full-foot");
+    var note = node("p", "lc-full-note");
+    note.setAttribute("aria-live", "polite");
+    var legend = node("p", "lc-full-legend");
+    if (s.zone) {
+      legend.appendChild(legendItem("is-zone", s.zone.label));
+      if (s.zone.target_label) legend.appendChild(legendItem("is-target", s.zone.target_label));
+    } else if (num(s.zone_low) && num(s.zone_high)) {
+      legend.appendChild(legendItem("is-zone", "Zone"));
+    }
+    legend.appendChild(legendItem("is-risk", "Risico"));
+    legend.appendChild(legendItem("is-reward", "Winst"));
+    foot.appendChild(note);
+    foot.appendChild(legend);
     dlg.appendChild(head);
     dlg.appendChild(el);
-    var legend = src.closest(".lc") && src.closest(".lc").querySelector(".lc-legend");
-    if (legend) dlg.appendChild(legend.cloneNode(true));
+    dlg.appendChild(foot);
     document.body.appendChild(dlg);
     full = { dlg: dlg, el: el, src: src };
+    var opts = { onNote: function (text) { note.textContent = text; note.hidden = !text; } };
+    note.hidden = true;
+
+    function show(tf) {
+      destroy(el);
+      el.setAttribute("data-tf", tf);
+      Array.prototype.forEach.call(seg.children, function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-tf") === tf)); });
+      create(el, true, opts);
+    }
+    FULL_TFS.forEach(function (tf) {
+      var b = node("button", "lc-seg-btn", TF_TEXT[tf]);
+      b.type = "button";
+      b.setAttribute("data-tf", tf);
+      b.setAttribute("aria-label", "Candles van " + { "15m": "15 minuten", "1h": "1 uur", "4h": "4 uur" }[tf]);
+      b.addEventListener("click", function () { if (b.getAttribute("aria-pressed") !== "true") show(tf); });
+      seg.appendChild(b);
+    });
+
     document.documentElement.classList.add("lc-lock");
     close.addEventListener("click", function () { if (dlg.close) dlg.close(); else done(); });
     function done() {
@@ -317,7 +492,7 @@
     }
     dlg.addEventListener("close", done);
     if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
-    create(el, true);
+    show(fullTf(s));
   }
 
   document.addEventListener("click", function (e) {
