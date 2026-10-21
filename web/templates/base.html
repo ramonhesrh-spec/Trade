@@ -375,7 +375,7 @@
 <div class="more-sheet" id="more-sheet" hidden>
   <div class="more-sheet-panel" role="dialog" aria-label="Meer">
     <div class="more-links">
-      <a href="/week">Kwartaalcijfers</a><a href="/signalen">Journaal</a><a href="/meldingen">Meldingen</a><a href="/account">Account</a><a href="/uitleg">Handleiding</a>{% if is_ceo(user) %}<a href="/galerij">Galerij</a>{% endif %}
+      <a href="/week">Kwartaalcijfers</a><a href="/signalen">Journaal</a><a href="/meldingen">Meldingen</a><a href="/account">Account</a><a href="/uitleg">Handleiding</a><a href="/zone-radar">Zone-radar uitleg</a>{% if is_ceo(user) %}<a href="/galerij">Galerij</a>{% endif %}
     </div>
     <p class="muted more-label">Coins</p>
     <div class="more-coins">{% for c in coins %}<a href="/coins/{{ c.symbol }}">{{ macros.coin_avatar(c.symbol, 22) }}{{ c.symbol }}</a>{% endfor %}</div>

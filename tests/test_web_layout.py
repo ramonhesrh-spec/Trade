@@ -151,6 +151,12 @@ class BaseShellTests(unittest.TestCase):
         self.assertIn("viewport-fit=cover", html)
         self.assertIn('content="black-translucent"', html)
 
+    def test_zone_radar_uitleg_staat_op_een_eigen_pagina(self):
+        r = self.client.get("/zone-radar")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("ongetest", r.text)
+        self.assertIn('href="/zone-radar"', self.client.get("/smc").text)
+
     def test_achtergrond_is_vlak_zonder_raster_of_zwevende_lagen(self):
         css = open(os.path.join(os.path.dirname(main.__file__), "static", "style.css"), encoding="utf-8").read()
         for pad in ("/vandaag", "/login"):

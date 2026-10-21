@@ -302,6 +302,12 @@ async def api_public_prices():
     return prices
 
 
+@app.get("/zone-radar")
+async def zone_radar_uitleg(request: Request, user: dict = Depends(require_login)):
+    """Uitleg voor gebruikers bij de kaarten 'Zone-radar' op /smc."""
+    return templates.TemplateResponse(request, "zones_uitleg.html", {"user": user, "coins": repo.list_coins()})
+
+
 @app.get("/uitleg")
 async def uitleg(request: Request, user: dict = Depends(require_login)):
     """Dezelfde uitleg als de openbare landingspagina (hoe het werkt,

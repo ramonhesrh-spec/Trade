@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Zone-radar uitleg — HesPulse{% endblock %}
+{% block page_title %}Zone-radar{% endblock %}
+{% block content %}
+
+<p class="page-intro">Niveaus waar de koers kan keren, met een plan voor je limietorder. Je beslist zelf of je hem zet.</p>
+
+<section class="landing-section" style="padding-left:0; padding-right:0; border-top:none;">
+  <h2>Wat is een zone</h2>
+  <p>Een zone is een prijsvak waar de koers eerder hard wegging. Een vraagzone ligt onder de koers: kopers waren hier sterk. Een aanbodzone ligt boven de koers: verkopers waren hier sterk. Keert de koers terug naar zo'n vak, dan zijn de kansen groter dat hij daar weer keert. Dat is een verwachting en geen zekerheid.</p>
+</section>
+
+<section class="landing-section" style="padding-left:0; padding-right:0;">
+  <h2>Wat zie je op een kaart</h2>
+  <div class="factor-grid">
+    <div class="factor"><h3>Limiet</h3><p>De prijs waarop je zelf een limietorder zet. Bij een vraagzone is dat de bovenkant van de zone (long). Bij een aanbodzone is dat de onderkant (short).</p></div>
+    <div class="factor"><h3>Stop</h3><p>De prijs waarop je trade stopt als je ongelijk hebt. Hij ligt net voorbij de zone. Zet hem altijd, op het moment dat je limiet vult.</p></div>
+    <div class="factor"><h3>Doel</h3><p>De rand van de volgende zone aan de andere kant. Een kaart komt er alleen als je minstens 2 keer zoveel kunt winnen als verliezen (2R).</p></div>
+  </div>
+</section>
+
+<section class="landing-section" style="padding-left:0; padding-right:0;">
+  <h2>Zo gebruik je het</h2>
+  <ol>
+    <li>Je krijgt een melding bij een nieuwe kaart. Tik erop en bekijk de grafiek.</li>
+    <li>Past de zone bij wat jij ziet? Kijk naar de trend en de rest van de markt. Daar kijkt de radar niet naar.</li>
+    <li>Zet bij je beurs een limietorder op de limietprijs. Zet de stop en het doel erbij. De chips op de kaart kopiëren de prijzen.</li>
+    <li>Vult je limiet, dan krijg je een tweede melding en staat de trade in je journaal. Sluit hem daar af met je eigen exit.</li>
+    <li>Staat de koers voorbij de stop of is het doel al geraakt voordat je limiet vulde, dan vervalt de kaart. Doe dan niets.</li>
+  </ol>
+</section>
+
+<section class="landing-section" style="padding-left:0; padding-right:0;">
+  <h2>Welke zones komen op de radar</h2>
+  <ul>
+    <li>Zones op de 1-uurs en 4-uurs grafiek, op gesloten candles.</li>
+    <li>Per coin en per richting de dichtstbijzijnde zone, maximaal 6% van de koers weg.</li>
+    <li>Staat de koers al in de zone of voorbij het doel, dan komt er geen kaart.</li>
+    <li>Een nieuwe kaart voor dezelfde zone komt niet terug nadat hij vulde of verviel.</li>
+    <li>Maximaal 20 nieuwe kaarten per dag. De zones dichtst bij de koers gaan voor.</li>
+  </ul>
+</section>
+
+<section class="landing-section" style="padding-left:0; padding-right:0;">
+  <h2>Eerlijk over wat dit is</h2>
+  <p>De zone-radar is ongetest. We hebben niet bewezen dat zones na kosten winst geven. Elke kaart is een niveau met een plan, geen voorspelling. Op <a href="/bewijs">Bewijs</a> zie je apart hoe de zone-radar presteert, met alle verliezers erbij. Een verliezende kaart hoort erbij: de stop begrenst je verlies op de afstand die op de kaart staat.</p>
+  <p>HesPulse plaatst nooit zelf een order. Handel alleen met geld waarvan je het verlies kunt dragen.</p>
+</section>
+
+<p><a href="/smc">Naar de Radar</a></p>
+
+{% endblock %}

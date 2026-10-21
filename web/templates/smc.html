@@ -9,6 +9,8 @@
 {{ macros.headline("Setups die wachten", setup_cards|length, "wachten",
      explain="SMC-setups die op hun zone wachten (structuur brak, een sweep pakte de liquiditeit) en zone-radar-kaarten: de dichtstbijzijnde vraag- of aanbodzone op 1u en 4u als limietplan, ongetest. Je krijgt een melding bij een nieuwe kaart en zodra de limiet geraakt wordt.") }}
 
+<p class="muted"><a href="/zone-radar">Zone-radar: zo werkt het</a></p>
+
 {% set smc_proof = proof("smc") %}
 {{ macros.keylines([
   {"label": "Open trades", "value": signal_cards|length},
