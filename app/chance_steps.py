@@ -66,6 +66,31 @@ def script_steps(sc: dict) -> list[dict]:
                       live=(sc["coin"], sc["trigger_level"], "lp") if state == "waiting" and sc.get("coin") else None)
 
 
+def now_line(state: Optional[str], direction: str, entry: float, stop: float, take: Optional[float] = None, *,
+             wait_for: Optional[str] = None) -> str:
+    """Eén zin bovenaan een kaart: wat je nu doet, in gewone woorden. `state` is een radarstand (wacht, in_zone, door_zone, ongeldig,
+    doel_geraakt), 'open' voor een lopende trade, of 'fired'/'vervallen' voor een scenario; None (nog geen koers) leest als wacht.
+    `wait_for` vervangt het instapniveau in de wachtzin (de voorwaarde van een scenario)."""
+    levels = f"stop {fmt(stop)}" + (f", doel {fmt(take)}" if take is not None else "")
+    order = f"limit {direction} op {fmt(entry)}, {levels}"
+    if state == "open":
+        return f"Trade loopt. {levels[0].upper()}{levels[1:]}."
+    if state == "fired":
+        return f"De voorwaarde is geraakt. Zet nu een {order}."
+    if state == "in_zone":
+        return f"De koers staat in de zone: je limit {direction} op {fmt(entry)} is waarschijnlijk gevuld. Houd {levels} aan."
+    if state == "door_zone":
+        return f"De koers ging door de zone heen. Is je limit gevuld, houd dan {levels} aan."
+    if state == "ongeldig":
+        return f"Plan vervallen: de koers raakte de stop. Haal je limit op {fmt(entry)} weg als die nog openstaat."
+    if state == "doel_geraakt":
+        return f"Het doel is gehaald zonder dat je limit vulde. Haal je limit op {fmt(entry)} weg."
+    if state == "vervallen":
+        return "Dit scenario is voorbij. Er is niets meer te doen."
+    wait = f"Wacht tot {wait_for}." if wait_for else f"Wacht tot de koers {fmt(entry)} bereikt."
+    return f"{wait} Zet dan een {order}."
+
+
 def level_chips(entry: float, stop: float, take: float) -> list[dict]:
     """Instap, stop en doel als losse getallen voor de tik-om-te-kopiëren-knoppen. Zelfde notatie als in de stappen, met een punt als
     decimaalteken, want dat accepteert elk orderveld van een beurs."""

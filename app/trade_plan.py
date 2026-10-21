@@ -47,6 +47,9 @@ def plan_state(direction: str, zone_low: float, zone_high: float, stop: float, p
     return "in_zone" if price <= zone_high else "door_zone"
 
 
+# Kort woord voor de standpil bovenaan een kaart; de zin eronder (chance_steps.now_line) zegt wat je doet.
+STATE_SHORT = {"wacht": "Wacht", "in_zone": "In zone", "door_zone": "Door de zone", "ongeldig": "Vervallen", "doel_geraakt": "Gemist", "open": "Open trade"}
+
 STATE_LABELS = {
     "wacht": "Wacht op de zone",
     "in_zone": "In de zone: je order is waarschijnlijk geraakt",

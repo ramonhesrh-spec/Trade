@@ -25,6 +25,30 @@ class ChanceStepsTests(unittest.TestCase):
         self.assertNotIn("live_coin", cs.script_steps({**sc, "state": "fired"})[0])
 
 
+class NowLineTest(unittest.TestCase):
+    def test_waiting_names_the_level_and_the_full_order(self):
+        self.assertEqual(cs.now_line("wacht", "short", 2455.0, 2484.0, 2392.0),
+                         "Wacht tot de koers 2455.00 bereikt. Zet dan een limit short op 2455.00, stop 2484.00, doel 2392.00.")
+        # Zonder koers is er nog geen stand: dan is wachten het enige wat je kunt doen.
+        self.assertEqual(cs.now_line(None, "short", 2455.0, 2484.0, 2392.0), cs.now_line("wacht", "short", 2455.0, 2484.0, 2392.0))
+
+    def test_open_trade_only_names_stop_and_target(self):
+        self.assertEqual(cs.now_line("open", "short", 2455.0, 2484.0, 2392.0), "Trade loopt. Stop 2484.00, doel 2392.00.")
+        self.assertEqual(cs.now_line("open", "long", 100.0, 99.0), "Trade loopt. Stop 99.0000.")       # meelopende stop: geen doel
+
+    def test_every_state_gets_its_own_sentence(self):
+        states = ("wacht", "in_zone", "door_zone", "ongeldig", "doel_geraakt", "open", "fired", "vervallen")
+        lines = {s: cs.now_line(s, "long", 100.0, 99.0, 103.0) for s in states}
+        self.assertEqual(len(set(lines.values())), len(states))
+        self.assertIn("waarschijnlijk gevuld", lines["in_zone"])
+        self.assertIn("Haal je limit op 100.00 weg", lines["ongeldig"])
+        self.assertTrue(lines["fired"].startswith("De voorwaarde is geraakt. Zet nu een limit long op 100.00"))
+
+    def test_a_scenario_waits_for_its_condition(self):
+        self.assertTrue(cs.now_line("wacht", "long", 100.8, 99.8, 103.0, wait_for="een 5m-candle sluit boven 101")
+                        .startswith("Wacht tot een 5m-candle sluit boven 101. Zet dan een limit long op 100.80"))
+
+
 class LevelChipsTest(unittest.TestCase):
     def test_three_chips_in_the_same_notation_as_the_steps(self):
         chips = cs.level_chips(100.0, 97.0, 0.09571)

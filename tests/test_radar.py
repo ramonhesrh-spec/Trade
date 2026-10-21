@@ -80,6 +80,15 @@ class RadarTests(unittest.TestCase):
         self.assertAlmostEqual(payload["signal:3"]["live_r"], 1.0)
         self.assertEqual(payload["setup:7"]["chart"]["price"], 102.0)
 
+    def test_kaart_zegt_bovenaan_wat_je_nu_doet(self):
+        waiting, filled = radar.setup_card(SETUP, 102.0), radar.signal_card(SIGNAL, 97.0)
+        self.assertEqual((waiting["state_short"], filled["state_short"]), ("Wacht", "Open trade"))
+        self.assertTrue(waiting["action"].startswith("Wacht tot de koers 100.00 bereikt. Zet dan een limit long op 100.00"))
+        self.assertTrue(filled["action"].startswith("Trade loopt."))
+        payload = radar.live_payload([radar.setup_card(SETUP, 99.5)])["setup:7"]       # in de zone: de zin en de pil lopen live mee
+        self.assertEqual(payload["short"], "In zone")
+        self.assertIn("waarschijnlijk gevuld", payload["action"])
+
     def test_kaarten_hebben_kopieerbare_niveaus(self):
         card = radar.setup_card(SETUP, 102.0)
         self.assertEqual([c["text"] for c in card["levels"]], ["100.00", "97.0000", "106.00"])

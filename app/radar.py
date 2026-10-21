@@ -23,6 +23,8 @@ def setup_card(setup: dict, price: Optional[float]) -> Optional[dict]:
         # Eigen sleutel voor de zone-radar: zijn ids komen uit een andere tabel en zouden anders botsen met die van een SMC-setup.
         "key": f"{'zone' if setup.get('source') == 'zone_radar' else 'setup'}:{setup['id']}", "kind": "setup", "coin": setup["coin"], "direction": setup["direction"],
         "plan": plan, "price": price, "state": state, "state_label": tp.STATE_LABELS.get(state, "Koers wordt opgehaald"),
+        "state_short": tp.STATE_SHORT.get(state, "Geen koers"),
+        "action": chance_steps.now_line(state, setup["direction"], plan.limit, plan.stop, plan.take),
         "distance_pct": distance, "approach_pct": approach, "live_r": None,
         "chart": None if moot else tp.chart_spec(setup["direction"], plan.stop, plan.take, plan.limit, price, setup["zone_low"], setup["zone_high"]),
         "created_at": setup["created_at"], "setup": setup,
@@ -69,7 +71,8 @@ def signal_card(signal: dict, price: Optional[float]) -> Optional[dict]:
     r = tp.live_r(signal["direction"], entry, stop, price) if price else None
     return {
         "key": f"signal:{signal['id']}", "kind": "signal", "coin": signal["coin"], "direction": signal["direction"],
-        "plan": None, "price": price, "state": "open", "state_label": "Open trade",
+        "plan": None, "price": price, "state": "open", "state_label": "Open trade", "state_short": tp.STATE_SHORT["open"],
+        "action": chance_steps.now_line("open", signal["direction"], entry, stop, take),
         "distance_pct": None, "approach_pct": None, "live_r": r,
         "chart": tp.chart_spec(signal["direction"], stop, take, entry, price, entry=entry),
         "created_at": signal["created_at"], "signal": signal,
@@ -82,7 +85,7 @@ def live_payload(cards: list[dict]) -> dict:
     """Wat de browser elke paar seconden ververst: status, afstand, live R en de niveaus voor de grafiek per kaart (getallen, zie trade_plan.chart_spec; None bij een moot plan)."""
     return {
         c["key"]: {
-            "state": c["state"], "label": c["state_label"], "price": c["price"],
+            "state": c["state"], "label": c["state_label"], "short": c["state_short"], "action": c["action"], "price": c["price"],
             "distance_pct": c["distance_pct"], "approach_pct": c["approach_pct"], "live_r": c["live_r"], "chart": c["chart"],
         }
         for c in cards

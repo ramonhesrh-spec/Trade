@@ -103,6 +103,8 @@ def scenario_view(s: dict, price: Optional[float], now: datetime, coin: str = ""
         "chart": tp.chart_spec(s["direction"], s["stop_loss"], s["take_profit"], s["entry"], price, entry=s["entry"]),
     }
     view["steps"] = chance_steps.script_steps(view)
+    view["action"] = chance_steps.now_line({"waiting": "wacht", "fired": "fired"}.get(state, "vervallen"), s["direction"], s["entry"], s["stop_loss"],
+                                           s["take_profit"], wait_for="een " + view["trigger"] if state == "waiting" else None)
     view["levels"] = chance_steps.level_chips(s["entry"], s["stop_loss"], s["take_profit"])
     return view
 
