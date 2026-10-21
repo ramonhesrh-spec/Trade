@@ -166,13 +166,15 @@
     if (!s) return;
     var green = css("--green", "#33d69f"), red = css("--red", "#f2685c"), accent = css("--accent", "#0ABAB5");
     var bg = css("--panel", "#131a1b");
-    setLine(lc, "take", s.take, { color: green, title: "Doel", axisLabelTextColor: bg });
-    setLine(lc, "stop", s.stop, { color: red, title: "Stop", axisLabelTextColor: bg });
+    // Schermvullend staan de woorden niet op de lijnen: ze liggen over de candles. De kleur van het prijslabel is dan de sleutel (zie de legenda).
+    var word = function (w) { return lc.full ? "" : w; };
+    setLine(lc, "take", s.take, { color: green, title: word("Doel"), axisLabelTextColor: bg });
+    setLine(lc, "stop", s.stop, { color: red, title: word("Stop"), axisLabelTextColor: bg });
     var open = s.entry !== null && s.entry !== undefined;
     // Gewone woorden op de lijnen: je limietorder en je gevulde entry zijn allebei "Instap".
-    setLine(lc, "limit", open ? null : s.limit, { color: accent, title: "Instap", axisLabelTextColor: bg });
-    setLine(lc, "entry", open ? s.entry : null, { color: accent, title: "Instap", axisLabelTextColor: bg });
-    setLine(lc, "now", s.price, { color: css("--text-dim", "#b7c4c2"), lineStyle: 2, title: "Koers nu", axisLabelTextColor: bg });
+    setLine(lc, "limit", open ? null : s.limit, { color: accent, title: word("Instap"), axisLabelTextColor: bg });
+    setLine(lc, "entry", open ? s.entry : null, { color: accent, title: word("Instap"), axisLabelTextColor: bg });
+    setLine(lc, "now", s.price, { color: css("--text-dim", "#b7c4c2"), lineStyle: 2, title: word("Koers nu"), axisLabelTextColor: bg });
     lc.el.setAttribute("aria-label", s.label || "");
     lc.band.applyOptions({ baseValue: { type: "price", price: s.zone_low != null ? s.zone_low : 0 } });
     if (lc.full) syncZones(lc);
@@ -457,6 +459,10 @@
     } else if (num(s.zone_low) && num(s.zone_high)) {
       legend.appendChild(legendItem("is-zone", "Zone"));
     }
+    legend.appendChild(legendItem("is-line-entry", "Instap"));
+    legend.appendChild(legendItem("is-line-stop", "Stop"));
+    legend.appendChild(legendItem("is-line-take", "Doel"));
+    legend.appendChild(legendItem("is-line-now", "Nu"));
     legend.appendChild(legendItem("is-risk", "Risico"));
     legend.appendChild(legendItem("is-reward", "Winst"));
     foot.appendChild(note);

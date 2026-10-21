@@ -2599,6 +2599,10 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .lc-key::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: var(--space-3); border-radius: 2px; vertical-align: -1px; }
 .lc-key.is-risk::before { background: rgba(242, 104, 92, 0.45); }
 .lc-key.is-reward::before { background: rgba(51, 214, 159, 0.45); }
+.lc-key.is-line-entry::before { background: var(--accent); }
+.lc-key.is-line-stop::before { background: var(--red); }
+.lc-key.is-line-take::before { background: var(--green); }
+.lc-key.is-line-now::before { background: var(--text-dim); }
 .lc-key.is-zone::before { background: rgba(10, 186, 181, 0.45); }
 .lc-expand { flex: none; display: inline-flex; align-items: center; gap: var(--space-3); min-width: 44px; min-height: 44px; padding: 0 var(--space-2) 0 var(--space-4);
   background: none; border: 0; color: var(--accent); font: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer; }
