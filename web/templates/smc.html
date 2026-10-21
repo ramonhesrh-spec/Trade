@@ -32,25 +32,25 @@
   {% if setup_cards %}
   <div class="radar-grid">
     {% for c in setup_cards %}
+    {% set zone = c.setup.source == "zone_radar" %}
     <article class="radar-card" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
       {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
            price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div", coin=c.coin) }}
-      {% if c.setup.source == "zone_radar" %}<div class="radar-meta muted">Zone-radar · ongetest</div>{% endif %}
-      <div class="radar-state radar-state-{{ c.state or 'laden' }}" data-radar="state">{{ c.state_label }}</div>
+      {{ macros.card_tags(c.state_short, c.state, c.state_label, kind=("Zone-radar" if zone else "SMC"), untested=zone, age=(c.created_at | age)) }}
+      {{ macros.now_line(c.action) }}
       <div class="approach" role="img" aria-label="Koers op {{ "%.0f"|format(c.approach_pct or 0) }}% van de weg naar je instap"{% if c.approach_pct is none %} hidden{% endif %}>
         <span class="approach-track"></span>
         <span class="approach-dot" data-radar="approach" style="left: {{ "%.1f"|format(c.approach_pct or 0) }}%"></span>
         <span class="approach-end">Instap</span>
       </div>
       {% if c.chart %}{{ macros.level_chart(c.coin, c.chart) }}{% endif %}
-      {{ macros.level_chips(c.coin, c.levels, "/smc#radar-" ~ c.key|replace(':', '-')) }}
+      {{ macros.level_chips(c.coin, c.levels, "/smc#radar-" ~ c.key|replace(':', '-'), rr=(c.plan.rr if c.levels else none)) }}
       {{ macros.steps_list(c.steps, user.risk_per_trade_eur) }}
-      {{ macros.share_button(c.coin, c.direction, c.steps) }}
-      <details class="confidence-detail js-accordion">
+      <details class="setup-why">
         <summary>Waarom</summary>
-        {% if c.setup.source == "zone_radar" %}
-        <p class="muted">
-          Zone-radar, ongetest. {{ "Vraagzone" if c.direction == "long" else "Aanbodzone" }} op {{ "1u" if c.setup.tf == "1h" else "4u" }}
+        {% if zone %}
+        <p class="setup-reason">
+          {{ "Vraagzone" if c.direction == "long" else "Aanbodzone" }} op {{ "1u" if c.setup.tf == "1h" else "4u" }}
           van {{ "%.4f"|format(c.setup.zone_low) }} tot {{ "%.4f"|format(c.setup.zone_high) }}: de limiet staat op de binnenrand, de stop een kwart ATR voorbij de buitenrand.
           Het doel is de rand van de eerstvolgende {{ "aanbodzone" if c.direction == "long" else "vraagzone" }} op {{ "1u" if c.setup.target_tf == "1h" else "4u" }}
           ({{ "%.4f"|format(c.setup.target_low) }} tot {{ "%.4f"|format(c.setup.target_high) }}).
@@ -58,7 +58,7 @@
           Deze soort is niet getoetst; Bewijs toont de score apart.
         </p>
         {% else %}
-        <p class="muted">
+        <p class="setup-reason">
           Structuur brak op {{ "%.4f"|format(c.setup.structure_level) }},
           sweep op {{ "%.4f"|format(c.setup.sweep_price) }},
           doel bij liquidity {{ "%.4f"|format(c.setup.liquidity_target) }}.
@@ -67,7 +67,7 @@
         </p>
         {% endif %}
       </details>
-      <div class="radar-meta muted">{{ c.created_at | age }}</div>
+      {{ macros.share_button(c.coin, c.direction, c.steps) }}
     </article>
     {% endfor %}
   </div>
@@ -83,8 +83,8 @@
     <article class="radar-card is-moot" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
       {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
            price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div", coin=c.coin) }}
-      <div class="radar-state radar-state-{{ c.state }}" data-radar="state">{{ c.state_label }}</div>
-      <div class="radar-meta muted">{{ c.created_at | age }}</div>
+      {{ macros.card_tags(c.state_short, c.state, c.state_label, kind=("Zone-radar" if c.setup.source == "zone_radar" else "SMC"), age=(c.created_at | age)) }}
+      {{ macros.now_line(c.action) }}
     </article>
     {% endfor %}
   </div>
@@ -102,20 +102,21 @@
     <article class="radar-card" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
       {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
            price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div", coin=c.coin) }}
-      <div class="radar-state radar-state-open" data-radar="state">{{ c.state_label }}</div>
+      {% set zone = c.signal.trade_type == "zone_radar" %}
+      {{ macros.card_tags(c.state_short, "open", kind=("Zone-radar" if zone else "SMC"), untested=zone, age=(c.created_at | age)) }}
+      {{ macros.now_line(c.action) }}
       {% if c.chart %}{{ macros.level_chart(c.coin, c.chart) }}{% endif %}
-      {{ macros.level_chips(c.coin, c.levels, "/smc#radar-" ~ c.key|replace(':', '-')) }}
       {% set pos = [[((c.live_r if c.live_r is not none else 0) + 1) / (c.rr + 1) * 100, 0]|max, 100]|min %}
-      <div class="r-progress" data-rr="{{ c.rr }}" role="img" aria-label="Voortgang tussen stop en doel">
-        <span class="r-progress-mark{% if c.live_r is not none and c.live_r < 0 %} neg{% elif c.live_r is not none and c.live_r > 0 %} pos{% endif %}" data-radar="progress" style="left: {{ "%.1f"|format(pos) }}%"></span>
-        <span class="r-progress-end start">Stop −1R</span><span class="r-progress-zero" style="left: {{ "%.1f"|format(100 / (c.rr + 1)) }}%"></span><span class="r-progress-end end">Doel +{{ "%.1f"|format(c.rr) }}R</span>
+      <div class="r-live">
+        <p class="r-live-head"><span class="level-chip-label">Nu</span>
+          <span class="radar-r {{ 'pos' if c.live_r is not none and c.live_r > 0 else 'neg' if c.live_r is not none and c.live_r < 0 }}" data-radar="live_r">{% if c.live_r is not none %}{{ "%+.2f"|format(c.live_r) }}R{% else %}-{% endif %}</span></p>
+        <div class="r-progress" data-rr="{{ c.rr }}" role="img" aria-label="Voortgang tussen stop en doel">
+          <span class="r-progress-mark{% if c.live_r is not none and c.live_r < 0 %} neg{% elif c.live_r is not none and c.live_r > 0 %} pos{% endif %}" data-radar="progress" style="left: {{ "%.1f"|format(pos) }}%"></span>
+          <span class="r-progress-zero" style="left: {{ "%.1f"|format(100 / (c.rr + 1)) }}%"></span>
+        </div>
+        <p class="r-progress-ends"><span class="neg">Stop −1R</span><span class="pos">Doel +{{ "%.1f"|format(c.rr) }}R</span></p>
       </div>
-      <dl class="radar-facts">
-        <div><dt>Entry</dt><dd>{{ "%.4f"|format(c.signal.price) }}</dd></div>
-        <div><dt>R:R bij entry</dt><dd>{{ "%.1f"|format(c.rr) }}</dd></div>
-        <div><dt>Nu</dt><dd class="radar-r {{ 'pos' if c.live_r is not none and c.live_r > 0 else 'neg' if c.live_r is not none and c.live_r < 0 }}" data-radar="live_r">{% if c.live_r is not none %}{{ "%+.2f"|format(c.live_r) }}R{% else %}-{% endif %}</dd></div>
-      </dl>
-      <div class="radar-meta muted">{{ c.created_at | age }}</div>
+      {{ macros.level_chips(c.coin, c.levels, "/smc#radar-" ~ c.key|replace(':', '-'), rr=c.rr) }}
     </article>
     {% endfor %}
   </div>

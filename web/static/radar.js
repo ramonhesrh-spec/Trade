@@ -17,9 +17,11 @@
       if (!data) return;
       var state = card.querySelector('[data-radar="state"]');
       if (state) {
-        state.textContent = data.label;
-        state.className = "radar-state radar-state-" + (data.state || "laden");
+        state.textContent = data.short || data.label;
+        state.title = data.label;
+        state.className = "state-pill is-" + (data.state || "laden");
       }
+      if (data.action) setText(card, "action", data.action);
       // Doel gehaald terwijl de pagina openstaat: grafiek en stappen verdwijnen, de rest van de kaart komt bij de volgende paginaweergave.
       card.classList.toggle("is-moot", data.state === "doel_geraakt");
       if (!(window.hesLiveFresh && window.hesLiveFresh()) && data.distance_pct !== null && data.distance_pct !== undefined) {

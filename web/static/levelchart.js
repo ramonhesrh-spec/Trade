@@ -7,10 +7,11 @@
    - Live: update(el, spec) verschuift de laatste candle en de Nu-lijn; de grafiek wordt niet opnieuw gemaakt.
    - Rood vlak van instap (of limiet) tot stop, groen van instap tot doel (areas): de niveaus van het plan, geen schatting.
    - Candles komen van /api/radar_candles (een minuut gecachet op de server en hier per coin+tijdframe gedeeld).
+   - Schermvullend: een tik op de grafiek of op "Groot" opent dezelfde grafiek in een dialoog (telt niet mee voor MAX_LIVE, weg bij sluiten).
    De lightweight-charts-bibliotheek tekent zonder animatie, dus er is niets dat prefers-reduced-motion hoeft te dempen. */
 (function () {
   var MAX_LIVE = 8;
-  var CANDLE_LIMIT = 96;
+  var CANDLE_LIMIT = 60;            // 60 candles: op een telefoon blijft elke candle zichtbaar breed genoeg
   var REFRESH_MS = 60000;
   var LC = window.LightweightCharts;
   var api = { update: function () {}, screenshot: function () { return Promise.resolve(null); } };
@@ -125,9 +126,10 @@
     setLine(lc, "take", s.take, { color: green, title: "Doel", axisLabelTextColor: bg });
     setLine(lc, "stop", s.stop, { color: red, title: "Stop", axisLabelTextColor: bg });
     var open = s.entry !== null && s.entry !== undefined;
-    setLine(lc, "limit", open ? null : s.limit, { color: accent, title: "Limiet", axisLabelTextColor: bg });
-    setLine(lc, "entry", open ? s.entry : null, { color: accent, title: "Entry", axisLabelTextColor: bg });
-    setLine(lc, "now", s.price, { color: css("--text-dim", "#b7c4c2"), lineStyle: 2, title: "Nu", axisLabelTextColor: bg });
+    // Gewone woorden op de lijnen: je limietorder en je gevulde entry zijn allebei "Instap".
+    setLine(lc, "limit", open ? null : s.limit, { color: accent, title: "Instap", axisLabelTextColor: bg });
+    setLine(lc, "entry", open ? s.entry : null, { color: accent, title: "Instap", axisLabelTextColor: bg });
+    setLine(lc, "now", s.price, { color: css("--text-dim", "#b7c4c2"), lineStyle: 2, title: "Koers nu", axisLabelTextColor: bg });
     lc.el.setAttribute("aria-label", s.label || "");
     lc.band.applyOptions({ baseValue: { type: "price", price: s.zone_low != null ? s.zone_low : 0 } });
   }
@@ -174,7 +176,7 @@
     var up = css("--candle-up", "#0ABAB5"), down = css("--candle-down", "#f4f8f7");
     var chart = LC.createChart(el, {
       autoSize: true,
-      layout: { background: { type: "solid", color: panel }, textColor: css("--muted", "#7d8c8a"), fontSize: 10, fontFamily: css("--mono", "monospace").replace(/"/g, "") },
+      layout: { background: { type: "solid", color: panel }, textColor: css("--text-dim", "#b7c4c2"), fontSize: 12, fontFamily: css("--mono", "monospace").replace(/"/g, "") },
       grid: { vertLines: { visible: false }, horzLines: { color: "rgba(255,255,255,0.04)" } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.08 } },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: 12, fixLeftEdge: true, tickMarkFormatter: tickLabel },
@@ -253,8 +255,7 @@
     fill();
   }
 
-  api.update = function (el, next) {
-    if (!next) return;
+  function update(el, next) {
     el._spec = next;
     var lc = el._lc;
     if (!lc) { el.setAttribute("aria-label", next.label || ""); return; }
@@ -263,7 +264,68 @@
     lc.chart.priceScale("right").applyOptions({ autoScale: true });     // de schaal opnieuw bepalen met de nieuwe niveaus
     syncBand(lc);
     syncAreas(lc);
+  }
+
+  api.update = function (el, next) {
+    if (!next) return;
+    update(el, next);
+    if (full && full.src === el) update(full.el, next);
   };
+
+  // Schermvullend: een eigen element met dezelfde gegevens, tijdelijk gemaakt (niet in `live`) en bij sluiten weer weggehaald.
+  var full = null;
+  function openFull(src) {
+    if (full || !spec(src)) return;
+    var s = spec(src), dlg = document.createElement("dialog");
+    dlg.className = "lc-full";
+    dlg.setAttribute("aria-label", "Grafiek " + src.getAttribute("data-coin"));
+    var head = document.createElement("div");
+    head.className = "lc-full-head";
+    var title = document.createElement("p");
+    title.className = "lc-full-title";
+    title.textContent = src.getAttribute("data-coin") + " " + (s.direction || "");
+    var cap = document.createElement("span");
+    cap.className = "lc-full-cap";
+    cap.textContent = src.getAttribute("data-caption") || "";
+    title.appendChild(cap);
+    var close = document.createElement("button");
+    close.type = "button";
+    close.className = "lc-full-close";
+    close.setAttribute("aria-label", "Grafiek sluiten");
+    close.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+    head.appendChild(title);
+    head.appendChild(close);
+    var el = document.createElement("div");
+    el.className = "level-chart";
+    ["data-coin", "data-tf", "role", "aria-label"].forEach(function (a) { if (src.hasAttribute(a)) el.setAttribute(a, src.getAttribute(a)); });
+    el._spec = s;
+    dlg.appendChild(head);
+    dlg.appendChild(el);
+    var legend = src.closest(".lc") && src.closest(".lc").querySelector(".lc-legend");
+    if (legend) dlg.appendChild(legend.cloneNode(true));
+    document.body.appendChild(dlg);
+    full = { dlg: dlg, el: el, src: src };
+    document.documentElement.classList.add("lc-lock");
+    close.addEventListener("click", function () { if (dlg.close) dlg.close(); else done(); });
+    function done() {
+      destroy(el);
+      dlg.remove();
+      full = null;
+      document.documentElement.classList.remove("lc-lock");
+      var back = src.closest(".lc") && src.closest(".lc").querySelector("[data-lc-expand]");
+      if (back) back.focus();
+    }
+    dlg.addEventListener("close", done);
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+    create(el, true);
+  }
+
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest("[data-lc-expand], .lc .level-chart");
+    if (!t) return;
+    var src = t.matches("[data-lc-expand]") ? t.closest(".lc").querySelector("[data-levelchart]") : t;
+    if (src) openFull(src);
+  });
 
   // Voor de deelafbeelding (share.js): het canvas van de grafiek zoals hij er nu staat. Staat hij nog niet (kaart ver weg), dan
   // wordt hij even gemaakt en daarna weer weggehaald.

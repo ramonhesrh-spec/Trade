@@ -257,9 +257,16 @@
 
 
 {# Candlegrafiek met de niveaus van een plan (web/static/levelchart.js tekent hem zodra hij in beeld komt). `chart` is
-   trade_plan.chart_spec; zonder JavaScript blijft de aria-tekst met de niveaus staan. #}
+   trade_plan.chart_spec; zonder JavaScript blijft de aria-tekst met de niveaus staan. Een tik op de grafiek of op de knop opent hem
+   schermvullend (levelchart.js); de regel eronder zegt wat de vlakken betekenen, het bijschrift in de grafiek de candlegrootte. #}
 {% macro level_chart(coin, chart, tf="15m", extra_class="") %}
-<div class="level-chart {{ extra_class }}" data-levelchart='{{ chart|tojson }}' data-coin="{{ coin }}" data-tf="{{ tf }}" data-caption="Candles van {{ {'5m': '5 minuten', '15m': '15 minuten', '1h': '1 uur', '4h': '4 uur'}.get(tf, tf) }} · jouw tijd" role="img" aria-label="{{ chart.label }}"></div>
+<figure class="lc {{ extra_class }}">
+  <div class="level-chart" data-levelchart='{{ chart|tojson }}' data-coin="{{ coin }}" data-tf="{{ tf }}" data-caption="Candles van {{ {'5m': '5 minuten', '15m': '15 minuten', '1h': '1 uur', '4h': '4 uur'}.get(tf, tf) }} · jouw tijd" role="img" aria-label="{{ chart.label }}"></div>
+  <figcaption class="lc-foot">
+    <span class="lc-legend"><span class="lc-key is-risk">Rood vlak: risico tot je stop</span><span class="lc-key is-reward">Groen vlak: winst tot je doel</span>{% if chart.zone_low is defined and chart.zone_low is not none %}<span class="lc-key is-zone">Band: de zone</span>{% endif %}</span>
+    <button type="button" class="lc-expand" data-lc-expand aria-label="Grafiek van {{ coin }} schermvullend openen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><span>Groot</span></button>
+  </figcaption>
+</figure>
 {% endmacro %}
 
 
@@ -269,19 +276,42 @@
 {% endmacro %}
 
 
-{# Instap, stop en doel als knoppen: een tik zet het getal op het klembord (web/static/copy.js). `levels` komt uit chance_steps.level_chips;
-   `url` is waar een prijsalarm naartoe linkt (web/static/alarm.js zet de bel). #}
-{% macro level_chips(coin, levels, url="") %}
+{# Het plan als blok: per niveau een regel met het getal (tik = kopiëren, web/static/copy.js) en een bel voor een prijsalarm
+   (web/static/alarm.js). `levels` komt uit chance_steps.level_chips (of range_chips); `rr` is de R:R van het plan, als die er is.
+   `url` is waar een prijsalarm naartoe linkt. #}
+{% macro level_chips(coin, levels, url="", rr=none) %}
 {% if levels %}
 <div class="level-chips" data-chips-coin="{{ coin }}" data-chips-url="{{ url }}">
+  <div class="level-rows">
   {% for l in levels %}
-  <span class="level-chip level-chip-{{ l.key }}">
-    <button type="button" class="level-copy" data-copy="{{ l.text }}" aria-label="Kopieer {{ l.label|lower }} {{ l.text }}"><span class="level-chip-label">{{ l.label }}</span> {{ l.text }}</button>
-    <button type="button" class="level-bell" data-alarm-price="{{ l.value }}" data-alarm-label="{{ l.label }}" aria-pressed="false" aria-label="Prijsalarm op {{ l.label|lower }} {{ l.text }}"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
-  </span>
+  <div class="level-chip level-chip-{{ l.key }}">
+    <button type="button" class="level-copy" data-copy="{{ l.text }}" aria-label="Kopieer {{ l.label|lower }} {{ l.text }}"><span class="level-chip-label">{{ l.label }}</span><span class="level-chip-num">{{ l.text }}</span></button>
+    <button type="button" class="level-bell" data-alarm-price="{{ l.value }}" data-alarm-label="{{ l.label }}" aria-pressed="false" aria-label="Prijsalarm op {{ l.label|lower }} {{ l.text }}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
+  </div>
   {% endfor %}
+  {% if rr %}<div class="level-rr"><span class="level-chip-label">R:R</span><span class="level-chip-num">1:{{ "%.1f"|format(rr) }}</span></div>{% endif %}
+  </div>
+  <p class="level-hint">Tik een getal om het te kopiëren. De bel zet een prijsalarm.</p>
 </div>
 {% endif %}
+{% endmacro %}
+
+
+{# Kop onder de coinrij (of, met `direction`, de kop van een scenario): de stand als pil (live bijgewerkt via `hook`), de soort en "ongetest" als stille labels, rechts de leeftijd. #}
+{% macro card_tags(short, state, label="", kind=none, untested=false, age=none, hook="data-radar", direction=none) %}
+<div class="card-tags">
+  {% if direction %}<span class="radar-dir radar-dir-{{ direction }}">{{ direction }}</span>{% endif %}
+  <span class="state-pill is-{{ state or 'laden' }}" {{ hook }}="state"{% if label %} title="{{ label }}"{% endif %}>{{ short }}</span>
+  {% if kind %}<span class="kind-tag">{{ kind }}</span>{% endif %}
+  {% if untested %}<span class="kind-tag is-untested">ongetest</span>{% endif %}
+  {% if age %}<span class="card-age">{{ age }}</span>{% endif %}
+</div>
+{% endmacro %}
+
+
+{# De zin bovenaan een kaart: wat je nu doet (chance_steps.now_line). #}
+{% macro now_line(text, hook="data-radar") %}
+{% if text %}<p class="now-line" {{ hook }}="action">{{ text }}</p>{% endif %}
 {% endmacro %}
 
 

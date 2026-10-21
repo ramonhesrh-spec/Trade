@@ -64,18 +64,14 @@
       {% endif %}
       {% for sc in s.scenarios %}
       <div class="vd-scenario vd-scenario-{{ sc.state }}" data-vd-scenario="{{ sc.id }}">
-        <div class="vd-scenario-main">
-          <div class="vd-scenario-top">
-            <span class="radar-dir radar-dir-{{ sc.direction }}">{{ sc.direction }}</span>
-            <span class="vd-state" data-vd="state">{{ sc.state_label }}</span>
-          </div>
-          {{ macros.steps_list(sc.steps, user.risk_per_trade_eur) }}
-          {{ macros.level_chips(s.coin, sc.levels, "/vandaag") }}
-          {{ macros.share_button(s.coin, sc.direction, sc.steps) }}
-          <p class="muted vd-fine">{{ sc.reason }}</p>
-          <p class="muted vd-fine">Vervalt over <span data-vd="left">{{ "%.0f"|format(sc.hours_left) }}</span> uur</p>
-        </div>
+        {{ macros.card_tags(sc.state_short, sc.state, sc.state_label, kind="Markt-script", untested=true, hook="data-vd", direction=sc.direction) }}
+        {{ macros.now_line(sc.action, hook="data-vd") }}
         {{ macros.level_chart(s.coin, sc.chart, extra_class="vd-chart") }}
+        {{ macros.level_chips(s.coin, sc.levels, "/vandaag", rr=sc.rr) }}
+        {{ macros.steps_list(sc.steps, user.risk_per_trade_eur) }}
+        <p class="muted vd-fine">{{ sc.reason }}</p>
+        <p class="muted vd-fine">Vervalt over <span data-vd="left">{{ "%.0f"|format(sc.hours_left) }}</span> uur</p>
+        {{ macros.share_button(s.coin, sc.direction, sc.steps) }}
       </div>
       {% endfor %}
       <footer class="vd-script-foot muted">Geschreven om {{ s.written.strftime("%H:%M") }}</footer>

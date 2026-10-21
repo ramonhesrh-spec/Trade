@@ -91,11 +91,11 @@ def now_line(state: Optional[str], direction: str, entry: float, stop: float, ta
     return f"{wait} Zet dan een {order}."
 
 
-def level_chips(entry: float, stop: float, take: float) -> list[dict]:
+def level_chips(entry: float, stop: float, take: Optional[float]) -> list[dict]:
     """Instap, stop en doel als losse getallen voor de tik-om-te-kopiëren-knoppen. Zelfde notatie als in de stappen, met een punt als
-    decimaalteken, want dat accepteert elk orderveld van een beurs."""
+    decimaalteken, want dat accepteert elk orderveld van een beurs. Zonder doel (meelopende stop) alleen instap en stop."""
     return [{"key": key, "label": label, "value": value, "text": fmt(value)}
-            for key, label, value in (("entry", "Instap", entry), ("stop", "Stop", stop), ("take", "Doel", take))]
+            for key, label, value in (("entry", "Instap", entry), ("stop", "Stop", stop), ("take", "Doel", take)) if value is not None]
 
 
 FAMILY_WORD = {"zone": "de zone", "sweep": "het order block"}

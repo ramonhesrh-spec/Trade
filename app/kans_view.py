@@ -77,8 +77,9 @@ def format_events(events: list[dict]) -> list[dict]:
 def facts(signal: dict) -> dict:
     entry, stop, take = signal["price"], signal["stop_loss"], signal["take_profit"]
     risk = abs(entry - stop) if entry and stop else 0.0
+    label = TYPE_LABELS.get(signal["trade_type"], signal["trade_type"])
     return {"entry": entry, "stop": stop, "take": take, "risk_pct": risk / entry * 100 if entry and risk else None,
-            "rr": abs(take - entry) / risk if risk and take else None, "label": TYPE_LABELS.get(signal["trade_type"], signal["trade_type"]).replace(" (ongetest)", "")}
+            "rr": abs(take - entry) / risk if risk and take else None, "label": label.replace(" (ongetest)", ""), "untested": label.endswith(" (ongetest)")}
 
 
 def _event_levels(fired: dict) -> list[dict]:

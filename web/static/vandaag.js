@@ -22,7 +22,9 @@
       var data = payload.scenarios[el.getAttribute("data-vd-scenario")];
       if (!data) return;
       var state = el.querySelector('[data-vd="state"]');
-      if (state) state.textContent = data.label;
+      if (state) { state.textContent = data.short || data.label; state.title = data.label; state.className = "state-pill is-" + data.state; }
+      var action = el.querySelector('[data-vd="action"]');
+      if (action && data.action) action.textContent = data.action;
       el.className = el.className.replace(/vd-scenario-\w+/, "vd-scenario-" + data.state);
       var dist = el.querySelector('[data-vd="distance"]');
       if (dist && !live) dist.textContent = data.to_trigger_pct === null ? "-" : (data.to_trigger_pct >= 0 ? "+" : "") + data.to_trigger_pct.toFixed(2) + "%";

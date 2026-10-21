@@ -1510,20 +1510,15 @@ main + .footer { border-top: 1px solid var(--border); }
 .radar-state-open { color: var(--accent); }
 .radar-state-doel_geraakt { color: var(--text-dim); }
 .radar-card.is-moot { opacity: 0.7; }
-.radar-card.is-moot .level-chart, .radar-card.is-moot .vd-steps, .radar-card.is-moot .confidence-detail, .radar-card.is-moot .share-btn { display: none; }
+.radar-card.is-moot .lc, .radar-card.is-moot .vd-steps, .radar-card.is-moot .setup-why, .radar-card.is-moot .share-btn, .radar-card.is-moot .level-chips { display: none; }
 /* Candlegrafiek per kaart (levelchart.js). touch-action pan-y: een veeg over de grafiek scrolt de pagina, de grafiek pakt geen gebaren. */
 .level-chart { position: relative; height: 200px; background: var(--panel); border-radius: var(--radius-sm); overflow: hidden; touch-action: pan-y; }
 .level-chart::before { content: attr(data-caption); position: absolute; top: 4px; left: 8px; z-index: 3; pointer-events: none; font-size: 10px; color: var(--muted); }
 .level-chart:empty::after { content: "Grafiek laden"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: var(--text-xs); color: var(--muted); }
 .level-chart.is-failed::after { content: "Geen koersdata, niveaus staan in de tekst"; }
 .vd-chart { margin-top: var(--space-6); }
-.radar-facts { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4) var(--space-7); margin: 0; }
-.radar-facts div { display: flex; flex-direction: column; }
-.radar-facts dt { font-size: var(--text-xs); color: var(--muted); }
-.radar-facts dd { margin: 0; font-family: var(--mono); font-size: var(--text-md); font-weight: 600; }
 .radar-r.pos { color: var(--green); }
 .radar-r.neg { color: var(--red); }
-.radar-meta { font-size: var(--text-xs); }
 
 .proof-card {
   background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow-sm);
@@ -2088,14 +2083,6 @@ html { -webkit-tap-highlight-color: transparent; }
 .push-pause:disabled { opacity: 0.6; }
 @media (max-width: 560px) { .topbar-right { gap: var(--space-4); } .push-pause svg { display: none; } }
 
-/* Kopieerbare niveaus op een kaart (copy.js). Minstens 32px hoog: het is een tikdoel op een telefoon. */
-.level-chips { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.level-chip { display: inline-flex; align-items: stretch; border: 1px solid var(--border-strong); border-radius: 999px; overflow: hidden; }
-.level-chip-stop { border-color: rgba(242, 104, 92, 0.45); }
-.level-chip-take { border-color: rgba(51, 214, 159, 0.45); }
-.level-copy { min-height: 32px; padding: 4px 10px; background: none; border: 0; color: var(--text); font-family: var(--mono); font-size: var(--text-sm); cursor: pointer; }
-.level-copy:active { background: var(--panel-hover); }
-.level-chip-label { color: var(--muted); font-family: var(--sans); font-size: var(--text-xs); }
 .copy-toast { position: fixed; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 700; padding: 8px 14px;
               border-radius: 999px; background: var(--panel); border: 1px solid var(--border-strong); color: var(--text); font-size: var(--text-sm);
               opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
@@ -2104,13 +2091,6 @@ html { -webkit-tap-highlight-color: transparent; }
 .win-toast { position: fixed; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 960; display: flex; align-items: center; gap: var(--space-4);
              padding: 6px 16px 6px 6px; border-radius: 18px; background: var(--panel); border: 1px solid var(--border-strong); color: var(--text); font-weight: 600; cursor: pointer; }
 .win-toast img { width: 96px; height: auto; border-radius: 12px; display: block; }
-
-/* Bel naast een niveau (alarm.js): gevuld zodra er een alarm op staat. */
-.level-bell { min-width: 32px; min-height: 32px; display: inline-flex; align-items: center; justify-content: center; background: none; border: 0;
-              border-left: 1px solid var(--border); color: var(--muted); cursor: pointer; }
-.level-bell.is-on { color: var(--accent); }
-.level-bell.is-on svg { fill: currentColor; }
-.level-bell:disabled { opacity: 0.5; }
 
 /* Versheid van de koersen (stale.js): groen is gemeten en vers, oranje betekent dat je naar een oude koers kijkt. Geen animatie. */
 .price-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
@@ -2434,7 +2414,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 
 /* Waarom (kenmerken en toelichting) en Zo lees je dit: dicht tot je erop tikt. */
 .setup-why { border-top: var(--sep); padding-top: var(--space-5); }
-.setup-why > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--space-4); min-height: 36px; color: var(--text-dim); font-size: var(--text-md); }
+.setup-why > summary { list-style: none; cursor: pointer; display: flex; align-items: center; gap: var(--space-4); min-height: 44px; color: var(--text-dim); font-size: var(--text-md); }
 .setup-why > summary::-webkit-details-marker { display: none; }
 .setup-why > summary::after { content: ""; margin-left: auto; width: 7px; height: 7px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform 0.2s ease; }
 .setup-why[open] > summary::after { transform: rotate(225deg); }
@@ -2584,3 +2564,116 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .step-approach i { position: absolute; inset: 0 auto 0 0; border-radius: 2px; background: var(--accent); transition: width 0.4s ease; }
 .step-approach.is-full i { background: var(--green); }
 @media (prefers-reduced-motion: reduce) { .step-approach i { transition: none; } }
+
+
+/* ===== Kaarten: één systeem (2026-10-21) =====
+   Elke kans leest van boven naar beneden hetzelfde: coin en richting, de stand als pil met soort en "ongetest" als stille labels,
+   één zin met wat je nu doet, de grafiek met een regel die de vlakken uitlegt, het plan als blok met uitgelijnde getallen, dan de stappen.
+   Turquoise is wat jij doet (de zin, je instap, de stand die om actie vraagt); rood en groen alleen voor stop en doel, verlies en winst. */
+.radar-card { gap: var(--space-7); }
+.radar-card > .mrow { min-height: 0; padding-bottom: 0; }
+
+.card-tags { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3) var(--space-3); }
+.state-pill { display: inline-flex; align-items: center; gap: var(--space-3); min-height: 26px; padding: 0 var(--space-5); border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill); color: var(--text-dim); font-size: var(--text-sm); font-weight: 600; white-space: nowrap; }
+.state-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.state-pill.is-in_zone, .state-pill.is-open, .state-pill.is-fired { color: var(--accent); background: var(--accent-bg); border-color: rgba(10, 186, 181, 0.45); }
+.state-pill.is-ongeldig { color: var(--red); border-color: rgba(242, 104, 92, 0.45); }
+.state-pill.is-door_zone, .state-pill.is-doel_geraakt, .state-pill.is-laden, .state-pill.is-expired, .state-pill.is-missed { color: var(--muted); }
+.kind-tag { display: inline-flex; align-items: center; min-height: 26px; padding: 0 var(--space-4); border-radius: var(--radius-pill); background: var(--panel);
+  color: var(--text-dim); font-size: var(--text-xs); white-space: nowrap; }
+.kind-tag.is-untested { background: none; border: 1px dashed var(--border-interactive); color: var(--muted); }
+.card-age { margin-left: auto; color: var(--muted); font-size: var(--text-xs); white-space: nowrap; }
+
+.now-line { margin: 0; padding: var(--space-1) 0 var(--space-1) var(--space-6); border-left: 2px solid var(--accent); color: var(--text);
+  font-size: var(--text-lg); font-weight: 500; line-height: 1.45; text-wrap: pretty; }
+.radar-card.is-moot .now-line { border-left-color: var(--border-strong); color: var(--text-dim); font-size: var(--text-md); }
+
+/* Grafiek: hoog genoeg om candles te lezen, met een uitlegregel en "Groot" eronder. */
+.lc { margin: 0; min-width: 0; }
+.lc .level-chart { height: 288px; cursor: zoom-in; }
+.level-chart::before { top: 6px; left: 10px; font-size: var(--text-xs); color: var(--text-dim); }
+.lc-foot { display: flex; align-items: center; gap: var(--space-4); margin-top: var(--space-2); }
+.lc-legend { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-6); color: var(--muted); font-size: var(--text-xs); line-height: 1.5; }
+.lc-key { white-space: nowrap; }
+.lc-key::before { content: ""; display: inline-block; width: 9px; height: 9px; margin-right: var(--space-3); border-radius: 2px; vertical-align: -1px; }
+.lc-key.is-risk::before { background: rgba(242, 104, 92, 0.45); }
+.lc-key.is-reward::before { background: rgba(51, 214, 159, 0.45); }
+.lc-key.is-zone::before { background: rgba(10, 186, 181, 0.45); }
+.lc-expand { flex: none; display: inline-flex; align-items: center; gap: var(--space-3); min-width: 44px; min-height: 44px; padding: 0 var(--space-2) 0 var(--space-4);
+  background: none; border: 0; color: var(--accent); font: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer; }
+.lc-expand:hover, .lc-expand:active { background: none; color: var(--accent); }
+.lc-expand:focus-visible, .lc-full-close:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius); }
+.vd-chart { margin-top: 0; }
+
+.lc-full { position: fixed; inset: 0; width: 100%; height: 100%; max-width: none; max-height: none; margin: 0; border: 0; background: var(--bg); color: var(--text);
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.lc-full[open] { display: flex; flex-direction: column; }
+.lc-full::backdrop { background: var(--bg); }
+.lc-full-head { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-2) var(--space-2) var(--space-2) var(--gutter); }
+.lc-full-title { flex: 1; min-width: 0; margin: 0; font-weight: 600; font-size: var(--text-lg); }
+.lc-full-cap { margin-left: var(--space-5); color: var(--muted); font-size: var(--text-sm); font-weight: 400; }
+.lc-full-close { display: grid; place-items: center; width: 48px; height: 48px; padding: 0; background: none; border: 0; color: var(--text); cursor: pointer; }
+.lc-full-close:hover { background: none; color: var(--text); }
+.lc-full .level-chart { flex: 1; height: auto; min-height: 0; border-radius: 0; }
+.lc-full .level-chart::before { content: none; }
+.lc-full .lc-legend { flex: none; padding: var(--space-4) var(--gutter); }
+html.lc-lock, html.lc-lock body { overflow: hidden; }
+
+/* Het plan als blok: een regel per niveau, label links, getal rechts in vaste breedte, bel als eigen tikvlak. */
+.level-chips { display: grid; gap: var(--space-3); }
+.level-rows { background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); padding: 0 0 0 var(--space-6); }
+.level-chip, .level-rr { display: flex; align-items: center; min-height: 44px; border-bottom: var(--sep); }
+.level-rows > :last-child { border-bottom: 0; }
+.level-copy { flex: 1; min-width: 0; display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); min-height: 44px; padding: 0;
+  background: none; border: 0; border-radius: 0; color: var(--text); font: inherit; text-align: left; cursor: copy; }
+.level-copy:hover { background: none; color: var(--text); }
+.level-copy:active .level-chip-num { color: var(--accent); }
+.level-copy:focus-visible, .level-bell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; border-radius: var(--radius-sm); }
+.level-chip-label { display: inline-flex; align-items: center; gap: var(--space-4); color: var(--text-dim); font-family: var(--sans); font-size: var(--text-md); white-space: nowrap; }
+.level-chip-label::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--border-interactive); flex: none; }
+.level-chip-entry .level-chip-label::before, .level-chip[class*="level-chip-limit"] .level-chip-label::before { background: var(--accent); }
+.level-chip-stop .level-chip-label::before { background: var(--red); }
+.level-chip-take .level-chip-label::before { background: var(--green); }
+.level-rr .level-chip-label::before { background: none; border: 1px solid var(--border-interactive); width: 6px; height: 6px; }
+.level-chip-num { font-family: var(--mono); font-size: var(--num-row); font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.level-rr { justify-content: space-between; padding-right: 44px; }
+.level-bell { flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; background: none; border: 0; border-radius: 0; color: var(--muted); cursor: pointer; }
+.level-bell:hover { background: none; color: var(--text-dim); }
+.level-bell.is-on { color: var(--accent); }
+.level-bell.is-on svg { fill: currentColor; }
+.level-bell:disabled { opacity: 0.5; }
+.level-hint { margin: 0; color: var(--muted); font-size: var(--text-xs); }
+
+/* Open trade: het resultaat nu in R, daaronder waar dat ligt tussen stop (-1R) en doel. */
+.r-live { display: grid; gap: var(--space-3); }
+.r-live-head { display: flex; align-items: baseline; justify-content: space-between; margin: 0; }
+.r-live-head .level-chip-label::before { content: none; }
+.r-live .radar-r { font-family: var(--sans); font-size: var(--text-2xl); font-weight: 600; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.r-live .r-progress { height: 14px; margin: 0; border: 0; }
+.r-live .r-progress::before { content: ""; position: absolute; left: 0; right: 0; top: 5px; height: 4px; border-radius: 2px; background: var(--border-strong); }
+.r-live .r-progress-mark { top: 0; bottom: auto; box-shadow: 0 0 0 3px var(--bg); }
+.r-live .r-progress-zero { top: 1px; bottom: auto; height: 12px; background: var(--text-dim); }
+.r-progress-ends { display: flex; justify-content: space-between; margin: 0; font-size: var(--text-xs); }
+
+/* Deelknop op een kaart: rustig, het blok erboven is waar je kijkt. */
+.radar-card > .share-btn, .vd-scenario > .share-btn { align-self: flex-start; justify-self: start; min-height: 44px; padding: 0 var(--space-8);
+  background: none; border: 1px solid rgba(10, 186, 181, 0.45); border-radius: var(--radius-pill); color: var(--accent); }
+.radar-card > .share-btn:hover, .vd-scenario > .share-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+.radar-card .setup-why .setup-reason { line-height: 1.55; }
+
+/* Scenario op Vandaag: dezelfde volgorde, de richting staat voor de pil. */
+.vd-scenario { gap: var(--space-7); }
+.card-tags > .radar-dir { display: inline-flex; align-items: center; min-height: 26px; padding: 0 var(--space-4); }
+@media (min-width: 761px) { .lc .level-chart { height: 300px; } }
+
+/* Kanspagina in hetzelfde systeem: kop, stand, zin, grafiek, plan; alles op één ritme. */
+.kans-card { display: flex; flex-direction: column; gap: var(--space-7); }
+.kans-card > * { margin-top: 0; margin-bottom: 0; }
+.kans-head { display: grid; gap: var(--space-4); }
+.kans-head > .mrow { min-height: 0; padding: 0; }
+.kans-card > .share-btn { align-self: flex-start; min-height: 44px; padding: 0 var(--space-8); background: none; border: 1px solid rgba(10, 186, 181, 0.45);
+  border-radius: var(--radius-pill); color: var(--accent); }
+.kans-card > .share-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
+.kans-card > .vd-section-title { margin-top: var(--space-6); }
+.kans-risk { font-size: var(--text-sm); }

@@ -656,8 +656,8 @@ async def api_vandaag(user: dict = Depends(require_login)):
     ctx = await _vandaag_context(user)
     payload = {
         "prices": ctx["prices"],
-        "scenarios": {str(sc["id"]): {"state": sc["state"], "label": sc["state_label"], "to_trigger_pct": sc["to_trigger_pct"],
-                                       "hours_left": sc["hours_left"], "chart": sc["chart"]}
+        "scenarios": {str(sc["id"]): {"state": sc["state"], "label": sc["state_label"], "short": sc["state_short"], "to_trigger_pct": sc["to_trigger_pct"],
+                                       "hours_left": sc["hours_left"], "chart": sc["chart"], "action": sc["action"]}
                       for s in ctx["scripts"] for sc in s["scenarios"]},
     }
     return JSONResponse(payload, headers=_age_header(ctx["prices"].keys()))
@@ -688,8 +688,12 @@ async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dic
     trailing = None
     if signal["trade_type"] in rule_live.ENGINE_TYPES:          # meelopende stop: geen doel, de uitkomst is winst of verlies in R
         trailing = kans_view.trailing_outcome(signal, (repo.get_trade_result(signal_id) or {}).get("r_value"))
+    facts = kans_view.facts(signal)
+    still_open = signal["auto_outcome"] is None and facts["entry"] and facts["stop"]
     return templates.TemplateResponse(request, "kans.html", {
-        "user": user, "signal": signal, "facts": kans_view.facts(signal), "trailing": trailing,
+        "user": user, "signal": signal, "facts": facts, "trailing": trailing,
+        "action": chance_steps.now_line("open", signal["direction"], facts["entry"], facts["stop"], facts["take"]) if still_open else None,
+        "levels": chance_steps.level_chips(facts["entry"], facts["stop"], facts["take"] or None) if facts["entry"] and facts["stop"] else [],
         "events": kans_view.timeline(signal, setup, trailing["text"] if trailing else None),
         "chart": Markup(kans_view.chart(signal, setup, candles, price)), "price": price, "setup": setup,
         "tf": tf, "timeframes": KANS_TIMEFRAMES if not setup else (),

@@ -19,6 +19,8 @@ MEASURED_VOLATILITY = {"vs_open": 1.86, "funding": 1.01, "opties_expiry": 1.06}
 VOL_NOTE_MIN = 1.3
 
 KIND_LABEL = {"funding": "Funding", "vs_open": "VS opent", "opties_expiry": "Opties-expiry", "macro": "Macro"}
+# Kort woord voor de standpil op een scenariokaart; STATE_LABELS blijft de volledige zin (titel van de pil).
+STATE_SHORT = {"waiting": "Wacht", "fired": "Afgegaan", "expired": "Vervallen", "missed": "Gemist"}
 STATE_LABELS = {
     "waiting": "Wacht op de voorwaarde",
     "fired": "Afgegaan: melding verstuurd",
@@ -96,7 +98,7 @@ def scenario_view(s: dict, price: Optional[float], now: datetime, coin: str = ""
         to_trigger = (s["trigger_level"] - price) / price * 100
     state = s["state"] if s["state"] != "waiting" or hours_left > 0 else "expired"
     view = {
-        "id": s["id"], "coin": coin, "trigger_level": s["trigger_level"], "direction": s["direction"], "state": state, "state_label": STATE_LABELS.get(state, state),
+        "id": s["id"], "coin": coin, "trigger_level": s["trigger_level"], "direction": s["direction"], "state": state, "state_label": STATE_LABELS.get(state, state), "state_short": STATE_SHORT.get(state, state),
         "trigger": ms.trigger_text(s["trigger_type"], s["direction"], s["trigger_level"]), "reason": s["reason"],
         "entry": s["entry"], "stop": s["stop_loss"], "take": s["take_profit"], "rr": rr,
         "risk_pct": abs(s["entry"] - s["stop_loss"]) / s["entry"] * 100, "hours_left": hours_left, "to_trigger_pct": to_trigger,

@@ -155,6 +155,11 @@ class BaseShellTests(unittest.TestCase):
         import re
         html = main.templates.env.from_string('{% import "_macros.html" as m %}{{ m.level_chart("ETH", {"label": "x"}) }}{{ m.level_chart("ETH", {"label": "x"}, tf="1h") }}').render()
         self.assertEqual(re.findall(r'data-caption="([^"]+)"', html), ["Candles van 15 minuten · jouw tijd", "Candles van 1 uur · jouw tijd"])
+        # Onder de grafiek: wat de vlakken betekenen en een knop (minstens 44px, zie style.css) die hem schermvullend opent.
+        self.assertIn("Rood vlak: risico tot je stop", html)
+        self.assertIn("Groen vlak: winst tot je doel", html)
+        self.assertNotIn("Band: de zone", html)                              # geen zone in deze spec, dan ook geen uitleg ervan
+        self.assertEqual(html.count("data-lc-expand"), 2)
 
     def test_zone_radar_uitleg_staat_op_een_eigen_pagina(self):
         r = self.client.get("/zone-radar")
@@ -283,7 +288,8 @@ class ZoneRadarLayoutTests(BaseShellTests):
 
     def test_zone_radar_kaart_op_de_radar_en_vandaag(self):
         html = self.client.get("/smc").text
-        for needle in ['id="radar-zone-1"', 'data-radar-key="zone:1"', "Zone-radar · ongetest", "Vraagzone op 1u", "Wacht op de zone"]:
+        for needle in ['id="radar-zone-1"', 'data-radar-key="zone:1"', '<span class="kind-tag">Zone-radar</span>', '<span class="kind-tag is-untested">ongetest</span>',
+                       "Vraagzone op 1u", "Wacht op de zone", 'class="now-line" data-radar="action">Wacht tot de koers 96.0000 bereikt.']:
             self.assertIn(needle, html, needle)
         self.assertIn('"zone:1"', self.client.get("/api/radar").text)
         self.assertIn("Zone-radar", self.client.get("/vandaag").text)
@@ -740,7 +746,8 @@ class RestLayoutTests(BaseShellTests):
                                   "hard_gates_ok": 1, "price": 100.0, "stop_loss": 99.0, "take_profit": 102.0, "trade_type": "smc"})
         r = self.client.get("/kans/%d" % sid)
         self.assertEqual(r.status_code, 200)
-        for needle in ['class="ph"', ">BTC long<", 'class="kl"', "Instap", "R:R"]:
+        # Het plan staat in hetzelfde blok als op de Radar (macro level_chips), met bovenaan wat je nu doet.
+        for needle in ['class="ph"', ">BTC long<", 'class="level-chips"', "Instap", "R:R", "Trade loopt. Stop 99.0000, doel 102.00."]:
             self.assertIn(needle, r.text, needle)
 
     def test_uitleg_en_keten_hebben_een_kop(self):

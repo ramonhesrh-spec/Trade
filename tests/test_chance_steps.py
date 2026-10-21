@@ -56,6 +56,7 @@ class LevelChipsTest(unittest.TestCase):
         self.assertEqual([c["label"] for c in chips], ["Instap", "Stop", "Doel"])
         self.assertEqual([c["text"] for c in chips], ["100.00", "97.0000", "0.09571"])
         self.assertEqual(chips[2]["value"], 0.09571)
+        self.assertEqual([c["key"] for c in cs.level_chips(100.0, 97.0, None)], ["entry", "stop"])     # meelopende stop: geen doel
 
     def test_tiny_prices_stay_fixed_point(self):
         self.assertEqual(cs.fmt(0.0000123), "0.0000123")
