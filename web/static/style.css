@@ -1513,6 +1513,7 @@ main + .footer { border-top: 1px solid var(--border); }
 .radar-card.is-moot .level-chart, .radar-card.is-moot .vd-steps, .radar-card.is-moot .confidence-detail, .radar-card.is-moot .share-btn { display: none; }
 /* Candlegrafiek per kaart (levelchart.js). touch-action pan-y: een veeg over de grafiek scrolt de pagina, de grafiek pakt geen gebaren. */
 .level-chart { position: relative; height: 200px; background: var(--panel); border-radius: var(--radius-sm); overflow: hidden; touch-action: pan-y; }
+.level-chart::before { content: attr(data-caption); position: absolute; top: 4px; left: 8px; z-index: 3; pointer-events: none; font-size: 10px; color: var(--muted); }
 .level-chart:empty::after { content: "Grafiek laden"; position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: var(--text-xs); color: var(--muted); }
 .level-chart.is-failed::after { content: "Geen koersdata, niveaus staan in de tekst"; }
 .vd-chart { margin-top: var(--space-6); }

@@ -151,6 +151,11 @@ class BaseShellTests(unittest.TestCase):
         self.assertIn("viewport-fit=cover", html)
         self.assertIn('content="black-translucent"', html)
 
+    def test_grafiek_noemt_de_candlegrootte_en_de_tijdzone(self):
+        import re
+        html = main.templates.env.from_string('{% import "_macros.html" as m %}{{ m.level_chart("ETH", {"label": "x"}) }}{{ m.level_chart("ETH", {"label": "x"}, tf="1h") }}').render()
+        self.assertEqual(re.findall(r'data-caption="([^"]+)"', html), ["Candles van 15 minuten · jouw tijd", "Candles van 1 uur · jouw tijd"])
+
     def test_zone_radar_uitleg_staat_op_een_eigen_pagina(self):
         r = self.client.get("/zone-radar")
         self.assertEqual(r.status_code, 200)

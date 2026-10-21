@@ -259,7 +259,7 @@
 {# Candlegrafiek met de niveaus van een plan (web/static/levelchart.js tekent hem zodra hij in beeld komt). `chart` is
    trade_plan.chart_spec; zonder JavaScript blijft de aria-tekst met de niveaus staan. #}
 {% macro level_chart(coin, chart, tf="15m", extra_class="") %}
-<div class="level-chart {{ extra_class }}" data-levelchart='{{ chart|tojson }}' data-coin="{{ coin }}" data-tf="{{ tf }}" role="img" aria-label="{{ chart.label }}"></div>
+<div class="level-chart {{ extra_class }}" data-levelchart='{{ chart|tojson }}' data-coin="{{ coin }}" data-tf="{{ tf }}" data-caption="Candles van {{ {'5m': '5 minuten', '15m': '15 minuten', '1h': '1 uur', '4h': '4 uur'}.get(tf, tf) }} · jouw tijd" role="img" aria-label="{{ chart.label }}"></div>
 {% endmacro %}
 
 
