@@ -143,6 +143,42 @@ class RadarCardTests(unittest.TestCase):
         self.assertEqual(card["plan"].limit, 0.6083)
         self.assertEqual(card["state"], "wacht")
         self.assertGreater(card["plan"].rr, 2)
+        self.assertIsNotNone(card["chart"]["zone"])                       # tf bekend, sleutel ontbreekt: zone zonder herkomst
+        self.assertIsNone(card["chart"]["zone"]["origin"])
+
+
+class ChartZoneTests(unittest.TestCase):
+    ROW = {"direction": "long", "tf": "1h", "zone_key": "4h:bull:2026-10-20T08:00:00+00:00", "target_tf": "4h",
+           "target_low": 0.75, "target_high": 0.77}
+
+    def test_herkomst_uit_de_sleutel(self):
+        self.assertEqual(zr.zone_origin("4h:bull:2026-10-20T08:00:00+00:00"), ("4h", "bull", 1792483200))
+        self.assertEqual(zr.zone_origin("1h:bear:2026-10-20T08:00:00"), ("1h", "bear", 1792483200))     # zonder tijdzone = UTC
+        for bad in ("", "1h:bear:a", "2h:bull:2026-10-20T08:00:00", "1h:x:2026-10-20T08:00:00", None):
+            self.assertIsNone(zr.zone_origin(bad))
+
+    def test_zone_voor_de_grafiek(self):
+        z = zr.chart_zone(self.ROW)
+        self.assertEqual((z["tf"], z["kind"], z["label"], z["origin"]), ("4h", "bull", "Vraagzone 4u", 1792483200))
+        self.assertEqual((z["target_low"], z["target_high"], z["target_label"]), (0.75, 0.77, "Doelzone 4u"))
+        self.assertIn("dalende 4u-candle", z["note"])
+        self.assertIn("omhoog", z["note"])
+        short = zr.chart_zone({**self.ROW, "direction": "short", "zone_key": "1h:bear:2026-10-20T08:00:00+00:00"})
+        self.assertEqual(short["label"], "Aanbodzone 1u")
+        self.assertIn("stijgende 1u-candle", short["note"])
+
+    def test_zonder_bruikbare_sleutel_geen_marker_en_zonder_doelzone_geen_vlak(self):
+        z = zr.chart_zone({"direction": "long", "tf": "1h", "zone_key": "1h:bull:a"})
+        self.assertEqual(z["tf"], "1h")
+        self.assertIsNone(z["origin"])
+        self.assertIsNone(z["note"])
+        self.assertIsNone(z["target_low"])
+        self.assertIsNone(zr.chart_zone({"direction": "long", "tf": "15m"}))
+
+    def test_open_signaal_heeft_geen_zone(self):
+        card = radar.signal_card({"id": 1, "coin": "BTC", "direction": "long", "price": 100.0, "stop_loss": 97.0, "take_profit": 106.0,
+                                  "created_at": "2026-10-21T10:00:00+00:00"}, 101.0)
+        self.assertIsNone(card["chart"]["zone"])
 
 
 class LiveTests(unittest.TestCase):

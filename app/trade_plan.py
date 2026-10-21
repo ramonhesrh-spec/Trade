@@ -90,10 +90,12 @@ def _fmt(value: float) -> str:
 
 
 def chart_spec(direction: str, stop: float, take: float, limit: float, price: Optional[float] = None,
-               zone_low: Optional[float] = None, zone_high: Optional[float] = None, entry: Optional[float] = None) -> dict:
+               zone_low: Optional[float] = None, zone_high: Optional[float] = None, entry: Optional[float] = None,
+               zone: Optional[dict] = None) -> dict:
     """Wat web/static/levelchart.js nodig heeft om de niveaus op een echte candlegrafiek te tekenen. De server stuurt
     alleen getallen (stop, take, limit, zone_low, zone_high, entry, price, direction; None als iets ontbreekt), de browser
-    tekent. `entry` gezet = een open trade (lijn "Entry" in plaats van "Limiet"). `label` is dezelfde informatie als tekst,
+    tekent. `entry` gezet = een open trade (lijn "Entry" in plaats van "Limiet"). `zone` is wat de schermvullende grafiek over de herkomst
+    van het niveau weet (zone_radar.chart_zone), of None als de kaart geen zone met bekende herkomst heeft. `label` is dezelfde informatie als tekst,
     voor aria-label en voor wie geen JavaScript heeft."""
     parts = [f"Doel {_fmt(take)}", f"Stop {_fmt(stop)}"]
     parts.append(f"Entry {_fmt(entry)}" if entry is not None else f"Limiet {_fmt(limit)}")
@@ -102,4 +104,4 @@ def chart_spec(direction: str, stop: float, take: float, limit: float, price: Op
     if price is not None:
         parts.append(f"Nu {_fmt(price)}")
     return {"direction": direction, "stop": stop, "take": take, "limit": limit, "zone_low": zone_low, "zone_high": zone_high,
-            "entry": entry, "price": price, "label": f"{direction.capitalize()}-plan: " + ", ".join(parts)}
+            "entry": entry, "price": price, "zone": zone, "label": f"{direction.capitalize()}-plan: " + ", ".join(parts)}

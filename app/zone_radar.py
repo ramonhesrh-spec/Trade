@@ -118,7 +118,51 @@ def target_text(direction: str, tf: str) -> str:
     return f"{'aanbodzone' if direction == 'long' else 'vraagzone'} {TF_TEXT.get(tf, tf)}"
 
 
+def zone_origin(zone_key: str) -> Optional[tuple[str, str, int]]:
+    """(tf, soort, openmoment in unix-seconden) uit de sleutel van ZoneLevel, of None als hij niet zo te lezen is."""
+    parts = str(zone_key or "").split(":", 2)
+    if len(parts) != 3 or parts[0] not in TFS or parts[1] not in ("bull", "bear"):
+        return None
+    try:
+        ts = pd.Timestamp(parts[2])
+    except (ValueError, TypeError):
+        return None
+    if pd.isna(ts):
+        return None
+    # ZoneLevel schrijft de tijd van de beurs-candles, en die zijn UTC; een sleutel zonder tijdzone is dus ook UTC.
+    ts = ts.tz_localize("UTC") if ts.tzinfo is None else ts
+    return parts[0], parts[1], int(ts.timestamp())
+
+
+def chart_zone(row: dict) -> Optional[dict]:
+    """Wat de schermvullende grafiek over deze zone tekent en zegt: het tijdframe waarop hij ontstond, het openmoment van de order block-candle
+    (None als de sleutel dat niet geeft), de doelzone en de uitleg in gewone taal. De uitleg zegt alleen wat find_zones eist."""
+    origin = zone_origin(row.get("zone_key", ""))
+    tf = origin[0] if origin else row.get("tf")
+    if tf not in TFS:
+        return None
+    direction = row["direction"]
+    tf_text = TF_TEXT[tf]
+    if direction == "long":
+        note = (f"De zone ontstond hier: na deze dalende {tf_text}-candle ging de koers sterk omhoog, binnen {rs.DISP_BARS} candles een slot "
+                f"minstens {rs.DISP_ATR:g} ATR boven de top ervan. Het vlak is het bereik van die candle.")
+    else:
+        note = (f"De zone ontstond hier: na deze stijgende {tf_text}-candle ging de koers sterk omlaag, binnen {rs.DISP_BARS} candles een slot "
+                f"minstens {rs.DISP_ATR:g} ATR onder de bodem ervan. Het vlak is het bereik van die candle.")
+    has_target = row.get("target_low") is not None and row.get("target_high") is not None and row.get("target_tf") in TFS
+    return {
+        "tf": tf, "kind": "bull" if direction == "long" else "bear", "label": zone_text(direction, tf),
+        "origin": origin[2] if origin else None,
+        "note": note if origin else None,
+        "note_other_tf": f"De markering staat op de plek van de {tf_text}-candle waar de zone ontstond. Kies {tf_text} om die candle zelf te zien.",
+        "note_outside": "De zone ontstond voor de eerste candle van deze grafiek. Kies een hoger tijdframe om te zien waar.",
+        "target_low": row["target_low"] if has_target else None, "target_high": row["target_high"] if has_target else None,
+        "target_label": f"Doelzone {TF_TEXT[row['target_tf']]}" if has_target else None,
+    }
+
+
 def radar_setup(row: dict) -> dict:
     """Een rij uit zone_radar_setups in de vorm die radar.setup_card leest (zoals web.main._with_preview voor SMC), met source zodat de kaart
     een eigen sleutel en tekst krijgt."""
-    return {**row, "source": TRADE_TYPE, "preview_stop_loss": row["stop_loss"], "preview_take_profit": row["take_profit"]}
+    return {**row, "source": TRADE_TYPE, "preview_stop_loss": row["stop_loss"], "preview_take_profit": row["take_profit"],
+            "chart_zone": chart_zone(row)}
