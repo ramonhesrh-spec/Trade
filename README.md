@@ -423,7 +423,7 @@ sudo systemctl start crypto-news.service crypto-script.service
 - `app/zone_radar_live.py` (rekenregels in `app/zone_radar.py`): per coin de dichtstbijzijnde actieve vraagzone onder en aanbodzone boven de koers
   op 1u en 4u (binnen 6%), als limietplan op de Radar (`/smc`): limiet op de binnenrand, stop een kwart ATR voorbij de buitenrand (minstens
   `SMC_MIN_STOP_PCT`), doel de rand van de eerstvolgende tegenovergestelde zone, minimaal 2R. Melding bij een nieuwe kaart en bij de vulling;
-  gevuld wordt het een signaal met `trade_type = 'zone_radar'` (ongetest, apart op Bewijs). Max `ZONE_RADAR_MAX_PER_DAY` (12) nieuwe kaarten
+  gevuld wordt het een signaal met `trade_type = 'zone_radar'` (ongetest, apart op Bewijs). Max `ZONE_RADAR_MAX_PER_DAY` (20, de kaarten dichtst bij de koers gaan voor) nieuwe kaarten
   per dag, `ZONE_RADAR_ENABLED=false` zet het uit. Handmatig draaien: `python3 -m app.zone_radar_live`.
 - `app/calendar_alerts.py`: herinnering 30 minuten vóór de opening van de VS-beurs (stil) en vóór een macro-uitslag uit
   `data/macro_events.csv` (met geluid). De agenda toont alleen momenten die de toets als duidelijk anders mat, plus macro;
