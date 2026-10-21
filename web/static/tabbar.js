@@ -60,3 +60,20 @@
     window.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
   });
 })();
+
+// iOS-app (standalone): na terugkeren uit een andere app houdt Safari soms een oude vensterhoogte vast, en dan hangt het dok halverwege het scherm.
+// Het dok even uit de layout halen dwingt een nieuwe berekening van position: fixed af.
+(function () {
+  var dock = document.querySelector(".dock");
+  if (!dock) return;
+  function relayout() {
+    dock.style.display = "none";
+    void dock.offsetHeight;
+    dock.style.display = "";
+  }
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) { relayout(); setTimeout(relayout, 300); } });
+  window.addEventListener("pageshow", relayout);
+  window.addEventListener("orientationchange", function () { setTimeout(relayout, 300); });
+  window.addEventListener("resize", function () { clearTimeout(relayout.t); relayout.t = setTimeout(relayout, 150); });
+  document.addEventListener("hp:chart-closed", relayout);
+})();

@@ -487,6 +487,7 @@
       dlg.remove();
       full = null;
       document.documentElement.classList.remove("lc-lock");
+      document.dispatchEvent(new Event("hp:chart-closed"));
       var back = src.closest(".lc") && src.closest(".lc").querySelector("[data-lc-expand]");
       if (back) back.focus();
     }
