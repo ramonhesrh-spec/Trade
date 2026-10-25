@@ -46,6 +46,7 @@
       {% if c.chart %}{{ macros.level_chart(c.coin, c.chart) }}{% endif %}
       {{ macros.level_chips(c.coin, c.levels, "/smc#radar-" ~ c.key|replace(':', '-'), rr=(c.plan.rr if c.levels else none)) }}
       {{ macros.steps_list(c.steps, user.risk_per_trade_eur) }}
+      {{ macros.context_block(context.get(c.coin, [])) }}
       <details class="setup-why">
         <summary>Waarom</summary>
         {% if zone %}
@@ -117,6 +118,7 @@
         <p class="r-progress-ends"><span class="neg">Stop −1R</span><span class="pos">Doel +{{ "%.1f"|format(c.rr) }}R</span></p>
       </div>
       {{ macros.level_chips(c.coin, c.levels, "/smc#radar-" ~ c.key|replace(':', '-'), rr=c.rr) }}
+      {{ macros.context_block(context.get(c.coin, [])) }}
     </article>
     {% endfor %}
   </div>

@@ -559,3 +559,23 @@
   <span>Zoek een coin of pagina</span>
 </button>
 {% endmacro %}
+
+{# Marktcontext (app/market_context.py): gemeten waarden met bron en leeftijd, nooit een advies. lines: {"label", "value", "note", "flag", "source", "age"};
+   een lege lijst geeft niets, zodat een ontbrekende bron nooit als lege regel of streepje verschijnt. #}
+{% macro context_block(lines, title="Context", foot=none) %}
+{% if lines %}
+<section class="ctx" aria-label="{{ title }}, gemeten">
+  <header class="ctx-head"><h4 class="ctx-title">{{ title }}</h4><span class="ctx-tag" title="Gemeten bij de bron, geen schatting en geen advies">gemeten</span></header>
+  <dl class="ctx-list">
+    {% for l in lines %}
+    <div class="ctx-row">
+      <dt>{{ l.label }}</dt>
+      <dd class="ctx-val"><span class="ctx-num">{{ l.value }}</span>{% if l.flag %}<span class="ctx-flag">{{ l.flag }}</span>{% endif %}</dd>
+      <dd class="ctx-meta">{{ [l.note, l.source, l.age]|select|join(" · ") }}</dd>
+    </div>
+    {% endfor %}
+  </dl>
+  {% if foot %}<p class="ctx-foot">{{ foot }}</p>{% endif %}
+</section>
+{% endif %}
+{% endmacro %}

@@ -41,6 +41,16 @@ class RepoTests(DbCase):
         self.assertEqual(repo.market_context_last_at("binance"), "2026-10-25T11:55:00+00:00")
         self.assertIsNone(repo.market_context_last_at("bybit"))
 
+    def test_migration_adds_snapshot_columns_to_an_existing_table(self):
+        with db.session() as conn:
+            conn.execute("ALTER TABLE zone_radar_setups RENAME TO zr_old")
+            conn.execute("CREATE TABLE zone_radar_setups (id INTEGER PRIMARY KEY AUTOINCREMENT, coin TEXT, zone_key TEXT, signal_id INTEGER, state TEXT)")
+        db.init_db()
+        db.init_db()                                                        # idempotent
+        with db.session() as conn:
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(zone_radar_setups)")}
+        self.assertTrue({"ctx_funding", "ctx_oi_change_24h", "ctx_spread"} <= cols)
+
     def test_series_and_prune(self):
         repo.add_market_context([("BTC", "hyperliquid", "oi_usd", 1.0, "2026-09-01T00:00:00+00:00"),
                                  ("BTC", "hyperliquid", "oi_usd", 2.0, "2026-10-24T12:00:00+00:00")])

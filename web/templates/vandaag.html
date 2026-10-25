@@ -90,6 +90,27 @@
     <span class="vd-hero-number" data-vd-price="BTC">{% if prices.get("BTC") %}{{ "{:,.0f}".format(prices["BTC"]).replace(",", ".") }}{% endif %}</span>
   </div>
 </div>
+{% set mx = market_context %}
+{% if mx.lines or mx.table %}
+<div class="flat" id="marktcontext">
+  <h3>{{ macros.term("Marktcontext", "Gemeten bij publieke bronnen naast Binance, met de bron en hoe oud de meting is. Het beschrijft de markt; geen kaart of melding hangt ervan af.", "vd-ctx-pop") }}</h3>
+  {{ macros.context_block(mx.lines, title="Markt") }}
+  {% if mx.table %}
+  <div class="ctx">
+    <header class="ctx-head"><h4 class="ctx-title">Funding per 8u</h4><span class="ctx-tag">gemeten</span></header>
+    <table class="ctx-table">
+      <thead><tr><th scope="col">Beurs</th>{% for coin in mx.table.coins %}<th scope="col">{{ coin }}</th>{% endfor %}</tr></thead>
+      <tbody>
+      {% for r in mx.table.rows %}
+      <tr><th scope="row">{{ r.source }}</th>{% for cell in r.cells %}<td>{% if cell %}<span class="ctx-num">{{ cell.value }}</span>{% if cell.flag %}<span class="ctx-flag">{{ cell.flag }}</span>{% endif %}<span class="ctx-age">{{ cell.age }}</span>{% endif %}</td>{% endfor %}</tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="ctx-foot">Positief: longs betalen shorts. Hoog vanaf +{{ "%.2f"|format(ctx_high)|replace(".", ",") }}%, laag vanaf {{ "%.2f"|format(ctx_low)|replace(".", ",") }}%; die grenzen liggen vast.</p>
+  </div>
+  {% endif %}
+</div>
+{% endif %}
 <div class="flat">
   <h3>Stemming van het markt-script</h3>
   {% if mood.total %}

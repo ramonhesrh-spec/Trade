@@ -68,6 +68,31 @@
   {% endfor %}
 </div>
 
+{% if funding_split %}
+{% set fs = funding_split[0] %}
+<div class="flat" id="funding">
+  <h3>Funding bij het ontstaan</h3>
+  <p class="proof-footnote muted">Kaarten waar de funding op Binance bij het ontstaan extreem was (+{{ "%.2f"|format(fs.high)|replace(".", ",") }}% per 8u of hoger, of {{ "%.2f"|format(fs.low)|replace(".", ",") }}% of lager; vooraf vastgelegd) naast de rest. Alleen doel en stop tellen, na kosten.</p>
+  {% for f in funding_split %}
+  <div class="ctx">
+    <header class="ctx-head"><h4 class="ctx-title">{{ f.label }}</h4></header>
+    <table class="ctx-table" aria-label="{{ f.label }}: extreme funding tegenover de rest">
+      <thead><tr><th scope="col"></th><th scope="col">n</th><th scope="col">Winrate</th><th scope="col">R</th></tr></thead>
+      <tbody>
+      {% for name, g in (("Extreme funding", f.extreme), ("De rest", f.rest)) %}
+      <tr><th scope="row">{{ name }}</th><td><span class="ctx-num">{{ g.n }}</span></td>
+        <td><span class="ctx-num">{% if g.winrate is not none %}{{ "%.0f"|format(g.winrate * 100) }}%{% else %}-{% endif %}</span></td>
+        <td><span class="ctx-num {{ 'pos' if g.avg_net and g.avg_net > 0 else 'neg' if g.avg_net and g.avg_net < 0 else '' }}">{% if g.avg_net is not none %}{{ "%+.2f"|format(g.avg_net)|replace(".", ",") }}R{% else %}-{% endif %}</span></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="ctx-foot">{{ f.extreme.open + f.rest.open }} nog open of vervallen{% if f.unmeasured %}, {{ f.unmeasured }} afgerond zonder bewaarde stand (nog geen meting toen de kaart ontstond){% endif %}; die tellen hier niet mee.</p>
+  </div>
+  {% endfor %}
+  <p class="proof-footnote muted">Dit beschrijft wat er gebeurde en voorspelt niets. Geen kaart of melding houdt rekening met funding; zo is te zien of het samengaat met een andere uitkomst, zonder dat het er iets aan verandert.</p>
+</div>
+{% endif %}
+
 <div class="flat">
   <details class="setup-why proof-read">
   <summary>Zo lees je dit</summary>

@@ -33,7 +33,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import ceo, chance_checks, freshness, chance_steps, kans_view, rule_live, trust, zone_radar
+from app import ceo, chance_checks, freshness, chance_steps, kans_view, market_context, rule_live, trust, zone_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 
@@ -451,6 +451,14 @@ def _forming_setups() -> list[dict]:
     return [_with_preview(s) for s in repo.list_forming_smc_setups()] + [zone_radar.radar_setup(r) for r in repo.list_zone_radar_setups()]
 
 
+def _context_lines(coins) -> dict[str, list[dict]]:
+    """Het blok Context per coin (app/market_context.coin_lines): alleen wat de ophaler echt mat, met bron en leeftijd."""
+    coins = set(coins)
+    latest = market_context.latest(repo.latest_market_context(coins)) if coins else {}
+    now = datetime.now(timezone.utc)
+    return {c: market_context.coin_lines(latest.get(c, {}), now) for c in coins}
+
+
 async def _radar_cards() -> list[dict]:
     forming = _forming_setups()
     open_signals = repo.list_open_smc_signals(types=("smc", zone_radar.TRADE_TYPE))
@@ -583,7 +591,7 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     _apply_user_confirmed(entries, user["confirm_threshold_pct"], required_factors)
     entries.sort(key=lambda e: e["created_at"], reverse=True)
     return templates.TemplateResponse(request, "smc.html", {
-        "user": user,
+        "user": user, "context": _context_lines(c["coin"] for c in cards),
         "setup_cards": radar.waiting_cards(cards),
         "moot_cards": radar.moot_cards(cards),
         "signal_cards": [c for c in cards if c["kind"] == "signal"],
@@ -632,6 +640,8 @@ async def _vandaag_context(user: dict) -> dict:
         "last_check_ago": today.ago_text((repo.get_beat("structuur") or {}).get("at"), now),
         "chance_plans": [c["card"] for c in chances if c["card"]], "chance_rows": [c for c in chances if not c["card"]],
         "scenarios_waiting": sum(1 for sc in scripts for x in sc["scenarios"] if x["state"] == "waiting"),
+        "ctx_high": market_context.FUNDING_HIGH_PCT, "ctx_low": market_context.FUNDING_LOW_PCT,
+        "market_context": market_context.market_view(market_context.latest(repo.latest_market_context([market_context.MARKET, *market_context.VANDAAG_COINS])), now),
         "budget": today.budget_ring(push_policy.used(repo.list_recent_pushes(user["id"], (now - timedelta(hours=24)).isoformat())), user.get("push_budget")),
     }
 
@@ -698,7 +708,14 @@ async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dic
         "chart": Markup(kans_view.chart(signal, setup, candles, price)), "price": price, "setup": setup,
         "tf": tf, "timeframes": KANS_TIMEFRAMES if not setup else (),
         "fingerprint": (repo.get_chain_link(signal["id"]) or {}).get("hash"),
+        **_kans_context(signal),
     })
+
+
+def _kans_context(signal: dict) -> dict:
+    """Context nu, en voor een zone-radar-kaart ook de bewaarde stand bij zijn ontstaan."""
+    origin = repo.get_zone_radar_setup_by_signal(signal["id"]) if signal["trade_type"] == zone_radar.TRADE_TYPE else None
+    return {"context": _context_lines([signal["coin"]])[signal["coin"]], "context_origin": market_context.snapshot_lines(origin) if origin else []}
 
 
 async def _range_sweep_kans(request: Request, signal: dict, user: dict):
@@ -720,7 +737,7 @@ async def _range_sweep_kans(request: Request, signal: dict, user: dict):
     return templates.TemplateResponse(request, "kans.html", {
         "user": user, "signal": signal, "facts": kans_view.facts(signal), "trailing": None, "price": price, "setup": None, "tf": "30m", "timeframes": (),
         "events": kans_view.format_events(kans_view.range_sweep_events(setup, trade)),
-        "chart": Markup(chart), "fingerprint": None,
+        "chart": Markup(chart), "fingerprint": None, **_kans_context(signal),
         "range_sweep": {"state": state, "stopped": stopped, "running": not trade["closed_at"] and not stopped, "reference": ref, "stop_pct": pct,
                         "cost_r": rangesweep_lab.LAB_COST_PCT / pct if pct else None, "lab_cost_pct": rangesweep_lab.LAB_COST_PCT,
                         "mae": trade["mae_r"], "mfe": trade["mfe_r"], "reached": reached, "score": setup["score"], "grade": setup["grade"],
@@ -861,7 +878,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     for c in curves:
         c["svg"] = Markup(track_record.equity_svg(c["cumulative"], c["drawdown"]))
     return templates.TemplateResponse(request, "bewijs.html", {
-        "curves": curves, "total": total, "per_type": per_type,
+        "curves": curves, "total": total, "per_type": per_type, "funding_split": track_record.funding_split(rows, config.TRACK_RECORD_COST_PCT),
         "hours": track_record.hour_grid(rows, config.TRACK_RECORD_COST_PCT),
         "rule_statuses": rule_statuses, "other_rules": other_rules, "range_sweep": range_sweep, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
         "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,

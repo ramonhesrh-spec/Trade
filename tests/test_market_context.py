@@ -157,7 +157,12 @@ class DisplayTests(unittest.TestCase):
         btc = next(f for f in view["funding"] if f["coin"] == "BTC")
         self.assertEqual([v["source"] for v in btc["venues"]], ["Binance", "Hyperliquid", "OKX"])
         self.assertEqual(btc["venues"][0]["value"], "+0,060%")
-        self.assertEqual(mc.market_view({}, NOW), {"lines": [], "funding": []})
+        table = view["table"]
+        self.assertEqual(table["coins"], ["BTC", "ETH"])
+        self.assertEqual([r["source"] for r in table["rows"]], ["Binance", "Hyperliquid", "OKX"])       # Bybit ontbreekt: geen rij
+        self.assertEqual([c["value"] if c else None for c in table["rows"][0]["cells"]], ["+0,060%", "+0,060%"])
+        self.assertEqual(table["rows"][0]["cells"][0]["flag"], "hoog")
+        self.assertEqual(mc.market_view({}, NOW), {"lines": [], "funding": [], "table": None})
 
     def test_snapshot_only_fresh_values(self):
         latest = mc.latest(rows_for("BTC", ago(minutes=4)))["BTC"]

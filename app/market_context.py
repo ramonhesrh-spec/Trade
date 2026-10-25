@@ -304,7 +304,7 @@ def coin_lines(coin_latest: dict, now: datetime) -> list[dict]:
     if spread:
         venue, diff, at = spread
         lines.append(_line("Verschil tussen beurzen", f"{_nl(diff, 3)}%", "binance", at, now, spread_text(venue, diff)))
-        lines[-1]["source"] = f"Binance, {SOURCE_NAMES[venue]}"
+        lines[-1]["source"] = ""          # de tekst noemt beide beurzen al
     for bron in ("binance", "hyperliquid"):
         oi = coin_latest.get(bron, {}).get("oi_change_24h")
         if oi:
@@ -338,7 +338,13 @@ def market_view(all_latest: dict, now: datetime) -> dict:
                    "age": freshness.age_text(freshness.age_seconds(per[v][1], now))} for v in VENUES if v in per]
         if venues:
             funding.append({"coin": coin, "venues": venues})
-    return {"lines": lines, "funding": funding}
+    table = None
+    if funding:
+        coins = [f["coin"] for f in funding]
+        by = {f["coin"]: {v["source"]: v for v in f["venues"]} for f in funding}
+        sources = [SOURCE_NAMES[v] for v in VENUES if any(SOURCE_NAMES[v] in by[c] for c in coins)]
+        table = {"coins": coins, "rows": [{"source": s, "cells": [by[c].get(s) for c in coins]} for s in sources]}
+    return {"lines": lines, "funding": funding, "table": table}
 
 
 SNAPSHOT_KEYS = ("ctx_funding", "ctx_oi_change_24h", "ctx_spread")
