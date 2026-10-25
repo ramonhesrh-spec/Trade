@@ -9,6 +9,8 @@ from html import escape
 from typing import Optional
 from zoneinfo import ZoneInfo
 
+from app import market_context
+
 RECENT_DAYS = 90
 MIN_FOR_STATUS = 30
 MIN_FOR_PROVEN = 100
@@ -170,6 +172,33 @@ def _score_split(resolved: list[tuple[dict, float]], net: list[float]) -> Option
     low = [n for p, n in scored if p < SCORE_CUT_PCT]
     return {"cut": SCORE_CUT_PCT, "high_n": len(high), "high_avg": sum(high) / len(high) if high else None,
             "low_n": len(low), "low_avg": sum(low) / len(low) if low else None}
+
+
+def _group_stats(items: list[tuple[dict, Optional[float]]]) -> dict:
+    resolved = [n for _, n in items if n is not None]
+    wins = sum(1 for n in resolved if n > 0)
+    return {"n": len(resolved), "wins": wins, "open": len(items) - len(resolved),
+            "winrate": wins / len(resolved) if resolved else None, "avg_net": sum(resolved) / len(resolved) if resolved else None}
+
+
+def funding_split(rows: list[dict], round_trip_cost_pct: float) -> list[dict]:
+    """Per kaartsoort: kaarten met extreme funding bij het ontstaan (market_context.is_extreme, vaste drempels) tegenover de rest, in n, winrate en
+    R na kosten. Alleen soorten met een bewaarde stand (ctx_funding). Een afgeronde kaart zonder stand telt apart als 'unmeasured', zodat niemand
+    denkt dat de tabel alles omvat. Net als _score_split: dit toont of het samengaat, het is geen voorspeller."""
+    groups: dict[str, dict] = {}
+    for r in rows:
+        gross = signal_r(r)
+        net = None if gross is None or not r.get("price") else gross - _cost_r(r, round_trip_cost_pct)
+        g = groups.setdefault(r["trade_type"], {"extreme": [], "rest": [], "unmeasured": 0, "measured": False})
+        if r.get("ctx_funding") is None:
+            g["unmeasured"] += net is not None
+            continue
+        g["measured"] = True
+        g["extreme" if market_context.is_extreme(r["ctx_funding"]) else "rest"].append((r, net))
+    order = list(TYPE_LABELS)
+    return [{"trade_type": t, "label": TYPE_LABELS.get(t, t), "extreme": _group_stats(g["extreme"]), "rest": _group_stats(g["rest"]),
+             "unmeasured": g["unmeasured"], "high": market_context.FUNDING_HIGH_PCT, "low": market_context.FUNDING_LOW_PCT}
+            for t, g in sorted(groups.items(), key=lambda kv: order.index(kv[0]) if kv[0] in order else len(order)) if g["measured"]]
 
 
 def summarize(rows: list[dict], round_trip_cost_pct: float, now: Optional[datetime] = None) -> list[dict]:

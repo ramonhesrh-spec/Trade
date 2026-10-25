@@ -457,3 +457,32 @@ class LabRuleHelpersTest(unittest.TestCase):
         self.assertEqual([r["rule"] for r in rows], ["sw_don_1h", "pull21", "don20", "pull50"])
         self.assertEqual(rows[1]["avg_text"], "+0,11R")
         self.assertEqual(rows[3]["avg_text"], "-")
+
+
+class FundingSplitTests(unittest.TestCase):
+    """Bewijs: kaarten met extreme funding bij het ontstaan tegenover de rest, per soort. Beschrijft, voorspelt niets."""
+
+    def test_extreme_against_the_rest_per_type(self):
+        rows = [dict(row("zone_radar", "take_profit"), ctx_funding=0.08), dict(row("zone_radar", "stop_loss"), ctx_funding=-0.05),
+                dict(row("zone_radar", "take_profit"), ctx_funding=0.01), dict(row("zone_radar", "stop_loss"), ctx_funding=0.0),
+                dict(row("zone_radar", "stop_loss"), ctx_funding=0.02), dict(row("zone_radar", None), ctx_funding=0.09),
+                dict(row("zone_radar", "take_profit"), ctx_funding=None), dict(row("smc", "take_profit"), ctx_funding=None)]
+        out = tr.funding_split(rows, 0.0)
+        self.assertEqual([s["trade_type"] for s in out], ["zone_radar"])         # smc heeft geen gemeten stand: geen tabel
+        s = out[0]
+        self.assertEqual(s["label"], "Zone-radar (ongetest)")
+        self.assertEqual((s["extreme"]["n"], s["extreme"]["wins"], s["extreme"]["open"]), (2, 1, 1))
+        self.assertAlmostEqual(s["extreme"]["winrate"], 0.5)
+        self.assertAlmostEqual(s["extreme"]["avg_net"], 0.5)                    # (+2 - 1) / 2
+        self.assertEqual((s["rest"]["n"], s["rest"]["wins"]), (3, 1))
+        self.assertAlmostEqual(s["rest"]["avg_net"], 0.0)                       # (+2 - 1 - 1) / 3
+        self.assertEqual(s["unmeasured"], 1)                                    # afgerond, maar zonder stand: apart geteld, niet weggelaten
+        self.assertEqual((s["high"], s["low"]), (0.05, -0.03))
+
+    def test_empty_group_has_no_numbers(self):
+        out = tr.funding_split([dict(row("zone_radar", "take_profit"), ctx_funding=0.01)], 0.0)
+        self.assertEqual(out[0]["extreme"], {"n": 0, "wins": 0, "open": 0, "winrate": None, "avg_net": None})
+
+    def test_costs_count_like_elsewhere(self):
+        out = tr.funding_split([dict(row("zone_radar", "take_profit"), ctx_funding=0.2)], 0.1)
+        self.assertAlmostEqual(out[0]["extreme"]["avg_net"], 2.0 - 0.1)         # 0,1% kosten op een stop van 1%
