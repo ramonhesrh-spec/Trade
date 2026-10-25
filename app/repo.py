@@ -2611,9 +2611,10 @@ def list_signals_for_quality_report(since_iso: Optional[str] = None) -> list[dic
     with db.session() as conn:
         rows = conn.execute(
             """SELECT s.id, s.coin, s.direction, s.message_id, s.trade_type, s.auto_outcome, s.auto_outcome_at, s.price, s.stop_loss, s.take_profit,
-                      s.created_at, s.pass_pct, (sv.id IS NOT NULL) AS samenval, tr.r_value AS r_override
+                      s.created_at, s.pass_pct, (sv.id IS NOT NULL) AS samenval, tr.r_value AS r_override, zr.ctx_funding
                FROM signals s LEFT JOIN samenvallen sv ON sv.smc_signal_id = s.id
                LEFT JOIN trade_results tr ON tr.signal_id = s.id
+               LEFT JOIN zone_radar_setups zr ON zr.signal_id = s.id
                WHERE s.is_practice = 0 AND (? IS NULL OR s.created_at >= ?) ORDER BY s.created_at""",
             (since_iso, since_iso),
         ).fetchall()
@@ -3190,7 +3191,7 @@ def set_signal_price(signal_id: int, price: float) -> None:
 
 
 _ZONE_RADAR_COLS = ("coin", "direction", "tf", "zone_key", "zone_low", "zone_high", "stop_loss", "take_profit", "rr", "atr",
-                    "target_tf", "target_low", "target_high")
+                    "target_tf", "target_low", "target_high", "ctx_funding", "ctx_oi_change_24h", "ctx_spread")
 
 
 def insert_zone_radar_setup(row: dict, created_at: str) -> Optional[int]:
@@ -3199,7 +3200,7 @@ def insert_zone_radar_setup(row: dict, created_at: str) -> Optional[int]:
     with db.session() as conn:
         cur = conn.execute(
             f"INSERT OR IGNORE INTO zone_radar_setups ({', '.join(_ZONE_RADAR_COLS)}, created_at) VALUES ({', '.join('?' for _ in _ZONE_RADAR_COLS)}, ?)",
-            (*(row[c] for c in _ZONE_RADAR_COLS), created_at))
+            (*(row.get(c) for c in _ZONE_RADAR_COLS), created_at))
         return cur.lastrowid if cur.rowcount else None
 
 
@@ -3241,3 +3242,43 @@ def get_zone_radar_setup_by_signal(signal_id: int) -> Optional[dict]:
     with db.session() as conn:
         row = conn.execute("SELECT * FROM zone_radar_setups WHERE signal_id = ?", (signal_id,)).fetchone()
         return dict(row) if row else None
+
+
+def add_market_context(rows: list[tuple]) -> None:
+    """rows: (coin, bron, metric, waarde, gemeten_op)."""
+    if not rows:
+        return
+    with db.session() as conn:
+        conn.executemany("INSERT INTO market_context (coin, bron, metric, waarde, gemeten_op) VALUES (?, ?, ?, ?, ?)", rows)
+
+
+def latest_market_context(coins) -> list[dict]:
+    """De nieuwste meting per (coin, bron, metric) voor deze coins ('markt' voor de marktbrede bronnen)."""
+    coins = list(coins)
+    if not coins:
+        return []
+    marks = ", ".join("?" for _ in coins)
+    with db.session() as conn:
+        rows = conn.execute(
+            f"""SELECT m.coin, m.bron, m.metric, m.waarde, m.gemeten_op FROM market_context m
+                JOIN (SELECT coin, bron, metric, MAX(gemeten_op) AS at FROM market_context WHERE coin IN ({marks}) GROUP BY coin, bron, metric) l
+                  ON l.coin = m.coin AND l.bron = m.bron AND l.metric = m.metric AND l.at = m.gemeten_op
+                GROUP BY m.coin, m.bron, m.metric""", coins).fetchall()
+        return [dict(r) for r in rows]
+
+
+def market_context_last_at(bron: str) -> Optional[str]:
+    with db.session() as conn:
+        return conn.execute("SELECT MAX(gemeten_op) AS at FROM market_context WHERE bron = ?", (bron,)).fetchone()["at"]
+
+
+def market_context_series(coin: str, bron: str, metric: str, since_iso: str) -> list[tuple[str, float]]:
+    with db.session() as conn:
+        return [(r["gemeten_op"], r["waarde"]) for r in conn.execute(
+            "SELECT gemeten_op, waarde FROM market_context WHERE coin = ? AND bron = ? AND metric = ? AND gemeten_op >= ? ORDER BY gemeten_op",
+            (coin, bron, metric, since_iso)).fetchall()]
+
+
+def prune_market_context(before_iso: str) -> None:
+    with db.session() as conn:
+        conn.execute("DELETE FROM market_context WHERE gemeten_op < ?", (before_iso,))

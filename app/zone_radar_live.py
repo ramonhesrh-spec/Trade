@@ -13,7 +13,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, repo
+from app import config, market_context, repo
 from app import zone_radar as zr
 
 logger = logging.getLogger("zone_radar_live")
@@ -127,6 +127,17 @@ async def _scan(coin: str, now: pd.Timestamp, waiting: list[dict]) -> list[dict]
     return [{**plan, "coin": coin, "distance": abs(plan["limit"] - price) / price} for plan in zr.plans(zones, price) if plan["direction"] not in busy]
 
 
+def _context(coin: str, stamp: pd.Timestamp) -> dict:
+    """De marktcontext bij het ontstaan van de kaart, om later op Bewijs te toetsen. Hij wordt pas na de keuze van het plan gelezen: de kaart zelf
+    hangt er niet van af, en een fout hier kost alleen de stand, nooit de kaart."""
+    try:
+        latest = market_context.latest(repo.latest_market_context([coin])).get(coin, {})
+        return market_context.snapshot(latest, stamp.to_pydatetime())
+    except Exception:
+        logger.exception("Marktcontext voor %s niet te lezen, kaart zonder stand", coin)
+        return {}
+
+
 async def run(now: Optional[datetime] = None) -> None:
     """Draait in de SMC-snelcyclus (market_scanner.scan_smc_fast)."""
     if not config.ZONE_RADAR_ENABLED:
@@ -146,7 +157,7 @@ async def run(now: Optional[datetime] = None) -> None:
         if repo.count_zone_radar_setups_since(since) >= config.ZONE_RADAR_MAX_PER_DAY:
             logger.info("Zone-radar: dagcap van %s kaarten bereikt, %s %s wacht", config.ZONE_RADAR_MAX_PER_DAY, plan["coin"], plan["direction"])
             break
-        setup_id = repo.insert_zone_radar_setup({k: v for k, v in plan.items() if k != "distance"}, stamp.isoformat())
+        setup_id = repo.insert_zone_radar_setup({**{k: v for k, v in plan.items() if k != "distance"}, **_context(plan["coin"], stamp)}, stamp.isoformat())
         if setup_id is None:
             continue
         logger.info("Zone-radar %s %s: kaart %s, %s %s-%s, R:R %.1f", plan["coin"], plan["direction"], setup_id, plan["tf"], plan["zone_low"], plan["zone_high"], plan["rr"])

@@ -175,3 +175,5 @@ RANGE_SWEEP_MAX_NEGATIVE = int(_get("RANGE_SWEEP_MAX_NEGATIVE", "30"))
 # met een melding bij een nieuwe kaart en bij de vulling. Voor iedereen, altijd ongetest: Bewijs telt hem apart (trade_type 'zone_radar').
 ZONE_RADAR_ENABLED = _get("ZONE_RADAR_ENABLED", "true").lower() == "true"
 ZONE_RADAR_MAX_PER_DAY = int(_get("ZONE_RADAR_MAX_PER_DAY", "20"))
+# Marktcontext (app/market_context_live.py): funding, OI, Fear and Greed en stablecoins van publieke bronnen naast Binance. Alleen weergave en opslag.
+MARKET_CONTEXT_ENABLED = _get("MARKET_CONTEXT_ENABLED", "true").lower() == "true"

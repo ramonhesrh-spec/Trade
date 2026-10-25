@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import calendar_alerts, chance_checks, config, exchange, indicators, market_script, trend_live, rejection_live, patterns, push_notify, range_sweep_live, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan, zone_radar_live
+from app import calendar_alerts, chance_checks, config, exchange, indicators, market_context_live, market_script, trend_live, rejection_live, patterns, push_notify, range_sweep_live, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan, zone_radar_live
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
@@ -1223,6 +1223,8 @@ async def scan_smc_fast() -> None:
     if not repo.is_market_scan_enabled():
         logger.info("Marktscan staat uit (noodrem), SMC-snelcheck overgeslagen")
         return
+    # De marktcontext haalt intussen op in zijn eigen threads, zodat zijn netwerkwachttijd nooit bij die van de motoren optelt. Hij beslist niets.
+    context = asyncio.ensure_future(market_context_live.run())
     for coin_row in repo.list_coins():
         await _run_smc_check(coin_row["symbol"])
     try:
@@ -1263,6 +1265,10 @@ async def scan_smc_fast() -> None:
         await structure_live.run()
     except Exception:
         logger.exception("Structuur-motor is mislukt")
+    try:
+        await context          # vóór de zone-radar: een nieuwe kaart bewaart de stand van deze cyclus
+    except Exception:
+        logger.exception("Marktcontext is mislukt")
     try:
         await zone_radar_live.run()
     except Exception:

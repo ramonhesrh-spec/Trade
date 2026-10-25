@@ -824,6 +824,25 @@ CREATE TABLE IF NOT EXISTS zone_radar_setups (
     ended_at TEXT,
     signal_id INTEGER REFERENCES signals(id),
     alert_sent INTEGER NOT NULL DEFAULT 0,
+    -- Marktcontext bij het ontstaan (app/market_context.snapshot): Binance-funding in % per 8u, Binance-OI over 24u in %, grootste fundingverschil
+    -- met Binance. De vulling schrijft ze niet over; leeg als er toen geen verse meting was. Ze beslissen niets, Bewijs toetst ze.
+    ctx_funding REAL,
+    ctx_oi_change_24h REAL,
+    ctx_spread REAL,
     UNIQUE (coin, zone_key)
 );
 CREATE INDEX IF NOT EXISTS idx_zone_radar_setups_state ON zone_radar_setups(state);
+
+-- Marktcontext (app/market_context_live.py): gemeten waarden van publieke bronnen, één rij per meting. coin is 'markt' voor wat bij geen coin hoort
+-- (Fear and Greed, stablecoins). bron: binance, hyperliquid, bybit, okx, alternative, defillama. Een mislukte ophaal schrijft niets, zodat de oude
+-- waarde met zijn eigen tijd blijft staan. Geen motor leest dit; het staat als feit op kaart en Vandaag.
+CREATE TABLE IF NOT EXISTS market_context (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    bron TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    waarde REAL NOT NULL,
+    gemeten_op TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_market_context_lookup ON market_context (coin, bron, metric, gemeten_op);
+CREATE INDEX IF NOT EXISTS idx_market_context_bron ON market_context (bron, gemeten_op);

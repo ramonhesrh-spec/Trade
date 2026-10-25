@@ -264,5 +264,31 @@ class LiveTests(unittest.TestCase):
         self.assertEqual(states["long"], "zone_weg")
 
 
+    def test_kaart_bewaart_de_marktcontext_van_zijn_ontstaan(self):
+        at = self.now.isoformat()
+        repo.add_market_context([("TIA", "binance", "funding_8h", 0.06, at), ("TIA", "binance", "oi_change_24h", 3.5, at),
+                                 ("TIA", "hyperliquid", "funding_8h", 0.02, at)])
+        self.run_once()
+        cards = repo.list_zone_radar_setups()
+        self.assertEqual({c["direction"] for c in cards}, {"long", "short"})        # dezelfde kaarten als zonder context: hij beslist niets
+        long = next(c for c in cards if c["direction"] == "long")
+        self.assertEqual((long["ctx_funding"], long["ctx_oi_change_24h"], long["ctx_spread"]), (0.06, 3.5, 0.04))
+
+        later = self.now + pd.Timedelta(hours=1)
+        repo.add_market_context([("TIA", "binance", "funding_8h", -0.09, later.isoformat())])
+        self.m5 = frame([(105.0, 105.0, 104.0, 104.5)], start=later, step=pd.Timedelta(minutes=5))
+        self.now = later + pd.Timedelta(minutes=10)
+        self.run_once()
+        filled = repo.list_zone_radar_setups(("filled",))[0]
+        self.assertEqual(filled["ctx_funding"], 0.06)                                 # de vulling overschrijft de stand bij het ontstaan niet
+        rows = [r for r in repo.list_signals_for_quality_report(None) if r["trade_type"] == "zone_radar"]
+        self.assertEqual([r["ctx_funding"] for r in rows], [0.06])
+
+    def test_oude_context_wordt_niet_als_stand_bewaard(self):
+        repo.add_market_context([("TIA", "binance", "funding_8h", 0.06, (self.now - pd.Timedelta(hours=3)).isoformat())])
+        self.run_once()
+        self.assertEqual({c["ctx_funding"] for c in repo.list_zone_radar_setups()}, {None})
+
+
 if __name__ == "__main__":
     unittest.main()
