@@ -440,6 +440,29 @@ sudo systemctl start crypto-news.service crypto-script.service
   de eigen voorspellingen. `/api/vandaag` ververst koersen en scenario's elke 15 seconden (`web/static/vandaag.js`).
 - Bewijs en het weekrapport tonen de soort `script` apart.
 
+### Marktcontext: funding, OI, Fear and Greed en stablecoins (alleen weergave)
+
+Geen eigen service: `app/market_context_live.py` draait in de snelle SMC-cyclus (`crypto-market-scan-smc.timer`, elke 5 minuten),
+naast de motoren en hooguit 20 seconden. Bronnen, allemaal publiek en zonder sleutel: Binance (`/fapi/v1/premiumIndex`,
+`/fapi/v1/fundingInfo`, `/futures/data/openInterestHist`), Hyperliquid (`POST https://api.hyperliquid.xyz/info`, `metaAndAssetCtxs`),
+Bybit (`/v5/market/tickers?category=linear`), OKX (`/api/v5/public/funding-rate`), alternative.me (`/fng/`) en DefiLlama
+(`stablecoins.llama.fi/stablecoincharts/all`). Funding en OI worden elke cyclus opgehaald, Fear and Greed en stablecoins elke 6 uur;
+een bron die faalt schrijft niets, de oude waarde blijft met zijn tijd staan. Metingen staan in de tabel `market_context` (30 dagen).
+
+Wat je ziet: een blok Context op elke Radar-kaart en kanspagina (funding per 8u met wie betaalt, het grootste verschil met Binance,
+OI over 24 uur, met bron en leeftijd), Marktcontext op Vandaag (tab Markt) en op Bewijs een tabel per kaartsoort: kaarten met extreme
+funding bij het ontstaan (vaste grenzen +0,05% en -0,03% per 8u) naast de rest. Een zone-radar-kaart bewaart de stand bij zijn ontstaan
+(`ctx_funding`, `ctx_oi_change_24h`, `ctx_spread`). Geen motor, filter of melding leest iets hiervan. `MARKET_CONTEXT_ENABLED=false` zet het uit.
+
+Controleren op de VPS:
+
+```bash
+cd /opt/crypto-alerts && source .venv/bin/activate
+python3 -m app.market_context_live                      # één ronde met logregels per bron
+sqlite3 data/trading.db "SELECT name, at, detail FROM engine_heartbeat WHERE name = 'marktcontext'"
+sqlite3 data/trading.db "SELECT bron, metric, COUNT(*), MAX(gemeten_op) FROM market_context GROUP BY bron, metric"
+```
+
 ### Samenval en alleen-informatie per soort
 
 Samenval (`app/samenval.py`): een SMC-signaal en een community-call (day_trading) op dezelfde coin en kant binnen
