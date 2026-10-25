@@ -46,7 +46,7 @@ class LevelChartFullTest(unittest.TestCase):
         out = run_node("levelchart_harness.js", "levelchart.js")
         self.assertEqual(out["limitBase"], 120)
         self.assertEqual(out["limitOld"], 162)                             # 150 candles oud plus marge
-        self.assertEqual(out["limitCap"], 200)                             # nooit meer dan de server levert
+        self.assertEqual(out["limitCap"], 500)                             # nooit meer dan de server levert (RADAR_CANDLE_FETCH)
         self.assertEqual(out["limit15"], 160)
 
     def test_markering_op_de_candle_waarin_de_zone_ontstond(self):
