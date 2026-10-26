@@ -88,8 +88,9 @@ class BaseShellTests(unittest.TestCase):
 
     def test_vandaag_heeft_de_schil(self):
         html = self.client.get("/vandaag").text
-        for needle in ['class="has-glow"', 'id="fsearch"', 'class="dock"', 'class="tabbar"', 'id="push-pause"', 'id="price-dot"',
-                       'id="system-status"', 'id="cmdk"', 'id="more-sheet"', 'id="push-banner"', ">SMC</a>", ">Bewijs</a>",
+        self.assertNotIn('id="fsearch"', html)                  # Nu volgt het ontwerp: geen zoekveld over de kaart, zoeken blijft via Ctrl+K en Plannen
+        for needle in ['class="has-glow"', 'class="dock"', 'class="tabbar"', 'id="push-pause"', 'id="price-dot"',
+                       'id="system-status"', 'id="cmdk"', 'id="more-sheet"', 'id="push-banner"', ">Plannen</a>", ">Bewijs</a>",
                        "data-more-toggle"]:
             self.assertIn(needle, html, needle)
 
@@ -114,7 +115,7 @@ class BaseShellTests(unittest.TestCase):
     def test_kop_toont_het_woordmerk_op_elke_omgezette_pagina(self):
         for pad in ("/vandaag", "/smc", "/bewijs", "/structuur", "/coins/BTC"):
             html = self.client.get(pad).text
-            kop = html[html.index('class="ph"'):]
+            kop = html[html.index('class="ph'):]                # Nu heeft class="ph ph-logo": merk met teken, zonder zichtbare paginatitel
             kop = kop[:kop.index('data-more-toggle')]
             self.assertIn('<span class="ph-brand">HesPulse</span>', kop, pad)
 
@@ -125,12 +126,12 @@ class BaseShellTests(unittest.TestCase):
         self.assertIn('<form action="/logout" method="post" class="more-logout">', sheet)
         self.assertIn("Uitloggen", sheet)
 
-    def test_zoekveld_alleen_op_vandaag_en_radar(self):
-        for pad in ("/vandaag", "/smc"):
+    def test_zoekveld_alleen_op_de_radar(self):
+        for pad in ("/smc",):
             html = self.client.get(pad).text
             self.assertIn('id="fsearch"', html, pad)
             self.assertIn('<body class="has-fsearch">', html, pad)
-        for pad in ("/bewijs", "/structuur"):
+        for pad in ("/vandaag", "/bewijs", "/structuur"):
             html = self.client.get(pad).text
             self.assertNotIn('id="fsearch"', html, pad)
             self.assertNotIn("has-fsearch", html, pad)
@@ -195,6 +196,86 @@ class BaseShellTests(unittest.TestCase):
         html = TestClient(main.app).get("/login").text
         self.assertNotIn("fsearch", html)
         self.assertNotIn("has-glow", html)
+
+
+class NavTests(BaseShellTests):
+    """Vier tabs (Nu, Plannen, Logboek, Bewijs); de rest zit achter het initiaal rechtsboven. Geen url verandert."""
+
+    def tabs(self, html):
+        import re
+        bar = html[html.index('<nav class="tabbar"'):html.index("</nav>", html.index('<nav class="tabbar"'))]
+        return re.findall(r'<a class="tab[^"]*" href="([^"]+)"[^>]*>(?:<svg.*?</svg>)?<span>([^<]+)</span>', bar, re.S), bar
+
+    def test_dok_heeft_vier_tabs_zonder_meer_en_zonder_ceo(self):
+        found, bar = self.tabs(self.client.get("/bewijs").text)
+        self.assertEqual(found, [("/vandaag", "Nu"), ("/smc", "Plannen"), ("/signalen", "Logboek"), ("/bewijs", "Bewijs")])
+        self.assertNotIn("more-toggle", bar)
+        self.assertNotIn("tab-ceo", bar)
+
+    def test_plannen_is_actief_op_radar_en_setups(self):
+        for pad in ("/smc", "/structuur"):
+            _, bar = self.tabs(self.client.get(pad).text)
+            self.assertRegex(bar, r'class="tab is-active" href="/smc" aria-current="page"', pad)
+        _, bar = self.tabs(self.client.get("/signalen").text)
+        self.assertRegex(bar, r'class="tab is-active" href="/signalen" aria-current="page"')
+
+    def test_het_initiaal_opent_het_blad_met_de_rest(self):
+        html = self.client.get("/bewijs").text
+        kop = html[html.index('class="ph"'):]
+        kop = kop[:kop.index("</div>\n", kop.index("ph-av"))]
+        self.assertRegex(kop, r'<button type="button" class="ph-avatar" data-more-toggle aria-controls="more-sheet" aria-expanded="false" aria-label="Menu: account en meer">T</button>')
+        sheet = html[html.index('id="more-sheet"'):html.index("<footer")]
+        for href in ("/account", "/uitleg", "/meldingen", "/zone-radar", "/week"):
+            self.assertIn(f'href="{href}"', sheet, href)
+        leerling = repo.create_user("leerling", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        self.client.cookies.set(main.SESSION_COOKIE, security.create_session_token(leerling))
+        main._ceo_cache.update(at=0.0)
+        html = self.client.get("/bewijs").text
+        sheet = html[html.index('id="more-sheet"'):html.index("<footer")]
+        self.assertIn('href="/account"', sheet)
+        self.assertNotIn('href="/ceo"', sheet)                  # alleen de eigenaar
+        self.assertNotIn('href="/galerij"', sheet)
+
+    def test_de_eigenaar_ziet_ceo_en_galerij_in_het_blad(self):
+        main._ceo_cache.update(at=0.0)
+        html = self.client.get("/bewijs").text                  # tester is de eerste gebruiker en dus de CEO
+        if not main.is_ceo(repo.get_user_by_username("tester")):
+            self.skipTest("CEO_USERNAME wijst naar een ander")
+        sheet = html[html.index('id="more-sheet"'):html.index("<footer")]
+        self.assertIn('href="/ceo"', sheet)
+        self.assertIn('href="/galerij"', sheet)
+
+    def test_desktop_balk_volgt_dezelfde_vier_plus_het_initiaal(self):
+        import re
+        html = self.client.get("/bewijs").text
+        nav = html[html.index('<div class="nav-links">'):html.index("</div>", html.index('<div class="nav-links">'))]
+        self.assertEqual(re.findall(r'href="([^"]+)"[^>]*>([^<]+)</a>', nav),
+                         [("/vandaag", "Nu"), ("/smc", "Plannen"), ("/signalen", "Logboek"), ("/bewijs", "Bewijs")])
+        self.assertIn('class="topbar-avatar" data-more-toggle', html)
+
+    def test_plannen_badge_telt_wat_in_de_zone_staat(self):
+        repo.insert_zone_radar_setup({"coin": "TIA", "direction": "long", "tf": "1h", "zone_key": "1h:bull:x", "zone_low": 99.0, "zone_high": 101.0,
+                                      "stop_loss": 98.0, "take_profit": 106.0, "rr": 5.0, "atr": 0.5, "target_tf": "4h", "target_low": 106.0,
+                                      "target_high": 107.0}, db.now_iso())
+        repo.insert_zone_radar_setup({"coin": "SOL", "direction": "long", "tf": "1h", "zone_key": "1h:bull:y", "zone_low": 95.0, "zone_high": 96.0,
+                                      "stop_loss": 94.0, "take_profit": 104.0, "rr": 8.0, "atr": 0.5, "target_tf": "4h", "target_low": 104.0,
+                                      "target_high": 105.0}, db.now_iso())
+        self.client.get("/smc")                                 # warmt de koerscache (100 voor elke coin): TIA in de zone, SOL wacht
+        _, bar = self.tabs(self.client.get("/bewijs").text)
+        self.assertRegex(bar, r'<span>Plannen</span>\s*<i class="tab-badge" aria-label="1 in de zone">1</i>')
+
+    def test_radar_en_setups_wisselen_binnen_plannen(self):
+        for pad, actief in (("/smc", "/smc"), ("/structuur", "/structuur")):
+            html = self.client.get(pad).text
+            sw = html[html.index('class="plan-switch"'):html.index("</nav>", html.index('class="plan-switch"'))]
+            self.assertIn('href="/smc"', sw)
+            self.assertIn('href="/structuur"', sw)
+            self.assertRegex(sw, r'class="ut-tab is-active" href="%s" aria-current="page"' % actief)
+            self.assertIn(">Plannen<", html[html.index('class="ph"'):html.index('class="plan-switch"')])
+
+    def test_logboek_heet_logboek_en_de_url_blijft(self):
+        html = self.client.get("/signalen").text
+        self.assertIn('<span>Logboek</span>', html[html.index('class="ph"'):])
 
 
 class VandaagLayoutTests(BaseShellTests):

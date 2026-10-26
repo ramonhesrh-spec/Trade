@@ -29,10 +29,15 @@
 <link rel="stylesheet" href="{{ asset('style.css') }}">
 </head>
 {% import "_macros.html" as macros %}
+{# Vier tabs. Plannen is zowel de Radar (/smc) als de Setups (/structuur): die wisselen binnen Plannen (macro plan_switch). #}
+{% set main_tabs = (("/vandaag", "Nu"), ("/smc", "Plannen"), ("/signalen", "Logboek"), ("/bewijs", "Bewijs")) %}
+{% set nav_here = "/smc" if request.url.path == "/structuur" else request.url.path %}
 {% set _pt %}{% block page_title %}{% endblock %}{% endset %}
 {# Zoekveld alleen op pagina's die het blok dock_search vullen; de body-klasse laat de CSS de onderruimte aanpassen. #}
 {% set _fs %}{% block dock_search %}{% endblock %}{% endset %}
-<body{% if user and _fs|trim %} class="has-fsearch"{% endif %}{% if not user %} data-hp-anon{% endif %}>
+{# `bare`: een schermvullende stap (de order-checklist) zonder kop, dok en blad; terug gaat via de knoppen op de pagina zelf. #}
+{% set _bare = bare|default(false) %}
+<body{% if user and _fs|trim %} class="has-fsearch"{% elif _bare %} class="is-bare"{% endif %}{% if not user %} data-hp-anon{% endif %}>
 {% if user %}<div class="glow-edge-tint" aria-hidden="true"></div>{% endif %}
 <div id="page-progress" aria-hidden="true"></div>
 <div id="offline-banner" class="offline-banner" hidden role="status">Geen internetverbinding. Koersen en meldingen worden niet bijgewerkt tot je weer online bent.</div>
@@ -266,7 +271,7 @@
     new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
   })();
 </script>
-<header class="topbar{% if not (user and _pt|trim) %} topbar-flow{% endif %}">
+<header class="topbar{% if not (user and _pt|trim) %} topbar-flow{% endif %}"{% if _bare %} hidden{% endif %}>
   <div class="topbar-top">
     <a href="/ceo" class="brand">
       <span class="brand-logo-wrap">
@@ -302,10 +307,7 @@
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>
       <button type="button" id="shortcuts-hint" class="shortcuts-hint" title="Sneltoetsen (?)" aria-label="Sneltoetsen tonen">?</button>
-      <form action="/logout" method="post" class="logout-form">
-        {% if user %}<span class="muted">{{ "CEO" if is_ceo(user) else "Leerling" }} {{ user.username }}</span>{% endif %}
-        <button type="submit">Uitloggen</button>
-      </form>
+      {% if user %}<button type="button" class="topbar-avatar" data-more-toggle aria-controls="more-sheet" aria-expanded="false" aria-label="Menu: account en meer" title="{{ 'CEO' if is_ceo(user) else 'Leerling' }} {{ user.username }}">{{ (user.username or "?")[0]|upper }}</button>{% endif %}
     </div>
   </div>
   {% if ticker_coins %}
@@ -322,16 +324,8 @@
   {% endif %}
   <nav>
     <div class="nav-links">
-      {% set here = request.url.path %}
-      <a href="/vandaag"{% if here == "/vandaag" %} class="is-active" aria-current="page"{% endif %}>Vandaag</a>
-      <a href="/structuur"{% if here == "/structuur" %} class="is-active" aria-current="page"{% endif %}>Setups</a>
-      <a href="/smc"{% if here == "/smc" %} class="is-active" aria-current="page"{% endif %}>SMC</a>
-      <a href="/bewijs"{% if here == "/bewijs" %} class="is-active" aria-current="page"{% endif %}>Bewijs</a>
-      <a href="/signalen"{% if here == "/signalen" %} class="is-active" aria-current="page"{% endif %}>Journaal</a>
-      <a href="/meldingen"{% if here == "/meldingen" %} class="is-active" aria-current="page"{% endif %}>Meldingen</a>
-      <a href="/account"{% if here == "/account" %} class="is-active" aria-current="page"{% endif %}>Account</a>
-      <a href="/uitleg"{% if here == "/uitleg" %} class="is-active" aria-current="page"{% endif %}>Handleiding</a>
-      {% if is_ceo(user) %}<a href="/galerij"{% if here == "/galerij" %} class="is-active" aria-current="page"{% endif %}>Galerij</a>{% endif %}
+      {% for href, label in main_tabs %}<a href="{{ href }}"{% if nav_here == href %} class="is-active" aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
     </div>
     <details class="coin-menu js-accordion">
       <summary>
@@ -348,34 +342,23 @@
 </header>
 
 <main>
-{% if user and _pt|trim %}{{ macros.page_header(user, _pt|trim) }}{% endif %}
+{% if user and _pt|trim and not _bare %}{{ macros.page_header(user, _pt|trim, logo=ph_logo|default(false)) }}{% endif %}
 {% block content %}{% endblock %}
 </main>
-{% if user %}
-{% set here = request.url.path %}
+{% if user and not _bare %}
 <div class="dock">
 {{ _fs }}
 <nav class="tabbar" aria-label="Hoofdmenu">
-  <a class="tab tab-ceo{% if here == '/ceo' %} is-active{% endif %}" href="/ceo"{% if here == '/ceo' %} aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" aria-hidden="true"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5L3 8z"/></svg><span>CEO</span></a>
-  <a class="tab{% if here == '/vandaag' %} is-active{% endif %}" href="/vandaag"{% if here == '/vandaag' %} aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg><span>Vandaag</span></a>
-  <a class="tab{% if here == '/structuur' %} is-active{% endif %}" href="/structuur"{% if here == '/structuur' %} aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></svg><span>Setups</span>
-    {% if nav_counts and nav_counts.setups %}<i class="tab-badge">{{ nav_counts.setups }}</i>{% endif %}</a>
-  <a class="tab{% if here == '/smc' %} is-active{% endif %}" href="/smc"{% if here == '/smc' %} aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></svg><span>Radar</span>
-    {% if nav_counts and nav_counts.radar %}<i class="tab-badge">{{ nav_counts.radar }}</i>{% endif %}</a>
-  <a class="tab{% if here == '/bewijs' %} is-active{% endif %}" href="/bewijs"{% if here == '/bewijs' %} aria-current="page"{% endif %}>
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span>Bewijs</span></a>
-  <button class="tab" type="button" id="more-toggle" data-more-toggle aria-expanded="false" aria-controls="more-sheet">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="5" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="19" cy="12" r="1.2"/></svg><span>Meer</span></button>
+  {% for href, label in main_tabs %}<a class="tab{% if nav_here == href %} is-active{% endif %}" href="{{ href }}"{% if nav_here == href %} aria-current="page"{% endif %}><span>{{ label }}</span>{% if href == "/smc" and nav_counts and nav_counts.in_zone %}
+    <i class="tab-badge" aria-label="{{ nav_counts.in_zone }} in de zone">{{ nav_counts.in_zone }}</i>{% endif %}</a>
+  {% endfor %}
 </nav>
 </div>
 <div class="more-sheet" id="more-sheet" hidden>
-  <div class="more-sheet-panel" role="dialog" aria-label="Meer">
+  <div class="more-sheet-panel" role="dialog" aria-label="Account en meer">
+    <p class="more-who"><span class="more-av" aria-hidden="true">{{ (user.username or "?")[0]|upper }}</span><span>{{ user.username }}<span class="muted">{{ "Eigenaar" if is_ceo(user) else "Leerling" }}</span></span></p>
     <div class="more-links">
-      <a href="/week">Kwartaalcijfers</a><a href="/signalen">Journaal</a><a href="/meldingen">Meldingen</a><a href="/account">Account</a><a href="/uitleg">Handleiding</a><a href="/zone-radar">Zone-radar uitleg</a>{% if is_ceo(user) %}<a href="/galerij">Galerij</a>{% endif %}
+      <a href="/account">Account</a><a href="/meldingen">Meldingen</a><a href="/uitleg">Handleiding</a><a href="/zone-radar">Zone-radar uitleg</a><a href="/week">Kwartaalcijfers</a>{% if is_ceo(user) %}<a href="/galerij">Galerij</a><a href="/ceo">CEO</a>{% endif %}
     </div>
     <p class="muted more-label">Coins</p>
     <div class="more-coins">{% for c in coins %}<a href="/coins/{{ c.symbol }}">{{ macros.coin_avatar(c.symbol, 22) }}{{ c.symbol }}</a>{% endfor %}</div>
@@ -607,13 +590,13 @@
 
     function buildItems() {
       var list = [
-        { label: "Vandaag", href: "/vandaag", hint: "pagina" },
-        { label: "Setups", href: "/structuur", hint: "pagina" },
-        { label: "Radar", href: "/smc", hint: "pagina" },
+        { label: "Nu", href: "/vandaag", hint: "pagina" },
+        { label: "Plannen: Radar", href: "/smc", hint: "pagina" },
+        { label: "Plannen: Setups", href: "/structuur", hint: "pagina" },
+        { label: "Logboek", href: "/signalen", hint: "pagina" },
         { label: "Bewijs", href: "/bewijs", hint: "pagina" },
         { label: "Meldingen", href: "/meldingen", hint: "pagina" },
         { label: "Kwartaalcijfers", href: "/week", hint: "pagina" },
-        { label: "Signalen", href: "/signalen", hint: "pagina" },
         { label: "Mijn account", href: "/account", hint: "pagina" },
         { label: "Handleiding", href: "/uitleg", hint: "pagina" },
       ];

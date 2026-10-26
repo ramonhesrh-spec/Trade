@@ -322,7 +322,7 @@ class WebVandaagTests(unittest.TestCase):
     def test_nav_badges_follow_the_same_validity(self):
         self.seed_chances()
         self.client.get("/vandaag")                                       # warmt de koerscache, die het menu leest
-        text = self.client.get("/bewijs").text
+        text = self.client.get("/smc").text                               # de teller staat op de wisselaar Radar | Setups binnen Plannen
         self.assertRegex(text, r'<span>Setups</span>\s*<i class="tab-badge">1</i>')        # alleen het geldige BTC-plan, niet verlopen of voorbij de stop
 
     def test_coin_page_shows_the_signal_a_notification_links_to_even_when_it_is_old(self):
@@ -447,7 +447,7 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn(anon.get("/vandaag", follow_redirects=False).status_code, (302, 303, 401))
         page = self.client.get("/vandaag").text
         self.assertIn('href="/vandaag"', page)
-        self.assertIn(">Journaal<", page)
+        self.assertIn(">Logboek<", page)                                 # het journaal heet in de navigatie Logboek, de url bleef
         r = self.client.get("/", follow_redirects=False)
         self.assertEqual(r.headers["location"], "/ceo")
 

@@ -1,9 +1,84 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
-{% block title %}Vandaag — HesPulse{% endblock %}
-{% block page_title %}Vandaag{% endblock %}
-{% block dock_search %}{{ macros.float_search() }}{% endblock %}
+{% set ph_logo = true %}
+{% block title %}Nu — HesPulse{% endblock %}
+{% block page_title %}Nu{% endblock %}
 {% block content %}
+{# Nu (app/nu.py): rust, of precies één kaart. nu.js vergelijkt de handtekening met /api/radar en laadt opnieuw zodra er iets in of
+   uit de zone gaat; verder bewegen alleen koers, afstand en balk. #}
+{% set n = nu %}
+{% set f = n.focus %}
+{% set zone_keys = ([f.key] if n.mode == "zone" else []) + n.also|map(attribute="key")|list %}
+{% set trade_keys = ([f.key] if n.mode == "trade" else []) + n.trades|map(attribute="key")|list %}
+<section class="nu nu-{{ n.mode }}" data-nu-mode="{{ n.mode }}" data-nu-sig="{{ zone_keys|sort|join(',') }}|{{ trade_keys|sort|join(',') }}"
+         data-nu-skip="{{ n.skipped|map(attribute='key')|join(',') }}" aria-labelledby="nu-title">
+{% if n.mode == "rust" %}
+  <div class="nu-calm">
+    <p class="nu-when">{{ nu_when }}</p>
+    <h2 class="nu-title" id="nu-title">Niets te doen.</h2>
+    {% if n.skipped %}{% set sk = n.skipped[0] %}
+    <p class="nu-lead">Je sloeg {{ sk.coin }} {{ sk.direction }} over. Er staat geen ander plan in de zone; het staat nog wel onder <a href="/smc">Plannen</a>.</p>
+    {% else %}
+    <p class="nu-lead">Er staat geen plan in de zone. Je krijgt een melding als dat verandert.</p>
+    {% endif %}
+  </div>
+  {% if n.nearest %}{% set p = n.nearest %}
+  <a class="nu-next" href="/smc#radar-{{ p.key|replace(':', '-') }}" data-nu-key="{{ p.key }}" data-nu-coin="{{ p.coin }}" data-nu-limit="{{ p.limit }}" data-nu-dir="{{ p.direction }}">
+    <span class="nu-next-head"><span>Eerstvolgende</span><span>{{ p.coin }} · {{ p.dir_word }}</span></span>
+    <span class="nu-next-body">
+      <span class="nu-stack"><span class="nu-label">Nog tot instap</span><span class="nu-dist" data-nu="distance">{{ p.distance_text }}</span></span>
+      <span class="nu-stack nu-end"><span class="nu-px" data-nu="price">{{ p.price_text }}</span><span class="nu-lim"><span aria-hidden="true">→</span><span class="sr-only">limiet</span> {{ p.limit_text }}</span></span>
+    </span>
+    <span class="nu-bar" role="img" aria-label="Koers op {{ '%.0f'|format(p.approach_pct or 0) }}% van de weg naar de limiet"><i data-nu="bar" style="width: {{ '%.1f'|format(p.approach_pct or 0) }}%"></i></span>
+  </a>
+  <i data-live-coin="{{ p.coin }}" hidden></i>
+  {% else %}
+  <p class="nu-next is-empty">Geen plan wacht op zijn zone. <a href="/smc">Naar Plannen</a></p>
+  {% endif %}
+  <div class="nu-stats">
+    <a class="nu-stat" href="/smc"><span class="nu-label">Plannen</span><span class="nu-num">{{ n.plans }}</span></a>
+    <a class="nu-stat" href="/smc#tab-open"><span class="nu-label">Open trades</span><span class="nu-num">{{ n.open_trades }}</span></a>
+    <span class="nu-stat"><span class="nu-label">{{ macros.term("Gekeken", "Hoe oud de oudste koers achter deze plannen is. De stip rechtsboven kleurt oranje als hij ouder is dan twee minuten.", "nu-seen-pop") }}</span><span class="nu-num" data-nu="seen">{{ nu_seen }}</span></span>
+  </div>
+{% else %}
+  <div class="nu-focus" data-nu-key="{{ f.key }}" data-nu-coin="{{ f.coin }}" data-nu-dir="{{ f.direction }}"
+       {% if n.mode == "zone" %}data-nu-limit="{{ f.limit }}"{% else %}data-nu-entry="{{ f.entry }}" data-nu-stop="{{ f.rows|selectattr('tone', 'equalto', 'loss')|map(attribute='value')|first }}"{% endif %}>
+    <p class="nu-pill{% if n.mode == 'trade' %} is-open{% endif %}"><span class="nu-dot" aria-hidden="true"></span>{{ "In zone" if n.mode == "zone" else "Open trade" }}</p>
+    <h2 class="nu-head" id="nu-title"><span class="nu-coin">{{ f.coin }}</span><span class="nu-dir">{{ f.dir_word }}</span></h2>
+    <p class="nu-say">{{ f.action }}</p>
+    <div class="nu-now">
+      <span class="nu-stack"><span class="nu-label">Koers nu</span><span class="nu-big" data-nu="price">{{ f.price_text or "-" }}</span></span>
+      {% if n.mode == "trade" %}<span class="nu-stack nu-end"><span class="nu-label">Nu</span><span class="nu-r {{ 'pos' if (f.live_r or 0) > 0 else 'neg' if (f.live_r or 0) < 0 else '' }}" data-nu="live_r">{{ f.live_r_text or "-" }}</span></span>{% endif %}
+    </div>
+    <i data-live-coin="{{ f.coin }}" hidden></i>
+    <dl class="nu-plan">
+      {% for r in f.rows %}<div class="nu-row is-{{ r.tone }}"><dt>{{ r.label }}</dt><dd>{{ r.text }}</dd></div>
+      {% endfor %}
+    </dl>
+    <p class="nu-meta">
+      <span>{{ "Zone-radar" if f.trade_type == "zone_radar" else "SMC" if f.trade_type == "smc" else f.trade_type }} · limietplan</span>
+      {% if f.untested %}<span class="kind-tag is-untested">ongetest</span>{% else %}{{ macros.proof_tag(f.trade_type, f.key|replace(':', '-')) }}{% endif %}
+    </p>
+    <div class="nu-actions">
+      {% if n.mode == "zone" %}
+      <a class="nu-cta" href="{{ f.checklist_url }}">Zet de order, stap voor stap</a>
+      <form method="post" action="/nu/overslaan"><input type="hidden" name="key" value="{{ f.key }}"><button type="submit" class="nu-skip">Sla over</button></form>
+      {% else %}
+      <a class="nu-cta is-quiet" href="{{ f.url }}">Bekijk de trade</a>
+      {% endif %}
+    </div>
+    {% for a in n.also %}
+    <a class="nu-also" href="/vandaag?plan={{ a.key }}"><span class="nu-dot" aria-hidden="true"></span>Ook in zone: <b>{{ a.coin }} {{ a.direction }}</b><span class="nu-chev" aria-hidden="true">›</span></a>
+    {% endfor %}
+    {% for t in n.trades %}
+    <a class="nu-also" href="{{ t.url }}">Loopt: <b>{{ t.coin }} {{ t.direction }}</b><span class="nu-also-r">{{ t.live_r_text }}</span><span class="nu-chev" aria-hidden="true">›</span></a>
+    {% endfor %}
+  </div>
+{% endif %}
+</section>
+
+<section class="nu-markt" id="markt" aria-labelledby="markt-title">
+<h2 class="nu-markt-title" id="markt-title">Markt</h2>
 
 {# Het getal is de lengte van dezelfde lijst als de Kansen-tab (today.open_chances): geen tweede definitie. #}
 {{ macros.headline("Open kansen nu", chances|length, chances_unit,
@@ -193,8 +268,10 @@
 </section>
 
 </div>
+</section>
 
 <script defer src="{{ asset('vendor/lightweight-charts-4.2.0.standalone.production.js') }}"></script>
 <script defer src="{{ asset('levelchart.js') }}"></script>
 <script src="/static/vandaag.js" defer></script>
+<script src="{{ asset('nu.js') }}" defer></script>
 {% endblock %}

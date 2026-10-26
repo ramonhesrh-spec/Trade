@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
-{% block title %}Signalen — HesPulse{% endblock %}
-{% block page_title %}Journaal{% endblock %}
+{% block title %}Logboek — HesPulse{% endblock %}
+{% block page_title %}Logboek{% endblock %}
 {% block content %}
 
 {{ macros.headline("Signalen, nieuwste eerst", entries|length, "signalen" if showing_all else "open") }}

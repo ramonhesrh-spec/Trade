@@ -90,6 +90,28 @@ class ScreenTests(unittest.TestCase):
         self.assertLessEqual(len(nu.add_skip(",".join(f"setup:{i}" for i in range(40)), "zone:1").split(",")), nu.MAX_SKIP)
 
 
+class LookupTests(unittest.TestCase):
+    def test_datumregel_in_het_nederlands(self):
+        from datetime import datetime
+        self.assertEqual(nu.date_line(datetime(2026, 10, 25, 23, 46)), "Zondag 25 oktober · 23:46")
+        self.assertEqual(nu.date_line(datetime(2026, 3, 2, 9, 5)), "Maandag 2 maart · 09:05")
+
+    def test_item_voor_de_checklist_alleen_als_het_plan_nog_kan_vullen(self):
+        cards = [setup(SHORT, 80800.0), setup(LONG, 96.0), radar.signal_card(TRADE, 97.0)]
+        self.assertEqual(nu.item_for(cards, "zone:8")["key"], "zone:8")
+        self.assertIsNone(nu.item_for(cards, "setup:7"))                # stop geraakt
+        self.assertIsNone(nu.item_for(cards, "signal:3"))               # een open trade heeft geen order meer te zetten
+        self.assertIsNone(nu.item_for(cards, "zone:99"))
+
+    def test_setupkaart_wordt_een_plan_met_meerdere_doelen(self):
+        card = {"id": 4, "coin": "SOL", "direction": "long", "plan": {"level": 100.0, "stop": 99.0}, "targets": [(102.0, 2.0), (103.0, 3.0)]}
+        item = nu.structure_item(card, 100.5, "wacht")
+        self.assertEqual(item["key"], "structuur:4")
+        self.assertEqual(item["distance_text"], "0,50%")
+        self.assertEqual(len(item["targets"]), 2)
+        self.assertEqual(item["trade_type"], "structuur")
+
+
 class PlanRowTests(unittest.TestCase):
     def test_rijen_staan_op_prijs_zoals_de_grafiek(self):
         short = nu.plan_rows("short", 80774.8, 81097.9, [(80128.6, 2.0)])

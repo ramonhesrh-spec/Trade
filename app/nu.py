@@ -25,7 +25,7 @@ def pct_nl(value: float) -> str:
 
 
 def r_nl(value: float) -> str:
-    return f"{value:+.2f}".replace(".", ",") + " R"
+    return f"{value:+.2f}".replace(".", ",").replace("-", "\u2212") + " R"      # echt minteken, zoals nu.js
 
 
 def plan_rows(direction: str, entry: float, stop: float, targets: list[tuple[float, float]], entry_label: str = "Instap") -> list[dict]:
@@ -83,6 +83,31 @@ def screen(cards: list[dict], skipped: Iterable[str] = (), prefer: Optional[str]
     if trades:
         return {**base, "mode": "trade", "focus": trades[0], "also": [], "trades": trades[1:]}
     return {**base, "mode": "rust", "focus": None, "also": [], "trades": []}
+
+
+def item_for(cards: list[dict], key: str) -> Optional[dict]:
+    """Het plan achter een checklist-sleutel, alleen zolang het nog kan vullen; een open trade of een vervallen plan heeft geen order meer."""
+    for c in cards:
+        if c["key"] == key and c["kind"] == "setup" and c["state"] in radar.OPEN_STATES:
+            return _from_setup(c)
+    return None
+
+
+def structure_item(card: dict, price: Optional[float], state: Optional[str]) -> dict:
+    """Een klaarstaand Setups-plan (web.main._structure_cards) als checklist-item: limiet op het retest-niveau, met al zijn doelen."""
+    level = card["plan"]["level"]
+    long = card["direction"] == "long"
+    dist = ((price - level) / level * 100 if long else (level - price) / level * 100) if price else None
+    return plan_item(f"structuur:{card['id']}", card["coin"], card["direction"], level, card["plan"]["stop"], [tuple(t) for t in card["targets"]],
+                     price=price, state=state, distance_pct=dist, trade_type="structuur")
+
+
+MONTHS = ("januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december")
+DAYS = ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag")
+
+
+def date_line(dt) -> str:
+    return f"{DAYS[dt.weekday()].capitalize()} {dt.day} {MONTHS[dt.month - 1]} · {dt:%H:%M}"
 
 
 def checklist(item: dict) -> list[dict]:

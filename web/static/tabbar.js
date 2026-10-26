@@ -1,23 +1,29 @@
-// Menu "Meer" als blad onderaan. Sluit bij een tik ernaast, op Escape en bij het openen van een link.
+// Het initiaal rechtsboven opent het blad met Account, Handleiding, Meldingen en de rest: onderaan op een telefoon, rechtsboven op een
+// groot scherm. Sluit bij een tik ernaast, op Escape en bij het openen van een link; de focus gaat terug naar het initiaal.
 (function () {
-  var toggles = document.querySelectorAll("#more-toggle, [data-more-toggle]"), sheet = document.getElementById("more-sheet");
+  var toggles = document.querySelectorAll("[data-more-toggle]"), sheet = document.getElementById("more-sheet");
   if (!toggles.length || !sheet) return;
-  function setOpen(open) {
+  var opener = null;
+  function setOpen(open, from) {
     toggles.forEach(function (t) { t.setAttribute("aria-expanded", open ? "true" : "false"); });
-    if (open) { sheet.hidden = false; requestAnimationFrame(function () { sheet.classList.add("is-open"); }); }
-    else { sheet.classList.remove("is-open"); setTimeout(function () { if (!sheet.classList.contains("is-open")) sheet.hidden = true; }, 220); }
+    if (open) {
+      opener = from || null;
+      sheet.hidden = false;
+      requestAnimationFrame(function () {
+        sheet.classList.add("is-open");
+        var first = sheet.querySelector(".more-links a");
+        if (first) first.focus({ preventScroll: true });
+      });
+    } else {
+      if (!sheet.classList.contains("is-open")) return;
+      sheet.classList.remove("is-open");
+      setTimeout(function () { if (!sheet.classList.contains("is-open")) sheet.hidden = true; }, 220);
+      if (opener && document.contains(opener)) opener.focus({ preventScroll: true });
+      opener = null;
+    }
   }
-  // Op desktop (de dock en het blad bestaan daar niet) is .ph-title geen knop: niet focusbaar en een klik doet niets.
-  var phone = window.matchMedia("(max-width: 760px)");
-  function syncPhone() {
-    document.querySelectorAll(".ph-title[data-more-toggle]").forEach(function (t) {
-      if (phone.matches) t.removeAttribute("tabindex"); else t.setAttribute("tabindex", "-1");
-    });
-  }
-  syncPhone();
-  if (phone.addEventListener) phone.addEventListener("change", syncPhone);
   toggles.forEach(function (t) {
-    t.addEventListener("click", function () { if (phone.matches) setOpen(t.getAttribute("aria-expanded") !== "true"); });
+    t.addEventListener("click", function () { setOpen(t.getAttribute("aria-expanded") !== "true", t); });
   });
   // De zoekpalette sluit het blad eerst, zodat die er niet achter opent.
   document.addEventListener("hp:close-more", function () { setOpen(false); });

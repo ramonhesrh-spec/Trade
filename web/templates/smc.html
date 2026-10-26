@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 {% block title %}SMC-radar — HesPulse{% endblock %}
-{% block page_title %}Radar{% endblock %}
+{% block page_title %}Plannen{% endblock %}
 {% block dock_search %}{{ macros.float_search() }}{% endblock %}
 {% block content %}
+{{ macros.plan_switch("/smc", nav_counts) }}
 
 {# Een telling heeft geen reeks, dus geen lijntje bij het getal. #}
 {{ macros.headline("Setups die wachten", setup_cards|length, "wachten",

@@ -360,6 +360,7 @@
   {{ c.chart }}
   {{ steps_list(c.steps, risk_eur) }}
   {{ r_bars(c.targets) }}
+  <a class="order-link" href="/nu/order/structuur:{{ c.id }}">Zet de order, stap voor stap</a>
   {{ share_button(c.coin, c.direction, c.steps) }}
   {# Kenmerken en toelichting achter één tik: ze beschrijven de kans, de stappen hierboven zijn wat je doet. #}
   {% if c.checks or c.reason %}
@@ -453,18 +454,28 @@
    zodat de indeling op één plek bijgehouden wordt. ===== #}
 
 {# Kop van een pagina: avatar naar Account, titel die het Meer-blad opent (pagina wisselen), rechts de vaste knoppen uit base.html. #}
-{% macro page_header(user, title) %}
-<div class="ph">
-  <a class="ph-avatar" href="/account" aria-label="Mijn account">{{ (user.username or "?")[0]|upper }}</a>
+{% macro page_header(user, title, logo=false) %}
+{# Het initiaal rechtsboven opent het blad met Account, Handleiding, Meldingen en de rest (tabbar.js); de vier tabs staan in het dok.
+   `logo`: Nu toont het merk met zijn teken in plaats van een paginatitel, zoals in het ontwerp; de kop van het scherm zelf is de titel. #}
+<div class="ph{% if logo %} ph-logo{% endif %}">
   <div class="ph-main">
+    {% if logo %}<svg class="ph-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="2"/><path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#0ABAB5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endif %}
     <span class="ph-brand">HesPulse</span>
-    <button type="button" class="ph-title" data-more-toggle aria-controls="more-sheet" aria-expanded="false">
-      <span>{{ title }}</span>
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
-    </button>
+    {% if logo %}<h1 class="sr-only">{{ title }}</h1>{% else %}<h1 class="ph-title"><span>{{ title }}</span></h1>{% endif %}
   </div>
   {{ caller() if caller }}
+  <button type="button" class="ph-avatar" data-more-toggle aria-controls="more-sheet" aria-expanded="false" aria-label="Menu: account en meer">{{ (user.username or "?")[0]|upper }}</button>
 </div>
+{% endmacro %}
+
+{# Plannen bestaat uit twee pagina's die blijven waar ze waren: de Radar (/smc) en de Setups (/structuur). Dezelfde linktabs als utabs,
+   met de tellers die eerst op de tabs in het dok stonden (wachtende Radar-plannen, klaarstaande setups). #}
+{% macro plan_switch(active, counts) %}
+<nav class="plan-switch" aria-label="Plannen">
+  {% for href, label, n in (("/smc", "Radar", counts.radar if counts else 0), ("/structuur", "Setups", counts.setups if counts else 0)) %}
+  <a class="ut-tab{% if href == active %} is-active{% endif %}" href="{{ href }}"{% if href == active %} aria-current="page"{% endif %}><span>{{ label }}</span>{% if n %}<i class="tab-badge">{{ n }}</i>{% endif %}</a>
+  {% endfor %}
+</nav>
 {% endmacro %}
 
 {# Rond coinplaatje: het echte logo uit web/static/coins (zie SOURCES.md), anders de letters. Of er een logo is weet de server al

@@ -1,8 +1,9 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 {% block title %}Setups — HesPulse{% endblock %}
-{% block page_title %}Setups{% endblock %}
+{% block page_title %}Plannen{% endblock %}
 {% block content %}
+{{ macros.plan_switch("/structuur", nav_counts) }}
 
 {% set fresh = engine_on and engine_minutes is not none and engine_minutes <= 15 %}
 {{ macros.headline("Plannen die klaarstaan", structure_cards|length + range_sweep_cards|length, "klaar",

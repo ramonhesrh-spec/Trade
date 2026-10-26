@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import ceo, chance_checks, freshness, chance_steps, kans_view, market_context, rule_live, trust, zone_radar
+from app import ceo, chance_checks, freshness, chance_steps, kans_view, market_context, nu, rule_live, trust, zone_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -84,13 +84,16 @@ def _nav_context(request: Request) -> dict:
     pagina's (Vandaag, Setups, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
     # Alleen de koersen uit de cache: het menu mag geen Binance-aanroep per paginaweergave doen. Zonder koers telt een setup mee.
     cached = {coin: hit[1] for coin, hit in _price_cache.items() if hit[1]}
-    radar_count = radar.waiting_count(_forming_setups(), cached)
+    forming = _forming_setups()
+    radar_count = radar.waiting_count(forming, cached)
     now = datetime.now(timezone.utc)
     setups = sum(1 for r in repo.list_structure_setups(("waiting",), 50)
                  if today.structure_state(r, json.loads(r["plan"]), cached.get(r["coin"]), now) in today.OPEN_PLAN_STATES)
     # De range sweep hoort bij Setups (de melding en de kans wijzen naar /structuur), net als in today.open_chances.
     setups += _range_sweep_open_count(_cookie_user(request), cached, now)
-    return {"coins": repo.list_coins(), "nav_counts": {"setups": setups, "radar": radar_count}}
+    # Het getal op Plannen in het dok: wat nu in de zone staat, zoals het appicoon (radar.in_zone_count). De twee tellers van vroeger
+    # staan op de wisselaar Radar | Setups binnen Plannen.
+    return {"coins": repo.list_coins(), "nav_counts": {"setups": setups, "radar": radar_count, "in_zone": radar.in_zone_count(forming, cached)}}
 
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context])
@@ -617,13 +620,15 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     }, headers=_viewer_header(user))
 
 
-async def _open_chances(user: dict, structure_cards: list[dict], scripts: list[dict], prices: dict, now: datetime) -> list[dict]:
+async def _open_chances(user: dict, structure_cards: list[dict], scripts: list[dict], prices: dict, now: datetime,
+                        radar_cards: Optional[list[dict]] = None) -> list[dict]:
     """De open kansen die deze kijker ziet, volgens today.open_chances: een proefsoort telt niet mee voor een leerling."""
     since = (now - timedelta(hours=today.OPEN_SIGNAL_HOURS)).isoformat()
     signals = [g for t in today.SIGNAL_LABELS for g in repo.list_recent_signals_of_type(t, since) if not g["is_practice"]]
     signals = rule_live.for_viewer(signals, is_ceo(user))
     prices = {**prices, **await _cached_prices({g["coin"] for g in signals} - prices.keys())}
-    return today.open_chances(structure_cards, scripts, await _radar_cards(), signals, prices, now, range_cards=await _range_sweep_cards(user))
+    cards = radar_cards if radar_cards is not None else await _radar_cards()
+    return today.open_chances(structure_cards, scripts, cards, signals, prices, now, range_cards=await _range_sweep_cards(user))
 
 
 async def _vandaag_context(user: dict) -> dict:
@@ -640,7 +645,8 @@ async def _vandaag_context(user: dict) -> dict:
         at = datetime.fromisoformat(e["at"])
         events.append({**e, "time": today.local(at if at.tzinfo else at.replace(tzinfo=timezone.utc)).strftime("%H:%M")})
     structure_cards = await _structure_cards()
-    chances = await _open_chances(user, structure_cards, scripts, prices, now)
+    radar_cards = await _radar_cards()
+    chances = await _open_chances(user, structure_cards, scripts, prices, now, radar_cards=radar_cards)
     rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
     week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
     summary = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT)
@@ -661,6 +667,7 @@ async def _vandaag_context(user: dict) -> dict:
         "ctx_high": market_context.FUNDING_HIGH_PCT, "ctx_low": market_context.FUNDING_LOW_PCT,
         "market_context": market_context.market_view(market_context.latest(repo.latest_market_context([market_context.MARKET, *market_context.VANDAAG_COINS])), now),
         "budget": today.budget_ring(push_policy.used(repo.list_recent_pushes(user["id"], (now - timedelta(hours=24)).isoformat())), user.get("push_budget")),
+        "radar_cards": radar_cards,
     }
 
 
@@ -674,7 +681,40 @@ async def vandaag_page(request: Request, bron: str = "", user: dict = Depends(re
         return RedirectResponse(url="/ceo", status_code=303)
     ctx = await _vandaag_context(user)
     greeting = ceo.greeting(today.local(datetime.now(timezone.utc)).hour, is_ceo(user), user["username"])
-    return templates.TemplateResponse(request, "vandaag.html", {"user": user, "greeting": greeting, **ctx}, headers=_viewer_header(user))
+    cards = ctx["radar_cards"]
+    screen = nu.screen(cards, nu.parse_skip(request.cookies.get(NU_SKIP_COOKIE)), request.query_params.get("plan"))
+    # Gekeken: hoe oud de oudste koers achter deze kaarten is (app/freshness.py), niet de tijd van de paginaweergave.
+    age = freshness.oldest_age(_price_fetched_at, {c["coin"] for c in cards}, time.time())
+    return templates.TemplateResponse(request, "vandaag.html", {
+        "user": user, "greeting": greeting, **ctx, "nu": screen, "nu_seen": freshness.age_text(age) or "-",
+        "nu_when": nu.date_line(today.local(datetime.now(timezone.utc)))}, headers=_viewer_header(user))
+
+
+NU_SKIP_COOKIE = "hp_skip"
+
+
+@app.post("/nu/overslaan")
+async def nu_skip(request: Request, key: str = Form(""), user: dict = Depends(require_login)):
+    """Sla over: dit plan vult Nu niet meer op dit toestel (een dag). Het blijft op de Radar staan; niets anders verandert."""
+    response = RedirectResponse(url="/vandaag", status_code=303)
+    response.set_cookie(NU_SKIP_COOKIE, nu.add_skip(request.cookies.get(NU_SKIP_COOKIE), key), max_age=24 * 3600, samesite="lax", path="/")
+    return response
+
+
+@app.get("/nu/order/{key}")
+async def nu_order(request: Request, key: str, user: dict = Depends(require_login)):
+    """De order-checklist, schermvullend: de stappen van het orderformulier met een tik-om-te-kopiëren per getal."""
+    item = None
+    if key.startswith("structuur:"):
+        card = next((c for c in await _structure_cards() if f"structuur:{c['id']}" == key), None)
+        if card:
+            price = (await _cached_prices({card["coin"]})).get(card["coin"])
+            item = nu.structure_item(card, price, today.structure_state(card, card["plan"], price, datetime.now(timezone.utc)))
+    elif nu.SKIP_KEY.match(key):
+        item = nu.item_for(await _radar_cards(), key)
+    if item is None:
+        raise HTTPException(status_code=404)
+    return templates.TemplateResponse(request, "order.html", {"user": user, "item": item, "steps": nu.checklist(item), "note": nu.price_note(item)})
 
 
 def _viewer_header(user: dict) -> dict:
