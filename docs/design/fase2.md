@@ -20,6 +20,11 @@ De CEO gaf op 26 oktober 2026 het startsein voor fase 2 en liet de keuzes aan de
   overgeslagen. Leerlingen zien elkaar of elkaars resultaten nooit.
 - **R7 Niet bouwen:** de widget, de trilpatronen (de optie blijft hieronder staan) en de lettertypekeuze voor de oude pagina's.
 
+Gebouwd (fase 2): R1 tot en met R6. Afwijkingen van het ontwerp: de week staat als tab Week op Bewijs (naast het totaal van alle
+meldingen) en niet als heel scherm; "Volgens plan" ontbreekt omdat het niet meetbaar is; de knop "Bekijk replay" is 44px hoog in plaats
+van 32px; Beheer heeft het gewone dok en kop in plaats van een terugknop; uitnodigen per e-mail is overgeslagen. Wat de app zag staat per dag
+als één regel (nieuwe plannen, in de zone) in plaats van per kaart.
+
 Fase 1 (navigatie met vier tabs, Nu in rust en met één kaart, de order-checklist, licht thema en Geist) staat in de app. Dit zijn de
 onderdelen uit `hespulse_v2.dc.html` die bewust nog niet gebouwd zijn, met de keuzes die eerst gemaakt moeten worden.
 

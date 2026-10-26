@@ -506,6 +506,24 @@ localStorage), zodat de server de pagina meteen in het goede thema schrijft. Con
 `python3 scripts/layout_check.py --base http://127.0.0.1:8000 --user <naam> --out /tmp/lc --theme dark` en daarna `--theme light`.
 Letters: Geist en Geist Mono (Google Fonts); offline valt de pagina terug op de systeemletters.
 
+### Logboek, replay, week en Beheer (ontwerp V2, fase 2)
+
+**Logboek** (`/signalen`) is een dagtijdlijn: per dag wat de app zag (nieuwe plannen, in de zone), wat jij deed (checklist afgerond
+met de gemeten duur, gevuld, genomen, overgeslagen) en de uitkomst met R. Een trade is een plan waarvan je de checklist afrondde en
+dat vulde, of een melding die je in het Journaal als genomen of aangepast markeerde. R komt uit de uitkomst van het signaal (doel of
+stop), zonder kosten; oefentrades tellen nooit mee. Overslaan op Nu en de tijden van de checklist staan per gebruiker in de database
+(`plan_skips`, `checklist_runs`). De oude signalenlijst staat onder de tabs Open en Alle; het Journaal (status, sluiten, terugzetten,
+export) staat op Account. Bij elke afgeronde trade opent **Bekijk replay** de 5m-candles van een uur voor de vulling tot de uitkomst,
+met stop, instap en doel, een schuifbalk, een knop per moment en Speel af.
+
+**Week** is een tab op Bewijs: de R van jouw trades deze week, acht weken ernaast, gemiddelde en grootste verlies, en hoogstens één
+telbare observatie over overgeslagen plannen.
+
+**Beheer** (`/beheer`, alleen de eigenaar, via het initiaal): leerlingen met hun set, week-R en wanneer ze laatst keken; volg-sets
+(een naam en coins; een set filtert alleen de pushmeldingen van die leerling); uitnodigingen per code met aantal keer en
+verloopdatum. Registreren blijft open; zet `REGISTRATION_REQUIRES_INVITE=true` in `.env` om alleen met een geldige code toe te
+laten. Een code kent zijn set toe. Leerlingen zien elkaar of elkaars resultaten nooit.
+
 ### App op het beginscherm (PWA)
 
 HesPulse is te installeren als app (`web/static/manifest.json`, `service-worker.js`, `pwa.js`, `install.js`). De app start op
@@ -650,7 +668,8 @@ melding (genomen, entry, exit, notitie) is niet zichtbaar voor hem, en
 andersom.
 
 Registratie is open voor iedereen die de link heeft, dat is bewust zo
-gekozen. Tegen geautomatiseerde spam-registraties zit een limiet van
+gekozen (met `REGISTRATION_REQUIRES_INVITE=true` alleen met een code uit
+`/beheer`). Tegen geautomatiseerde spam-registraties zit een limiet van
 `MAX_REGISTRATIONS_PER_HOUR` (standaard 5) per IP-adres per uur, in te
 stellen in `.env`.
 
