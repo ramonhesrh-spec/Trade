@@ -1,0 +1,16 @@
+{# Kop voor de installeerbare app, op elke pagina (ook inloggen en de landingspagina: daar staat iemand vaak als hij Zet op beginscherm kiest).
+   Twee theme-color-varianten zodat de statusbalk het systeemthema kan volgen; de lichte staat op donker tot de lichte versie van de app er is.
+   pwa.js (HP.applyThemeColor) zet ze gelijk aan de echte achtergrond als een pagina zelf van thema wisselt. #}
+<meta name="theme-color" content="#0a0e0f" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#0a0e0f" media="(prefers-color-scheme: light)">
+<link rel="apple-touch-icon" href="/static/icon-192.png">
+<link rel="manifest" href="/static/manifest.json">
+<!-- iOS negeert manifest.json's display:standalone volledig; zonder deze
+     drie meta-tags blijft "Zet op beginscherm" gewoon Safari met adresbalk
+     openen, ononderscheidbaar van de site zelf. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="HesPulse">
+{# Opstartbeelden (scripts/make_splash.py): zonder exact passend beeld toont iOS bij het openen van de app een wit scherm. #}
+{% for s in splash_screens %}<link rel="apple-touch-startup-image" href="/static/splash/{{ s.file }}" media="{{ s.media }}">
+{% endfor %}

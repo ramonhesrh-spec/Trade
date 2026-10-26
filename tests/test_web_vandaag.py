@@ -465,7 +465,7 @@ class WebVandaagTests(unittest.TestCase):
         self.assertNotIn("Geheime samenvatting", page)           # scenario's en duiding blijven achter het inloggen
         self.assertNotIn("Break boven gisteren hoog.", page)       # de reden bij een scenario blijft ook achter het inloggen
         self.assertNotIn("Wacht op de voorwaarde", page)
-        self.assertEqual(anon.get("/static/manifest.json").json()["start_url"], "/ceo")
+        self.assertEqual(anon.get("/static/manifest.json").json()["start_url"], "/vandaag?bron=app")   # de CEO gaat door naar /ceo, zie test_pwa
         self.assertEqual(self.client.get("/dashboard", follow_redirects=False).headers["location"], "/vandaag")
 
 

@@ -29,6 +29,8 @@
   {"label": "Winrate", "value": ("%.0f"|format(winrate.winrate_pct) if winrate.winrate_pct is not none else "-"), "unit": ("%" if winrate.winrate_pct is not none else ""), "explain": "Eigen trades, oefentrades niet meegeteld."},
   {"label": "Drempel", "value": user.confirm_threshold_pct, "unit": "%"}], "ac") }}
 
+{{ macros.install_help("card") }}
+
 {% if unclear_messages %}
 <details class="stats-collapse js-accordion" style="--i: 1">
   <summary class="stats-summary">

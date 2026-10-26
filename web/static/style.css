@@ -2104,6 +2104,40 @@ html { -webkit-tap-highlight-color: transparent; }
 .push-banner span { flex: 1 1 200px; }
 .push-banner-close { background: none; border: 0; color: var(--muted); font-size: var(--text-lg); min-width: 32px; min-height: 32px; cursor: pointer; }
 
+/* De geïnstalleerde app (pwa.js, install.js). Updatemelding: één brede knop bovenaan, het hele vlak is tikbaar. */
+.sw-update { position: sticky; top: 0; z-index: 71; display: block; width: 100%; min-height: 44px; margin: 0; border: 0; border-radius: 0;
+             padding: calc(var(--space-4) + env(safe-area-inset-top)) var(--space-7) var(--space-4); font-size: var(--text-base); text-align: center; }
+.sw-update[hidden] { display: none; }
+.sw-update:disabled { opacity: 1; cursor: progress; }
+/* Bewaarde pagina zonder verbinding (service worker): dezelfde oranje balk als offline, met de tijd van de laatste versie. */
+.offline-banner.is-saved { min-height: 44px; box-sizing: border-box; }
+.offline-banner.is-saved[role="button"] { cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+
+.install-glyph { width: 16px; height: 16px; vertical-align: -3px; color: var(--accent); }
+.install-help .install-lead { margin: 0 0 var(--space-6); color: var(--text-dim); font-size: var(--text-base); line-height: 1.55; }
+.install-help .install-lead:last-child { margin-bottom: 0; }
+.install-steps { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-6); }
+.install-steps[hidden] { display: none; }
+.install-steps li { display: grid; grid-template-columns: 28px 1fr; gap: var(--space-5); align-items: start; }
+.install-num { display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--accent); color: var(--accent);
+               font-family: var(--mono); font-size: var(--text-sm); font-weight: 600; }
+.install-steps strong { display: block; color: var(--text); font-size: var(--text-md); font-weight: 600; line-height: 28px; }
+.install-steps li > div > span { display: block; color: var(--text-dim); font-size: var(--text-base); line-height: 1.5; }
+.install-actions[hidden], .install-help [hidden] { display: none; }
+.install-btn { min-height: 44px; padding: 0 var(--space-8); border-radius: var(--radius); }
+
+/* Rustige banner op Vandaag: geen accentvlak zoals de meldingenbanner, alleen een rand; hij wil niets, hij wijst de weg. */
+.install-banner { display: flex; align-items: center; gap: var(--space-4); margin: var(--space-6) 0; padding: var(--space-3) var(--space-3) var(--space-3) var(--space-6);
+                  background: var(--panel); border: 1px solid var(--border); border-radius: var(--radius); font-size: var(--text-base); }
+.install-banner[hidden], .install-banner [hidden] { display: none; }
+.install-banner p { flex: 1 1 auto; margin: 0; line-height: 1.45; color: var(--text-dim); }
+.install-banner strong { display: block; color: var(--text); font-weight: 600; }
+.install-banner-act { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; min-width: 44px; padding: 0 var(--space-6);
+                      border-radius: var(--radius); font-size: var(--text-base); font-weight: 600; white-space: nowrap; }
+a.install-banner-act { color: var(--accent); border: 1px solid var(--border-interactive); text-decoration: none; }
+.install-banner-close { flex: none; min-width: 44px; min-height: 44px; background: none; border: 0; color: var(--text-dim); font-size: var(--text-xl); line-height: 1; }
+.install-banner-close:hover { background: none; color: var(--text); }
+
 /* Afstandsbalk (radar.approach_pct): rechts is de instap, de stip is de koers. Zelfde schaal van 3% als de afstandsring. */
 .approach { position: relative; height: 16px; margin-right: 46px; }
 .approach[hidden] { display: none; }

@@ -3,19 +3,17 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0a0e0f">
 <meta name="color-scheme" content="dark">
 <style>html{background:#0a0e0f}</style>
 <title>Inloggen — HesPulse</title>
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/static/icon-192.png">
-<link rel="manifest" href="/static/manifest.json">
+{% include "_pwa_head.html" %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ asset('style.css') }}">
 </head>
-<body class="login-body">
+<body class="login-body" data-hp-anon>
 <form class="login-card" method="post" action="/login">
   <div class="login-brand">
     <span class="brand-logo-wrap">
@@ -48,5 +46,6 @@
   <p class="muted" style="text-align: center; margin: 0;">Nog geen account? <a href="/registreer">Registreren</a></p>
   <p class="footer">{{ disclaimer }}</p>
 </form>
+<script src="{{ asset('pwa.js') }}" defer></script>
 </body>
 </html>

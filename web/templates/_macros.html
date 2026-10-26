@@ -560,6 +560,36 @@
 </button>
 {% endmacro %}
 
+{# Installatiehulp (install.js): kind "card" op Account, "banner" op Vandaag. Server-zijdig verborgen; install.js toont hem alleen als de app
+   niet vanaf het beginscherm draait. De iOS-stappen tonen het echte Delen-teken, want dat is wat je in Safari moet vinden. #}
+{% macro install_help(kind) %}
+{% set share_icon %}<svg class="install-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l4-4 4 4"/><path d="M12 3v12"/><path d="M7 10H5v11h14V10h-2"/></svg>{% endset %}
+{% if kind == "card" %}
+<section class="card install-help" id="install-help" data-install="card" hidden>
+  <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>Zet HesPulse op je beginscherm</h3>
+  <p class="install-lead">Dan opent HesPulse als app, zonder adresbalk, en zie je zonder bereik de laatst bekende Radar en Vandaag. Op iPhone komen meldingen alleen binnen in de app op je beginscherm.</p>
+  <ol class="install-steps" data-install-ios hidden>
+    <li><span class="install-num" aria-hidden="true">1</span><div><strong>Tik op Delen {{ share_icon }}</strong><span>Het vierkantje met de pijl omhoog, onderaan in Safari. Op een iPad staat het bovenaan.</span></div></li>
+    <li><span class="install-num" aria-hidden="true">2</span><div><strong>Kies Zet op beginscherm</strong><span>Staat hij er niet tussen? Scroll in het menu omlaag. Tik daarna rechtsboven op Voeg toe.</span></div></li>
+    <li><span class="install-num" aria-hidden="true">3</span><div><strong>Open HesPulse vanaf je beginscherm</strong><span>Log daar één keer in en zet meldingen aan bij Instellingen hieronder.</span></div></li>
+  </ol>
+  <div class="install-actions" data-install-android hidden>
+    <button type="button" class="install-btn" data-install-prompt>Installeer HesPulse</button>
+  </div>
+  <p class="install-lead" data-install-menu hidden>Open het menu van je browser en kies Installeren of Toevoegen aan startscherm.</p>
+</section>
+{% else %}
+<aside class="install-banner" id="install-banner" data-install="banner" hidden aria-label="HesPulse installeren">
+  <p><strong>Zet HesPulse op je beginscherm</strong>
+    <span data-install-ios hidden>Tik op Delen {{ share_icon }} en kies Zet op beginscherm.</span>
+    <span data-install-android hidden>Opent als app, ook zonder bereik.</span></p>
+  <a class="install-banner-act" href="/account#install-help" data-install-ios hidden>Uitleg</a>
+  <button type="button" class="install-banner-act" data-install-prompt data-install-android hidden>Installeer</button>
+  <button type="button" class="install-banner-close" data-install-dismiss aria-label="Niet meer tonen">&times;</button>
+</aside>
+{% endif %}
+{% endmacro %}
+
 {# Marktcontext (app/market_context.py): gemeten waarden met bron en leeftijd, nooit een advies. lines: {"label", "value", "note", "flag", "source", "age"};
    een lege lijst geeft niets, zodat een ontbrekende bron nooit als lege regel of streepje verschijnt. #}
 {% macro context_block(lines, title="Context", foot=none) %}

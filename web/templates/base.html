@@ -5,7 +5,6 @@
 <meta name="live-exchange" content="{{ live_exchange }}">
 <meta name="live-quote" content="{{ live_quote }}">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0a0e0f">
 <meta name="color-scheme" content="dark">
 <style>html{background:#0a0e0f}</style>
 <script>
@@ -16,14 +15,7 @@
 </script>
 <title>{% block title %}HesPulse{% endblock %}</title>
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/static/icon-192.png">
-<link rel="manifest" href="/static/manifest.json">
-<!-- iOS negeert manifest.json's display:standalone volledig; zonder deze
-     drie meta-tags blijft "Zet op beginscherm" gewoon Safari met adresbalk
-     openen, ononderscheidbaar van de site zelf. -->
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="HesPulse">
+{% include "_pwa_head.html" %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -33,10 +25,11 @@
 {% set _pt %}{% block page_title %}{% endblock %}{% endset %}
 {# Zoekveld alleen op pagina's die het blok dock_search vullen; de body-klasse laat de CSS de onderruimte aanpassen. #}
 {% set _fs %}{% block dock_search %}{% endblock %}{% endset %}
-<body{% if user and _fs|trim %} class="has-fsearch"{% endif %}>
+<body{% if user and _fs|trim %} class="has-fsearch"{% endif %}{% if not user %} data-hp-anon{% endif %}>
 {% if user %}<div class="glow-edge-tint" aria-hidden="true"></div>{% endif %}
 <div id="page-progress" aria-hidden="true"></div>
 <div id="offline-banner" class="offline-banner" hidden role="status">Geen internetverbinding. Koersen en meldingen worden niet bijgewerkt tot je weer online bent.</div>
+<button type="button" id="sw-update" class="sw-update" hidden>Nieuwe versie beschikbaar, tik om te laden</button>
 {% if user %}
 <div id="push-banner" class="push-banner" hidden role="status">
   <span id="push-banner-text">Meldingen staan uit op dit apparaat.</span>
@@ -888,33 +881,7 @@
     });
   })();
 
-  // Offline-banner: direct zichtbaar zodra de browser meldt dat de
-  // verbinding weg is, niet pas als je toevallig een actie probeert.
-  // navigator.onLine is niet waterdicht (kan "online" blijven zeggen bij
-  // een kapotte verbinding zonder echte internettoegang), maar vangt wel
-  // het duidelijke geval (vliegtuigmodus, geen wifi) meteen op.
-  (function () {
-    var banner = document.getElementById("offline-banner");
-    if (!banner) return;
-    function update() { banner.hidden = navigator.onLine; }
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    update();
-  })();
-
-  // Service worker: maakt de site installeerbaar en toont een nette
-  // offline-pagina bij een mislukte navigatie. Cachet bewust geen
-  // koersen, meldingen of trade-status, zie service-worker.js.
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", function () {
-      // Op de root geserveerd (/service-worker.js), niet onder /static/:
-      // een service worker kan alleen pagina's binnen zijn eigen pad
-      // beheren, dus vanaf /static/ zou hij /dashboard nooit kunnen
-      // bedienen en zou navigator.serviceWorker.ready daar voor altijd
-      // blijven hangen (zie web/main.py se /service-worker.js-route).
-      navigator.serviceWorker.register("/service-worker.js").catch(function () {});
-    });
-  }
+  // Offline-balk, updatemelding, registratie van de service worker en de themakleur staan in pwa.js.
 
   // Tijdelijke debug-console (?debug=1): toont console-logs/fouten op het
   // scherm zelf, voor het opsporen van de iOS-pushmeldingbug zonder Mac +
@@ -938,6 +905,8 @@
     }
   } catch (e) {}
 </script>
+<script src="{{ asset('pwa.js') }}" defer></script>
+<script src="{{ asset('install.js') }}" defer></script>
 <script src="{{ asset('hints.js') }}" defer></script>
 <script src="{{ asset('kansen.js') }}" defer></script>
 <script src="{{ asset('tabbar.js') }}" defer></script>

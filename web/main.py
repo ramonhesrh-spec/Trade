@@ -5,6 +5,7 @@ uvicorn web.main:app --host 0.0.0.0 --port 8000
 """
 import asyncio
 import csv
+import hashlib
 import io
 import json
 import logging
@@ -36,6 +37,7 @@ from app import gallery_job
 from app import ceo, chance_checks, freshness, chance_steps, kans_view, market_context, rule_live, trust, zone_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
+from web import splash
 
 logger = logging.getLogger("web")
 
@@ -93,6 +95,7 @@ def _nav_context(request: Request) -> dict:
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context])
 templates.env.globals["disclaimer"] = config.DISCLAIMER
+templates.env.globals["splash_screens"] = splash.SCREENS
 def asset(path: str) -> str:
     """URL van een statisch bestand met zijn wijzigingstijd erachter, zodat de browser het onthoudt tot het bestand verandert."""
     try:
@@ -596,7 +599,7 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
         "moot_cards": radar.moot_cards(cards),
         "signal_cards": [c for c in cards if c["kind"] == "signal"],
         "entries": entries,
-    })
+    }, headers=_viewer_header(user))
 
 
 async def _open_chances(user: dict, structure_cards: list[dict], scripts: list[dict], prices: dict, now: datetime) -> list[dict]:
@@ -647,12 +650,23 @@ async def _vandaag_context(user: dict) -> dict:
 
 
 @app.get("/vandaag")
-async def vandaag_page(request: Request, user: dict = Depends(require_login)):
+async def vandaag_page(request: Request, bron: str = "", user: dict = Depends(require_login)):
     """Cockpit: het markt-script van nu, de agenda van de komende 24 uur, wat beweegt (liquidaties en nieuws) en de score van
-    wat HesPulse zelf voorspelde. Alles komt uit app/today.py en de verzamelaars; er staat niets op wat niet gemeten is."""
+    wat HesPulse zelf voorspelde. Alles komt uit app/today.py en de verzamelaars; er staat niets op wat niet gemeten is.
+    ?bron=app is de start_url van het manifest: de CEO begint de app op zijn eigen pagina, een leerling hier. Zonder die markering (de
+    tab, een snelkoppeling) ziet ook de CEO Vandaag."""
+    if bron == "app" and is_ceo(user):
+        return RedirectResponse(url="/ceo", status_code=303)
     ctx = await _vandaag_context(user)
     greeting = ceo.greeting(today.local(datetime.now(timezone.utc)).hour, is_ceo(user), user["username"])
-    return templates.TemplateResponse(request, "vandaag.html", {"user": user, "greeting": greeting, **ctx})
+    return templates.TemplateResponse(request, "vandaag.html", {"user": user, "greeting": greeting, **ctx}, headers=_viewer_header(user))
+
+
+def _viewer_header(user: dict) -> dict:
+    """Kop voor de pagina's die de service worker offline bewaart (Radar, Vandaag). Hij wist de bewaarde pagina's zodra een andere kijker
+    op hetzelfde apparaat inlogt. Afgeleid met het geheim, zodat er geen kaal gebruikers-id in een kop of cache staat."""
+    tag = hashlib.sha256(f"hespulse-viewer:{config.JWT_SECRET}:{user['id']}".encode()).hexdigest()[:20]
+    return {"X-HP-Viewer": tag}
 
 
 def _age_header(coins) -> dict:
