@@ -13,10 +13,10 @@
     { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "shortcuts": [
-    { "name": "Radar", "short_name": "Radar", "description": "Kansen die zich vormen, met limiet, stop en doel", "url": "/smc",
-      "icons": [{ "src": "/static/shortcut-radar.png", "sizes": "96x96", "type": "image/png" }] },
-    { "name": "Vandaag", "short_name": "Vandaag", "description": "Open kansen, markt en agenda van vandaag", "url": "/vandaag",
+    { "name": "Nu", "short_name": "Nu", "description": "Niets te doen, of het ene plan dat nu in de zone staat", "url": "/vandaag",
       "icons": [{ "src": "/static/shortcut-vandaag.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Plannen", "short_name": "Plannen", "description": "Plannen die wachten, met limiet, stop en doel", "url": "/smc",
+      "icons": [{ "src": "/static/shortcut-radar.png", "sizes": "96x96", "type": "image/png" }] },
     { "name": "Bewijs", "short_name": "Bewijs", "description": "Gemeten resultaat per soort melding", "url": "/bewijs",
       "icons": [{ "src": "/static/shortcut-bewijs.png", "sizes": "96x96", "type": "image/png" }] }
   ]

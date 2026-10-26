@@ -3,7 +3,7 @@
 // Verouderde handelsdata tonen alsof het actueel is, is voor een trading tool gevaarlijker dan geen data. Daarom is alles netwerk-eerst: een
 // bewaarde pagina komt alleen terug als het netwerk faalt, en dan altijd met die balk. /api, POST en push gaan nooit door een cache.
 // Verhoog SW_VERSION bij elke wijziging aan dit bestand (tests/test_pwa.py bewaakt dat): de nieuwe versie wacht dan op de updatemelding.
-const SW_VERSION = 3;
+const SW_VERSION = 4;
 const CACHE_NAME = "hespulse-shell-v" + SW_VERSION;
 const PAGES_CACHE = "hespulse-pages-v" + SW_VERSION;
 const NAV_CACHE = "hespulse-nav";

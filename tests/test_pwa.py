@@ -23,6 +23,7 @@ SW = STATIC / "service-worker.js"
 # dan SW_VERSION (anders blijft de oude versie op telefoons hangen en ziet niemand de updatemelding) en zet hier de nieuwe afdruk.
 SW_FINGERPRINTS = {
     3: "3cf7f570b78c45cdad01c3b3bf08d14548aff2eed40ca635609439cd09fdcda9",
+    4: "3cf7f570b78c45cdad01c3b3bf08d14548aff2eed40ca635609439cd09fdcda9",   # V2 fase 1: nieuwe navigatie en thema; oude bewaarde pagina's vallen weg
 }
 
 
@@ -54,10 +55,10 @@ class ManifestTest(unittest.TestCase):
         self.assertEqual(self.m["theme_color"], "#0a0e0f")
         self.assertEqual(self.m["background_color"], "#0a0e0f")
 
-    def test_shortcuts_radar_vandaag_bewijs_with_existing_icons(self):
+    def test_shortcuts_nu_plannen_bewijs_with_existing_icons(self):
         from PIL import Image
         got = [(s["name"], s["url"]) for s in self.m["shortcuts"]]
-        self.assertEqual(got, [("Radar", "/smc"), ("Vandaag", "/vandaag"), ("Bewijs", "/bewijs")])
+        self.assertEqual(got, [("Nu", "/vandaag"), ("Plannen", "/smc"), ("Bewijs", "/bewijs")])       # de tabnamen van V2, dezelfde urls
         for s in self.m["shortcuts"]:
             self.assertTrue(s.get("short_name"))
             self.assertTrue(s.get("description"))
@@ -107,7 +108,7 @@ class WebPwaTest(unittest.TestCase):
     def test_app_start_shows_a_student_vandaag(self):
         r = self.client(self.student_id).get("/vandaag?bron=app", follow_redirects=False)
         self.assertEqual(r.status_code, 200)
-        self.assertIn("Vandaag", r.text)
+        self.assertIn("<title>Nu — HesPulse</title>", r.text)                     # Vandaag heet in V2 Nu, op dezelfde url
 
     def test_app_start_without_session_goes_to_login(self):
         r = self.client().get("/vandaag?bron=app", follow_redirects=False)

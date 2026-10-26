@@ -476,7 +476,7 @@ start; herstart `crypto-bot` na een wijziging.
 
 ### Trade Radar en Bewijs (dashboard)
 
-`/smc` heet in de navigatie **SMC** (de structuur-breuken staan apart op **Setups**, `/structuur`): elke bouwende SMC-setup en elk open SMC-signaal staat als handelsplan met een
+`/smc` staat in de navigatie onder **Plannen**, met een wisselaar naar **Setups** (`/structuur`, de structuur-breuken): elke bouwende SMC-setup en elk open SMC-signaal staat als handelsplan met een
 prijsladder (zone, limietorder op de zone-rand, stop, doel, koers nu), de R:R vanaf de limietprijs, de afstand tot de order en
 een live status die elke 15 seconden meebeweegt (`/api/radar`, `web/static/radar.js`; koersen staan 10 seconden in een cache).
 De rekenlaag zit in `app/trade_plan.py` en `app/radar.py`. Zodra de koers in de zone komt stuurt de SMC-check eenmalig een
@@ -488,11 +488,29 @@ begint met de limietorder en de R:R vanaf die prijs.
 die een vaste regel volgt (onder 30 afgeronde trades "nog te weinig data", daarboven positief of negatief na kosten, "voordeel
 gemeten" pas bij 100 trades en een positief gemiddelde). Vervallen en open signalen staan er bewust bij maar tellen niet mee.
 
+### Navigatie, Nu en thema (ontwerp V2, fase 1)
+
+Vier tabs: **Nu** (`/vandaag`), **Plannen** (`/smc`, met een wisselaar naar Setups op `/structuur`), **Logboek** (`/signalen`) en
+**Bewijs** (`/bewijs`); geen url veranderde. Account, Meldingen, Handleiding, Zone-radar uitleg, Kwartaalcijfers, Galerij en CEO
+(alleen de eigenaar) staan in het menu achter je initiaal rechtsboven. Het getal op Plannen telt de plannen die nu in de zone staan.
+
+Nu (`app/nu.py`) toont rust ("Niets te doen.", het eerstvolgende plan met de gemeten afstand tot de limiet, het aantal plannen, open
+trades en hoe oud de koers is) of precies één kaart: een plan in de zone (met de knop naar de order-checklist en Sla over, dat een dag
+op dit toestel geldt via de cookie `hp_skip`) of, zonder plan in de zone, de open trade met live R. Een tweede plan in de zone staat
+klein eronder. Marktcontext, scenario's, nieuws, agenda en score staan lager op dezelfde pagina onder **Markt**. De order-checklist
+(`/nu/order/<sleutel>`) loopt de velden van het orderformulier af: instrument en richting, limietprijs, stop, doel. Een tik op een
+getal kopieert het met een punt; er is geen stap voor de positiegrootte.
+
+Thema: donker is de standaard. In Account kies je Systeem, Donker of Licht; de keuze staat in de cookie `hp_theme` (en in
+localStorage), zodat de server de pagina meteen in het goede thema schrijft. Controleer het contrast na een kleurwijziging voor beide:
+`python3 scripts/layout_check.py --base http://127.0.0.1:8000 --user <naam> --out /tmp/lc --theme dark` en daarna `--theme light`.
+Letters: Geist en Geist Mono (Google Fonts); offline valt de pagina terug op de systeemletters.
+
 ### App op het beginscherm (PWA)
 
 HesPulse is te installeren als app (`web/static/manifest.json`, `service-worker.js`, `pwa.js`, `install.js`). De app start op
-`/vandaag?bron=app`: een leerling ziet Vandaag, de CEO wordt doorgestuurd naar `/ceo`; het manifest houdt `id` `/ceo` zodat
-bestaande installaties dezelfde app blijven. Lang drukken op het icoon geeft snelkoppelingen naar Radar, Vandaag en Bewijs.
+`/vandaag?bron=app`: een leerling ziet Nu, de CEO wordt doorgestuurd naar `/ceo`; het manifest houdt `id` `/ceo` zodat
+bestaande installaties dezelfde app blijven. Lang drukken op het icoon geeft snelkoppelingen naar Nu, Plannen en Bewijs.
 Account toont de installatiehulp (iPhone: Delen, Zet op beginscherm, open de app; Android en Chrome: een eigen knop), Vandaag
 een rustige banner die je kunt wegklikken; beide verdwijnen in de geïnstalleerde app. Offline toont de app de laatst bekende
 Radar en Vandaag met de balk "Offline, laatst bijgewerkt om HH:MM": de service worker bewaart alleen die twee pagina's, per pad
