@@ -3062,3 +3062,31 @@ a.lb-title:hover { color: var(--aci); }
 .rp-ctrl { display: grid; grid-template-columns: 56px minmax(0, 1fr) 56px; gap: 8px; margin-top: 4px; }
 .rp-btn { height: 56px; border-radius: 14px; border: 1px solid var(--bd); background: var(--s1); color: var(--tx); font: 500 20px var(--sans); cursor: pointer; }
 .rp-play { height: 56px; border: 0; border-radius: 14px; background: var(--ac); color: var(--onac); font: 600 17px var(--sans); cursor: pointer; }
+
+/* Weekterugblik (ontwerp E): één groot gemeten getal, acht staven in neutraal grijs met deze week in accent. Een verlies hangt onder de
+   nullijn. Geen beweging. */
+.wk { display: flex; flex-direction: column; gap: 6px; }
+.wk-label { font-size: 13px; color: var(--tx2); }
+.wk-total { font: 500 56px / 1 var(--mono); letter-spacing: -0.04em; color: var(--tx); font-variant-numeric: tabular-nums; }
+.wk-counts { font-size: 15px; color: var(--tx2); }
+.wk-chart { margin: 18px 0 0; padding: 16px; border-radius: 16px; background: var(--s1); border: 1px solid var(--bd); display: flex; flex-direction: column; gap: 12px; }
+.wk-chart-head { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; font-size: 13px; color: var(--tx2); }
+.wk-mono { font-family: var(--mono); color: var(--tx); }
+.wk-bars { position: relative; height: 160px; display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+.wk-bars::before { content: ""; position: absolute; left: 0; right: 0; top: 66.6%; height: 1px; background: var(--bd); }
+.wk-col { position: relative; }
+.wk-bar { position: absolute; left: 0; right: 0; bottom: 33.4%; height: calc(var(--h) * 0.666); min-height: 3px; border-radius: 4px; background: var(--tx2); opacity: 0.45; }
+.wk-bar.is-neg { bottom: auto; top: 66.6%; height: calc(var(--h) * 0.334); }
+.wk-bar.is-cur { background: var(--ac); opacity: 1; }
+.wk-names { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 8px; }
+.wk-name { display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 11px; color: var(--tx2); }
+.wk-name b { font: 500 11px var(--mono); color: var(--tx2); }
+.wk-name.is-cur b { color: var(--aci); }
+.wk-stats { margin: 14px 0 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.wk-stats div { display: flex; flex-direction: column; gap: 2px; }
+.wk-stats dt { font-size: 13px; color: var(--tx2); }
+.wk-stats dd { margin: 0; font: 400 16px var(--mono); color: var(--tx); }
+.wk-obs { margin: 16px 0 0; padding: 14px 16px; border-radius: 14px; background: var(--actint); display: flex; flex-direction: column; gap: 4px; font-size: 15px;
+  line-height: 1.45; color: var(--tx); text-wrap: pretty; }
+.wk-obs-t { font-size: 13px; font-weight: 600; color: var(--aci); }
+

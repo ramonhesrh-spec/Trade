@@ -167,5 +167,20 @@ class FormatTests(unittest.TestCase):
         self.assertEqual(logbook.r_text(0.0), "0,0 R")
 
 
+
+class WeekInputTests(unittest.TestCase):
+    def test_afgeronde_trades_en_overgeslagen_uitkomsten(self):
+        s5 = sig(5, outcome="take_profit", outcome_at="2026-10-25T22:20:00+00:00")
+        s6 = sig(6, coin="SOL", outcome="stop_loss", outcome_at="2026-10-25T21:00:00+00:00")
+        runs = [{"plan_key": "zone:1", "coin": "BTC", "direction": "short", "opened_at": "2026-10-25T20:38:00+00:00", "done_at": "2026-10-25T20:39:12+00:00"}]
+        plans = {"zone:1": plan("zone:1", signal_id=5), "zone:2": plan("zone:2", "SOL", signal_id=6), "zone:3": plan("zone:3")}
+        skips = [{"plan_key": "zone:2", "skipped_at": "2026-10-25T18:00:00+00:00"}, {"plan_key": "zone:3", "skipped_at": "2026-10-25T18:30:00+00:00"},
+                 {"plan_key": "zone:1", "skipped_at": "2026-10-25T18:40:00+00:00"}]
+        signals = {5: s5, 6: s6}
+        self.assertEqual(logbook.closed_trades(runs, plans, signals, []), [{"signal_id": 5, "at": "2026-10-25T22:20:00+00:00", "r": 2.0}])
+        self.assertEqual(logbook.skip_outcomes(skips, runs, plans, signals),
+                         [{"at": "2026-10-25T18:00:00+00:00", "outcome": "stop_loss", "r": -1.0}, {"at": "2026-10-25T18:30:00+00:00", "outcome": None, "r": None}])
+
+
 if __name__ == "__main__":
     unittest.main()

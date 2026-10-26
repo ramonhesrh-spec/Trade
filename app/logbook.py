@@ -114,6 +114,47 @@ def _seen_events(seen: list[dict], tz) -> list[dict]:
     return out
 
 
+def user_trades(runs: list[dict], plans: dict, signals: dict, taken: list[dict]) -> dict[int, tuple[str, datetime, Optional[float]]]:
+    """Jouw trades: signaal-id -> (soort, instapmoment, eigen instapprijs). Een plan met een afgeronde checklist dat vulde ('filled', instap op
+    de vulling), of een journaalregel die je als genomen of aangepast markeerde ('taken'). Oefentrades vallen weg."""
+    real = {sid: s for sid, s in signals.items() if not s.get("is_practice")}
+    out: dict[int, tuple[str, datetime, Optional[float]]] = {}
+    for run in runs:
+        sid = (plans.get(run["plan_key"]) or {}).get("signal_id")
+        if run.get("done_at") and sid in real:
+            out[sid] = ("filled", _parse(real[sid]["created_at"]), None)
+    for row in taken:
+        sid = row["signal_id"]
+        if row.get("status") in TAKEN_STATUSES and sid in real and sid not in out and row.get("entry_time"):
+            out[sid] = ("taken", _parse(row["entry_time"]), row.get("entry_price"))
+    return out
+
+
+def closed_trades(runs: list[dict], plans: dict, signals: dict, taken: list[dict]) -> list[dict]:
+    """Jouw afgeronde trades met hun R (track_record.signal_r) en het moment van de uitkomst, voor de weekterugblik."""
+    out = []
+    for sid in user_trades(runs, plans, signals, taken):
+        r = _resolved(signals[sid])
+        if r is not None and signals[sid].get("auto_outcome_at"):
+            out.append({"signal_id": sid, "at": signals[sid]["auto_outcome_at"], "r": r})
+    return out
+
+
+def skip_outcomes(skips: list[dict], runs: list[dict], plans: dict, signals: dict) -> list[dict]:
+    """Jouw overgeslagen plannen (zonder afgeronde checklist) met de uitkomst van het signaal waartoe ze werden, als die vaststaat."""
+    done = {r["plan_key"] for r in runs if r.get("done_at")}
+    out = []
+    for skip in skips:
+        if skip["plan_key"] in done:
+            continue
+        signal = signals.get((plans.get(skip["plan_key"]) or {}).get("signal_id"))
+        if signal and signal.get("is_practice"):
+            signal = None
+        r = _resolved(signal)
+        out.append({"at": skip["skipped_at"], "outcome": signal["auto_outcome"] if r is not None else None, "r": r})
+    return out
+
+
 def timeline(*, skips: list[dict], runs: list[dict], plans: dict, signals: dict, taken: list[dict], seen: list[dict], now: datetime, tz,
              days: int = DAYS_SHOWN) -> list[dict]:
     """De dagen van het Logboek, nieuwste eerst, met hun momenten van laat naar vroeg. Alles komt van deze ene gebruiker: zijn overgeslagen
@@ -123,22 +164,13 @@ def timeline(*, skips: list[dict], runs: list[dict], plans: dict, signals: dict,
     real = {sid: s for sid, s in signals.items() if not s.get("is_practice")}
     done_keys = {r["plan_key"] for r in runs if r.get("done_at")}
     events: list[dict] = []
-    trade_entries: dict[int, tuple[str, datetime, Optional[float]]] = {}
+    trade_entries = user_trades(runs, plans, real, taken)
 
     for run in runs:
         seconds = checklist_seconds(run.get("opened_at"), run.get("done_at"))
         if run.get("done_at"):
             sub = f"Checklist in {duration_text(seconds)}." if seconds is not None else "Checklist afgerond."
             events.append(_event("order", _parse(run["done_at"]), tz, f"{run['coin']} {run['direction']} order gezet", sub, tone="accent"))
-            sid = (plans.get(run["plan_key"]) or {}).get("signal_id")
-            if sid in real:
-                trade_entries[sid] = ("filled", _parse(real[sid]["created_at"]), None)
-
-    for row in taken:
-        sid = row["signal_id"]
-        if row.get("status") not in TAKEN_STATUSES or sid not in real or sid in trade_entries or not row.get("entry_time"):
-            continue
-        trade_entries[sid] = ("taken", _parse(row["entry_time"]), row.get("entry_price"))
 
     for sid, (kind, at, own_price) in trade_entries.items():
         s = real[sid]

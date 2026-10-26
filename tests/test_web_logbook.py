@@ -180,6 +180,25 @@ class ReplayPageTests(Base):
         self.assertIn("niet op te halen", html)
 
 
+class WeekTabTests(Base):
+    def test_jouw_week_op_bewijs_met_alleen_eigen_trades(self):
+        sid = self.signal()
+        repo.mark_signal_auto_outcome(sid, "take_profit", db.now_iso())
+        jid = repo.create_journal_entry(sid, self.anna, 0)
+        repo.update_journal_status(jid, self.anna, "genomen")
+        html = self.client.get("/bewijs").text
+        sec = html[html.index('id="tab-week"'):html.index('id="tab-uurkaart"')]
+        self.assertIn('class="wk-total">+2,0 R<', sec)
+        self.assertIn("1 trade · 1 gewonnen · 0 verloren", sec)
+        self.assertNotIn("Volgens plan", sec)
+        self.assertIn('href="#tab-week"', html)
+        self.login(self.bram)
+        sec = self.client.get("/bewijs").text
+        sec = sec[sec.index('id="tab-week"'):sec.index('id="tab-uurkaart"')]
+        self.assertIn('class="wk-total">0,0 R<', sec)
+        self.assertNotIn("Wat opviel", sec)
+
+
 def datetime_ms(value):
     from datetime import datetime
     return datetime.fromisoformat(value).timestamp() * 1000

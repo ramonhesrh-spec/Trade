@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import ceo, chance_checks, freshness, chance_steps, kans_view, logbook, market_context, nu, trade_replay, rule_live, trust, zone_radar
+from app import ceo, chance_checks, freshness, chance_steps, kans_view, logbook, market_context, nu, trade_replay, week_review, rule_live, trust, zone_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -380,18 +380,28 @@ async def mark_all_meldingen_gelezen(user: dict = Depends(require_login)):
 LOGBOOK_DAYS = logbook.DAYS_SHOWN
 
 
-def _logbook_days(user: dict, now: datetime) -> list[dict]:
-    """De dagtijdlijn van deze ene gebruiker (app/logbook.py): zijn overgeslagen plannen, zijn checklists en zijn genomen journaalregels,
-    met de gedeelde plannen en signalen erachter. Een proefsoort die hij niet mag zien valt weg (rule_live.for_viewer)."""
-    since = (now - timedelta(days=LOGBOOK_DAYS + 1)).isoformat()
+def _logbook_inputs(user: dict, since: str) -> dict:
+    """Wat app/logbook.py van deze ene gebruiker leest: zijn overgeslagen plannen, zijn checklists en zijn genomen journaalregels (alle drie
+    gefilterd op zijn user_id), met de gedeelde plannen en signalen erachter. Een proefsoort die hij niet mag zien valt weg (rule_live.for_viewer)."""
     skips = repo.list_plan_skips(user["id"], since)
     runs = repo.list_checklist_runs(user["id"], since)
     taken = [e for e in repo.list_journal(user["id"]) if not e["is_practice"] and e["status"] in logbook.TAKEN_STATUSES]
     plans = repo.plans_for_keys([r["plan_key"] for r in skips + runs])
     ids = [p["signal_id"] for p in plans.values()] + [e["signal_id"] for e in taken]
     signals = {s["id"]: s for s in rule_live.for_viewer(list(repo.signals_by_ids(ids).values()), is_ceo(user))}
-    return logbook.timeline(skips=skips, runs=runs, plans=plans, signals=signals, taken=taken, seen=repo.list_plan_moments(since),
-                            now=now, tz=today.LOCAL_TZ)
+    return {"skips": skips, "runs": runs, "plans": plans, "signals": signals, "taken": taken}
+
+
+def _logbook_days(user: dict, now: datetime) -> list[dict]:
+    since = (now - timedelta(days=LOGBOOK_DAYS + 1)).isoformat()
+    return logbook.timeline(**_logbook_inputs(user, since), seen=repo.list_plan_moments(since), now=now, tz=today.LOCAL_TZ)
+
+
+def _week_review(user: dict, now: datetime) -> dict:
+    """De weekterugblik van deze ene gebruiker (app/week_review.py) over de laatste acht weken."""
+    d = _logbook_inputs(user, (now - timedelta(weeks=week_review.WEEKS, days=1)).isoformat())
+    return week_review.review(logbook.closed_trades(d["runs"], d["plans"], d["signals"], d["taken"]),
+                              logbook.skip_outcomes(d["skips"], d["runs"], d["plans"], d["signals"]), now, today.LOCAL_TZ)
 
 
 REPLAY_CACHE_MAX = 64
@@ -1029,6 +1039,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     for c in curves:
         c["svg"] = Markup(track_record.equity_svg(c["cumulative"], c["drawdown"]))
     return templates.TemplateResponse(request, "bewijs.html", {
+        "my_week": _week_review(user, datetime.now(timezone.utc)),
         "curves": curves, "total": total, "per_type": per_type, "funding_split": track_record.funding_split(rows, config.TRACK_RECORD_COST_PCT),
         "hours": track_record.hour_grid(rows, config.TRACK_RECORD_COST_PCT),
         "rule_statuses": rule_statuses, "other_rules": other_rules, "range_sweep": range_sweep, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,

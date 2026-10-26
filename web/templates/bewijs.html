@@ -21,6 +21,7 @@
 
 {{ macros.utabs([
   {"key": "soort", "label": "Per soort", "href": "#tab-soort"},
+  {"key": "week", "label": "Week", "href": "#tab-week"},
   {"key": "regels", "label": "Regels", "href": "#tab-regels"},
   {"key": "curves", "label": "Curves", "href": "#tab-curves"},
   {"key": "uurkaart", "label": "Uurkaart", "href": "#tab-uurkaart"}], "soort", "bewijs",
@@ -207,6 +208,35 @@
 <p class="muted empty">Nog geen afgeronde trades voor een curve.</p>
 {% endif %}
 
+</section>
+
+{# Jouw week (ontwerp E, app/week_review.py): alleen jouw eigen trades, R uit de uitkomst van het signaal. Acht weken in neutraal grijs,
+   deze week in accent; hoogstens één observatie en alleen een telbare. #}
+<section id="tab-week" data-utab-panel>
+  {% set w = my_week %}
+  <div class="wk">
+    <span class="wk-label">{{ w.label }}</span>
+    <span class="wk-total">{{ w.total_text }}</span>
+    <span class="wk-counts">{{ w.counts_text }}</span>
+    <div class="wk-chart">
+      <div class="wk-chart-head"><span>R per week</span><span>{{ w.weeks|length }} weken · totaal <span class="wk-mono">{{ w.eight_total_text }}</span></span></div>
+      <div class="wk-bars" role="img" aria-label="R per week over {{ w.weeks|length }} weken, deze week rechts">
+        {% for b in w.weeks %}<div class="wk-col"><i class="wk-bar{% if b.current %} is-cur{% endif %}{% if b.negative %} is-neg{% endif %}" style="--h: {{ b.height_pct }}%"></i></div>{% endfor %}
+      </div>
+      <div class="wk-names" aria-hidden="true">
+        {% for b in w.weeks %}<span class="wk-name{% if b.current %} is-cur{% endif %}"><b>{{ b.value_text }}</b>{{ b.name }}</span>{% endfor %}
+      </div>
+    </div>
+    {% if w.stats %}
+    <dl class="wk-stats">
+      {% for st in w.stats %}<div><dt>{{ st.label }}</dt><dd>{{ st.value }}</dd></div>{% endfor %}
+    </dl>
+    {% endif %}
+    {% if w.observation %}
+    <div class="wk-obs"><span class="wk-obs-t">Wat opviel</span><span>{{ w.observation }}</span></div>
+    {% endif %}
+    <p class="lb-note">Jouw trades: plannen met een afgeronde checklist die vulden, en meldingen die je in het Journaal als genomen markeerde. R uit doel of stop, zonder kosten. Zie ook het <a href="/signalen">Logboek</a>.</p>
+  </div>
 </section>
 
 <section id="tab-uurkaart" data-utab-panel>
