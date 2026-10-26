@@ -3372,3 +3372,19 @@ def list_plan_moments(since_iso: str) -> list[dict]:
                SELECT created_at, zone_alert_at AS zone_at FROM smc_setups WHERE created_at >= ? OR zone_alert_at >= ?""",
             (since_iso, since_iso, since_iso, since_iso)).fetchall()
         return [dict(r) for r in rows]
+
+
+def plan_for_signal(signal_id: int) -> Optional[dict]:
+    """Het Radar- of Setups-plan waaruit dit signaal ontstond, in dezelfde vorm als plans_for_keys; None voor een signaal zonder plan."""
+    with db.session() as conn:
+        for kind, table in (("zone", "zone_radar_setups"), ("setup", "smc_setups"), ("structuur", "structure_setups")):
+            row = conn.execute(f"SELECT id FROM {table} WHERE signal_id = ?", (signal_id,)).fetchone()
+            if row:
+                return plans_for_keys([f"{kind}:{row['id']}"]).get(f"{kind}:{row['id']}")
+    return None
+
+
+def get_checklist_run(user_id: int, plan_key: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM checklist_runs WHERE user_id = ? AND plan_key = ?", (user_id, plan_key)).fetchone()
+        return dict(row) if row else None

@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import ceo, chance_checks, freshness, chance_steps, kans_view, logbook, market_context, nu, rule_live, trust, zone_radar
+from app import ceo, chance_checks, freshness, chance_steps, kans_view, logbook, market_context, nu, trade_replay, rule_live, trust, zone_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -392,6 +392,47 @@ def _logbook_days(user: dict, now: datetime) -> list[dict]:
     signals = {s["id"]: s for s in rule_live.for_viewer(list(repo.signals_by_ids(ids).values()), is_ceo(user))}
     return logbook.timeline(skips=skips, runs=runs, plans=plans, signals=signals, taken=taken, seen=repo.list_plan_moments(since),
                             now=now, tz=today.LOCAL_TZ)
+
+
+REPLAY_CACHE_MAX = 64
+_replay_candles: dict[tuple[str, str, int, int], list] = {}
+
+
+async def _closed_candles(coin: str, tf: str, start: datetime, count: int) -> Optional[list]:
+    """Candles van een afgesloten venster. Die veranderen nooit meer, dus ze blijven bewaard (de oudste vallen eraf na REPLAY_CACHE_MAX)."""
+    key = (coin, tf, int(start.timestamp()), count)
+    if key not in _replay_candles:
+        try:
+            df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, tf, count, int(start.timestamp() * 1000))
+        except Exception:
+            logger.exception("Replay-candles voor %s niet opgehaald", coin)
+            return None
+        rows = [[int(r.timestamp.timestamp()), float(r.open), float(r.high), float(r.low), float(r.close)] for r in df.itertuples()]
+        if not rows:
+            return None
+        while len(_replay_candles) >= REPLAY_CACHE_MAX:
+            _replay_candles.pop(next(iter(_replay_candles)))
+        _replay_candles[key] = rows
+    return _replay_candles[key]
+
+
+@app.get("/logboek/replay/{signal_id}")
+async def logboek_replay(request: Request, signal_id: int, user: dict = Depends(require_login)):
+    """Replay van een afgeronde trade (app/trade_replay.py): candles van een uur voor de vulling tot de uitkomst, de niveaus en elk moment
+    met zijn echte tijd. De checklist is die van deze gebruiker; de rest is het gedeelde signaal."""
+    rows = repo.signals_by_ids([signal_id])
+    signal = rows.get(signal_id)
+    if (not signal or signal["auto_outcome"] not in trade_replay.OUTCOME_LABEL or not signal["auto_outcome_at"]
+            or not rule_live.for_viewer([signal], is_ceo(user))):
+        raise HTTPException(status_code=404)
+    plan = repo.plan_for_signal(signal_id)
+    run = repo.get_checklist_run(user["id"], plan["key"]) if plan else None
+    start, end, tf = trade_replay.window(signal["created_at"], signal["auto_outcome_at"])
+    candles = await _closed_candles(signal["coin"], tf, start, trade_replay.candle_count(start, end, tf))
+    view = trade_replay.build(candles or [], signal, trade_replay.moments(signal, plan, run), tf, today.LOCAL_TZ)
+    day = logbook.short_date(logbook._parse(signal["auto_outcome_at"]).astimezone(today.LOCAL_TZ).date()).lower()
+    return templates.TemplateResponse(request, "replay.html", {"user": user, "signal": signal, "view": view, "day": day,
+                                                                "svg": Markup(view["svg"]) if view else None})
 
 
 @app.get("/signalen")

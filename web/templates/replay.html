@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set bare = true %}
+{% block title %}Replay {{ signal.coin }} {{ signal.direction }} — HesPulse{% endblock %}
+{% block content %}
+{# Replay van een afgeronde trade (ontwerp D, app/trade_replay.py). De tekening en elk moment staan er zonder JavaScript; replay.js schuift de
+   cursor, dimt de candles na het moment en zet R en de zin van dat moment. R bestaat pas na de vulling en komt uit de candle-sluiting. #}
+<div class="rp" data-rp>
+  <header class="rp-top">
+    <a class="ck-nav" href="/signalen"><span aria-hidden="true">‹</span> Logboek</a>
+    <span class="rp-tf">Replay{% if view %} · {{ view.tf_label }}{% endif %}</span>
+  </header>
+  {% if not view %}
+  <h1 class="rp-title">{{ signal.coin }} {{ signal.direction }}</h1>
+  <p class="lb-empty">De candles van deze trade zijn nu niet op te halen bij de beurs. Probeer het straks opnieuw.</p>
+  {% else %}
+  {% set f = view.frames[view.start_index] %}
+  <div class="rp-head">
+    <div class="rp-head-l"><h1 class="rp-title">{{ signal.coin }} {{ signal.direction }}</h1><span class="rp-when"><span data-rp="time">{{ f.time }}</span> · {{ day }}</span></div>
+    <div class="rp-head-r"><span class="rp-rlabel" data-rp="rlabel">{{ f.r_label }}</span><span class="rp-r" data-rp="r" aria-live="polite">{{ f.r_text }}</span></div>
+  </div>
+  <div class="rp-chart">{{ svg }}</div>
+  <div class="rp-event">
+    <span class="rp-step" data-rp="step">{{ f.step }}</span>
+    <span class="rp-text" data-rp="event">{{ f.event }}</span>
+  </div>
+  <label class="sr-only" for="rp-range">Moment in de trade</label>
+  <input id="rp-range" class="rp-range" type="range" min="0" max="{{ view.frames|length - 1 }}" step="1" value="{{ view.start_index }}" data-rp="range" hidden>
+  <ol class="rp-moments" aria-label="Momenten">
+    {% for m in view.moments %}
+    <li><button type="button" class="rp-mom{% if loop.last %} is-cur{% endif %}" data-rp-go="{{ m.index }}"><span class="rp-mom-t">{{ m.time }}</span> {{ m.label }}</button></li>
+    {% endfor %}
+  </ol>
+  <div class="rp-ctrl" data-rp="ctrl" hidden>
+    <button type="button" class="rp-btn" data-rp="prev" aria-label="Vorig moment">‹</button>
+    <button type="button" class="rp-play" data-rp="play">Speel af</button>
+    <button type="button" class="rp-btn" data-rp="next" aria-label="Volgend moment">›</button>
+  </div>
+  <script type="application/json" data-rp="frames">{{ view.frames|tojson }}</script>
+  {% endif %}
+</div>
+<script src="{{ asset('replay.js') }}" defer></script>
+{% endblock %}

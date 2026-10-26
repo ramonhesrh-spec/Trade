@@ -101,5 +101,89 @@ class TimelinePageTests(Base):
         self.assertNotIn('<section class="lb"', html)
 
 
+
+class ReplayPageTests(Base):
+    def setUp(self):
+        super().setUp()
+        import pandas as pd
+
+        def ohlcv(coin, timeframe="5m", limit=200, since=None):
+            self.calls.append((coin, timeframe, limit, since))
+            start = since // 1000
+            rows = [[(start + i * 300) * 1000, 100.0, 100.2, 99.8, 100.0, 1] for i in range(limit)]
+            df = pd.DataFrame(rows, columns=["timestamp", "open", "high", "low", "close", "volume"])
+            df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+            return df
+        self.calls = []
+        main._replay_candles.clear()
+        self.ohlcv = mock.patch.object(main.exchange, "fetch_ohlcv", side_effect=ohlcv)
+        self.ohlcv.start()
+
+    def tearDown(self):
+        self.ohlcv.stop()
+        super().tearDown()
+
+    def closed(self, outcome="take_profit", **kw):
+        sid = self.signal(**kw)
+        with db.session() as conn:
+            conn.execute("UPDATE signals SET created_at = '2026-10-25T20:40:00+00:00' WHERE id = ?", (sid,))
+        repo.mark_signal_auto_outcome(sid, outcome, "2026-10-25T21:40:00+00:00")
+        return sid
+
+    def test_replay_met_candles_niveaus_en_momenten(self):
+        sid = self.closed()
+        html = self.client.get(f"/logboek/replay/{sid}").text
+        self.assertIn("BTC short", html)
+        self.assertIn("Replay · 5 min", html)
+        self.assertEqual(html.count('class="rp-candle'), 25)
+        for label in ("Gevuld", "Doel geraakt", "Speel af"):
+            self.assertIn(label, html)
+        self.assertIn('class="rp-r" data-rp="r" aria-live="polite">+2,0 R<', html)
+        self.assertIn('href="/signalen"', html)
+        self.assertEqual(self.calls, [("BTC", "5m", 25, int(datetime_ms("2026-10-25T19:40:00+00:00")))])
+
+    def test_de_candles_van_een_gesloten_venster_worden_een_keer_opgehaald(self):
+        sid = self.closed()
+        self.client.get(f"/logboek/replay/{sid}")
+        self.client.get(f"/logboek/replay/{sid}")
+        self.assertEqual(len(self.calls), 1)
+
+    def test_eigen_checklist_wel_die_van_een_ander_niet(self):
+        zid = repo.insert_zone_radar_setup({"coin": "BTC", "direction": "short", "tf": "1h", "zone_key": "k", "zone_low": 100.0, "zone_high": 100.5,
+                                            "stop_loss": 101.0, "take_profit": 98.0, "rr": 2.0, "atr": 0.5, "target_tf": "4h", "target_low": 98.0,
+                                            "target_high": 98.5}, "2026-10-25T18:00:00+00:00")
+        sid = repo.fill_zone_radar_setup(zid, {"coin": "BTC", "direction": "short", "category": "day_trading", "trade_type": "zone_radar", "price": 100.0,
+                                               "stop_loss": 101.0, "take_profit": 98.0, "confidence": "x", "technical_confirmed": 1, "hard_gates_ok": 1})
+        with db.session() as conn:
+            conn.execute("UPDATE signals SET created_at = '2026-10-25T20:40:00+00:00' WHERE id = ?", (sid,))
+        repo.mark_signal_auto_outcome(sid, "take_profit", "2026-10-25T21:40:00+00:00")
+        repo.open_checklist(self.bram, f"zone:{zid}", "BTC", "short", "2026-10-25T20:30:00+00:00")
+        repo.finish_checklist(self.bram, f"zone:{zid}", "2026-10-25T20:31:12+00:00")
+        html = self.client.get(f"/logboek/replay/{sid}").text
+        self.assertIn("Plan actief", html)
+        self.assertNotIn("Order gezet", html)
+        self.login(self.bram)
+        self.assertIn("Order gezet", self.client.get(f"/logboek/replay/{sid}").text)
+
+    def test_open_oefen_of_onbekend_geeft_404(self):
+        self.assertEqual(self.client.get(f"/logboek/replay/{self.signal()}").status_code, 404)
+        self.assertEqual(self.client.get(f"/logboek/replay/{self.closed(is_practice=1)}").status_code, 404)
+        self.assertEqual(self.client.get(f"/logboek/replay/{self.closed(outcome='vervallen')}").status_code, 404)
+        self.assertEqual(self.client.get("/logboek/replay/999").status_code, 404)
+
+    def test_beurs_onbereikbaar_zegt_dat(self):
+        sid = self.closed()
+        self.ohlcv.stop()
+        with mock.patch.object(main.exchange, "fetch_ohlcv", side_effect=RuntimeError("weg")):
+            html = self.client.get(f"/logboek/replay/{sid}").text
+        self.ohlcv.start()
+        self.assertIn("niet op te halen", html)
+
+
+def datetime_ms(value):
+    from datetime import datetime
+    return datetime.fromisoformat(value).timestamp() * 1000
+
+
 if __name__ == "__main__":
     unittest.main()
