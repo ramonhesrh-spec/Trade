@@ -94,12 +94,13 @@
     });
   }
 
-  // Themakleur: de statusbalk van de geïnstalleerde app volgt de echte achtergrond (--bg). Een themawissel (de lichte versie, later) roept
-  // window.HP.applyThemeColor() aan; zonder expliciet thema volgen de twee media-varianten in base.html het systeem.
+  // Themakleur: de statusbalk van de geïnstalleerde app volgt de echte achtergrond (--bg). Een themawissel in Account (theme.js) roept
+  // window.HP.applyThemeColor() aan; met Systeem (data-theme="system") volgen de twee media-varianten in _pwa_head.html het toestel.
   function applyThemeColor() {
     var bg = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim();
     if (!bg) return;
-    var explicit = document.documentElement.getAttribute("data-theme");
+    var theme = document.documentElement.getAttribute("data-theme");
+    var explicit = theme === "dark" || theme === "light";
     document.querySelectorAll('meta[name="theme-color"]').forEach(function (m) {
       var media = m.getAttribute("media") || "";
       var light = media.indexOf("light") !== -1;

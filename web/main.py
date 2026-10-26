@@ -162,6 +162,21 @@ templates.env.globals["pause_minutes_left"] = lambda u: push_policy.pause_minute
 templates.env.globals["pause_text"] = push_policy.pause_text
 templates.env.globals["stale_after_s"] = freshness.STALE_AFTER_S
 
+# Thema per toestel: de cookie laat de server meteen het juiste data-theme en de juiste achtergrond schrijven, zodat er geen flits van
+# donker naar licht is. Zonder keuze blijft het donker, zoals voor de lichte versie bestond. theme.js houdt cookie en localStorage gelijk.
+THEME_COOKIE = "hp_theme"
+THEMES = ("system", "dark", "light")
+THEME_BG = {"dark": "#0a0e0f", "light": "#f4f6f6"}
+
+
+def theme_of(request: Optional[Request]) -> str:
+    value = request.cookies.get(THEME_COOKIE) if request is not None else None
+    return value if value in THEMES else "dark"
+
+
+templates.env.globals["theme_of"] = theme_of
+templates.env.globals["theme_bg"] = THEME_BG
+
 
 def _age_label(iso: str | None) -> str:
     """Leesbare "3 uur geleden"-tekst voor een db.now_iso()-tijdstip.
@@ -1924,6 +1939,14 @@ async def toggle_market_scan(enabled: str = Form(...), user: dict = Depends(requ
 
 
 CONFIRM_THRESHOLD_PRESETS = {"soepel": 45.0, "normaal": 60.0, "streng": 75.0}
+
+
+@app.post("/instellingen/thema")
+async def update_theme(thema: str = Form("dark"), user: dict = Depends(require_login)):
+    """Zonder JavaScript: het formulier in Account zet de cookie. Met JavaScript doet theme.js dat zelf, zonder herladen."""
+    response = RedirectResponse(url="/account#weergave", status_code=303)
+    response.set_cookie(THEME_COOKIE, thema if thema in THEMES else "dark", max_age=400 * 24 * 3600, samesite="lax", path="/")
+    return response
 
 
 @app.post("/instellingen/drempel")

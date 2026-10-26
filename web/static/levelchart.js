@@ -310,7 +310,7 @@
     var chart = LC.createChart(el, {
       autoSize: true,
       layout: { background: { type: "solid", color: panel }, textColor: css("--text-dim", "#b7c4c2"), fontSize: 12, fontFamily: css("--mono", "monospace").replace(/"/g, "") },
-      grid: { vertLines: { visible: false }, horzLines: { color: "rgba(255,255,255,0.04)" } },
+      grid: { vertLines: { visible: false }, horzLines: { color: css("--chart-grid", "rgba(255,255,255,0.04)") } },
       rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.08 } },
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: full ? 8 : 12, fixLeftEdge: !full, tickMarkFormatter: tickLabel },
       crosshair: { vertLine: { visible: false, labelVisible: false }, horzLine: { visible: false, labelVisible: false } },

@@ -31,6 +31,23 @@
 
 {{ macros.install_help("card") }}
 
+{% set _t = theme_of(request) %}
+<section class="flat" id="weergave">
+  <h3>Weergave</h3>
+  <form method="post" action="/instellingen/thema" class="theme-pick" data-theme-pick>
+    <fieldset>
+      <legend class="muted">Thema op dit toestel</legend>
+      <div class="seg" role="radiogroup" aria-label="Thema">
+        {% for value, label in (("system", "Systeem"), ("dark", "Donker"), ("light", "Licht")) %}
+        <label class="seg-opt"><input type="radio" name="thema" value="{{ value }}"{% if _t == value %} checked{% endif %}><span>{{ label }}</span></label>
+        {% endfor %}
+      </div>
+    </fieldset>
+    <p class="muted theme-note">Systeem volgt de instelling van je telefoon of computer.</p>
+    <noscript><button type="submit">Bewaar</button></noscript>
+  </form>
+</section>
+
 {% if unclear_messages %}
 <details class="stats-collapse js-accordion" style="--i: 1">
   <summary class="stats-summary">

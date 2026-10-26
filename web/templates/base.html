@@ -1,12 +1,19 @@
 <!doctype html>
-<html lang="nl"{% if user %} class="has-glow"{% endif %}>
+{% set _theme = theme_of(request) %}
+<html lang="nl" data-theme="{{ _theme }}"{% if user %} class="has-glow"{% endif %}>
 <head>
 <meta charset="utf-8">
 <meta name="live-exchange" content="{{ live_exchange }}">
 <meta name="live-quote" content="{{ live_quote }}">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="color-scheme" content="dark">
-<style>html{background:#0a0e0f}</style>
+<meta name="color-scheme" content="{{ 'dark light' if _theme == 'system' else _theme }}">
+<style>html{background:{{ theme_bg['light' if _theme == 'light' else 'dark'] }}}{% if _theme == 'system' %}@media (prefers-color-scheme: light){html{background:{{ theme_bg.light }}}}{% endif %}</style>
+<script>
+  // Een bewaarde pagina (service worker) kan een oudere keuze dragen dan dit toestel nu heeft; localStorage wint, vóór de eerste verf.
+  (function () {
+    try { var t = localStorage.getItem("hp_theme"); if (t === "system" || t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+  })();
+</script>
 <script>
   // Met minder beweging aangevraagd slaat de overgang tussen pagina's helemaal over, ook het vastleggen van de oude pagina.
   window.addEventListener("pagereveal", function (e) {
@@ -18,7 +25,7 @@
 {% include "_pwa_head.html" %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="{{ asset('style.css') }}">
 </head>
 {% import "_macros.html" as macros %}
@@ -906,6 +913,7 @@
   } catch (e) {}
 </script>
 <script src="{{ asset('pwa.js') }}" defer></script>
+<script src="{{ asset('theme.js') }}" defer></script>
 <script src="{{ asset('install.js') }}" defer></script>
 <script src="{{ asset('hints.js') }}" defer></script>
 <script src="{{ asset('kansen.js') }}" defer></script>

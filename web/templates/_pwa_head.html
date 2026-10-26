@@ -1,8 +1,9 @@
 {# Kop voor de installeerbare app, op elke pagina (ook inloggen en de landingspagina: daar staat iemand vaak als hij Zet op beginscherm kiest).
-   Twee theme-color-varianten zodat de statusbalk het systeemthema kan volgen; de lichte staat op donker tot de lichte versie van de app er is.
+   Twee theme-color-varianten: met Systeem volgt de statusbalk het toestel, met een gekozen thema staan beide op die kleur (base.html zet _theme).
    pwa.js (HP.applyThemeColor) zet ze gelijk aan de echte achtergrond als een pagina zelf van thema wisselt. #}
-<meta name="theme-color" content="#0a0e0f" media="(prefers-color-scheme: dark)">
-<meta name="theme-color" content="#0a0e0f" media="(prefers-color-scheme: light)">
+{% set _th = _theme|default("dark") %}
+<meta name="theme-color" content="{{ theme_bg['light' if _th == 'light' else 'dark'] }}" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="{{ theme_bg['dark' if _th == 'dark' else 'light'] }}" media="(prefers-color-scheme: light)">
 <link rel="apple-touch-icon" href="/static/icon-192.png">
 <link rel="manifest" href="/static/manifest.json">
 <!-- iOS negeert manifest.json's display:standalone volledig; zonder deze

@@ -30,8 +30,8 @@
   --radius: 6px;
   --radius-sm: 3px;
   --display: "Big Shoulders Display", "Arial Narrow", Impact, sans-serif;
-  --sans: "IBM Plex Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+  --sans: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --mono: "Geist Mono", "SFMono-Regular", Consolas, monospace;
 
   /* Lettergrootte-schaal (visuele verfijning, 2026-09-30): vervangt 19
      losse font-size-waardes verspreid door dit bestand, waaronder halve
@@ -88,6 +88,53 @@
   --glow-edge: #0c3a42;
   --glow-edge-height: 240px;
   --glow-tab: 0 0 18px -2px rgba(10, 186, 181, 0.35);
+  /* Ontwerp V2 (docs/design/hespulse_v2.dc.html, TH.dark): de nieuwe schermen lezen deze namen. Waar een oude token al bestond, wijst de
+     nieuwe ernaar, zodat het donkere thema er hetzelfde uitziet als voor V2. */
+  --s1: var(--panel);
+  --s2: #1a2124;
+  --bd: var(--border);
+  --tx: var(--text);
+  --tx2: #98a4a7;
+  --ac: #0ABAB5;
+  --aci: #2fd3ce;
+  --onac: #03201f;
+  --win: var(--green);
+  --loss: var(--red);
+  --actint: rgba(10, 186, 181, 0.14);
+  --glass: rgba(19, 26, 27, 0.86);         /* dok en zoekveld: half doorzichtig boven de inhoud */
+  --press: rgba(234, 241, 240, 0.04);
+  --chart-grid: rgba(255, 255, 255, 0.04);
+}
+
+/* Licht thema (TH.light uit het ontwerp). Twee keer dezelfde regels: gekozen in Account (data-theme="light"), of Systeem met een licht
+   toestel. tests/test_theme.py eist dat beide blokken gelijk zijn. Donker is de standaard: zonder keuze blijft alles zoals het was. */
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg: #f4f6f6; --bg-elevated: #ffffff; --panel: #ffffff; --panel-hover: #eef2f2; --border: #dce2e3; --border-strong: #c3cccd;
+  --border-interactive: #7b8b8d; --text: #0d1415; --text-dim: #3e4a4c; --muted: #55615f;
+  --green: #0f7a45; --green-bg: rgba(15, 122, 69, 0.12); --red: #c42f3d; --red-bg: rgba(196, 47, 61, 0.11); --amber: #8a5300;
+  --accent: #067a76; --accent-dark: #045c59; --accent-bg: rgba(10, 186, 181, 0.13); --on-accent: #ffffff;
+  --candle-up: #0a9a95; --candle-down: #3e4a4c;
+  --shadow-sm: 0 1px 2px rgba(13, 20, 21, 0.08); --shadow-md: 0 4px 16px -4px rgba(13, 20, 21, 0.14), 0 1px 2px rgba(13, 20, 21, 0.06);
+  --glow-top-peak: transparent; --glow-top-shoulder: transparent; --glow-top-mid: transparent; --glow-top-tail: transparent;
+  --glow-edge: #f4f6f6; --glow-tab: none;
+  --s2: #eef2f2; --tx2: #55615f; --ac: #0ABAB5; --aci: #067a76; --onac: #03201f; --actint: rgba(10, 186, 181, 0.13);
+  --glass: rgba(255, 255, 255, 0.9); --press: rgba(13, 20, 21, 0.05); --chart-grid: rgba(13, 20, 21, 0.06);
+}
+@media (prefers-color-scheme: light) {
+  :root[data-theme="system"] {
+  color-scheme: light;
+  --bg: #f4f6f6; --bg-elevated: #ffffff; --panel: #ffffff; --panel-hover: #eef2f2; --border: #dce2e3; --border-strong: #c3cccd;
+  --border-interactive: #7b8b8d; --text: #0d1415; --text-dim: #3e4a4c; --muted: #55615f;
+  --green: #0f7a45; --green-bg: rgba(15, 122, 69, 0.12); --red: #c42f3d; --red-bg: rgba(196, 47, 61, 0.11); --amber: #8a5300;
+  --accent: #067a76; --accent-dark: #045c59; --accent-bg: rgba(10, 186, 181, 0.13); --on-accent: #ffffff;
+  --candle-up: #0a9a95; --candle-down: #3e4a4c;
+  --shadow-sm: 0 1px 2px rgba(13, 20, 21, 0.08); --shadow-md: 0 4px 16px -4px rgba(13, 20, 21, 0.14), 0 1px 2px rgba(13, 20, 21, 0.06);
+  --glow-top-peak: transparent; --glow-top-shoulder: transparent; --glow-top-mid: transparent; --glow-top-tail: transparent;
+  --glow-edge: #f4f6f6; --glow-tab: none;
+  --s2: #eef2f2; --tx2: #55615f; --ac: #0ABAB5; --aci: #067a76; --onac: #03201f; --actint: rgba(10, 186, 181, 0.13);
+  --glass: rgba(255, 255, 255, 0.9); --press: rgba(13, 20, 21, 0.05); --chart-grid: rgba(13, 20, 21, 0.06);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -1909,7 +1956,7 @@ html { -webkit-tap-highlight-color: transparent; }
   main { padding-bottom: calc(84px + env(safe-area-inset-bottom)); }
   .tabbar {
     display: grid; grid-template-columns: repeat(6, 1fr); position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 500;
-    padding: 6px; background: rgba(19, 26, 27, 0.86); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    padding: 6px; background: var(--glass); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
     border: 1px solid var(--border-strong); border-radius: 22px; box-shadow: var(--shadow-md);
     transition: transform 0.26s cubic-bezier(0.2, 0.8, 0.2, 1);
   }
@@ -2202,6 +2249,9 @@ html.has-glow {
   background-color: var(--bg);
 }
 html.has-glow body { background: none; }
+/* Licht heeft geen gloed (TH.light: --glow transparant); de lineaire laag hierboven heeft vaste donkere kleuren en gaat dus helemaal weg. */
+:root[data-theme="light"].has-glow { background-image: none; }
+@media (prefers-color-scheme: light) { :root[data-theme="system"].has-glow { background-image: none; } }
 /* iOS 26 in een geinstalleerde webapp: de webview begint onder de statusbalk (safe-area-inset-top is 0) en CSS kan daar niet schilderen.
    iOS vult die strook zelf met de background-color van een position:fixed element dat de bovenrand raakt (de kleur wordt dus uit
    background-color gelezen, niet uit gradienten of opacity). Daarom een vol-brede, vlakke, dekkende kleur; de mask laat hem in beeld
@@ -2354,7 +2404,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
   body.has-fsearch .more-sheet-panel { padding-bottom: calc(150px + env(safe-area-inset-bottom)); }
   .fsearch {
     display: flex; align-items: center; gap: var(--space-6); width: 100%; min-height: 52px; padding: 0 var(--space-8);
-    background: rgba(19, 26, 27, 0.86); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
+    background: var(--glass); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px);
     border: 1px solid var(--border-strong); border-radius: var(--radius-pill); box-shadow: var(--shadow-md);
     color: var(--text-dim); font: 400 var(--text-lg) var(--sans); text-align: left; cursor: pointer;
   }
@@ -2508,7 +2558,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .mrow, .ut-tab { transition: transform 0.12s ease, background-color 0.12s ease; }
 .mrow { border-radius: 12px; }
 .ut-tab { border-radius: 8px 8px 0 0; }
-.mrow:active, .ut-tab:active, .tab:active { transform: scale(0.97); background-color: rgba(234, 241, 240, 0.04); }
+.mrow:active, .ut-tab:active, .tab:active { transform: scale(0.97); background-color: var(--press); }
 .tab.is-active:active { background-color: var(--accent-bg); }
 
 /* Tabpanelen vloeien in bij een wissel (utabs.js zet .is-shown); de streep schuift naar de gekozen tab. */
