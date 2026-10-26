@@ -488,6 +488,20 @@ begint met de limietorder en de R:R vanaf die prijs.
 die een vaste regel volgt (onder 30 afgeronde trades "nog te weinig data", daarboven positief of negatief na kosten, "voordeel
 gemeten" pas bij 100 trades en een positief gemiddelde). Vervallen en open signalen staan er bewust bij maar tellen niet mee.
 
+### App op het beginscherm (PWA)
+
+HesPulse is te installeren als app (`web/static/manifest.json`, `service-worker.js`, `pwa.js`, `install.js`). De app start op
+`/vandaag?bron=app`: een leerling ziet Vandaag, de CEO wordt doorgestuurd naar `/ceo`; het manifest houdt `id` `/ceo` zodat
+bestaande installaties dezelfde app blijven. Lang drukken op het icoon geeft snelkoppelingen naar Radar, Vandaag en Bewijs.
+Account toont de installatiehulp (iPhone: Delen, Zet op beginscherm, open de app; Android en Chrome: een eigen knop), Vandaag
+een rustige banner die je kunt wegklikken; beide verdwijnen in de geïnstalleerde app. Offline toont de app de laatst bekende
+Radar en Vandaag met de balk "Offline, laatst bijgewerkt om HH:MM": de service worker bewaart alleen die twee pagina's, per pad
+en alleen met de kijker-kop `X-HP-Viewer` van een ingelogde gebruiker; een andere kijker, uitloggen of een omleiding naar
+`/login` wist ze. `/api`, POST en push gaan nooit door een cache. Na een wijziging aan `service-worker.js` verhoog je
+`SW_VERSION` (de test `tests/test_pwa.py` bewaakt dat); gebruikers krijgen dan "Nieuwe versie beschikbaar, tik om te laden".
+De opstartbeelden voor iPhone en de snelkoppelingsiconen maak je opnieuw met `python3 scripts/make_splash.py` (Pillow, komt mee
+met matplotlib); de formaten staan in `web/splash.py`. Na een deploy is alleen `crypto-web` herstarten nodig.
+
 ### Periodieke factor-drift-check
 
 ```bash
