@@ -45,6 +45,9 @@
   <label>Wachtwoord herhalen
     <input type="password" name="password_confirm" autocomplete="new-password" minlength="8" required>
   </label>
+  <label>Uitnodigingscode{% if not invite_required %} <span class="muted">(als je er een kreeg)</span>{% endif %}
+    <input type="text" name="code" value="{{ code or '' }}" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="16" placeholder="HES-7Q2K"{% if invite_required %} required{% endif %}>
+  </label>
   <button type="submit">Account aanmaken</button>
   <p class="muted" style="text-align: center; margin: 0;">Al een account? <a href="/login">Inloggen</a></p>
   <p class="footer">{{ disclaimer }}</p>

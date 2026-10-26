@@ -31,6 +31,11 @@ def decide(recent: list[dict], coin: str, direction: str, budget: Optional[int],
     return True, ""
 
 
+def in_follow_set(coins: Optional[set], coin: str) -> bool:
+    """Een volg-set (fase 2) laat alleen zijn eigen coins als push door; zonder set (None) komt alles. De kaarten en de data blijven gelijk."""
+    return coins is None or coin in coins
+
+
 PAUSE_HOURS = 2
 
 

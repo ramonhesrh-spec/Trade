@@ -3090,3 +3090,48 @@ a.lb-title:hover { color: var(--aci); }
   line-height: 1.45; color: var(--tx); text-wrap: pretty; }
 .wk-obs-t { font-size: 13px; font-weight: 600; color: var(--aci); }
 
+/* Beheer (ontwerp E): drie lijsten op één pagina. Alles leest de V2-tokens; tikvlakken minstens 44px. */
+.bh { display: flex; flex-direction: column; gap: 24px; margin: 0 0 var(--space-12); }
+.bh-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.bh-eyebrow { font: 500 12px var(--mono); letter-spacing: 0.04em; text-transform: uppercase; color: var(--tx2); }
+.bh-invite { display: inline-flex; align-items: center; min-height: 44px; padding: 0 16px; border-radius: 12px; background: var(--ac); color: var(--onac);
+  font: 600 15px var(--sans); text-decoration: none; }
+.bh-invite:hover { color: var(--onac); }
+.bh-error { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--red-bg); color: var(--tx); font-size: 14px; }
+.bh section { display: flex; flex-direction: column; gap: 8px; scroll-margin-top: 80px; }
+.bh-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.bh-head h2 { margin: 0; font: 500 13px var(--sans); text-transform: none; letter-spacing: 0; color: var(--tx2); }
+.bh-head > span { font-size: 13px; color: var(--tx2); }
+.bh-list { border-radius: 16px; background: var(--s1); border: 1px solid var(--bd); overflow: hidden; }
+.bh-row-wrap + .bh-row-wrap, .bh-list > .bh-row + .bh-row { border-top: 1px solid var(--bd); }
+.bh-row { min-height: 56px; padding: 8px 14px; display: flex; align-items: center; gap: 12px; list-style: none; cursor: pointer; }
+.bh-row::-webkit-details-marker { display: none; }
+.bh-inv { cursor: default; }
+.bh-inv.is-done { opacity: 0.7; }
+.bh-av { width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--s2); display: flex; align-items: center; justify-content: center;
+  font-size: 13px; font-weight: 600; color: var(--tx); }
+.bh-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.bh-name { font-size: 15px; font-weight: 500; color: var(--tx); overflow-wrap: anywhere; }
+.bh-sub { font-size: 13px; color: var(--tx2); }
+.bh-code { font: 500 14px var(--mono); color: var(--tx); }
+.bh-right { display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+.bh-r { font: 400 15px var(--mono); color: var(--tx); font-variant-numeric: tabular-nums; }
+.bh-seen { font-size: 12px; color: var(--tx2); }
+.bh-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; padding: 4px 14px 14px; }
+.bh-form label { display: flex; flex-direction: column; gap: 4px; flex: 1 1 160px; min-width: 0; font-size: 13px; color: var(--tx2); }
+.bh-form input, .bh-form select { min-height: 44px; width: 100%; min-width: 0; box-sizing: border-box; }
+.bh-form button { min-height: 44px; padding: 0 16px; border-radius: 12px; }
+.bh-new { padding: 12px 14px; border-radius: 16px; border: 1px dashed var(--bd); }
+.bh-pair { display: flex; gap: 8px; flex: 1 1 100%; }
+.bh-pair label { flex: 1 1 0; }
+.bh-sets { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.bh-set { border-radius: 14px; background: var(--s1); border: 1px solid var(--bd); }
+.bh-set[open] { grid-column: 1 / -1; }
+.bh-set > summary { min-height: 44px; padding: 12px; display: flex; flex-direction: column; gap: 4px; list-style: none; cursor: pointer; }
+.bh-set > summary::-webkit-details-marker { display: none; }
+.bh-set .bh-name { font-weight: 600; }
+.bh-n { font: 400 13px var(--mono); color: var(--tx2); }
+.bh-copy { min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: var(--aci); font: 500 14px var(--sans); cursor: pointer; }
+.bh-x { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--tx2); font-size: 20px; cursor: pointer; }
+.bh-del { background: transparent; border: 1px solid var(--bd); color: var(--loss); }
+.bh-row:focus-visible, .bh-set > summary:focus-visible, .bh-copy:focus-visible, .bh-x:focus-visible { outline: 2px solid var(--ac); outline-offset: -2px; border-radius: 12px; }

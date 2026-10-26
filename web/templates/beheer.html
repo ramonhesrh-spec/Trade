@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}Beheer — HesPulse{% endblock %}
+{% block page_title %}Beheer{% endblock %}
+{% block content %}
+{# Beheer (ontwerp E): alleen de eigenaar, achter het initiaal. Leerlingen, volg-sets en uitnodigingen, in die volgorde. Een leerling ziet deze
+   pagina nooit (404) en ziet nergens de naam of het resultaat van een ander. Een volg-set filtert alleen zijn pushmeldingen. #}
+<div class="bh">
+  <div class="bh-top">
+    <span class="bh-eyebrow">Alleen eigenaar</span>
+    <a class="bh-invite" href="#uitnodigen">Nodig uit</a>
+  </div>
+  {% if fout %}<p class="bh-error" role="alert">{{ fout }}</p>{% endif %}
+
+  <section id="leerlingen" aria-labelledby="bh-l">
+    <div class="bh-head"><h2 id="bh-l">Leerlingen · {{ students|length }}</h2><span>Week-R · laatst gekeken</span></div>
+    {% if students %}
+    <div class="bh-list">
+      {% for s in students %}
+      <details class="bh-row-wrap">
+        <summary class="bh-row">
+          <span class="bh-av" aria-hidden="true">{{ s.initials }}</span>
+          <span class="bh-main"><span class="bh-name">{{ s.name }}</span><span class="bh-sub">{{ s.set }}</span></span>
+          <span class="bh-right"><span class="bh-r">{{ s.week_r }}</span>{% if s.seen %}<span class="bh-seen">{{ s.seen }}</span>{% endif %}</span>
+        </summary>
+        <form class="bh-form" method="post" action="/beheer/leerling/{{ s.id }}/set">
+          <label>Volg-set van {{ s.name }}
+            <select name="set_id">
+              <option value=""{% if not s.set_id %} selected{% endif %}>Geen set, alle pushes</option>
+              {% for v in sets %}<option value="{{ v.id }}"{% if v.id == s.set_id %} selected{% endif %}>{{ v.name }}</option>{% endfor %}
+            </select>
+          </label>
+          <button type="submit">Bewaar</button>
+        </form>
+      </details>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p class="lb-empty">Nog geen leerlingen. Maak hieronder een uitnodiging en stuur de link.</p>
+    {% endif %}
+  </section>
+
+  <section id="sets" aria-labelledby="bh-s">
+    <div class="bh-head"><h2 id="bh-s">Volg-sets</h2><span>alleen voor pushes</span></div>
+    {% if sets %}
+    <div class="bh-sets">
+      {% for v in sets %}
+      <details class="bh-set">
+        <summary>
+          <span class="bh-name">{{ v.name }}</span>
+          <span class="bh-sub">{{ v.coins|join(" · ") if v.coins else "Nog geen coins" }}</span>
+          <span class="bh-n">{{ v.members }} leerling{{ "en" if v.members != 1 }}</span>
+        </summary>
+        <form class="bh-form" method="post" action="/beheer/sets/{{ v.id }}/coins">
+          <label>Coins<input type="text" name="coins" value="{{ v.coins|join(', ') }}" autocapitalize="characters" spellcheck="false"></label>
+          <button type="submit">Bewaar</button>
+        </form>
+        <form class="bh-form" method="post" action="/beheer/sets/{{ v.id }}/verwijder" onsubmit="return confirm('Set {{ v.name }} weghalen? Leden krijgen dan weer alle pushes.');">
+          <button type="submit" class="bh-del">Haal weg</button>
+        </form>
+      </details>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <form class="bh-form bh-new" method="post" action="/beheer/sets">
+      <label>Nieuwe set<input type="text" name="name" maxlength="40" placeholder="Kern" required></label>
+      <label>Coins<input type="text" name="coins" placeholder="BTC, ETH" autocapitalize="characters" spellcheck="false"></label>
+      <button type="submit">Maak set</button>
+    </form>
+  </section>
+
+  <section id="uitnodigen" aria-labelledby="bh-u">
+    <div class="bh-head"><h2 id="bh-u">Open uitnodigingen · {{ open_invites }}</h2><span>{{ "registreren alleen met code" if invite_required else "registreren is open" }}</span></div>
+    {% if invites %}
+    <div class="bh-list">
+      {% for i in invites %}
+      <div class="bh-row bh-inv{% if not i.usable %} is-done{% endif %}">
+        <span class="bh-main"><span class="bh-code">{{ i.code }}</span><span class="bh-sub">Code · {{ i.line }}</span></span>
+        {% if i.usable %}<button type="button" class="bh-copy" data-copy="{{ request.base_url }}registreer?code={{ i.code }}" aria-label="Kopieer de link met {{ i.code }}">Kopieer</button>{% endif %}
+        <form method="post" action="/beheer/uitnodiging/{{ i.id }}/verwijder"><button type="submit" class="bh-x" aria-label="Haal {{ i.code }} weg">×</button></form>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <form class="bh-form bh-new" method="post" action="/beheer/uitnodiging">
+      <label>Set
+        <select name="set_id">
+          <option value="">Geen set</option>
+          {% for v in sets %}<option value="{{ v.id }}">{{ v.name }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="bh-pair">
+        <label>Keer bruikbaar<input type="number" name="uses" value="1" min="1" max="100" inputmode="numeric"></label>
+        <label>Dagen geldig<input type="number" name="days" value="7" min="1" max="90" inputmode="numeric"></label>
+      </div>
+      <button type="submit">Maak code</button>
+    </form>
+    <p class="lb-note">Kopieer geeft de registratielink met de code erin. Wie zich met een code aanmeldt, komt in de set van die code.</p>
+  </section>
+</div>
+{% endblock %}

@@ -358,7 +358,7 @@
   <div class="more-sheet-panel" role="dialog" aria-label="Account en meer">
     <p class="more-who"><span class="more-av" aria-hidden="true">{{ (user.username or "?")[0]|upper }}</span><span>{{ user.username }}<span class="muted">{{ "Eigenaar" if is_ceo(user) else "Leerling" }}</span></span></p>
     <div class="more-links">
-      <a href="/account">Account</a><a href="/meldingen">Meldingen</a><a href="/uitleg">Handleiding</a><a href="/zone-radar">Zone-radar uitleg</a><a href="/week">Kwartaalcijfers</a>{% if is_ceo(user) %}<a href="/galerij">Galerij</a><a href="/ceo">CEO</a>{% endif %}
+      <a href="/account">Account</a><a href="/meldingen">Meldingen</a><a href="/uitleg">Handleiding</a><a href="/zone-radar">Zone-radar uitleg</a><a href="/week">Kwartaalcijfers</a>{% if is_ceo(user) %}<a href="/beheer">Beheer</a><a href="/galerij">Galerij</a><a href="/ceo">CEO</a>{% endif %}
     </div>
     <p class="muted more-label">Coins</p>
     <div class="more-coins">{% for c in coins %}<a href="/coins/{{ c.symbol }}">{{ macros.coin_avatar(c.symbol, 22) }}{{ c.symbol }}</a>{% endfor %}</div>

@@ -37,7 +37,10 @@ CREATE TABLE IF NOT EXISTS users (
     -- default (60.0) is numeriek gelijk aan de "Normaal"-stand, dus de
     -- waarde alleen kan "nog niet gekozen" niet van "bewust Normaal
     -- gekozen" onderscheiden. Voedt de onboarding-checklist (Task 9).
-    confirm_threshold_set_at TEXT
+    confirm_threshold_set_at TEXT,
+    -- Volg-set (fase 2, R6): leeg is geen set. Een set filtert alleen de pushmeldingen van deze gebruiker (push_policy.in_follow_set), nooit
+    -- de data of de kaarten die hij ziet.
+    follow_set_id INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -875,3 +878,24 @@ CREATE TABLE IF NOT EXISTS checklist_runs (
     UNIQUE (user_id, plan_key)
 );
 CREATE INDEX IF NOT EXISTS idx_checklist_runs_user ON checklist_runs(user_id, opened_at);
+
+-- Volg-sets (fase 2, R6): een benoemde set coins van de eigenaar. coins is een kommalijst hoofdletters. Een leerling hoort bij geen of één set
+-- (users.follow_set_id); de set bepaalt alleen welke kansen hem als push bereiken.
+CREATE TABLE IF NOT EXISTS follow_sets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    coins TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+-- Uitnodigingen per code (fase 2, R6): bruikbaar tot max_uses keer en tot expires_at. Een geldige code bij het registreren kent zijn set toe;
+-- met REGISTRATION_REQUIRES_INVITE=true is er zonder geldige code geen account.
+CREATE TABLE IF NOT EXISTS invites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    set_id INTEGER REFERENCES follow_sets(id) ON DELETE SET NULL,
+    max_uses INTEGER NOT NULL DEFAULT 1,
+    uses INTEGER NOT NULL DEFAULT 0,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);

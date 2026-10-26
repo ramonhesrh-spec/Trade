@@ -896,24 +896,35 @@ def create_user(
         return row["id"]
 
 
-def register_user(username: str, password_hash: str) -> Optional[int]:
+def register_user(username: str, password_hash: str, invite_code: Optional[str] = None, now_iso: Optional[str] = None) -> Optional[int]:
     """Voor open registratie via /registreer. In tegenstelling tot
     create_user() faalt dit gewoon (geeft None) als de gebruikersnaam al
     bestaat, in plaats van het bestaande account te overschrijven. Portfolio
     en risicopercentage starten op 0 / de standaardwaarde, in te stellen na
     het inloggen. telegram_chat_id staat hier vast op NULL: die kolom is
-    een restant van de Telegram-bot (Taak 11), niet meer instelbaar."""
+    een restant van de Telegram-bot (Taak 11), niet meer instelbaar.
+
+    Met invite_code (fase 2): de code moet bruikbaar zijn op now_iso; in dezelfde transactie telt hij een gebruik en krijgt het account de
+    set van de code. Een bezette naam of een ongeldige code geeft None en kost geen gebruik."""
     with db.session() as conn:
         existing = conn.execute(
             "SELECT 1 FROM users WHERE username = ?", (username,)
         ).fetchone()
         if existing:
             return None
+        set_id = None
+        if invite_code is not None:
+            invite = conn.execute("SELECT * FROM invites WHERE code = ? AND uses < max_uses AND expires_at > ?",
+                                  (invite_code, now_iso or db.now_iso())).fetchone()
+            if not invite:
+                return None
+            conn.execute("UPDATE invites SET uses = uses + 1 WHERE id = ?", (invite["id"],))
+            set_id = invite["set_id"]
         cur = conn.execute(
             """INSERT INTO users
-               (username, password_hash, portfolio_eur, risk_percent, telegram_chat_id, created_at)
-               VALUES (?, ?, 0, ?, NULL, ?)""",
-            (username, password_hash, config.DEFAULT_RISK_PERCENT, db.now_iso()),
+               (username, password_hash, portfolio_eur, risk_percent, telegram_chat_id, created_at, follow_set_id)
+               VALUES (?, ?, 0, ?, NULL, ?, ?)""",
+            (username, password_hash, config.DEFAULT_RISK_PERCENT, db.now_iso(), set_id),
         )
         return cur.lastrowid
 
@@ -3388,3 +3399,73 @@ def get_checklist_run(user_id: int, plan_key: str) -> Optional[dict]:
     with db.session() as conn:
         row = conn.execute("SELECT * FROM checklist_runs WHERE user_id = ? AND plan_key = ?", (user_id, plan_key)).fetchone()
         return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Beheer (fase 2, R6): volg-sets en uitnodigingen. Alleen de eigenaar komt hier via /beheer.
+# ---------------------------------------------------------------------------
+
+def _set_row(row) -> dict:
+    d = dict(row)
+    d["coins"] = [c for c in (d.get("coins") or "").split(",") if c]
+    return d
+
+
+def create_follow_set(name: str, coins: list[str]) -> Optional[int]:
+    with db.session() as conn:
+        cur = conn.execute("INSERT OR IGNORE INTO follow_sets (name, coins, created_at) VALUES (?, ?, ?)", (name, ",".join(coins), db.now_iso()))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def update_follow_set(set_id: int, coins: list[str]) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE follow_sets SET coins = ? WHERE id = ?", (",".join(coins), set_id))
+
+
+def delete_follow_set(set_id: int) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE users SET follow_set_id = NULL WHERE follow_set_id = ?", (set_id,))
+        conn.execute("UPDATE invites SET set_id = NULL WHERE set_id = ?", (set_id,))
+        conn.execute("DELETE FROM follow_sets WHERE id = ?", (set_id,))
+
+
+def list_follow_sets() -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT f.*, (SELECT COUNT(*) FROM users u WHERE u.follow_set_id = f.id) AS members FROM follow_sets f ORDER BY f.name").fetchall()
+        return [_set_row(r) for r in rows]
+
+
+def set_user_follow_set(user_id: int, set_id: Optional[int]) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE users SET follow_set_id = ? WHERE id = ?", (set_id, user_id))
+
+
+def follow_set_coins(user_id: int) -> Optional[set]:
+    """De coins van de volg-set van deze gebruiker, of None zonder set (dan komt elke kans als push)."""
+    with db.session() as conn:
+        row = conn.execute("SELECT f.* FROM users u JOIN follow_sets f ON f.id = u.follow_set_id WHERE u.id = ?", (user_id,)).fetchone()
+        return set(_set_row(row)["coins"]) if row else None
+
+
+def create_invite(code: str, set_id: Optional[int], max_uses: int, expires_at: str) -> Optional[int]:
+    with db.session() as conn:
+        cur = conn.execute("INSERT OR IGNORE INTO invites (code, set_id, max_uses, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
+                           (code, set_id, max_uses, expires_at, db.now_iso()))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def get_invite(code: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM invites WHERE code = ?", (code,)).fetchone()
+        return dict(row) if row else None
+
+
+def list_invites() -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT i.*, f.name AS set_name FROM invites i LEFT JOIN follow_sets f ON f.id = i.set_id ORDER BY i.id DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_invite(invite_id: int) -> None:
+    with db.session() as conn:
+        conn.execute("DELETE FROM invites WHERE id = ?", (invite_id,))

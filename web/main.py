@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import ceo, chance_checks, freshness, chance_steps, kans_view, logbook, market_context, nu, trade_replay, week_review, rule_live, trust, zone_radar
+from app import ceo, chance_checks, freshness, chance_steps, kans_view, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -1121,8 +1121,9 @@ USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{3,32}$")
 
 
 @app.get("/registreer")
-async def register_form(request: Request):
-    return templates.TemplateResponse(request, "register.html", {"error": None})
+async def register_form(request: Request, code: str = ""):
+    return templates.TemplateResponse(request, "register.html", {"error": None, "code": beheer.normalize_code(code)[:16],
+                                                                  "invite_required": config.REGISTRATION_REQUIRES_INVITE})
 
 
 @app.post("/registreer")
@@ -1131,12 +1132,14 @@ async def register_submit(
     username: str = Form(...),
     password: str = Form(...),
     password_confirm: str = Form(...),
+    code: str = Form(""),
 ):
     ip = request.client.host if request.client else ""
+    code = beheer.normalize_code(code)[:16]
 
     def error(message: str, status_code: int = 400):
         return templates.TemplateResponse(
-            request, "register.html", {"error": message}, status_code=status_code,
+            request, "register.html", {"error": message, "code": code, "invite_required": config.REGISTRATION_REQUIRES_INVITE}, status_code=status_code,
         )
 
     if security.is_registration_rate_limited(ip):
@@ -1150,10 +1153,18 @@ async def register_submit(
     if password != password_confirm:
         return error("Wachtwoorden komen niet overeen.")
 
+    now = datetime.now(timezone.utc)
+    if config.REGISTRATION_REQUIRES_INVITE and not code:
+        return error("Registreren gaat met een uitnodigingscode. Vraag er een aan de eigenaar.")
+    if code:
+        invite = repo.get_invite(code)
+        if not invite or not beheer.invite_usable(invite, now):
+            return error("Deze uitnodigingscode is onbekend, verlopen of al op.")
+
     security.record_registration_attempt(ip)
-    user_id = repo.register_user(username, security.hash_password(password))
+    user_id = repo.register_user(username, security.hash_password(password), invite_code=code or None, now_iso=now.isoformat())
     if user_id is None:
-        return error("Deze gebruikersnaam is al in gebruik.")
+        return error("Deze gebruikersnaam is al in gebruik." if repo.get_user_by_username(username) else "Deze uitnodigingscode is net op of verlopen.")
 
     token = security.create_session_token(user_id)
     response = RedirectResponse(url="/ceo", status_code=303)
@@ -2229,6 +2240,91 @@ async def api_candles(symbol: str, user: dict = Depends(require_login)):
         "patterns": patterns, "sr_zones": sr_zones, "trendlines": trendline_data,
         "forming_patterns": forming_patterns,
     }
+
+
+def _owner(user: dict) -> dict:
+    """Beheer is alleen van de eigenaar; voor iedereen anders bestaat de pagina niet (404, geen 403: een leerling hoort niet te weten dat hij er is)."""
+    if not is_ceo(user):
+        raise HTTPException(status_code=404)
+    return user
+
+
+@app.get("/beheer")
+async def beheer_page(request: Request, fout: str = "", user: dict = Depends(require_login)):
+    """Leerlingen, volg-sets en uitnodigingen op één pagina, in die volgorde (ontwerp E). Week-R per leerling is zijn eigen weekterugblik;
+    laatst gekeken komt uit user_visits en ontbreekt als hij nooit keek."""
+    _owner(user)
+    now = datetime.now(timezone.utc)
+    visits = repo.visit_stats(now)
+    sets = repo.list_follow_sets()
+    names = {s["id"]: s["name"] for s in sets}
+    students = []
+    for u in repo.list_users():
+        if u["id"] == user["id"]:
+            continue
+        students.append({"id": u["id"], "name": u["username"], "initials": beheer.initials(u["username"]), "set_id": u.get("follow_set_id"),
+                         "set": names.get(u.get("follow_set_id"), "Geen set"), "week_r": _week_review(u, now)["total_text"],
+                         "seen": beheer.seen_text((visits.get(u["id"]) or {}).get("last_at"), now)})
+    invites = [{**i, "line": beheer.invite_line(i, now), "usable": beheer.invite_usable(i, now)} for i in repo.list_invites()]
+    return templates.TemplateResponse(request, "beheer.html", {
+        "user": user, "students": students, "sets": sets, "invites": invites, "open_invites": sum(1 for i in invites if i["usable"]),
+        "invite_required": config.REGISTRATION_REQUIRES_INVITE, "fout": fout[:120]})
+
+
+@app.post("/beheer/sets")
+async def beheer_set_create(name: str = Form(""), coins: str = Form(""), user: dict = Depends(require_login)):
+    _owner(user)
+    name = name.strip()[:40]
+    if not name or repo.create_follow_set(name, beheer.parse_coins(coins)) is None:
+        return RedirectResponse("/beheer?fout=" + ("Geef de set een naam." if not name else "Er is al een set met deze naam.") + "#sets", status_code=303)
+    return RedirectResponse("/beheer#sets", status_code=303)
+
+
+@app.post("/beheer/sets/{set_id}/coins")
+async def beheer_set_coins(set_id: int, coins: str = Form(""), user: dict = Depends(require_login)):
+    _owner(user)
+    repo.update_follow_set(set_id, beheer.parse_coins(coins))
+    return RedirectResponse("/beheer#sets", status_code=303)
+
+
+@app.post("/beheer/sets/{set_id}/verwijder")
+async def beheer_set_delete(set_id: int, user: dict = Depends(require_login)):
+    _owner(user)
+    repo.delete_follow_set(set_id)
+    return RedirectResponse("/beheer#sets", status_code=303)
+
+
+@app.post("/beheer/leerling/{student_id}/set")
+async def beheer_student_set(student_id: int, set_id: str = Form(""), user: dict = Depends(require_login)):
+    _owner(user)
+    valid = {s["id"] for s in repo.list_follow_sets()}
+    chosen = int(set_id) if set_id.isdigit() and int(set_id) in valid else None
+    if repo.get_user(student_id):
+        repo.set_user_follow_set(student_id, chosen)
+    return RedirectResponse("/beheer#leerlingen", status_code=303)
+
+
+INVITE_MAX_USES = 100
+INVITE_MAX_DAYS = 90
+
+
+@app.post("/beheer/uitnodiging")
+async def beheer_invite_create(set_id: str = Form(""), uses: int = Form(1), days: int = Form(7), user: dict = Depends(require_login)):
+    _owner(user)
+    valid = {s["id"] for s in repo.list_follow_sets()}
+    chosen = int(set_id) if set_id.isdigit() and int(set_id) in valid else None
+    expires = (datetime.now(timezone.utc) + timedelta(days=max(1, min(days, INVITE_MAX_DAYS)))).isoformat()
+    for _ in range(10):         # een botsing met een bestaande code is zeldzaam; dan een nieuwe
+        if repo.create_invite(beheer.new_code(), chosen, max(1, min(uses, INVITE_MAX_USES)), expires):
+            break
+    return RedirectResponse("/beheer#uitnodigen", status_code=303)
+
+
+@app.post("/beheer/uitnodiging/{invite_id}/verwijder")
+async def beheer_invite_delete(invite_id: int, user: dict = Depends(require_login)):
+    _owner(user)
+    repo.delete_invite(invite_id)
+    return RedirectResponse("/beheer#uitnodigen", status_code=303)
 
 
 @app.get("/ceo")

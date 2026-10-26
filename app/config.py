@@ -74,6 +74,9 @@ SESSION_HOURS = 24 * 7
 
 # Maximum aantal registraties per IP per uur, tegen geautomatiseerde spam.
 MAX_REGISTRATIONS_PER_HOUR = int(_get("MAX_REGISTRATIONS_PER_HOUR", "5"))
+# Registreren alleen met een geldige uitnodigingscode van Beheer (/beheer). Standaard uit: dan blijft /registreer open zoals het was, en kent een
+# meegegeven code alleen zijn volg-set toe.
+REGISTRATION_REQUIRES_INVITE = _get("REGISTRATION_REQUIRES_INVITE", "false").strip().lower() == "true"
 
 # Standaard risicopercentage voor een nieuwe gebruiker, aan te passen per
 # gebruiker in het dashboard.

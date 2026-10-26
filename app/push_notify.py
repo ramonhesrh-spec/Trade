@@ -105,6 +105,11 @@ async def send_kans_push(user_id: int, coin: str, direction: str, title: str, bo
         # Telt niet mee voor het dagbudget: wie pauzeert, heeft na de pauze zijn volle budget nog.
         repo.create_notification(user_id, "kans", title, f"{body}\nMeldingen stonden op pauze, daarom geen push.", url)
         return False
+    if not push_policy.in_follow_set(repo.follow_set_coins(user_id), coin):
+        # Een volg-set (Beheer) filtert alleen de push; de kans staat gewoon op de meldingenpagina en de kaarten blijven gelijk.
+        name = next((s["name"] for s in repo.list_follow_sets() if s["id"] == user.get("follow_set_id")), "")
+        repo.create_notification(user_id, "kans", title, f"{body}\n{coin} staat niet in je volg-set {name}, daarom geen push.", url)
+        return False
     allowed, reason = push_policy.decide(repo.list_recent_pushes(user_id, (now - timedelta(hours=24)).isoformat()), coin, direction, user.get("push_budget"), now)
     if not allowed:
         repo.create_notification(user_id, "kans", title, f"{body}\n{reason}", url)
