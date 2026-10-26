@@ -3282,3 +3282,42 @@ def market_context_series(coin: str, bron: str, metric: str, since_iso: str) -> 
 def prune_market_context(before_iso: str) -> None:
     with db.session() as conn:
         conn.execute("DELETE FROM market_context WHERE gemeten_op < ?", (before_iso,))
+
+
+# ---------------------------------------------------------------------------
+# Overslaan en de order-checklist (fase 2): altijd per gebruiker, elke query filtert op user_id
+# ---------------------------------------------------------------------------
+
+def record_plan_skip(user_id: int, plan_key: str, coin: Optional[str], direction: Optional[str], at: str) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT OR IGNORE INTO plan_skips (user_id, plan_key, coin, direction, skipped_at) VALUES (?, ?, ?, ?, ?)",
+                     (user_id, plan_key, coin, direction, at))
+
+
+def list_plan_skips(user_id: int, since_iso: Optional[str] = None) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT * FROM plan_skips WHERE user_id = ? AND (? IS NULL OR skipped_at >= ?) ORDER BY skipped_at",
+                            (user_id, since_iso, since_iso)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def open_checklist(user_id: int, plan_key: str, coin: Optional[str], direction: Optional[str], at: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO checklist_runs (user_id, plan_key, coin, direction, opened_at) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(user_id, plan_key) DO UPDATE SET opened_at = excluded.opened_at WHERE checklist_runs.done_at IS NULL""",
+            (user_id, plan_key, coin, direction, at))
+
+
+def finish_checklist(user_id: int, plan_key: str, at: str) -> bool:
+    """True als deze aanroep de checklist afrondde; een tweede keer, of zonder openen, verandert niets."""
+    with db.session() as conn:
+        return conn.execute("UPDATE checklist_runs SET done_at = ? WHERE user_id = ? AND plan_key = ? AND done_at IS NULL",
+                            (at, user_id, plan_key)).rowcount == 1
+
+
+def list_checklist_runs(user_id: int, since_iso: Optional[str] = None) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT * FROM checklist_runs WHERE user_id = ? AND (? IS NULL OR opened_at >= ?) ORDER BY opened_at",
+                            (user_id, since_iso, since_iso)).fetchall()
+        return [dict(r) for r in rows]

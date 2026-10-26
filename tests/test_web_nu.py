@@ -173,5 +173,47 @@ class ChecklistPageTests(Base):
         self.assertIn("selectNodeContents", src)                          # laatste terugval: het getal geselecteerd laten staan
 
 
+class PlanLogWebTests(Base):
+    """R1 en R2: overslaan en de checklist komen per gebruiker in de database, naast de cookie."""
+    def uid(self):
+        return repo.get_user_by_username("dirk")["id"]
+
+    def test_overslaan_schrijft_een_rij_met_coin_en_richting(self):
+        zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
+        self.client.post("/nu/overslaan", data={"key": f"zone:{zid}"}, follow_redirects=False)
+        rows = repo.list_plan_skips(self.uid())
+        self.assertEqual([(r["plan_key"], r["coin"], r["direction"]) for r in rows], [(f"zone:{zid}", "BTC", "short")])
+
+    def test_een_onbekende_sleutel_wordt_niet_bewaard(self):
+        self.client.post("/nu/overslaan", data={"key": "iets"}, follow_redirects=False)
+        self.assertEqual(repo.list_plan_skips(self.uid()), [])
+
+    def test_overgeslagen_op_een_ander_toestel_telt_ook_hier(self):
+        zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
+        repo.record_plan_skip(self.uid(), f"zone:{zid}", "BTC", "short", db.now_iso())
+        sec = self.nu(self.client.get("/vandaag").text)                      # geen cookie op dit toestel
+        self.assertIn('data-nu-mode="rust"', sec)
+        self.assertIn("Je sloeg BTC short over.", sec)
+
+    def test_de_checklist_bewaart_openen_en_afronden(self):
+        zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
+        html = self.client.get(f"/nu/order/zone:{zid}").text
+        self.assertIn(f'data-ck-done-url="/nu/order/zone:{zid}/klaar"', html)
+        run = repo.list_checklist_runs(self.uid())[0]
+        self.assertEqual((run["plan_key"], run["coin"], run["direction"], run["done_at"]), (f"zone:{zid}", "BTC", "short", None))
+        r = self.client.post(f"/nu/order/zone:{zid}/klaar")
+        self.assertEqual(r.json(), {"ok": True})
+        self.assertIsNotNone(repo.list_checklist_runs(self.uid())[0]["done_at"])
+        self.assertEqual(self.client.post(f"/nu/order/zone:{zid}/klaar").json(), {"ok": False})
+
+    def test_afronden_met_een_onbekende_sleutel_geeft_404(self):
+        self.assertEqual(self.client.post("/nu/order/iets/klaar").status_code, 404)
+
+    def test_het_script_meldt_het_afronden_een_keer(self):
+        src = (main.BASE_DIR / "static" / "order.js").read_text(encoding="utf-8")
+        self.assertIn("data-ck-done-url", src)
+        self.assertIn("keepalive", src)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -5,7 +5,7 @@
 {% block content %}
 {# De order-checklist (ontwerp B, app/nu.py checklist): de stappen in de volgorde van het orderformulier. Een tik op een getal kopieert het
    met een punt, vinkt de stap af en licht de volgende op (order.js). Zonder JavaScript staan alle getallen er gewoon om over te typen. #}
-<div class="ck" data-ck data-ck-key="{{ item.key }}" data-ck-coin="{{ item.coin }}" data-ck-dir="{{ item.direction }}" data-ck-limit="{{ item.limit }}">
+<div class="ck" data-ck data-ck-key="{{ item.key }}" data-ck-coin="{{ item.coin }}" data-ck-dir="{{ item.direction }}" data-ck-limit="{{ item.limit }}" data-ck-done-url="/nu/order/{{ item.key }}/klaar">
   <header class="ck-top">
     <a class="ck-nav" href="/vandaag" data-ck-back><span aria-hidden="true">‹</span> Terug</a>
     <span class="ck-label" data-ck-label aria-live="polite">Stap 1 van {{ steps|length }}</span>

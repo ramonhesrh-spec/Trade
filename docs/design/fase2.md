@@ -1,5 +1,25 @@
 # Ontwerp V2, fase 2: wat nog open staat
 
+## Besluiten
+
+De CEO gaf op 26 oktober 2026 het startsein voor fase 2 en liet de keuzes aan de bouwer. Deze besluiten gelden:
+
+- **R1 Overslaan** staat in de database per gebruiker met tijdstip (tabel `plan_skips`, `repo.record_plan_skip`/`list_plan_skips`), naast de
+  cookie `hp_skip` die voor het toestel blijft. Nu telt beide (een dag). Het Logboek toont overgeslagen plannen.
+- **R2 Checklist** bewaart geopend en afgerond per gebruiker en plan (tabel `checklist_runs`). "Checklist in 1 min 12 s" staat er alleen als
+  beide tijden bestaan.
+- **R3 Logboek** (`/signalen`) wordt een dagtijdlijn: wat de app zag, wat jij deed, de uitkomst met R. Elke R komt uit
+  `track_record.signal_r`, nooit afgeleid. Dagtotaal in R, oudere dagen samengevouwen. Het Journaal blijft bereikbaar en werkt. Alleen eigen
+  data; oefentrades tellen nooit mee.
+- **R4 Replay** per afgeronde trade: 5m-candles van instap tot sluiting met een uur ervoor, niveaus als lijnen, een cursor met schuifbalk en
+  knoppen per moment uit echte tijdstempels. R op een moment alleen na de vulling, gemeten uit de candle-sluiting.
+- **R5 Weekterugblik** op Bewijs: één groot getal (gemeten R van de week), acht weken in grijs met deze week in accent, getallen eronder, en
+  hoogstens één telbare observatie. "Volgens plan" alleen als het meetbaar is, anders weg.
+- **R6 Beheer** (alleen eigenaar, achter het initiaal; `/ceo` blijft): leerlingen, volg-sets en uitnodigingen per code. Een volg-set filtert
+  alleen de pushmeldingen van die gebruiker. Registratie blijft open tenzij `REGISTRATION_REQUIRES_INVITE=true`. Uitnodigen per e-mail is
+  overgeslagen. Leerlingen zien elkaar of elkaars resultaten nooit.
+- **R7 Niet bouwen:** de widget, de trilpatronen (de optie blijft hieronder staan) en de lettertypekeuze voor de oude pagina's.
+
 Fase 1 (navigatie met vier tabs, Nu in rust en met één kaart, de order-checklist, licht thema en Geist) staat in de app. Dit zijn de
 onderdelen uit `hespulse_v2.dc.html` die bewust nog niet gebouwd zijn, met de keuzes die eerst gemaakt moeten worden.
 

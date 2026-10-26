@@ -846,3 +846,30 @@ CREATE TABLE IF NOT EXISTS market_context (
 );
 CREATE INDEX IF NOT EXISTS idx_market_context_lookup ON market_context (coin, bron, metric, gemeten_op);
 CREATE INDEX IF NOT EXISTS idx_market_context_bron ON market_context (bron, gemeten_op);
+
+-- Overgeslagen plannen (fase 2, R1): per gebruiker, met het moment van de tik op Nu. De cookie hp_skip blijft voor het toestel; deze rij
+-- maakt het Logboek en de weekterugblik mogelijk. Eén rij per gebruiker en plan: een tweede tik houdt het eerste moment.
+CREATE TABLE IF NOT EXISTS plan_skips (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    plan_key TEXT NOT NULL,
+    coin TEXT,
+    direction TEXT,
+    skipped_at TEXT NOT NULL,
+    UNIQUE (user_id, plan_key)
+);
+CREATE INDEX IF NOT EXISTS idx_plan_skips_user ON plan_skips(user_id, skipped_at);
+
+-- De order-checklist (fase 2, R2): wanneer hij openging en wanneer alle stappen stonden, per gebruiker en plan. Alleen met beide tijden toont
+-- het Logboek "checklist in 1 min 12 s". Opnieuw openen voor het afronden zet opened_at opnieuw; na het afronden verandert de rij niet meer.
+CREATE TABLE IF NOT EXISTS checklist_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    plan_key TEXT NOT NULL,
+    coin TEXT,
+    direction TEXT,
+    opened_at TEXT NOT NULL,
+    done_at TEXT,
+    UNIQUE (user_id, plan_key)
+);
+CREATE INDEX IF NOT EXISTS idx_checklist_runs_user ON checklist_runs(user_id, opened_at);

@@ -682,7 +682,7 @@ async def vandaag_page(request: Request, bron: str = "", user: dict = Depends(re
     ctx = await _vandaag_context(user)
     greeting = ceo.greeting(today.local(datetime.now(timezone.utc)).hour, is_ceo(user), user["username"])
     cards = ctx["radar_cards"]
-    screen = nu.screen(cards, nu.parse_skip(request.cookies.get(NU_SKIP_COOKIE)), request.query_params.get("plan"))
+    screen = nu.screen(cards, _skipped_keys(request, user), request.query_params.get("plan"))
     # Gekeken: hoe oud de oudste koers achter deze kaarten is (app/freshness.py), niet de tijd van de paginaweergave.
     age = freshness.oldest_age(_price_fetched_at, {c["coin"] for c in cards}, time.time())
     return templates.TemplateResponse(request, "vandaag.html", {
@@ -691,11 +691,22 @@ async def vandaag_page(request: Request, bron: str = "", user: dict = Depends(re
 
 
 NU_SKIP_COOKIE = "hp_skip"
+NU_SKIP_HOURS = 24
+
+
+def _skipped_keys(request: Request, user: dict) -> frozenset:
+    """Overgeslagen op dit toestel (cookie) of op een ander toestel van dezelfde gebruiker (plan_skips), allebei een dag."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=NU_SKIP_HOURS)).isoformat()
+    return nu.parse_skip(request.cookies.get(NU_SKIP_COOKIE)) | {r["plan_key"] for r in repo.list_plan_skips(user["id"], since)}
 
 
 @app.post("/nu/overslaan")
 async def nu_skip(request: Request, key: str = Form(""), user: dict = Depends(require_login)):
-    """Sla over: dit plan vult Nu niet meer op dit toestel (een dag). Het blijft op de Radar staan; niets anders verandert."""
+    """Sla over: dit plan vult Nu een dag niet meer. Het blijft op de Radar staan. De cookie houdt het op dit toestel; de rij in plan_skips
+    zet het met zijn moment in het Logboek en de weekterugblik."""
+    if nu.SKIP_KEY.match(key):
+        item = nu.item_for(await _radar_cards(), key)
+        repo.record_plan_skip(user["id"], key, item["coin"] if item else None, item["direction"] if item else None, db.now_iso())
     response = RedirectResponse(url="/vandaag", status_code=303)
     response.set_cookie(NU_SKIP_COOKIE, nu.add_skip(request.cookies.get(NU_SKIP_COOKIE), key), max_age=24 * 3600, samesite="lax", path="/")
     return response
@@ -714,7 +725,16 @@ async def nu_order(request: Request, key: str, user: dict = Depends(require_logi
         item = nu.item_for(await _radar_cards(), key)
     if item is None:
         raise HTTPException(status_code=404)
+    repo.open_checklist(user["id"], key, item["coin"], item["direction"], db.now_iso())
     return templates.TemplateResponse(request, "order.html", {"user": user, "item": item, "steps": nu.checklist(item), "note": nu.price_note(item)})
+
+
+@app.post("/nu/order/{key}/klaar")
+async def nu_order_done(key: str, user: dict = Depends(require_login)):
+    """order.js meldt dat alle stappen stonden; met het openmoment geeft dat de gemeten duur in het Logboek. Een tweede melding verandert niets."""
+    if not nu.SKIP_KEY.match(key):
+        raise HTTPException(status_code=404)
+    return {"ok": repo.finish_checklist(user["id"], key, db.now_iso())}
 
 
 def _viewer_header(user: dict) -> dict:

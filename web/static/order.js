@@ -8,7 +8,18 @@
   var segs = [].slice.call(root.querySelectorAll(".ck-seg"));
   var label = root.querySelector("[data-ck-label]"), next = root.querySelector("[data-ck-next]"), done = root.querySelector("[data-ck-done]");
   var reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-  var cur = 0, finished = [];
+  var cur = 0, finished = [], reported = false;
+
+  // Het moment dat alle stappen stonden, één keer per bezoek: samen met het openen geeft de server "checklist in 1 min 12 s" in het Logboek.
+  // keepalive zodat de melding ook aankomt als de tik op "Order staat" meteen naar Nu gaat.
+  function reportDone() {
+    var url = root.getAttribute("data-ck-done-url");
+    if (reported || !url || !window.fetch) return;
+    reported = true;
+    try {
+      fetch(url, { method: "POST", credentials: "same-origin", cache: "no-store", keepalive: true }).catch(function () {});
+    } catch (e) { /* zonder melding blijft alleen de duur weg */ }
+  }
 
   function render() {
     var all = cur >= steps.length;
@@ -24,6 +35,7 @@
       seg.classList.toggle("is-cur", i === cur);
     });
     if (label) label.textContent = all ? "Klaar" : "Stap " + (cur + 1) + " van " + steps.length;
+    if (all) reportDone();
     if (next) next.hidden = all;
     if (done) done.hidden = !all;
   }
