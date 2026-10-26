@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+body{margin:0;background:#D9DEDF;font-family:'Geist',system-ui,sans-serif;color:#0D1415;-webkit-font-smoothing:antialiased}
+a{color:#067A76;text-decoration:none}a:hover{color:#045C59;text-decoration:underline}
+*{box-sizing:border-box}
+</style>
+</helmet>
+
+<section id="v2" style="padding:56px 48px 96px; display:flex; flex-direction:column; gap:72px">
+  <div style="display:flex; flex-direction:column; gap:10px; max-width:820px">
+    <div style="font:500 13px 'Geist Mono',monospace; color:#55615F; letter-spacing:.04em">HESPULSE V2 · RICHTING "ÉÉN DING"</div>
+    <div style="font-size:36px; font-weight:600; letter-spacing:-.02em; line-height:1.1; text-wrap:balance">Er is niets te doen, of precies één ding.</div>
+    <div style="font-size:16px; line-height:1.55; color:#3E4A4C; text-wrap:pretty">De huidige app laat 16 kansen, 9 tabs en 26 open regels tegelijk zien. V2 draait het om: de app beslist wat nu telt en zwijgt over de rest. Vier tabs: <b>Nu</b>, <b>Plannen</b>, <b>Logboek</b>, <b>Bewijs</b>. Account, Handleiding en Beheer zitten achter je initiaal rechtsboven. Voor ervaren traders: geen uitleg in de weg, wel één tik om hem te openen.</div>
+  </div>
+  <div id="A" style="display:flex; flex-direction:column; gap:28px">
+    <div style="display:flex; flex-direction:column; gap:12px; max-width:820px">
+      <div style="display:flex; align-items:center; gap:10px"><span style="font:600 13px 'Geist Mono',monospace; background:#0D1415; color:#fff; padding:4px 8px; border-radius:6px">A</span><span style="font-size:22px; font-weight:600">Nu: rust, of één kaart</span></div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; font-size:14px; line-height:1.5; color:#2E3839; text-wrap:pretty">
+          <div><b>Rust.</b> Geen lijst. Eén zin, en het eerstvolgende niveau met een gemeten afstand. De 16 andere plannen staan onder Plannen, niet hier.</div>
+          <div><b>Eén ding.</b> Komt een plan in de zone, dan vult de kaart het scherm. Eén knop opent de order-checklist. Een tweede kans in de zone staat er klein onder, nooit naast.</div>
+          <div><b>Levend.</b> Alleen de koers en de afstand bewegen. De balk loopt mee met de echte prijs en staat stil bij reduced motion.</div>
+        </div>
+      </sc-if>
+    </div>
+    <sc-for list="{{ themes }}" as="t" hint-placeholder-count="2">
+      <div style="display:flex; flex-direction:column; gap:10px">
+        <div style="font:500 13px 'Geist Mono',monospace; color:#3E4A4C">{{ t.name }}</div>
+        <div style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start">
+
+          <div style="{{ t.frame }}">
+            <div style="height:812px; display:flex; flex-direction:column">
+              <div style="height:44px; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font:600 15px 'Geist',sans-serif"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+              <div style="padding:8px 16px 0; display:flex; align-items:center; justify-content:space-between">
+                <div style="display:flex; align-items:center; gap:10px">
+                  <svg width="26" height="26" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="2"></circle><path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#0ABAB5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                  <span style="font-size:16px; font-weight:600">HesPulse</span>
+                </div>
+                <span style="width:44px; height:44px; border-radius:50%; border:1px solid var(--bd); display:flex; align-items:center; justify-content:center; font:600 15px 'Geist',sans-serif">D</span>
+              </div>
+              <div style="flex:1; padding:0 16px; display:flex; flex-direction:column; justify-content:center; gap:28px">
+                <div style="display:flex; flex-direction:column; gap:10px">
+                  <span style="font-size:14px; color:var(--tx2)">Zondag 25 oktober · 23:46</span>
+                  <span style="font-size:34px; font-weight:600; letter-spacing:-.025em; line-height:1.1; text-wrap:balance">Niets te doen.</span>
+                  <span style="font-size:16px; line-height:1.5; color:var(--tx2); text-wrap:pretty">Er staat geen plan in de zone. Je krijgt een melding als dat verandert.</span>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:14px; padding:18px 16px; border-radius:16px; background:var(--s1); border:1px solid var(--bd)">
+                  <div style="display:flex; justify-content:space-between; align-items:baseline; gap:8px">
+                    <span style="font-size:13px; color:var(--tx2)">Eerstvolgende</span>
+                    <span style="font-size:13px; color:var(--tx2)">BTC · Short</span>
+                  </div>
+                  <div style="display:flex; justify-content:space-between; align-items:flex-end; gap:8px">
+                    <div style="display:flex; flex-direction:column; gap:2px"><span style="font-size:13px; color:var(--tx2)">Nog tot instap</span><span style="font:500 32px 'Geist Mono',monospace; letter-spacing:-.02em">0,30%</span></div>
+                    <div style="display:flex; flex-direction:column; gap:2px; align-items:flex-end"><span style="font:400 15px 'Geist Mono',monospace">80537</span><span style="font:400 13px 'Geist Mono',monospace; color:var(--tx2)">→ 80774,8</span></div>
+                  </div>
+                  <div style="height:4px; border-radius:2px; background:var(--s2)"><div style="width:86%; height:4px; border-radius:2px; background:var(--ac)"></div></div>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px">
+                  <div style="display:flex; flex-direction:column; gap:2px"><span style="font-size:13px; color:var(--tx2)">Plannen</span><span style="font:400 16px 'Geist Mono',monospace">16</span></div>
+                  <div style="display:flex; flex-direction:column; gap:2px"><span style="font-size:13px; color:var(--tx2)">Open trades</span><span style="font:400 16px 'Geist Mono',monospace">0</span></div>
+                  <div style="display:flex; flex-direction:column; gap:2px"><span style="font-size:13px; color:var(--tx2)">Gekeken</span><span style="font:400 16px 'Geist Mono',monospace">2 min</span></div>
+                </div>
+              </div>
+              <div style="border-top:1px solid var(--bd); background:var(--s1); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:20px">
+                <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--aci); font-size:13px; font-weight:600; border-top:2px solid var(--ac); margin-top:-1px">Nu</div>
+                <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Plannen</div>
+                <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Logboek</div>
+                <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Bewijs</div>
+              </div>
+            </div>
+          </div>
+          <div style="{{ t.frame }}">
+            <div style="height:812px; display:flex; flex-direction:column">
+              <div style="height:44px; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font:600 15px 'Geist',sans-serif"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+              <div style="padding:8px 16px 0; display:flex; align-items:center; justify-content:space-between">
+                <span style="display:inline-flex; align-items:center; gap:7px; height:30px; padding:0 12px; border-radius:15px; background:var(--actint); font-size:13px; font-weight:600; color:var(--aci)"><span style="width:9px; height:9px; border-radius:50%; background:var(--ac)"></span>In zone · nog 22 min</span>
+                <span style="width:44px; height:44px; border-radius:50%; border:1px solid var(--bd); display:flex; align-items:center; justify-content:center; font:600 15px 'Geist',sans-serif">D</span>
+              </div>
+              <div style="padding:16px 16px 0; display:flex; flex-direction:column; gap:6px">
+                <div style="display:flex; align-items:baseline; gap:10px"><span style="font-size:40px; font-weight:600; letter-spacing:-.03em">BTC</span><span style="font-size:20px; color:var(--tx2)">Short</span></div>
+                <span style="font-size:17px; line-height:1.45; text-wrap:pretty">Zet nu een limit short op <span style="font-family:'Geist Mono',monospace">80774,8</span>.</span>
+              </div>
+              <div style="padding:16px 16px 0; display:flex; flex-direction:column; gap:2px">
+                <span style="font-size:13px; color:var(--tx2)">Koers nu</span>
+                <span style="font:500 44px 'Geist Mono',monospace; letter-spacing:-.03em">80768,2</span>
+              </div>
+              <div style="padding:20px 16px 0">
+                <div style="border:1px solid var(--bd); border-radius:16px; overflow:hidden; background:var(--s1)">
+                  <div style="min-height:44px; padding:0 14px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--bd)"><span style="font-size:14px; color:var(--tx2)">Stop</span><span style="font:500 16px 'Geist Mono',monospace; color:var(--loss)">81097,9</span></div>
+                  <div style="min-height:44px; padding:0 14px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--bd); background:var(--actint)"><span style="font-size:14px; color:var(--aci); font-weight:500">Instap</span><span style="font:500 16px 'Geist Mono',monospace">80774,8</span></div>
+                  <div style="min-height:44px; padding:0 14px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--bd)"><span style="font-size:14px; color:var(--tx2)">Doel 1 · 1 R</span><span style="font:500 16px 'Geist Mono',monospace; color:var(--win)">80451,7</span></div>
+                  <div style="min-height:44px; padding:0 14px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--bd)"><span style="font-size:14px; color:var(--tx2)">Doel 2 · 2 R</span><span style="font:500 16px 'Geist Mono',monospace; color:var(--win)">80128,6</span></div>
+                  <div style="min-height:44px; padding:0 14px; display:flex; align-items:center; justify-content:space-between"><span style="font-size:14px; color:var(--tx2)">Doel 3 · 3 R</span><span style="font:500 16px 'Geist Mono',monospace; color:var(--win)">79805,5</span></div>
+                </div>
+              </div>
+              <div style="padding:14px 16px 0; display:flex; justify-content:space-between; gap:8px; font-size:13px; color:var(--tx2)">
+                <span>4 van 6 kenmerken · gemeten</span>
+                <span style="display:inline-flex; align-items:center; height:22px; padding:0 8px; border-radius:5px; border:1px dashed var(--tx2); font:500 12px 'Geist Mono',monospace">in proef</span>
+              </div>
+              <div style="margin-top:auto; padding:16px 16px 0; display:flex; flex-direction:column; gap:4px">
+                <button style="height:56px; border:0; border-radius:14px; background:var(--ac); color:var(--onac); font:600 17px 'Geist',sans-serif">Zet de order, stap voor stap</button>
+                <button style="height:44px; border:0; background:transparent; color:var(--tx2); font:500 15px 'Geist',sans-serif">Sla over</button>
+              </div>
+              <div style="margin:8px 16px 0; min-height:48px; padding:0 14px; border-radius:12px; border:1px solid var(--bd); display:flex; align-items:center; gap:10px; font-size:14px; color:var(--tx2)"><span style="width:8px; height:8px; border-radius:50%; background:var(--ac)"></span>Ook in zone: <span style="color:var(--tx); font-weight:500">SOL long</span><span style="margin-left:auto">›</span></div>
+              <div style="margin-top:12px; border-top:1px solid var(--bd); background:var(--s1); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:20px">
+                <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--aci); font-size:13px; font-weight:600; border-top:2px solid var(--ac); margin-top:-1px">Nu</div>
+                <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Plannen</div>
+                <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Logboek</div>
+                <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Bewijs</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+  <div style="display:flex; flex-direction:column; gap:8px; max-width:820px; padding:20px 22px; border-radius:14px; background:#fff; border:1px solid #C9D0D1">
+    <div style="font:500 12px 'Geist Mono',monospace; color:#55615F; letter-spacing:.04em">BESLUITEN OP DE OPEN VRAGEN (aan te passen)</div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:6px 20px; font-size:14px; line-height:1.5; color:#2E3839">
+      <div><b>Checklist</b> volledig scherm. Een modal over Nu laat de kaart erachter meelezen; hier wil je focus.</div>
+      <div><b>Widget</b> toont coin, richting én afstand. Alleen afstand zegt niet wélk plan.</div>
+      <div><b>Logboek</b> toont ook gesloten trades met resultaat in R, en overgeslagen plannen.</div>
+      <div><b>Replay</b> doet beide: schuiven voor overzicht, tikken per moment voor precisie.</div>
+      <div><b>Beheer</b>: leerlingen zien elkaar niet. Alleen de eigenaar ziet namen en resultaten.</div>
+    </div>
+  </div>
+
+  <div id="B" style="display:flex; flex-direction:column; gap:28px">
+    <div style="display:flex; flex-direction:column; gap:12px; max-width:820px">
+      <div style="display:flex; align-items:center; gap:10px"><span style="font:600 13px 'Geist Mono',monospace; background:#0D1415; color:#fff; padding:4px 8px; border-radius:6px">B</span><span style="font-size:22px; font-weight:600">Order-checklist: vijf stappen, één tik per getal</span></div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; font-size:14px; line-height:1.5; color:#2E3839; text-wrap:pretty">
+          <div><b>Volgorde van je beurs.</b> Markt, prijs, stop, doel, grootte. Precies zoals het orderformulier ze vraagt.</div>
+          <div><b>Tik = kopiëren.</b> Het getal gaat met een punt naar je klembord, de stap vinkt af en de volgende licht op. Probeer het.</div>
+          <div><b>Grootte voor je.</b> Uitgerekend voor 1 R risico. Je hoeft niet te rekenen terwijl de prijs beweegt.</div>
+        </div>
+      </sc-if>
+    </div>
+    <div style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start">
+      <div style="{{ dk }}">
+        <div style="height:812px; display:flex; flex-direction:column">
+          <div style="height:44px; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font:600 15px 'Geist',sans-serif"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+          <div style="padding:0 8px; display:flex; align-items:center; justify-content:space-between">
+            <button onClick="{{ ckBack }}" style="height:44px; min-width:44px; padding:0 8px; border:0; background:transparent; color:var(--tx2); font:500 15px 'Geist',sans-serif">‹ Terug</button>
+            <span style="font:500 13px 'Geist Mono',monospace; color:var(--tx2)">{{ ckLabel }}</span>
+            <button onClick="{{ ckReset }}" style="height:44px; min-width:44px; padding:0 8px; border:0; background:transparent; color:var(--tx2); font:500 15px 'Geist',sans-serif">Sluit</button>
+          </div>
+          <div style="padding:8px 16px 0; display:flex; flex-direction:column; gap:12px">
+            <div style="display:flex; align-items:baseline; gap:10px"><span style="font-size:28px; font-weight:600; letter-spacing:-.02em">BTC short</span><span style="font-size:15px; color:var(--tx2)">limit · 1 R</span></div>
+            <div style="display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px">
+              <sc-for list="{{ ck }}" as="s" hint-placeholder-count="5"><div style="{{ s.seg }}"></div></sc-for>
+            </div>
+          </div>
+          <div style="padding:20px 16px 0; display:flex; flex-direction:column; gap:8px">
+            <sc-for list="{{ ck }}" as="s" hint-placeholder-count="5">
+              <div onClick="{{ s.go }}" style="{{ s.row }}">
+                <span style="{{ s.dot }}">{{ s.mark }}</span>
+                <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:2px">
+                  <span style="font-size:15px; font-weight:600">{{ s.title }}</span>
+                  <span style="font-size:13px; line-height:1.4; color:var(--tx2); text-wrap:pretty">{{ s.sub }}</span>
+                </div>
+                <sc-if value="{{ s.hasVal }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ s.copy }}" style="min-height:44px; padding:6px 10px; border-radius:10px; border:1px solid var(--bd); background:var(--s2); display:flex; flex-direction:column; align-items:flex-end; gap:1px; cursor:pointer">
+                    <span style="{{ s.valStyle }}">{{ s.val }}</span>
+                    <span style="font-size:11px; color:var(--tx2)">{{ s.cta }}</span>
+                  </button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="margin-top:auto; padding:16px 16px 28px; display:flex; flex-direction:column; gap:8px">
+            <span style="font-size:13px; color:var(--tx2); text-align:center">Koers nu <span style="font-family:'Geist Mono',monospace; color:var(--tx)">80768,2</span> · nog in zone</span>
+            <button onClick="{{ ckNext }}" style="height:56px; border:0; border-radius:14px; background:var(--ac); color:var(--onac); font:600 17px 'Geist',sans-serif; cursor:pointer">{{ ckCta }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="C" style="display:flex; flex-direction:column; gap:28px">
+    <div style="display:flex; flex-direction:column; gap:12px; max-width:820px">
+      <div style="display:flex; align-items:center; gap:10px"><span style="font:600 13px 'Geist Mono',monospace; background:#0D1415; color:#fff; padding:4px 8px; border-radius:6px">C</span><span style="font-size:22px; font-weight:600">Vergrendelscherm en trillen</span></div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; font-size:14px; line-height:1.5; color:#2E3839; text-wrap:pretty">
+          <div><b>Widget.</b> Alleen het eerstvolgende plan. Coin, richting, afstand. Je hoeft de app niet te openen om te weten dat er niets is.</div>
+          <div><b>Melding.</b> Komt alleen bij "in zone". De zin is de opdracht; tik opent direct de checklist.</div>
+          <div><b>Trillen.</b> Elke stand heeft een eigen ritme, zodat je in je zak voelt wat er gebeurt.</div>
+        </div>
+      </sc-if>
+    </div>
+    <div style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start">
+      <div style="{{ dk }}">
+        <div style="height:812px; display:flex; flex-direction:column; align-items:center; padding:64px 16px 0">
+          <span style="font-size:17px; font-weight:500; color:var(--tx2)">Zondag 25 oktober</span>
+          <span style="font-size:88px; font-weight:600; letter-spacing:-.04em; line-height:1">23:46</span>
+          <div style="margin-top:20px; width:300px; padding:12px 14px; border-radius:18px; background:rgba(255,255,255,.08); display:flex; flex-direction:column; gap:8px">
+            <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--tx2)"><span>HesPulse · eerstvolgende</span><span>BTC short</span></div>
+            <div style="display:flex; justify-content:space-between; align-items:baseline"><span style="font:500 26px 'Geist Mono',monospace; letter-spacing:-.02em">0,30%</span><span style="font-size:13px; color:var(--tx2)">tot instap</span></div>
+            <div style="height:4px; border-radius:2px; background:rgba(255,255,255,.12)"><div style="width:86%; height:4px; border-radius:2px; background:var(--ac)"></div></div>
+          </div>
+          <span style="margin-top:auto; margin-bottom:40px; font-size:13px; color:var(--tx2)">Rust · geen melding</span>
+        </div>
+      </div>
+      <div style="{{ dk }}">
+        <div style="height:812px; display:flex; flex-direction:column; align-items:center; padding:64px 16px 0">
+          <span style="font-size:17px; font-weight:500; color:var(--tx2)">Zondag 25 oktober</span>
+          <span style="font-size:88px; font-weight:600; letter-spacing:-.04em; line-height:1">23:46</span>
+          <div style="margin-top:20px; width:300px; padding:12px 14px; border-radius:18px; background:rgba(10,186,181,.16); display:flex; flex-direction:column; gap:8px">
+            <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--aci)"><span>HesPulse · in zone</span><span>BTC short</span></div>
+            <div style="display:flex; justify-content:space-between; align-items:baseline"><span style="font:500 26px 'Geist Mono',monospace; letter-spacing:-.02em">0,01%</span><span style="font-size:13px; color:var(--tx2)">nog 22 min</span></div>
+          </div>
+          <div style="margin-top:auto; margin-bottom:28px; width:100%; padding:14px; border-radius:20px; background:rgba(255,255,255,.1); display:flex; gap:12px">
+            <span style="width:38px; height:38px; flex:none; border-radius:9px; background:#12181A; display:flex; align-items:center; justify-content:center"><svg width="24" height="24" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="2"></circle><path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#0ABAB5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+            <div style="flex:1; display:flex; flex-direction:column; gap:2px">
+              <div style="display:flex; justify-content:space-between; font-size:14px"><b>BTC short in zone</b><span style="color:var(--tx2); font-size:13px">nu</span></div>
+              <span style="font-size:14px; line-height:1.4; color:var(--tx2)">Zet een limit op <span style="font-family:'Geist Mono',monospace; color:var(--tx)">80774,8</span>. Tik voor de checklist.</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="width:375px; display:flex; flex-direction:column; gap:2px; padding:8px 0; border-radius:20px; background:#fff; border:1px solid #C9D0D1">
+        <div style="padding:10px 18px 8px; font:500 12px 'Geist Mono',monospace; color:#55615F; letter-spacing:.04em">TRILPATROON PER STAND</div>
+        <sc-for list="{{ haptics }}" as="h" hint-placeholder-count="5">
+          <div style="padding:12px 18px; display:flex; align-items:center; gap:14px; border-top:1px solid #E3E8E8">
+            <div style="flex:1; display:flex; flex-direction:column; gap:2px"><span style="font-size:15px; font-weight:600">{{ h.name }}</span><span style="font-size:13px; color:#55615F">{{ h.desc }}</span></div>
+            <div style="width:96px; height:20px; display:flex; align-items:center; gap:3px">
+              <sc-for list="{{ h.pulses }}" as="p" hint-placeholder-count="2"><span style="{{ p }}"></span></sc-for>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div id="D" style="display:flex; flex-direction:column; gap:28px">
+    <div style="display:flex; flex-direction:column; gap:12px; max-width:820px">
+      <div style="display:flex; align-items:center; gap:10px"><span style="font:600 13px 'Geist Mono',monospace; background:#0D1415; color:#fff; padding:4px 8px; border-radius:6px">D</span><span style="font-size:22px; font-weight:600">Logboek als dagtijdlijn · Replay</span></div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; font-size:14px; line-height:1.5; color:#2E3839; text-wrap:pretty">
+          <div><b>Een dag lees je van boven naar onder.</b> Wat de app zag, wat jij deed, wat het opleverde. Overgeslagen plannen staan er ook: die zijn net zo leerzaam.</div>
+          <div><b>Replay.</b> Schuif door de avond of tik per moment. Elk moment heeft één zin en de R op dat moment. Speel af om het opnieuw te beleven.</div>
+          <div><b>Kleur.</b> Candles grijs. Alleen stop en doelen kleuren, net als op Nu.</div>
+        </div>
+      </sc-if>
+    </div>
+    <div style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start">
+      <div style="{{ dk }}">
+        <div style="height:812px; display:flex; flex-direction:column">
+          <div style="height:44px; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font:600 15px 'Geist',sans-serif"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+          <div style="padding:8px 16px 0; display:flex; justify-content:space-between; align-items:flex-end">
+            <div style="display:flex; flex-direction:column; gap:2px"><span style="font-size:13px; color:var(--tx2)">Zondag 25 oktober</span><span style="font-size:28px; font-weight:600; letter-spacing:-.02em">Vandaag</span></div>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px"><span style="font-size:13px; color:var(--tx2)">Dag</span><span style="font:500 28px 'Geist Mono',monospace; letter-spacing:-.02em">+1,0 R</span></div>
+          </div>
+          <div style="flex:1; padding:20px 16px 0; display:flex; flex-direction:column">
+            <sc-for list="{{ log }}" as="e" hint-placeholder-count="5">
+              <div style="display:grid; grid-template-columns:48px 14px minmax(0,1fr); gap:10px">
+                <span style="padding-top:12px; font:400 13px 'Geist Mono',monospace; color:var(--tx2)">{{ e.t }}</span>
+                <div style="display:flex; flex-direction:column; align-items:center"><span style="{{ e.dot }}"></span><span style="flex:1; width:1px; background:var(--bd)"></span></div>
+                <div style="margin-bottom:10px; padding:10px 12px; border-radius:12px; background:var(--s1); border:1px solid var(--bd); display:flex; flex-direction:column; gap:3px">
+                  <div style="display:flex; justify-content:space-between; gap:8px"><span style="font-size:15px; font-weight:600">{{ e.title }}</span><span style="{{ e.rStyle }}">{{ e.r }}</span></div>
+                  <span style="font-size:13px; line-height:1.4; color:var(--tx2); text-wrap:pretty">{{ e.sub }}</span>
+                  <sc-if value="{{ e.replay }}" hint-placeholder-val="{{ false }}"><a href="#replay" style="min-height:32px; display:flex; align-items:center; font-size:13px; font-weight:500; color:var(--aci)">Bekijk replay ›</a></sc-if>
+                </div>
+              </div>
+            </sc-for>
+            <div style="padding:6px 0 0 72px; font-size:13px; color:var(--tx2)">Zaterdag 24 okt · −1,0 R · 2 trades ›</div>
+          </div>
+          <div style="margin-top:12px; border-top:1px solid var(--bd); background:var(--s1); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:20px">
+            <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Nu</div>
+            <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Plannen</div>
+            <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--aci); font-size:13px; font-weight:600; border-top:2px solid var(--ac); margin-top:-1px">Logboek</div>
+            <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Bewijs</div>
+          </div>
+        </div>
+      </div>
+      <div id="replay" style="{{ dk }}">
+        <div style="height:812px; display:flex; flex-direction:column">
+          <div style="height:44px; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font:600 15px 'Geist',sans-serif"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+          <div style="padding:0 8px; display:flex; align-items:center; justify-content:space-between">
+            <span style="height:44px; padding:0 8px; display:flex; align-items:center; color:var(--tx2); font-size:15px; font-weight:500">‹ Logboek</span>
+            <span style="padding-right:8px; font-size:13px; color:var(--tx2)">Replay · 5 min</span>
+          </div>
+          <div style="padding:4px 16px 0; display:flex; justify-content:space-between; align-items:flex-end">
+            <div style="display:flex; flex-direction:column; gap:2px"><span style="font-size:28px; font-weight:600; letter-spacing:-.02em">BTC short</span><span style="font:400 13px 'Geist Mono',monospace; color:var(--tx2)">{{ rpTime }}</span></div>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px"><span style="font-size:13px; color:var(--tx2)">{{ rpRLabel }}</span><span style="font:500 32px 'Geist Mono',monospace; letter-spacing:-.02em">{{ rpR }}</span></div>
+          </div>
+          <div style="margin:16px 16px 0; padding:12px 0; border-radius:16px; background:var(--s1); border:1px solid var(--bd)">
+            <div style="position:relative; height:260px; margin:0 52px 0 10px">
+              <sc-for list="{{ rpLevels }}" as="l" hint-placeholder-count="4">
+                <div style="{{ l.line }}"><span style="{{ l.tag }}">{{ l.label }}</span></div>
+              </sc-for>
+              <sc-for list="{{ rpCandles }}" as="c" hint-placeholder-count="20">
+                <div style="{{ c.wick }}"><div style="{{ c.body }}"></div></div>
+              </sc-for>
+              <div style="{{ rpCursor }}"></div>
+            </div>
+          </div>
+          <div style="padding:14px 16px 0; min-height:72px; display:flex; flex-direction:column; gap:4px">
+            <span style="font-size:13px; color:var(--tx2)">{{ rpStep }}</span>
+            <span style="font-size:17px; font-weight:500; line-height:1.4; text-wrap:pretty">{{ rpEvent }}</span>
+          </div>
+          <div style="padding:8px 16px 0">
+            <input type="range" min="0" max="39" step="1" value="{{ rpI }}" onChange="{{ rpScrub }}" style="width:100%; height:44px; accent-color:#0ABAB5; cursor:pointer"></input>
+          </div>
+          <div style="padding:0 16px; display:flex; gap:6px; flex-wrap:wrap">
+            <sc-for list="{{ rpEvents }}" as="m" hint-placeholder-count="6">
+              <button onClick="{{ m.go }}" style="{{ m.style }}">{{ m.t }}</button>
+            </sc-for>
+          </div>
+          <div style="margin-top:auto; padding:16px 16px 28px; display:grid; grid-template-columns:56px minmax(0,1fr) 56px; gap:8px">
+            <button onClick="{{ rpPrev }}" style="height:56px; border-radius:14px; border:1px solid var(--bd); background:var(--s1); color:var(--tx); font:500 20px 'Geist',sans-serif; cursor:pointer">‹</button>
+            <button onClick="{{ rpToggle }}" style="height:56px; border:0; border-radius:14px; background:var(--ac); color:var(--onac); font:600 17px 'Geist',sans-serif; cursor:pointer">{{ rpPlayLabel }}</button>
+            <button onClick="{{ rpNext }}" style="height:56px; border-radius:14px; border:1px solid var(--bd); background:var(--s1); color:var(--tx); font:500 20px 'Geist',sans-serif; cursor:pointer">›</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="E" style="display:flex; flex-direction:column; gap:28px">
+    <div style="display:flex; flex-direction:column; gap:12px; max-width:820px">
+      <div style="display:flex; align-items:center; gap:10px"><span style="font:600 13px 'Geist Mono',monospace; background:#0D1415; color:#fff; padding:4px 8px; border-radius:6px">E</span><span style="font-size:22px; font-weight:600">Weekterugblik en R-trend · Beheer</span></div>
+      <sc-if value="{{ showNotes }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; font-size:14px; line-height:1.5; color:#2E3839; text-wrap:pretty">
+          <div><b>Week.</b> Eén groot getal: je gemeten R. Daaronder acht weken trend in neutraal grijs, deze week in accent. Eén observatie, geen rapport.</div>
+          <div><b>Beheer.</b> Alleen voor de eigenaar, via het initiaal. Leerlingen, volg-sets en uitnodigingen op één scrollbare pagina, in die volgorde.</div>
+          <div><b>Privé.</b> Leerlingen zien nooit elkaars namen of resultaten. De eigenaar ziet per leerling de week-R en wanneer die laatst keek.</div>
+        </div>
+      </sc-if>
+    </div>
+    <div style="display:flex; gap:32px; flex-wrap:wrap; align-items:flex-start">
+      <div style="{{ dk }}">
+        <div style="height:812px; display:flex; flex-direction:column">
+          <div style="height:44px; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font:600 15px 'Geist',sans-serif"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+          <div style="padding:8px 16px 0; display:flex; flex-direction:column; gap:6px">
+            <span style="font-size:13px; color:var(--tx2)">Week 43 · 19–25 oktober</span>
+            <span style="font:500 56px 'Geist Mono',monospace; letter-spacing:-.04em; line-height:1">+3,4 R</span>
+            <span style="font-size:15px; color:var(--tx2)">7 trades · 4 gewonnen · 3 verloren · 5 overgeslagen</span>
+          </div>
+          <div style="margin:24px 16px 0; padding:16px; border-radius:16px; background:var(--s1); border:1px solid var(--bd); display:flex; flex-direction:column; gap:12px">
+            <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--tx2)"><span>R per week</span><span>8 weken · totaal <span style="font-family:'Geist Mono',monospace; color:var(--tx)">+10,3 R</span></span></div>
+            <div style="position:relative; height:180px; display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:8px">
+              <div style="position:absolute; left:0; right:0; top:120px; height:1px; background:var(--bd)"></div>
+              <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="8">
+                <div style="position:relative; height:180px"><div style="{{ w.bar }}"></div></div>
+              </sc-for>
+            </div>
+            <div style="display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:8px">
+              <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="8">
+                <div style="display:flex; flex-direction:column; align-items:center; gap:1px"><span style="{{ w.valStyle }}">{{ w.v }}</span><span style="font-size:11px; color:var(--tx2)">{{ w.n }}</span></div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="margin:16px 16px 0; display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px">
+            <div style="display:flex; flex-direction:column; gap:2px"><span style="font-size:13px; color:var(--tx2)">Gem. per trade</span><span style="font:400 16px 'Geist Mono',monospace">+0,49 R</span></div>
+            <div style="display:flex; flex-direction:column; gap:2px"><span style="font-size:13px; color:var(--tx2)">Grootste verlies</span><span style="font:400 16px 'Geist Mono',monospace">−1,0 R</span></div>
+            <div style="display:flex; flex-direction:column; gap:2px"><span style="font-size:13px; color:var(--tx2)">Volgens plan</span><span style="font:400 16px 'Geist Mono',monospace">7 / 7</span></div>
+          </div>
+          <div style="margin:20px 16px 0; padding:14px 16px; border-radius:14px; background:var(--actint); display:flex; flex-direction:column; gap:4px">
+            <span style="font-size:13px; font-weight:600; color:var(--aci)">Wat opviel</span>
+            <span style="font-size:15px; line-height:1.45; text-wrap:pretty">3 van je 5 overgeslagen plannen haalden doel 1. Samen +3,0 R die je liet liggen.</span>
+          </div>
+          <div style="margin-top:auto; border-top:1px solid var(--bd); background:var(--s1); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:20px">
+            <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Nu</div>
+            <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Plannen</div>
+            <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--tx2); font-size:13px; font-weight:500">Logboek</div>
+            <div style="height:56px; display:flex; align-items:center; justify-content:center; color:var(--aci); font-size:13px; font-weight:600; border-top:2px solid var(--ac); margin-top:-1px">Bewijs</div>
+          </div>
+        </div>
+      </div>
+      <div style="{{ dk }}">
+        <div style="height:812px; display:flex; flex-direction:column; overflow:hidden">
+          <div style="height:44px; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font:600 15px 'Geist',sans-serif"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+          <div style="padding:0 8px; display:flex; align-items:center; justify-content:space-between">
+            <span style="height:44px; padding:0 8px; display:flex; align-items:center; color:var(--tx2); font-size:15px; font-weight:500">‹ Account</span>
+            <span style="padding-right:8px; font:500 12px 'Geist Mono',monospace; color:var(--tx2)">ALLEEN EIGENAAR</span>
+          </div>
+          <div style="padding:4px 16px 0; display:flex; justify-content:space-between; align-items:flex-end">
+            <span style="font-size:28px; font-weight:600; letter-spacing:-.02em">Beheer</span>
+            <button style="height:44px; padding:0 16px; border:0; border-radius:12px; background:var(--ac); color:var(--onac); font:600 15px 'Geist',sans-serif">Nodig uit</button>
+          </div>
+          <div style="padding:20px 16px 8px; display:flex; justify-content:space-between; font-size:13px; color:var(--tx2)"><span>Leerlingen · 14</span><span>Week-R · laatst gekeken</span></div>
+          <div style="margin:0 16px; border-radius:16px; background:var(--s1); border:1px solid var(--bd); overflow:hidden">
+            <sc-for list="{{ students }}" as="s" hint-placeholder-count="5">
+              <div style="min-height:56px; padding:8px 14px; display:flex; align-items:center; gap:12px; border-bottom:1px solid var(--bd)">
+                <span style="width:34px; height:34px; flex:none; border-radius:50%; background:var(--s2); display:flex; align-items:center; justify-content:center; font-size:13px; font-weight:600">{{ s.i }}</span>
+                <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:1px"><span style="font-size:15px; font-weight:500">{{ s.name }}</span><span style="font-size:13px; color:var(--tx2)">{{ s.set }}</span></div>
+                <div style="display:flex; flex-direction:column; align-items:flex-end; gap:1px"><span style="font:400 15px 'Geist Mono',monospace">{{ s.r }}</span><span style="font-size:12px; color:var(--tx2)">{{ s.seen }}</span></div>
+              </div>
+            </sc-for>
+            <div style="min-height:44px; padding:0 14px; display:flex; align-items:center; font-size:14px; color:var(--aci); font-weight:500">Alle 14 leerlingen ›</div>
+          </div>
+          <div style="padding:20px 16px 8px; font-size:13px; color:var(--tx2)">Volg-sets</div>
+          <div style="margin:0 16px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px">
+            <sc-for list="{{ sets }}" as="v" hint-placeholder-count="2">
+              <div style="padding:12px; border-radius:14px; background:var(--s1); border:1px solid var(--bd); display:flex; flex-direction:column; gap:4px">
+                <span style="font-size:15px; font-weight:600">{{ v.name }}</span>
+                <span style="font-size:13px; color:var(--tx2)">{{ v.coins }}</span>
+                <span style="font:400 13px 'Geist Mono',monospace; color:var(--tx2)">{{ v.n }}</span>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:20px 16px 8px; font-size:13px; color:var(--tx2)">Open uitnodigingen · 2</div>
+          <div style="margin:0 16px; border-radius:16px; background:var(--s1); border:1px solid var(--bd)">
+            <div style="min-height:52px; padding:0 14px; display:flex; align-items:center; justify-content:space-between; border-bottom:1px solid var(--bd)"><div style="display:flex; flex-direction:column"><span style="font-size:14px">sanne@…</span><span style="font-size:12px; color:var(--tx2)">Kern · verloopt over 5 d</span></div><span style="font-size:13px; color:var(--aci); font-weight:500">Opnieuw</span></div>
+            <div style="min-height:52px; padding:0 14px; display:flex; align-items:center; justify-content:space-between"><div style="display:flex; flex-direction:column"><span style="font:500 14px 'Geist Mono',monospace">HES-7Q2K</span><span style="font-size:12px; color:var(--tx2)">Code · Alts · 1 van 5 gebruikt</span></div><span style="font-size:13px; color:var(--aci); font-weight:500">Kopieer</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- /v2 -->
+</section>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Weergave&quot;}}">
+const TH = {
+  dark: { '--bg':'#0A0E0F','--s1':'#12181A','--s2':'#1A2124','--bd':'#263033','--tx':'#E9EEEF','--tx2':'#98A4A7','--ac':'#0ABAB5','--aci':'#2FD3CE','--onac':'#03201F','--win':'#3DCB80','--loss':'#F2646F','--actint':'rgba(10,186,181,.14)','--wintint':'rgba(61,203,128,.16)','--losstint':'rgba(242,100,111,.16)','--glow':'radial-gradient(120% 300px at 50% -60px, rgba(10,186,181,.18), rgba(10,186,181,0) 70%)' },
+  light: { '--bg':'#F4F6F6','--s1':'#FFFFFF','--s2':'#EEF2F2','--bd':'#DCE2E3','--tx':'#0D1415','--tx2':'#55615F','--ac':'#0ABAB5','--aci':'#067A76','--onac':'#03201F','--win':'#0F7A45','--loss':'#C42F3D','--actint':'rgba(10,186,181,.13)','--wintint':'rgba(15,122,69,.12)','--losstint':'rgba(196,47,61,.11)','--glow':'linear-gradient(transparent, transparent)' }
+};
+class Component extends DCLogic {
+  state = { copied: null };
+  renderVals() {
+    const frameOf = k => { const v = TH[k]; return { ...v, width: 375, borderRadius: 32, overflow: 'hidden', border: '1px solid ' + v['--bd'], background: v['--glow'] + ', ' + v['--bg'], backgroundRepeat: 'no-repeat', color: v['--tx'], fontFamily: "'Geist', system-ui, sans-serif", display: 'flex', flexDirection: 'column', boxShadow: '0 20px 50px rgba(10,20,22,.18)' }; };
+    const themes = ['dark', 'light'].map(k => ({ key: k, name: k === 'dark' ? 'Donker' : 'Licht', frame: frameOf(k) }));
+    const S = [['1', 'Open BTC-PERP bij je beurs', 'Kies Short en Limit.', null, ''], ['2', 'Limietprijs', 'Plak in het prijsveld.', '80774,8', 'var(--tx)'], ['3', 'Stop', 'Zet hem meteen mee.', '81097,9', 'var(--loss)'], ['4', 'Doel', 'Doel 2 · 2 R. Of verdeel over 1, 2 en 3.', '80128,6', 'var(--win)']];
+    const copy = (k, v) => { try { navigator.clipboard && navigator.clipboard.writeText(v.replace(',', '.')); } catch (e) {} this.setState({ copied: k }); clearTimeout(this.ct); this.ct = setTimeout(() => this.setState({ copied: null }), 1600); };
+    const steps = S.map(([n, title, sub, val, col]) => ({ n, title, sub, val, col, hasVal: !!val, isCopied: this.state.copied === n, notCopied: this.state.copied !== n, copy: () => val && copy(n, val) }));
+    const dk = frameOf('dark');
+    const C = TH.dark;
+    // checklist
+    const CK = [['Open BTC-PERP', 'Kies Short en Limit in het orderformulier.', null, C['--tx']], ['Limietprijs', 'Plak in het prijsveld.', '80774,8', C['--tx']], ['Stop', 'Zet hem meteen mee, niet later.', '81097,9', C['--loss']], ['Doel', 'Doel 2 · 2 R. Of verdeel over 1, 2 en 3.', '80128,6', C['--win']], ['Grootte', '1 R = €100 risico bij jouw instelling.', '0,309', C['--tx']]];
+    const cur = this.state.ck ?? 1;
+    const ck = CK.map(([title, sub, val, col], i) => {
+      const done = i < cur, isCur = i === cur, cp = this.state.copied === 'ck' + i;
+      return {
+        title, sub, val, hasVal: !!val, mark: done ? '✓' : String(i + 1), cta: cp ? 'Gekopieerd' : 'Tik om te kopiëren',
+        seg: { height: 4, borderRadius: 2, background: done || isCur ? C['--ac'] : C['--s2'], opacity: isCur ? .55 : 1 },
+        row: { minHeight: 64, padding: '10px 12px', borderRadius: 14, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', background: isCur ? C['--actint'] : C['--s1'], border: '1px solid ' + (isCur ? C['--ac'] : C['--bd']), opacity: i > cur ? .55 : 1 },
+        dot: { width: 28, height: 28, flex: 'none', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', font: "600 13px 'Geist Mono',monospace", background: done ? C['--ac'] : 'transparent', color: done ? C['--onac'] : (isCur ? C['--aci'] : C['--tx2']), border: done ? 0 : '1.5px solid ' + (isCur ? C['--ac'] : C['--bd']) },
+        valStyle: { font: "500 16px 'Geist Mono',monospace", color: col },
+        go: () => this.setState({ ck: i }),
+        copy: e => { e.stopPropagation(); copy('ck' + i, val); this.setState({ ck: Math.max(cur, i + 1) }); }
+      };
+    });
+    const ckDone = cur >= CK.length;
+    // haptics
+    const pulse = (w, h, a) => ({ width: w, height: h, borderRadius: 2, background: C['--ac'], opacity: a });
+    const haptics = [
+      ['Wacht', 'Geen trilling. Rust is stil.', []],
+      ['In zone', 'Twee korte tikken.', [pulse(6, 12, 1), pulse(6, 12, 1)]],
+      ['Gevuld · open', 'Eén lange, stevige.', [pulse(34, 16, 1)]],
+      ['Doel geraakt', 'Drie oplopend.', [pulse(6, 8, .6), pulse(6, 12, .8), pulse(6, 16, 1)]],
+      ['Stop geraakt', 'Eén zware, kort. Geen alarm.', [pulse(14, 20, 1)]]
+    ].map(([name, desc, pulses]) => ({ name, desc, pulses: pulses.map(p => name.startsWith('Stop') ? { ...p, background: C['--loss'] } : p) }));
+    // log
+    const rs = c => ({ font: "500 15px 'Geist Mono',monospace", color: c });
+    const dot = c => ({ width: 10, height: 10, marginTop: 15, borderRadius: '50%', background: c, flex: 'none' });
+    const log = [
+      { t: '23:20', title: 'BTC short gesloten', sub: 'Doel 2 geraakt. Na doel 1 stond je stop op instap.', r: '+2,0 R', rStyle: rs(C['--win']), dot: dot(C['--win']), replay: true },
+      { t: '21:40', title: 'BTC short gevuld', sub: 'Limit op 80774,8. Checklist in 1 min 12 s.', r: '', rStyle: rs(C['--tx2']), dot: dot(C['--ac']), replay: false },
+      { t: '19:05', title: 'SOL long overgeslagen', sub: 'Jouw keuze. Haalde later doel 1 (+1,0 R gemist).', r: '0 R', rStyle: rs(C['--tx2']), dot: dot(C['--tx2']), replay: true },
+      { t: '14:30', title: 'ETH long gesloten', sub: 'Stop geraakt, 40 min na instap. Volgens plan.', r: '−1,0 R', rStyle: rs(C['--loss']), dot: dot(C['--loss']), replay: true },
+      { t: '09:12', title: 'Dag begonnen', sub: '16 plannen actief. 3 kwamen vandaag in de zone.', r: '', rStyle: rs(C['--tx2']), dot: dot(C['--bd']), replay: false }
+    ];
+    // replay
+    const CL = [80420,80480,80510,80470,80530,80590,80560,80620,80660,80640,80700,80730,80710,80760,80790,80850,80920,80980,81010,80960,80900,80820,80760,80690,80600,80520,80440,80480,80400,80330,80270,80300,80220,80160,80110,80150,80090,80130,80060,80100];
+    const lo = 79950, hi = 81200, H = 260, N = CL.length, y = p => (hi - p) / (hi - lo) * H;
+    const ri = this.state.ri ?? 34, EN = 80774.8, ST = 81097.9, RU = ST - EN;
+    const rpCandles = CL.map((c, i) => {
+      const o = i ? CL[i - 1] : c - 20, top = Math.max(o, c), bot = Math.min(o, c);
+      const wx = (i === 18 ? 35 : 0) + 18, hh = top + wx, ll = bot - (i === 26 || i === 34 ? 35 : 18);
+      return {
+        wick: { position: 'absolute', left: (i + .5) / N * 100 + '%', top: y(hh), height: y(ll) - y(hh), width: 1, background: '#6B777A', opacity: i > ri ? .18 : 1 },
+        body: { position: 'absolute', left: -2.5, width: 6, top: y(top) - y(hh), height: Math.max(2, y(bot) - y(top)), borderRadius: 1, background: c >= o ? '#98A4A7' : '#4E5A5D' }
+      };
+    });
+    const lvl = (p, label, col, dash) => ({ label, line: { position: 'absolute', left: 0, right: -52, top: y(p), borderTop: '1px ' + (dash ? 'dashed ' : 'solid ') + col }, tag: { position: 'absolute', right: 0, top: -9, font: "500 11px 'Geist Mono',monospace", color: col, background: C['--s1'], padding: '1px 4px' } });
+    const rpLevels = [lvl(ST, 'Stop', C['--loss']), lvl(EN, 'Instap', C['--aci'], true), lvl(80451.7, 'D1', C['--win'], true), lvl(80128.6, 'D2', C['--win'], true)];
+    const EV = [[0, 'Plan actief. Prijs onder de zone, niets te doen.'], [13, 'In zone. Melding met twee tikken.'], [14, 'Gevuld op 80774,8. Order stond in 1 min 12 s.'], [18, 'Tegen je in. 0,9 R van je stop, plan blijft staan.'], [26, 'Doel 1 geraakt. Stop naar instap: geen risico meer.'], [34, 'Doel 2 geraakt. Trade gesloten.']];
+    const tm = i => { const m = 20 * 60 + 30 + i * 5; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+    const evI = EV.reduce((a, e, k) => e[0] <= ri ? k : a, 0);
+    const fmtR = v => (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1).replace('.', ',') + ' R';
+    const rNow = ri < 14 ? null : ri >= 34 ? 2 : (EN - CL[ri]) / RU;
+    const setRi = v => { this.setState({ ri: Math.max(0, Math.min(N - 1, v)) }); };
+    const stop = () => { clearInterval(this.pt); this.pt = null; };
+    const rpEvents = EV.map(([i], k) => ({ t: tm(i), go: () => { stop(); setRi(i); this.forceUpdate(); }, style: { height: 36, padding: '0 10px', borderRadius: 18, cursor: 'pointer', font: "500 13px 'Geist Mono',monospace", border: '1px solid ' + (k === evI ? C['--ac'] : C['--bd']), background: k === evI ? C['--actint'] : 'transparent', color: k === evI ? C['--aci'] : C['--tx2'] } }));
+    // week
+    const WV = [1.2, -0.8, 2.4, 0.6, -1.5, 3.1, 1.9, 3.4];
+    const weeks = WV.map((v, i) => { const last = i === WV.length - 1, h = Math.abs(v) / 3.6 * 110; return { v: (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1).replace('.', ','), n: 'w' + (36 + i), bar: { position: 'absolute', left: 0, right: 0, borderRadius: 4, top: v >= 0 ? 120 - h : 120, height: Math.max(3, h * (v < 0 ? .5 : 1)), background: last ? C['--ac'] : '#3A4548' }, valStyle: { font: "500 11px 'Geist Mono',monospace", color: last ? C['--aci'] : C['--tx2'] } }; });
+    const students = [['MV', 'Mark V.', 'Kern', '+2,1 R', '12 min'], ['LB', 'Lotte B.', 'Kern', '+0,4 R', '1 u'], ['JK', 'Jasper K.', 'Alts', '−1,3 R', 'gisteren'], ['NA', 'Noor A.', 'Kern + Alts', '+3,0 R', '3 min'], ['TD', 'Tim D.', 'Alts', '0 R', '6 d']].map(([i, name, set, r, seen]) => ({ i, name, set, r, seen }));
+    const sets = [{ name: 'Kern', coins: 'BTC · ETH', n: '9 leerlingen' }, { name: 'Alts', coins: 'SOL · LINK · AVAX', n: '7 leerlingen' }];
+    return {
+      themes, steps, showNotes: this.props.showNotes ?? true, dk,
+      ck, ckLabel: ckDone ? 'Klaar' : 'Stap ' + (cur + 1) + ' van 5', ckCta: ckDone ? 'Order staat. Volg hem op Nu' : 'Volgende stap',
+      ckNext: () => this.setState({ ck: ckDone ? 0 : cur + 1 }), ckBack: () => this.setState({ ck: Math.max(0, cur - 1) }), ckReset: () => this.setState({ ck: 0 }),
+      haptics, log, weeks, students, sets,
+      rpCandles, rpLevels, rpEvents, rpI: ri, rpTime: tm(ri) + ' · zo 25 okt', rpEvent: EV[evI][1], rpStep: 'Moment ' + (evI + 1) + ' van ' + EV.length,
+      rpR: rNow === null ? '—' : fmtR(rNow), rpRLabel: rNow === null ? 'Niet gevuld' : ri >= 34 ? 'Resultaat' : 'Open',
+      rpCursor: { position: 'absolute', top: 0, bottom: 0, width: 1, left: (ri + .5) / N * 100 + '%', background: C['--ac'], opacity: .7 },
+      rpScrub: e => { stop(); setRi(+e.target.value); },
+      rpPrev: () => { stop(); const p = [...EV].reverse().find(e => e[0] < ri); setRi(p ? p[0] : 0); },
+      rpNext: () => { stop(); const n = EV.find(e => e[0] > ri); setRi(n ? n[0] : N - 1); },
+      rpPlayLabel: this.pt ? 'Pauze' : 'Speel af',
+      rpToggle: () => { if (this.pt) { stop(); this.forceUpdate(); return; } if (ri >= N - 1) setRi(0); this.pt = setInterval(() => { const v = (this.state.ri ?? 34) + 1; if (v >= N) { stop(); this.forceUpdate(); } else this.setState({ ri: v }); }, 220); this.forceUpdate(); }
+    };
+  }
+  componentWillUnmount() { clearInterval(this.pt); }
+}
+</script>
+</body>
+</html>
