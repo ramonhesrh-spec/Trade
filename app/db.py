@@ -297,6 +297,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
     # Hier en niet in schema.sql: op een bestaande database met dubbele rijen zou de index het opstarten breken, en een tweede trade per setup is
     # precies de fout die hij moet voorkomen.
     conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_range_sweep_trades_setup ON range_sweep_trades (setup_id)")
+    if "zone_alert_at" not in {row["name"] for row in conn.execute("PRAGMA table_info(smc_setups)")}:
+        conn.execute("ALTER TABLE smc_setups ADD COLUMN zone_alert_at TEXT")
     zone_radar_cols = {row["name"] for row in conn.execute("PRAGMA table_info(zone_radar_setups)")}
     for col in ("ctx_funding", "ctx_oi_change_24h", "ctx_spread"):
         if col not in zone_radar_cols:

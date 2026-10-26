@@ -736,7 +736,7 @@ class ListPagesLayoutTests(BaseShellTests):
 
     def test_signalen_linktabs_en_menu_met_formulier(self):
         self.seed_signal()
-        html = self.client.get("/signalen").text
+        html = self.client.get("/signalen?weergave=open").text
         self.assertIn('class="ph"', html)
         self.assertRegex(html, r'class="ut-tab[^"]*" href="/signalen\?alles=1"')
         menu = html[html.index('class="ut-menu'):]

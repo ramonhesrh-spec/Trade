@@ -1,7 +1,7 @@
 """Overslaan en de order-checklist in de database (fase 2, R1 en R2): per gebruiker, met tijdstip, en nooit zichtbaar voor een ander."""
 import unittest
 
-from app import logbook, repo
+from app import db, logbook, repo
 from tests.test_samenval import DbCase
 
 
@@ -67,6 +67,50 @@ class ChecklistRepoTests(DbCase):
         self.assertFalse(repo.finish_checklist(self.b, "zone:4", "2026-10-25T21:40:00+00:00"))
         self.assertEqual(repo.list_checklist_runs(self.b), [])
         self.assertIsNone(repo.list_checklist_runs(self.a)[0]["done_at"])
+
+
+class PlanLookupTests(DbCase):
+    def zone(self, key="1h:bear:a", coin="BTC"):
+        return repo.insert_zone_radar_setup({"coin": coin, "direction": "short", "tf": "1h", "zone_key": key, "zone_low": 100.0, "zone_high": 101.0,
+                                             "stop_loss": 102.0, "take_profit": 96.0, "rr": 2.0, "atr": 0.5, "target_tf": "4h",
+                                             "target_low": 96.0, "target_high": 97.0}, "2026-10-25T18:00:00+00:00")
+
+    def test_een_zone_radar_sleutel_geeft_plan_en_vulling(self):
+        zid = self.zone()
+        sid = repo.fill_zone_radar_setup(zid, {"coin": "BTC", "direction": "short", "category": "day_trading", "trade_type": "zone_radar",
+                                               "price": 100.0, "stop_loss": 102.0, "take_profit": 96.0, "confidence": "x", "technical_confirmed": 1, "hard_gates_ok": 1})
+        plans = repo.plans_for_keys([f"zone:{zid}", "zone:999", "iets"])
+        self.assertEqual(list(plans), [f"zone:{zid}"])
+        p = plans[f"zone:{zid}"]
+        self.assertEqual((p["coin"], p["direction"], p["created_at"], p["signal_id"]), ("BTC", "short", "2026-10-25T18:00:00+00:00", sid))
+        self.assertIsNotNone(p["zone_at"])                     # bij de zone-radar is in de zone komen de vulling zelf
+
+    def test_een_smc_sleutel_met_het_moment_van_de_zonemelding(self):
+        with db.session() as conn:
+            cur = conn.execute("""INSERT INTO smc_setups (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target,
+                                  created_at, updated_at) VALUES ('ETH', 'long', 99, 100, 101, 98, 106, '2026-10-25T10:00:00+00:00', '2026-10-25T10:00:00+00:00')""")
+            setup_id = cur.lastrowid
+        self.assertIsNone(repo.plans_for_keys([f"setup:{setup_id}"])[f"setup:{setup_id}"]["zone_at"])
+        repo.mark_smc_zone_alert_sent(setup_id)
+        first = repo.plans_for_keys([f"setup:{setup_id}"])[f"setup:{setup_id}"]["zone_at"]
+        self.assertIsNotNone(first)
+        repo.mark_smc_zone_alert_sent(setup_id)                # een tweede keer houdt het eerste moment
+        self.assertEqual(repo.plans_for_keys([f"setup:{setup_id}"])[f"setup:{setup_id}"]["zone_at"], first)
+
+    def test_signalen_op_id_met_de_echte_r_en_zonder_oefentrades(self):
+        sid = self.insert_signal(auto_outcome="take_profit")
+        practice = self.insert_signal(is_practice=1)
+        repo.set_trade_result(sid, 3.4, "2026-10-25T21:00:00+00:00")
+        rows = repo.signals_by_ids([sid, practice, 999])
+        self.assertEqual(list(rows), [sid])
+        self.assertEqual(rows[sid]["r_override"], 3.4)
+
+    def test_plan_momenten_sinds(self):
+        self.zone("1h:bear:a")
+        self.zone("1h:bear:b", "ETH")
+        rows = repo.list_plan_moments("2026-10-25T00:00:00+00:00")
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(repo.list_plan_moments("2026-10-26T00:00:00+00:00"), [])
 
 
 class DurationTests(unittest.TestCase):

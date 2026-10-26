@@ -2461,8 +2461,9 @@ def list_forming_smc_setups() -> list[dict]:
 
 
 def mark_smc_zone_alert_sent(setup_id: int) -> None:
+    """zone_alert_at is het moment dat de koers in de zone kwam (Logboek en replay); een tweede aanroep houdt het eerste moment."""
     with db.session() as conn:
-        conn.execute("UPDATE smc_setups SET zone_alert_sent = 1 WHERE id = ?", (setup_id,))
+        conn.execute("UPDATE smc_setups SET zone_alert_sent = 1, zone_alert_at = COALESCE(zone_alert_at, ?) WHERE id = ?", (db.now_iso(), setup_id))
 
 
 def count_zone_alerted_setups() -> int:
@@ -3320,4 +3321,54 @@ def list_checklist_runs(user_id: int, since_iso: Optional[str] = None) -> list[d
     with db.session() as conn:
         rows = conn.execute("SELECT * FROM checklist_runs WHERE user_id = ? AND (? IS NULL OR opened_at >= ?) ORDER BY opened_at",
                             (user_id, since_iso, since_iso)).fetchall()
+        return [dict(r) for r in rows]
+
+
+# Sleutel -> plan, per soort: zone:<id> (zone_radar_setups, in de zone komen is daar de vulling zelf), setup:<id> (smc_setups, zone_alert_at)
+# en structuur:<id> (structure_setups, fired_at is het raken van de limiet).
+_PLAN_SOURCES = {
+    "zone": "SELECT z.id, z.coin, z.direction, z.created_at, z.signal_id, s.created_at AS zone_at FROM zone_radar_setups z "
+            "LEFT JOIN signals s ON s.id = z.signal_id WHERE z.id IN ({marks})",
+    "setup": "SELECT id, coin, direction, created_at, signal_id, zone_alert_at AS zone_at FROM smc_setups WHERE id IN ({marks})",
+    "structuur": "SELECT id, coin, direction, created_at, signal_id, fired_at AS zone_at FROM structure_setups WHERE id IN ({marks})",
+}
+
+
+def plans_for_keys(keys) -> dict[str, dict]:
+    ids: dict[str, list[int]] = {}
+    for key in set(keys):
+        kind, _, raw = key.partition(":")
+        if kind in _PLAN_SOURCES and raw.isdigit():
+            ids.setdefault(kind, []).append(int(raw))
+    out = {}
+    with db.session() as conn:
+        for kind, wanted in ids.items():
+            for r in conn.execute(_PLAN_SOURCES[kind].format(marks=", ".join("?" for _ in wanted)), wanted).fetchall():
+                out[f"{kind}:{r['id']}"] = {**dict(r), "key": f"{kind}:{r['id']}"}
+    return out
+
+
+def signals_by_ids(ids) -> dict[int, dict]:
+    """Signalen met hun uitkomst en de echte R van een meelopende stop (r_override, zoals track_record.signal_r leest). Geen oefentrades."""
+    wanted = sorted({i for i in ids if i is not None})
+    if not wanted:
+        return {}
+    with db.session() as conn:
+        rows = conn.execute(
+            f"""SELECT s.id, s.coin, s.direction, s.trade_type, s.price, s.stop_loss, s.take_profit, s.created_at, s.auto_outcome,
+                       s.auto_outcome_at, s.is_practice, tr.r_value AS r_override
+                FROM signals s LEFT JOIN trade_results tr ON tr.signal_id = s.id
+                WHERE s.is_practice = 0 AND s.id IN ({", ".join("?" for _ in wanted)})""", wanted).fetchall()
+        return {r["id"]: dict(r) for r in rows}
+
+
+def list_plan_moments(since_iso: str) -> list[dict]:
+    """Wat de app zag: elk Radar-plan (SMC en zone-radar) dat sinds `since_iso` ontstond of in de zone kwam, met beide momenten."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT z.created_at, s.created_at AS zone_at FROM zone_radar_setups z LEFT JOIN signals s ON s.id = z.signal_id
+               WHERE z.created_at >= ? OR s.created_at >= ?
+               UNION ALL
+               SELECT created_at, zone_alert_at AS zone_at FROM smc_setups WHERE created_at >= ? OR zone_alert_at >= ?""",
+            (since_iso, since_iso, since_iso, since_iso)).fetchall()
         return [dict(r) for r in rows]

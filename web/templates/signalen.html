@@ -4,20 +4,48 @@
 {% block page_title %}Logboek{% endblock %}
 {% block content %}
 
-{{ macros.headline("Signalen, nieuwste eerst", entries|length, "signalen" if showing_all else "open") }}
-
+{# Vier linktabs: de dagtijdlijn (ontwerp D, app/logbook.py), de signalenlijst open en alle, en het Journaal op Account (genomen, aangepast,
+   genegeerd, sluiten, terugzetten en de export staan daar en werken daar). #}
 {% set tabs = [
-  {"key": "open", "label": "Open", "href": "/signalen"},
-  {"key": "alle", "label": "Alle", "href": "/signalen?alles=1"}] %}
+  {"key": "dag", "label": "Dag", "href": "/signalen"},
+  {"key": "open", "label": "Open", "href": "/signalen?weergave=open"},
+  {"key": "alle", "label": "Alle", "href": "/signalen?alles=1"},
+  {"key": "journaal", "label": "Journaal", "href": "/account#journaal"}] %}
+
+{% if view == "dag" %}
+{{ macros.utabs(tabs, "dag", "logboek") }}
+{% set today_ = days[0] %}
+<section class="lb" aria-label="Dagtijdlijn">
+  <div class="lb-head">
+    <div class="lb-head-l"><span class="lb-date">{{ today_.date_text }}</span><span class="lb-day">Vandaag</span></div>
+    <div class="lb-head-r"><span class="lb-date">Dag</span><span class="lb-total{% if today_.total_r is not none and today_.total_r > 0 %} pos{% elif today_.total_r is not none and today_.total_r < 0 %} neg{% endif %}">{{ today_.total_text }}</span></div>
+  </div>
+  {% if today_.events %}
+  {{ macros.log_events(today_.events) }}
+  {% else %}
+  <p class="lb-empty">Nog niets vandaag. Zodra je een plan overslaat, een checklist afrondt of een trade sluit, staat het hier.</p>
+  {% endif %}
+
+  {% for d in days[1:] %}
+  <details class="lb-old">
+    <summary><span>{{ d.summary }}</span><span class="lb-chev" aria-hidden="true">›</span></summary>
+    {{ macros.log_events(d.events) }}
+  </details>
+  {% endfor %}
+  <p class="lb-note">R komt uit de uitkomst van het signaal (doel of stop), zonder kosten. Overgeslagen plannen tellen niet mee in het dagtotaal.</p>
+</section>
+
+{% else %}
+{{ macros.headline("Signalen, nieuwste eerst", entries|length, "signalen" if showing_all else "open") }}
 {% if not showing_all and entries %}
-{% call macros.utabs(tabs, "open", "journaal") %}
+{% call macros.utabs(tabs, "open", "logboek") %}
   <form method="post" action="/signalen/verbergen-alles" class="ut-form"
         onsubmit="return confirm('Alle {{ entries|length }} open signalen als niet interessant markeren?');">
     <button type="submit">alles niet interessant</button>
   </form>
 {% endcall %}
 {% else %}
-{{ macros.utabs(tabs, "alle" if showing_all else "open", "journaal") }}
+{{ macros.utabs(tabs, "alle" if showing_all else "open", "logboek") }}
 {% endif %}
 
 <section class="flat">
@@ -31,4 +59,5 @@
   </div>
   {% endif %}
 </section>
+{% endif %}
 {% endblock %}

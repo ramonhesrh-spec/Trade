@@ -620,3 +620,24 @@
 </section>
 {% endif %}
 {% endmacro %}
+
+{# De momenten van één dag in het Logboek (app/logbook.timeline), van laat naar vroeg: tijd, een stip in de kleur van het moment en een kaart.
+   Alleen een gesloten trade kleurt naar zijn uitkomst; de rest is accent (jij deed iets), grijs (overgeslagen) of stil (wat de app zag). #}
+{% macro log_events(events) %}
+<ol class="lb-list">
+  {% for e in events %}
+  <li class="lb-ev is-{{ e.tone }}" data-lb-kind="{{ e.kind }}">
+    <time class="lb-time" datetime="{{ e.at.isoformat() }}">{{ e.time }}</time>
+    <span class="lb-rail" aria-hidden="true"><i></i></span>
+    <div class="lb-card">
+      <div class="lb-row">
+        {% if e.url %}<a class="lb-title" href="{{ e.url }}">{{ e.title }}</a>{% else %}<span class="lb-title">{{ e.title }}</span>{% endif %}
+        {% if e.r_text %}<span class="lb-r">{{ e.r_text }}</span>{% endif %}
+      </div>
+      <span class="lb-sub">{{ e.sub }}</span>
+      {% if e.replay_url %}<a class="lb-replay" href="{{ e.replay_url }}">Bekijk replay <span aria-hidden="true">›</span></a>{% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+{% endmacro %}

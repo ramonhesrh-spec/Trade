@@ -2972,3 +2972,45 @@ body.is-bare .footer, body.is-bare .push-banner { display: none !important; }
 .seg-opt input:checked + span { background: var(--s2); color: var(--tx); font-weight: 600; }
 .seg-opt input:focus-visible + span { outline: 2px solid var(--ac); outline-offset: 1px; }
 .theme-note { margin: var(--space-4) 0 0; font-size: var(--text-base); }
+
+/* ===== Fase 2: Logboek als dagtijdlijn (ontwerp D, app/logbook.py) =====
+   Tijd, stip met lijn, kaart. Alleen de uitkomst van een gesloten trade kleurt; R staat in mono. Oudere dagen zijn een uitklapregel. */
+.lb { display: flex; flex-direction: column; gap: 16px; margin: 0 0 var(--space-12); }
+.lb-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; }
+.lb-head-l, .lb-head-r { display: flex; flex-direction: column; gap: 2px; }
+.lb-head-r { align-items: flex-end; }
+.lb-date { font-size: 13px; color: var(--tx2); }
+.lb-day { font: 600 28px / 1.1 var(--sans); letter-spacing: -0.02em; color: var(--tx); }
+.lb-total { font: 500 28px / 1.1 var(--mono); letter-spacing: -0.02em; color: var(--tx); font-variant-numeric: tabular-nums; }
+.lb-total.pos { color: var(--win); }
+.lb-total.neg { color: var(--loss); }
+.lb-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.lb-ev { display: grid; grid-template-columns: 48px 14px minmax(0, 1fr); gap: 10px; }
+.lb-time { padding-top: 12px; font: 400 13px / 1.3 var(--mono); color: var(--tx2); font-variant-numeric: tabular-nums; }
+.lb-rail { display: flex; flex-direction: column; align-items: center; }
+.lb-rail i { width: 10px; height: 10px; margin-top: 15px; border-radius: 50%; background: var(--bd); flex: none; }
+.lb-rail::after { content: ""; flex: 1; width: 1px; background: var(--bd); }
+.lb-ev:last-child .lb-rail::after { background: transparent; }
+.lb-ev.is-win .lb-rail i { background: var(--win); }
+.lb-ev.is-loss .lb-rail i { background: var(--loss); }
+.lb-ev.is-accent .lb-rail i { background: var(--ac); }
+.lb-ev.is-muted .lb-rail i { background: var(--tx2); }
+.lb-card { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; background: var(--s1); border: 1px solid var(--bd); display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.lb-ev.is-quiet .lb-card { background: transparent; }
+.lb-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.lb-title { font-size: 15px; font-weight: 600; color: var(--tx); text-decoration: none; min-width: 0; overflow-wrap: anywhere; }
+a.lb-title:hover { color: var(--aci); }
+.lb-r { flex: none; font: 500 15px / 1.3 var(--mono); color: var(--tx2); font-variant-numeric: tabular-nums; }
+.lb-ev.is-win .lb-r { color: var(--win); }
+.lb-ev.is-loss .lb-r { color: var(--loss); }
+.lb-sub { font-size: 13px; line-height: 1.4; color: var(--tx2); text-wrap: pretty; }
+.lb-replay { align-self: flex-start; min-height: 44px; margin: -4px 0 -8px; display: flex; align-items: center; font-size: 14px; font-weight: 500; color: var(--aci); text-decoration: none; }
+.lb-empty { margin: 0; padding: 14px 16px; border-radius: 12px; border: 1px dashed var(--bd); font-size: 15px; line-height: 1.5; color: var(--tx2); text-wrap: pretty; }
+.lb-old { border-top: 1px solid var(--bd); }
+.lb-old > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 48px; font-size: 14px; color: var(--tx2); cursor: pointer; }
+.lb-old > summary::-webkit-details-marker { display: none; }
+.lb-old > summary:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; border-radius: 6px; }
+.lb-old[open] > summary .lb-chev { transform: rotate(90deg); }
+.lb-old > .lb-list { padding-bottom: 8px; }
+.lb-chev { font-size: 18px; color: var(--tx2); }
+.lb-note { margin: 4px 0 0; font-size: 12px; line-height: 1.5; color: var(--tx2); }

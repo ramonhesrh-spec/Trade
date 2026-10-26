@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import ceo, chance_checks, freshness, chance_steps, kans_view, market_context, nu, rule_live, trust, zone_radar
+from app import ceo, chance_checks, freshness, chance_steps, kans_view, logbook, market_context, nu, rule_live, trust, zone_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -377,8 +377,25 @@ async def mark_all_meldingen_gelezen(user: dict = Depends(require_login)):
     return RedirectResponse(url="/meldingen", status_code=303)
 
 
+LOGBOOK_DAYS = logbook.DAYS_SHOWN
+
+
+def _logbook_days(user: dict, now: datetime) -> list[dict]:
+    """De dagtijdlijn van deze ene gebruiker (app/logbook.py): zijn overgeslagen plannen, zijn checklists en zijn genomen journaalregels,
+    met de gedeelde plannen en signalen erachter. Een proefsoort die hij niet mag zien valt weg (rule_live.for_viewer)."""
+    since = (now - timedelta(days=LOGBOOK_DAYS + 1)).isoformat()
+    skips = repo.list_plan_skips(user["id"], since)
+    runs = repo.list_checklist_runs(user["id"], since)
+    taken = [e for e in repo.list_journal(user["id"]) if not e["is_practice"] and e["status"] in logbook.TAKEN_STATUSES]
+    plans = repo.plans_for_keys([r["plan_key"] for r in skips + runs])
+    ids = [p["signal_id"] for p in plans.values()] + [e["signal_id"] for e in taken]
+    signals = {s["id"]: s for s in rule_live.for_viewer(list(repo.signals_by_ids(ids).values()), is_ceo(user))}
+    return logbook.timeline(skips=skips, runs=runs, plans=plans, signals=signals, taken=taken, seen=repo.list_plan_moments(since),
+                            now=now, tz=today.LOCAL_TZ)
+
+
 @app.get("/signalen")
-async def signalen_page(request: Request, alles: bool = False, user: dict = Depends(require_login)):
+async def signalen_page(request: Request, alles: bool = False, weergave: str = "", user: dict = Depends(require_login)):
     """Kale, puur signalen-pagina (geen journaal/portfolio-content, zie
     CLAUDE.md 'pure signals'-uitgangspunt van deze taak): dezelfde
     gedeelde signalen als het dashboard, hier chronologisch, nieuwste
@@ -400,7 +417,11 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     aparte open/resolved-scheiding nodig zoals de oude percentage-sortering
     die wel had (die moest voorkomen dat een oud, toevallig hoog percentage
     een vers signaal overstemde; dat risico bestaat niet meer zodra tijd
-    zelf de sorteersleutel is)."""
+    zelf de sorteersleutel is).
+
+    Sinds fase 2 is de standaard de dagtijdlijn (app/logbook.py); de signalenlijst staat onder ?weergave=open en ?alles=1."""
+    if not alles and weergave != "open":
+        return templates.TemplateResponse(request, "signalen.html", {"user": user, "view": "dag", "days": _logbook_days(user, datetime.now(timezone.utc))})
     entries = repo.list_signalen_for_user(user["id"])
     if not alles:
         entries = [e for e in entries if e["auto_outcome"] is None]
@@ -411,7 +432,7 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     _apply_user_confirmed(entries, user["confirm_threshold_pct"], required_factors)
     entries.sort(key=lambda e: e["created_at"], reverse=True)
     return templates.TemplateResponse(request, "signalen.html", {
-        "user": user,
+        "user": user, "view": "alle" if alles else "open",
         "coins": repo.list_coins(),
         "entries": entries,
         "showing_all": alles,
