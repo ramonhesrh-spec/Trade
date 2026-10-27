@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import chain, config, db, risk
+from app import announce, chain, config, db, risk
 
 logger = logging.getLogger(__name__)
 
@@ -3569,3 +3569,43 @@ def list_invites() -> list[dict]:
 def delete_invite(invite_id: int) -> None:
     with db.session() as conn:
         conn.execute("DELETE FROM invites WHERE id = ?", (invite_id,))
+
+
+# ---------------------------------------------------------------------------
+# Aankondiging (app/announce.py)
+# ---------------------------------------------------------------------------
+
+ANNOUNCEMENT_SETTING_KEY = "announcement_at"
+
+
+def get_announcement_at() -> Optional[datetime]:
+    """Het moment uit de settings-tabel; staat het daar niet, dan de startwaarde uit .env. Een gewist moment is een lege waarde in de tabel,
+    zodat .env het daarna niet stilletjes terugzet."""
+    with db.session() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (ANNOUNCEMENT_SETTING_KEY,)).fetchone()
+    return announce.parse_moment(row["value"] if row else config.ANNOUNCEMENT_AT)
+
+
+def set_announcement_at(at: datetime) -> None:
+    db.set_setting(ANNOUNCEMENT_SETTING_KEY, at.astimezone(timezone.utc).isoformat())
+
+
+def clear_announcement_at() -> None:
+    db.set_setting(ANNOUNCEMENT_SETTING_KEY, "")
+
+
+def claim_flag(key: str) -> bool:
+    """True voor precies één aanroeper, ook als twee processen tegelijk claimen: de INSERT slaagt maar één keer (settings.key is uniek)."""
+    with db.session() as conn:
+        cur = conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING", (key, db.now_iso()))
+        return cur.rowcount == 1
+
+
+def story_seen(user_id: int, version: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("SELECT 1 FROM user_flags WHERE user_id = ? AND flag = ?", (user_id, f"story:{version}")).fetchone() is not None
+
+
+def mark_story_seen(user_id: int, version: str) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT OR IGNORE INTO user_flags (user_id, flag, created_at) VALUES (?, ?, ?)", (user_id, f"story:{version}", db.now_iso()))

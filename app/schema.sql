@@ -965,3 +965,11 @@ CREATE TABLE IF NOT EXISTS invites (
     expires_at TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
+
+-- Eenmalige dingen per gebruiker, zoals het "Wat is nieuw"-verhaal van een versie (flag 'story:v3'). Eén rij betekent gedaan.
+CREATE TABLE IF NOT EXISTS user_flags (
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    flag TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, flag)
+);
