@@ -556,6 +556,24 @@ telbare observatie over overgeslagen plannen.
 verloopdatum. Registreren blijft open; zet `REGISTRATION_REQUIRES_INVITE=true` in `.env` om alleen met een geldige code toe te
 laten. Een code kent zijn set toe. Leerlingen zien elkaar of elkaars resultaten nooit.
 
+### Een update aankondigen (/nieuw)
+
+`/nieuw` is openbaar en deelbaar (Discord, WhatsApp; linkvoorbeeld `web/static/og/nieuw.png`, opnieuw maken met
+`python3 scripts/make_og.py`). Vóór het gekozen moment telt hij af, daarna toont hij wat er live is met een knop naar HesPulse.
+Na het moment ziet elke ingelogde gebruiker één keer het verhaal "Wat is nieuw" (zes kaarten; opnieuw te openen via het initiaal),
+en gaat er in de snelle cyclus (`crypto-market-scan-smc.timer`) precies één pushmelding uit naar iedereen met een abonnement
+(pauze telt, binnen stille uren stil). Het moment staat in de database, dus geen herstart nodig:
+
+```bash
+python3 scripts/aankondiging.py --zet 2026-11-02T18:00   # Amsterdamse tijd
+python3 scripts/aankondiging.py --toon
+python3 scripts/aankondiging.py --test-push              # alleen naar de eigenaar
+python3 scripts/aankondiging.py --wis
+```
+
+`ANNOUNCEMENT_AT` in `.env` is alleen een startwaarde. Het verhaal en de push horen bij `announce.STORY_VERSION`: een tijd verzetten
+geeft niemand iets twee keer; een volgende update met nieuwe kaarten krijgt een nieuwe versie.
+
 ### App op het beginscherm (PWA)
 
 HesPulse is te installeren als app (`web/static/manifest.json`, `service-worker.js`, `pwa.js`, `install.js`). De app start op
