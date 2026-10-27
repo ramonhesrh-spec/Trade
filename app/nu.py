@@ -7,7 +7,7 @@ Trade: alleen een open trade; die staat er met zijn live R zoals op de Radar."""
 import re
 from typing import Iterable, Optional
 
-from app import chance_steps, radar
+from app import chance_steps, ladder, radar
 
 TRADE_TYPE_ZONE = "zone_radar"          # zelfde waarde als zone_radar.TRADE_TYPE; niet importeren houdt dit bestand los van pandas
 TRADE_TYPE_SWEEP = "zone_sweep"         # zelfde waarde als zone_sweep.TRADE_TYPE
@@ -42,8 +42,12 @@ def plan_rows(direction: str, entry: float, stop: float, targets: list[tuple[flo
 
 def plan_item(key: str, coin: str, direction: str, limit: float, stop: float, targets: list[tuple[float, float]], *, price: Optional[float],
               state: Optional[str], distance_pct: Optional[float] = None, approach_pct: Optional[float] = None, action: str = "",
-              trade_type: str = "smc", untested: bool = False) -> dict:
-    return {"kind": "plan", "key": key, "coin": coin, "direction": direction, "dir_word": DIR_WORD.get(direction, direction),
+              trade_type: str = "smc", untested: bool = False, zone_low: Optional[float] = None, zone_high: Optional[float] = None,
+              chart: Optional[dict] = None, origin: str = "") -> dict:
+    # De ladder (app/ladder.py) tekent dezelfde getallen; de afstand erop blijft distance_pct van de kaart.
+    return {"kind": "plan", "zone_low": zone_low, "zone_high": zone_high, "chart": chart, "origin": origin,
+            "ladder": ladder.build(direction, stop, limit, targets, price, zone_low, zone_high),
+            "ladder_compact": ladder.build(direction, stop, limit, targets, price, zone_low, zone_high, compact=True), "key": key, "coin": coin, "direction": direction, "dir_word": DIR_WORD.get(direction, direction),
             "limit": limit, "limit_text": nl(limit), "stop": stop, "targets": targets, "price": price, "price_text": nl(price) if price else "",
             "state": state, "distance_pct": distance_pct, "distance_text": pct_nl(distance_pct) if distance_pct is not None else "",
             "approach_pct": approach_pct, "action": action, "trade_type": trade_type, "untested": untested,
@@ -55,9 +59,11 @@ def _from_setup(c: dict) -> dict:
     untested = source in UNTESTED_SOURCES
     p = c["plan"]
     # Een plan zonder doel (zone-sweep) heeft alleen instap en stop: het doel kies je zelf.
+    setup = c.get("setup") or {}
     return plan_item(c["key"], c["coin"], c["direction"], p.limit, p.stop, [(p.take, p.rr)] if p.take is not None else [], price=c["price"],
                      state=c["state"], distance_pct=c["distance_pct"], approach_pct=c["approach_pct"], action=c["action"],
-                     trade_type=source if untested else "smc", untested=untested)
+                     trade_type=source if untested else "smc", untested=untested, zone_low=setup.get("zone_low"), zone_high=setup.get("zone_high"),
+                     chart=c.get("chart"), origin=((setup.get("chart_zone") or {}).get("label") or ""))
 
 
 def _from_signal(c: dict) -> dict:
@@ -67,7 +73,8 @@ def _from_signal(c: dict) -> dict:
             "entry": s["price"], "price": c["price"], "price_text": nl(c["price"]) if c["price"] else "", "action": c["action"],
             "live_r": r, "live_r_text": r_nl(r) if r is not None else "", "trade_type": s.get("trade_type") or "smc",
             "untested": s.get("trade_type") in UNTESTED_SOURCES, "created_at": c["created_at"], "url": f"/kans/{s['id']}",
-            "rows": plan_rows(c["direction"], s["price"], s["stop_loss"], [(s["take_profit"], c["rr"])])}
+            "rows": plan_rows(c["direction"], s["price"], s["stop_loss"], [(s["take_profit"], c["rr"])]), "chart": c.get("chart"),
+            "ladder": ladder.build(c["direction"], s["stop_loss"], s["price"], [(s["take_profit"], c["rr"])], c["price"], trade=True)}
 
 
 def screen(cards: list[dict], skipped: Iterable[str] = (), prefer: Optional[str] = None) -> dict:

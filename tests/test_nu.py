@@ -153,3 +153,32 @@ class ChecklistTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class LadderItemTests(unittest.TestCase):
+    """V3: elk item op Nu draagt zijn ladder (app/ladder.py) met de getallen die de kaart al had; er wordt niets opnieuw berekend."""
+    def test_een_plan_in_de_zone_heeft_een_volle_ladder_met_zone(self):
+        f = nu.screen([setup(SHORT, 80800.0)])["focus"]
+        lad = f["ladder"]
+        self.assertEqual([ln["name"] for ln in lad["lines"]], ["Stop", "Instap", "Doel"])
+        self.assertEqual((lad["zone"]["low"], lad["zone"]["high"]), (80774.8, 80900.0))
+        self.assertTrue(lad["in_zone"])
+        self.assertEqual(f["zone_low"], 80774.8)
+
+    def test_het_eerstvolgende_plan_heeft_een_uitgezoomde_ladder(self):
+        near = nu.screen([setup(SHORT, 80537.0)])["nearest"]
+        self.assertTrue(near["ladder_compact"]["compact"])
+        self.assertEqual([ln["name"] for ln in near["ladder_compact"]["lines"]], ["Instap"])
+        self.assertEqual(near["ladder_compact"]["price"]["text"], "80537,00")
+
+    def test_herkomst_is_een_regel_uit_de_zone(self):
+        row = {**SHORT, "tf": "4h", "chart_zone": {"label": "Aanbodzone 4u", "tf": "4h"}}
+        f = nu.screen([setup(row, 80800.0)])["focus"]
+        self.assertEqual(f["origin"], "Aanbodzone 4u")
+        self.assertEqual(nu.screen([setup(LONG, 99.5)])["focus"]["origin"], "")
+
+    def test_een_open_trade_heeft_een_ladder_zonder_zone(self):
+        f = nu.screen([radar.signal_card(TRADE, 98.0)])["focus"]
+        self.assertIsNone(f["ladder"]["zone"])
+        self.assertTrue(f["ladder"]["trade"])
+        self.assertEqual(f["chart"]["entry"], 100.0)
