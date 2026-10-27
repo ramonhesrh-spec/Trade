@@ -10,8 +10,10 @@ from typing import Iterable, Optional
 from app import chance_steps, radar
 
 TRADE_TYPE_ZONE = "zone_radar"          # zelfde waarde als zone_radar.TRADE_TYPE; niet importeren houdt dit bestand los van pandas
+TRADE_TYPE_SWEEP = "zone_sweep"         # zelfde waarde als zone_sweep.TRADE_TYPE
+UNTESTED_SOURCES = (TRADE_TYPE_ZONE, TRADE_TYPE_SWEEP)
 MAX_SKIP = 20
-SKIP_KEY = re.compile(r"^(zone|setup|signal|structuur):\d+$")
+SKIP_KEY = re.compile(r"^(zone|zsweep|setup|signal|structuur):\d+$")
 DIR_WORD = {"long": "Long", "short": "Short"}
 
 
@@ -49,11 +51,13 @@ def plan_item(key: str, coin: str, direction: str, limit: float, stop: float, ta
 
 
 def _from_setup(c: dict) -> dict:
-    zone = (c.get("setup") or {}).get("source") == TRADE_TYPE_ZONE
+    source = (c.get("setup") or {}).get("source")
+    untested = source in UNTESTED_SOURCES
     p = c["plan"]
-    return plan_item(c["key"], c["coin"], c["direction"], p.limit, p.stop, [(p.take, p.rr)], price=c["price"], state=c["state"],
-                     distance_pct=c["distance_pct"], approach_pct=c["approach_pct"], action=c["action"],
-                     trade_type=TRADE_TYPE_ZONE if zone else "smc", untested=zone)
+    # Een plan zonder doel (zone-sweep) heeft alleen instap en stop: het doel kies je zelf.
+    return plan_item(c["key"], c["coin"], c["direction"], p.limit, p.stop, [(p.take, p.rr)] if p.take is not None else [], price=c["price"],
+                     state=c["state"], distance_pct=c["distance_pct"], approach_pct=c["approach_pct"], action=c["action"],
+                     trade_type=source if untested else "smc", untested=untested)
 
 
 def _from_signal(c: dict) -> dict:
@@ -62,7 +66,7 @@ def _from_signal(c: dict) -> dict:
     return {"kind": "trade", "key": c["key"], "coin": c["coin"], "direction": c["direction"], "dir_word": DIR_WORD.get(c["direction"], c["direction"]),
             "entry": s["price"], "price": c["price"], "price_text": nl(c["price"]) if c["price"] else "", "action": c["action"],
             "live_r": r, "live_r_text": r_nl(r) if r is not None else "", "trade_type": s.get("trade_type") or "smc",
-            "untested": s.get("trade_type") == TRADE_TYPE_ZONE, "created_at": c["created_at"], "url": f"/kans/{s['id']}",
+            "untested": s.get("trade_type") in UNTESTED_SOURCES, "created_at": c["created_at"], "url": f"/kans/{s['id']}",
             "rows": plan_rows(c["direction"], s["price"], s["stop_loss"], [(s["take_profit"], c["rr"])])}
 
 
@@ -115,18 +119,19 @@ def checklist(item: dict) -> list[dict]:
     positiegrootte zit bewust niet in HesPulse."""
     targets = item["targets"]
     many = len(targets) > 1
-    first_t, first_r = targets[0]
     choices = [{"label": f"Doel {i} · {r:.1f} R".replace(".", ","), "text": nl(t), "copy": chance_steps.fmt(t)} for i, (t, r) in enumerate(targets, 1)] if many else []
-    goal_sub = "Kies een doel, de rest kun je later bijzetten." if many else f"{first_r:.1f} R vanaf je instap.".replace(".", ",", 1)
+    goal_sub = "Kies een doel, de rest kun je later bijzetten." if many else f"{targets[0][1]:.1f} R vanaf je instap.".replace(".", ",", 1) if targets else ""
 
     def step(n, title, sub, value=None, tone=""):
         return {"n": n, "title": title, "sub": sub, "value": value, "text": nl(value) if value is not None else "",
                 "copy": chance_steps.fmt(value) if value is not None else "", "tone": tone, "choices": []}
 
-    return [step(1, f"Open {item['coin']} bij je beurs", f"Kies {item['dir_word']} en Limit in het orderformulier."),
-            step(2, "Limietprijs", "Plak in het prijsveld.", item["limit"]),
-            step(3, "Stop", "Zet hem meteen mee, niet later.", item["stop"], "loss"),
-            {**step(4, "Doel", goal_sub, first_t, "win"), "choices": choices}]
+    first = [step(1, f"Open {item['coin']} bij je beurs", f"Kies {item['dir_word']} en Limit in het orderformulier."),
+             step(2, "Limietprijs", "Plak in het prijsveld.", item["limit"]),
+             step(3, "Stop", "Zet hem meteen mee, niet later.", item["stop"], "loss")]
+    if not targets:
+        return first + [step(4, "Doel", "Geen doel van HesPulse: dat kies je zelf.")]
+    return first + [{**step(4, "Doel", goal_sub, targets[0][0], "win"), "choices": choices}]
 
 
 def price_note(item: Optional[dict]) -> str:

@@ -50,6 +50,8 @@
 <p class="muted reason-legend">Autonoom gedetecteerd door HesPulse, zonder doorgestuurd bericht. De vinkjes hieronder zijn de gepoolde factoren die deze kans ondersteunen of tegenspreken; het percentage hierboven combineert dat met de historische winrate van dit type.</p>
 {% elif entry.trade_type in ("structuur", "structuur_c", "trend", "rejectie", "script", "smc_waarschuwing") %}
 <p class="muted reason-legend">Elk vinkje is een kenmerk dat bij het melden gemeten is. Het percentage telt hoeveel er kloppen. Het is nog niet bewezen dat een hoge score vaker wint: Bewijs meet dat per soort.</p>
+{% elif entry.trade_type == "zone_sweep" %}
+<p class="muted reason-legend">Gemeten bij het ontstaan: hoe diep de prik door de zone ging en hoe snel de koers terugsloot. Ongetest: de labrun volgt later, Bewijs toont de score.</p>
 {% elif entry.trade_type == "smc" %}
 <p class="muted reason-legend">Structuurbreuk, liquidity sweep en een terugtrek-zone hieronder zijn de feitelijke onderbouwing — geen los gemeten technische factoren zoals bij day-trading.</p>
 {% else %}
@@ -152,8 +154,8 @@
     {% elif entry.trade_type == "smc" %}
     <span class="badge badge-swing" title="Autonoom herkend door HesPulse: structuurbreuk + liquidity sweep op 30m, afwijzing in de terugtrek-zone op 15m — geen gepoold percentage">SMC</span>
     {% endif %}
-    {# Een range sweep heeft geen doel: de uitkomst is de referentie-uitgang en leest nooit als een geraakt doel. #}
-    {% if entry.trade_type == "range_sweep" and entry.auto_outcome in ("take_profit", "stop_loss") %}
+    {# Een range sweep (en een zone-sweep zonder doel) heeft geen doel: de uitkomst is de referentie-uitgang en leest nooit als een geraakt doel. #}
+    {% if (entry.trade_type == "range_sweep" or (entry.trade_type == "zone_sweep" and entry.take_profit is none)) and entry.auto_outcome in ("take_profit", "stop_loss") %}
     <span class="badge {{ 'badge-outcome-win' if entry.auto_outcome == 'take_profit' else 'badge-outcome-loss' }}" title="Uitgang volgens de referentie (meelopende stop), geen doel">referentie {{ ('%+.2f'|format(entry.ref_r))|replace('.', ',') if entry.ref_r is defined and entry.ref_r is not none else '' }}R</span>
     {% elif entry.auto_outcome == "take_profit" %}<span class="badge badge-outcome-win">✓ take profit</span>
     {% elif entry.auto_outcome == "stop_loss" %}<span class="badge badge-outcome-loss">✗ stop loss</span>
@@ -264,7 +266,7 @@
 <figure class="lc {{ extra_class }}">
   <div class="level-chart" data-levelchart='{{ chart|tojson }}' data-coin="{{ coin }}" data-tf="{{ tf }}" data-caption="Candles van {{ {'5m': '5 minuten', '15m': '15 minuten', '1h': '1 uur', '4h': '4 uur'}.get(tf, tf) }} · jouw tijd" role="img" aria-label="{{ chart.label }}"></div>
   <figcaption class="lc-foot">
-    <span class="lc-legend"><span class="lc-key is-risk">Rood vlak: risico tot je stop</span><span class="lc-key is-reward">Groen vlak: winst tot je doel</span>{% if chart.zone_low is defined and chart.zone_low is not none %}<span class="lc-key is-zone">Band: de zone</span>{% endif %}</span>
+    <span class="lc-legend"><span class="lc-key is-risk">Rood vlak: risico tot je stop</span>{% if chart.take is not none %}<span class="lc-key is-reward">Groen vlak: winst tot je doel</span>{% endif %}{% if chart.zone_low is defined and chart.zone_low is not none %}<span class="lc-key is-zone">Band: de zone</span>{% endif %}</span>
     <button type="button" class="lc-expand" data-lc-expand aria-label="Grafiek van {{ coin }} groot openen, op het tijdframe van het niveau"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><span>Groot</span></button>
   </figcaption>
 </figure>

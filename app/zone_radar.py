@@ -20,7 +20,7 @@ from app.replay.lab import add_indicators
 TRADE_TYPE = "zone_radar"
 LABEL = "Zone-radar"
 TFS = ("1h", "4h")
-TF_TEXT = {"1h": "1u", "4h": "4u"}
+TF_TEXT = {"1h": "1u", "2h": "2u", "4h": "4u"}
 # Vooraf gekozen, niet gemeten: 6% is wat een altcoin op een gewone dag of twee aflegt. Een zone verder weg is een kaart die dagen wacht en de
 # Radar vult met plannen waar niemand vandaag iets mee doet; dichterbij dan dit is de zone een order die je nu kunt zetten.
 MAX_DISTANCE_PCT = 6.0
@@ -64,23 +64,19 @@ def _distance_pct(direction: str, z: ZoneLevel, price: float) -> float:
 def plan_for(direction: str, zones: list[ZoneLevel], price: float) -> Optional[dict]:
     """Het plan voor de dichtstbijzijnde eigen zone, of None. Alleen die ene zone telt: valt hij af op het doel of de 2R, dan wordt er niet
     naar een verdere zone gezocht die wel past, anders kiest de code net zo lang tot er een kaart uitkomt."""
-    own_kind, opp_kind = ("bull", "bear") if direction == "long" else ("bear", "bull")
+    own_kind = "bull" if direction == "long" else "bear"
     own = [z for z in zones if z.kind == own_kind and 0 < _distance_pct(direction, z, price) <= MAX_DISTANCE_PCT]
     if not own:
         return None
     zone = min(own, key=lambda z: (_distance_pct(direction, z, price), TFS.index(z.tf)))
     if direction == "long":
         limit, raw_stop = zone.high, zone.low - STOP_ATR * zone.atr
-        targets = [z for z in zones if z.kind == opp_kind and z.low > price]
-        target = min(targets, key=lambda z: z.low) if targets else None
-        take = target.low if target else None
     else:
         limit, raw_stop = zone.low, zone.high + STOP_ATR * zone.atr
-        targets = [z for z in zones if z.kind == opp_kind and z.high < price]
-        target = max(targets, key=lambda z: z.high) if targets else None
-        take = target.high if target else None
+    target = target_for(direction, zones, price)
     if target is None:
         return None
+    take = target_edge(direction, target)
     stop = smc_eval.floor_stop(direction, limit, raw_stop)
     plan = tp.limit_plan(direction, zone.low, zone.high, stop, take)
     if plan is None or plan.rr < MIN_RR:
@@ -92,6 +88,20 @@ def plan_for(direction: str, zones: list[ZoneLevel], price: float) -> Optional[d
             "limit": limit, "stop_loss": stop, "take_profit": take, "rr": plan.rr, "atr": zone.atr,
             "target_tf": target.tf, "target_low": target.low, "target_high": target.high,
             "distance_pct": _distance_pct(direction, zone, price)}
+
+
+def target_for(direction: str, zones: list[ZoneLevel], price: float) -> Optional[ZoneLevel]:
+    """De eerstvolgende tegenovergestelde zone voorbij `price`: de laagste aanbodzone boven de koers (long), de hoogste vraagzone eronder (short)."""
+    if direction == "long":
+        targets = [z for z in zones if z.kind == "bear" and z.low > price]
+        return min(targets, key=lambda z: z.low) if targets else None
+    targets = [z for z in zones if z.kind == "bull" and z.high < price]
+    return max(targets, key=lambda z: z.high) if targets else None
+
+
+def target_edge(direction: str, target: ZoneLevel) -> float:
+    """Het doel is de rand die de koers als eerste raakt."""
+    return target.low if direction == "long" else target.high
 
 
 def plans(zones: list[ZoneLevel], price: float) -> list[dict]:
@@ -118,10 +128,11 @@ def target_text(direction: str, tf: str) -> str:
     return f"{'aanbodzone' if direction == 'long' else 'vraagzone'} {TF_TEXT.get(tf, tf)}"
 
 
-def zone_origin(zone_key: str) -> Optional[tuple[str, str, int]]:
-    """(tf, soort, openmoment in unix-seconden) uit de sleutel van ZoneLevel, of None als hij niet zo te lezen is."""
+def zone_origin(zone_key: str, tfs: tuple[str, ...] = TFS) -> Optional[tuple[str, str, int]]:
+    """(tf, soort, openmoment in unix-seconden) uit de sleutel van ZoneLevel, of None als hij niet zo te lezen is. `tfs`: de timeframes die de
+    aanroeper kent (de zone-sweep heeft ook 2u)."""
     parts = str(zone_key or "").split(":", 2)
-    if len(parts) != 3 or parts[0] not in TFS or parts[1] not in ("bull", "bear"):
+    if len(parts) != 3 or parts[0] not in tfs or parts[1] not in ("bull", "bear"):
         return None
     try:
         ts = pd.Timestamp(parts[2])
@@ -134,12 +145,16 @@ def zone_origin(zone_key: str) -> Optional[tuple[str, str, int]]:
     return parts[0], parts[1], int(ts.timestamp())
 
 
-def chart_zone(row: dict) -> Optional[dict]:
+# Wat de schermvullende grafiek als keuze heeft (web/static/levelchart.js, FULL_TFS). Een zone op een ander tijdframe (2u) opent op 1u.
+CHART_TFS = ("15m", "1h", "4h")
+
+
+def chart_zone(row: dict, tfs: tuple[str, ...] = TFS) -> Optional[dict]:
     """Wat de schermvullende grafiek over deze zone tekent en zegt: het tijdframe waarop hij ontstond, het openmoment van de order block-candle
     (None als de sleutel dat niet geeft), de doelzone en de uitleg in gewone taal. De uitleg zegt alleen wat find_zones eist."""
-    origin = zone_origin(row.get("zone_key", ""))
+    origin = zone_origin(row.get("zone_key", ""), tfs)
     tf = origin[0] if origin else row.get("tf")
-    if tf not in TFS:
+    if tf not in tfs:
         return None
     direction = row["direction"]
     tf_text = TF_TEXT[tf]
@@ -149,12 +164,14 @@ def chart_zone(row: dict) -> Optional[dict]:
     else:
         note = (f"De zone ontstond hier: na deze stijgende {tf_text}-candle ging de koers sterk omlaag, binnen {rs.DISP_BARS} candles een slot "
                 f"minstens {rs.DISP_ATR:g} ATR onder de bodem ervan. Het vlak is het bereik van die candle.")
-    has_target = row.get("target_low") is not None and row.get("target_high") is not None and row.get("target_tf") in TFS
+    has_target = row.get("target_low") is not None and row.get("target_high") is not None and row.get("target_tf") in tfs
+    other_tf = (f"De markering staat op de plek van de {tf_text}-candle waar de zone ontstond. Kies {tf_text} om die candle zelf te zien."
+                if tf in CHART_TFS else f"De markering staat op de plek van de {tf_text}-candle waar de zone ontstond; {tf_text} staat niet in de keuze.")
     return {
         "tf": tf, "kind": "bull" if direction == "long" else "bear", "label": zone_text(direction, tf),
         "origin": origin[2] if origin else None,
         "note": note if origin else None,
-        "note_other_tf": f"De markering staat op de plek van de {tf_text}-candle waar de zone ontstond. Kies {tf_text} om die candle zelf te zien.",
+        "note_other_tf": other_tf,
         "note_outside": "De zone ontstond voor de eerste candle van deze grafiek. Kies een hoger tijdframe om te zien waar.",
         "target_low": row["target_low"] if has_target else None, "target_high": row["target_high"] if has_target else None,
         "target_label": f"Doelzone {TF_TEXT[row['target_tf']]}" if has_target else None,

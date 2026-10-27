@@ -461,10 +461,11 @@
     }
     legend.appendChild(legendItem("is-line-entry", "Instap"));
     legend.appendChild(legendItem("is-line-stop", "Stop"));
-    legend.appendChild(legendItem("is-line-take", "Doel"));
+    // Een plan zonder doel (zone-sweep) heeft geen doellijn en geen winstvlak: dan ook niet in de legenda.
+    if (num(s.take)) legend.appendChild(legendItem("is-line-take", "Doel"));
     legend.appendChild(legendItem("is-line-now", "Nu"));
     legend.appendChild(legendItem("is-risk", "Risico"));
-    legend.appendChild(legendItem("is-reward", "Winst"));
+    if (num(s.take)) legend.appendChild(legendItem("is-reward", "Winst"));
     foot.appendChild(note);
     foot.appendChild(legend);
     dlg.appendChild(head);

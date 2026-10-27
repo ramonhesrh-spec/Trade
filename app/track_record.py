@@ -31,6 +31,7 @@ TYPE_LABELS = {
     "don55_trend": "Trend 4u met meelopende stop",
     "range_sweep": "Range sweep (ongetest)",
     "zone_radar": "Zone-radar (ongetest)",
+    "zone_sweep": "Zone-sweep (ongetest)",
 }
 # Leesbare namen voor de labvarianten (sleutel: Variant.name.lower()); alleen de CEO ziet ze. Onbekend: de ruwe naam.
 LAB_LABELS = {

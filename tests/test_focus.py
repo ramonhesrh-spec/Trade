@@ -6,10 +6,10 @@ from app import config, focus
 
 class FocusTypesTest(unittest.TestCase):
     def test_focus_types_are_the_three_live_kinds(self):
-        self.assertEqual(focus.FOCUS_TYPES, ("structuur", "structuur_c", "zone_radar"))
+        self.assertEqual(focus.FOCUS_TYPES, ("structuur", "structuur_c", "zone_radar", "zone_sweep"))
 
     def test_is_focus(self):
-        for t in ("structuur", "structuur_c", "zone_radar"):
+        for t in ("structuur", "structuur_c", "zone_radar", "zone_sweep"):
             self.assertTrue(focus.is_focus(t))
         for t in ("day_trading", "patroon", "trend", "rejectie", "script", "smc", "smc_waarschuwing", "swing",
                   "range_sweep", "range_watch", "don55_trend", "samenval", None, ""):

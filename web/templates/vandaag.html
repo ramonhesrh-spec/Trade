@@ -56,7 +56,7 @@
       {% endfor %}
     </dl>
     <p class="nu-meta">
-      <span>{{ "Zone-radar" if f.trade_type == "zone_radar" else "SMC" if f.trade_type == "smc" else f.trade_type }} · limietplan</span>
+      <span>{{ {"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "smc": "SMC"}.get(f.trade_type, f.trade_type) }} · limietplan</span>
       {% if f.untested %}<span class="kind-tag is-untested">ongetest</span>{% else %}{{ macros.proof_tag(f.trade_type, f.key|replace(':', '-')) }}{% endif %}
     </p>
     <div class="nu-actions">

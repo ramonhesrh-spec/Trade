@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import ceo, chance_checks, focus, freshness, chance_steps, kans_view, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar
+from app import ceo, chance_checks, focus, freshness, chance_steps, kans_view, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -84,7 +84,7 @@ def _nav_context(request: Request) -> dict:
     pagina's (Vandaag, Setups, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
     # Alleen de koersen uit de cache: het menu mag geen Binance-aanroep per paginaweergave doen. Zonder koers telt een setup mee.
     cached = {coin: hit[1] for coin, hit in _price_cache.items() if hit[1]}
-    forming = _forming_setups()
+    forming = _forming_setups(_cookie_user(request))
     radar_count = radar.waiting_count(forming, cached)
     now = datetime.now(timezone.utc)
     setups = sum(1 for r in repo.list_structure_setups(("waiting",), 50)
@@ -123,6 +123,10 @@ def coin_logo(coin: str | None) -> dict | None:
 
 
 _proof_cache = {"at": 0.0, "map": {}, "labs": {}, "rows": []}
+# Proeven die om de stopkwaliteit draaien: hun strenge toets op een voordeel mag Negatief niet veroorzaken (track_record.rule_status, stop_lab=).
+STOP_LAB_KEYS = {"range_sweep": "range_sweep_stop", "zone_sweep": "zone_sweep_stop"}
+# De labrijen van de zone-sweep die bij de live motor horen: op Bewijs onder de motor, niet als "regel zonder live motor".
+ZONE_SWEEP_LAB_KEYS = ("zone_sweep_stop", "zs_1h", "zs_2h", "zs_4h")
 
 
 def proof(trade_type: str) -> dict:
@@ -141,7 +145,7 @@ def proof(trade_type: str) -> dict:
     if trade_type in rule_live.CEO_ONLY_TYPES or trade_type in labs:
         # Eén betekenis van Bewezen: voor een regel met een labtoets dezelfde status als op Bewijs (labtoets, 50 live trades, bewaking).
         # De range sweep draait om de stopkwaliteit: zijn strenge toets op een voordeel mag Negatief niet veroorzaken (track_record.rule_status).
-        stop_lab = labs.get("range_sweep_stop") if trade_type == rule_live.RANGE_SWEEP else None
+        stop_lab = labs.get(STOP_LAB_KEYS[trade_type]) if trade_type in STOP_LAB_KEYS else None
         return track_record.rule_proof(labs.get(trade_type), track_record.live_net_r(_proof_cache["rows"], trade_type, config.TRACK_RECORD_COST_PCT), stop_lab=stop_lab)
     return trust.status(_proof_cache["map"].get(trade_type))
 
@@ -395,7 +399,7 @@ def _logbook_inputs(user: dict, since: str) -> dict:
 
 def _logbook_days(user: dict, now: datetime) -> list[dict]:
     since = (now - timedelta(days=LOGBOOK_DAYS + 1)).isoformat()
-    return logbook.timeline(**_logbook_inputs(user, since), seen=repo.list_plan_moments(since), now=now, tz=today.LOCAL_TZ)
+    return logbook.timeline(**_logbook_inputs(user, since), seen=repo.list_plan_moments(since, include_zone_sweep=_sees_zone_sweep(user)), now=now, tz=today.LOCAL_TZ)
 
 
 def _week_review(user: dict, now: datetime) -> dict:
@@ -540,11 +544,21 @@ def _with_preview(setup: dict) -> dict:
     return setup
 
 
-def _forming_setups() -> list[dict]:
-    """Wat de Radar als wachtende kaart toont: bouwende SMC-setups en wachtende zone-radar-kaarten, in de vorm die radar.setup_card leest.
+def _sees_zone_sweep(user: Optional[dict]) -> bool:
+    """De zone-sweep is voor iedereen tot ZONE_SWEEP_PUBLIC uit staat; dan alleen de CEO (rule_live.CEO_ONLY_TYPES, dezelfde bron als voor de signalen).
+    Zonder kijker (een aanroep zonder gebruiker) alleen als hij openbaar is."""
+    return rule_live.ZONE_SWEEP not in rule_live.CEO_ONLY_TYPES or is_ceo(user)
+
+
+def _forming_setups(user: Optional[dict] = None) -> list[dict]:
+    """Wat de Radar als wachtende kaart toont: bouwende SMC-setups, wachtende zone-radar-kaarten en, als de kijker hem mag zien, wachtende
+    zone-sweep-kaarten, in de vorm die radar.setup_card leest.
     Met focus geen SMC-setups: die motor zoekt niets nieuws en maakt er geen signaal meer van. Hier gefilterd, zodat Radar, Nu, het dok en het appicoon gelijk tellen."""
     smc = [_with_preview(s) for s in repo.list_forming_smc_setups()] if focus.engine_on("smc") else []
-    return smc + [zone_radar.radar_setup(r) for r in repo.list_zone_radar_setups()]
+    rows = smc + [zone_radar.radar_setup(r) for r in repo.list_zone_radar_setups()]
+    if _sees_zone_sweep(user):
+        rows += [zone_sweep.radar_setup(r) for r in repo.list_zone_sweep_setups()]
+    return rows
 
 
 def _context_lines(coins) -> dict[str, list[dict]]:
@@ -555,9 +569,10 @@ def _context_lines(coins) -> dict[str, list[dict]]:
     return {c: market_context.coin_lines(latest.get(c, {}), now) for c in coins}
 
 
-async def _radar_cards() -> list[dict]:
-    forming = _forming_setups()
-    open_signals = repo.list_open_smc_signals(types=("smc", zone_radar.TRADE_TYPE))
+async def _radar_cards(user: Optional[dict] = None) -> list[dict]:
+    forming = _forming_setups(user)
+    types = ("smc", zone_radar.TRADE_TYPE) + ((zone_sweep.TRADE_TYPE,) if _sees_zone_sweep(user) else ())
+    open_signals = repo.list_open_smc_signals(types=types)
     prices = await _cached_prices([s["coin"] for s in forming] + [s["coin"] for s in open_signals])
     cards = [c for s in forming if (c := radar.setup_card(s, prices.get(s["coin"])))]
     cards += [c for s in open_signals if (c := radar.signal_card(s, prices.get(s["coin"])))]
@@ -681,8 +696,8 @@ async def smc_page(request: Request, user: dict = Depends(require_login)):
     """Trade Radar: bouwende setups en open SMC-signalen als handelsplan met candlegrafiek en live status (de limietorder
     staat op de zone-rand, zie app/trade_plan.py), daaronder de afgeronde signalen in dezelfde stijl als /signalen.
     Afgeronde signalen verschijnen ook op /signalen en het dashboard: deze pagina is een extra, gerichte weergave."""
-    cards = await _radar_cards()
-    entries = [e for e in repo.list_signalen_for_user(user["id"]) if e["trade_type"] in ("smc", zone_radar.TRADE_TYPE)]
+    cards = await _radar_cards(user)
+    entries = [e for e in repo.list_signalen_for_user(user["id"]) if e["trade_type"] in ("smc", zone_radar.TRADE_TYPE, zone_sweep.TRADE_TYPE)]
     winrate = repo.winrate_stats(user["id"])
     pattern_winrate = repo.pattern_winrate_stats()
     entries = _add_signal_context(entries, winrate, pattern_winrate)
@@ -709,7 +724,7 @@ async def _open_chances(user: dict, structure_cards: list[dict], scripts: list[d
     signals = [g for t in today.SIGNAL_LABELS for g in repo.list_recent_signals_of_type(t, since) if not g["is_practice"]]
     signals = rule_live.for_viewer(signals, is_ceo(user))
     prices = {**prices, **await _cached_prices({g["coin"] for g in signals} - prices.keys())}
-    cards = radar_cards if radar_cards is not None else await _radar_cards()
+    cards = radar_cards if radar_cards is not None else await _radar_cards(user)
     # Een wachtend scenario is een nieuwe kans; een gevuld script-signaal staat hierboven bij de open signalen en blijft.
     scripts = scripts if focus.engine_on("script") else []
     return today.open_chances(structure_cards, scripts, cards, signals, prices, now, range_cards=await _range_sweep_cards(user))
@@ -730,13 +745,13 @@ async def _vandaag_context(user: dict) -> dict:
         at = datetime.fromisoformat(e["at"])
         events.append({**e, "time": today.local(at if at.tzinfo else at.replace(tzinfo=timezone.utc)).strftime("%H:%M")})
     structure_cards = await _structure_cards()
-    radar_cards = await _radar_cards()
+    radar_cards = await _radar_cards(user)
     chances = await _open_chances(user, structure_cards, scripts, prices, now, radar_cards=radar_cards)
     rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
     week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
     # Naar buiten is elke structuurkans Structuur: Vandaag telt structuur_c erbij; Bewijs houdt de twee interne soorten apart.
     summary = track_record.summarize([{**r, "trade_type": "structuur"} if r["trade_type"] == "structuur_c" else r for r in rows], config.TRACK_RECORD_COST_PCT)
-    score_types = focus.FOCUS_TYPES if focus.active() else ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing", "zone_radar")
+    score_types = focus.FOCUS_TYPES if focus.active() else ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing", "zone_radar", "zone_sweep")
     score = [e for e in summary if e["trade_type"] in score_types or e["source"] == "alles"]
     for e in score:
         e["spark"] = Markup(track_record.sparkline_svg(e["cumulative"], width=180, height=36))
@@ -792,7 +807,7 @@ async def nu_skip(request: Request, key: str = Form(""), user: dict = Depends(re
     """Sla over: dit plan vult Nu een dag niet meer. Het blijft op de Radar staan. De cookie houdt het op dit toestel; de rij in plan_skips
     zet het met zijn moment in het Logboek en de weekterugblik."""
     if nu.SKIP_KEY.match(key):
-        item = nu.item_for(await _radar_cards(), key)
+        item = nu.item_for(await _radar_cards(user), key)
         repo.record_plan_skip(user["id"], key, item["coin"] if item else None, item["direction"] if item else None, db.now_iso())
     response = RedirectResponse(url="/vandaag", status_code=303)
     response.set_cookie(NU_SKIP_COOKIE, nu.add_skip(request.cookies.get(NU_SKIP_COOKIE), key), max_age=24 * 3600, samesite="lax", path="/")
@@ -809,7 +824,7 @@ async def nu_order(request: Request, key: str, user: dict = Depends(require_logi
             price = (await _cached_prices({card["coin"]})).get(card["coin"])
             item = nu.structure_item(card, price, today.structure_state(card, card["plan"], price, datetime.now(timezone.utc)))
     elif nu.SKIP_KEY.match(key):
-        item = nu.item_for(await _radar_cards(), key)
+        item = nu.item_for(await _radar_cards(user), key)
     if item is None:
         raise HTTPException(status_code=404)
     repo.open_checklist(user["id"], key, item["coin"], item["direction"], db.now_iso())
@@ -871,16 +886,19 @@ async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dic
     prices = await _cached_prices({signal["coin"]})
     price = prices.get(signal["coin"])
     signal.setdefault("message_summary", None)
-    trailing = None
+    trailing = reference = None
     if signal["trade_type"] in rule_live.ENGINE_TYPES:          # meelopende stop: geen doel, de uitkomst is winst of verlies in R
         trailing = kans_view.trailing_outcome(signal, (repo.get_trade_result(signal_id) or {}).get("r_value"))
+    elif signal["trade_type"] == zone_sweep.TRADE_TYPE and signal["take_profit"] is None:
+        # Een zone-sweep zonder doel: de R op Bewijs komt van de referentie-uitgang, niet van een doel dat geraakt werd.
+        reference = kans_view.reference_outcome(signal, (repo.get_trade_result(signal_id) or {}).get("r_value"))
     facts = kans_view.facts(signal)
     still_open = signal["auto_outcome"] is None and facts["entry"] and facts["stop"]
     return templates.TemplateResponse(request, "kans.html", {
-        "user": user, "signal": signal, "facts": facts, "trailing": trailing,
+        "user": user, "signal": signal, "facts": facts, "trailing": trailing, "reference": reference,
         "action": chance_steps.now_line("open", signal["direction"], facts["entry"], facts["stop"], facts["take"]) if still_open else None,
         "levels": chance_steps.level_chips(facts["entry"], facts["stop"], facts["take"] or None) if facts["entry"] and facts["stop"] else [],
-        "events": kans_view.timeline(signal, setup, trailing["text"] if trailing else None),
+        "events": kans_view.timeline(signal, setup, (trailing or reference or {}).get("text")),
         "chart": Markup(kans_view.chart(signal, setup, candles, price)), "price": price, "setup": setup,
         "tf": tf, "timeframes": KANS_TIMEFRAMES if not setup else (),
         "fingerprint": (repo.get_chain_link(signal["id"]) or {}).get("hash"),
@@ -945,7 +963,7 @@ async def api_kansen(user: dict = Depends(require_login)):
 async def api_radar(user: dict = Depends(require_login)):
     """Live status per radar-kaart, voor radar.js: nieuwe koers, afstand tot de limietorder, live R en de niveaus voor de grafiek.
     De leeftijd van de oudste koers staat in de header X-Price-Age, zodat de vorm van de payload per kaart gelijk blijft."""
-    cards = await _radar_cards()
+    cards = await _radar_cards(user)
     return JSONResponse(radar.live_payload(cards), headers=_age_header({c["coin"] for c in cards}))
 
 
@@ -1042,11 +1060,15 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
     visible = track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES)
     # De range sweep heeft zijn eigen sectie met de stopmeting; als 'andere regel zonder motor' zou hij een live motor ontkennen die er wel is.
+    # De zone-sweep draait live (ongetest): zodra zijn labrun is opgeslagen staat hij bij de regels met een motor, met zijn stoptoets als stop_lab.
+    # Tot dan is zijn eigen rij onder Per soort de enige plek, zonder status.
     range_sweep = await _range_sweep_proof(user, rows, lab_types)
-    engine_types, other_types = track_record.split_rule_types([t for t in visible if t not in (rule_live.RANGE_SWEEP, "range_sweep_stop")], rule_live.ENGINE_TYPES)
+    hidden = (rule_live.RANGE_SWEEP, "range_sweep_stop") + ZONE_SWEEP_LAB_KEYS
+    engine_types, other_types = track_record.split_rule_types([t for t in visible if t not in hidden], rule_live.ENGINE_TYPES + (rule_live.ZONE_SWEEP,))
     rule_statuses = []
     for trade_type in engine_types:
-        status = track_record.rule_status(lab_types.get(trade_type), track_record.live_net_r(rows, trade_type, config.TRACK_RECORD_COST_PCT))
+        stop_lab = lab_types.get(STOP_LAB_KEYS[trade_type]) if trade_type in STOP_LAB_KEYS else None
+        status = track_record.rule_status(lab_types.get(trade_type), track_record.live_net_r(rows, trade_type, config.TRACK_RECORD_COST_PCT), stop_lab=stop_lab)
         rule_statuses.append({**status, "label": track_record.rule_label(trade_type), "css": status["status"].lower().replace(" ", "-"),
                               "lab_line": track_record.lab_line(lab_types.get(trade_type))})
     other_rules = track_record.other_rule_rows(lab_types, other_types)
@@ -1583,7 +1605,7 @@ async def api_system_status(user: dict = Depends(require_login)):
             "received_at": s["created_at"],
         }
 
-    forming = _forming_setups()
+    forming = _forming_setups(user)
     # Alleen wat de radar al in de cache zette: deze poll mag niet trager worden door een beurs die net niet antwoordt.
     zone_prices = {c: hit[1] for c in {s["coin"] for s in forming} if (hit := _price_cache.get(c)) and hit[1]}
     return {

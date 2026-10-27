@@ -11,20 +11,22 @@ class TradePlan:
     direction: str
     limit: float
     stop: float
-    take: float
+    take: Optional[float]      # None: een plan zonder doel (zone-sweep zonder tegenovergestelde zone op 2R), het doel kies je zelf
     risk_pct: float
-    rr: float
+    rr: Optional[float]
 
 
-def limit_plan(direction: str, zone_low: float, zone_high: float, stop: float, take: float) -> Optional[TradePlan]:
+def limit_plan(direction: str, zone_low: float, zone_high: float, stop: float, take: Optional[float],
+               limit: Optional[float] = None) -> Optional[TradePlan]:
     """De limietorder staat op de rand van de zone die de koers als eerste raakt: de bovenkant voor een long (de
-    koers komt van boven), de onderkant voor een short. None als stop of doel niet aan de juiste kant van die prijs liggen."""
-    limit = zone_high if direction == "long" else zone_low
+    koers komt van boven), de onderkant voor een short. None als stop of doel niet aan de juiste kant van die prijs liggen.
+    `limit`: een andere limiet dan de rand (de zone-sweep zet hem op het slot als dat al in de zone lag). `take` None: plan zonder doel."""
+    limit = limit if limit is not None else zone_high if direction == "long" else zone_low
     sign = 1 if direction == "long" else -1
-    if (limit - stop) * sign <= 0 or (take - limit) * sign <= 0:
+    if (limit - stop) * sign <= 0 or (take is not None and (take - limit) * sign <= 0):
         return None
     risk = abs(limit - stop)
-    return TradePlan(direction, limit, stop, take, risk / limit * 100, abs(take - limit) / risk)
+    return TradePlan(direction, limit, stop, take, risk / limit * 100, abs(take - limit) / risk if take is not None else None)
 
 
 def plan_state(direction: str, zone_low: float, zone_high: float, stop: float, price: float,
@@ -89,7 +91,7 @@ def _fmt(value: float) -> str:
     return f"{value:.4f}" if abs(value) < 100 else f"{value:.2f}"
 
 
-def chart_spec(direction: str, stop: float, take: float, limit: float, price: Optional[float] = None,
+def chart_spec(direction: str, stop: float, take: Optional[float], limit: float, price: Optional[float] = None,
                zone_low: Optional[float] = None, zone_high: Optional[float] = None, entry: Optional[float] = None,
                zone: Optional[dict] = None) -> dict:
     """Wat web/static/levelchart.js nodig heeft om de niveaus op een echte candlegrafiek te tekenen. De server stuurt
@@ -97,7 +99,7 @@ def chart_spec(direction: str, stop: float, take: float, limit: float, price: Op
     tekent. `entry` gezet = een open trade (lijn "Entry" in plaats van "Limiet"). `zone` is wat de schermvullende grafiek over de herkomst
     van het niveau weet (zone_radar.chart_zone), of None als de kaart geen zone met bekende herkomst heeft. `label` is dezelfde informatie als tekst,
     voor aria-label en voor wie geen JavaScript heeft."""
-    parts = [f"Doel {_fmt(take)}", f"Stop {_fmt(stop)}"]
+    parts = ([f"Doel {_fmt(take)}"] if take is not None else []) + [f"Stop {_fmt(stop)}"]
     parts.append(f"Entry {_fmt(entry)}" if entry is not None else f"Limiet {_fmt(limit)}")
     if zone_low is not None and zone_high is not None:
         parts.append(f"zone {_fmt(zone_low)} tot {_fmt(zone_high)}")

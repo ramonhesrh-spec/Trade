@@ -19,6 +19,7 @@
 
   {% if range_sweep %}<p class="kans-outcome {{ 'is-loss' if range_sweep.stopped else 'is-open' if range_sweep.running else '' }}">{{ "✗ " if range_sweep.stopped else "" }}{{ range_sweep.state }}{% if range_sweep.running and price %} · nu {{ fmt(price) }}{% endif %}</p>
   {% if range_sweep.reference %}<p class="muted kans-reference">{{ range_sweep.reference.text }}</p>{% endif %}
+  {% elif reference %}<p class="kans-outcome">{{ reference.text }}</p>
   {% elif trailing %}<p class="kans-outcome {{ 'is-win' if trailing.win else 'is-loss' }}"{% if trailing.win %} data-win="{{ signal.id }}"{% endif %}>{{ "✓" if trailing.win else "✗" }} {{ trailing.text }}</p>
   {% elif signal.auto_outcome == "take_profit" %}<p class="kans-outcome is-win" data-win="{{ signal.id }}">✓ Doel geraakt</p>
   {% elif signal.auto_outcome == "stop_loss" %}<p class="kans-outcome is-loss">✗ Stop geraakt</p>

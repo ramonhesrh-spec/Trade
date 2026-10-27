@@ -3258,6 +3258,97 @@ def get_zone_radar_setup_by_signal(signal_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
+_ZONE_SWEEP_COLS = ("coin", "direction", "variant", "stop_name", "tf", "zone_key", "zone_low", "zone_high", "zone_at", "sweep_at", "extreme",
+                    "placed_at", "expires_at", "ref_price", "range_high", "range_low", "atr_t", "limit_price", "stop_loss", "take_profit", "rr",
+                    "target_tf", "target_low", "target_high", "prik_atr", "herstel_bars", "quiet")
+
+
+def insert_zone_sweep_setup(row: dict, created_at: str) -> Optional[int]:
+    """None als deze zone voor deze coin al een kaart had (UNIQUE coin, zone_key): een tweede cyclus of een herstart maakt er geen tweede."""
+    with db.session() as conn:
+        cur = conn.execute(
+            f"INSERT OR IGNORE INTO zone_sweep_setups ({', '.join(_ZONE_SWEEP_COLS)}, created_at) VALUES ({', '.join('?' for _ in _ZONE_SWEEP_COLS)}, ?)",
+            (*(row.get(c, 0 if c == "quiet" else None) for c in _ZONE_SWEEP_COLS), created_at))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def list_zone_sweep_setups(states: tuple[str, ...] = ("waiting",), since_iso: Optional[str] = None) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        rows = conn.execute(f"SELECT * FROM zone_sweep_setups WHERE state IN ({marks}) AND (? IS NULL OR placed_at >= ?) ORDER BY id",
+                            (*states, since_iso, since_iso)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def count_zone_sweep_announced_since(since_iso: str) -> int:
+    """Kaarten die gemeld mochten worden (niet stil) sinds `since_iso`, in welke staat ook: de melding ging al uit. Voor de dagcap."""
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) AS n FROM zone_sweep_setups WHERE placed_at >= ? AND quiet = 0", (since_iso,)).fetchone()["n"]
+
+
+def mark_zone_sweep_alert_sent(setup_id: int) -> bool:
+    """True als deze aanroep de vlag zette: alleen die mag de melding van de nieuwe kaart sturen."""
+    with db.session() as conn:
+        return conn.execute("UPDATE zone_sweep_setups SET alert_sent = 1 WHERE id = ? AND alert_sent = 0", (setup_id,)).rowcount == 1
+
+
+def end_zone_sweep_setup(setup_id: int, state: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("UPDATE zone_sweep_setups SET state = ?, ended_at = ? WHERE id = ? AND state = 'waiting'",
+                            (state, db.now_iso(), setup_id)).rowcount == 1
+
+
+def fill_zone_sweep_setup(setup_id: int, signal: dict, user_ids: list[int], measure: Optional[dict] = None) -> Optional[int]:
+    """Alles van een vulling in één transactie: de staat (alleen vanuit waiting), het signaal buiten de openbare ketting, het dagboek van de
+    kijkers en, bij een kaart zonder doel, de meetrij (measure: entry, stop, filled_at, checked_until). None als de kaart al niet meer wachtte."""
+    with db.session() as conn:
+        if conn.execute("UPDATE zone_sweep_setups SET state = 'filled', ended_at = ? WHERE id = ? AND state = 'waiting'",
+                        (db.now_iso(), setup_id)).rowcount != 1:
+            return None
+        signal_id = _insert_signal(conn, signal, False)
+        conn.execute("UPDATE zone_sweep_setups SET signal_id = ? WHERE id = ?", (signal_id, setup_id))
+        if measure is not None:
+            conn.execute("""INSERT INTO zone_sweep_trades (signal_id, setup_id, entry, stop, filled_at, checked_until, ref_stop, ref_extreme)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                         (signal_id, setup_id, measure["entry"], measure["stop"], measure["filled_at"], measure["checked_until"],
+                          measure["stop"], measure["entry"]))
+        for uid in user_ids:
+            _journal_in(conn, signal_id, uid)
+        return signal_id
+
+
+_ZONE_SWEEP_TRADE_FIELDS = _TRADE_FIELDS - {"legs_filled"}
+
+
+def update_zone_sweep_trade(signal_id: int, **fields) -> None:
+    unknown = set(fields) - _ZONE_SWEEP_TRADE_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor zone_sweep_trades: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE zone_sweep_trades SET {', '.join(f + ' = ?' for f in fields)} WHERE signal_id = ?", (*fields.values(), signal_id))
+
+
+_ZONE_SWEEP_TRADE_SELECT = """SELECT zt.*, s.coin, s.direction, s.price, s.created_at, s.auto_outcome, st.variant, st.tf
+                              FROM zone_sweep_trades zt JOIN signals s ON s.id = zt.signal_id JOIN zone_sweep_setups st ON st.id = zt.setup_id"""
+
+
+def list_open_zone_sweep_trades() -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"{_ZONE_SWEEP_TRADE_SELECT} WHERE zt.closed_at IS NULL ORDER BY zt.signal_id").fetchall()]
+
+
+def get_zone_sweep_trade(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute(f"{_ZONE_SWEEP_TRADE_SELECT} WHERE zt.signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_zone_sweep_setup_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM zone_sweep_setups WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
 def add_market_context(rows: list[tuple]) -> None:
     """rows: (coin, bron, metric, waarde, gemeten_op)."""
     if not rows:
@@ -3337,11 +3428,13 @@ def list_checklist_runs(user_id: int, since_iso: Optional[str] = None) -> list[d
         return [dict(r) for r in rows]
 
 
-# Sleutel -> plan, per soort: zone:<id> (zone_radar_setups, in de zone komen is daar de vulling zelf), setup:<id> (smc_setups, zone_alert_at)
-# en structuur:<id> (structure_setups, fired_at is het raken van de limiet).
+# Sleutel -> plan, per soort: zone:<id> (zone_radar_setups, in de zone komen is daar de vulling zelf), zsweep:<id> (zone_sweep_setups, idem),
+# setup:<id> (smc_setups, zone_alert_at) en structuur:<id> (structure_setups, fired_at is het raken van de limiet).
 _PLAN_SOURCES = {
     "zone": "SELECT z.id, z.coin, z.direction, z.created_at, z.signal_id, s.created_at AS zone_at FROM zone_radar_setups z "
             "LEFT JOIN signals s ON s.id = z.signal_id WHERE z.id IN ({marks})",
+    "zsweep": "SELECT z.id, z.coin, z.direction, z.created_at, z.signal_id, s.created_at AS zone_at FROM zone_sweep_setups z "
+              "LEFT JOIN signals s ON s.id = z.signal_id WHERE z.id IN ({marks})",
     "setup": "SELECT id, coin, direction, created_at, signal_id, zone_alert_at AS zone_at FROM smc_setups WHERE id IN ({marks})",
     "structuur": "SELECT id, coin, direction, created_at, signal_id, fired_at AS zone_at FROM structure_setups WHERE id IN ({marks})",
 }
@@ -3375,22 +3468,27 @@ def signals_by_ids(ids) -> dict[int, dict]:
         return {r["id"]: dict(r) for r in rows}
 
 
-def list_plan_moments(since_iso: str) -> list[dict]:
-    """Wat de app zag: elk Radar-plan (SMC en zone-radar) dat sinds `since_iso` ontstond of in de zone kwam, met beide momenten."""
+def list_plan_moments(since_iso: str, include_zone_sweep: bool = True) -> list[dict]:
+    """Wat de app zag: elk Radar-plan (SMC, zone-radar en, als de kijker hem mag zien, zone-sweep) dat sinds `since_iso` ontstond of in de zone
+    kwam, met beide momenten."""
+    sweep = ("""UNION ALL
+               SELECT z.created_at, s.created_at AS zone_at FROM zone_sweep_setups z LEFT JOIN signals s ON s.id = z.signal_id
+               WHERE z.created_at >= ? OR s.created_at >= ?""" if include_zone_sweep else "")
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT z.created_at, s.created_at AS zone_at FROM zone_radar_setups z LEFT JOIN signals s ON s.id = z.signal_id
+            f"""SELECT z.created_at, s.created_at AS zone_at FROM zone_radar_setups z LEFT JOIN signals s ON s.id = z.signal_id
                WHERE z.created_at >= ? OR s.created_at >= ?
                UNION ALL
-               SELECT created_at, zone_alert_at AS zone_at FROM smc_setups WHERE created_at >= ? OR zone_alert_at >= ?""",
-            (since_iso, since_iso, since_iso, since_iso)).fetchall()
+               SELECT created_at, zone_alert_at AS zone_at FROM smc_setups WHERE created_at >= ? OR zone_alert_at >= ?
+               {sweep}""",
+            (since_iso,) * (6 if include_zone_sweep else 4)).fetchall()
         return [dict(r) for r in rows]
 
 
 def plan_for_signal(signal_id: int) -> Optional[dict]:
     """Het Radar- of Setups-plan waaruit dit signaal ontstond, in dezelfde vorm als plans_for_keys; None voor een signaal zonder plan."""
     with db.session() as conn:
-        for kind, table in (("zone", "zone_radar_setups"), ("setup", "smc_setups"), ("structuur", "structure_setups")):
+        for kind, table in (("zone", "zone_radar_setups"), ("zsweep", "zone_sweep_setups"), ("setup", "smc_setups"), ("structuur", "structure_setups")):
             row = conn.execute(f"SELECT id FROM {table} WHERE signal_id = ?", (signal_id,)).fetchone()
             if row:
                 return plans_for_keys([f"{kind}:{row['id']}"]).get(f"{kind}:{row['id']}")
