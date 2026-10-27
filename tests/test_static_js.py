@@ -121,3 +121,4 @@ class NotificationNavigationTest(unittest.TestCase):
         self.assertEqual(out["afterBackground"]["href"], "https://x.test/structuur#tab-ranges")
         self.assertEqual(out["onReturn"]["href"], "https://x.test/vandaag")  # niets te doen zonder bestemming
         self.assertEqual(out["stale"]["href"], "https://x.test/vandaag")     # een bestemming ouder dan 2 minuten telt niet
+        self.assertEqual(out["coldStart"]["href"], "https://x.test/kans/7")  # de bestemming kwam na het laden, de herhaalde controle vindt hem

@@ -44,5 +44,22 @@ function run(pending, event) {
   ctx.document.visibilityState = "visible"; docL.visibilitychange();
   for (let i = 0; i < 4; i++) await new Promise((r) => setImmediate(r));
   out.afterBackground = { href: location.href };
+  // Koude start: de bestemming komt binnen nadat de pagina al geladen was en er geen terugkeer of focus meer volgt. Alleen de herhaalde controle vangt dat op.
+  const timers = [], store2 = {};
+  const cache2 = { match: async (k) => store2[k], delete: (k) => { delete store2[k]; } };
+  const location2 = { origin: "https://x.test", href: "https://x.test/ceo" };
+  const ctx2 = { location: location2, URL, Date, Promise, setInterval: (f) => { timers.push(f); return timers.length; }, clearInterval: () => {}, setTimeout: () => 0,
+    caches: { open: async () => cache2 },
+    navigator: { serviceWorker: { addEventListener: () => {} } },
+    document: { addEventListener: () => {}, querySelector: () => null, querySelectorAll: () => [], visibilityState: "visible", title: "" },
+    window: { addEventListener: () => {}, matchMedia: () => ({ matches: false }), scrollY: 0 } };
+  ctx2.window.caches = ctx2.caches;
+  vm.createContext(ctx2);
+  vm.runInContext(fs.readFileSync(process.argv[2], "utf8"), ctx2);
+  await new Promise((r) => setImmediate(r));
+  store2["/__pending-nav"] = { json: async () => ({ url: "https://x.test/kans/7", at: Date.now() }) };
+  timers.forEach((f) => f());
+  for (let i = 0; i < 4; i++) await new Promise((r) => setImmediate(r));
+  out.coldStart = { href: location2.href };
   console.log(JSON.stringify(out));
 })();

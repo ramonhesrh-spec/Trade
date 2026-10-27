@@ -106,6 +106,12 @@
     }).catch(function () {});
   }
   checkPending();
+  // Bij een koude start laadt de pagina soms vóórdat de service worker de bestemming heeft bewaard (de melding wordt pas afgehandeld als de app al
+  // staat), en een bericht kan verloren gaan vóór deze pagina luistert. Daarom een paar seconden blijven kijken, tot de bestemming er is of de tijd om is.
+  var pendingChecks = 0, pendingTimer = setInterval(function () {
+    if (++pendingChecks > 16) { clearInterval(pendingTimer); return; }
+    if (document.visibilityState === "visible") checkPending();
+  }, 750);
   document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible") checkPending(); });
   window.addEventListener("pageshow", checkPending);
   window.addEventListener("focus", checkPending);
