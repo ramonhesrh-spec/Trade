@@ -123,6 +123,7 @@
   {% endfor %}
 </div>
 {% endif %}
+{% if script_on %}
 <div class="flat" id="scripts">
   <h3>{% if scenarios_waiting %}{{ macros.term("Markt-script per coin", scenarios_waiting ~ " scenario's wachten op een voorwaarde. Dat zijn hypotheses, geen getekende plannen.", "vd-script-pop") }}{% else %}Markt-script per coin{% endif %}</h3>
   {% if not scripts %}
@@ -157,6 +158,7 @@
   {% endfor %}
   {% endif %}
 </div>
+{% endif %}
 </section>
 
 <section id="tab-markt" data-utab-panel>
@@ -188,6 +190,7 @@
   {% endif %}
 </div>
 {% endif %}
+{% if script_on %}
 <div class="flat">
   <h3>Stemming van het markt-script</h3>
   {% if mood.total %}
@@ -196,6 +199,7 @@
   <p class="muted vd-empty">Het eerste markt-script verschijnt na de volgende ronde van 4 uur.</p>
   {% endif %}
 </div>
+{% endif %}
 <div class="vd-two">
   <div class="flat">
     <h3>Gedwongen sluitingen, laatste uur</h3>

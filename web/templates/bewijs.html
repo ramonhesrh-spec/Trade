@@ -33,10 +33,14 @@
 {% if not summary %}
 <p class="muted empty">Nog geen signalen om te meten.</p>
 {% else %}
+{% set focus_view = off_types or focus.active() %}
 <div class="flat">
+  {% if focus_view %}<h3 class="focus-title">In focus <span class="muted">deze soorten melden nieuwe kansen</span></h3>{% endif %}
   {{ macros.row_head("Soort", "", "Per trade") }}
+  {% if focus_view and not per_type %}<p class="muted empty">Nog geen signalen van Structuur of de zone-radar.</p>{% endif %}
   {% for e in per_type %}
-  <details class="mrow-wrap">
+  {# Met focus staan de soorten die nog melden open: het grote getal en de feiten zonder extra tik. #}
+  <details class="mrow-wrap{% if focus_view %} is-focus{% endif %}"{% if focus_view %} open{% endif %}>
     {{ macros.market_row(e.label[:3]|upper, e.label, chip=status_labels[e.status],
          subtitle=e.resolved ~ " afgerond" ~ ((", winrate " ~ "%.0f"|format(e.winrate * 100) ~ "%") if e.winrate is not none else ""),
          right_text=(("%+.2f"|format(e.avg_net) ~ "R") if e.avg_net is not none else "-"),
@@ -68,6 +72,22 @@
   </details>
   {% endfor %}
 </div>
+
+{% if off_types %}
+<div class="flat focus-off" id="uitgezet">
+  <h3>Uitgezet, ter verbetering</h3>
+  <p class="proof-footnote muted">Deze soorten melden niets nieuws: ze staan tijdelijk uit om ze één voor één te verbeteren. Een trade die nog loopt, volgt HesPulse tot hij sluit. Hun cijfers blijven hier staan, ook de verliezers.</p>
+  <table class="ctx-table off-table" aria-label="Eindcijfers van de uitgezette soorten">
+    <thead><tr><th scope="col">Soort</th><th scope="col">n</th><th scope="col">Doel</th><th scope="col">Stop</th><th scope="col">Netto R</th></tr></thead>
+    <tbody>
+    {% for e in off_types %}
+    <tr><th scope="row">{{ e.label }}{% if e.source_label %}<span class="off-sub">{{ e.source_label }}{% if e.open_or_expired %} · {{ e.open_or_expired }} open of vervallen{% endif %}</span>{% elif e.open_or_expired %}<span class="off-sub">{{ e.open_or_expired }} open of vervallen</span>{% endif %}</th><td>{{ e.resolved }}</td><td>{{ e.wins }}</td><td>{{ e.losses }}</td><td class="{{ 'pos' if e.net_total and e.net_total > 0 else 'neg' if e.net_total and e.net_total < 0 else '' }}">{% if e.net_total is not none %}{{ "%+.2f"|format(e.net_total)|replace(".", ",") }}R{% else %}-{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="proof-footnote muted">n is het aantal afgeronde trades; alleen doel en stop tellen, open en vervallen staan ernaast. Netto R is de som na {{ "%.2f"|format(cost_pct)|replace(".", ",") }}% kosten per rondreis. Zonder vast doel (meelopende stop) telt een winst als doel.</p>
+</div>
+{% endif %}
 
 {% if funding_split %}
 {% set fs = funding_split[0] %}
@@ -109,6 +129,7 @@
 </section>
 
 <section id="tab-regels" data-utab-panel>
+{% if focus.active() and (range_sweep or rule_statuses) %}<p class="engine-status is-off">Uit door focus: de proefmotor en de range sweep openen geen nieuwe trades. Lopende trades volgen ze tot hun stop.</p>{% endif %}
 {% if range_sweep %}
 {% set rs = range_sweep %}
 <div class="flat" id="range-sweep">

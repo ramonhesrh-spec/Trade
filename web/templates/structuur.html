@@ -19,8 +19,8 @@
   {"key": "klaarstaand", "label": "Klaarstaand", "href": "#tab-klaarstaand", "count": structure_cards|length}]
   + ([{"key": "range-sweep", "label": "Range sweep", "href": "#tab-range-sweep", "count": range_sweep_cards|length},
       {"key": "ranges", "label": "Ranges", "href": "#tab-ranges", "count": range_watches|length}] if range_visible else [])
-  + [{"key": "trend", "label": "Trend", "href": "#tab-trend"},
-  {"key": "eerder", "label": "Eerder", "href": "#tab-eerder"}], "klaarstaand", "setups") }}
+  + ([{"key": "trend", "label": "Trend", "href": "#tab-trend"}] if not trend_focus_off or trend_signals else [])
+  + [{"key": "eerder", "label": "Eerder", "href": "#tab-eerder"}], "klaarstaand", "setups") }}
 
 <div class="ut-panels" data-utabs-panels="setups">
 
@@ -98,13 +98,19 @@
 </section>
 {% endif %}
 
+{% if not trend_focus_off or trend_signals %}
 <section id="tab-trend" data-utab-panel>
   {% if trend_minutes is none or trend_minutes > 15 %}
   <p class="engine-status is-stale">{% if trend_minutes is none %}Nog geen controle gedraaid.{% else %}Laatste controle {{ trend_minutes }} minuten geleden.{% endif %}</p>
   {% else %}
   <p class="muted tab-meta">Laatste controle {{ trend_minutes }} min geleden</p>
   {% endif %}
-  {% if not trend_on %}
+  {% if trend_focus_off %}
+  <p class="muted tab-meta">Uit door focus: geen nieuwe instappen. Deze trades lopen nog tot hun stop of doel.</p>
+  {% endif %}
+  {% if trend_focus_off and not trend_signals %}
+  <p class="muted empty">Geen lopende trend-trades.</p>
+  {% elif not trend_on and not trend_focus_off %}
   <p class="muted empty">Staat uit.</p>
   {% elif not trend_signals %}
   <p class="muted empty">Geen instap de laatste 24 uur.</p>
@@ -117,6 +123,7 @@
   {% endfor %}
   {% endif %}
 </section>
+{% endif %}
 
 <section id="tab-eerder" data-utab-panel>
   {% if not history %}

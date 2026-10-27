@@ -3135,3 +3135,18 @@ a.lb-title:hover { color: var(--aci); }
 .bh-x { min-width: 44px; min-height: 44px; border: 0; background: transparent; color: var(--tx2); font-size: 20px; cursor: pointer; }
 .bh-del { background: transparent; border: 1px solid var(--bd); color: var(--loss); }
 .bh-row:focus-visible, .bh-set > summary:focus-visible, .bh-copy:focus-visible, .bh-x:focus-visible { outline: 2px solid var(--ac); outline-offset: -2px; border-radius: 12px; }
+
+/* Focus op Bewijs (app/focus.py): de soorten die nog melden staan open met een groter getal, de uitgezette soorten als één rustige tabel
+   eronder. Geen eigen kleuren: de toon komt van pos/neg en de V2-tokens, zodat licht en donker uit dezelfde regels komen. */
+.focus-title { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.focus-title .muted { font-size: 13px; font-weight: 400; color: var(--tx2); }
+details.mrow-wrap.is-focus .mrow-body .proof-number { font-size: 44px; }
+.focus-off h3 { margin-bottom: var(--space-2); }
+.off-table { margin-top: var(--space-4); }
+.off-table th:first-child { width: 40%; }
+.off-table thead th:nth-child(n+2):nth-child(-n+4) { width: 11%; }
+.off-table td { font-variant-numeric: tabular-nums; color: var(--text); padding-left: var(--space-3); white-space: nowrap; }
+.off-table th:last-child, .off-table td:last-child { width: 27%; }
+.off-table td.pos { color: var(--green); }
+.off-table td.neg { color: var(--red); }
+.off-sub { display: block; font-size: 12px; color: var(--tx2); margin-top: 2px; }

@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import ceo, chance_checks, freshness, chance_steps, kans_view, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar
+from app import ceo, chance_checks, focus, freshness, chance_steps, kans_view, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -74,7 +74,7 @@ def _cookie_user(request: Request) -> Optional[dict]:
 
 def _range_sweep_open_count(user: Optional[dict], prices: dict, now: datetime) -> int:
     """Hetzelfde filter als _range_sweep_cards, maar met alleen de koerscache: het menu doet geen beursaanroep per pagina."""
-    if not user or not _sees_range_sweep(user):
+    if not user or not _range_sweep_shown(user):
         return 0
     return sum(1 for s in repo.list_range_sweep_setups(("waiting", "niet_gemeld")) if today.range_sweep_state(s, prices.get(s["coin"]), now) in today.OPEN_RANGE_STATES)
 
@@ -147,6 +147,7 @@ def proof(trade_type: str) -> dict:
 
 
 templates.env.globals["proof"] = proof
+templates.env.globals["focus"] = focus
 templates.env.globals["asset"] = asset
 templates.env.globals["coin_logo"] = coin_logo
 templates.env.filters["grade_word"] = lambda g: {"A": "Sterk", "B": "Redelijk", "C": "Zwak"}.get(g, "Geen oordeel")
@@ -540,8 +541,10 @@ def _with_preview(setup: dict) -> dict:
 
 
 def _forming_setups() -> list[dict]:
-    """Wat de Radar als wachtende kaart toont: bouwende SMC-setups en wachtende zone-radar-kaarten, in de vorm die radar.setup_card leest."""
-    return [_with_preview(s) for s in repo.list_forming_smc_setups()] + [zone_radar.radar_setup(r) for r in repo.list_zone_radar_setups()]
+    """Wat de Radar als wachtende kaart toont: bouwende SMC-setups en wachtende zone-radar-kaarten, in de vorm die radar.setup_card leest.
+    Met focus geen SMC-setups: die motor zoekt niets nieuws en maakt er geen signaal meer van. Hier gefilterd, zodat Radar, Nu, het dok en het appicoon gelijk tellen."""
+    smc = [_with_preview(s) for s in repo.list_forming_smc_setups()] if focus.engine_on("smc") else []
+    return smc + [zone_radar.radar_setup(r) for r in repo.list_zone_radar_setups()]
 
 
 def _context_lines(coins) -> dict[str, list[dict]]:
@@ -585,11 +588,16 @@ def _sees_range_sweep(user: dict) -> bool:
     return rule_live.RANGE_SWEEP not in rule_live.CEO_ONLY_TYPES or is_ceo(user)
 
 
+def _range_sweep_shown(user: dict) -> bool:
+    """Wachtende range sweeps en de ranges zijn nieuwe kansen: met focus staan ze nergens. Een gevulde range sweep blijft als open signaal staan."""
+    return _sees_range_sweep(user) and focus.engine_on(rule_live.RANGE_SWEEP)
+
+
 async def _range_sweep_cards(user: dict) -> list[dict]:
     """Wachtende range sweeps met kaart, stappen en chips. Zoals _structure_cards valt een setup weg die verlopen is, waarvan de koers het midden van de
     range al raakte of voorbij de stop staat: de motor zet de rij pas bij zijn volgende cyclus om, en tot dan mag hij nergens meetellen of staan.
     Setups die de dagcap niet meldde ('niet_gemeld') staan wel op de pagina."""
-    if not _sees_range_sweep(user):
+    if not _range_sweep_shown(user):
         return []
     setups = repo.list_range_sweep_setups(("waiting", "niet_gemeld"))
     if not setups:
@@ -608,7 +616,7 @@ async def _range_sweep_cards(user: dict) -> list[dict]:
 
 async def _range_watch_rows(user: dict) -> list[dict]:
     """De ranges die de range-watch nu volgt, dichtstbij een rand eerst; een range zonder koers staat achteraan."""
-    if not _sees_range_sweep(user):
+    if not _sees_range_sweep(user) or not focus.engine_on("range_watch"):
         return []
     watches = repo.list_range_watches(("actief",))
     if not watches:
@@ -637,13 +645,15 @@ async def structuur_page(request: Request, alleen: str = "", kant: str = "", use
     since24 = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
     trend_beat = repo.get_beat("trend")
     trend_minutes = int((datetime.now(timezone.utc) - datetime.fromisoformat(trend_beat["at"])).total_seconds() // 60) if trend_beat else None
+    trend_focus_off = not focus.engine_on("trend")        # uit door focus: alleen nog de trades die lopen
     return templates.TemplateResponse(request, "structuur.html", {"trend_minutes": trend_minutes,
         "user": user, "structure_cards": [c for c in await _structure_cards()
                             if (alleen != "ab" or c["grade"] in ("A", "B")) and (kant not in ("long", "short") or c["direction"] == kant)],
         "only_ab": alleen == "ab", "side": kant if kant in ("long", "short") else "", "history": history,
         "engine_minutes": minutes, "counts": repo.structure_counts(since24), "engine_on": config.STRUCTURE_ENABLED,
-        "trend_signals": repo.list_recent_signals_of_type("trend", since24), "trend_on": config.TREND_ENABLED,
-        "range_sweep_cards": await _range_sweep_cards(user), "range_watches": await _range_watch_rows(user), "range_visible": _sees_range_sweep(user),
+        "trend_signals": [s for s in repo.list_recent_signals_of_type("trend", since24) if not trend_focus_off or s["auto_outcome"] is None],
+        "trend_on": config.TREND_ENABLED and not trend_focus_off, "trend_focus_off": trend_focus_off,
+        "range_sweep_cards": await _range_sweep_cards(user), "range_watches": await _range_watch_rows(user), "range_visible": _range_sweep_shown(user),
         "range_watch_on": config.RANGE_WATCH_ENABLED, "range_sweep_on": config.RANGE_SWEEP_ENABLED})
 
 
@@ -700,12 +710,15 @@ async def _open_chances(user: dict, structure_cards: list[dict], scripts: list[d
     signals = rule_live.for_viewer(signals, is_ceo(user))
     prices = {**prices, **await _cached_prices({g["coin"] for g in signals} - prices.keys())}
     cards = radar_cards if radar_cards is not None else await _radar_cards()
+    # Een wachtend scenario is een nieuwe kans; een gevuld script-signaal staat hierboven bij de open signalen en blijft.
+    scripts = scripts if focus.engine_on("script") else []
     return today.open_chances(structure_cards, scripts, cards, signals, prices, now, range_cards=await _range_sweep_cards(user))
 
 
 async def _vandaag_context(user: dict) -> dict:
     now = datetime.now(timezone.utc)
-    scripts_raw = repo.latest_scripts()
+    script_on = focus.engine_on("script")
+    scripts_raw = repo.latest_scripts() if script_on else []      # met focus schrijft niemand een nieuw script; een oud script is geen kans
     coins = [c["symbol"] for c in repo.list_coins()]
     prices = await _cached_prices(set(coins) | {"BTC"})
     scripts = [today.script_view(s, prices.get(s["coin"]), now) for s in scripts_raw]
@@ -722,14 +735,15 @@ async def _vandaag_context(user: dict) -> dict:
     rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
     week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
     summary = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT)
-    score = [e for e in summary if e["trade_type"] in ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing", "zone_radar") or e["source"] == "alles"]
+    score_types = focus.FOCUS_TYPES if focus.active() else ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing", "zone_radar")
+    score = [e for e in summary if e["trade_type"] in score_types or e["source"] == "alles"]
     for e in score:
         e["spark"] = Markup(track_record.sparkline_svg(e["cumulative"], width=180, height=36))
     return {
         "now": today.nl_stamp(today.local(now)), "fmt": today.fmt_price, "prices": prices, "scripts": scripts, "mood": today.mood(scripts_raw),
         "timeline": Markup(today.timeline_svg(now, moments)), "moments": moments, "liquidations": liquidations,
         "liq_last": repo.latest_liquidation_bucket(), "events": events, "score": score, "money": today.money,
-        "status_labels": track_record.STATUS_LABELS, "script_enabled": config.SCRIPT_ENABLED,
+        "status_labels": track_record.STATUS_LABELS, "script_enabled": config.SCRIPT_ENABLED, "script_on": script_on,
         "structure_cards": structure_cards,
         "chances": chances, "nearest": today.nearest_chance(chances), "chances_unit": today.chances_unit(len(chances)),
         "last_message_ago": today.ago_text(repo.last_message_received_at(), now),
@@ -1023,7 +1037,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     for entry in summary:
         entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
     total = next((e for e in summary if e["source"] == "alles"), None)
-    per_type = [e for e in summary if e["source"] != "alles"]
+    per_type, off_types = focus.split(e for e in summary if e["source"] != "alles")
     lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
     visible = track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES)
     # De range sweep heeft zijn eigen sectie met de stopmeting; als 'andere regel zonder motor' zou hij een live motor ontkennen die er wel is.
@@ -1040,7 +1054,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
         c["svg"] = Markup(track_record.equity_svg(c["cumulative"], c["drawdown"]))
     return templates.TemplateResponse(request, "bewijs.html", {
         "my_week": _week_review(user, datetime.now(timezone.utc)),
-        "curves": curves, "total": total, "per_type": per_type, "funding_split": track_record.funding_split(rows, config.TRACK_RECORD_COST_PCT),
+        "curves": curves, "total": total, "per_type": per_type, "off_types": off_types, "funding_split": track_record.funding_split(rows, config.TRACK_RECORD_COST_PCT),
         "hours": track_record.hour_grid(rows, config.TRACK_RECORD_COST_PCT),
         "rule_statuses": rule_statuses, "other_rules": other_rules, "range_sweep": range_sweep, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
         "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,

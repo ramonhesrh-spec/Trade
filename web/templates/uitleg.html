@@ -14,7 +14,7 @@
     </div>
     <div class="factor">
       <h3>Plannen</h3>
-      <p>Alle plannen die wachten. Bovenaan wissel je tussen de Radar (zones en SMC) en de Setups (structuurbreuken). Het getal op de tab telt wat nu in de zone staat.</p>
+      <p>Alle plannen die wachten. Bovenaan wissel je tussen de Radar ({% if focus.active() %}de zone-radar{% else %}zones en SMC{% endif %}) en de Setups (structuurbreuken). Het getal op de tab telt wat nu in de zone staat.</p>
     </div>
     <div class="factor">
       <h3>Logboek en Bewijs</h3>
@@ -23,6 +23,13 @@
   </div>
   <p>Account, meldingen, deze handleiding en de rest zitten achter je initiaal rechtsboven. In Account kies je ook een licht of donker thema.</p>
 </section>
+
+{% if focus.active() %}
+<section class="landing-section" id="wat-meldt-hespulse" style="padding-left:0; padding-right:0;">
+  <h2>Wat HesPulse nu meldt</h2>
+  <p>Drie soorten kansen: Structuur A/B, Structuur C en de <a href="/zone-radar">zone-radar</a>. De rest staat tijdelijk uit, om die soorten één voor één te verbeteren. Een trade van zo'n soort die nog loopt, volgt HesPulse tot hij sluit, en hun cijfers blijven op <a href="/bewijs">Bewijs</a>.</p>
+</section>
+{% endif %}
 
 <section class="landing-section" id="meldingen-aanzetten" style="padding-left:0; padding-right:0;">
   <h2>Meldingen</h2>
