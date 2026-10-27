@@ -425,6 +425,14 @@ sudo systemctl start crypto-news.service crypto-script.service
   `SMC_MIN_STOP_PCT`), doel de rand van de eerstvolgende tegenovergestelde zone, minimaal 2R. Melding bij een nieuwe kaart en bij de vulling;
   gevuld wordt het een signaal met `trade_type = 'zone_radar'` (ongetest, apart op Bewijs). Max `ZONE_RADAR_MAX_PER_DAY` (20, de kaarten dichtst bij de koers gaan voor) nieuwe kaarten
   per dag, `ZONE_RADAR_ENABLED=false` zet het uit. Handmatig draaien: `python3 -m app.zone_radar_live`.
+- `app/zone_sweep_live.py` (kaart in `app/zone_sweep.py`, detector `app/replay/zonesweep.py`): de koers prikt door een actieve vraagzone (long) of
+  aanbodzone (short) en sluit binnen 6 candles op 1u terug. Live vóór de labrun, op verzoek van de gebruiker, altijd ongetest (zie
+  `docs/onderzoek/zone-sweep/preregistratie.md`, "Aanvullende besluiten"). Varianten ZS_1H, ZS_2H en ZS_4H, limiet op de binnenrand, stop een
+  kwart ATR voorbij de prik, doel de rand van de eerstvolgende tegenovergestelde zone bij minstens 2R, anders geen doel (dan telt Bewijs de R bij de
+  referentie-uitgang, zoals bij de range sweep). Kaart op de Radar, melding bij een nieuwe kaart en bij de vulling, gevuld een signaal met
+  `trade_type = 'zone_sweep'` buiten de `/keten`. `ZONE_SWEEP_ENABLED` (standaard `true`), `ZONE_SWEEP_PUBLIC` (standaard `true`; `false` is
+  alleen de CEO), `ZONE_SWEEP_MAX_PER_DAY` (10 gemelde kaarten per 24 uur, de rest staat stil op de Radar). Draait in de snelle SMC-check, geen
+  eigen unit. Handmatig: `python3 -m app.zone_sweep_live`.
 - `app/calendar_alerts.py`: herinnering 30 minuten vóór de opening van de VS-beurs (stil) en vóór een macro-uitslag uit
   `data/macro_events.csv` (met geluid). De agenda toont alleen momenten die de toets als duidelijk anders mat, plus macro;
   funding-resets en opties-expiry stonden er eerst bij maar bewegen de markt niet meetbaar. De agenda is niet volledig

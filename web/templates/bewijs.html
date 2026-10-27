@@ -63,6 +63,7 @@
         Lager: {% if e.score_split.low_avg is not none %}{{ "%+.2f"|format(e.score_split.low_avg) }}R ({{ e.score_split.low_n }}){% else %}nog geen afgeronde kans{% endif %}. Dit toont of de gemeten kenmerken iets zeggen.</p>
       {% endif %}
       {% if e.trade_type == "range_sweep" %}<p class="proof-footnote muted">R gemeten bij de referentie-uitgang (meelopende stop 3 ATR op 1u), niet bij een doel; de stopkwaliteit staat onder Regels.</p>{% endif %}
+      {% if e.trade_type == "zone_sweep" %}<p class="proof-footnote muted">Ongetest: live op verzoek, de labrun volgt later. Met een doel telt doel of stop; een kaart zonder doel telt de R bij de referentie-uitgang (meelopende stop 3 ATR op 1u). De status staat onder Regels.</p>{% endif %}
       <p class="proof-footnote muted">{{ e.wins }} winst, {{ e.losses }} verlies. {{ e.open_or_expired }} nog open of vervallen, die tellen niet mee in winrate en R.</p>
     </div>
   </details>

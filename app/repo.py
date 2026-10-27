@@ -3426,11 +3426,13 @@ def list_checklist_runs(user_id: int, since_iso: Optional[str] = None) -> list[d
         return [dict(r) for r in rows]
 
 
-# Sleutel -> plan, per soort: zone:<id> (zone_radar_setups, in de zone komen is daar de vulling zelf), setup:<id> (smc_setups, zone_alert_at)
-# en structuur:<id> (structure_setups, fired_at is het raken van de limiet).
+# Sleutel -> plan, per soort: zone:<id> (zone_radar_setups, in de zone komen is daar de vulling zelf), zsweep:<id> (zone_sweep_setups, idem),
+# setup:<id> (smc_setups, zone_alert_at) en structuur:<id> (structure_setups, fired_at is het raken van de limiet).
 _PLAN_SOURCES = {
     "zone": "SELECT z.id, z.coin, z.direction, z.created_at, z.signal_id, s.created_at AS zone_at FROM zone_radar_setups z "
             "LEFT JOIN signals s ON s.id = z.signal_id WHERE z.id IN ({marks})",
+    "zsweep": "SELECT z.id, z.coin, z.direction, z.created_at, z.signal_id, s.created_at AS zone_at FROM zone_sweep_setups z "
+              "LEFT JOIN signals s ON s.id = z.signal_id WHERE z.id IN ({marks})",
     "setup": "SELECT id, coin, direction, created_at, signal_id, zone_alert_at AS zone_at FROM smc_setups WHERE id IN ({marks})",
     "structuur": "SELECT id, coin, direction, created_at, signal_id, fired_at AS zone_at FROM structure_setups WHERE id IN ({marks})",
 }
@@ -3464,22 +3466,27 @@ def signals_by_ids(ids) -> dict[int, dict]:
         return {r["id"]: dict(r) for r in rows}
 
 
-def list_plan_moments(since_iso: str) -> list[dict]:
-    """Wat de app zag: elk Radar-plan (SMC en zone-radar) dat sinds `since_iso` ontstond of in de zone kwam, met beide momenten."""
+def list_plan_moments(since_iso: str, include_zone_sweep: bool = True) -> list[dict]:
+    """Wat de app zag: elk Radar-plan (SMC, zone-radar en, als de kijker hem mag zien, zone-sweep) dat sinds `since_iso` ontstond of in de zone
+    kwam, met beide momenten."""
+    sweep = ("""UNION ALL
+               SELECT z.created_at, s.created_at AS zone_at FROM zone_sweep_setups z LEFT JOIN signals s ON s.id = z.signal_id
+               WHERE z.created_at >= ? OR s.created_at >= ?""" if include_zone_sweep else "")
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT z.created_at, s.created_at AS zone_at FROM zone_radar_setups z LEFT JOIN signals s ON s.id = z.signal_id
+            f"""SELECT z.created_at, s.created_at AS zone_at FROM zone_radar_setups z LEFT JOIN signals s ON s.id = z.signal_id
                WHERE z.created_at >= ? OR s.created_at >= ?
                UNION ALL
-               SELECT created_at, zone_alert_at AS zone_at FROM smc_setups WHERE created_at >= ? OR zone_alert_at >= ?""",
-            (since_iso, since_iso, since_iso, since_iso)).fetchall()
+               SELECT created_at, zone_alert_at AS zone_at FROM smc_setups WHERE created_at >= ? OR zone_alert_at >= ?
+               {sweep}""",
+            (since_iso,) * (6 if include_zone_sweep else 4)).fetchall()
         return [dict(r) for r in rows]
 
 
 def plan_for_signal(signal_id: int) -> Optional[dict]:
     """Het Radar- of Setups-plan waaruit dit signaal ontstond, in dezelfde vorm als plans_for_keys; None voor een signaal zonder plan."""
     with db.session() as conn:
-        for kind, table in (("zone", "zone_radar_setups"), ("setup", "smc_setups"), ("structuur", "structure_setups")):
+        for kind, table in (("zone", "zone_radar_setups"), ("zsweep", "zone_sweep_setups"), ("setup", "smc_setups"), ("structuur", "structure_setups")):
             row = conn.execute(f"SELECT id FROM {table} WHERE signal_id = ?", (signal_id,)).fetchone()
             if row:
                 return plans_for_keys([f"{kind}:{row['id']}"]).get(f"{kind}:{row['id']}")
