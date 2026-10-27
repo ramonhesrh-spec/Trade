@@ -11,7 +11,7 @@ from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import config, db, push_policy, repo
+from app import config, db, focus, push_policy, repo
 
 NOW = datetime.now(timezone.utc)
 
@@ -71,6 +71,13 @@ def quiet_text(user: dict) -> str:
     return f"{start} tot {end} (Amsterdam), {state} (stil = wel push, zonder geluid)"
 
 
+def focus_line(on: bool) -> str:
+    if not on:
+        return "ENGINE_FOCUS: uit (alle motoren volgen hun eigen vlag)"
+    return (f"ENGINE_FOCUS: aan, nieuwe kansen alleen van {', '.join(focus.FOCUS_TYPES)}; de andere motoren staan {focus.OFF_DETAIL} "
+            "(hartslag hieronder), hun open trades lopen door")
+
+
 def open_chances(now: datetime) -> list[dict]:
     """Open kansen rechtstreeks uit de tabellen, zonder koers: genoeg om te zien wat er klaarstaat en of er al gemeld is."""
     out = []
@@ -79,12 +86,13 @@ def open_chances(now: datetime) -> list[dict]:
         out.append({"soort": "Structuur", "coin": s["coin"], "direction": s["direction"], "state": "verlopen" if expired else f"wacht, oordeel {s['grade'] or 'geen'}",
                     "at": s["created_at"], "flag": "aanmaak-push bij elk oordeel (A luid, B, C 'Zwak' en geen oordeel stil); bij het bereiken van de limiet volgt 'Structuur gevuld'",
                     "skip": bool(expired)})
+    smc_off, script_off = not focus.engine_on("smc"), not focus.engine_on("script")
     for s in safe("smc-setups", repo.list_forming_smc_setups, []):
-        out.append({"soort": "SMC-zone", "coin": s["coin"], "direction": s["direction"], "state": "bouwend", "at": s["created_at"],
-                    "flag": f"zone gezet-push verstuurd: {'ja' if s['alert_sent'] else 'nee'}; in-de-zone-push verstuurd: {'ja' if s['zone_alert_sent'] else 'nee'}", "skip": False})
+        out.append({"soort": "SMC-zone", "coin": s["coin"], "direction": s["direction"], "state": focus.OFF_DETAIL if smc_off else "bouwend", "at": s["created_at"],
+                    "flag": f"zone gezet-push verstuurd: {'ja' if s['alert_sent'] else 'nee'}; in-de-zone-push verstuurd: {'ja' if s['zone_alert_sent'] else 'nee'}", "skip": smc_off})
     for sc in safe("scripts", repo.list_waiting_scenarios, []):
-        out.append({"soort": "Markt-script", "coin": sc["coin"], "direction": sc["direction"], "state": "wacht op voorwaarde", "at": sc.get("created_at"),
-                    "flag": "push pas bij het afgaan van de voorwaarde", "skip": False})
+        out.append({"soort": "Markt-script", "coin": sc["coin"], "direction": sc["direction"], "state": focus.OFF_DETAIL if script_off else "wacht op voorwaarde",
+                    "at": sc.get("created_at"), "flag": "push pas bij het afgaan van de voorwaarde", "skip": script_off})
     return out
 
 
@@ -122,6 +130,7 @@ def main() -> None:
     print(f"\nVAPID: privésleutel {'ingesteld' if vapid else 'ONTBREEKT (dan gaat er helemaal geen push uit)'}, publieke sleutel {'ingesteld' if config.VAPID_PUBLIC_KEY else 'ONTBREEKT'}")
     info = sorted(config.SIGNAL_TYPE_INFO_ONLY)
     print(f"SIGNAL_TYPE_INFO_ONLY: {', '.join(info) if info else 'leeg (niets alleen-informatie)'}")
+    print(focus_line(config.ENGINE_FOCUS))
     chances = open_chances(now)
     print(f"\nOpen kansen: {len(chances)}")
     for c in chances:

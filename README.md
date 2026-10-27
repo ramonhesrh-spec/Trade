@@ -27,6 +27,29 @@ aanmaken, dat is een bewuste keuze, geen invite-only systeem. Na
 registreren of inloggen kom je op `/dashboard`, het besloten logboek, dat
 blijft voor elke gebruiker apart.
 
+## Focus: welke soorten nu melden
+
+Sinds oktober 2026 zoeken en melden alleen drie soorten nog nieuwe kansen: Structuur A/B (`structuur`), Structuur C (`structuur_c`) en de
+zone-radar (`zone_radar`). De zone-sweep blijft lab, zonder live motor. Alle andere soorten staan uit, zodat de app overzichtelijk blijft
+en ze later één voor één verbeterd kunnen worden: day trading via Discord, patroon (uitbraak, trendlijn, chart-patroon), trend, rejectie,
+het markt-script, SMC en SMC met waarschuwing, swing, samenval, de range sweep en range-watch, en de proefmotor (`don55_trend`).
+
+Uitzetten is geen weggooien: code en data blijven, en `ENGINE_FOCUS=false` in `.env` zet alles terug zoals het was (herstart `crypto-bot`,
+`crypto-web` en de timers pakken het bij hun volgende ronde op). De bron van waarheid is `app/focus.py`.
+
+- **Motoren:** een uitgezette motor zoekt niets nieuws en stuurt geen nieuwe melding. Zijn hartslag zegt `uit door focus`
+  (`scripts/push_diag.py` toont ze). Een eigen vlag zoals `TREND_ENABLED` of `RANGE_SWEEP_ENABLED` geldt daarnaast gewoon.
+- **Discord:** een doorgestuurd bericht wordt nog opgeslagen en gededupliceerd, maar niet meer aan Anthropic voorgelegd; er komt geen
+  signaal, journaalregel of push uit.
+- **Lopende trades:** `app/level_check.py`, `rule_live.update_open` en het volgen van de range sweep blijven open posities, stops en doelen
+  volgen en melden hun uitkomst tot ze sluiten. Een wachtende SMC-setup wordt geen signaal meer en staat niet meer op de Radar.
+- **Weergave:** Nu, Plannen, de tellers (dok, appicoon) en de kansen op Vandaag tonen alleen nieuwe en wachtende kansen van de focus-soorten;
+  een open trade van een uitgezette soort blijft staan onder zijn eigen naam. Het markt-script verdwijnt van Vandaag.
+- **Bewijs:** de focus-soorten staan bovenaan en open, de andere onder "Uitgezet, ter verbetering" met hun eindcijfers (n, doel, stop,
+  netto R). Niets verdwijnt.
+- **Pushbudget:** de regels van `push_policy` zijn niet veranderd; omdat alleen de focus-soorten nog iets nieuws melden, gaat het dagbudget
+  in de praktijk alleen naar hen.
+
 ## Onderdelen
 
 - `app/discord_bot.py` — leest DM's, alleen leesrechten

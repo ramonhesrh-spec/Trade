@@ -30,6 +30,13 @@ class PushDiagTest(unittest.TestCase):
         self.assertEqual(pd.age_text((NOW - timedelta(minutes=5)).isoformat(), NOW), "5 min geleden")
         self.assertEqual(pd.age_text(None, NOW), "onbekend")
 
+    def test_focus_line_names_what_is_on_and_off(self):
+        line = pd.focus_line(True)
+        self.assertIn("ENGINE_FOCUS: aan", line)
+        self.assertIn("structuur, structuur_c, zone_radar", line)
+        self.assertIn("uit door focus", line)
+        self.assertIn("ENGINE_FOCUS: uit", pd.focus_line(False))
+
 
 if __name__ == "__main__":
     unittest.main()
