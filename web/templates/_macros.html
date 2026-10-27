@@ -26,7 +26,8 @@
    richting long") — geen " | " en geen leidende ✓/✗, dus die valt door
    naar de plain-tekst-tak hieronder in plaats van als kapotte
    factor-styling (0/1 "mislukt") te renderen. #}
-{% for factor in entry.reason.split(" | ") %}
+{# Oudere structuursignalen dragen nog het kenmerk "De CEO keurt goed (A of B)"; het oordeel staat niet meer op een scherm (app/structure_live.py). #}
+{% for factor in entry.reason.split(" | ") if "De CEO keurt" not in factor %}
 <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}"{% if p_style %} style="{{ p_style }}"{% endif %}>{{ factor }}</p>
 {% endfor %}
 {% elif entry.trade_type == 'swing' %}
@@ -348,12 +349,13 @@
 
 {# Een structuur-setup als getekende trade (app/setup_chart.py), met het plan eronder. Gebruikt op Setups en op Vandaag. #}
 {% macro setup_card(c, risk_eur=none) %}
-<article class="setup-card{% if c.grade is none or c.grade == 'C' %} is-weak{% endif %}" id="structuur-{{ c.id }}">
+{# Geen oordeel op de kaart: A, B en C zijn alleen een meting in de database (app/structure_live.py), elke gespotte kans ziet er hetzelfde uit. #}
+<article class="setup-card" id="structuur-{{ c.id }}">
   <header class="setup-head">
     {{ coin_avatar(c.coin, 36, "setup-av") }}
     <div class="setup-id">
       <p class="setup-title"><a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a><span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span></p>
-      <p class="setup-sub"><span class="setup-grade setup-grade-{{ (c.grade or 'c')|lower }}" title="Oordeel van de CEO">{{ c.grade | grade_word }}</span>{{ proof_tag("structuur", "s" ~ c.id) }}</p>
+      <p class="setup-sub"><span class="muted setup-kind">Structuur</span>{{ proof_tag("structuur", "s" ~ c.id) }}</p>
     </div>
     <span class="muted setup-age">{{ c.created_at | age }}</span>
   </header>
@@ -363,11 +365,10 @@
   <a class="order-link" href="/nu/order/structuur:{{ c.id }}">Zet de order, stap voor stap</a>
   {{ share_button(c.coin, c.direction, c.steps) }}
   {# Kenmerken en toelichting achter één tik: ze beschrijven de kans, de stappen hierboven zijn wat je doet. #}
-  {% if c.checks or c.reason %}
+  {% if c.checks %}
   <details class="setup-why">
-    <summary>Waarom{% if c.checks %} <span class="muted">{{ c.checks|selectattr(1)|list|length }} van {{ c.checks|length }} kenmerken</span>{% endif %}</summary>
-    {% if c.checks %}<ul class="setup-checks" aria-label="Wat er klopt en wat niet">{% for label, ok in c.checks %}<li class="{{ 'is-ok' if ok else 'is-no' }}"><span aria-hidden="true">{{ "✓" if ok else "✗" }}</span> {{ label }}</li>{% endfor %}</ul>{% endif %}
-    {% if c.reason %}<p class="setup-reason"><span class="muted">Toelichting:</span> {{ c.reason }}</p>{% endif %}
+    <summary>Waarom <span class="muted">{{ c.checks|selectattr(1)|list|length }} van {{ c.checks|length }} kenmerken</span></summary>
+    <ul class="setup-checks" aria-label="Wat er klopt en wat niet">{% for label, ok in c.checks %}<li class="{{ 'is-ok' if ok else 'is-no' }}"><span aria-hidden="true">{{ "✓" if ok else "✗" }}</span> {{ label }}</li>{% endfor %}</ul>
   </details>
   {% endif %}
 </article>

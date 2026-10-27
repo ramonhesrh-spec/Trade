@@ -402,17 +402,19 @@ class SetupsLayoutTests(BaseShellTests):
                             take_profit, trade_type, created_at) VALUES (NULL, 'SOL', 'long', 'x', 'hoog', 1, 100, 99, 102, 'trend', ?)""", (db.now_iso(),))
         html = self.client.get("/structuur").text
         for needle in ['data-utabs="setups"', 'id="tab-klaarstaand"', 'id="tab-trend"', 'id="tab-eerder"', 'class="st-meta"',
-                       "Laatste 24 uur: 3 kansen gezien, 2 beoordeeld", "Sterk en redelijk</a>", "stack-toggle", 'class="mrow"',
+                       "Laatste 24 uur: 3 kansen gezien, 2 met plan", "stack-toggle", 'class="mrow"',
                        "Instap 100.0000, stop 99.0000, doel 102.0000", "Geen ruimte."]:
             self.assertIn(needle, html, needle)
         self.assertRegex(html, r'class="hl-num">2</span><span class="hl-unit">klaar')
+        for word in ("Sterk", "Redelijk", "Zwak", "beoordeeld", "Oordeel"):
+            self.assertNotIn(word, html, word)
         self.assertNotIn("·</span>", html[html.index('id="tab-trend"'):html.index('id="tab-eerder"')])
 
     def test_tellingen_staan_in_een_stille_regel(self):
         self.seed_waiting()
         html = self.client.get("/structuur").text
         meta = html[html.index('class="st-meta"'):html.index('data-utabs="setups"')]
-        self.assertRegex(meta, r"<b>3</b> gezien</span><span><b>2</b> beoordeeld</span><span><b>1</b> zonder plan")
+        self.assertRegex(meta, r"<b>3</b> gezien</span><span><b>2</b> met plan</span><span><b>1</b> zonder plan")
         self.assertNotIn('class="kl"', html[:html.index('data-utabs="setups"')])
 
     def test_stille_bediening_zonder_gevulde_pillen(self):
@@ -448,7 +450,7 @@ class SetupsLayoutTests(BaseShellTests):
         self.assertNotIn("dist-ring", card)
         self.assertNotIn('class="proof-line', card)
         self.assertRegex(head, r'class="radar-dir radar-dir-(long|short)">')
-        self.assertRegex(head, r'class="setup-grade setup-grade-[abc]" title="Oordeel van de CEO">(Sterk|Redelijk|Zwak)</span>')
+        self.assertNotIn("setup-grade", head)                               # geen oordeel op de kaart: elke gespotte kans is gewoon Structuur
         self.assertRegex(head, r'class="proof-tag is-proef"><button type="button" class="kl-term" popovertarget="pt-structuur-s\d+">In proef</button>')
         pop = head[head.index("popover>"):]
         self.assertIn('<a class="proof-pop-link" href="/bewijs">Bekijk Bewijs</a>', pop)

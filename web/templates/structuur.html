@@ -11,8 +11,8 @@
      explain="Kansen die klaarstaan, met instap, stop en doelen. De motor kijkt elke 5 minuten. De score per soort staat op Bewijs.") }}
 
 {# De tellingen van 24 uur in één stille regel: als drie kernregels kostten ze een heel scherm voor het eerste plan. #}
-<p class="st-meta">{{ macros.term("24 uur", "Laatste 24 uur: " ~ counts.total ~ " " ~ ("kans" if counts.total == 1 else "kansen") ~ " gezien, " ~ (counts.goedgekeurd + counts.afgekeurd) ~ " beoordeeld, " ~ counts.geen_plan ~ " zonder plan.", "st-24") }}
-  <span><b>{{ counts.total }}</b> gezien</span><span><b>{{ counts.goedgekeurd + counts.afgekeurd }}</b> beoordeeld</span><span><b>{{ counts.geen_plan }}</b> zonder plan</span></p>
+<p class="st-meta">{{ macros.term("24 uur", "Laatste 24 uur: " ~ counts.total ~ " " ~ ("kans" if counts.total == 1 else "kansen") ~ " gezien, " ~ counts.met_plan ~ " met plan, " ~ counts.geen_plan ~ " zonder plan.", "st-24") }}
+  <span><b>{{ counts.total }}</b> gezien</span><span><b>{{ counts.met_plan }}</b> met plan</span><span><b>{{ counts.geen_plan }}</b> zonder plan</span></p>
 
 {# De range sweep is een proef voor de CEO: een leerling krijgt zijn tabs en panelen niet eens te zien (range_visible). #}
 {{ macros.utabs([
@@ -39,8 +39,7 @@
   {% set stackable = structure_cards|length > 1 %}
   <div class="filter-row">
     <p class="filter-chips">
-      <a class="chip{% if not only_ab and not side %} is-active{% endif %}" href="/structuur">Alles</a>
-      <a class="chip{% if only_ab %} is-active{% endif %}" href="/structuur?alleen=ab">Sterk en redelijk</a>
+      <a class="chip{% if not side %} is-active{% endif %}" href="/structuur">Alles</a>
       <a class="chip{% if side == 'long' %} is-active{% endif %}" href="/structuur?kant=long">Long</a>
       <a class="chip{% if side == 'short' %} is-active{% endif %}" href="/structuur?kant=short">Short</a>
     </p>
@@ -129,11 +128,11 @@
   {% if not history %}
   <p class="muted empty">Nog geen afgeronde setups in de laatste 7 dagen.</p>
   {% else %}
-  {{ macros.row_head("Laatste 7 dagen", "", "Oordeel") }}
+  {{ macros.row_head("Laatste 7 dagen", "", "Gezien") }}
   {% for h in history %}
   <div class="mrow-wrap">
     {{ macros.market_row(h.coin, h.coin, chip=h.direction, chip_tone=("pos" if h.direction == "long" else "neg"), subtitle=h.state_label,
-         right_text=(h.grade | grade_word), el="div", coin=h.coin) }}
+         right_text=(h.created_at | age), el="div", coin=h.coin) }}
     {% if h.state == "geen_plan" and h.reason %}<p class="muted mrow-reason">{{ h.reason }}</p>{% endif %}
   </div>
   {% endfor %}

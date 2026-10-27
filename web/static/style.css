@@ -3150,3 +3150,4 @@ details.mrow-wrap.is-focus .mrow-body .proof-number { font-size: 44px; }
 .off-table td.pos { color: var(--green); }
 .off-table td.neg { color: var(--red); }
 .off-sub { display: block; font-size: 12px; color: var(--tx2); margin-top: 2px; }
+.setup-kind { font-size: var(--text-sm); margin-right: var(--space-3); }

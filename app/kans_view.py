@@ -77,7 +77,8 @@ def format_events(events: list[dict]) -> list[dict]:
 def facts(signal: dict) -> dict:
     entry, stop, take = signal["price"], signal["stop_loss"], signal["take_profit"]
     risk = abs(entry - stop) if entry and stop else 0.0
-    label = TYPE_LABELS.get(signal["trade_type"], signal["trade_type"])
+    # structuur_c is intern (het oordeel als meting, apart op Bewijs); naar buiten heet elke structuurkans Structuur.
+    label = TYPE_LABELS["structuur"] if signal["trade_type"] == "structuur_c" else TYPE_LABELS.get(signal["trade_type"], signal["trade_type"])
     return {"entry": entry, "stop": stop, "take": take, "risk_pct": risk / entry * 100 if entry and risk else None,
             "rr": abs(take - entry) / risk if risk and take else None, "label": label.replace(" (ongetest)", ""), "untested": label.endswith(" (ongetest)")}
 

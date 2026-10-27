@@ -57,15 +57,15 @@ class WebVandaagTests(unittest.TestCase):
         r = self.client.get("/structuur")
         self.assertEqual(r.status_code, 200)
         self.assertIn(f'id="structuur-{sid}"', r.text)
-        self.assertIn("Laatste 24 uur: 1 kans gezien, 1 beoordeeld", r.text)
+        self.assertIn("Laatste 24 uur: 1 kans gezien, 1 met plan", r.text)
         live = self.client.get("/api/kansen").json()
         self.assertIn(str(sid), live["structuur"])                         # live afstand per wachtend plan
         self.assertIn("te gaan", r.text)
         self.assertIn("sc-limit", r.text)
         self.assertIn('data-live-coin="BTC"', r.text)                      # live.js volgt de koers van de beurt
-        self.assertIn("Schone range.", r.text)
+        self.assertNotIn("Schone range.", r.text)                          # de toelichting bij het oordeel staat niet op de kaart
 
-    def test_setups_filter_shows_only_a_and_b_on_request(self):
+    def test_setups_have_no_grade_filter_every_chance_shows(self):
         import json
         candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
         plan = {"level": 100.0, "stop": 101.0, "risk_pct": 1.0, "targets": [98.0, 97.0], "targets_r": [2.0, 3.0], "candles": candles}
@@ -74,12 +74,10 @@ class WebVandaagTests(unittest.TestCase):
                 "coin": coin, "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
                 "line_slope": 0.0, "atr": 0.5, "grade": grade, "reason": f"Reden {grade}.", "features": "{}", "state": "waiting",
                 "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
-        both = self.client.get("/structuur").text
-        self.assertIn("Reden A.", both)
-        self.assertIn("Reden C.", both)
-        only = self.client.get("/structuur?alleen=ab").text
-        self.assertIn("Reden A.", only)
-        self.assertNotIn("Reden C.", only)
+        for url in ("/structuur", "/structuur?alleen=ab"):                  # een oude link met het filter toont gewoon alles
+            text = self.client.get(url).text
+            self.assertEqual(text.count('class="setup-card'), 2, url)
+            self.assertNotIn("Sterk en redelijk", text)
 
     def test_kansen_tab_telt_wat_het_paneel_toont_of_zegt_waar_de_rest_staat(self):
         import json
@@ -101,9 +99,9 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn('<nav class="ut-menu">', text)                      # drie-puntjesmenu met Mijn week, Beste setups en Instellingen
         self.assertNotIn("quick-actions", text)
         self.assertIn("Geen plan klaar", self.client.get("/structuur").text)   # lege staat met uitleg en een knop
-        self.assertIn("Sterk en redelijk</a>", self.client.get("/structuur?kant=short").text)
+        self.assertNotIn("Sterk en redelijk", self.client.get("/structuur?kant=short").text)
 
-    def test_grade_c_card_is_muted_and_shows_facts_not_a_verdict(self):
+    def test_grade_c_card_looks_like_any_card_and_shows_facts_not_a_verdict(self):
         import json
         candles = [[(datetime(2026, 3, 2, tzinfo=timezone.utc) + timedelta(minutes=30 * i)).isoformat(), 100.0, 101.0, 99.0, 100.5] for i in range(20)]
         plan = {"level": 100.0, "stop": 101.0, "risk_pct": 1.0, "targets": [98.0, 97.0], "targets_r": [2.0, 3.0], "candles": candles}
@@ -112,12 +110,12 @@ class WebVandaagTests(unittest.TestCase):
             "line_slope": 0.0, "atr": 0.5, "grade": "C", "reason": "Te weinig ruimte.", "features": "{}", "state": "waiting",
             "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
         text = self.client.get("/structuur").text
-        self.assertIn("is-weak", text)
+        self.assertNotIn("is-weak", text)                                  # een C-kans ziet er hetzelfde uit als elke andere kans
         self.assertNotIn("De CEO twijfelt", text)                          # geen gevoel van een model, maar controlepunten en bewijs
-        self.assertIn("Zwak", text)
+        self.assertNotIn("Zwak", text)
         self.assertIn("Lijn of range minstens 3 keer aangeraakt", text)
         self.assertIn("In proef", text)                                    # bewijsregel met de proefbalk
-        self.assertEqual(text.count("Te weinig ruimte."), 1)               # de toelichting staat één keer
+        self.assertNotIn("Te weinig ruimte.", text)                        # de toelichting bij het oordeel staat niet op de kaart
 
     def test_coin_page_shows_masthead_price_and_waiting_structure_plan(self):
         import json

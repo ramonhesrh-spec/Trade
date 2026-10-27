@@ -627,8 +627,8 @@ async def _range_watch_rows(user: dict) -> list[dict]:
     return sorted(rows, key=lambda r: (r["dist_pct"] is None, r["dist_pct"] or 0))
 
 
-STRUCTURE_STATE_LABELS = {"schaduw": "Oordeel C: stil gevolgd, wacht op de terugkeer", "geen_plan": "Geen plan: te weinig ruimte of stop buiten bereik", "fired": "Limiet geraakt, signaal gemeld", "expired": "Verlopen, koers kwam niet terug", "niet_gemeld": "De CEO keurde af (C)",
-                          "overgeslagen": "Stop buiten het toegestane bereik", "geen_oordeel": "De CEO zat in een vergadering"}
+STRUCTURE_STATE_LABELS = {"schaduw": "Stil gevolgd, wacht op de terugkeer", "geen_plan": "Geen plan: te weinig ruimte of stop buiten bereik", "fired": "Limiet geraakt, signaal gemeld", "expired": "Verlopen, koers kwam niet terug",
+                          "niet_gemeld": "Niet gemeld: het dagmaximum was bereikt", "overgeslagen": "Stop buiten het toegestane bereik", "geen_oordeel": "Niet gemeld"}
 
 
 @app.get("/structuur")
@@ -648,8 +648,8 @@ async def structuur_page(request: Request, alleen: str = "", kant: str = "", use
     trend_focus_off = not focus.engine_on("trend")        # uit door focus: alleen nog de trades die lopen
     return templates.TemplateResponse(request, "structuur.html", {"trend_minutes": trend_minutes,
         "user": user, "structure_cards": [c for c in await _structure_cards()
-                            if (alleen != "ab" or c["grade"] in ("A", "B")) and (kant not in ("long", "short") or c["direction"] == kant)],
-        "only_ab": alleen == "ab", "side": kant if kant in ("long", "short") else "", "history": history,
+                            if kant not in ("long", "short") or c["direction"] == kant],
+        "side": kant if kant in ("long", "short") else "", "history": history,
         "engine_minutes": minutes, "counts": repo.structure_counts(since24), "engine_on": config.STRUCTURE_ENABLED,
         "trend_signals": [s for s in repo.list_recent_signals_of_type("trend", since24) if not trend_focus_off or s["auto_outcome"] is None],
         "trend_on": config.TREND_ENABLED and not trend_focus_off, "trend_focus_off": trend_focus_off,
@@ -734,7 +734,8 @@ async def _vandaag_context(user: dict) -> dict:
     chances = await _open_chances(user, structure_cards, scripts, prices, now, radar_cards=radar_cards)
     rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
     week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
-    summary = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT)
+    # Naar buiten is elke structuurkans Structuur: Vandaag telt structuur_c erbij; Bewijs houdt de twee interne soorten apart.
+    summary = track_record.summarize([{**r, "trade_type": "structuur"} if r["trade_type"] == "structuur_c" else r for r in rows], config.TRACK_RECORD_COST_PCT)
     score_types = focus.FOCUS_TYPES if focus.active() else ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing", "zone_radar")
     score = [e for e in summary if e["trade_type"] in score_types or e["source"] == "alles"]
     for e in score:

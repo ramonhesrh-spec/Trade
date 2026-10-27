@@ -2929,9 +2929,11 @@ def structure_counts(since_iso: str) -> dict:
     with db.session() as conn:
         rows = conn.execute(
             "SELECT state, grade, COUNT(*) AS n FROM structure_setups WHERE created_at >= ? GROUP BY state, grade", (since_iso,)).fetchall()
-    out = {"total": 0, "goedgekeurd": 0, "afgekeurd": 0, "geen_plan": 0, "geen_oordeel": 0}
+    out = {"total": 0, "goedgekeurd": 0, "afgekeurd": 0, "geen_plan": 0, "geen_oordeel": 0, "met_plan": 0}
     for r in rows:
         out["total"] += r["n"]
+        if r["state"] != "geen_plan":
+            out["met_plan"] += r["n"]
         if r["state"] == "geen_plan":
             out["geen_plan"] += r["n"]
         elif r["state"] == "geen_oordeel":
