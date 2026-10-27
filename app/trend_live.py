@@ -10,7 +10,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import chance_checks, config, push_notify, repo, smc_eval
+from app import chance_checks, config, focus, push_notify, repo, smc_eval
 from app.replay import trendpullback as tp
 from app.replay.lab import add_indicators
 
@@ -93,6 +93,10 @@ async def _check(coin: str, now: pd.Timestamp) -> None:
 async def run(now: Optional[datetime] = None) -> None:
     """Draait in de SMC-snelcyclus."""
     if not config.TREND_ENABLED:
+        return
+    if not focus.engine_on("trend"):
+        logger.info("Trend: %s, geen nieuwe kansen", focus.OFF_DETAIL)
+        repo.beat("trend", focus.OFF_DETAIL)
         return
     from app.structure_live import should_disable
     if should_disable(repo.list_type_results("trend", config.TREND_MAX_NEGATIVE), config.TREND_MAX_NEGATIVE):

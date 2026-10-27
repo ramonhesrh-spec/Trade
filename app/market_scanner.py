@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import calendar_alerts, chance_checks, config, exchange, indicators, market_context_live, market_script, trend_live, rejection_live, patterns, push_notify, range_sweep_live, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan, zone_radar_live
+from app import calendar_alerts, chance_checks, config, exchange, focus, indicators, market_context_live, market_script, trend_live, rejection_live, patterns, push_notify, range_sweep_live, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan, zone_radar_live
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
@@ -939,6 +939,11 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     return signal_id
 
 
+def _focus_off(name: str) -> None:
+    logger.info("%s: %s, geen nieuwe kansen", name, focus.OFF_DETAIL)
+    repo.beat(name, focus.OFF_DETAIL)
+
+
 async def _run_smc_check(coin: str) -> Optional[str]:
     """De SMC-check voor één coin, met een eigen try/except: een
     Binance-storing op 30m/15m mag de 4u-detectoren niet blokkeren, en
@@ -988,13 +993,17 @@ async def scan_market() -> None:
     # cyclus, over alle coins heen — pas na de hele scan geëvalueerd tegen
     # MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE, zie de constante hierboven.
     cycle_structural_candidates: list[dict] = []
+    smc_on, structural_on, day_on = focus.engine_on("smc"), focus.engine_on("patroon"), focus.engine_on("day_trading")
+    for name, on in (("smc", smc_on), ("patroon", structural_on), ("day_trading", day_on)):
+        if not on:
+            _focus_off(name)
 
     for coin_row in coins:
         coin = coin_row["symbol"]
         # SMC draait altijd buiten het 4u-blok hieronder: smc's structuur+
         # sweep+zone werkt lokaal per coin op 30m/15m, een 4u-fout voor deze
         # coin mag de smc-check niet overslaan.
-        smc_direction = await _run_smc_check(coin)
+        smc_direction = await _run_smc_check(coin) if smc_on else None
         if coin in config.EXTRA_COINS:
             continue    # extra coins: alleen SMC, zie config.EXTRA_COINS
         try:
@@ -1026,15 +1035,16 @@ async def scan_market() -> None:
             # kandidaat daadwerkelijk gemeld (_candidate_score: risk:reward,
             # de enige maat die voor alle drie soorten gelijk berekenbaar is).
             structural: list[dict] = []
-            breakout_candidate = await _find_breakout_retest_candidate(coin, direction, df, ind)
-            if breakout_candidate:
-                structural.append(breakout_candidate)
-            trendline_candidate = await _find_trendline_retest_candidate(coin, direction, df, ind)
-            if trendline_candidate:
-                structural.append(trendline_candidate)
-            pattern_candidate = await _find_chart_pattern_candidate(coin, df, ind, btc_divergence_direction)
-            if pattern_candidate:
-                structural.append(pattern_candidate)
+            if structural_on:
+                breakout_candidate = await _find_breakout_retest_candidate(coin, direction, df, ind)
+                if breakout_candidate:
+                    structural.append(breakout_candidate)
+                trendline_candidate = await _find_trendline_retest_candidate(coin, direction, df, ind)
+                if trendline_candidate:
+                    structural.append(trendline_candidate)
+                pattern_candidate = await _find_chart_pattern_candidate(coin, df, ind, btc_divergence_direction)
+                if pattern_candidate:
+                    structural.append(pattern_candidate)
 
             # Deze cyclus al een smc-signaal op deze coin gepusht: een
             # structurele kandidaat de andere kant op zou aan het eind van de
@@ -1102,6 +1112,9 @@ async def scan_market() -> None:
             # is. Elke cyclus geregistreerd (ook als dit een refresh is),
             # zodat de teller altijd de echte, actuele reeks weerspiegelt.
             consecutive = repo.record_scan_direction(coin, direction)
+            # Na de whiplash-teller, zodat die bij ENGINE_FOCUS=false de echte reeks kent. Een al open signaal wordt wel ververst.
+            if not was_open_before and not day_on:
+                continue
             if not was_open_before and consecutive < WHIPLASH_MIN_CONSECUTIVE_CYCLES:
                 logger.info(
                     "%s %s overgeslagen: richting pas %s cyclus/cycli op rij, nog geen %s",
@@ -1225,8 +1238,12 @@ async def scan_smc_fast() -> None:
         return
     # De marktcontext haalt intussen op in zijn eigen threads, zodat zijn netwerkwachttijd nooit bij die van de motoren optelt. Hij beslist niets.
     context = asyncio.ensure_future(market_context_live.run())
-    for coin_row in repo.list_coins():
-        await _run_smc_check(coin_row["symbol"])
+    if focus.engine_on("smc"):
+        for coin_row in repo.list_coins():
+            await _run_smc_check(coin_row["symbol"])
+    else:
+        # Ook een bouwende setup wordt geen signaal meer: de Radar toont hem met focus niet, dus niemand heeft er een order op.
+        _focus_off("smc")
     try:
         await samenval.run()
     except Exception:

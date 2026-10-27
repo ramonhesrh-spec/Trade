@@ -10,7 +10,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, push_notify, repo, smc_eval
+from app import config, focus, push_notify, repo, smc_eval
 from app.replay import rejection as rj
 
 logger = logging.getLogger("rejection_live")
@@ -84,6 +84,10 @@ async def _check(coin: str, now: pd.Timestamp) -> None:
 async def run(now: Optional[datetime] = None) -> None:
     """Draait in de SMC-snelcyclus."""
     if not config.REJECTION_ENABLED:
+        return
+    if not focus.engine_on("rejectie"):
+        logger.info("Rejectie: %s, geen nieuwe kansen", focus.OFF_DETAIL)
+        repo.beat("rejectie", focus.OFF_DETAIL)
         return
     from app.structure_live import should_disable
     if should_disable(repo.list_type_results("rejectie", config.REJECTION_MAX_NEGATIVE), config.REJECTION_MAX_NEGATIVE):

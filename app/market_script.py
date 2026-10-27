@@ -14,7 +14,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import chance_checks, config, repo, smc_eval
+from app import chance_checks, config, focus, repo, smc_eval
 from app.track_record import signal_r
 
 logger = logging.getLogger("market_script")
@@ -275,6 +275,11 @@ def generate_all() -> None:
     if not config.SCRIPT_ENABLED:
         logger.info("Markt-script staat uit")
         return
+    if not focus.engine_on("script"):
+        # Ook geen Claude-aanroep: een duiding die nooit iets mag melden kost alleen geld.
+        logger.info("Markt-script: %s, geen nieuwe duiding", focus.OFF_DETAIL)
+        repo.beat("script", focus.OFF_DETAIL)
+        return
     for row in repo.list_coins():
         try:
             generate_for_coin(row["symbol"])
@@ -319,6 +324,9 @@ async def run_triggers(now: Optional[datetime] = None) -> int:
     now = now or datetime.now(timezone.utc)
     repo.expire_scenarios(now.isoformat())
     if not config.SCRIPT_ENABLED:
+        return 0
+    if not focus.engine_on("script"):
+        repo.beat("script", focus.OFF_DETAIL)
         return 0
     if should_disable(repo.list_script_results(config.SCRIPT_MAX_NEGATIVE), config.SCRIPT_MAX_NEGATIVE):
         repo.notify_engine_disabled("Markt-script", f"De laatste {config.SCRIPT_MAX_NEGATIVE} afgeronde scenario's zijn samen negatief. Zie Bewijs.")

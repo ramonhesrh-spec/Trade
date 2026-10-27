@@ -19,7 +19,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from app import chance_checks, config, push_notify, push_policy, range_watch, repo, structure_live
+from app import chance_checks, config, focus, push_notify, push_policy, range_watch, repo, structure_live
 from app.replay import rangesweep as rs, rangesweep_lab as rl, stopquality as sq, trendlab as tl
 from app.replay.lab import add_indicators
 
@@ -296,6 +296,11 @@ async def _register(coin: str, v: rl.RSVariant, stop_name: str, s: dict, frames:
 async def scan(now: Optional[datetime] = None) -> None:
     """Nieuwe setups. Spec: geen nieuwe setups zonder geslaagde toets op stopkwaliteit; open trades volgt `follow` gewoon verder."""
     if not config.RANGE_SWEEP_ENABLED:
+        return
+    if not focus.engine_on(TRADE_TYPE):
+        # Alleen het zoeken stopt: track en follow volgen wat al gemeld of gevuld is.
+        logger.info("Range sweep: %s, geen nieuwe setups", focus.OFF_DETAIL)
+        repo.beat("range_sweep", focus.OFF_DETAIL)
         return
     stamp = _utc(now)
     if stamp.minute % 15 >= 10:

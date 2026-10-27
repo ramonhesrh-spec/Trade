@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
-from app import db, exchange, indicators, price_alerts, push_notify, range_sweep_live, repo, rule_live
+from app import db, exchange, focus, indicators, price_alerts, push_notify, range_sweep_live, repo, rule_live
 from app.signal_processor import (
     SWING_WATCH_MAX_AGE_DAYS, _price_broke_through, _price_near_level, run_swing_check,
 )
@@ -618,7 +618,12 @@ async def run_all_checks() -> None:
     except Exception:
         logger.exception("Proefmotor volgen is mislukt")
     await check_pending_signals()
-    await check_swing_watches()
+    if focus.engine_on("swing"):
+        await check_swing_watches()
+    else:
+        # Een swing-watch die raakt wordt een nieuw signaal; de wachtende watches blijven staan voor als swing weer aan gaat.
+        logger.info("Swing: %s, wachtende watches niet getoetst", focus.OFF_DETAIL)
+        repo.beat("swing", focus.OFF_DETAIL)
     await check_narratives()
 
 

@@ -9,7 +9,7 @@ import logging
 import time
 from typing import Callable, Optional
 
-from app import coinlist, config, exchange, explain, indicators, push_notify, repo, risk
+from app import coinlist, config, exchange, explain, focus, indicators, push_notify, repo, risk
 from app.anthropic_interpret import Interpretation, interpret_message
 from app.setup_eval import (  # noqa: F401  (market_scanner importeert deze namen hier)
     MAX_STOP_DISTANCE_PCT, MIN_RISK_REWARD_RATIO, evaluate_day_trading_setup, stop_within_max_distance,
@@ -153,6 +153,15 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
             f"duplicaat van bericht #{duplicate['id']}, niet opnieuw verwerkt",
         )
         repo.mark_message_envelope_processed(message_id)
+        return
+
+    # Focus: day trading via Discord staat uit. Het bericht staat al in messages en is hierboven gededupliceerd; zonder interpretatie komt er
+    # geen signaal, journaalregel of push uit, en geen Anthropic-kosten. Hier en niet in process_day_trading_signal: daar kijkt de golden test.
+    if not focus.engine_on("day_trading"):
+        logger.info("Bericht %s opgeslagen, niet geïnterpreteerd: day trading %s", message_id, focus.OFF_DETAIL)
+        repo.mark_message_processed(message_id, None, None, None, False,
+                                    note=f"Opgeslagen, niet geïnterpreteerd: day trading {focus.OFF_DETAIL} (ENGINE_FOCUS)")
+        repo.beat("day_trading", focus.OFF_DETAIL)
         return
 
     global _consecutive_interpret_failures

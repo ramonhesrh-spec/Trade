@@ -12,7 +12,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, db, push_notify, push_policy, repo
+from app import config, db, focus, push_notify, push_policy, repo
 from app.replay import rangesweep as rs, trendlab as tl
 
 logger = logging.getLogger("range_watch")
@@ -171,6 +171,10 @@ async def _follow(coin: str, watches: list[dict], now: datetime) -> None:
 async def run(now: Optional[datetime] = None) -> None:
     """5-minutencyclus naast rule_live.scan(). Uit tenzij RANGE_WATCH_ENABLED."""
     if not config.RANGE_WATCH_ENABLED:
+        return
+    if not focus.engine_on("range_watch"):
+        logger.info("Range-watch: %s", focus.OFF_DETAIL)
+        repo.beat("range_watch", focus.OFF_DETAIL)
         return
     now = now or datetime.now(timezone.utc)
     now = now if now.tzinfo else now.replace(tzinfo=timezone.utc)

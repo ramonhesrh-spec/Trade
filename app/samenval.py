@@ -7,7 +7,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import config, push_notify, repo
+from app import config, focus, push_notify, repo
 from app.track_record import signal_r
 
 logger = logging.getLogger(__name__)
@@ -48,6 +48,9 @@ def should_disable(results: list[dict], max_negative: int) -> bool:
 async def run(now: Optional[datetime] = None) -> int:
     """Geeft het aantal nieuwe samenvallen dat gemeld is."""
     if not config.SAMENVAL_ENABLED:
+        return 0
+    if not focus.engine_on("samenval"):
+        repo.beat("samenval", focus.OFF_DETAIL)
         return 0
     if should_disable(repo.list_samenval_results(config.SAMENVAL_MAX_NEGATIVE), config.SAMENVAL_MAX_NEGATIVE):
         logger.info("Samenval staat uit: de laatste %s afgeronde samenvallen zijn netto negatief", config.SAMENVAL_MAX_NEGATIVE)

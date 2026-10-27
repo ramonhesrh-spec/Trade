@@ -16,7 +16,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from app import config, push_notify, repo
+from app import config, focus, push_notify, repo
 from app.replay import trendlab as tl
 from app import track_record
 from app.track_record import _cost_r, signal_r
@@ -230,6 +230,11 @@ async def scan(now: Optional[datetime] = None) -> None:
     v = variant()
     delta = pd.Timedelta(v.timeframe)
     if stamp - stamp.floor(delta) > SCAN_WINDOW:
+        return
+    if not focus.engine_on(RULE):
+        # Alleen nieuwe trades stoppen: update_open (level_check) volgt de lopende proeftrades tot hun stop.
+        logger.info("Proef %s: %s, geen nieuwe trades", RULE, focus.OFF_DETAIL)
+        repo.beat(RULE, focus.OFF_DETAIL)
         return
     # Spec sectie 7: geen nieuwe regel live zonder lab-toets. Open trades volgt update_open gewoon verder.
     lab = repo.get_rule_lab(RULE)
