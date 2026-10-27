@@ -178,5 +178,12 @@ RANGE_SWEEP_MAX_NEGATIVE = int(_get("RANGE_SWEEP_MAX_NEGATIVE", "30"))
 # met een melding bij een nieuwe kaart en bij de vulling. Voor iedereen, altijd ongetest: Bewijs telt hem apart (trade_type 'zone_radar').
 ZONE_RADAR_ENABLED = _get("ZONE_RADAR_ENABLED", "true").lower() == "true"
 ZONE_RADAR_MAX_PER_DAY = int(_get("ZONE_RADAR_MAX_PER_DAY", "20"))
+# Zone-sweep (app/zone_sweep.py, app/zone_sweep_live.py): prik door een actieve zone met herstel, docs/onderzoek/zone-sweep/preregistratie.md.
+# De pre-registratie wil eerst een geslaagde labrun; op 2026-10-27 koos de gebruiker (CEO) uitdrukkelijk voor live zonder labrun, met het label
+# ongetest, zoals RANGE_SWEEP_UNTESTED. De labrun (zs_*, zone_sweep_stop, zone_sweep) blijft de toets die later volgt; Bewijs toont de live score apart.
+ZONE_SWEEP_ENABLED = _get("ZONE_SWEEP_ENABLED", "true").lower() == "true"
+# false: alleen de CEO ziet kaarten, signalen en cijfers (rule_live.CEO_ONLY_TYPES), zoals de range sweep zonder RANGE_SWEEP_PUBLIC.
+ZONE_SWEEP_PUBLIC = _get("ZONE_SWEEP_PUBLIC", "true").lower() == "true"
+ZONE_SWEEP_MAX_PER_DAY = int(_get("ZONE_SWEEP_MAX_PER_DAY", "10"))
 # Marktcontext (app/market_context_live.py): funding, OI, Fear and Greed en stablecoins van publieke bronnen naast Binance. Alleen weergave en opslag.
 MARKET_CONTEXT_ENABLED = _get("MARKET_CONTEXT_ENABLED", "true").lower() == "true"

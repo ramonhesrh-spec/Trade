@@ -93,6 +93,14 @@ def _level_hit_in_candles(
     return None
 
 
+def _self_measured(row: dict) -> bool:
+    """Soorten die hun uitkomst zelf zetten: de proefmotor (meelopende stop), de range sweep en een zone-sweep zonder doel (referentie-uitgang).
+    Een zone-sweep met doel blijft hier, die beslist op doel en stop zoals elk plan."""
+    if row["trade_type"] in (rule_live.RULE, range_sweep_live.TRADE_TYPE):
+        return True
+    return row["trade_type"] == rule_live.ZONE_SWEEP and row.get("take_profit") is None
+
+
 async def check_open_trades() -> None:
     entries = repo.list_open_entries_with_levels()
     logger.info("%d open logboekregels om te checken", len(entries))
@@ -101,7 +109,7 @@ async def check_open_trades() -> None:
 
     # De proefmotor volgt zijn eigen meelopende stop (rule_live.update_open); de vaste stop hier zou op een verouderd niveau melden.
     # Geen vast doel en een eigen meting: range_sweep_live zet uitkomst en R zelf.
-    entries = [e for e in entries if e["trade_type"] not in (rule_live.RULE, range_sweep_live.TRADE_TYPE)]
+    entries = [e for e in entries if not _self_measured(e)]
     for entry in entries:
         coin = entry["coin"]
         if coin not in coin_candles:
@@ -165,7 +173,7 @@ async def check_signal_outcomes() -> None:
     markeerde — dit is precies waarom het trackrecord niet meer van een
     handmatige actie afhangt."""
     # Geen vast doel en een meelopende stop: rule_live zet de uitkomst en de echte R zelf. Geen vast doel en een eigen meting: range_sweep_live idem.
-    signals = [s for s in repo.list_unresolved_signals_with_levels() if s["trade_type"] not in (rule_live.RULE, range_sweep_live.TRADE_TYPE)]
+    signals = [s for s in repo.list_unresolved_signals_with_levels() if not _self_measured(s)]
     logger.info("%d signalen zonder vastgestelde uitkomst om te checken", len(signals))
 
     # Per coin candles vanaf het oudste openstaande signaal, niet alleen de laatste 30 minuten: een doel of stop dat geraakt werd terwijl deze taak

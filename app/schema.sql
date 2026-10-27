@@ -838,6 +838,72 @@ CREATE TABLE IF NOT EXISTS zone_radar_setups (
 );
 CREATE INDEX IF NOT EXISTS idx_zone_radar_setups_state ON zone_radar_setups(state);
 
+-- Zone-sweep (app/zone_sweep_live.py): een prik door een actieve zone met herstel (app/replay/zonesweep.py), ongetest live op verzoek van de
+-- gebruiker. Eén rij per zone per coin (UNIQUE): dezelfde zone geeft nooit een tweede kaart. state: waiting, filled (signal_id gezet, trade_type
+-- 'zone_sweep'), verlopen, weggelopen of stop_voor_vulling (dezelfde regels als het lab). quiet = 1: niet gemeld (dagcap of een plan dat bij het
+-- ontstaan al dood was), de kaart staat wel op de Radar en wordt gevolgd. take_profit leeg: geen tegenovergestelde zone op minstens 2R.
+CREATE TABLE IF NOT EXISTS zone_sweep_setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    variant TEXT NOT NULL,
+    stop_name TEXT NOT NULL,
+    tf TEXT NOT NULL,
+    zone_key TEXT NOT NULL,
+    zone_low REAL NOT NULL,
+    zone_high REAL NOT NULL,
+    zone_at TEXT NOT NULL,
+    sweep_at TEXT NOT NULL,
+    extreme REAL NOT NULL,
+    placed_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    ref_price REAL NOT NULL,
+    range_high REAL NOT NULL,
+    range_low REAL NOT NULL,
+    atr_t REAL NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    rr REAL,
+    target_tf TEXT,
+    target_low REAL,
+    target_high REAL,
+    prik_atr REAL NOT NULL,
+    herstel_bars INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    ended_at TEXT,
+    quiet INTEGER NOT NULL DEFAULT 0,
+    alert_sent INTEGER NOT NULL DEFAULT 0,
+    signal_id INTEGER REFERENCES signals(id),
+    UNIQUE (coin, zone_key)
+);
+CREATE INDEX IF NOT EXISTS idx_zone_sweep_setups_state ON zone_sweep_setups(state);
+-- Gevulde zone-sweeps zonder doel: de meting van de stop en de referentie-uitgang (meelopende stop 3 ATR op 1u) die de R in trade_results geeft,
+-- zoals range_sweep_trades. Met een doel is er geen rij: dan beslist level_check de uitkomst op doel en stop.
+CREATE TABLE IF NOT EXISTS zone_sweep_trades (
+    signal_id INTEGER PRIMARY KEY,
+    setup_id INTEGER NOT NULL UNIQUE,
+    entry REAL NOT NULL,
+    stop REAL NOT NULL,
+    filled_at TEXT NOT NULL,
+    checked_until TEXT NOT NULL,
+    mae_r REAL NOT NULL DEFAULT 0,
+    mfe_r REAL NOT NULL DEFAULT 0,
+    reached_1r_at TEXT,
+    reached_2r_at TEXT,
+    reached_3r_at TEXT,
+    reached_4r_at TEXT,
+    reached_5r_at TEXT,
+    reached_6r_at TEXT,
+    stop_hit_at TEXT,
+    ref_stop REAL NOT NULL,
+    ref_extreme REAL NOT NULL,
+    ref_r REAL,
+    ref_closed_at TEXT,
+    closed_at TEXT
+);
+
 -- Marktcontext (app/market_context_live.py): gemeten waarden van publieke bronnen, één rij per meting. coin is 'markt' voor wat bij geen coin hoort
 -- (Fear and Greed, stablecoins). bron: binance, hyperliquid, bybit, okx, alternative, defillama. Een mislukte ophaal schrijft niets, zodat de oude
 -- waarde met zijn eigen tijd blijft staan. Geen motor leest dit; het staat als feit op kaart en Vandaag.

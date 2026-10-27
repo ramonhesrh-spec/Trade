@@ -20,7 +20,7 @@ def fmt(value: float) -> str:
     return f"{value:.4f}" if abs(value) < 100 else f"{value:.2f}"
 
 
-def plan_steps(wait_title: str, limit: float, stop: float, take_text: str, risk_pct: float, rr: float, *, state: str = "waiting",
+def plan_steps(wait_title: str, limit: float, stop: float, take_text: str, risk_pct: float, rr: Optional[float], *, state: str = "waiting",
                distance_pct: Optional[float] = None, page: str = "vandaag", live: Optional[tuple[str, float, str]] = None) -> list[dict]:
     """state: 'waiting' (stap 1 is aan de beurt), 'fired' of 'filled' (stap 2 is aan de beurt), anders alles gedempt.
     distance_pct: hoe ver de koers nog van stap 1 is, voor de live verversing van de pagina."""
@@ -31,11 +31,14 @@ def plan_steps(wait_title: str, limit: float, stop: float, take_text: str, risk_
     if live:
         # De browser rekent de afstand zelf uit bij elke koers van de beurs: (niveau - koers) / koers, of een van de varianten voor de radar.
         first["live_coin"], first["live_level"], first["live_mode"] = live
+    # Zonder doel (rr None) geen "rr" in de stap: steps_list rekent er dan geen bedrag mee uit.
+    last = ({"title": f"Stop {fmt(stop)}, {take_text}", "state": "next",
+             "sub": f"De stop ligt {risk_pct:.2f}% van je instap. Het doel levert {rr:.1f} keer wat je riskeert.", "rr": rr} if rr is not None else
+            {"title": f"Stop {fmt(stop)}, {take_text}", "state": "next", "sub": f"De stop ligt {risk_pct:.2f}% van je instap. Geen doel van HesPulse."})
     return [
         first,
         {"title": f"Zet een limietorder op {fmt(limit)}", "state": "now" if now == 2 else "next"},
-        {"title": f"Stop {fmt(stop)}, {take_text}", "state": "next",
-         "sub": f"De stop ligt {risk_pct:.2f}% van je instap. Het doel levert {rr:.1f} keer wat je riskeert.", "rr": rr},
+        last,
     ]
 
 
@@ -55,7 +58,8 @@ def structure_steps(plan: dict, targets: list[tuple[float, float]], price: Optio
 
 def smc_steps(plan, zone_low: float, zone_high: float, price: Optional[float], distance_pct: Optional[float], coin: str = "") -> list[dict]:
     wait = f"Wacht tot de koers in de zone {fmt(zone_low)} tot {fmt(zone_high)} komt"
-    return plan_steps(wait, plan.limit, plan.stop, f"doel {fmt(plan.take)}", plan.risk_pct, plan.rr, distance_pct=distance_pct, page="radar",
+    take_text = f"doel {fmt(plan.take)}" if plan.take is not None else "geen doel: dat kies je zelf"
+    return plan_steps(wait, plan.limit, plan.stop, take_text, plan.risk_pct, plan.rr, distance_pct=distance_pct, page="radar",
                       live=(coin, plan.limit, "pl" if plan.direction == "long" else "ll") if coin else None)
 
 

@@ -13,6 +13,7 @@ Elke melding gaat één keer af: de staat of de meting wordt vastgelegd vóór h
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -186,9 +187,20 @@ async def _frames(coin: str, now: pd.Timestamp) -> dict:
     return rs.build_frames(*parts)
 
 
+# De range sweep en de zone-sweep lezen in dezelfde cyclus dezelfde candles: één ophaling per coin, timeframe en lengte binnen deze tijd.
+FETCH_CACHE_SECONDS = 90
+_fetch_cache: dict[tuple[str, str, int], tuple[float, pd.DataFrame]] = {}
+
+
 def fetch_bars(coin: str, timeframe: str, limit: int) -> pd.DataFrame:
     from app import exchange
-    return exchange.fetch_ohlcv(coin, timeframe=timeframe, limit=limit)
+    key = (coin, timeframe, limit)
+    hit = _fetch_cache.get(key)
+    if hit and time.monotonic() - hit[0] < FETCH_CACHE_SECONDS:
+        return hit[1]
+    df = exchange.fetch_ohlcv(coin, timeframe=timeframe, limit=limit)
+    _fetch_cache[key] = (time.monotonic(), df)
+    return df
 
 
 async def _tell(uid: int, title: str, body: str, url: str, tag: str) -> None:
@@ -202,8 +214,8 @@ async def _tell(uid: int, title: str, body: str, url: str, tag: str) -> None:
     await push_notify.send_push(uid, title, body, url, silent=quiet, tag=tag)
 
 
-async def _tell_all(title: str, body: str, url: str, tag: str) -> None:
-    for uid in viewers():
+async def _tell_all(title: str, body: str, url: str, tag: str, uids: Optional[list[int]] = None) -> None:
+    for uid in (viewers() if uids is None else uids):
         try:
             await _tell(uid, title, body, url, tag)
         except Exception:
@@ -418,6 +430,12 @@ async def track(now: Optional[datetime] = None) -> None:
 
 
 async def _follow_trade(t: dict, b15: pd.DataFrame, b1h: pd.DataFrame, now: pd.Timestamp) -> None:
+    await follow_trade(t, b15, b1h, now, update=repo.update_range_sweep_trade, label=FAMILY_LABEL[t["family"]], tag=_tag(t["setup_id"]), uids=viewers())
+
+
+async def follow_trade(t: dict, b15: pd.DataFrame, b1h: pd.DataFrame, now: pd.Timestamp, *, update, label: str, tag: str, uids: list[int]) -> None:
+    """Eén cyclus van de meting en de referentie-uitgang voor een gevulde trade zonder doel. Ook de zone-sweep zonder doel volgt zo (`update` schrijft
+    naar zijn eigen tabel): dezelfde regels, dus dezelfde code."""
     cut = _upto(b15, now)
     closed = rs.closed_only(cut, now, "15m")
     forming = cut.iloc[len(closed):len(closed) + 1]
@@ -446,22 +464,21 @@ async def _follow_trade(t: dict, b15: pd.DataFrame, b1h: pd.DataFrame, now: pd.T
         closed_at = max(now, pd.Timestamp(t["created_at"])).isoformat()
         repo.set_trade_result(t["signal_id"], out["ref_r"], closed_at)
         repo.mark_signal_auto_outcome(t["signal_id"], "take_profit" if out["ref_r"] > 0 else "stop_loss", closed_at)
-    update = {k: out[k] for k in _MEASURE_KEYS}
+    fields = {k: out[k] for k in _MEASURE_KEYS}
     if finished:
-        update["closed_at"] = now.isoformat()
+        fields["closed_at"] = now.isoformat()
     # Vastleggen vóór het versturen: een mislukte verzending komt niet terug, een herstart meldt niets dubbel.
-    repo.update_range_sweep_trade(t["signal_id"], **update)
-    fam = FAMILY_LABEL[t["family"]]
-    url, tag = push_notify.signal_url(t["coin"], t["signal_id"]), _tag(t["setup_id"])
+    update(t["signal_id"], **fields)
+    url = push_notify.signal_url(t["coin"], t["signal_id"])
     if new_ref and out["ref_closed_at"] != out["stop_hit_at"]:
-        await _tell_all(push_notify.alert_title(t["coin"], t["direction"], f"{fam} · referentie gesloten"),
+        await _tell_all(push_notify.alert_title(t["coin"], t["direction"], f"{label} · referentie gesloten"),
                         f"Referentie-uitgang gesloten: {fmt_r(out['ref_r'])}, jouw trade beslis je zelf\n"
-                        "Dat is de R bij een meelopende stop van 3 ATR op 1u, niet bij jouw eigen doel.", url, tag)
+                        "Dat is de R bij een meelopende stop van 3 ATR op 1u, niet bij jouw eigen doel.", url, tag, uids)
     if new_stop:
-        await _tell_all(push_notify.alert_title(t["coin"], t["direction"], f"{fam} · stop geraakt"),
-                        f"Stop geraakt, {fmt_r(-out['mae_r'])}\nDe koers raakte de stop van dit plan. Wat je met jouw eigen order doet, beslis je zelf.", url, tag)
+        await _tell_all(push_notify.alert_title(t["coin"], t["direction"], f"{label} · stop geraakt"),
+                        f"Stop geraakt, {fmt_r(-out['mae_r'])}\nDe koers raakte de stop van dit plan. Wat je met jouw eigen order doet, beslis je zelf.", url, tag, uids)
     if new_ref or new_stop:
-        logger.info("Range sweep trade %s: stop %s, referentie %s", t["signal_id"], out["stop_hit_at"], out["ref_r"])
+        logger.info("%s trade %s: stop %s, referentie %s", label, t["signal_id"], out["stop_hit_at"], out["ref_r"])
 
 
 async def follow(now: Optional[datetime] = None) -> None:
