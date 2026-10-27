@@ -4,75 +4,108 @@
 {% block title %}Nu — HesPulse{% endblock %}
 {% block page_title %}Nu{% endblock %}
 {% block content %}
-{# Nu (app/nu.py): rust, of precies één kaart. nu.js vergelijkt de handtekening met /api/radar en laadt opnieuw zodra er iets in of
-   uit de zone gaat; verder bewegen alleen koers, afstand en balk. #}
+{# Nu (app/nu.py) op de prijsladder (ontwerp V3, app/ladder.py): rust, of precies één ladder. nu.js vergelijkt de handtekening met
+   /api/radar en laadt opnieuw zodra er iets in of uit de zone gaat; verder schuiven alleen koers, balk en getal (ladder.js).
+   Gebaren (nu.js): veeg de ladder opzij = overslaan met een ongedaan-balk, trek de greep omhoog = detailblad, houd een getal vast = kopiëren.
+   Elk gebaar heeft een knop ernaast: Sla over, Details en Enter op een getal. #}
 {% set n = nu %}
 {% set f = n.focus %}
 {% set zone_keys = ([f.key] if n.mode == "zone" else []) + n.also|map(attribute="key")|list %}
 {% set trade_keys = ([f.key] if n.mode == "trade" else []) + n.trades|map(attribute="key")|list %}
+{% set kinds = {"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "smc": "SMC"} %}
 <section class="nu nu-{{ n.mode }}" data-nu-mode="{{ n.mode }}" data-nu-sig="{{ zone_keys|sort|join(',') }}|{{ trade_keys|sort|join(',') }}"
          data-nu-skip="{{ n.skipped|map(attribute='key')|join(',') }}" aria-labelledby="nu-title">
 {% if n.mode == "rust" %}
   <div class="nu-calm">
-    <p class="nu-when">{{ nu_when }}</p>
-    <h2 class="nu-title" id="nu-title">Niets te doen.</h2>
-    {% if n.skipped %}{% set sk = n.skipped[0] %}
-    <p class="nu-lead">Je sloeg {{ sk.coin }} {{ sk.direction }} over. Er staat geen ander plan in de zone; het staat nog wel onder <a href="/smc">Plannen</a>.</p>
-    {% else %}
-    <p class="nu-lead">Er staat geen plan in de zone. Je krijgt een melding als dat verandert.</p>
-    {% endif %}
+    <h2 class="nu-rest" id="nu-title">Rust</h2>
+    <p class="nu-lead">Niets te doen.</p>
+    {% if n.skipped %}{% set sk = n.skipped[0] %}<p class="nu-note">Je sloeg {{ sk.coin }} {{ sk.direction }} over. Het staat nog onder <a href="/smc">Plannen</a>.</p>{% endif %}
   </div>
   {% if n.nearest %}{% set p = n.nearest %}
-  <a class="nu-next" href="/smc#radar-{{ p.key|replace(':', '-') }}" data-nu-key="{{ p.key }}" data-nu-coin="{{ p.coin }}" data-nu-limit="{{ p.limit }}" data-nu-dir="{{ p.direction }}">
-    <span class="nu-next-head"><span>Eerstvolgende</span><span>{{ p.coin }} · {{ p.dir_word }}</span></span>
-    <span class="nu-next-body">
-      <span class="nu-stack"><span class="nu-label">Nog tot instap</span><span class="nu-dist" data-nu="distance">{{ p.distance_text }}</span></span>
-      <span class="nu-stack nu-end"><span class="nu-px" data-nu="price">{{ p.price_text }}</span><span class="nu-lim"><span aria-hidden="true">→</span><span class="sr-only">limiet</span> {{ p.limit_text }}</span></span>
-    </span>
-    <span class="nu-bar" role="img" aria-label="Koers op {{ '%.0f'|format(p.approach_pct or 0) }}% van de weg naar de limiet"><i data-nu="bar" style="width: {{ '%.1f'|format(p.approach_pct or 0) }}%"></i></span>
+  <a class="nu-next" href="/smc#radar-{{ p.key|replace(':', '-') }}" data-nu-key="{{ p.key }}" data-nu-coin="{{ p.coin }}"
+     aria-label="Eerstvolgende plan: {{ p.coin }} {{ p.direction }}, nog {{ p.distance_text }} tot de instap. Open in Plannen.">
+    {{ macros.ladder(p.ladder_compact, "compact", coin=p.coin, limit=p.limit, num_text=p.distance_text, num_label=p.coin ~ " " ~ p.direction) }}
   </a>
+  {{ macros.ladder_skeleton("compact") }}
   <i data-live-coin="{{ p.coin }}" hidden></i>
   {% else %}
-  <p class="nu-next is-empty">Geen plan wacht op zijn zone. <a href="/smc">Naar Plannen</a></p>
+  <p class="nu-empty">Geen plan wacht op zijn zone. <a href="/smc">Naar Plannen</a></p>
   {% endif %}
-  <div class="nu-stats">
-    <a class="nu-stat" href="/smc"><span class="nu-label">Plannen</span><span class="nu-num">{{ n.plans }}</span></a>
-    <a class="nu-stat" href="/smc#tab-open"><span class="nu-label">Open trades</span><span class="nu-num">{{ n.open_trades }}</span></a>
-    <span class="nu-stat"><span class="nu-label">{{ macros.term("Gekeken", "Hoe oud de oudste koers achter deze plannen is. De stip rechtsboven kleurt oranje als hij ouder is dan twee minuten.", "nu-seen-pop") }}</span><span class="nu-num" data-nu="seen">{{ nu_seen }}</span></span>
-  </div>
+  <p class="nu-stale" data-nu-stale{% if not nu_stale %} hidden{% endif %}>{{ nu_stale }}</p>
 {% else %}
-  <div class="nu-focus" data-nu-key="{{ f.key }}" data-nu-coin="{{ f.coin }}" data-nu-dir="{{ f.direction }}"
-       {% if n.mode == "zone" %}data-nu-limit="{{ f.limit }}"{% else %}data-nu-entry="{{ f.entry }}" data-nu-stop="{{ f.rows|selectattr('tone', 'equalto', 'loss')|map(attribute='value')|first }}"{% endif %}>
-    <p class="nu-pill{% if n.mode == 'trade' %} is-open{% endif %}"><span class="nu-dot" aria-hidden="true"></span>{{ "In zone" if n.mode == "zone" else "Open trade" }}</p>
-    <h2 class="nu-head" id="nu-title"><span class="nu-coin">{{ f.coin }}</span><span class="nu-dir">{{ f.dir_word }}</span></h2>
-    <p class="nu-say">{{ f.action }}</p>
-    <div class="nu-now">
-      <span class="nu-stack"><span class="nu-label">Koers nu</span><span class="nu-big" data-nu="price">{{ f.price_text or "-" }}</span></span>
-      {% if n.mode == "trade" %}<span class="nu-stack nu-end"><span class="nu-label">Nu</span><span class="nu-r {{ 'pos' if (f.live_r or 0) > 0 else 'neg' if (f.live_r or 0) < 0 else '' }}" data-nu="live_r">{{ f.live_r_text or "-" }}</span></span>{% endif %}
+  {% set is_zone = n.mode == "zone" %}
+  <div class="nu-focus" data-nu-key="{{ f.key }}" data-nu-coin="{{ f.coin }}">
+    <header class="nu-top">
+      <h2 class="nu-head" id="nu-title"><span class="nu-coin">{{ f.coin }} {{ f.direction }}</span></h2>
+      <p class="nu-kind">
+        <span>{{ kinds.get(f.trade_type, f.trade_type) }}{% if not is_zone %} · Open trade{% endif %}</span>
+        {% if f.untested %}{{ macros.pill("ongetest") }}{% else %}{{ macros.proof_tag(f.trade_type, f.key|replace(':', '-')) }}{% endif %}
+      </p>
+    </header>
+    <div class="nu-swipe" data-nu-swipe{% if is_zone %} data-nu-skippable{% endif %}>
+      {% if is_zone %}
+      {{ macros.ladder(f.ladder, "plan", coin=f.coin, limit=f.limit, num_text="In zone", num_hook="state", price_left=true) }}
+      {% else %}
+      {{ macros.ladder(f.ladder, "trade", coin=f.coin, num_text=f.live_r_text or "-", num_hook="live_r",
+           stop=f.rows|selectattr('tone', 'equalto', 'loss')|map(attribute='value')|first,
+           num_class=("pos" if (f.live_r or 0) > 0 else "neg" if (f.live_r or 0) < 0 else "")) }}
+      {% endif %}
     </div>
+    {{ macros.ladder_skeleton("plan") }}
     <i data-live-coin="{{ f.coin }}" hidden></i>
-    <dl class="nu-plan">
-      {% for r in f.rows %}<div class="nu-row is-{{ r.tone }}"><dt>{{ r.label }}</dt><dd>{{ r.text }}</dd></div>
-      {% endfor %}
-    </dl>
-    <p class="nu-meta">
-      <span>{{ {"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "smc": "SMC"}.get(f.trade_type, f.trade_type) }} · limietplan</span>
-      {% if f.untested %}<span class="kind-tag is-untested">ongetest</span>{% else %}{{ macros.proof_tag(f.trade_type, f.key|replace(':', '-')) }}{% endif %}
-    </p>
+    <button type="button" class="nu-grab" data-nu-sheet-open aria-controls="nu-sheet" aria-expanded="false"><i aria-hidden="true"></i><span>Details</span></button>
     <div class="nu-actions">
-      {% if n.mode == "zone" %}
+      {% if is_zone %}
       <a class="nu-cta" href="{{ f.checklist_url }}">Zet de order, stap voor stap</a>
-      <form method="post" action="/nu/overslaan"><input type="hidden" name="key" value="{{ f.key }}"><button type="submit" class="nu-skip">Sla over</button></form>
+      <form method="post" action="/nu/overslaan" data-nu-skip-form><input type="hidden" name="key" value="{{ f.key }}"><button type="submit" class="nu-skip">Sla over</button></form>
       {% else %}
       <a class="nu-cta is-quiet" href="{{ f.url }}">Bekijk de trade</a>
       {% endif %}
     </div>
     {% for a in n.also %}
-    <a class="nu-also" href="/vandaag?plan={{ a.key }}"><span class="nu-dot" aria-hidden="true"></span>Ook in zone: <b>{{ a.coin }} {{ a.direction }}</b><span class="nu-chev" aria-hidden="true">›</span></a>
+    <a class="nu-also" href="/vandaag?plan={{ a.key }}">Ook in zone<b>{{ a.coin }} {{ a.direction }}</b><span class="nu-chev" aria-hidden="true">›</span></a>
     {% endfor %}
     {% for t in n.trades %}
-    <a class="nu-also" href="{{ t.url }}">Loopt: <b>{{ t.coin }} {{ t.direction }}</b><span class="nu-also-r">{{ t.live_r_text }}</span><span class="nu-chev" aria-hidden="true">›</span></a>
+    <a class="nu-also" href="{{ t.url }}">Loopt<b>{{ t.coin }} {{ t.direction }}</b><span class="nu-also-r">{{ t.live_r_text }}</span><span class="nu-chev" aria-hidden="true">›</span></a>
     {% endfor %}
+    <p class="nu-stale" data-nu-stale{% if not nu_stale %} hidden{% endif %}>{{ nu_stale }}</p>
+  </div>
+  {% if is_zone %}
+  <div class="nu-undo" data-nu-undo hidden role="status"><span>Overgeslagen.</span><button type="button" class="nu-undo-btn" data-nu-undo-btn>Ongedaan</button><i class="nu-undo-bar" aria-hidden="true"></i></div>
+  {% endif %}
+  <div class="nu-sheet" id="nu-sheet" role="dialog" aria-modal="true" aria-labelledby="nu-sheet-title" data-nu-sheet hidden>
+    <div class="nu-sheet-panel" data-nu-sheet-panel>
+      <button type="button" class="nu-sheet-grab" data-nu-sheet-close aria-label="Details sluiten"><i aria-hidden="true"></i></button>
+      <div class="nu-sheet-head">
+        <h3 class="nu-sheet-title" id="nu-sheet-title" tabindex="-1">{{ f.coin }} {{ f.direction }}</h3>
+        <button type="button" class="nu-sheet-x" data-nu-sheet-close aria-label="Sluiten"><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
+      </div>
+      <p class="nu-say">{{ f.action }}</p>
+      {% if is_zone %}{{ macros.ladder(f.ladder, "mini", coin=f.coin, limit=f.limit, num_text="In zone", num_hook="state", price_left=true) }}{% else %}{{ macros.ladder(f.ladder, "mini", coin=f.coin, num_text=f.live_r_text or "-", num_hook="live_r", stop=f.rows|selectattr('tone', 'equalto', 'loss')|map(attribute='value')|first,
+           num_class=("pos" if (f.live_r or 0) > 0 else "neg" if (f.live_r or 0) < 0 else "")) }}{% endif %}
+      <ul class="hold-list">
+        {% for r in f.rows %}
+        <li><button type="button" class="hold is-{{ r.tone }}" data-hold-copy="{{ r["copy"] }}" aria-label="{{ r.label }} {{ r.text }}, houd vast om te kopiëren">
+          <span class="hold-top"><span class="hold-lab" data-hold-label>{{ r.label }}</span><span class="hold-val">{{ r.text }}</span></span>
+          <span class="hold-bar" aria-hidden="true"><i></i></span>
+        </button></li>
+        {% endfor %}
+      </ul>
+      <p class="nu-hint">Houd vast om te kopiëren.</p>
+      <div class="nu-origin">
+        <span>{{ f.origin or kinds.get(f.trade_type, f.trade_type) }} · {{ "limietplan" if is_zone else "open trade" }}</span>
+        {% if f.chart %}
+        <div class="lc nu-chart"><div class="level-chart" hidden data-levelchart='{{ f.chart|tojson }}' data-coin="{{ f.coin }}" data-tf="15m" role="img" aria-label="{{ f.chart.label }}"></div>
+          <button type="button" class="nu-chart-btn" data-lc-expand>Grafiek</button></div>
+        {% endif %}
+      </div>
+      {% if nu_context %}
+      <dl class="nu-ctx" aria-label="Context, gemeten">
+        {% for l in nu_context %}<div><dt>{{ l.label }}</dt><dd><span class="nu-ctx-v">{{ l.value }}</span><span class="nu-ctx-m">{{ [l.note, l.source, l.age]|select|join(" · ") }}</span></dd></div>{% endfor %}
+      </dl>
+      {% endif %}
+      {% if is_zone %}<a class="nu-cta" href="{{ f.checklist_url }}">Zet de order, stap voor stap</a>{% else %}<a class="nu-cta is-quiet" href="{{ f.url }}">Bekijk de trade</a>{% endif %}
+    </div>
   </div>
 {% endif %}
 </section>
@@ -277,5 +310,6 @@
 <script defer src="{{ asset('vendor/lightweight-charts-4.2.0.standalone.production.js') }}"></script>
 <script defer src="{{ asset('levelchart.js') }}"></script>
 <script src="/static/vandaag.js" defer></script>
+<script src="{{ asset('ladder.js') }}" defer></script>
 <script src="{{ asset('nu.js') }}" defer></script>
 {% endblock %}

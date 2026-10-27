@@ -42,46 +42,79 @@ class Base(unittest.TestCase):
 
 
 class NuPageTests(Base):
+    """V3 (Peil): rust of één ladder. De getallen komen van dezelfde Radar-kaart; de ladder zet ze op hun echte plek."""
     def test_rust_zonder_plannen(self):
         html = self.client.get("/vandaag").text
         sec = self.nu(html)
         self.assertIn('data-nu-mode="rust"', sec)
+        self.assertIn(">Rust<", sec)
         self.assertIn("Niets te doen.", sec)
-        self.assertIn("Er staat geen plan in de zone. Je krijgt een melding als dat verandert.", sec)
         self.assertIn("Geen plan wacht op zijn zone.", sec)
-        for label in ("Plannen", "Open trades", "Gekeken"):
-            self.assertIn(label, sec)
-        self.assertNotIn("Eerstvolgende</span>", sec)
+        self.assertIn('href="/smc"', sec)
+        self.assertNotIn("data-ladder=", sec)
+        for gone in ("Open trades", "Gekeken", "Eerstvolgende"):          # het ontwerp schrapte de tellers en "Bijgewerkt"
+            self.assertNotIn(gone, sec)
 
-    def test_rust_met_het_eerstvolgende_plan_en_een_gemeten_afstand(self):
+    def test_rust_toont_het_eerstvolgende_plan_uitgezoomd_met_de_gemeten_afstand(self):
         zone("BTC", "short", 102.0, 103.0, 104.0, 95.0, "1h:bear:a")         # limiet 102, koers 100: nog 1,96%
         zone("SOL", "long", 90.0, 91.0, 89.0, 110.0, "1h:bull:b")            # limiet 91: nog 9,89%
         sec = self.nu(self.client.get("/vandaag").text)
-        self.assertIn("Eerstvolgende", sec)
-        self.assertIn("BTC · Short", sec)
-        self.assertIn(">1,96%<", sec)
-        self.assertIn("102,00", sec)
-        self.assertRegex(sec, r'class="nu-bar"[^>]*><i data-nu="bar" style="width: 34\.\d%">')
-        self.assertRegex(sec, r'Plannen</span><span class="nu-num">2</span>')
-        self.assertRegex(sec, r'Gekeken</button>.*?</span></span><span class="nu-num" data-nu="seen">net</span>')
+        self.assertIn('data-ladder="compact"', sec)
+        self.assertRegex(sec, r'class="lad-num"[^>]*data-lad="distance"[^>]*>1,96%<')
+        self.assertIn("BTC short", sec)
+        self.assertIn(">102,00<", sec)                                        # instap als tag-getal
+        self.assertIn('data-lad-limit="102.0"', sec)
+        self.assertNotIn(">Stop<", sec)                                       # uitgezoomd: geen stop en geen doel
+        self.assertNotIn("SOL", sec)
 
-    def test_een_plan_in_de_zone_vult_het_scherm_met_de_checklistknop(self):
+    def test_een_plan_in_de_zone_vult_het_scherm_met_een_ladder(self):
         zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")    # koers 100 staat in de zone
         zone("ETH", "long", 99.0, 100.5, 98.0, 106.0, "1h:bull:b")           # ook in de zone, verder van zijn limiet
         sec = self.nu(self.client.get("/vandaag").text)
         self.assertIn('data-nu-mode="zone"', sec)
-        self.assertIn(">In zone<", sec)
-        self.assertIn('class="nu-coin">BTC<', sec)
+        self.assertIn('data-ladder="plan"', sec)
+        self.assertIn("is-in-zone", sec)
+        self.assertIn('class="nu-coin">BTC short<', sec)
+        for tag in (">Stop<", ">Instap<", ">Doel<"):
+            self.assertIn(tag, sec)
         self.assertIn("De koers staat in de zone", sec)
         self.assertIn(f'href="/nu/order/zone:{zid}"', sec)
         self.assertIn("Zet de order, stap voor stap", sec)
-        self.assertIn('<span class="kind-tag is-untested">ongetest</span>', sec)
-        for label in ("Stop", "Instap", "Doel · 2,0 R"):
-            self.assertIn(label, sec)
-        ook = sec[sec.index("Sla over"):]
+        self.assertIn('class="pill is-untested">ongetest<', sec)
+        ook = sec[sec.index("Zet de order"):]
         self.assertIn("Ook in zone", ook)
         self.assertIn("ETH long", ook)
-        self.assertLess(sec.index("Zet de order"), sec.index("Ook in zone"))
+
+    def test_geschrapt_op_nu(self):
+        zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
+        sec = self.nu(self.client.get("/vandaag").text)
+        for gone in ("coin-av", "24u", "Volume", "winkans", "Winkans", "signaalsterkte", "verwachte R", "<dt>", "nu-plan"):
+            self.assertNotIn(gone, sec, gone)
+
+    def test_detailblad_met_vasthouden_om_te_kopieren(self):
+        zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
+        sec = self.nu(self.client.get("/vandaag").text)
+        sheet = sec[sec.index('id="nu-sheet"'):]
+        self.assertIn('role="dialog"', sec[sec.index('id="nu-sheet"') - 200:])
+        for copy in ("100.00", "102.00", "96.0000"):
+            self.assertIn(f'data-hold-copy="{copy}"', sheet)
+        self.assertIn("Houd vast", sheet)
+        self.assertIn("Aanbodzone 1u", sheet)                                # herkomst in één regel
+        self.assertIn("data-lc-expand", sheet)                               # grafiek pas na een tik, schermvullend
+        self.assertIn(f'href="/nu/order/zone:{zid}"', sheet)
+
+    def test_overslaan_heeft_een_ongedaan_balk_en_een_knop_zonder_js(self):
+        zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
+        sec = self.nu(self.client.get("/vandaag").text)
+        self.assertIn('data-nu-undo hidden', sec)
+        self.assertIn("Ongedaan", sec)
+        self.assertIn(f'name="key" value="zone:{zid}"', sec)
+        self.assertIn("Sla over", sec)
+
+    def test_skelet_in_de_vorm_van_de_ladder(self):
+        zone("BTC", "short", 102.0, 103.0, 104.0, 95.0, "1h:bear:a")
+        sec = self.nu(self.client.get("/vandaag").text)
+        self.assertIn("data-ladder-skeleton", sec)
 
     def test_sla_over_onthoudt_het_plan_en_valt_terug_op_rust(self):
         zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
@@ -96,14 +129,15 @@ class NuPageTests(Base):
         zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
         eid = zone("ETH", "long", 99.0, 100.5, 98.0, 106.0, "1h:bull:b")
         sec = self.nu(self.client.get(f"/vandaag?plan=zone:{eid}").text)
-        self.assertIn('class="nu-coin">ETH<', sec)
+        self.assertIn('class="nu-coin">ETH long<', sec)
 
-    def test_alleen_een_open_trade_toont_die_met_live_r(self):
+    def test_alleen_een_open_trade_toont_de_ladder_met_live_r(self):
         sid = repo.insert_signal({"coin": "BNB", "direction": "short", "category": "x", "confidence": "hoog", "technical_confirmed": 1, "hard_gates_ok": 1,
                                   "price": 101.0, "stop_loss": 103.0, "take_profit": 95.0, "trade_type": "zone_radar"})
         sec = self.nu(self.client.get("/vandaag").text)
         self.assertIn('data-nu-mode="trade"', sec)
-        self.assertIn(">Open trade<", sec)
+        self.assertIn('data-ladder="trade"', sec)
+        self.assertIn("· Open trade<", sec)
         self.assertIn("+0,50 R", sec)
         self.assertIn(f'href="/kans/{sid}"', sec)
         self.assertNotIn("Zet de order", sec)
@@ -114,12 +148,19 @@ class NuPageTests(Base):
         for needle in ('data-utabs="vandaag"', 'id="tab-kansen"', 'id="tab-markt"', 'id="tab-agenda"', 'id="tab-score"', "Open kansen nu"):
             self.assertIn(needle, markt, needle)
         self.assertLess(html.index('<section class="nu'), html.index('id="markt"'))
+        self.assertIn("ladder.js", html)
 
     def test_de_kop_toont_het_merk_en_een_verborgen_titel(self):
         html = self.client.get("/vandaag").text
         kop = html[html.index('class="ph'):html.index('<section class="nu')]
         self.assertIn('class="ph ph-logo"', kop)
         self.assertIn('<h1 class="sr-only">Nu</h1>', kop)
+
+    def test_een_verse_koers_krijgt_geen_leeftijdsregel(self):
+        zone("BTC", "short", 102.0, 103.0, 104.0, 95.0, "1h:bear:a")
+        sec = self.nu(self.client.get("/vandaag").text)
+        self.assertNotRegex(sec, r"Koers \d+ (s|min|u) oud")
+        self.assertIn("data-nu-stale", sec)
 
 
 class ChecklistPageTests(Base):

@@ -125,7 +125,8 @@ class WebZoneSweepTests(unittest.TestCase):
         self.price["XRP"] = 100.1
         sid = self.add_card()
         text = self.client.get("/vandaag").text
-        self.assertIn("Zone-sweep · limietplan", text)
+        self.assertIn("<span>Zone-sweep</span>", text)                    # V3: soort in grijs naast de pil, herkomst in het detailblad
+        self.assertIn("· limietplan", text)
         self.assertIn(f"/nu/order/zsweep:{sid}", text)
         self.assertEqual(self.client.get(f"/nu/order/zsweep:{sid}").status_code, 200)
 

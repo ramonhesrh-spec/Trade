@@ -71,7 +71,7 @@ class FocusOnTests(Base):
     def test_nu_takes_the_zone_radar_plan_never_the_smc_plan(self):
         html = self.client.get("/vandaag").text
         sec = html[html.index('<section class="nu'):html.index("</section>", html.index('<section class="nu'))]
-        self.assertIn('class="nu-coin">BTC<', sec)
+        self.assertIn('class="nu-coin">BTC short<', sec)
         self.assertNotIn("XRP", sec)
         self.assertNotIn("Ook in zone", sec)                            # het SMC-plan staat ook in de zone, maar telt niet
 

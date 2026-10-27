@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import ceo, chance_checks, focus, freshness, chance_steps, kans_view, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep
+from app import ceo, chance_checks, focus, freshness, chance_steps, kans_view, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -787,8 +787,10 @@ async def vandaag_page(request: Request, bron: str = "", user: dict = Depends(re
     screen = nu.screen(cards, _skipped_keys(request, user), request.query_params.get("plan"))
     # Gekeken: hoe oud de oudste koers achter deze kaarten is (app/freshness.py), niet de tijd van de paginaweergave.
     age = freshness.oldest_age(_price_fetched_at, {c["coin"] for c in cards}, time.time())
+    focus_coin = (screen["focus"] or {}).get("coin")
     return templates.TemplateResponse(request, "vandaag.html", {
-        "user": user, "greeting": greeting, **ctx, "nu": screen, "nu_seen": freshness.age_text(age) or "-",
+        "user": user, "greeting": greeting, **ctx, "nu": screen, "nu_stale": ladder.stale_text(age),
+        "nu_context": _context_lines([focus_coin])[focus_coin] if focus_coin else [],
         "nu_when": nu.date_line(today.local(datetime.now(timezone.utc)))}, headers=_viewer_header(user))
 
 

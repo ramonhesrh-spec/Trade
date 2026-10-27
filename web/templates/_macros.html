@@ -644,3 +644,37 @@
   {% endfor %}
 </ol>
 {% endmacro %}
+
+{# ===== Ontwerp V3: de prijsladder (app/ladder.py tekent de maths, web/static/ladder.js schuift de koers live) =====
+   `lad` is ladder.build(...). mode: "plan" (vol, met accent), "trade" (gevulde order, het getal is de live R), "compact" (uitgezoomd,
+   zonder accent, voor rust en lijsten), "mini" (klein in het detailblad). Tags van 12px op de lijn zelf, geen kolomkoppen; het grote getal
+   is altijd gemeten (afstand of live R). #}
+{% macro ladder(lad, mode="plan", coin="", limit=none, num_text="", num_label="", num_hook="distance", stop=none, num_class="", price_left=false) %}
+<div class="lad lad-{{ mode }}{% if lad.in_zone %} is-in-zone{% endif %}{% if price_left %} has-price-left{% endif %}" data-ladder="{{ mode }}" data-lad-coin="{{ coin }}"
+     data-lad-hi="{{ lad.hi }}" data-lad-lo="{{ lad.lo }}" data-lad-dir="{{ lad.direction }}"
+     {% if limit is not none %}data-lad-limit="{{ limit }}" {% endif %}{% if lad.zone %}data-lad-zlo="{{ lad.zone.low }}" data-lad-zhi="{{ lad.zone.high }}" {% endif %}
+     {% if lad.trade %}data-lad-entry="{{ lad.entry }}" data-lad-stop="{{ stop }}" {% endif %}role="group" aria-label="Prijsladder {{ coin }}: boven is duurder">
+  {% if lad.zone %}<div class="lad-zone" style="top: {{ '%.2f'|format(lad.zone.top) }}%; height: {{ '%.2f'|format(lad.zone.height) }}%" aria-hidden="true"></div>{% endif %}
+  {% for ln in lad.lines %}
+  <i class="lad-line is-{{ ln.tone }}" style="top: {{ '%.2f'|format(ln.y) }}%" aria-hidden="true"></i>
+  <span class="lad-tag is-{{ ln.tone }}" style="top: {{ '%.2f'|format(ln.tag_y) }}%"><span class="lad-tag-name">{{ ln.name }}</span><span class="lad-tag-px">{{ ln.text }}</span></span>
+  {% endfor %}
+  {% if lad.gap %}<i class="lad-gap" data-lad="gap" style="top: {{ '%.2f'|format(lad.gap.top) }}%; height: {{ '%.2f'|format(lad.gap.height) }}%" aria-hidden="true"></i>{% endif %}
+  {% if lad.price %}
+  <div class="lad-px" data-lad="price" style="top: {{ '%.2f'|format(lad.price.y) }}%"><i class="lad-px-line" aria-hidden="true"></i><i class="lad-px-dot" aria-hidden="true"></i><span class="lad-px-val"><span class="sr-only">Koers </span><span data-lad="price-text">{{ lad.price.text }}</span></span></div>
+  {% endif %}
+  {% if num_text %}
+  <div class="lad-big" data-lad="big" style="top: {{ '%.2f'|format(lad.num_y) }}%"><span class="lad-num{% if num_class %} {{ num_class }}{% endif %}" data-lad="{{ num_hook }}">{{ num_text }}</span>{% if price_left and lad.price %}<span class="lad-num-label">Koers <span data-lad="price-text">{{ lad.price.text }}</span></span>{% elif num_label %}<span class="lad-num-label">{{ num_label }}</span>{% endif %}</div>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Skelet in de vorm van de ladder: getoond terwijl Nu opnieuw laadt (nu.js), zodat de inhoud op dezelfde plek verschijnt. Geen spinner. #}
+{% macro ladder_skeleton(mode="plan") %}
+<div class="lad lad-{{ mode }} lad-skel" data-ladder-skeleton hidden aria-hidden="true">
+  <i style="top: 12%"></i><i class="is-zone" style="top: 35%"></i><i style="top: 66%"></i><i style="top: 89%"></i><b></b>
+</div>
+{% endmacro %}
+
+{# Pil voor de bewijsstand: "ongetest" gestippeld, "proef" doorgetrokken; rustig, nooit gekleurd per soort. #}
+{% macro pill(text, dashed=true) %}<span class="pill {{ 'is-untested' if dashed else 'is-proef' }}">{{ text }}</span>{% endmacro %}
