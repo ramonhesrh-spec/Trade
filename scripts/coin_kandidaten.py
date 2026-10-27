@@ -28,7 +28,7 @@ def main() -> None:
         rows.append((t["quoteVolume"], base, t["last"], t.get("percentage") or 0.0))
     rows.sort(reverse=True)
     print(f"Kandidaten, meest verhandeld eerst (volume in miljoen {config.QUOTE_CURRENCY} per 24 uur):")
-    for i, (vol, base, last, pct) in enumerate(rows[:a + 10], 1):
+    for i, (vol, base, last, pct) in enumerate(rows[:a.aantal + 10], 1):
         print(f"{i:>2}. {base:<8} {vol / 1e6:>8.1f} M   koers {last:<12g} {pct:+.1f}% 24u")
     print(f"\nZet je keuze in .env: EXTRA_COINS={','.join(current_extra(current))}{',' if current_extra(current) else ''}NIEUW1,NIEUW2,... en herstart crypto-bot.")
 
