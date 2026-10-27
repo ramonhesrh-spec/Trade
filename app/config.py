@@ -179,6 +179,11 @@ RANGE_WATCH_MAX_PER_DAY = int(_get("RANGE_WATCH_MAX_PER_DAY", "3"))
 RANGE_SWEEP_MAX_PER_DAY = int(_get("RANGE_SWEEP_MAX_PER_DAY", "6"))
 RANGE_SWEEP_MAX_NEGATIVE = int(_get("RANGE_SWEEP_MAX_NEGATIVE", "30"))
 
+# Focus (app/focus.py): alleen Structuur A/B, Structuur C en de zone-radar zoeken en melden nog nieuwe kansen; alle andere motoren (day trading via
+# Discord, patroon, trend, rejectie, markt-script, SMC, swing, range sweep en range-watch, de proefmotor) staan uit, hun open trades lopen door tot ze
+# sluiten. Standaard aan; false zet alles terug zoals het was. Een eigen vlag hierboven of hieronder (TREND_ENABLED enz.) blijft daarnaast gelden.
+ENGINE_FOCUS = _get("ENGINE_FOCUS", "true").strip().lower() != "false"
+
 # Zone-radar (app/zone_radar.py, app/zone_radar_live.py): de dichtstbijzijnde actieve vraag- en aanbodzone op 1u en 4u als limietplan op de Radar,
 # met een melding bij een nieuwe kaart en bij de vulling. Voor iedereen, altijd ongetest: Bewijs telt hem apart (trade_type 'zone_radar').
 ZONE_RADAR_ENABLED = _get("ZONE_RADAR_ENABLED", "true").lower() == "true"
