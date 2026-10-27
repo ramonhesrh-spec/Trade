@@ -111,6 +111,16 @@ class WebZoneSweepTests(unittest.TestCase):
         self.assertIn("Zone-sweep (ongetest)", text)
         self.assertNotIn("Bewezen", text.split("Zone-sweep (ongetest)")[1][:400])
 
+    def test_na_de_labrun_status_volgens_de_stoptoets(self):
+        repo.set_rule_lab("zone_sweep_stop", True, {"variant": "ZS_2H", "stop_name": "wick_025"}, db.now_iso())
+        repo.set_rule_lab("zone_sweep", False, {"variant": "ZS_2H"}, db.now_iso())
+        text = self.client.get("/bewijs").text
+        rules = text.split("Status per regel")[1]
+        card = rules.split("Zone-sweep (ongetest)")[1][:600]
+        self.assertIn("In proef", card)
+        self.assertNotIn("Negatief", card)
+        self.assertNotIn("Zone-sweep 2u", rules.split("Andere geteste regels")[-1] if "Andere geteste regels" in rules else "")
+
     def test_nu_toont_een_zone_sweep_in_de_zone(self):
         self.price["XRP"] = 100.1
         sid = self.add_card()

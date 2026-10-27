@@ -1043,10 +1043,10 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     total = next((e for e in summary if e["source"] == "alles"), None)
     per_type = [e for e in summary if e["source"] != "alles"]
     lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
-    zs_live = {rule_live.ZONE_SWEEP} if config.ZONE_SWEEP_ENABLED or rule_live.ZONE_SWEEP in lab_types else set()
-    visible = track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES) | zs_live, is_ceo(user), rule_live.CEO_ONLY_TYPES)
+    visible = track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES)
     # De range sweep heeft zijn eigen sectie met de stopmeting; als 'andere regel zonder motor' zou hij een live motor ontkennen die er wel is.
-    # De zone-sweep draait live (ongetest) en staat daarom bij de regels met een motor, met zijn eigen stoptoets als stop_lab.
+    # De zone-sweep draait live (ongetest): zodra zijn labrun is opgeslagen staat hij bij de regels met een motor, met zijn stoptoets als stop_lab.
+    # Tot dan is zijn eigen rij onder Per soort de enige plek, zonder status.
     range_sweep = await _range_sweep_proof(user, rows, lab_types)
     hidden = (rule_live.RANGE_SWEEP, "range_sweep_stop") + ZONE_SWEEP_LAB_KEYS
     engine_types, other_types = track_record.split_rule_types([t for t in visible if t not in hidden], rule_live.ENGINE_TYPES + (rule_live.ZONE_SWEEP,))
