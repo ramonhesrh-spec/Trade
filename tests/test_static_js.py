@@ -122,3 +122,30 @@ class NotificationNavigationTest(unittest.TestCase):
         self.assertEqual(out["onReturn"]["href"], "https://x.test/vandaag")  # niets te doen zonder bestemming
         self.assertEqual(out["stale"]["href"], "https://x.test/vandaag")     # een bestemming ouder dan 2 minuten telt niet
         self.assertEqual(out["coldStart"]["href"], "https://x.test/kans/7")  # de bestemming kwam na het laden, de herhaalde controle vindt hem
+
+
+@unittest.skipUnless(shutil.which("node"), "node ontbreekt")
+class LadderMathTest(unittest.TestCase):
+    """ladder.js schuift de koers live met dezelfde formules als app/ladder.py; twee versies die uit elkaar lopen zou de lijn verkeerd zetten."""
+    def test_dezelfde_maths_als_de_server(self):
+        from app import ladder
+        out = run_node("ladder_harness.js", "ladder.js")
+        for got, args in zip(out["ys"], [(107.5, 110, 100), (130, 110, 100), (90, 110, 100), (80800, 81300, 80000)]):
+            self.assertAlmostEqual(got, ladder.y_pct(*args))
+        for got, args in zip(out["ds"], [("short", 100, 98), ("long", 100, 102), ("short", 80774.8, 80537)]):
+            self.assertAlmostEqual(got, ladder.distance_pct(*args))
+        self.assertEqual(out["nls"], [ladder.nl(v) for v in (80774.8, 102, 0.1702, 2.5)])
+        self.assertEqual([out["stale"][i] for i in range(5)], [ladder.stale_text(v) for v in (None, 30, 45, 150, 7300)])
+
+    def test_balk_van_zonerand_naar_koers(self):
+        from app import ladder
+        out = run_node("ladder_harness.js", "ladder.js")
+        lad = ladder.build("short", 110.0, 101.0, [(90.0, 1.0)], 99.0, 101.0, 102.0)
+        hi, lo = 110, 90
+        self.assertAlmostEqual(out["gap"]["top"], ladder.y_pct(101, hi, lo))
+        self.assertAlmostEqual(out["gap"]["height"], ladder.y_pct(99, hi, lo) - ladder.y_pct(101, hi, lo))
+        self.assertFalse(out["gap"]["inZone"])
+        self.assertTrue(out["inZone"]["inZone"])
+        self.assertEqual(out["inZone"]["height"], 0)
+        self.assertAlmostEqual(out["noZone"]["top"], ladder.y_pct(104, hi, lo))
+        self.assertTrue(lad["gap"])
