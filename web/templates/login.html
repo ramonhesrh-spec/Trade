@@ -44,6 +44,7 @@
   </label>
   <button type="submit">Inloggen</button>
   <p class="muted" style="text-align: center; margin: 0;">Nog geen account? <a href="/registreer">Registreren</a></p>
+  {% if announce.link_visible %}<a class="login-news" href="/nieuw">{{ "HesPulse wordt vernieuwd: aftellen" if announce.phase == "before" else "Nieuw in HesPulse: bekijk het" }}</a>{% endif %}
   <p class="footer">{{ disclaimer }}</p>
 </form>
 <script src="{{ asset('pwa.js') }}" defer></script>

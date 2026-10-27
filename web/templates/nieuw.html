@@ -1,0 +1,89 @@
+<!doctype html>
+{% import "_announce.html" as an %}
+{% set _theme = theme_of(request) %}
+{% set before = phase_now == "before" %}
+{% set og_title = "Peil. HesPulse wordt vernieuwd." if before else "HesPulse is vernieuwd" %}
+{% set og_desc = a.LEAD_BEFORE if before else "Peil, Nu, meer kansen en de order-checklist: dit is er nieuw in HesPulse." %}
+<html lang="nl" data-theme="{{ _theme }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="{{ 'dark light' if _theme == 'system' else _theme }}">
+<style>html{background:{{ theme_bg['light' if _theme == 'light' else 'dark'] }}}{% if _theme == 'system' %}@media (prefers-color-scheme: light){html{background:{{ theme_bg.light }}}}{% endif %}</style>
+<script>
+  (function () {
+    try { var t = localStorage.getItem("hp_theme"); if (t === "system" || t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+  })();
+</script>
+<title>{{ og_title }}</title>
+<meta name="description" content="{{ og_desc }}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="HesPulse">
+<meta property="og:title" content="{{ og_title }}">
+<meta property="og:description" content="{{ og_desc }}">
+<meta property="og:url" content="{{ og_url }}">
+<meta property="og:image" content="{{ og_image }}">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Peil. HesPulse wordt vernieuwd. Een prijsladder met een zone, de koers en de afstand ertussen.">
+<meta property="og:locale" content="nl_NL">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{{ og_title }}">
+<meta name="twitter:description" content="{{ og_desc }}">
+<meta name="twitter:image" content="{{ og_image }}">
+<link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ asset('style.css') }}">
+<link rel="stylesheet" href="{{ asset('announce.css') }}">
+</head>
+<body class="nw-body">
+<main class="nw">
+  <a class="nw-brand" href="{{ '/vandaag' if user else '/' }}">
+    <svg viewBox="0 0 32 32" width="28" height="28" fill="none" aria-hidden="true">
+      <circle cx="16" cy="16" r="15" stroke="var(--ac)" stroke-width="2"/>
+      <path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="var(--ac)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>HesPulse</span>
+  </a>
+
+  {% if before %}
+  <p class="nw-eyebrow">Update · {{ at_label }}</p>
+  <h1 class="nw-h1"><span class="nw-peil">Peil.</span> <span class="nw-sub">HesPulse wordt vernieuwd.</span></h1>
+  <p class="nw-lead">{{ a.LEAD_BEFORE }}</p>
+
+  <div class="nw-clock" role="timer" data-countdown data-target="{{ at.isoformat() }}" data-now="{{ now.isoformat() }}"
+       aria-label="Nog {{ left.days }} dagen, {{ left.hours }} uur en {{ left.minutes }} minuten">
+    {% for unit, label, value in (("days", "dagen", left.days), ("hours", "uren", left.hours), ("minutes", "minuten", left.minutes), ("seconds", "seconden", left.seconds)) %}
+    <div class="nw-unit">
+      <span class="nw-digits" data-unit="{{ unit }}" aria-hidden="true">{{ "%02d"|format(value) }}</span>
+      <span class="nw-label" aria-hidden="true">{{ label }}</span>
+    </div>
+    {% endfor %}
+  </div>
+
+  <ul class="nw-promises">
+    {% for p in a.PROMISES %}<li>{{ p }}</li>{% endfor %}
+  </ul>
+  {% else %}
+  {% if at_label %}<p class="nw-eyebrow">Update · live sinds {{ at_label }}</p>{% else %}<p class="nw-eyebrow">Update</p>{% endif %}
+  <h1 class="nw-h1"><span class="nw-peil">{{ a.HEADLINE_LIVE }}</span></h1>
+  <p class="nw-lead">{{ a.LEAD_LIVE }}</p>
+  <a class="nw-cta" href="{{ '/vandaag' if user else '/login' }}">Open HesPulse</a>
+
+  <ul class="nw-list">
+    {% for c in a.CARDS %}
+    <li class="nw-item">
+      <div class="nw-item-art">{{ an.art(c.key) }}</div>
+      <div><h2>{{ c.title }}</h2><p>{{ c.text }}</p></div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% endif %}
+
+  <p class="nw-foot">{{ disclaimer }}</p>
+</main>
+{% if before %}<script src="{{ asset('nieuw.js') }}" defer></script>{% endif %}
+</body>
+</html>

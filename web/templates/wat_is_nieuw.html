@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% import "_announce.html" as an %}
+{% block title %}Wat is nieuw · HesPulse{% endblock %}
+{% block content %}
+{{ an.story(announce.cards, announce.version, page=true) }}
+<noscript><p><a href="/nieuw">Bekijk wat er nieuw is</a></p></noscript>
+{% endblock %}
