@@ -526,10 +526,17 @@ Vier tabs: **Nu** (`/vandaag`), **Plannen** (`/smc`, met een wisselaar naar Setu
 **Bewijs** (`/bewijs`); geen url veranderde. Account, Meldingen, Handleiding, Zone-radar uitleg, Kwartaalcijfers, Galerij en CEO
 (alleen de eigenaar) staan in het menu achter je initiaal rechtsboven. Het getal op Plannen telt de plannen die nu in de zone staan.
 
-Nu (`app/nu.py`) toont rust ("Niets te doen.", het eerstvolgende plan met de gemeten afstand tot de limiet, het aantal plannen, open
-trades en hoe oud de koers is) of precies één kaart: een plan in de zone (met de knop naar de order-checklist en Sla over, dat een dag
-op dit toestel geldt via de cookie `hp_skip`) of, zonder plan in de zone, de open trade met live R. Een tweede plan in de zone staat
-klein eronder. Marktcontext, scenario's, nieuws, agenda en score staan lager op dezelfde pagina onder **Markt**. De order-checklist
+Nu (`app/nu.py`) staat sinds ontwerp V3 (`docs/design/hespulse_v3.dc.html`, "Peil", fase A) op de **prijsladder**: de prijs rechtop,
+boven is duurder en onder goedkoper. Stop, instap, doel en de zone staan op hun echte plek; de koers is een lijn die live naar de zone
+schuift en de afstand tot de instap is een balk met het gemeten percentage ernaast. In rust staat er "Rust. Niets te doen." met het
+eerstvolgende plan als uitgezoomde ladder (alleen zone, instap en koers). Staat een plan in de zone, dan vult één ladder het scherm met
+de knop "Zet de order, stap voor stap" naar de order-checklist; zonder plan in de zone staat de open trade er met live R. Gebaren:
+veeg de ladder opzij om over te slaan (een ongedaan-balk van 4 seconden, geen vraag; het overslaan geldt een dag via de cookie `hp_skip`
+en `plan_skips`), trek de greep "Details" omhoog voor het detailblad (de getallen, de herkomst van de zone in één regel, de context en
+de grafiek schermvullend) en houd daar een getal vast om het te kopiëren. Elk gebaar heeft ook een knop (Sla over, Details, Enter op
+een getal). "Koers X oud" verschijnt alleen als de koers ouder is dan 30 seconden. De maths van de ladder staat in `app/ladder.py`,
+het live schuiven in `web/static/ladder.js` (dezelfde formules, `tests/test_static_js.py` legt ze naast elkaar). Een tweede plan in de
+zone staat als rij eronder. Marktcontext, scenario's, nieuws, agenda en score staan lager op dezelfde pagina onder **Markt**. De order-checklist
 (`/nu/order/<sleutel>`) loopt de velden van het orderformulier af: instrument en richting, limietprijs, stop, doel. Een tik op een
 getal kopieert het met een punt; er is geen stap voor de positiegrootte.
 
