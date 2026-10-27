@@ -82,6 +82,9 @@ MAX_REGISTRATIONS_PER_HOUR = int(_get("MAX_REGISTRATIONS_PER_HOUR", "5"))
 # Registreren alleen met een geldige uitnodigingscode van Beheer (/beheer). Standaard uit: dan blijft /registreer open zoals het was, en kent een
 # meegegeven code alleen zijn volg-set toe.
 REGISTRATION_REQUIRES_INVITE = _get("REGISTRATION_REQUIRES_INVITE", "false").strip().lower() == "true"
+# Startwaarde voor het moment van de aankondiging (/nieuw, het verhaal en de push), Amsterdamse tijd zoals 2026-11-02T18:00. De database wint:
+# scripts/aankondiging.py --zet/--wis verandert het zonder herstart (repo.get_announcement_at).
+ANNOUNCEMENT_AT = _get("ANNOUNCEMENT_AT", "")
 
 # Standaard risicopercentage voor een nieuwe gebruiker, aan te passen per
 # gebruiker in het dashboard.

@@ -1130,6 +1130,12 @@ button:hover { background: var(--accent-dark); border-color: var(--accent-dark);
   padding: var(--space-10); display: flex; flex-direction: column; gap: var(--space-7);
   width: 320px; max-width: calc(100vw - 32px);
 }
+/* Link naar /nieuw zolang een aankondiging loopt (app/announce.py). */
+.login-news {
+  display: flex; align-items: center; justify-content: center; min-height: 44px; padding: 0 12px; border-radius: 10px;
+  background: var(--actint); color: var(--aci); font-weight: 500; text-align: center; text-decoration: none;
+}
+.login-news:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
 .login-brand { display: flex; align-items: center; gap: var(--space-5); margin-bottom: var(--space-2); }
 .login-brand .brand-logo { height: 32px; width: 32px; }
 .login-brand span { font-weight: 700; font-size: var(--text-xl); letter-spacing: -0.01em; }

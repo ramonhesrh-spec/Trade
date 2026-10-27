@@ -18,7 +18,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import calendar_alerts, chance_checks, config, exchange, focus, indicators, market_context_live, market_script, trend_live, rejection_live, patterns, push_notify, range_sweep_live, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan, zone_radar_live, zone_sweep_live
+from app import announce_live, calendar_alerts, chance_checks, config, exchange, focus, indicators, market_context_live, market_script, trend_live, rejection_live, patterns, push_notify, range_sweep_live, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan, zone_radar_live, zone_sweep_live
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
@@ -1233,6 +1233,11 @@ async def scan_smc_fast() -> None:
     ruimt repo.auto_ignore_opposite_pending (al aangeroepen door beide
     paden) dat net zo op als bij elke andere opeenvolgende tegengestelde
     melding — geen nieuw risico, hetzelfde bestaande opruimmechanisme."""
+    # Vóór de noodrem: de aankondiging van een update is geen marktscan en moet ook komen als die even uit staat.
+    try:
+        await announce_live.run()
+    except Exception:
+        logger.exception("Aankondigingspush is mislukt")
     if not repo.is_market_scan_enabled():
         logger.info("Marktscan staat uit (noodrem), SMC-snelcheck overgeslagen")
         return

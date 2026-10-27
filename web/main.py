@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import ceo, chance_checks, focus, freshness, chance_steps, kans_view, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep
+from app import announce, ceo, chance_checks, focus, freshness, chance_steps, kans_view, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -96,7 +96,22 @@ def _nav_context(request: Request) -> dict:
     return {"coins": repo.list_coins(), "nav_counts": {"setups": setups, "radar": radar_count, "in_zone": radar.in_zone_count(forming, cached)}}
 
 
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context])
+def _announce_context(request: Request) -> dict:
+    """De aankondiging (app/announce.py) op elke pagina: de link naar /nieuw zolang hij loopt en het verhaal "Wat is nieuw" één keer per
+    ingelogde gebruiker na het moment. Een bezoeker zonder inlog krijgt het verhaal nooit."""
+    now = datetime.now(timezone.utc)
+    at = repo.get_announcement_at()
+    user = _cookie_user(request) if announce.story_due(at, now, seen=False) else None
+    return {"announce": {
+        "phase": announce.phase(at, now),
+        "link_visible": announce.link_visible(at, now),
+        "story_due": bool(user) and not repo.story_seen(user["id"], announce.STORY_VERSION),
+        "version": announce.STORY_VERSION,
+        "cards": announce.CARDS,
+    }}
+
+
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context, _announce_context])
 templates.env.globals["disclaimer"] = config.DISCLAIMER
 templates.env.globals["splash_screens"] = splash.SCREENS
 def asset(path: str) -> str:
@@ -326,6 +341,32 @@ async def api_public_prices():
         except Exception:
             prices[coin] = None
     return prices
+
+
+@app.get("/nieuw")
+async def nieuw(request: Request):
+    """Openbaar, zonder inlog en deelbaar: vóór het moment een aftelklok, daarna wat er live is. Zonder gezet moment de live-versie."""
+    now = datetime.now(timezone.utc)
+    at = repo.get_announcement_at()
+    base = config.DASHBOARD_URL.rstrip("/")
+    return templates.TemplateResponse(request, "nieuw.html", {
+        "user": _cookie_user(request), "phase_now": announce.phase(at, now), "at": at, "now": now,
+        "at_label": announce.fmt_local(at) if at else "", "left": announce.remaining(at, now) if at else None, "a": announce,
+        "og_image": f"{base}/static/og/nieuw.png?v={int((BASE_DIR / 'static' / 'og' / 'nieuw.png').stat().st_mtime)}",
+        "og_url": f"{base}/nieuw",
+    })
+
+
+@app.get("/wat-is-nieuw")
+async def wat_is_nieuw(request: Request, user: dict = Depends(require_login)):
+    """Het verhaal opnieuw, vanuit het menu; sluiten gaat terug naar Nu."""
+    return templates.TemplateResponse(request, "wat_is_nieuw.html", {"user": user, "bare": True})
+
+
+@app.post("/api/wat-is-nieuw/gezien")
+async def wat_is_nieuw_gezien(user: dict = Depends(require_login)):
+    repo.mark_story_seen(user["id"], announce.STORY_VERSION)
+    return {"ok": True}
 
 
 @app.get("/zone-radar")
