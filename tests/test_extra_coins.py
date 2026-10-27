@@ -17,9 +17,10 @@ class ExtraCoinsTest(unittest.TestCase):
         importlib.reload(coinlist)
 
     def test_extras_are_parsed_deduped_and_appended(self):
-        extra, fixed = self.reload_config(" xrp, HBAR ,btc,")
-        self.assertEqual(extra, ["XRP", "HBAR"])
-        self.assertEqual(fixed[-2:], ["XRP", "HBAR"])
+        extra, fixed = self.reload_config(" foo, HBAR ,btc, bar,")
+        self.assertEqual(extra[-2:], ["FOO", "BAR"])             # wat in .env staat komt na de standaardlijst
+        self.assertEqual(extra.count("HBAR"), 1)                  # en een dubbele coin telt één keer
+        self.assertEqual(fixed[-2:], ["FOO", "BAR"])
         self.assertEqual(fixed.count("BTC"), 1)
 
     def test_aliases_follow_fixed_coins_and_text_filter_sees_extra(self):
@@ -31,7 +32,10 @@ class ExtraCoinsTest(unittest.TestCase):
 
     def test_default_is_unchanged(self):
         extra, fixed = self.reload_config("")
-        self.assertEqual((extra, fixed), ([], config.BASE_COINS))
+        self.assertEqual(extra, config.DEFAULT_EXTRA_COINS)
+        self.assertEqual(fixed, config.BASE_COINS + config.DEFAULT_EXTRA_COINS)
+        self.assertEqual(len(fixed), 35)
+        self.assertEqual(len(set(fixed)), 35)
 
 
 class ScanSkipsFourHourBlockTest(unittest.TestCase):

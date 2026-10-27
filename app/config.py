@@ -38,7 +38,12 @@ TIMEFRAME = "4h"
 BASE_COINS = ["BTC", "ETH", "SOL", "BNB", "AVAX", "DOGE", "SUI"]
 # Extra coins (komma-gescheiden in .env, bijvoorbeeld XRP,HBAR): alleen de SMC-check draait erop, niet de 4u-detectoren
 # (patroon, uitbraak, trendlijn), want die verliezen op de basiscoins. Eerst met scripts/replay_smc_report.py toetsen.
-EXTRA_COINS = [c.strip().upper() for c in _get("EXTRA_COINS", "").split(",") if c.strip() and c.strip().upper() not in BASE_COINS]
+# De standaardlijst van de extra coins (2026-10-27, gekozen uit de marktenlijst van de eigenaar op Kraken: alle 5x en 3x met veel handel, plus
+# een paar 2x). Wat in .env bij EXTRA_COINS staat komt erbij; zo hoeft een nieuwe VPS geen lijst over te typen.
+DEFAULT_EXTRA_COINS = ["AAVE", "APT", "ARB", "HYPE", "TIA", "WLD", "ADA", "BCH", "DOT", "ETC", "FIL", "HBAR", "INJ", "LINK", "LTC", "TAO", "TRX", "UNI",
+                       "XRP", "ENA", "NEAR", "ONDO", "PEPE", "ZEC", "PUMP", "XLM", "OP", "RENDER"]
+_env_extra = [c.strip().upper() for c in _get("EXTRA_COINS", "").split(",") if c.strip()]
+EXTRA_COINS = [c for c in dict.fromkeys(DEFAULT_EXTRA_COINS + _env_extra) if c not in BASE_COINS]
 FIXED_COINS = BASE_COINS + EXTRA_COINS
 
 # De uitgebreide factoren (ADX, volatiliteit, BTC-trend, 1u bevestiging,
