@@ -19,6 +19,8 @@ class DigestTest(unittest.TestCase):
         self.assertEqual(title, "2 kansen wachten")
         self.assertIn("Het dichtst bij: BNB short, nog 0.4%", body)
         self.assertIn("SOL long: nog 1.5%", body)
+        three = digest.build([{"coin": c, "direction": "short", "grade": g, "dist_pct": d} for c, g, d in (("BNB", "A", 0.4), ("ETH", "B", 0.8), ("SOL", "C", 1.5))])[1]
+        self.assertIn("ETH short: nog 0.8%", three)                        # geen letter van het oordeel in de dagbrief
         self.assertTrue(digest.build([{"coin": "BNB", "direction": "short", "grade": "A", "dist_pct": 0.4}], "Een stop is een bijsturing.")[1].endswith("Een stop is een bijsturing."))
         self.assertEqual(digest.build([{"coin": "BNB", "direction": "short", "grade": "A", "dist_pct": 0.4}])[0], "1 kans wacht")
 

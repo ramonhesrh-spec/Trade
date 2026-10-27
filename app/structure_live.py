@@ -4,8 +4,9 @@ gebroken niveau, limietorder, stop net achter de terugkeer, ladder van doelen), 
 Drie stappen, elke 5 minuten in de SMC-snelcyclus:
   1. Ontdekken: de detector uit app/replay/breakretest.py (zelfde code als de toets, alleen gesloten candles) vindt een verse
      breuk. Claude geeft een oordeel A, B of C op de kwaliteit. Claude verzint geen prijzen: niveau, stop en doelen komen uit code.
-  2. Melden: elke breuk met een plan staat op de pagina en in de dagbrief. Sterk (A) klinkt luid, redelijk (B) is stil, zwak (C) krijgt pas een melding als de limiet vult.
-     Het plan staat erin: limietniveau, stop en doelen.
+  2. Melden: elke breuk met een plan staat op de pagina en in de dagbrief en krijgt dezelfde luide melding met limietniveau, stop en doelen. Het
+     oordeel van Claude (A, B of C) wordt alleen nog bewaard als meting: het filtert niets, ordent niets en bepaalt het volume niet (besluit van
+     de CEO, oktober 2026: C won live het meest). Bij een volle dagcap gaat de kans die het dichtst bij zijn limiet ligt voor.
   3. Volgen: raakt de koers het niveau, dan wordt het een gewoon signaal (trade_type 'structuur'), zodat journaal, uitkomst en Bewijs
      werken zonder extra code. Keert de koers terug voorbij het niveau, dan vervalt de setup.
 
@@ -177,11 +178,22 @@ def parse_grade(payload: dict) -> tuple[Optional[str], str]:
 
 
 def alert_body(setup: dict, plan: dict) -> str:
+    """Zonder de toelichting van het oordeel: die zou het oordeel via een omweg weer laten meesturen."""
     from app import push_notify
-    rr = abs(plan["targets"][0] - plan["level"]) / abs(plan["level"] - plan["stop"])
     targets = " · ".join(f"{push_notify.fmt_price(t)} ({r:g}R)" for t, r in zip(plan["targets"], plan["targets_r"]))
-    return push_notify.trade_body("Limietorder", plan["level"], plan["stop"], take_profit_of(plan), None,
-                                  f"Doelen {targets}", (setup["reason"] or "").strip())
+    return push_notify.trade_body("Limietorder", plan["level"], plan["stop"], take_profit_of(plan), None, f"Doelen {targets}", "")
+
+
+def distance_pct(direction: str, level: float, price: float) -> float:
+    """Hoever de koers nog van het limietniveau is, in procenten; positief is nog te gaan."""
+    return (level - price) / level * 100 if direction == br.SHORT else (price - level) / level * 100
+
+
+def choose(candidates: list[dict], room: int) -> tuple[list[dict], list[dict]]:
+    """(melden, houden) bij `room` plekken onder de dagcap: dichtst bij de limiet eerst, nooit op letter."""
+    ordered = sorted(candidates, key=lambda c: abs(c["dist_pct"]))
+    room = max(room, 0)
+    return ordered[:room], ordered[room:]
 
 
 async def _push_all(title: str, body: str, url: str, tag: str, loud: bool, coin: Optional[str] = None, direction: Optional[str] = None) -> None:
@@ -199,12 +211,14 @@ async def _push_all(title: str, body: str, url: str, tag: str, loud: bool, coin:
             logger.exception("Structuur-melding voor %s naar gebruiker %s is mislukt", tag, user["username"])
 
 
-async def _discover(coin: str, now: datetime) -> None:
-    from app import exchange, push_notify
+async def _discover(coin: str, now: datetime) -> list[dict]:
+    """Nieuwe breuken met een plan, opgeslagen in de stand 'oordeel'. Melden doet run(), over alle coins samen, zodat de dagcap op afstand kiest."""
+    from app import exchange
     df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="30m", limit=300)
     closed = df[df["timestamp"] + BAR <= pd.Timestamp(now)].reset_index(drop=True)
     if len(closed) < br.LOOKBACK + 20:
-        return
+        return []
+    found = []
     b, events, p_high, p_low = fresh_breaks(closed)
     n = len(b)
     for ev in events.itertuples():
@@ -245,24 +259,30 @@ async def _discover(coin: str, now: datetime) -> None:
         setup_id = repo.insert_structure_setup(row)
         if setup_id is None:
             continue
-        # Eerst de dagcap: een breuk die toch niet gemeld wordt krijgt geen Claude-aanroep, anders betaal je voor een oordeel dat niemand ziet.
-        capped = repo.count_structure_alerts_since((now - timedelta(hours=24)).isoformat()) >= config.STRUCTURE_MAX_ALERTS_PER_DAY
+        found.append({"id": setup_id, "coin": coin, "row": row, "plan": plan, "ev": ev, "b": b,
+                      "dist_pct": distance_pct(ev.direction, plan["level"], price_now)})
+    return found
+
+
+async def _announce(found: list[dict], now: datetime) -> None:
+    from app import push_notify
+    room = config.STRUCTURE_MAX_ALERTS_PER_DAY - repo.count_structure_alerts_since((now - timedelta(hours=24)).isoformat())
+    send, hold = choose(found, room)
+    for c in hold:
+        repo.update_structure_judgement(c["id"], None, "", "niet_gemeld")
+        logger.info("Structuur %s %s: dagcap vol, niet gemeld (%.2f%% van de limiet)", c["coin"], c["ev"].direction, c["dist_pct"])
+    for c in send:
+        coin, ev, plan = c["coin"], c["ev"], c["plan"]
+        # Het oordeel blijft een meting (Bewijs telt C apart als structuur_c). Een kans die toch niet gemeld wordt, krijgt geen Claude-aanroep.
         grade, reason = None, ""
-        if not capped:
-            try:
-                grade, reason = parse_grade(await asyncio.to_thread(call_claude, judge_context(coin, ev, b, plan)))
-            except Exception:
-                logger.exception("Oordeel van Claude voor %s is mislukt", coin)
-        # Elke breuk met een plan staat op de pagina en krijgt een melding: A luid, de rest stil. Een C meldt zich stil met 'Zwak' in de titel, zodat
-        # je ziet dat het oordeel laag is. Bewijs houdt C apart (trade_type 'structuur_c').
-        state = "niet_gemeld" if capped else "waiting"
-        repo.update_structure_judgement(setup_id, grade, reason, state)
-        logger.info("Structuur %s %s %s: oordeel %s (%s)", coin, ev.direction, ev.kind, grade, state)
-        if state == "waiting":
-            setup = {**row, "id": setup_id, "reason": reason}
-            label = "Structuur wacht · Zwak" if grade == "C" else "Structuur wacht"
-            await _push_all(push_notify.alert_title(coin, ev.direction, label), alert_body(setup, plan),
-                            f"/structuur#structuur-{setup_id}", f"structuur-{coin}", loud=grade == "A", coin=coin, direction=ev.direction)
+        try:
+            grade, reason = parse_grade(await asyncio.to_thread(call_claude, judge_context(coin, ev, c["b"], plan)))
+        except Exception:
+            logger.exception("Oordeel van Claude voor %s is mislukt", coin)
+        repo.update_structure_judgement(c["id"], grade, reason, "waiting")
+        logger.info("Structuur %s %s %s: gemeld, oordeel %s als meting", coin, ev.direction, ev.kind, grade)
+        await _push_all(push_notify.alert_title(coin, ev.direction, "Structuur wacht"), alert_body({**c["row"], "id": c["id"]}, plan),
+                        f"/structuur#structuur-{c['id']}", f"structuur-{coin}", loud=True, coin=coin, direction=ev.direction)
 
 
 async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: pd.Timestamp) -> None:
@@ -274,14 +294,13 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
     sign = -1 if direction == br.SHORT else 1
     fired["targets"] = [entry + sign * risk * r for r in plan["targets_r"]]
     take = take_profit_of(fired)
-    grade = setup["grade"] or "zonder oordeel"
-    narrative = f"Structuur, instap {push_notify.fmt_price(entry)}. {setup['reason'] or ''}".strip()
+    narrative = f"Structuur, instap {push_notify.fmt_price(entry)}."
     reason, pass_pct = chance_checks.finish(chance_checks.structure_checks(chance_checks.parse_features(setup.get("features")), plan, setup["grade"]))
     signal_id = repo.insert_signal({
         "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "structuur_c" if setup["grade"] == "C" else "structuur",
         "pattern_name": "Structuur", "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None,
         "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": pass_pct,
-        "hard_gates_ok": 1, "confidence": f"Structuur {grade}", "reason": reason, "stop_loss": stop,
+        "hard_gates_ok": 1, "confidence": "Structuur", "reason": reason, "stop_loss": stop,
         "take_profit": take, "context_note": None, "is_practice": 0, "plain_explanation": narrative, "suggested_entry_low": None,
         "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
     })
@@ -313,7 +332,7 @@ async def _fire_shadow(setup: dict, plan: dict, entry: float, stop: float) -> No
         "message_id": None, "coin": setup["coin"], "direction": setup["direction"], "category": "day_trading", "trade_type": "structuur_c",
         "pattern_name": "Structuur C", "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None,
         "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Structuur C (schaduw)",
-        "reason": f"Zwak oordeel, stil gevolgd. {setup['reason'] or ''}".strip(), "stop_loss": stop, "take_profit": take, "context_note": None,
+        "reason": "Stil gevolgd (oude schaduwregel).", "stop_loss": stop, "take_profit": take, "context_note": None,
         "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None, "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
     })
     repo.set_structure_state(setup["id"], "fired", signal_id)
@@ -436,14 +455,19 @@ async def run(now: Optional[datetime] = None) -> None:
         repo.notify_engine_disabled("Structuur-breuken", f"De laatste {config.STRUCTURE_MAX_NEGATIVE} afgeronde signalen zijn samen negatief. Zie Bewijs.")
         return
     symbols = {c["symbol"] for c in repo.list_coins()}
+    found = []
     # Alle gevolgde coins, niet alleen de basiscoins: meer breuken betekent eerder een cijfer waar we iets op kunnen afstellen.
     for coin in config.FIXED_COINS:
         if coin not in symbols:
             continue
         try:
-            await _discover(coin, now)
+            found += await _discover(coin, now)
         except Exception:
             logger.exception("Structuur-check voor %s is mislukt", coin)
+    try:
+        await _announce(found, now)
+    except Exception:
+        logger.exception("Structuur-meldingen zijn mislukt")
     await _track(now)
     await _follow(now)
     try:

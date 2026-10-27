@@ -6,7 +6,7 @@ from unittest import mock
 
 import pandas as pd
 
-from app import config, repo, structure_live as sl
+from app import config, db, repo, structure_live as sl
 from app.replay import breakretest as br
 from app.replay.lab import make_bars
 from tests.replay.test_breakretest import frame
@@ -31,6 +31,19 @@ class PureTest(unittest.TestCase):
         loss = {**win, "auto_outcome": "stop_loss"}
         self.assertTrue(sl.should_disable([win] * 8 + [loss] * 22, 30))
         self.assertFalse(sl.should_disable([loss] * 29, 30))
+
+
+class CapTest(unittest.TestCase):
+    def test_full_cap_picks_the_chance_closest_to_its_limit_not_the_letter(self):
+        cands = [{"id": 1, "grade": "A", "dist_pct": 2.5}, {"id": 2, "grade": "C", "dist_pct": -0.4}, {"id": 3, "grade": "B", "dist_pct": 1.0}]
+        sent, held = sl.choose(cands, 2)
+        self.assertEqual([c["id"] for c in sent], [2, 3])
+        self.assertEqual([c["id"] for c in held], [1])
+
+    def test_room_zero_or_negative_sends_nothing(self):
+        cands = [{"id": 1, "dist_pct": 1.0}]
+        self.assertEqual(sl.choose(cands, 0), ([], cands))
+        self.assertEqual(sl.choose(cands, -3), ([], cands))
 
 
 class ChartTest(unittest.TestCase):
@@ -123,24 +136,33 @@ class LiveTest(DbCase):
         self.assertEqual(len(kept), 1)
         self.assertIn("al voorbij", kept[0]["reason"])
 
-    def test_grade_c_pushes_quietly_labelled_zwak_and_stays_on_the_page(self):
+    def test_every_grade_is_announced_the_same_loud_way(self):
+        # Het oordeel is alleen nog een meting: A, B en C krijgen bij het ontstaan dezelfde luide melding zonder letter of woord.
+        from app import push_notify
+        for grade in ("A", "B", "C"):
+            with self.subTest(grade=grade):
+                self.setUp()                                               # verse database: het pushbudget en de dedupe van de vorige ronde tellen niet
+                self.run_live(BREAK_BAR + 4, grade=grade)
+                self.assertEqual(len(self.pushed), 1)
+                title, body, url, silent = self.pushed[0]
+                self.assertEqual(title, push_notify.alert_title("BTC", "short", "Structuur wacht"))
+                self.assertFalse(silent)
+                self.assertNotIn("Schone range", body)                     # de toelichting van het oordeel staat er niet in
+                self.assertTrue(url.startswith("/structuur#structuur-"))
+                self.assertEqual(repo.list_structure_setups(("waiting",))[0]["grade"], grade)     # het oordeel blijft als meting
+
+    def test_grade_c_fill_is_a_loud_structuur_c_signal(self):
         self.run_live(BREAK_BAR + 4, grade="C")
-        self.assertEqual(len(self.pushed), 1)
-        title, _, _, silent = self.pushed[0]
-        self.assertIn("Structuur wacht", title)
-        self.assertIn("Zwak", title)
-        self.assertTrue(silent)
-        self.assertEqual(len(repo.list_structure_setups(("waiting",))), 1)
-
-    def test_grade_a_is_loud_and_not_labelled_zwak(self):
-        self.run_live(BREAK_BAR + 4, grade="A")
-        self.assertFalse(self.pushed[0][3])
-        self.assertNotIn("Zwak", self.pushed[0][0])
-
-    def test_grade_b_is_silent(self):
-        self.run_live(BREAK_BAR + 4, grade="B")
-        self.assertTrue(self.pushed[0][3])
-        self.assertNotIn("Zwak", self.pushed[0][0])
+        self.pushed.clear()
+        self.run_live(BREAK_BAR + 9)
+        self.assertEqual([r["trade_type"] for r in repo.list_signals_for_quality_report(None)], ["structuur_c"])   # Bewijs houdt C apart
+        filled = [p for p in self.pushed if "gevuld" in p[0]]
+        self.assertEqual(len(filled), 1)
+        self.assertFalse(filled[0][3])
+        sig = repo.list_signals_for_quality_report(None)[0]
+        full = repo.get_signal(sig["id"])
+        self.assertNotIn("CEO", full["reason"])
+        self.assertEqual(full["confidence"], "Structuur")
 
     def test_grade_c_respects_budget_and_conflict_rule(self):
         user_id = repo.list_users()[0]["id"]

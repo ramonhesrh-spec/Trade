@@ -23,6 +23,13 @@ class ChanceChecksTests(unittest.TestCase):
         self.assertFalse(any(ok for _, ok in weak))
         self.assertEqual(cc.parse_features("{kapot"), {})
 
+    def test_structure_checks_ignore_the_grade(self):
+        # Het oordeel A/B/C is alleen nog een meting in de database: het telt niet als kenmerk en staat niet op een kaart.
+        plan = {"from_levels": True, "targets_r": [1.0, 2.0]}
+        f = {"vol_ratio": 2.0, "with_trend": True, "touches": 4, "span": 20}
+        self.assertEqual(cc.structure_checks(f, plan, "A"), cc.structure_checks(f, plan, "C"))
+        self.assertFalse(any("CEO" in label for label, _ in cc.structure_checks(f, plan, None)))
+
     def test_trend_checks_use_room_to_the_impulse_top_and_stop_size(self):
         ok = cc.trend_checks("long", 100.0, 99.0, 102.0)        # top op 2R, stop 1%
         self.assertEqual([c for _, c in ok], [True, True, True])

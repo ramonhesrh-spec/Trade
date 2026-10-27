@@ -29,7 +29,7 @@ def build(waiting: list[dict], quote: Optional[str] = None) -> Optional[tuple[st
     nearest = ordered[0]
     n = len(ordered)
     title = f"{n} {'kans wacht' if n == 1 else 'kansen wachten'}"
-    lines = [f"{w['coin']} {w['direction']}{' ' + w['grade'] if w.get('grade') in ('A', 'B') else ''}: nog {abs(w['dist_pct']):.1f}%" for w in ordered[:3]]
+    lines = [f"{w['coin']} {w['direction']}: nog {abs(w['dist_pct']):.1f}%" for w in ordered[:3]]
     body = f"Het dichtst bij: {nearest['coin']} {nearest['direction']}, nog {abs(nearest['dist_pct']):.1f}%.\n" + "\n".join(lines[1:] if n > 1 else [])
     return title, (body.strip() + (f"\n{quote}" if quote else ""))
 
