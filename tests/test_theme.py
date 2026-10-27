@@ -61,7 +61,26 @@ class TokenTests(unittest.TestCase):
             self.assertIn(name, DARK, name)
             self.assertIn(name, LIGHT, name)
         self.assertEqual(LIGHT["--bg"].strip(), "#f4f6f6")           # TH.light uit het ontwerp
-        self.assertEqual(LIGHT["--aci"].strip(), "#067a76")
+        for name in ("--zone", "--cu", "--cdn"):                       # V3: zonevlak en candlekleuren
+            self.assertIn(name, DARK, name)
+            self.assertIn(name, LIGHT, name)
+
+    def test_v3_tokens_uit_het_ontwerp(self):
+        # TH uit docs/design/hespulse_v3.dc.html. Bijtekst is een tint donkerder (licht) of lichter (donker) dan het ontwerp, zodat hij
+        # de 6,9:1 haalt die het ontwerp zelf eist; --bg en --s1 blijven de bestaande, een stap ervan af en niet te zien.
+        for name, dark, light in (("--s2", "#1c2427", "#e7ecec"), ("--bd", "#263235", "#d3dbdb"), ("--tx", "#eef3f3", "#0d1415"),
+                                  ("--aci", "#3fd3ce", "#05706c"), ("--win", "#3dd68c", "#0b7a47"), ("--loss", "#ff6b6b", "#c42f2c"),
+                                  ("--cu", "#8f9b9e", "#a9b3b5"), ("--cdn", "#55625f", "#6b7779")):
+            self.assertEqual(resolve(DARK, name).lower(), dark, name)
+            self.assertEqual(resolve(LIGHT, name).lower(), light, name)
+
+    def test_bijtekst_haalt_6_9_en_accent_als_tekst_4_5(self):
+        for theme_name, theme in (("donker", DARK), ("licht", LIGHT)):
+            for bg in ("--bg", "--s1"):
+                for fg, need in (("--tx2", 6.9), ("--muted", 6.9), ("--aci", 4.5), ("--win", 4.5), ("--loss", 4.5)):
+                    ratio = contrast(resolve(theme, fg), resolve(theme, bg))
+                    self.assertGreaterEqual(ratio, need, f"{theme_name}: {fg} op {bg} = {ratio:.2f}")
+            self.assertGreaterEqual(contrast(resolve(theme, "--aci"), resolve(theme, "--s2")), 4.5, theme_name)
 
     def test_tekst_haalt_4_5_in_beide_themas(self):
         pairs = [("--text", "--bg"), ("--text-dim", "--panel"), ("--muted", "--bg"), ("--muted", "--panel"), ("--tx2", "--s1"),
