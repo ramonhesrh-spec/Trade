@@ -49,7 +49,7 @@ class NieuwPageTests(Base):
         self.before()
         r = self.client.get("/nieuw")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("Peil.", r.text)
+        self.assertIn("Kansen.", r.text)
         self.assertIn("HesPulse wordt vernieuwd.", r.text)
         self.assertIn('role="timer"', r.text)
         self.assertIn(f'data-target="{repo.get_announcement_at().isoformat()}"', r.text)
@@ -68,10 +68,10 @@ class NieuwPageTests(Base):
             self.assertIn(card["title"], r.text)
         self.assertRegex(r.text, r'<a[^>]*href="/login"[^>]*>Open HesPulse</a>')
 
-    def test_ingelogd_gaat_de_knop_naar_nu(self):
+    def test_ingelogd_gaat_de_knop_naar_kansen(self):
         self.after()
         self.login(self.mark)
-        self.assertRegex(self.client.get("/nieuw").text, r'<a[^>]*href="/vandaag"[^>]*>Open HesPulse</a>')
+        self.assertRegex(self.client.get("/nieuw").text, r'<a[^>]*href="/smc"[^>]*>Open HesPulse</a>')
 
     def test_zonder_tijd_de_live_versie(self):
         r = self.client.get("/nieuw")

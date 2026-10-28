@@ -15,13 +15,14 @@ TAB_OF = {"structuur": "structuur", "structuur_c": "structuur", "zone_radar": "z
 DEFAULT_TAB = "structuur"
 
 
-def say(state: Optional[str], direction: str) -> str:
+def say(state: Optional[str], direction: str, zone: bool = True) -> str:
     """De zin in het detailblad, alleen voor een plan dat nog niet vulde. De getallen staan in de tabel eronder en worden niet herhaald."""
     if state == "open":
         return ""
     if state == "in_zone":
         return f"De koers staat in de zone: je limit {direction} op de instap is waarschijnlijk gevuld. Houd stop en doel aan."
-    return f"Wacht tot de koers de zone bereikt. Zet dan een limit {direction} op de instap, met de stop en het doel uit de tabel."
+    where = "de zone" if zone else "de instap"
+    return f"Wacht tot de koers {where} bereikt. Zet dan een limit {direction} op de instap, met de stop en het doel uit de tabel."
 
 
 def _plan(item: dict, dom_id: str) -> dict:
@@ -32,7 +33,7 @@ def _plan(item: dict, dom_id: str) -> dict:
     else:
         num = ("", "distance", "")
     return {**item, "dom_id": dom_id, "title": f"{item['coin']} {item['direction']}", "tab": TAB_OF.get(item["trade_type"], item["trade_type"]),
-            "state_short": tp.STATE_SHORT.get(state, "Geen koers") if state else "Geen koers", "say": say(state, item["direction"]),
+            "state_short": tp.STATE_SHORT.get(state, "Geen koers") if state else "Geen koers", "say": say(state, item["direction"], item.get("zone_low") is not None),
             "num_text": num[0], "num_hook": num[1], "num_label": num[2]}
 
 

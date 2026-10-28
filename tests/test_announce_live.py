@@ -51,18 +51,18 @@ class MomentTests(Base):
 
 class StorySeenTests(Base):
     def test_per_gebruiker_en_idempotent(self):
-        self.assertFalse(repo.story_seen(self.anna, "v3"))
-        repo.mark_story_seen(self.anna, "v3")
-        repo.mark_story_seen(self.anna, "v3")
-        self.assertTrue(repo.story_seen(self.anna, "v3"))
-        self.assertFalse(repo.story_seen(self.bram, "v3"))
-        self.assertFalse(repo.story_seen(self.anna, "v4"))
+        self.assertFalse(repo.story_seen(self.anna, announce.STORY_VERSION))
+        repo.mark_story_seen(self.anna, announce.STORY_VERSION)
+        repo.mark_story_seen(self.anna, announce.STORY_VERSION)
+        self.assertTrue(repo.story_seen(self.anna, announce.STORY_VERSION))
+        self.assertFalse(repo.story_seen(self.bram, announce.STORY_VERSION))
+        self.assertFalse(repo.story_seen(self.anna, "v5"))
 
 
 class ClaimTests(Base):
     def test_een_vlag_kan_maar_een_keer_geclaimd_worden(self):
-        self.assertTrue(repo.claim_flag("announce_push:v3"))
-        self.assertFalse(repo.claim_flag("announce_push:v3"))
+        self.assertTrue(repo.claim_flag(f"announce_push:{announce.STORY_VERSION}"))
+        self.assertFalse(repo.claim_flag(f"announce_push:{announce.STORY_VERSION}"))
 
 
 class PushTests(Base):

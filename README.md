@@ -43,8 +43,8 @@ Uitzetten is geen weggooien: code en data blijven, en `ENGINE_FOCUS=false` in `.
   signaal, journaalregel of push uit.
 - **Lopende trades:** `app/level_check.py`, `rule_live.update_open` en het volgen van de range sweep blijven open posities, stops en doelen
   volgen en melden hun uitkomst tot ze sluiten. Een wachtende SMC-setup wordt geen signaal meer en staat niet meer op de Radar.
-- **Weergave:** Nu, Plannen, de tellers (dok, appicoon) en de kansen op Vandaag tonen alleen nieuwe en wachtende kansen van de focus-soorten;
-  een open trade van een uitgezette soort blijft staan onder zijn eigen naam. Het markt-script verdwijnt van Vandaag.
+- **Weergave:** Kansen en de tellers (dok, appicoon) tonen alleen nieuwe en wachtende kansen van de focus-soorten; een open trade van
+  een uitgezette soort blijft staan onder zijn eigen naam (een eigen tab op Kansen, of Verder open op Markt). Het markt-script verdwijnt van Markt.
 - **Bewijs:** de focus-soorten staan bovenaan en open, de andere onder "Uitgezet, ter verbetering" met hun eindcijfers (n, doel, stop,
   netto R). Niets verdwijnt.
 - **Pushbudget:** de regels van `push_policy` zijn niet veranderd; omdat alleen de focus-soorten nog iets nieuws melden, gaat het dagbudget
@@ -468,7 +468,7 @@ sudo systemctl start crypto-news.service crypto-script.service
   (max `TREND_MAX_PER_DAY`, 6) en `trade_type = 'trend'` zodat Bewijs de score toont. Gaat uit na `TREND_MAX_NEGATIVE` (40) negatieve afgeronde signalen.
 - `app/news.py`: RSS (CoinDesk, Cointelegraph, The Block) en Binance-aankondigingen, elke 10 minuten, gesorteerd door
   `ANTHROPIC_EXPLAIN_MODEL`. Een bron die niet antwoordt wordt overgeslagen.
-- `/vandaag` is de nieuwe startpagina: scripts, agenda van 24 uur, liquidaties van het laatste uur, nieuws en de score van
+- `/vandaag` (Markt): scripts, agenda van 24 uur, liquidaties van het laatste uur, nieuws en de score van
   de eigen voorspellingen. `/api/vandaag` ververst koersen en scenario's elke 15 seconden (`web/static/vandaag.js`).
 - Bewijs en het weekrapport tonen de soort `script` apart.
 
@@ -508,9 +508,8 @@ start; herstart `crypto-bot` na een wijziging.
 
 ### Trade Radar en Bewijs (dashboard)
 
-`/smc` staat in de navigatie onder **Plannen**, met een wisselaar naar **Setups** (`/structuur`, de structuur-breuken): elke bouwende SMC-setup en elk open SMC-signaal staat als handelsplan met een
-prijsladder (zone, limietorder op de zone-rand, stop, doel, koers nu), de R:R vanaf de limietprijs, de afstand tot de order en
-een live status die elke 15 seconden meebeweegt (`/api/radar`, `web/static/radar.js`; koersen staan 10 seconden in een cache).
+`/smc` heet in de navigatie **Kansen** (zie hieronder): elke wachtende kans en elke open trade staat als kaart met grafiek in de tab van
+zijn soort, met een live status die elke 15 seconden meebeweegt (`/api/radar`, `web/static/radar.js`; koersen staan 10 seconden in een cache).
 De rekenlaag zit in `app/trade_plan.py` en `app/radar.py`. Zodra de koers in de zone komt stuurt de SMC-check eenmalig een
 melding "koers in de zone" (`market_scanner._notify_zone_touches`, kolom `smc_setups.zone_alert_sent`), en de SMC-melding zelf
 begint met de limietorder en de R:R vanaf die prijs.
@@ -520,25 +519,28 @@ begint met de limietorder en de R:R vanaf die prijs.
 die een vaste regel volgt (onder 30 afgeronde trades "nog te weinig data", daarboven positief of negatief na kosten, "voordeel
 gemeten" pas bij 100 trades en een positief gemiddelde). Vervallen en open signalen staan er bewust bij maar tellen niet mee.
 
-### Navigatie, Nu en thema (ontwerp V2, fase 1)
+### Navigatie, Kansen en thema (ontwerp V4)
 
-Vier tabs: **Nu** (`/vandaag`), **Plannen** (`/smc`, met een wisselaar naar Setups op `/structuur`), **Logboek** (`/signalen`) en
-**Bewijs** (`/bewijs`); geen url veranderde. Account, Meldingen, Handleiding, Zone-radar uitleg, Kwartaalcijfers, Galerij en CEO
-(alleen de eigenaar) staan in het menu achter je initiaal rechtsboven. Het getal op Plannen telt de plannen die nu in de zone staan.
+Vier tabs: **Kansen** (`/smc`), **Logboek** (`/signalen`), **Bewijs** (`/bewijs`) en **Markt** (`/vandaag`); geen url veranderde, de
+oude `/structuur` stuurt door naar de tab Structuur op Kansen. Account, Meldingen, Handleiding, Zone-radar uitleg, Kwartaalcijfers,
+Galerij en CEO (alleen de eigenaar) staan in het menu achter je initiaal rechtsboven. Het getal op Kansen telt de kansen die nu in de
+zone staan.
 
-Nu (`app/nu.py`) staat sinds ontwerp V3 (`docs/design/hespulse_v3.dc.html`, "Peil", fase A) op de **prijsladder**: de prijs rechtop,
-boven is duurder en onder goedkoper. Stop, instap, doel en de zone staan op hun echte plek; de koers is een lijn die live naar de zone
-schuift en de afstand tot de instap is een balk met het gemeten percentage ernaast. In rust staat er "Rust. Niets te doen." met het
-eerstvolgende plan als uitgezoomde ladder (alleen zone, instap en koers). Staat een plan in de zone, dan vult één ladder het scherm met
-de knop "Zet de order, stap voor stap" naar de order-checklist; zonder plan in de zone staat de open trade er met live R. Gebaren:
-veeg de ladder opzij om over te slaan (een ongedaan-balk van 4 seconden, geen vraag; het overslaan geldt een dag via de cookie `hp_skip`
-en `plan_skips`), trek de greep "Details" omhoog voor het detailblad (de getallen, de herkomst van de zone in één regel, de context en
-de grafiek schermvullend) en houd daar een getal vast om het te kopiëren. Elk gebaar heeft ook een knop (Sla over, Details, Enter op
-een getal). "Koers X oud" verschijnt alleen als de koers ouder is dan 30 seconden. De maths van de ladder staat in `app/ladder.py`,
-het live schuiven in `web/static/ladder.js` (dezelfde formules, `tests/test_static_js.py` legt ze naast elkaar). Een tweede plan in de
-zone staat als rij eronder. Marktcontext, scenario's, nieuws, agenda en score staan lager op dezelfde pagina onder **Markt**. De order-checklist
-(`/nu/order/<sleutel>`) loopt de velden van het orderformulier af: instrument en richting, limietprijs, stop, doel. Een tik op een
-getal kopieert het met een punt; er is geen stap voor de positiegrootte.
+Kansen (`app/kansen.py`) heeft een tab per soort: Structuur, Zone-radar en Zone-sweep (met `ENGINE_FOCUS=false` ook SMC). Elke tab
+begint met een regel als "3 kansen · 1 in de zone · 1 open"; de tab met de meeste kansen in de zone gaat vanzelf open. Een kaart toont
+coin en richting, de stand (Wacht, In zone, Open), het label ongetest of in proef en de grafiek met zone, instap, stop en doel; een tik
+op de grafiek opent hem groot. In de zone staat bovenaan, daarna op gemeten afstand tot de instap; open trades staan onder Open.
+Wat niet meer actief is, en onder Structuur ook wat uitviel, de trend-trades en de range sweep (proef), staat als inklapbare regel
+onder de lijst. Een tik op de kop van een kaart opent het **detailblad**: de prijs als ladder (koerslabel links, lijnen in het midden,
+alleen de namen Stop, Instap en Doel rechts, zodat tekst nooit botst; `app/ladder.py`, live in `web/static/ladder.js`), daaronder de
+getallen één keer (houd vast om te kopiëren, de bel zet een prijsalarm), de herkomst, de gemeten context en vast onderaan
+"Zet de order, stap voor stap" naar de order-checklist (`/nu/order/<sleutel>`: instrument en richting, limietprijs, stop, doel; geen
+positiegrootte) of "Bekijk de trade". Sla over zet een kans een dag achteraan (cookie `hp_skip` en `plan_skips`, ook in het Logboek).
+Prijzen staan overal met een komma en zoveel decimalen als bij de prijs past (`app/price_text.py`: 80,92 voor HYPE); kopiëren geeft
+hetzelfde getal met een punt. Pushteksten houden hun oude notatie (golden tests).
+
+**Markt** (`/vandaag`) is de oude Vandaag zonder het scherm Nu: marktcontext, agenda, liquidaties, nieuws, scenario's (zolang het
+markt-script aan staat) en de score; open meldingen van soorten zonder eigen tab staan er onder Verder open.
 
 Thema: donker is de standaard. In Account kies je Systeem, Donker of Licht; de keuze staat in de cookie `hp_theme` (en in
 localStorage), zodat de server de pagina meteen in het goede thema schrijft. Controleer het contrast na een kleurwijziging voor beide:
@@ -550,7 +552,7 @@ Letters: Geist en Geist Mono (Google Fonts); offline valt de pagina terug op de 
 **Logboek** (`/signalen`) is een dagtijdlijn: per dag wat de app zag (nieuwe plannen, in de zone), wat jij deed (checklist afgerond
 met de gemeten duur, gevuld, genomen, overgeslagen) en de uitkomst met R. Een trade is een plan waarvan je de checklist afrondde en
 dat vulde, of een melding die je in het Journaal als genomen of aangepast markeerde. R komt uit de uitkomst van het signaal (doel of
-stop), zonder kosten; oefentrades tellen nooit mee. Overslaan op Nu en de tijden van de checklist staan per gebruiker in de database
+stop), zonder kosten; oefentrades tellen nooit mee. Overslaan op Kansen en de tijden van de checklist staan per gebruiker in de database
 (`plan_skips`, `checklist_runs`). De oude signalenlijst staat onder de tabs Open en Alle; het Journaal (status, sluiten, terugzetten,
 export) staat op Account. Bij elke afgeronde trade opent **Bekijk replay** de 5m-candles van een uur voor de vulling tot de uitkomst,
 met stop, instap en doel, een schuifbalk, een knop per moment en Speel af.
@@ -567,13 +569,15 @@ laten. Een code kent zijn set toe. Leerlingen zien elkaar of elkaars resultaten 
 
 `/nieuw` is openbaar en deelbaar (Discord, WhatsApp; linkvoorbeeld `web/static/og/nieuw.png`, opnieuw maken met
 `python3 scripts/make_og.py`). Vóór het gekozen moment telt hij af, daarna toont hij wat er live is met een knop naar HesPulse.
-Na het moment ziet elke ingelogde gebruiker één keer het verhaal "Wat is nieuw" (zes kaarten; opnieuw te openen via het initiaal),
+Na het moment ziet elke ingelogde gebruiker één keer het verhaal "Wat is nieuw" (zes kaarten: alle kansen op één plek, zones en
+Structuur, de order stap voor stap, Logboek en Replay, licht en donker, op je beginscherm; opnieuw te openen via het initiaal),
 en gaat er in de snelle cyclus (`crypto-market-scan-smc.timer`) precies één pushmelding uit naar iedereen met een abonnement
 (pauze telt, binnen stille uren stil). Het moment staat in de database, dus geen herstart nodig:
 
 ```bash
 python3 scripts/aankondiging.py --zet 2026-11-02T18:00   # Amsterdamse tijd
-python3 scripts/aankondiging.py --toon
+python3 scripts/aankondiging.py --zet +30m               # vanaf nu, ook +2u of +1u30m: direct na een update laten afgaan
+python3 scripts/aankondiging.py --toon                   # het moment en hoe lang nog
 python3 scripts/aankondiging.py --test-push              # alleen naar de eigenaar
 python3 scripts/aankondiging.py --wis
 ```
@@ -583,9 +587,10 @@ geeft niemand iets twee keer; een volgende update met nieuwe kaarten krijgt een 
 
 ### App op het beginscherm (PWA)
 
-HesPulse is te installeren als app (`web/static/manifest.json`, `service-worker.js`, `pwa.js`, `install.js`). De app start op
-`/vandaag?bron=app`: een leerling ziet Nu, de CEO wordt doorgestuurd naar `/ceo`; het manifest houdt `id` `/ceo` zodat
-bestaande installaties dezelfde app blijven. Lang drukken op het icoon geeft snelkoppelingen naar Nu, Plannen en Bewijs.
+HesPulse is te installeren als app (`web/static/manifest.json`, `service-worker.js`, `pwa.js`, `install.js`). De app start voor
+iedereen op Kansen (`start_url` `/smc`, sinds ontwerp V4; een oude installatie die nog `/vandaag?bron=app` opent, wordt doorgestuurd
+naar `/smc`); het manifest houdt `id` `/ceo` zodat bestaande installaties dezelfde app blijven. Een gewijzigde `start_url` neemt een
+telefoon pas over als hij het manifest opnieuw ophaalt. Lang drukken op het icoon geeft snelkoppelingen naar Kansen, Markt en Bewijs.
 Account toont de installatiehulp (iPhone: Delen, Zet op beginscherm, open de app; Android en Chrome: een eigen knop), Vandaag
 een rustige banner die je kunt wegklikken; beide verdwijnen in de geïnstalleerde app. Offline toont de app de laatst bekende
 Radar en Vandaag met de balk "Offline, laatst bijgewerkt om HH:MM": de service worker bewaart alleen die twee pagina's, per pad

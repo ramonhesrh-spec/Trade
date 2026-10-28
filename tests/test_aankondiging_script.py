@@ -5,11 +5,11 @@ import io
 import os
 import tempfile
 import unittest
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
-from app import config, db, repo, security
+from app import announce, config, db, repo, security
 
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "aankondiging.py"
 
@@ -52,6 +52,18 @@ class ScriptTests(unittest.TestCase):
         code, out = self.run_main("--toon")
         self.assertIn("maandag 2 november, 18:00", out)
 
+    def test_zet_relatief_vanaf_nu_en_toon_de_resterende_tijd(self):
+        before = datetime.now(timezone.utc)
+        code, out = self.run_main("--zet", "+30m")
+        self.assertEqual(code, 0)
+        at = repo.get_announcement_at()
+        self.assertTrue(timedelta(minutes=29) < at - before <= timedelta(minutes=30, seconds=5))
+        self.assertRegex(out, r"[Nn]og (29|30) min")
+        code, out = self.run_main("--zet", "+2u")
+        self.assertTrue(timedelta(hours=1, minutes=59) < repo.get_announcement_at() - before <= timedelta(hours=2, seconds=5))
+        code, out = self.run_main("--toon")
+        self.assertRegex(out, r"[Nn]og (1 u 59|2 u 0) min")
+
     def test_ongeldige_tijd_verandert_niets(self):
         code, out = self.run_main("--zet", "morgen")
         self.assertNotEqual(code, 0)
@@ -75,7 +87,7 @@ class ScriptTests(unittest.TestCase):
             code, out = self.run_main("--test-push")
         self.assertEqual(code, 0)
         self.assertEqual(sent, [self.ceo])
-        self.assertTrue(repo.claim_flag("announce_push:v3"))    # de echte push is nog niet geclaimd
+        self.assertTrue(repo.claim_flag(f"announce_push:{announce.STORY_VERSION}"))    # de echte push is nog niet geclaimd
 
 
 if __name__ == "__main__":

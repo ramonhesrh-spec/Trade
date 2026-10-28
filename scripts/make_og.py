@@ -29,17 +29,21 @@ def _font(bold: bool, size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.truetype(path, size)
 
 
-def _ladder(d: ImageDraw.ImageDraw, x: int, top: int, bottom: int) -> None:
-    """Peil in het klein: een rechtopstaande prijsschaal, de zone als vlak, de koers als lijn en de afstand als accentbalk."""
-    for i, y in enumerate(range(top, bottom + 1, 26 * SS)):
-        d.line([(x, y), (x + (34 if i % 4 == 0 else 18) * SS, y)], fill=LINE, width=2 * SS)
-    zone_top, zone_bottom = top + 70 * SS, top + 150 * SS
-    d.rectangle([x + 60 * SS, zone_top, x + 300 * SS, zone_bottom], fill=ZONE)
-    d.line([(x + 60 * SS, zone_bottom), (x + 300 * SS, zone_bottom)], fill=ACCENT, width=2 * SS)
-    price = bottom - 90 * SS
-    d.line([(x + 40 * SS, price), (x + 320 * SS, price)], fill=TEXT, width=3 * SS)
-    d.ellipse([x + 300 * SS, price - 9 * SS, x + 318 * SS, price + 9 * SS], fill=TEXT)
-    d.rectangle([x + 170 * SS, zone_bottom + 6 * SS, x + 184 * SS, price - 6 * SS], fill=ACCENT)
+def _card(d: ImageDraw.ImageDraw, x: int, top: int, bottom: int) -> None:
+    """Kansen in het klein: drie tabs (de gekozen onderstreept) boven een kaart met de zone als vlak, een koerslijn en de koers als stip.
+    Geen getallen: een getal op dit plaatje zou een verzonnen koers zijn."""
+    for i in range(3):
+        d.rounded_rectangle([x + i * 110 * SS, top, x + (i * 110 + 84) * SS, top + 12 * SS], radius=6 * SS, fill=LINE if i else DIM)
+    d.rectangle([x, top + 22 * SS, x + 84 * SS, top + 26 * SS], fill=ACCENT)
+    card_top = top + 50 * SS
+    d.rounded_rectangle([x, card_top, x + 320 * SS, bottom], radius=18 * SS, outline=LINE, width=2 * SS)
+    zone_top = card_top + 170 * SS
+    d.rectangle([x + 20 * SS, zone_top, x + 300 * SS, zone_top + 40 * SS], fill=ZONE)
+    d.line([(x + 20 * SS, zone_top), (x + 300 * SS, zone_top)], fill=ACCENT, width=2 * SS)
+    pts = [(20, 70), (60, 100), (100, 80), (140, 140), (180, 120), (220, 175), (260, 160)]
+    d.line([(x + px * SS, card_top + py * SS) for px, py in pts], fill=TEXT, width=3 * SS, joint="curve")
+    lx, ly = x + 260 * SS, card_top + 160 * SS
+    d.ellipse([lx - 9 * SS, ly - 9 * SS, lx + 9 * SS, ly + 9 * SS], fill=TEXT)
 
 
 def render() -> Image.Image:
@@ -48,12 +52,12 @@ def render() -> Image.Image:
     pad = 80 * SS
     _logo(d, pad + 26 * SS, pad + 26 * SS, 52 * SS)
     d.text((pad + 72 * SS, pad + 26 * SS), "HesPulse", font=_font(True, 34 * SS), fill=TEXT, anchor="lm")
-    d.text((pad - 6 * SS, 300 * SS), "Peil.", font=_font(True, 150 * SS), fill=TEXT, anchor="ls")
+    d.text((pad - 6 * SS, 300 * SS), "Kansen.", font=_font(True, 120 * SS), fill=TEXT, anchor="ls")
     d.text((pad, 380 * SS), "HesPulse wordt vernieuwd.", font=_font(True, 44 * SS), fill=TEXT, anchor="ls")
-    d.text((pad, 440 * SS), "De prijs als ladder: in één blik", font=_font(False, 30 * SS), fill=DIM, anchor="ls")
-    d.text((pad, 480 * SS), "hoe ver je kans nog is.", font=_font(False, 30 * SS), fill=DIM, anchor="ls")
+    d.text((pad, 440 * SS), "Alle kansen op één plek: een tab", font=_font(False, 30 * SS), fill=DIM, anchor="ls")
+    d.text((pad, 480 * SS), "per soort, met de grafiek erbij.", font=_font(False, 30 * SS), fill=DIM, anchor="ls")
     d.rectangle([pad, (H - 80) * SS, pad + 64 * SS, (H - 76) * SS], fill=ACCENT)
-    _ladder(d, 790 * SS, 110 * SS, 520 * SS)
+    _card(d, 800 * SS, 110 * SS, 520 * SS)
     return img.resize((W, H), Image.LANCZOS)
 
 

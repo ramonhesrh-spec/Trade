@@ -9,14 +9,14 @@
   <h2>Waar staat wat</h2>
   <div class="factor-grid">
     <div class="factor">
-      <h3>Nu</h3>
-      <p>Er is niets te doen, of precies één ding. Je ziet de prijs als een ladder: boven is duurder, onder goedkoper. Stop (rood), instap en doel (groen) staan op hun echte prijs, de zone is een dun vlak en de koers is de lijn met de stip. De balk ernaast is de afstand tot je instap, het grote getal is die afstand gemeten.</p>
-      <p>In rust staat het eerstvolgende plan klein. Staat een plan in de zone, dan vult de ladder het scherm met een knop die je stap voor stap door je order leidt: instrument en richting, limietprijs, stop, doel. Veeg de ladder opzij om het plan over te slaan (je hebt vier seconden om het ongedaan te maken), trek "Details" omhoog voor de getallen, waar de zone vandaan komt en de grafiek, en houd daar een getal vast om het te kopiëren. Daaronder staat de markt van vandaag.</p>
+      <h3>Kansen</h3>
+      <p>De app opent hier. Elke soort heeft een eigen tab: Structuur, Zone-radar{% if focus.active() %} en Zone-sweep{% else %}, Zone-sweep en SMC{% endif %}. Per kans zie je de coin en de richting, de stand (Wacht, In zone of Open) en de grafiek met de zone, je instap, stop en doel. Kansen die in de zone staan staan bovenaan, daarna op afstand tot je instap. Het getal op de tab is wat nu in de zone staat; de tab met de meeste kansen in de zone gaat vanzelf open. Een tik op de grafiek opent hem groot.</p>
+      <p>Tik op de kop van een kaart voor het detail: de prijs als ladder (boven is duurder, de koers is de stip met het getal links), daaronder stop, instap en doel. Houd een getal vast om het te kopiëren, de bel zet een prijsalarm. Onderaan leidt "Zet de order, stap voor stap" je door het orderformulier van je beurs: instrument en richting, limietprijs, stop, doel. "Sla over" haalt hem een dag naar onderen; je logboek onthoudt het.</p>
+      <p>Een zone-sweep is een kans waarbij de koers door een vraagzone (of aanbodzone) prikte en terug sloot. Is er geen tegenovergestelde zone op minstens 2R, dan zie je alleen instap en stop en kies je het doel zelf. Ongetest: hij draait live voordat het lab hem toetste, Bewijs toont de score apart.</p>
     </div>
     <div class="factor">
-      <h3>Plannen</h3>
-      <p>Alle plannen die wachten. Bovenaan wissel je tussen de Radar ({% if focus.active() %}de zone-radar{% else %}zones en SMC{% endif %}) en de Setups (structuurbreuken). Het getal op de tab telt wat nu in de zone staat.</p>
-      <p>Een zone-sweep is een kaart op de Radar: de koers prikte door een vraagzone (of aanbodzone) en sloot terug. Je ziet limiet, stop en doel; is er geen tegenovergestelde zone op minstens 2R, dan alleen limiet en stop en kies je het doel zelf. Ongetest: hij draait live voordat het lab hem toetste, Bewijs toont de score apart.</p>
+      <h3>Markt</h3>
+      <p>Wat de markt doet, gemeten: marktcontext (funding, open interest, Fear and Greed), de agenda van de komende 24 uur, liquidaties en nieuws. Open meldingen van soorten zonder eigen tab op Kansen staan hier onder Verder open.</p>
     </div>
     <div class="factor">
       <h3>Logboek en Bewijs</h3>

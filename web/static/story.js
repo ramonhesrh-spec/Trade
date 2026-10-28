@@ -1,6 +1,6 @@
 // Het verhaal "Wat is nieuw" (web/templates/_announce.html). Vegen werkt via scroll-snap, de stippen en de knop springen naar een kaart.
 // Gezien wordt onthouden op de server (per gebruiker) en in localStorage: zegt dit toestel al gezien, dan opent het niet en hoort de server
-// het alsnog. Op /wat-is-nieuw (data-page) staat het meteen open en gaat sluiten terug naar Nu.
+// het alsnog. Op /wat-is-nieuw (data-page) staat het meteen open en gaat sluiten terug naar Kansen.
 (function () {
   var root = document.getElementById("wn-story");
   if (!root) return;
@@ -49,7 +49,7 @@
 
   function close() {
     if (isPage) {
-      location.href = root.getAttribute("data-return") || "/vandaag";
+      location.href = root.getAttribute("data-return") || "/smc";
       return;
     }
     document.documentElement.classList.remove("wn-lock");

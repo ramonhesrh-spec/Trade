@@ -2876,7 +2876,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .kc-chev { flex: none; color: var(--tx2); }
 .kc-skipped { font-size: 12px; color: var(--tx2); }
 .kc .level-chart { height: 168px; }
-[data-utabs="kansen"] .ut-tab { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding-top: 0; padding-bottom: 0; }
+.ut-list .ut-tab { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding-top: 0; padding-bottom: 0; }
 .lc-bare .lc-foot { margin-top: 0; justify-content: space-between; align-items: center; }
 .lc-bare .level-chart::before { display: none; }
 .lc-cap { font-size: 12px; color: var(--tx2); }

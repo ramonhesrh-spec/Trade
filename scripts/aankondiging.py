@@ -2,7 +2,8 @@
 nieuw" en gaat er één pushmelding uit (in de 5-minutencyclus, app/announce_live.py).
 
     python3 scripts/aankondiging.py --zet 2026-11-02T18:00   # Amsterdamse tijd, bewaard als UTC
-    python3 scripts/aankondiging.py --toon
+    python3 scripts/aankondiging.py --zet +30m               # over 30 minuten vanaf nu (ook +2u, +1u30m, +1d)
+    python3 scripts/aankondiging.py --toon                   # het moment en hoe lang nog
     python3 scripts/aankondiging.py --wis                    # ook ANNOUNCEMENT_AT uit .env telt dan niet meer
     python3 scripts/aankondiging.py --test-push              # alleen naar de eigenaar, de echte push blijft staan
 """
@@ -23,10 +24,9 @@ def _show() -> None:
         print("Geen aankondiging gezet: /nieuw toont de live-versie, het verhaal opent niet vanzelf en er gaat geen push uit.")
         return
     now = datetime.now(timezone.utc)
-    left = announce.remaining(at, now)
     print(f"Aankondiging: {announce.fmt_local(at)} (Amsterdam), {at.isoformat()} UTC")
     if announce.phase(at, now) == "before":
-        print(f"Nog {left['days']}d {left['hours']}u {left['minutes']}m {left['seconds']}s")
+        print(announce.remaining_text(at, now).capitalize() + ".")
     else:
         print("Het moment is voorbij: /nieuw staat op live.")
 
@@ -34,7 +34,7 @@ def _show() -> None:
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(description="Moment van de aankondiging op /nieuw")
     g = p.add_mutually_exclusive_group(required=True)
-    g.add_argument("--zet", metavar="JJJJ-MM-DDTUU:MM", help="lokale tijd Europe/Amsterdam")
+    g.add_argument("--zet", metavar="JJJJ-MM-DDTUU:MM|+30m", help="lokale tijd Europe/Amsterdam, of vanaf nu: +30m, +2u")
     g.add_argument("--toon", action="store_true")
     g.add_argument("--wis", action="store_true")
     g.add_argument("--test-push", action="store_true", help="stuurt de push alleen naar de eigenaar")
@@ -42,9 +42,9 @@ def main(argv=None) -> int:
     db.init_db()
 
     if args.zet:
-        at = announce.parse_moment(args.zet)
+        at = announce.parse_when(args.zet, datetime.now(timezone.utc).replace(microsecond=0))
         if at is None:
-            print(f"Ongeldige tijd: {args.zet!r}. Gebruik bijvoorbeeld 2026-11-02T18:00.")
+            print(f"Ongeldige tijd: {args.zet!r}. Gebruik bijvoorbeeld 2026-11-02T18:00 of +30m.")
             return 2
         repo.set_announcement_at(at)
         _show()

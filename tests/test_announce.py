@@ -22,6 +22,22 @@ class ParseTests(unittest.TestCase):
         for raw in (None, "", "  ", "morgen", "2026-13-02T18:00"):
             self.assertIsNone(announce.parse_moment(raw), raw)
 
+    def test_relatief_vanaf_nu(self):
+        now = datetime(2026, 10, 28, 12, 0, tzinfo=UTC)
+        self.assertEqual(announce.parse_when("+30m", now), now + timedelta(minutes=30))
+        self.assertEqual(announce.parse_when("+2u", now), now + timedelta(hours=2))
+        self.assertEqual(announce.parse_when(" +1u30m ", now), now + timedelta(hours=1, minutes=30))
+        self.assertEqual(announce.parse_when("+0m", now), now)
+        self.assertEqual(announce.parse_when("2026-11-02T18:00", now), AT)          # een gewone tijd blijft werken
+        for raw in ("+", "+30", "+2x", "-30m", "+m", "30m"):
+            self.assertIsNone(announce.parse_when(raw, now), raw)
+
+    def test_resterende_tijd_als_tekst(self):
+        self.assertEqual(announce.remaining_text(AT, AT - timedelta(hours=2, minutes=5, seconds=3)), "nog 2 u 5 min 3 s")
+        self.assertEqual(announce.remaining_text(AT, AT - timedelta(days=1, minutes=1)), "nog 1 d 0 u 1 min 0 s")
+        self.assertEqual(announce.remaining_text(AT, AT - timedelta(seconds=40)), "nog 40 s")
+        self.assertEqual(announce.remaining_text(AT, AT), "")
+
     def test_lokale_weergave(self):
         self.assertEqual(announce.fmt_local(AT), "maandag 2 november, 18:00")
 
@@ -75,6 +91,17 @@ class StoryTests(unittest.TestCase):
     def test_nieuwe_soorten_heten_ongetest(self):
         coins = next(c for c in announce.CARDS if c["key"] == "kansen")
         self.assertIn("ongetest", coins["text"])
+
+    def test_de_kaarten_van_v4_in_volgorde(self):
+        self.assertEqual([c["key"] for c in announce.CARDS], ["tabs", "kansen", "checklist", "logboek", "thema", "installeer"])
+        self.assertEqual(announce.CARDS[0]["title"], "Alle kansen op één plek")
+        self.assertEqual(announce.CARDS[1]["title"], "Zones en Structuur")
+
+    def test_peil_en_nu_zijn_geen_hoofdbelofte_meer(self):
+        words = " ".join([c["title"] + " " + c["text"] for c in announce.CARDS] + announce.PROMISES
+                         + [announce.HEADLINE_BEFORE, announce.LEAD_BEFORE, announce.PUSH_BODY]).lower()
+        for gone in ("één ding tegelijk", "ladder", "peil", "nu:"):
+            self.assertNotIn(gone, words)
 
 
 class LinkAndPushTests(unittest.TestCase):

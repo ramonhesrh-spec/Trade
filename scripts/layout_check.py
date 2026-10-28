@@ -7,7 +7,7 @@ from PIL import Image
 from playwright.sync_api import sync_playwright
 
 REQUIRED = ["#push-pause", "#price-dot", "#system-status", ".tabbar", "#more-sheet"]
-WITH_SEARCH = {"/smc"}      # het zoekveld hoort alleen op de Radar te staan; Nu volgt het ontwerp zonder zoekveld
+WITH_SEARCH = {"/smc", "/structuur"}   # het zoekveld hoort alleen op Kansen (/structuur stuurt daarheen door)
 # Playwright vindt in deze omgeving zijn eigen Chromium niet; elders blijft de standaard gelden.
 CHROMIUM = os.environ.get("CHROMIUM_PATH") or None
 DEFAULT_PAGES = ["/vandaag", "/structuur", "/smc", "/bewijs", "/signalen", "/meldingen", "/account", "/week", "/ceo", "/uitleg", "/keten", "/coins/BTC"]

@@ -149,3 +149,4 @@ class SayTests(unittest.TestCase):
         self.assertIn("Wacht", kansen.say("wacht", "long"))
         self.assertIn("zone", kansen.say("in_zone", "short"))
         self.assertEqual(kansen.say("open", "long"), "")
+        self.assertIn("de instap bereikt", kansen.say("wacht", "long", zone=False))       # Structuur heeft een niveau, geen zone
