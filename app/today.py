@@ -198,7 +198,7 @@ def open_chances(structure_cards: list[dict], scripts: list[dict], smc_cards: li
         if g.get("auto_outcome") or g["trade_type"] not in SIGNAL_LABELS or _aware(g["created_at"]) < since or not signal_is_open(g, prices.get(g["coin"])):
             continue
         items.append({"kind": "signal", "coin": g["coin"], "direction": g["direction"], "soort": SIGNAL_LABELS[g["trade_type"]],
-                      "state": "Open, gemeld", "dist": None, "dist_text": "", "url": f"/kans/{g['id']}", "card": None})
+                      "state": "Open, gemeld", "dist": None, "dist_text": "", "url": f"/kans/{g['id']}", "card": None, "trade_type": g["trade_type"]})
     return sorted(items, key=lambda i: (i["dist"] is None, i["dist"] or 0))
 
 

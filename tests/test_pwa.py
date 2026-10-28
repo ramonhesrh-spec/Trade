@@ -97,18 +97,18 @@ class WebPwaTest(unittest.TestCase):
             c.cookies.set(self.main.SESSION_COOKIE, security.create_session_token(user_id))
         return c
 
-    def test_app_start_sends_the_ceo_to_his_own_page(self):
+    def test_an_old_app_start_opens_kansen_for_the_ceo_too(self):
         r = self.client(self.ceo_id).get("/vandaag?bron=app", follow_redirects=False)
         self.assertEqual(r.status_code, 303)
-        self.assertEqual(r.headers["location"], "/ceo")
+        self.assertEqual(r.headers["location"], "/smc")
 
     def test_ceo_can_still_open_vandaag_from_the_tab(self):
         self.assertEqual(self.client(self.ceo_id).get("/vandaag", follow_redirects=False).status_code, 200)
 
-    def test_app_start_shows_a_student_vandaag(self):
+    def test_an_old_app_start_opens_kansen_for_a_student(self):
         r = self.client(self.student_id).get("/vandaag?bron=app", follow_redirects=False)
-        self.assertEqual(r.status_code, 200)
-        self.assertIn("<title>Nu — HesPulse</title>", r.text)                     # Vandaag heet in V2 Nu, op dezelfde url
+        self.assertEqual((r.status_code, r.headers["location"]), (303, "/smc"))
+        self.assertIn("<title>Markt — HesPulse</title>", self.client(self.student_id).get("/vandaag").text)
 
     def test_app_start_without_session_goes_to_login(self):
         r = self.client().get("/vandaag?bron=app", follow_redirects=False)

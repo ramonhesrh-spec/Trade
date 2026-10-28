@@ -7,9 +7,9 @@
    met een punt, vinkt de stap af en licht de volgende op (order.js). Zonder JavaScript staan alle getallen er gewoon om over te typen. #}
 <div class="ck" data-ck data-ck-key="{{ item.key }}" data-ck-coin="{{ item.coin }}" data-ck-dir="{{ item.direction }}" data-ck-limit="{{ item.limit }}" data-ck-done-url="/nu/order/{{ item.key }}/klaar">
   <header class="ck-top">
-    <a class="ck-nav" href="/vandaag" data-ck-back><span aria-hidden="true">‹</span> Terug</a>
+    <a class="ck-nav" href="/smc" data-ck-back><span aria-hidden="true">‹</span> Terug</a>
     <span class="ck-label" data-ck-label aria-live="polite">Stap 1 van {{ steps|length }}</span>
-    <a class="ck-nav" href="/vandaag">Sluit</a>
+    <a class="ck-nav" href="/smc">Sluit</a>
   </header>
   <h1 class="ck-title">{{ item.coin }} {{ item.direction }} <span>limit</span></h1>
   <div class="ck-segs" aria-hidden="true">{% for s in steps %}<i class="ck-seg{% if loop.first %} is-cur{% endif %}"></i>{% endfor %}</div>
@@ -36,7 +36,7 @@
   <footer class="ck-foot">
     <p class="ck-price">Koers nu <span class="ck-px" data-ck="price">{{ item.price_text or "-" }}</span>{% if note %} · <span data-ck="note">{{ note }}</span>{% endif %}</p>
     <button type="button" class="ck-next" data-ck-next hidden>Volgende stap</button>
-    <a class="ck-next ck-done" href="/vandaag" data-ck-done>Order staat. Volg hem op Nu</a>
+    <a class="ck-next ck-done" href="/smc" data-ck-done>Order staat. Terug naar Kansen</a>
   </footer>
 </div>
 <i data-live-coin="{{ item.coin }}" hidden></i>

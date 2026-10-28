@@ -53,9 +53,11 @@
     return [s.stop, s.take, s.limit, s.zone_low, s.zone_high, s.entry, s.price].filter(function (v) { return typeof v === "number" && isFinite(v); });
   }
 
+  // Zelfde decimalen als app/price_text.py (en ladder.js): 2 vanaf 10, 3 vanaf 1, 4 vanaf 0,01, daaronder minstens drie cijfers die tellen.
   function precision(s) {
     var ref = Math.abs(s.entry != null ? s.entry : s.limit);
-    return ref >= 100 ? 2 : ref >= 0.1 ? 4 : 6;
+    if (!(ref > 0)) return 2;
+    return ref >= 10 ? 2 : ref >= 1 ? 3 : ref >= 0.01 ? 4 : Math.max(6, 2 - Math.floor(Math.log10(ref)));
   }
 
   // Risico en beloning van het plan zelf: van instap (of limiet) tot stop, en van instap tot doel. Geen schatting, alleen de niveaus.
@@ -315,6 +317,8 @@
       timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: full ? 8 : 12, fixLeftEdge: !full, tickMarkFormatter: tickLabel },
       crosshair: { vertLine: { visible: false, labelVisible: false }, horzLine: { visible: false, labelVisible: false } },
       handleScroll: !!full, handleScale: !!full,
+      // Komma als decimaalteken, zoals overal in de app; het aantal decimalen volgt de prijs (precision).
+      localization: { priceFormatter: function (p) { return p.toFixed(precision(s)).replace(".", ","); } },
     });
     var lc = { el: el, chart: chart, lines: {}, candles: [], dead: false, areas: {}, full: !!full, tf: el.getAttribute("data-tf") || "15m",
                boxes: [], originBar: null, onNote: full ? full.onNote : null };

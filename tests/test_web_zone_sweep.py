@@ -63,17 +63,20 @@ class WebZoneSweepTests(unittest.TestCase):
         text = self.client.get("/smc").text
         self.assertIn(f'id="radar-zsweep-{sid}"', text)
         card = text.split(f'id="radar-zsweep-{sid}"')[1].split("</article>")[0]
-        self.assertIn("Zone-sweep", card)
+        self.assertIn('class="kc-title">XRP long<', card)
         self.assertIn("ongetest", card)
-        self.assertIn("Zet een limietorder op 100.3", card)
         self.assertIn("data-levelchart", card)
-        self.assertIn("prikte", card)                       # de uitleg onder Waarom
+        self.assertIn(f'id="radar-zsweep-{sid}"', text.split('<section id="tab-zone_sweep"')[1].split("</section>\n")[0])
+        sheet = text.split(f'data-kd-item="zsweep:{sid}"')[1].split("</section>")[0]
+        self.assertIn('data-hold-copy="100.30"', sheet)                 # de limiet staat in de tabel van het blad
+        self.assertIn(">Zone-sweep<", sheet)
 
     def test_kaart_zonder_doel(self):
         sid = self.add_card(take_profit=None, rr=None, target_tf=None, target_low=None, target_high=None)
-        card = self.client.get("/smc").text.split(f'id="radar-zsweep-{sid}"')[1].split("</article>")[0]
-        self.assertIn("geen doel: dat kies je zelf", card)
-        self.assertNotIn("level-chip-take", card)
+        sheet = self.client.get("/smc").text.split(f'data-kd-item="zsweep:{sid}"')[1].split("</section>")[0]
+        self.assertNotIn(">Doel<", sheet)                               # geen doel op de ladder en niet in de tabel
+        self.assertNotIn("Doel ·", sheet)
+        self.assertIn(">Stop<", sheet)
 
     def test_leerling_ziet_niets_als_hij_niet_openbaar_is(self):
         sid = self.add_card()
@@ -121,11 +124,11 @@ class WebZoneSweepTests(unittest.TestCase):
         self.assertNotIn("Negatief", card)
         self.assertNotIn("Zone-sweep 2u", rules.split("Andere geteste regels")[-1] if "Andere geteste regels" in rules else "")
 
-    def test_nu_toont_een_zone_sweep_in_de_zone(self):
+    def test_kansen_toont_een_zone_sweep_in_de_zone(self):
         self.price["XRP"] = 100.1
         sid = self.add_card()
-        text = self.client.get("/vandaag").text
-        self.assertIn("<span>Zone-sweep</span>", text)                    # V3: soort in grijs naast de pil, herkomst in het detailblad
+        text = self.client.get("/smc").text
+        self.assertIn('class="ut-tab is-active" id="tab-zone_sweep-tab"', text)
         self.assertIn("· limietplan", text)
         self.assertIn(f"/nu/order/zsweep:{sid}", text)
         self.assertEqual(self.client.get(f"/nu/order/zsweep:{sid}").status_code, 200)

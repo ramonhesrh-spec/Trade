@@ -134,7 +134,12 @@ class LadderMathTest(unittest.TestCase):
             self.assertAlmostEqual(got, ladder.y_pct(*args))
         for got, args in zip(out["ds"], [("short", 100, 98), ("long", 100, 102), ("short", 80774.8, 80537)]):
             self.assertAlmostEqual(got, ladder.distance_pct(*args))
-        self.assertEqual(out["nls"], [ladder.nl(v) for v in (80774.8, 102, 0.1702, 2.5)])
+        from app import price_text
+        self.assertEqual(out["nls"], [price_text.nl(v) for v in (80774.8, 102, 0.1702, 2.5, 80.9234, 9.99, 0.0099, 0.00001234, 0, -3.5)])
+        self.assertEqual(out["nls"][:4], [ladder.nl(v) for v in (80774.8, 102, 0.1702, 2.5)])
+        for got, v in zip(out["labels"], (0, 3, 50, 99, 100)):
+            self.assertAlmostEqual(got, ladder.label_y(v))
+        self.assertEqual(out["plains"], [price_text.plain(v) for v in (80.9234, 0.00001234)])
         self.assertEqual([out["stale"][i] for i in range(5)], [ladder.stale_text(v) for v in (None, 30, 45, 150, 7300)])
 
     def test_balk_van_zonerand_naar_koers(self):

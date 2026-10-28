@@ -51,7 +51,7 @@ class WebMarketContextTests(unittest.TestCase):
         repo.insert_zone_radar_setup(card(), self.now.isoformat())
         self.seed_context()
         text = self.client.get("/smc").text
-        self.assertIn('class="ctx"', text)
+        self.assertIn('class="kd-ctx"', text)                               # in het detailblad van de kaart
         self.assertIn("gemeten", text)
         self.assertIn("+0,060% per 8u", text)
         self.assertIn("longs betalen", text)
@@ -61,7 +61,7 @@ class WebMarketContextTests(unittest.TestCase):
 
     def test_no_measurement_no_block(self):
         repo.insert_zone_radar_setup(card(), self.now.isoformat())
-        self.assertNotIn('class="ctx"', self.client.get("/smc").text)
+        self.assertNotIn('class="kd-ctx"', self.client.get("/smc").text)
         self.assertNotIn("Marktcontext", self.client.get("/vandaag").text)
 
     def test_vandaag_shows_market_context(self):

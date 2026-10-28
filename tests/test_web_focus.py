@@ -68,12 +68,11 @@ class FocusOnTests(Base):
         self.assertIn('id="radar-zone-', html)
         self.assertIn(f'id="radar-signal-{self.smc_open}"', html)
 
-    def test_nu_takes_the_zone_radar_plan_never_the_smc_plan(self):
-        html = self.client.get("/vandaag").text
-        sec = html[html.index('<section class="nu'):html.index("</section>", html.index('<section class="nu'))]
-        self.assertIn('class="nu-coin">BTC short<', sec)
-        self.assertNotIn("XRP", sec)
-        self.assertNotIn("Ook in zone", sec)                            # het SMC-plan staat ook in de zone, maar telt niet
+    def test_kansen_opens_the_zone_radar_tab_never_an_smc_plan(self):
+        html = self.client.get("/smc").text
+        self.assertIn('class="ut-tab is-active" id="tab-zone_radar-tab"', html)
+        self.assertIn('class="kc-title">BTC short<', html)
+        self.assertNotIn('class="kc-title">XRP', html)                  # het SMC-plan staat ook in de zone, maar telt niet
 
     def test_counters_count_only_focus_plans(self):
         self.client.get("/smc")                                         # vult de koerscache die de tellers lezen

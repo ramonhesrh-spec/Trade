@@ -68,6 +68,8 @@ class BuildTests(unittest.TestCase):
         stop = self.short()["lines"][0]
         self.assertEqual(stop["text"], "104,00")
         self.assertEqual(stop["copy"], "104.00")
+        hype = ladder.build("long", stop=78.5, entry=80.9234, targets=[(86.0, 2.0)], price=81.0)
+        self.assertEqual([ln["text"] for ln in hype["lines"]], ["86,00", "80,92", "78,50"])      # niet 80,9234 of 80,9200
 
     def test_meerdere_doelen_krijgen_een_nummer(self):
         lad = ladder.build("long", stop=90.0, entry=100.0, targets=[(110.0, 1.0), (120.0, 2.0)], price=101.0)
@@ -112,23 +114,11 @@ class BuildTests(unittest.TestCase):
         self.assertIsNone(lad["price"])
         self.assertIsNone(lad["gap"])
 
-    def test_het_getal_staat_tussen_zone_en_koers(self):
-        lad = self.short(price=97.0)
-        self.assertTrue(lad["gap"]["top"] <= lad["num_y"] <= lad["gap"]["top"] + lad["gap"]["height"])
-
     def test_tags_overlappen_niet(self):
         lad = ladder.build("short", stop=101.2, entry=101.0, targets=[(100.9, 0.5)], price=99.0)
         tags = sorted(ln["tag_y"] for ln in lad["lines"])
         for a, b in zip(tags, tags[1:]):
             self.assertGreaterEqual(b - a, ladder.TAG_GAP - 1e-9)
-
-    def test_uitgezoomd_toont_alleen_zone_instap_en_koers(self):
-        lad = ladder.build("short", stop=104.0, entry=101.0, targets=[(95.0, 2.0)], price=97.0, zone_low=101.0, zone_high=102.0, compact=True)
-        self.assertEqual([ln["name"] for ln in lad["lines"]], ["Instap"])
-        self.assertTrue(lad["compact"])
-        self.assertTrue(lad["lo"] < 97.0 and lad["hi"] > 102.0)
-        self.assertGreater(lad["hi"], 102.0)
-        self.assertLess(lad["hi"], 104.0)                      # de stop telt niet mee voor de schaal
 
     def test_een_trade_heeft_geen_zone_en_geen_balk(self):
         lad = ladder.build("long", stop=90.0, entry=100.0, targets=[(120.0, 2.0)], price=104.0, trade=True)
@@ -138,7 +128,7 @@ class BuildTests(unittest.TestCase):
 
 
 class DistanceTests(unittest.TestCase):
-    def test_zelfde_formule_als_nu_js_en_trade_plan(self):
+    def test_zelfde_formule_als_ladder_js_en_trade_plan(self):
         self.assertAlmostEqual(ladder.distance_pct("short", 100.0, 98.0), 2.0)
         self.assertAlmostEqual(ladder.distance_pct("long", 100.0, 102.0), 2.0)
         from app import trade_plan as tp
@@ -159,3 +149,51 @@ class StaleTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class CollisionTests(unittest.TestCase):
+    """De koers heeft een eigen kolom links, de tags staan rechts: tekst botst nooit, ook niet als de koers precies op een niveau staat."""
+    def tag_px(self, lad):
+        return sorted(ln["tag_y"] * ladder.HEIGHT_PX / 100 for ln in lad["lines"])
+
+    def assert_clean(self, lad):
+        tags = self.tag_px(lad)
+        for a, b in zip(tags, tags[1:]):
+            self.assertGreaterEqual(b - a, ladder.TAG_PX - 1e-6)
+        for t in tags:                                            # een tag past binnen de ladder, half boven en half onder zijn plek
+            self.assertGreaterEqual(t, ladder.TAG_PX / 2 - 1e-6)
+            self.assertLessEqual(t, ladder.HEIGHT_PX - ladder.TAG_PX / 2 + 1e-6)
+        p = lad["price"]
+        self.assertEqual(p["column"], "left")
+        self.assertTrue(all(ln["column"] == "right" for ln in lad["lines"]))
+        label = p["label_y"] * ladder.HEIGHT_PX / 100
+        self.assertGreaterEqual(label, ladder.PRICE_PX / 2 - 1e-6)
+        self.assertLessEqual(label, ladder.HEIGHT_PX - ladder.PRICE_PX / 2 + 1e-6)
+
+    def test_koers_precies_op_de_instap(self):
+        lad = ladder.build("long", stop=95.0, entry=100.0, targets=[(110.0, 2.0)], price=100.0, zone_low=99.0, zone_high=100.0)
+        entry = next(ln for ln in lad["lines"] if ln["name"] == "Instap")
+        self.assertAlmostEqual(lad["price"]["y"], entry["y"])        # de lijn staat op zijn prijs, het label in zijn eigen kolom
+        self.assert_clean(lad)
+
+    def test_koers_net_boven_de_stop(self):
+        self.assert_clean(ladder.build("long", stop=95.0, entry=100.0, targets=[(110.0, 2.0)], price=95.05, zone_low=99.0, zone_high=100.0))
+
+    def test_koers_voorbij_het_doel(self):
+        lad = ladder.build("short", stop=104.0, entry=101.0, targets=[(95.0, 2.0)], price=90.0)
+        self.assert_clean(lad)
+        self.assertGreater(lad["price"]["y"], next(ln["y"] for ln in lad["lines"] if ln["name"] == "Doel"))
+
+    def test_twee_tags_binnen_twaalf_pixels(self):
+        lad = ladder.build("short", stop=101.2, entry=101.0, targets=[(95.0, 1.0)], price=99.0)
+        ys = sorted(ln["y"] * ladder.HEIGHT_PX / 100 for ln in lad["lines"])
+        self.assertLess(ys[1] - ys[0], 12)                            # stop en instap liggen dichter dan 12px bij elkaar
+        self.assert_clean(lad)
+
+    def test_drie_tags_tegen_de_rand(self):
+        self.assert_clean(ladder.build("long", stop=99.99, entry=100.0, targets=[(100.01, 1.0)], price=150.0))
+
+    def test_label_van_de_koers_blijft_binnen_de_ladder(self):
+        lad = ladder.build("long", stop=95.0, entry=100.0, targets=[(110.0, 2.0)], price=200.0)
+        self.assertAlmostEqual(lad["price"]["label_y"], ladder.label_y(lad["price"]["y"]))
+        self.assert_clean(lad)

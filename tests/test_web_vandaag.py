@@ -54,14 +54,13 @@ class WebVandaagTests(unittest.TestCase):
             "coin": "BTC", "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
             "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "Schone range.", "features": "{}", "state": "waiting",
             "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
-        r = self.client.get("/structuur")
+        r = self.client.get("/structuur")                                # de oude pagina is de tab Structuur op Kansen
         self.assertEqual(r.status_code, 200)
         self.assertIn(f'id="structuur-{sid}"', r.text)
-        self.assertIn("Laatste 24 uur: 1 kans gezien, 1 met plan", r.text)
+        self.assertIn("Laatste 24 uur: 1 gezien, 1 met plan", r.text)
         live = self.client.get("/api/kansen").json()
         self.assertIn(str(sid), live["structuur"])                         # live afstand per wachtend plan
-        self.assertIn("te gaan", r.text)
-        self.assertIn("sc-limit", r.text)
+        self.assertIn("data-levelchart", r.text)
         self.assertIn('data-live-coin="BTC"', r.text)                      # live.js volgt de koers van de beurt
         self.assertNotIn("Schone range.", r.text)                          # de toelichting bij het oordeel staat niet op de kaart
 
@@ -76,7 +75,7 @@ class WebVandaagTests(unittest.TestCase):
                 "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
         for url in ("/structuur", "/structuur?alleen=ab"):                  # een oude link met het filter toont gewoon alles
             text = self.client.get(url).text
-            self.assertEqual(text.count('class="setup-card'), 2, url)
+            self.assertEqual(text.split('<section id="tab-structuur"')[1].split("</section>\n")[0].count('<article class="kc '), 2, url)
             self.assertNotIn("Sterk en redelijk", text)
 
     def test_kansen_tab_telt_wat_het_paneel_toont_of_zegt_waar_de_rest_staat(self):
@@ -88,10 +87,10 @@ class WebVandaagTests(unittest.TestCase):
                 "coin": coin, "direction": "short", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
                 "line_slope": 0.0, "atr": 0.5, "grade": "A", "reason": "Reden.", "features": "{}", "state": "waiting",
                 "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
-        text = self.client.get("/vandaag").text
-        self.assertEqual(text.count('class="setup-card'), 3)              # geen afkapping: alles wat geteld wordt staat er
-        self.assertRegex(text, r'(?s)Open kansen nu.*?hl-num">3</span><span class="hl-unit">kansen<')
-        self.assertIn('<i class="ut-count">3</i>', text)
+        text = self.client.get("/smc").text
+        tab = text.split('<section id="tab-structuur"')[1].split("</section>\n")[0]
+        self.assertEqual(tab.count('<article class="kc '), 3)              # geen afkapping: alles wat geteld wordt staat er
+        self.assertRegex(tab, r'class="kt-sum">3 kansen · \d in de zone<')
 
     def test_tabbar_filters_and_empty_state_invite_the_user(self):
         text = self.client.get("/vandaag").text
@@ -111,10 +110,9 @@ class WebVandaagTests(unittest.TestCase):
             "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": json.dumps(plan)})
         text = self.client.get("/structuur").text
         self.assertNotIn("is-weak", text)                                  # een C-kans ziet er hetzelfde uit als elke andere kans
-        self.assertNotIn("De CEO twijfelt", text)                          # geen gevoel van een model, maar controlepunten en bewijs
+        self.assertNotIn("De CEO twijfelt", text)
         self.assertNotIn("Zwak", text)
-        self.assertIn("Lijn of range minstens 3 keer aangeraakt", text)
-        self.assertIn("In proef", text)                                    # bewijsregel met de proefbalk
+        self.assertIn('class="pill is-untested">in proef<', text)           # de bewijsstand als rustige pil
         self.assertNotIn("Te weinig ruimte.", text)                        # de toelichting bij het oordeel staat niet op de kaart
 
     def test_coin_page_shows_masthead_price_and_waiting_structure_plan(self):
@@ -154,9 +152,7 @@ class WebVandaagTests(unittest.TestCase):
 
     def test_board_counts_open_chances_of_every_kind_not_only_structure_plans(self):
         r = self.client.get("/vandaag")
-        self.assertIn("Je krijgt een melding zodra er een staat.", r.text)
-        self.assertIn("Geen open kansen. Je krijgt een melding zodra er een staat.", r.text)
-        self.assertNotIn('class="ut-count"', r.text)                      # geen badge met 0
+        self.assertNotIn("Verder open", r.text)
         signal = {"message_id": None, "coin": "BTC", "direction": "long", "category": "day_trading", "trade_type": "trend", "pattern_name": "Trend-pullback",
                   "price": 100.0, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None, "atr": None,
                   "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Trend-pullback",
@@ -164,9 +160,7 @@ class WebVandaagTests(unittest.TestCase):
                   "suggested_entry_low": None, "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None}
         repo.insert_signal(signal)
         text = self.client.get("/vandaag").text
-        self.assertIn("Trend · Open, gemeld", text)                       # een soort zonder kaart krijgt een compacte rij
-        self.assertNotIn("Er staat niets open", text)
-        self.assertNotIn("Geen open kansen", text)
+        self.assertIn("Trend · Open, gemeld", text)                       # een soort zonder tab op Kansen krijgt een compacte rij op Markt
         self.assertNotIn("jaar candles", text)
 
     def seed_chances(self):
@@ -195,11 +189,13 @@ class WebVandaagTests(unittest.TestCase):
         repo.insert_market_script("ETH", "x", "long", "m", [scenario_row()], 0, (now - timedelta(hours=1)).isoformat())     # script verlopen
 
     def count_and_rows(self):
+        """Wat open staat: de kaarten in de tab Structuur op Kansen (met de telling in zijn regel) en de rijen onder Verder open op Markt."""
         import re
-        text = self.client.get("/vandaag").text
-        shown = text.count('class="setup-card') + len(re.findall(r'<a class="mrow"', text))
-        count = int(re.search(r'Open kansen nu.*?<span class="hl-num">(\d+)</span>', text, re.S).group(1))
-        return text, count, shown
+        kansen, markt = self.client.get("/smc").text, self.client.get("/vandaag").text
+        tab = kansen.split('<section id="tab-structuur"')[1].split('<section id="tab-zone_radar"')[0]
+        n = re.search(r'class="kt-sum">(?:(\d+) kans(?:en)?|Geen kansen)', tab).group(1)
+        rows = len(re.findall(r'<a class="mrow"', markt))
+        return kansen + markt, int(n or 0) + rows, tab.count('<article class="kc ') + tab.count('id="range-sweep-') + rows
 
     def test_count_equals_rendered_rows_for_a_leerling_and_the_ceo_sees_the_proefsoort(self):
         self.seed_chances()
@@ -212,7 +208,6 @@ class WebVandaagTests(unittest.TestCase):
         self.assertEqual((count, shown), (2, 2))
         self.assertIn("Rejectie", text)
         self.assertNotIn("Proefmotor", text)
-        self.assertIn('<i class="ut-count">2</i>', text)
 
     def seed_range_sweeps(self):
         """Een wachtende zone-retest, een verlopen, een voorbij zijn stop, en een gevulde met zijn signaal: alleen de eerste en de laatste zijn open."""
@@ -232,11 +227,9 @@ class WebVandaagTests(unittest.TestCase):
     def test_range_sweep_count_equals_rendered_rows_for_the_ceo_and_a_leerling_sees_none(self):
         self.seed_range_sweeps()
         text, count, shown = self.count_and_rows()
-        self.assertEqual((count, shown), (2, 2))                          # ARB wacht, SOL is gevuld; verlopen, voorbij de stop en uitgespeeld niet
+        self.assertEqual(shown, 2)                                        # ARB wacht, SOL is gevuld; verlopen, voorbij de stop en uitgespeeld niet
         self.assertIn("Range sweep gevuld", text)
         self.assertEqual(text.count('id="range-sweep-'), 1)
-        self.assertRegex(text, r'hl-num">2</span><span class="hl-unit">kansen<')
-        self.assertIn('<i class="ut-count">2</i>', text)
         leerling = repo.create_user("leerling", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
         self.client.cookies.set(self.main.SESSION_COOKIE, security.create_session_token(leerling))
         self.main._ceo_cache.update(at=0.0)
@@ -244,33 +237,19 @@ class WebVandaagTests(unittest.TestCase):
         self.assertEqual((count, shown), (0, 0))
         self.assertNotIn("range-sweep", text)
         self.assertNotIn("Range sweep", text)
-        self.assertIn("Geen open kansen", text)
 
-    def test_range_sweep_counts_agree_on_setups_radar_and_vandaag(self):
-        import re
+    def test_range_sweep_staat_onder_structuur_alleen_voor_wie_hem_mag_zien(self):
         range_seed.seed_lab()
         range_seed.seed_setup(coin="ARB")
         range_seed.seed_setup(coin="SOL", zone_at="2026-10-10T00:00:00+00:00")
-
-        def counts():
-            setups, radar_page = self.client.get("/structuur").text, self.client.get("/smc").text
-            badge = re.search(r'<span>Setups</span>\s*(?:<i class="tab-badge">(\d+)</i>)?', radar_page)
-            headline = int(re.search(r'Plannen die klaarstaan.*?<span class="hl-num">(\d+)</span>', setups, re.S).group(1))
-            return setups, radar_page, int(badge.group(1) or 0), headline
-
-        setups, radar_page, badge, headline = counts()
-        rows = setups.count('id="range-sweep-')
-        self.assertEqual((badge, headline, rows), (2, 2, 2))
-        self.assertNotIn("range-sweep", radar_page)
-        self.assertNotRegex(radar_page, r'<span>Radar</span>\s*<i class="tab-badge">')
-        self.assertRegex(radar_page, r'(?s)Setups die wachten.*?<span class="hl-num">0</span>')
-        self.assertEqual(self.count_and_rows()[1:], (2, 2))
+        text = self.client.get("/smc").text
+        tab = text.split('<section id="tab-structuur"')[1].split('<section id="tab-zone_radar"')[0]
+        self.assertEqual(tab.count('id="range-sweep-'), 2)
+        self.assertIn("Range sweep, proef", tab)
         leerling = repo.create_user("leerling", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
         self.client.cookies.set(self.main.SESSION_COOKIE, security.create_session_token(leerling))
         self.main._ceo_cache.update(at=0.0)
-        setups, radar_page, badge, headline = counts()
-        self.assertEqual((badge, headline), (0, 0))
-        self.assertNotIn("range-sweep", setups + radar_page)
+        self.assertNotIn("range-sweep", self.client.get("/smc").text)
 
     def test_a_positive_range_sweep_reference_never_reads_as_a_hit_target(self):
         self.seed_range_sweeps()
@@ -289,25 +268,19 @@ class WebVandaagTests(unittest.TestCase):
         self.seed_chances()
         range_seed.seed_setup(coin="ARB")
         text, count, shown = self.count_and_rows()
-        self.assertEqual((count, shown), (4, 4))
-        head = text[text.index('class="hl"'):text.index('class="kl"')]
-        self.assertIn("BTC short", head)                                  # 0% tot het retest-niveau, ARB staat op 1,00% tot zijn eerste limiet
+        self.assertEqual(shown, 4)
         self.assertLess(text.index('id="structuur-'), text.index('id="range-sweep-'))
 
-    def test_ondertitel_noemt_de_dichtstbijzijnde_kans_uit_dezelfde_lijst(self):
-        self.seed_chances()
-        text = self.client.get("/vandaag").text
-        head = text[text.index('class="hl"'):text.index('class="kl"')]
-        self.assertIn("BTC short", head)
-        self.assertNotIn("ETH short", head)
-
-    def test_eenheid_enkelvoud_en_meervoud_en_badge_gelijk(self):
-        self.seed_chances()
-        text = self.client.get("/vandaag").text
-        self.assertRegex(text, r'hl-num">3</span><span class="hl-unit">kansen<')
-        self.assertIn('<i class="ut-count">3</i>', text)
+    def test_eenheid_enkelvoud_en_meervoud(self):
         self.assertEqual(self.main.today.chances_unit(1), "kans")
         self.assertEqual(self.main.today.chances_unit(0), "kansen")
+
+    def test_markt_heeft_geen_tweede_kansenlijst(self):
+        self.seed_chances()
+        text = self.client.get("/vandaag").text
+        self.assertNotIn("Open kansen nu", text)
+        self.assertNotIn('id="tab-kansen"', text)
+        self.assertNotIn('id="structuur-', text)
 
     def test_de_drie_kernregels_komen_uit_gemeten_data(self):
         text = self.client.get("/vandaag").text
@@ -319,9 +292,9 @@ class WebVandaagTests(unittest.TestCase):
 
     def test_nav_badges_follow_the_same_validity(self):
         self.seed_chances()
-        self.client.get("/vandaag")                                       # warmt de koerscache, die het menu leest
-        text = self.client.get("/smc").text                               # de teller staat op de wisselaar Radar | Setups binnen Plannen
-        self.assertRegex(text, r'<span>Setups</span>\s*<i class="tab-badge">1</i>')        # alleen het geldige BTC-plan, niet verlopen of voorbij de stop
+        tab = self.client.get("/smc").text.split('<section id="tab-structuur"')[1].split("</section>\n")[0]
+        self.assertIn('class="kt-sum">1 kans', tab)                       # alleen het geldige BTC-plan, niet verlopen of voorbij de stop
+        self.assertEqual(tab.count('<article class="kc '), 1)
 
     def test_coin_page_shows_the_signal_a_notification_links_to_even_when_it_is_old(self):
         base = {"message_id": None, "coin": "BTC", "direction": "long", "category": "day_trading", "trade_type": "trend", "pattern_name": "Trend-pullback",

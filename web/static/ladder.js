@@ -1,23 +1,24 @@
-// De prijsladder (ontwerp V3): de server tekent de lijnen op hun prijs (app/ladder.py, macro `ladder`); hier schuift alleen de koers mee.
-// Dezelfde formules als app/ladder.py (tests/test_static_js.py legt ze naast elkaar): y in procent van de ladderhoogte, afstand zoals
-// trade_plan.distance_to_limit_pct, de balk van de dichtstbijzijnde zonerand naar de koers. De lijn schuift 1:1 naar de nieuwe prijs; bij
-// reduced motion springt hij en wisselt alleen de opacity van het getal (120 ms).
+// De prijsladder in het detailblad: de server tekent de lijnen op hun prijs (app/ladder.py, macro `ladder`); hier schuift alleen de koers mee.
+// Dezelfde formules als app/ladder.py (tests/test_static_js.py legt ze naast elkaar): y in procent van de ladderhoogte, het koerslabel in zijn
+// eigen kolom (labelY), afstand zoals trade_plan.distance_to_limit_pct, de balk van de dichtstbijzijnde zonerand naar de koers. Bij reduced
+// motion springt de lijn en wisselt alleen de opacity van het getal (120 ms).
 // Daarnaast: houd een getal vast om het te kopiëren ([data-hold-copy]): een balk loopt in 450 ms vol, dan staat het op het klembord.
 (function (root) {
+  var PRICE_EDGE = 34 / 2 / 240 * 100;          // ladder.PRICE_EDGE: PRICE_PX / 2 / HEIGHT_PX
   function y(p, hi, lo) { return Math.min(100, Math.max(0, (hi - p) / (hi - lo) * 100)); }
+  function labelY(py) { return Math.min(100 - PRICE_EDGE, Math.max(PRICE_EDGE, py)); }
   function distance(dir, limit, p) { return dir === "long" ? (p - limit) / limit * 100 : (limit - p) / limit * 100; }
-  // chance_steps.fmt met een komma, zoals nu.nl.
-  function nl(v) {
-    var s;
-    if (Math.abs(v) < 1) {
-      if (v === 0) return "0";
-      var d = 4 - Math.floor(Math.log10(Math.abs(v)));
-      s = v.toFixed(d).replace(/0+$/, "").replace(/\.$/, "");
-    } else {
-      s = Math.abs(v) < 100 ? v.toFixed(4) : v.toFixed(2);
-    }
-    return s.replace(".", ",");
+  // app/price_text.py: 2 decimalen vanaf 10, 3 vanaf 1, 4 vanaf 0,01, daaronder 6 maar altijd drie cijfers die tellen.
+  function decimals(v) {
+    var a = Math.abs(v);
+    if (a >= 10) return 2;
+    if (a >= 1) return 3;
+    if (a >= 0.01) return 4;
+    if (a === 0) return 0;
+    return Math.max(6, 2 - Math.floor(Math.log10(a)));
   }
+  function plain(v) { return v.toFixed(decimals(v)); }
+  function nl(v) { return plain(v).replace(".", ","); }
   function pct(v) { return v.toFixed(2).replace(".", ",") + "%"; }
   function rText(v) { return (v >= 0 ? "+" : "−") + Math.abs(v).toFixed(2).replace(".", ",") + " R"; }
   // De balk loopt van de zonerand die het dichtst bij de koers ligt (of de instap, zonder zone) naar de koers; in de zone is hij weg.
@@ -39,10 +40,9 @@
     if (age < 3600) return "Koers " + Math.floor(age / 60) + " min oud";
     return "Koers " + Math.floor(age / 3600) + " u oud";
   }
-  root.hesLadderMath = { y: y, distance: distance, nl: nl, gap: gap, stale: stale, pct: pct, rText: rText };
+  root.hesLadderMath = { y: y, labelY: labelY, distance: distance, nl: nl, plain: plain, gap: gap, stale: stale, pct: pct, rText: rText };
   if (typeof document === "undefined") return;
 
-  var NUM_EDGE = 10;
   var rm = !!(root.matchMedia && root.matchMedia("(prefers-reduced-motion: reduce)").matches);
 
   function num(el, name) { var v = parseFloat(el.getAttribute(name)); return isNaN(v) ? null : v; }
@@ -63,16 +63,16 @@
     var dir = el.getAttribute("data-lad-dir"), py = y(price, hi, lo);
     var line = el.querySelector('[data-lad="price"]');
     if (line) line.style.top = py + "%";
+    var lab = el.querySelector('[data-lad="price-label"]');
+    if (lab) lab.style.top = labelY(py) + "%";
     el.querySelectorAll('[data-lad="price-text"]').forEach(function (t) { setText(t, nl(price)); });
     var zlo = num(el, "data-lad-zlo"), zhi = num(el, "data-lad-zhi"), entry = num(el, "data-lad-entry"), limit = num(el, "data-lad-limit");
-    var mid = py;
     var bar = el.querySelector('[data-lad="gap"]');
     if (bar) {
       var g = gap(zlo, zhi, entry !== null ? entry : limit, price, hi, lo);
       bar.style.top = g.top + "%";
       bar.style.height = g.height + "%";
       el.classList.toggle("is-in-zone", g.inZone);
-      mid = g.top + g.height / 2;
     }
     if (limit !== null) {
       var d = distance(dir, limit, price);
@@ -84,10 +84,7 @@
       var rEl = el.querySelector('[data-lad="live_r"]');
       setText(rEl, rText(r));
       if (rEl) rEl.className = "lad-num " + (r > 0 ? "pos" : r < 0 ? "neg" : "");
-      mid = (py + y(entry, hi, lo)) / 2;
     }
-    var big = el.querySelector('[data-lad="big"]');
-    if (big) big.style.top = Math.min(100 - NUM_EDGE, Math.max(NUM_EDGE, mid)) + "%";
   }
 
   function updateCoin(coin, price) {

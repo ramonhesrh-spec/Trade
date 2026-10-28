@@ -33,7 +33,8 @@ class NeutralStructureTests(Base):
                 self.assertNotIn(word, html, f"{word} op {url}")
 
     def test_a_filled_c_chance_is_called_structuur(self):
-        self.assertIn("Structuur gevuld · Open, gemeld", self.client.get("/vandaag").text)
+        tab = self.client.get("/smc").text.split('<section id="tab-structuur"')[1].split('<section id="tab-zone_radar"')[0]
+        self.assertIn(f'id="radar-signal-{self.c_signal}"', tab)              # een gevulde C-kans staat onder Open in de tab Structuur
         self.assertIn("Structuur", self.client.get(f"/kans/{self.c_signal}").text)
 
     def test_bewijs_keeps_both_internal_types(self):

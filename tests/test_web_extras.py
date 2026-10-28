@@ -139,9 +139,10 @@ class PriceAlertRouteTest(WebCase):
         with db.session() as conn:
             conn.execute("""INSERT INTO smc_setups (coin, direction, zone_low, zone_high, structure_level, sweep_price, liquidity_target, atr,
                             created_at, updated_at) VALUES ('BTC', 'long', 99.0, 100.0, 101.0, 98.0, 110.0, 1.0, ?, ?)""", (db.now_iso(), db.now_iso()))
-        r = self.client.get("/smc")
+        r = self.client.get("/smc")                                         # in de tabel van het detailblad
         self.assertIn('class="level-bell"', r.text)
         self.assertIn('data-alarm-price="100.0"', r.text)
+        self.assertIn('data-chips-url="/smc#radar-setup-1"', r.text)
         self.assertIn("alarm.js", r.text)
 
 

@@ -42,40 +42,27 @@ class WebRadarTests(unittest.TestCase):
         self.patch.stop()
         self.tmp.cleanup()
 
-    def test_radar_pagina_toont_plan_status_en_live_r(self):
+    def test_kansen_toont_plan_stand_en_live_r(self):
         r = self.client.get("/smc")
         self.assertEqual(r.status_code, 200)
-        self.assertIn("SMC-radar", r.text)
-        self.assertIn("XRP", r.text)
-        self.assertIn("Wacht op de zone", r.text)
-        self.assertIn("Zet een limietorder op 100.00", r.text)   # limietprijs = bovenrand van de long-zone, in de drie stappen
-        self.assertIn("Wacht tot de koers in de zone", r.text)
-        self.assertIn("+1.00R", r.text)                # ETH long entry 100, stop 97, koers 103
+        self.assertIn("<title>Kansen", r.text)
+        self.assertIn('class="kc-title">XRP long<', r.text)                 # focus staat uit in de tests: SMC heeft een tab
+        self.assertIn(">Wacht<", r.text)
+        self.assertIn("Wacht tot de koers de zone bereikt", r.text)          # de zin in het blad, zonder getallen
+        self.assertIn("+1,00 R", r.text)                                     # ETH long entry 100, stop 97, koers 103
         self.assertIn("data-levelchart", r.text)
         self.assertIn("lightweight-charts-4.2.0", r.text)
-        self.assertIn("r-progress", r.text)                # voortgang tussen stop en doel bij de open trade
-        self.assertIn("Doel +", r.text)
-
-    def test_elke_radarrij_linkt_naar_de_coinpagina(self):
-        text = self.client.get("/smc").text
-        for coin in ("XRP", "ETH"):
-            self.assertIn(f'<a class="mrow-link" href="/coins/{coin}">{coin}</a>', text)
 
     def test_uitkomst_krijgt_nederlands_label_in_de_standrij(self):
         word = self.main.templates.env.filters["outcome_word"]
         self.assertEqual([word("take_profit"), word("stop_loss"), word(None)], ["Doel geraakt", "Stop geraakt", "Open"])
 
-    def test_radarrij_heeft_direct_een_koers(self):
-        text = self.client.get("/smc").text
-        self.assertIn('data-vd-price="ETH">103.00</span>', text)
-
-    def test_open_trade_kaart_staat_in_open_paneel_met_id_uit_alarmlink(self):
+    def test_open_trade_kaart_staat_in_zijn_tab_met_id_uit_alarmlink(self):
         import re
         text = self.client.get("/smc").text
-        url = re.search(r'data-chips-url="(/smc#radar-signal-\d+)"', text).group(1)
-        card_id = url.split("#")[1]
-        open_panel = text.split('id="tab-open"')[1].split('id="tab-afgerond"')[0]
-        self.assertIn(f'id="{card_id}"', open_panel)
+        card_id = re.search(r'id="(radar-signal-\d+)"', text).group(1)       # alarm.js linkt naar /smc#radar-signal-N
+        smc = text.split('<section id="tab-smc"')[1].split("</section>\n")[0]
+        self.assertIn(f'id="{card_id}"', smc.split(">Open</h3>")[1])
 
     def test_api_radar_levert_live_data_per_kaart(self):
         r = self.client.get("/api/radar")
@@ -154,19 +141,11 @@ class WebRadarTests(unittest.TestCase):
         self.assertIn('href="/smc"', r.text)
         self.assertIn('>Bewijs</a>', r.text)
 
-    def test_niveaus_zijn_tikbaar_om_te_kopieren(self):
+    def test_niveaus_zijn_vast_te_houden_om_te_kopieren(self):
         r = self.client.get("/smc")
-        self.assertIn('data-copy="100.00"', r.text)                      # limiet van de XRP-setup
-        self.assertIn('data-chips-coin="XRP"', r.text)
-        self.assertIn('data-copy="106.00"', r.text)                      # doel van de open ETH-trade
-        self.assertIn("copy.js", r.text)
-
-
-    def test_afstandsbalk_op_de_kaart(self):
-        r = self.client.get("/smc")
-        self.assertIn('data-radar="approach"', r.text)
-        self.assertIn("left: 33.3%", r.text)                                 # XRP: koers 102, limiet 100, 2% van 3%
-        self.assertIn('aria-label="Koers op 33% van de weg naar je instap"', r.text)
+        self.assertIn('data-hold-copy="100.00"', r.text)                 # limiet van de XRP-setup, in het blad
+        self.assertIn('data-hold-copy="106.00"', r.text)                 # doel van de open ETH-trade
+        self.assertNotIn("level-chips", r.text)                          # geen kopieerchips meer op de kaart
 
 
 if __name__ == "__main__":

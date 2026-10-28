@@ -262,11 +262,12 @@
 {# Candlegrafiek met de niveaus van een plan (web/static/levelchart.js tekent hem zodra hij in beeld komt). `chart` is
    trade_plan.chart_spec; zonder JavaScript blijft de aria-tekst met de niveaus staan. Een tik op de grafiek of op de knop opent hem
    schermvullend (levelchart.js); de regel eronder zegt wat de vlakken betekenen, het bijschrift in de grafiek de candlegrootte. #}
-{% macro level_chart(coin, chart, tf="15m", extra_class="") %}
-<figure class="lc {{ extra_class }}">
+{% macro level_chart(coin, chart, tf="15m", extra_class="", legend=true) %}
+<figure class="lc {{ extra_class }}{% if not legend %} lc-bare{% endif %}">
   <div class="level-chart" data-levelchart='{{ chart|tojson }}' data-coin="{{ coin }}" data-tf="{{ tf }}" data-caption="Candles van {{ {'5m': '5 minuten', '15m': '15 minuten', '1h': '1 uur', '4h': '4 uur'}.get(tf, tf) }} · jouw tijd" role="img" aria-label="{{ chart.label }}"></div>
   <figcaption class="lc-foot">
-    <span class="lc-legend"><span class="lc-key is-risk">Rood vlak: risico tot je stop</span>{% if chart.take is not none %}<span class="lc-key is-reward">Groen vlak: winst tot je doel</span>{% endif %}{% if chart.zone_low is defined and chart.zone_low is not none %}<span class="lc-key is-zone">Band: de zone</span>{% endif %}</span>
+    {% if not legend %}<span class="lc-cap">{{ {'5m': '5 min', '15m': '15 min', '1h': '1 uur', '4h': '4 uur'}.get(tf, tf) }} per candle · jouw tijd</span>{% endif %}
+    {% if legend %}<span class="lc-legend"><span class="lc-key is-risk">Rood vlak: risico tot je stop</span>{% if chart.take is not none %}<span class="lc-key is-reward">Groen vlak: winst tot je doel</span>{% endif %}{% if chart.zone_low is defined and chart.zone_low is not none %}<span class="lc-key is-zone">Band: de zone</span>{% endif %}</span>{% endif %}
     <button type="button" class="lc-expand" data-lc-expand aria-label="Grafiek van {{ coin }} groot openen, op het tijdframe van het niveau"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><span>Groot</span></button>
   </figcaption>
 </figure>
@@ -645,36 +646,90 @@
 </ol>
 {% endmacro %}
 
-{# ===== Ontwerp V3: de prijsladder (app/ladder.py tekent de maths, web/static/ladder.js schuift de koers live) =====
-   `lad` is ladder.build(...). mode: "plan" (vol, met accent), "trade" (gevulde order, het getal is de live R), "compact" (uitgezoomd,
-   zonder accent, voor rust en lijsten), "mini" (klein in het detailblad). Tags van 12px op de lijn zelf, geen kolomkoppen; het grote getal
-   is altijd gemeten (afstand of live R). #}
-{% macro ladder(lad, mode="plan", coin="", limit=none, num_text="", num_label="", num_hook="distance", stop=none, num_class="", price_left=false) %}
-<div class="lad lad-{{ mode }}{% if lad.in_zone %} is-in-zone{% endif %}{% if price_left %} has-price-left{% endif %}" data-ladder="{{ mode }}" data-lad-coin="{{ coin }}"
+{# ===== De prijsladder in het detailblad (app/ladder.py tekent de maths, web/static/ladder.js schuift de koers live) =====
+   `lad` is ladder.build(...). mode: "plan" (wacht op vulling) of "trade" (gevulde order, het getal is de live R). Drie kolommen, zodat tekst
+   nooit botst: links het koerslabel, in het midden de lijnen, rechts alleen de namen (de getallen staan één keer in de tabel eronder).
+   Het grote getal staat erboven en is altijd gemeten (afstand of live R) of de staat ("In zone"). #}
+{% macro ladder(lad, mode="plan", coin="", limit=none, num_text="", num_label="", num_hook="distance", stop=none, num_class="") %}
+<div class="lad lad-{{ mode }}{% if lad.in_zone %} is-in-zone{% endif %}" data-ladder="{{ mode }}" data-lad-coin="{{ coin }}"
      data-lad-hi="{{ lad.hi }}" data-lad-lo="{{ lad.lo }}" data-lad-dir="{{ lad.direction }}"
      {% if limit is not none %}data-lad-limit="{{ limit }}" {% endif %}{% if lad.zone %}data-lad-zlo="{{ lad.zone.low }}" data-lad-zhi="{{ lad.zone.high }}" {% endif %}
      {% if lad.trade %}data-lad-entry="{{ lad.entry }}" data-lad-stop="{{ stop }}" {% endif %}role="group" aria-label="Prijsladder {{ coin }}: boven is duurder">
-  {% if lad.zone %}<div class="lad-zone" style="top: {{ '%.2f'|format(lad.zone.top) }}%; height: {{ '%.2f'|format(lad.zone.height) }}%" aria-hidden="true"></div>{% endif %}
-  {% for ln in lad.lines %}
-  <i class="lad-line is-{{ ln.tone }}" style="top: {{ '%.2f'|format(ln.y) }}%" aria-hidden="true"></i>
-  <span class="lad-tag is-{{ ln.tone }}" style="top: {{ '%.2f'|format(ln.tag_y) }}%"><span class="lad-tag-name">{{ ln.name }}</span><span class="lad-tag-px">{{ ln.text }}</span></span>
-  {% endfor %}
-  {% if lad.gap %}<i class="lad-gap" data-lad="gap" style="top: {{ '%.2f'|format(lad.gap.top) }}%; height: {{ '%.2f'|format(lad.gap.height) }}%" aria-hidden="true"></i>{% endif %}
-  {% if lad.price %}
-  <div class="lad-px" data-lad="price" style="top: {{ '%.2f'|format(lad.price.y) }}%"><i class="lad-px-line" aria-hidden="true"></i><i class="lad-px-dot" aria-hidden="true"></i><span class="lad-px-val"><span class="sr-only">Koers </span><span data-lad="price-text">{{ lad.price.text }}</span></span></div>
-  {% endif %}
-  {% if num_text %}
-  <div class="lad-big" data-lad="big" style="top: {{ '%.2f'|format(lad.num_y) }}%"><span class="lad-num{% if num_class %} {{ num_class }}{% endif %}" data-lad="{{ num_hook }}">{{ num_text }}</span>{% if price_left and lad.price %}<span class="lad-num-label">Koers <span data-lad="price-text">{{ lad.price.text }}</span></span>{% elif num_label %}<span class="lad-num-label">{{ num_label }}</span>{% endif %}</div>
-  {% endif %}
-</div>
-{% endmacro %}
-
-{# Skelet in de vorm van de ladder: getoond terwijl Nu opnieuw laadt (nu.js), zodat de inhoud op dezelfde plek verschijnt. Geen spinner. #}
-{% macro ladder_skeleton(mode="plan") %}
-<div class="lad lad-{{ mode }} lad-skel" data-ladder-skeleton hidden aria-hidden="true">
-  <i style="top: 12%"></i><i class="is-zone" style="top: 35%"></i><i style="top: 66%"></i><i style="top: 89%"></i><b></b>
+  {% if num_text %}<p class="lad-head"><span class="lad-num{% if num_class %} {{ num_class }}{% endif %}" data-lad="{{ num_hook }}">{{ num_text }}</span>{% if num_label %}<span class="lad-num-label">{{ num_label }}</span>{% endif %}</p>{% endif %}
+  <div class="lad-plot">
+    {% if lad.zone %}<div class="lad-zone" style="top: {{ '%.2f'|format(lad.zone.top) }}%; height: {{ '%.2f'|format(lad.zone.height) }}%" aria-hidden="true"></div>{% endif %}
+    {% for ln in lad.lines %}<i class="lad-line is-{{ ln.tone }}" style="top: {{ '%.2f'|format(ln.y) }}%" aria-hidden="true"></i>
+    <span class="lad-tag is-{{ ln.tone }}" style="top: {{ '%.2f'|format(ln.tag_y) }}%">{{ ln.name }}</span>
+    {% endfor %}
+    {% if lad.gap %}<i class="lad-gap" data-lad="gap" style="top: {{ '%.2f'|format(lad.gap.top) }}%; height: {{ '%.2f'|format(lad.gap.height) }}%" aria-hidden="true"></i>{% endif %}
+    {% if lad.price %}
+    <i class="lad-px" data-lad="price" style="top: {{ '%.2f'|format(lad.price.y) }}%" aria-hidden="true"></i>
+    <span class="lad-px-val" data-lad="price-label" style="top: {{ '%.2f'|format(lad.price.label_y) }}%"><span class="lad-px-k">Koers</span><span data-lad="price-text">{{ lad.price.text }}</span></span>
+    {% endif %}
+  </div>
 </div>
 {% endmacro %}
 
 {# Pil voor de bewijsstand: "ongetest" gestippeld, "proef" doorgetrokken; rustig, nooit gekleurd per soort. #}
 {% macro pill(text, dashed=true) %}<span class="pill {{ 'is-untested' if dashed else 'is-proef' }}">{{ text }}</span>{% endmacro %}
+
+
+{# ===== Kansen (ontwerp V4, app/kansen.py) =====
+   Eén kans als compacte kaart: coin en richting in tekst, de stand, het bewijslabel als rustige pil en de grafiek met zone en niveaus. Een tik
+   op de kop (of op de kaart naast de grafiek) opent het detailblad (kaarten.js); een tik op de grafiek opent hem groot (levelchart.js). #}
+{% macro kans_label(it) %}{% if it.untested %}{{ pill("ongetest") }}{% else %}{{ pill(proof(it.trade_type).label|lower) }}{% endif %}{% endmacro %}
+
+{% macro kans_card(it) %}
+<article class="kc is-{{ it.state or 'laden' }}" id="{{ it.dom_id }}" data-kc="{{ it.key }}"{% if it.kind == "plan" and not it.key.startswith("structuur:") %} data-radar-key="{{ it.key }}"{% endif %}>
+  <button type="button" class="kc-head" data-kc-open="{{ it.key }}" aria-haspopup="dialog" aria-controls="kd">
+    <span class="kc-title">{{ it.title }}</span>
+    <span class="kc-tags">{% if it.skipped %}<span class="kc-skipped">overgeslagen</span>{% endif %}<span class="state-pill is-{{ it.state or 'laden' }}"{% if it.kind == "plan" %} data-radar="state"{% endif %}>{{ it.state_short }}</span>{{ kans_label(it) }}</span>
+    <svg class="kc-chev" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span class="sr-only">Details</span>
+  </button>
+  {% if it.chart %}{{ level_chart(it.coin, it.chart, legend=false) }}{% endif %}
+  <i data-live-coin="{{ it.coin }}" hidden></i>
+</article>
+{% endmacro %}
+
+{# Het detail van één kans in het blad: de opgeschoonde ladder, de getallen één keer (houd vast om te kopiëren), de herkomst in één regel,
+   de gemeten context en vast onderaan de knop. `ctx` is market_context.coin_lines van deze coin. #}
+{% macro kans_detail(it, ctx=[]) %}
+{% set kinds = {"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "smc": "SMC", "structuur": "Structuur", "structuur_c": "Structuur"} %}
+<section class="kd-item" data-kd-item="{{ it.key }}" aria-labelledby="kd-t-{{ it.dom_id }}" hidden>
+  <div class="kd-head">
+    <h3 class="kd-title" id="kd-t-{{ it.dom_id }}" tabindex="-1">{{ it.title }}</h3>
+    <button type="button" class="kd-x" data-kd-close aria-label="Sluiten"><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
+  </div>
+  <p class="kd-kind"><span class="state-pill is-{{ it.state or 'laden' }}">{{ it.state_short }}</span><span class="kd-type">{{ kinds.get(it.trade_type, it.trade_type) }}</span>{{ kans_label(it) }}</p>
+  {% if it.say %}<p class="kd-say">{{ it.say }}</p>{% endif %}
+  {% if it.kind == "trade" %}
+  {{ ladder(it.ladder, "trade", coin=it.coin, num_text=it.num_text, num_label=it.num_label, num_hook="live_r",
+       stop=it.rows|selectattr('tone', 'equalto', 'loss')|map(attribute='value')|first,
+       num_class=("pos" if (it.live_r or 0) > 0 else "neg" if (it.live_r or 0) < 0 else "")) }}
+  {% else %}
+  {{ ladder(it.ladder, "plan", coin=it.coin, limit=it.limit, num_text=it.num_text, num_label=it.num_label, num_hook=it.num_hook) }}
+  {% endif %}
+  <ul class="hold-list" data-chips-coin="{{ it.coin }}" data-chips-url="/smc#{{ it.dom_id }}">
+    {% for r in it.rows %}
+    <li class="hold-row"><button type="button" class="hold is-{{ r.tone }}" data-hold-copy="{{ r["copy"] }}" aria-label="{{ r.label }} {{ r.text }}, houd vast om te kopiëren">
+      <span class="hold-top"><span class="hold-lab" data-hold-label>{{ r.label }}</span><span class="hold-val">{{ r.text }}</span></span>
+      <span class="hold-bar" aria-hidden="true"><i></i></span>
+    </button><button type="button" class="level-bell" data-alarm-price="{{ r.value }}" data-alarm-label="{{ r.label }}" aria-pressed="false" aria-label="Prijsalarm op {{ r.label|lower }} {{ r.text }}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button></li>
+    {% endfor %}
+  </ul>
+  <p class="kd-hint">Houd een getal vast om te kopiëren. De bel zet een prijsalarm.</p>
+  <p class="kd-origin">{{ it.origin or kinds.get(it.trade_type, it.trade_type) }} · {{ "open trade" if it.kind == "trade" else "limietplan" }}</p>
+  {% if ctx %}
+  <dl class="kd-ctx" aria-label="Context, gemeten">
+    {% for l in ctx %}<div class="kd-ctx-row"><dt>{{ l.label }}{% if l.note %}<span class="kd-ctx-note">{{ l.note }}</span>{% endif %}</dt>
+      <dd class="kd-ctx-v">{{ l.value }}{% if l.flag %} <span class="ctx-flag">{{ l.flag }}</span>{% endif %}</dd>
+      <dd class="kd-ctx-m">{{ [l.source, l.age]|select|join(" · ") }}</dd></div>{% endfor %}
+  </dl>
+  {% endif %}
+  <div class="kd-foot">
+    {% if it.kind == "trade" %}<a class="kd-cta is-quiet" href="{{ it.url }}">Bekijk de trade</a>{% else %}<a class="kd-cta" href="{{ it.checklist_url }}">Zet de order, stap voor stap</a>
+    <form method="post" action="/nu/overslaan" class="kd-skip-form"><input type="hidden" name="key" value="{{ it.key }}"><button type="submit" class="kd-skip">Sla over</button></form>{% endif %}
+  </div>
+</section>
+{% endmacro %}

@@ -131,7 +131,7 @@ class BaseShellTests(unittest.TestCase):
             html = self.client.get(pad).text
             self.assertIn('id="fsearch"', html, pad)
             self.assertIn('<body class="has-fsearch">', html, pad)
-        for pad in ("/vandaag", "/bewijs", "/structuur"):
+        for pad in ("/vandaag", "/bewijs"):
             html = self.client.get(pad).text
             self.assertNotIn('id="fsearch"', html, pad)
             self.assertNotIn("has-fsearch", html, pad)
@@ -264,15 +264,6 @@ class NavTests(BaseShellTests):
         _, bar = self.tabs(self.client.get("/bewijs").text)
         self.assertRegex(bar, r'<span>Plannen</span>\s*<i class="tab-badge" aria-label="1 in de zone">1</i>')
 
-    def test_radar_en_setups_wisselen_binnen_plannen(self):
-        for pad, actief in (("/smc", "/smc"), ("/structuur", "/structuur")):
-            html = self.client.get(pad).text
-            sw = html[html.index('class="plan-switch"'):html.index("</nav>", html.index('class="plan-switch"'))]
-            self.assertIn('href="/smc"', sw)
-            self.assertIn('href="/structuur"', sw)
-            self.assertRegex(sw, r'class="ut-tab is-active" href="%s" aria-current="page"' % actief)
-            self.assertIn(">Plannen<", html[html.index('class="ph"'):html.index('class="plan-switch"')])
-
     def test_logboek_heet_logboek_en_de_url_blijft(self):
         html = self.client.get("/signalen").text
         self.assertIn('<span>Logboek</span>', html[html.index('class="ph"'):])
@@ -289,16 +280,12 @@ class VandaagLayoutTests(BaseShellTests):
     def test_groot_getal_is_geen_weekresultaat_meer_en_weekpagina_blijft_bereikbaar(self):
         self.seed_resolved()
         html = self.client.get("/vandaag").text
-        self.assertIn("Open kansen nu", html)
         self.assertNotIn("Laatste 7 dagen, na kosten", html)
         self.assertNotIn('class="hl-spark"', html)
         self.assertNotIn("R vandaag", html)
         self.assertIn('href="/week"', html)
         self.assertIn('href="/bewijs"', html)
 
-    def test_lege_ondertitel_nodigt_uit_tot_wachten(self):
-        html = self.client.get("/vandaag").text
-        self.assertIn("Je krijgt een melding zodra er een staat.", html[html.index('class="hl"'):html.index('class="kl"')])
 
     def test_tabs_en_panelen(self):
         from datetime import datetime, timedelta, timezone
@@ -306,7 +293,7 @@ class VandaagLayoutTests(BaseShellTests):
                                   "entry": 100.8, "stop_loss": 99.8, "take_profit": 103.0, "reason": "Break."}], 1,
                                   (datetime.now(timezone.utc) + timedelta(hours=10)).isoformat())
         html = self.client.get("/vandaag").text
-        for needle in ['data-utabs="vandaag"', 'data-utabs-panels="vandaag"', 'id="tab-kansen"', 'id="tab-markt"', 'id="tab-agenda"',
+        for needle in ['data-utabs="vandaag"', 'data-utabs-panels="vandaag"', 'id="tab-markt"', 'id="tab-agenda"',
                        'id="tab-score"', 'class="mrow-wrap', '<nav class="ut-menu">', ">Mijn week</a>", "data-spark-chg", 'data-vd-price="BTC"']:
             self.assertIn(needle, html, needle)
         self.assertNotIn('class="quick-action"', html)
@@ -343,20 +330,18 @@ class RadarLayoutTests(BaseShellTests):
                    take_profit, trade_type, created_at) VALUES (NULL, 'ETH', 'long', 'x', 'hoog', 1, 100, 97, 106, 'smc', ?)""",
                 (db.now_iso(),))
 
-    def test_radar_in_de_nieuwe_indeling(self):
-        html = self.client.get("/smc").text
-        for needle in ['data-utabs="radar"', 'id="tab-wachten"', 'id="tab-open"', 'id="tab-afgerond"', 'class="mrow"',
-                       'data-vd-price="XRP"', 'data-vd-price="ETH"', "data-radar-key", 'data-radar="state"', "r-progress",
-                       "Wacht op de zone", "Koers op ", "SMC-radar", "<title>SMC-radar"]:
+    def test_kansen_in_de_nieuwe_indeling(self):
+        html = self.client.get("/smc").text                     # in de tests staat focus uit: SMC heeft een eigen tab
+        for needle in ['data-utabs="kansen"', 'id="tab-structuur"', 'id="tab-zone_radar"', 'id="tab-smc"', 'class="kc-list"',
+                       'data-radar-key="setup:1"', 'data-radar="state"', ">Wacht<", "<title>Kansen", 'id="kd"', "data-kd-item"]:
             self.assertIn(needle, html, needle)
-        self.assertRegex(html, r'class="hl-num">1</span><span class="hl-unit">wachten')
-        self.assertRegex(html, r"<dt>Open trades</dt>\s*<dd[^>]*><span class=\"kl-num\">1</span>")
-        self.assertNotIn('class="radar-head"', html)
+        smc = html.split('<section id="tab-smc"')[1]
+        self.assertIn('class="kt-sum">1 kans · 0 in de zone · 1 open<', smc)
+        for gone in ("r-progress", "level-chips", "coin-av", "Koers op "):
+            self.assertNotIn(gone, smc[:smc.index('id="kd"')], gone)
 
-    def test_radar_kernregels_en_zoekveld(self):
+    def test_kansen_zoekveld(self):
         html = self.client.get("/smc").text
-        self.assertIn('class="kl"', html)
-        self.assertIn("Niet meer actief", html)
         self.assertIn('id="fsearch"', html)
 
 
@@ -367,13 +352,12 @@ class ZoneRadarLayoutTests(BaseShellTests):
                                       "stop_loss": 94.5, "take_profit": 104.0, "rr": 5.3, "atr": 0.5, "target_tf": "4h", "target_low": 104.0,
                                       "target_high": 105.0}, db.now_iso())
 
-    def test_zone_radar_kaart_op_de_radar_en_vandaag(self):
+    def test_zone_radar_kaart_op_kansen(self):
         html = self.client.get("/smc").text
-        for needle in ['id="radar-zone-1"', 'data-radar-key="zone:1"', '<span class="kind-tag">Zone-radar</span>', '<span class="kind-tag is-untested">ongetest</span>',
-                       "Vraagzone op 1u", "Wacht op de zone", 'class="now-line" data-radar="action">Wacht tot de koers 96.0000 bereikt.']:
+        for needle in ['id="radar-zone-1"', 'data-radar-key="zone:1"', 'class="kc-title">TIA long<', '<span class="pill is-untested">ongetest</span>',
+                       "Vraagzone 1u", ">Wacht<", '<span class="kd-type">Zone-radar</span>']:
             self.assertIn(needle, html, needle)
         self.assertIn('"zone:1"', self.client.get("/api/radar").text)
-        self.assertIn("Zone-radar", self.client.get("/vandaag").text)
 
 
 class SetupsLayoutTests(BaseShellTests):
@@ -395,78 +379,41 @@ class SetupsLayoutTests(BaseShellTests):
             "coin": "ETH", "direction": "long", "kind": "RANGE", "break_at": candles[10][0], "p1_at": candles[2][0], "line_a": 100.0,
             "line_slope": 0.0, "atr": 0.5, "grade": "B", "reason": "Geen ruimte.", "features": "{}", "state": "geen_plan", "expires_at": (datetime.now(timezone.utc) + timedelta(hours=3)).isoformat(), "plan": None})
 
-    def test_setups_in_de_nieuwe_indeling(self):
+    def test_structuur_op_kansen(self):
         self.seed_waiting()
         with db.session() as conn:
             conn.execute("""INSERT INTO signals (message_id, coin, direction, category, confidence, technical_confirmed, price, stop_loss,
                             take_profit, trade_type, created_at) VALUES (NULL, 'SOL', 'long', 'x', 'hoog', 1, 100, 99, 102, 'trend', ?)""", (db.now_iso(),))
         html = self.client.get("/structuur").text
-        for needle in ['data-utabs="setups"', 'id="tab-klaarstaand"', 'id="tab-trend"', 'id="tab-eerder"', 'class="st-meta"',
-                       "Laatste 24 uur: 3 kansen gezien, 2 met plan", "stack-toggle", 'class="mrow"',
-                       "Instap 100.0000, stop 99.0000, doel 102.0000", "Geen ruimte."]:
-            self.assertIn(needle, html, needle)
-        self.assertRegex(html, r'class="hl-num">2</span><span class="hl-unit">klaar')
-        for word in ("Sterk", "Redelijk", "Zwak", "beoordeeld", "Oordeel"):
+        tab = html.split('<section id="tab-structuur"')[1].split('<section id="tab-zone_radar"')[0]
+        for needle in ['class="kt-sum">2 kansen', "Laatste 24 uur: 3 gezien, 2 met plan", "Trend, laatste 24 uur",
+                       "Uitgevallen, gemist of vervallen, 7 dagen", "Geen ruimte.", 'class="kc-title">BTC short<', 'class="kc-title">SOL long<']:
+            self.assertIn(needle, tab, needle)
+        for word in ("Sterk", "Redelijk", "Zwak", "beoordeeld", "Oordeel", "stack-toggle"):
             self.assertNotIn(word, html, word)
-        self.assertNotIn("·</span>", html[html.index('id="tab-trend"'):html.index('id="tab-eerder"')])
 
-    def test_tellingen_staan_in_een_stille_regel(self):
+    def test_de_kaart_heeft_een_rustige_bewijspil_en_geen_oordeel(self):
         self.seed_waiting()
         html = self.client.get("/structuur").text
-        meta = html[html.index('class="st-meta"'):html.index('data-utabs="setups"')]
-        self.assertRegex(meta, r"<b>3</b> gezien</span><span><b>2</b> met plan</span><span><b>1</b> zonder plan")
-        self.assertNotIn('class="kl"', html[:html.index('data-utabs="setups"')])
+        card = html[html.index('<article class="kc '):html.index("</article>")]
+        self.assertIn('<span class="pill is-untested">in proef</span>', card)
+        self.assertNotIn("setup-grade", card)
+        self.assertNotIn("coin-av", card)
 
-    def test_stille_bediening_zonder_gevulde_pillen(self):
+    def test_meerdere_doelen_staan_in_de_tabel_van_het_blad(self):
         self.seed_waiting()
-        html = self.client.get("/structuur").text
-        row = html[html.index('class="filter-row"'):html.index('id="stack-bar"')]
-        self.assertIn('class="filter-chips"', row)
-        self.assertRegex(row, r'<button type="button" class="stack-toggle" id="stack-toggle" aria-pressed="false">Stapel</button>')
-        self.assertNotIn("Toon als stapel", html)
-        self.assertNotIn('class="chip" id="stack-', html)
-        bar = html[html.index('id="stack-bar"'):html.index('class="setup-grid"')]
-        self.assertIn(" hidden>", bar[:60])
-        for needle in ['id="stack-prev" aria-label="Vorige kaart"', 'id="stack-count"', 'id="stack-next" aria-label="Volgende kaart"',
-                       'class="stack-actions" role="group"']:
-            self.assertIn(needle, bar, needle)
-        self.assertRegex(bar, r'class="stack-act" id="stack-skip">.*Negeer</button>')
-        self.assertRegex(bar, r'class="stack-act is-keep" id="stack-keep">.*Bewaar</button>')
-        self.assertRegex(bar, r'class="stack-act" id="stack-reset">.*Opnieuw</button>')
-
-    def test_een_kaart_geeft_geen_stapelbediening(self):
-        self.seed_waiting()
-        html = self.client.get("/structuur?kant=long").text
-        self.assertEqual(html.count('class="setup-card'), 1)
-        self.assertNotIn('id="stack-toggle"', html)
-        self.assertNotIn('id="stack-bar"', html)
-
-    def test_kaartkop_met_logo_en_bewijs_achter_een_tik(self):
-        self.seed_waiting()
-        html = self.client.get("/structuur").text
-        card = html[html.index('class="setup-card'):html.index("</article>")]
-        head = card[card.index('class="setup-head"'):card.index("</header>")]
-        self.assertIn('class="coin-av setup-av', head)
-        self.assertNotIn("dist-ring", card)
-        self.assertNotIn('class="proof-line', card)
-        self.assertRegex(head, r'class="radar-dir radar-dir-(long|short)">')
-        self.assertNotIn("setup-grade", head)                               # geen oordeel op de kaart: elke gespotte kans is gewoon Structuur
-        self.assertRegex(head, r'class="proof-tag is-proef"><button type="button" class="kl-term" popovertarget="pt-structuur-s\d+">In proef</button>')
-        pop = head[head.index("popover>"):]
-        self.assertIn('<a class="proof-pop-link" href="/bewijs">Bekijk Bewijs</a>', pop)
-
-    def test_stap_een_heeft_een_afstandsbalk(self):
-        self.seed_waiting()
-        with mock.patch.object(main, "_cached_prices", new=mock.AsyncMock(return_value={"BTC": 99.0, "SOL": 101.0})):
-            html = self.client.get("/structuur").text
-        step = html[html.index('class="vd-step is-now"'):]
-        step = step[:step.index("</li>")]
-        self.assertRegex(step, r'<span class="muted step-dist"><span class="step-approach" aria-hidden="true"><i style="width: \d+%"></i></span>Nog <span data-vd="distance"')
+        html = self.client.get("/smc").text
+        sheet = html[html.index('data-kd-item="structuur:1"'):]
+        sheet = sheet[:sheet.index("</section>")]
+        self.assertIn("Doel 1 · 2,0 R", sheet)
+        self.assertIn("Doel 2 · 3,0 R", sheet)
+        self.assertIn('data-hold-copy="97.00"', sheet)
+        self.assertIn('href="/nu/order/structuur:1"', sheet)
 
     def test_lege_staat_blijft(self):
         html = self.client.get("/structuur").text
         self.assertIn("Geen plan klaar", html)
-        self.assertRegex(html, r'class="hl-num">0</span><span class="hl-unit">klaar')
+        self.assertIn('class="kt-sum">Geen kansen<', html)
 
 
 class RangeSweepLayoutTests(BaseShellTests):
@@ -509,7 +456,7 @@ class RangeSweepLayoutTests(BaseShellTests):
         range_seed.seed_setup(variant="RS_1H")
         self.assertNotIn("Historische kans", self.client.get("/structuur").text)
 
-    def test_tabs_range_sweep_en_ranges_en_de_ranges_rijen(self):
+    def test_range_sweep_en_ranges_onder_structuur(self):
         range_seed.seed_setup()
         repo.upsert_range_watch({"coin": "SOL", "tf": "2h", "range_high": 104.0, "range_low": 96.0, "first_at": "2026-10-10T00:00:00+00:00",
                                  "found_at": "2026-10-10T04:00:00+00:00", "atr": 1.0})
@@ -518,21 +465,14 @@ class RangeSweepLayoutTests(BaseShellTests):
         repo.set_range_watch_state(repo.upsert_range_watch({"coin": "BNB", "tf": "1h", "range_high": 1.0, "range_low": 0.5, "first_at": "2026-10-08T00:00:00+00:00",
                                                            "found_at": "2026-10-08T04:00:00+00:00", "atr": 0.1})[0], "gebroken")
         html = self.client.get("/structuur").text
-        self.assertIn('id="tab-ranges"', html)
-        self.assertRegex(html, r'href="#tab-range-sweep"[^>]*>Range sweep <i class="ut-count">1</i>')
-        self.assertRegex(html, r'href="#tab-ranges"[^>]*>Ranges <i class="ut-count">2</i>')
-        panel = html[html.index('id="tab-ranges"'):]
-        panel = panel[:panel.index("</section>")]
-        self.assertEqual(panel.count('class="mrow"'), 2)                              # de gebroken range hoort niet bij wat gevolgd wordt
-        for needle in ["SOL", "ETH", "96.0000 tot 104.00", "tot boven", "2u", "4u"]:
-            self.assertIn(needle, panel, needle)
-        self.assertNotIn("BNB", panel)
-        self.assertLess(panel.index("SOL"), panel.index("ETH"))                       # SOL ligt dichter bij een rand (4%) dan ETH (20%)
-
-    def test_lege_staat_wijst_naar_de_ranges(self):
-        html = self.client.get("/structuur").text
-        self.assertIn("Geen setup klaar", html)
-        self.assertIn('href="#tab-ranges"', html)
+        panel = html[html.index('id="tab-ranges"'):html.index('class="kt-meta">Laatste 24 uur')]     # de oude link /structuur#tab-ranges landt hier
+        self.assertIn('Range sweep, proef <span class="kt-n">1</span>', panel)
+        rows = panel[panel.rindex('<ul class="kt-rows">'):]
+        self.assertEqual(rows.count("<li>"), 2)                                      # de gebroken range hoort niet bij wat gevolgd wordt
+        for needle in ["SOL 2u", "ETH 4u", "96.0000 tot 104.00"]:
+            self.assertIn(needle, rows, needle)
+        self.assertNotIn("BNB", rows)
+        self.assertLess(rows.index("SOL"), rows.index("ETH"))                         # SOL ligt dichter bij een rand (4%) dan ETH (20%)
 
     def test_een_leerling_ziet_niets_van_de_range_sweep(self):
         range_seed.seed_lab()
@@ -559,13 +499,6 @@ class RangeSweepLayoutTests(BaseShellTests):
         html = self.client.get("/structuur").text
         self.assertEqual(html.count('id="range-sweep-'), 1)
         self.assertIn("OP", html[html.index('id="range-sweep-'):])
-
-    def test_radar_toont_de_range_sweep_niet_meer(self):
-        range_seed.seed_setup()
-        html = self.client.get("/smc").text
-        self.assertEqual(html.count('id="range-sweep-'), 0)
-        self.assertRegex(html, r'class="hl-num">0</span><span class="hl-unit">wachten')
-
 
 class BewijsLayoutTests(BaseShellTests):
     def seed(self):

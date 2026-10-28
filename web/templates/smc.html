@@ -1,160 +1,90 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
-{% block title %}SMC-radar — HesPulse{% endblock %}
-{% block page_title %}Plannen{% endblock %}
+{% block title %}Kansen — HesPulse{% endblock %}
+{% block page_title %}Kansen{% endblock %}
 {% block dock_search %}{{ macros.float_search() }}{% endblock %}
 {% block content %}
-{{ macros.plan_switch("/smc", nav_counts) }}
+{# Kansen (ontwerp V4, app/kansen.py): een tab per soort, per kans een compacte kaart met de grafiek. Een tik op de kop opent het detailblad
+   (kaarten.js), een tik op de grafiek opent hem groot (levelchart.js). De ankers van de meldingen (/smc#radar-zone-N, /smc#radar-zsweep-N,
+   /structuur#structuur-N) wijzen naar het id van de kaart: utabs.js opent dan de juiste tab en scrolt erheen. #}
+{% set empty = {
+  "structuur": ("Geen plan klaar", "Zodra een lijn of range breekt en het plan genoeg ruimte heeft, krijg je een melding en staat hier de kaart. De motor kijkt elke 5 minuten."),
+  "zone_radar": ("Geen zone binnen bereik", "Een kaart verschijnt als de dichtstbijzijnde vraag- of aanbodzone op 1u of 4u binnen 6% van de koers ligt."),
+  "zone_sweep": ("Geen sweep", "Een kaart verschijnt als de koers door een zone prikt en binnen een paar candles terug sluit."),
+  "smc": ("Geen SMC-setup", "Een kaart verschijnt als structuur breekt en een sweep de liquiditeit pakt.")} %}
+{{ macros.utabs(page.tabs, page.active, "kansen") }}
 
-{# Een telling heeft geen reeks, dus geen lijntje bij het getal. #}
-{{ macros.headline("Setups die wachten", setup_cards|length, "wachten",
-     explain="SMC-setups die op hun zone wachten (structuur brak, een sweep pakte de liquiditeit), zone-radar-kaarten (de dichtstbijzijnde vraag- of aanbodzone op 1u en 4u als limietplan) en zone-sweeps (de koers prikte door een zone en sloot terug). Zone-radar en zone-sweep zijn ongetest. Je krijgt een melding bij een nieuwe kaart en zodra de limiet geraakt wordt.") }}
-
-<p class="muted"><a href="/zone-radar">Zone-radar: zo werkt het</a></p>
-
-{% set smc_proof = proof("smc") %}
-{{ macros.keylines([
-  {"label": "Open trades", "value": signal_cards|length},
-  {"label": "Niet meer actief", "value": moot_cards|length},
-  {"label": "SMC per trade, na kosten", "value": smc_proof.label, "explain": smc_proof.text ~ " Gemeten op afgeronde SMC-trades. Bewijs toont de details."}], "rd") }}
-
-{{ macros.utabs([
-  {"key": "wachten", "label": "Wachten", "href": "#tab-wachten", "count": setup_cards|length},
-  {"key": "open", "label": "Open", "href": "#tab-open", "count": signal_cards|length},
-  {"key": "afgerond", "label": "Afgerond", "href": "#tab-afgerond"}], "wachten", "radar") }}
-
-<div class="ut-panels" data-utabs-panels="radar">
-
-<section id="tab-wachten" data-utab-panel class="is-shown">
-<div class="flat">
-  {% if not setup_cards %}
-  {{ macros.empty_state("Nog geen bouwende setup", "De CEO zit in een vergadering. Een SMC-setup verschijnt hier zodra structuur breekt, een sweep de liquiditeit pakt en er een zone ontstaat om op te wachten. Je krijgt dan een melding.", "Bekijk de Setups", "/structuur") }}
-  {% else %}
-  {% if setup_cards %}
-  <div class="radar-grid">
-    {% for c in setup_cards %}
-    {% set zone = c.setup.source == "zone_radar" %}
-    {% set sweep = c.setup.source == "zone_sweep" %}
-    <article class="radar-card" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
-      {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
-           price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div", coin=c.coin) }}
-      {{ macros.card_tags(c.state_short, c.state, c.state_label, kind=("Zone-radar" if zone else "Zone-sweep" if sweep else "SMC"), untested=(zone or sweep), age=(c.created_at | age)) }}
-      {{ macros.now_line(c.action) }}
-      <div class="approach" role="img" aria-label="Koers op {{ "%.0f"|format(c.approach_pct or 0) }}% van de weg naar je instap"{% if c.approach_pct is none %} hidden{% endif %}>
-        <span class="approach-track"></span>
-        <span class="approach-dot" data-radar="approach" style="left: {{ "%.1f"|format(c.approach_pct or 0) }}%"></span>
-        <span class="approach-end">Instap</span>
-      </div>
-      {% if c.chart %}{{ macros.level_chart(c.coin, c.chart) }}{% endif %}
-      {{ macros.level_chips(c.coin, c.levels, "/smc#radar-" ~ c.key|replace(':', '-'), rr=(c.plan.rr if c.levels else none)) }}
-      {{ macros.steps_list(c.steps, user.risk_per_trade_eur) }}
-      {{ macros.context_block(context.get(c.coin, [])) }}
-      <details class="setup-why">
-        <summary>Waarom</summary>
-        {% if zone %}
-        <p class="setup-reason">
-          {{ "Vraagzone" if c.direction == "long" else "Aanbodzone" }} op {{ "1u" if c.setup.tf == "1h" else "4u" }}
-          van {{ "%.4f"|format(c.setup.zone_low) }} tot {{ "%.4f"|format(c.setup.zone_high) }}: de limiet staat op de binnenrand, de stop een kwart ATR voorbij de buitenrand.
-          Het doel is de rand van de eerstvolgende {{ "aanbodzone" if c.direction == "long" else "vraagzone" }} op {{ "1u" if c.setup.target_tf == "1h" else "4u" }}
-          ({{ "%.4f"|format(c.setup.target_low) }} tot {{ "%.4f"|format(c.setup.target_high) }}).
-          Geen structuurbreuk of sweep nodig: de zone zelf is het niveau. Je krijgt een melding zodra de limiet geraakt wordt, en dan staat hij in je journaal.
-          Deze soort is niet getoetst; Bewijs toont de score apart.
-        </p>
-        {% elif sweep %}
-        {% set tfw = {"1h": "1u", "2h": "2u", "4h": "4u"} %}
-        <p class="setup-reason">
-          De koers prikte {{ "onder de vraagzone" if c.direction == "long" else "boven de aanbodzone" }} op {{ tfw.get(c.setup.tf, c.setup.tf) }}
-          ({{ "%.4f"|format(c.setup.zone_low) }} tot {{ "%.4f"|format(c.setup.zone_high) }}), {{ "%.2f"|format(c.setup.prik_atr)|replace(".", ",") }} ATR diep,
-          en sloot binnen {{ c.setup.herstel_bars }} {{ "candle" if c.setup.herstel_bars == 1 else "candles" }} op 1u terug.
-          De limiet staat op de binnenrand van de zone, de stop een kwart ATR voorbij de prik.
-          {% if c.setup.take_profit is not none %}Het doel is de rand van de eerstvolgende {{ "aanbodzone" if c.direction == "long" else "vraagzone" }} op {{ tfw.get(c.setup.target_tf, c.setup.target_tf) }}.
-          {% else %}Er is geen tegenovergestelde zone op minstens 2R, dus geen doel: dat kies je zelf.{% endif %}
-          De order vervalt na 24 uur. Deze soort is niet getoetst: de labrun volgt later, Bewijs toont de score apart.
-        </p>
-        {% else %}
-        <p class="setup-reason">
-          Structuur brak op {{ "%.4f"|format(c.setup.structure_level) }},
-          sweep op {{ "%.4f"|format(c.setup.sweep_price) }},
-          doel bij liquidity {{ "%.4f"|format(c.setup.liquidity_target) }}.
-          Stop en doel liggen al vast. Dit wordt pas een melding als de zone een afwijzende candle geeft
-          en risico/rendement boven de ondergrens ligt. Raakt de koers de zone en keert niet om, dan kan je order wel gevuld zijn zonder dat er een melding komt.
-        </p>
-        {% endif %}
-      </details>
-      {{ macros.share_button(c.coin, c.direction, c.steps) }}
-    </article>
-    {% endfor %}
-  </div>
+<div class="ut-panels" data-utabs-panels="kansen">
+{% for t in page.tabs %}
+<section id="tab-{{ t.key }}" data-utab-panel{% if t.key == page.active %} class="is-shown"{% endif %}>
+  <p class="kt-sum">{{ t.summary }}</p>
+  {% if t.plans %}
+  <div class="kc-list">{% for it in t.plans %}{{ macros.kans_card(it) }}{% endfor %}</div>
+  {% elif t.key in empty %}
+  {{ macros.empty_state(empty[t.key][0], empty[t.key][1]) }}
   {% endif %}
+  {% if t.trades %}
+  <h3 class="kt-sub">Open</h3>
+  <div class="kc-list">{% for it in t.trades %}{{ macros.kans_card(it) }}{% endfor %}</div>
   {% endif %}
-</div>
 
-{% if moot_cards %}
-<div class="flat">
-  <h3>Niet meer actief</h3>
-  <div class="radar-grid">
-    {% for c in moot_cards %}
-    <article class="radar-card is-moot" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
-      {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
-           price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div", coin=c.coin) }}
-      {{ macros.card_tags(c.state_short, c.state, c.state_label, kind=({"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep"}.get(c.setup.source, "SMC")), age=(c.created_at | age)) }}
-      {{ macros.now_line(c.action) }}
-    </article>
-    {% endfor %}
-  </div>
-</div>
-{% endif %}
+  {% if t.moot %}
+  <details class="kt-more">
+    <summary>Niet meer actief <span class="kt-n">{{ t.moot|length }}</span></summary>
+    <ul class="kt-rows">{% for m in t.moot %}<li id="{{ m.dom_id }}"><b>{{ m.title }}</b><span>{{ m.label }}</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+
+  {% if t.key == "structuur" %}
+  {% if not (engine_on and engine_minutes is not none and engine_minutes <= 15) %}
+  <p class="engine-status {% if not engine_on %}is-off{% else %}is-stale{% endif %}">
+    {% if is_ceo(user) %}
+      {% if not engine_on %}De motor staat uit (STRUCTURE_ENABLED=false).
+      {% elif engine_minutes is none %}De motor heeft nog niet gedraaid. Hij start in de eerstvolgende scan van 5 minuten, na een herstart van de bot.
+      {% else %}Let op: de motor draaide {{ engine_minutes }} minuten geleden voor het laatst. Controleer crypto-market-scan-smc.timer.{% endif %}
+    {% else %}Controle tijdelijk niet actueel.{% endif %}
+  </p>
+  {% endif %}
+  {% if history %}
+  <details class="kt-more">
+    <summary>Uitgevallen, gemist of vervallen, 7 dagen <span class="kt-n">{{ history|length }}</span></summary>
+    <ul class="kt-rows">{% for h in history %}<li><b>{{ h.coin }} {{ h.direction }}</b><span>{{ h.state_label }} · {{ h.created_at | age }}</span>{% if h.state == "geen_plan" and h.reason %}<span class="kt-reason">{{ h.reason }}</span>{% endif %}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% if trend_signals %}
+  <details class="kt-more">
+    <summary>Trend, laatste 24 uur <span class="kt-n">{{ trend_signals|length }}</span></summary>
+    <ul class="kt-rows">{% for s in trend_signals %}<li><a href="/coins/{{ s.coin }}#signal-{{ s.id }}"><b>{{ s.coin }} {{ s.direction }}</b></a><span>{{ s.auto_outcome | outcome_word }}</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% if range_visible %}
+  <details class="kt-more" id="tab-ranges"{% if range_sweep_cards %} open{% endif %}>
+    <summary>Range sweep, proef <span class="kt-n">{{ range_sweep_cards|length }}</span></summary>
+    <p class="muted tab-meta">Ongetest. De stop is het plan, het doel kies je zelf.{% if is_ceo(user) %} <a href="/galerij">Galerij</a>{% endif %}</p>
+    <div class="setup-grid">{% for c in range_sweep_cards %}{{ macros.range_sweep_card(c) }}{% endfor %}</div>
+    {% if range_watches %}
+    <ul class="kt-rows">{% for r in range_watches %}<li><b>{{ r.coin }} {{ r.tf_label }}</b><span>{{ r.low_text }} tot {{ r.high_text }} · {{ r.dist_text }}</span></li>{% endfor %}</ul>
+    {% endif %}
+  </details>
+  {% endif %}
+  <p class="kt-meta">Laatste 24 uur: {{ counts.total }} gezien, {{ counts.met_plan }} met plan.</p>
+  {% endif %}
+  {% if t.key in ("zone_radar", "zone_sweep") %}<p class="kt-meta"><a href="/zone-radar">Zone-radar en zone-sweep: zo werkt het</a></p>{% endif %}
 </section>
+{% endfor %}
+</div>
 
-<section id="tab-open" data-utab-panel>
-<div class="flat">
-  {% if not signal_cards %}
-  {{ macros.empty_state("Geen open trades", "De CEO is aan het golfen. Een open SMC-trade toont hier zijn voortgang tussen stop en doel, live.") }}
-  {% else %}
-  <div class="radar-grid">
-    {% for c in signal_cards %}
-    <article class="radar-card" id="radar-{{ c.key|replace(':', '-') }}" data-radar-key="{{ c.key }}">
-      {{ macros.market_row(c.coin, c.coin, chip=c.direction, chip_tone=("pos" if c.direction == "long" else "neg"),
-           price_coin=c.coin, price_text=(fmt_price(c.price) if c.price else ""), chg_coin=c.coin, href="/coins/" ~ c.coin, el="div", coin=c.coin) }}
-      {% set zone = c.signal.trade_type in ("zone_radar", "zone_sweep") %}
-      {{ macros.card_tags(c.state_short, "open", kind=({"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep"}.get(c.signal.trade_type, "SMC")), untested=zone, age=(c.created_at | age)) }}
-      {{ macros.now_line(c.action) }}
-      {% if c.chart %}{{ macros.level_chart(c.coin, c.chart) }}{% endif %}
-      {% set pos = [[((c.live_r if c.live_r is not none else 0) + 1) / (c.rr + 1) * 100, 0]|max, 100]|min %}
-      <div class="r-live">
-        <p class="r-live-head"><span class="level-chip-label">Nu</span>
-          <span class="radar-r {{ 'pos' if c.live_r is not none and c.live_r > 0 else 'neg' if c.live_r is not none and c.live_r < 0 }}" data-radar="live_r">{% if c.live_r is not none %}{{ "%+.2f"|format(c.live_r) }}R{% else %}-{% endif %}</span></p>
-        <div class="r-progress" data-rr="{{ c.rr }}" role="img" aria-label="Voortgang tussen stop en doel">
-          <span class="r-progress-mark{% if c.live_r is not none and c.live_r < 0 %} neg{% elif c.live_r is not none and c.live_r > 0 %} pos{% endif %}" data-radar="progress" style="left: {{ "%.1f"|format(pos) }}%"></span>
-          <span class="r-progress-zero" style="left: {{ "%.1f"|format(100 / (c.rr + 1)) }}%"></span>
-        </div>
-        <p class="r-progress-ends"><span class="neg">Stop −1R</span><span class="pos">Doel +{{ "%.1f"|format(c.rr) }}R</span></p>
-      </div>
-      {{ macros.level_chips(c.coin, c.levels, "/smc#radar-" ~ c.key|replace(':', '-'), rr=c.rr) }}
-      {{ macros.context_block(context.get(c.coin, [])) }}
-    </article>
-    {% endfor %}
+{# Eén blad voor alle kansen: kaarten.js toont alleen het gekozen deel. Het blad hangt aan body (main heeft z-index 1, het dok ligt erboven). #}
+<div class="kd" id="kd" role="dialog" aria-modal="true" aria-label="Details van de kans" data-kd hidden>
+  <div class="kd-panel" data-kd-panel>
+    <button type="button" class="kd-grab" data-kd-close aria-label="Details sluiten"><i aria-hidden="true"></i></button>
+    {% for it in items %}{{ macros.kans_detail(it, context.get(it.coin, [])) }}{% endfor %}
   </div>
-  {% endif %}
 </div>
-</section>
 
-<section id="tab-afgerond" data-utab-panel>
-<div class="flat">
-  {% if not entries %}
-  <p class="muted empty">Nog geen afgeronde SMC-signalen.</p>
-  {% else %}
-  <div class="signal-list">
-    {% for entry in entries %}
-    {{ macros.signal_card(entry, dismissible=False, showing_all=True) }}
-    {% endfor %}
-  </div>
-  {% endif %}
-</div>
-</section>
-
-</div>
 <script defer src="{{ asset('vendor/lightweight-charts-4.2.0.standalone.production.js') }}"></script>
 <script defer src="{{ asset('levelchart.js') }}"></script>
-<script defer src="/static/radar.js"></script>
+<script defer src="{{ asset('radar.js') }}"></script>
+<script defer src="{{ asset('ladder.js') }}"></script>
+<script defer src="{{ asset('kaarten.js') }}"></script>
 {% endblock %}

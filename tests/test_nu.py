@@ -1,4 +1,4 @@
-"""Het scherm Nu (app/nu.py): rust of precies één kaart, het eerstvolgende plan, de tweede kans en de order-checklist."""
+"""Plannen en trades als item (app/nu.py) voor het detailblad op Kansen en de order-checklist, plus overslaan."""
 import unittest
 
 from app import nu, radar
@@ -15,72 +15,7 @@ def setup(row, price):
     return radar.setup_card(row, price)
 
 
-class ScreenTests(unittest.TestCase):
-    def test_zonder_kaarten_is_het_rust_zonder_eerstvolgende(self):
-        s = nu.screen([])
-        self.assertEqual(s["mode"], "rust")
-        self.assertIsNone(s["nearest"])
-        self.assertEqual((s["plans"], s["open_trades"]), (0, 0))
-
-    def test_rust_noemt_het_dichtstbijzijnde_wachtende_plan(self):
-        far, near = setup(LONG, 103.0), setup(SHORT, 80537.0)        # 3,00% en 0,29% tot de limiet
-        s = nu.screen([far, near])
-        self.assertEqual(s["mode"], "rust")
-        self.assertEqual(s["nearest"]["key"], "zone:8")
-        self.assertEqual(s["nearest"]["distance_text"], "0,29%")
-        self.assertEqual(s["nearest"]["limit_text"], "80774,80")
-        self.assertEqual(s["nearest"]["price_text"], "80537,00")
-        self.assertAlmostEqual(s["nearest"]["approach_pct"], near["approach_pct"])
-        self.assertEqual(s["plans"], 2)
-
-    def test_een_plan_zonder_koers_telt_mee_maar_is_nooit_eerstvolgende(self):
-        s = nu.screen([setup(LONG, None)])
-        self.assertEqual(s["plans"], 1)
-        self.assertIsNone(s["nearest"])
-
-    def test_een_moot_of_vervallen_plan_telt_niet_mee(self):
-        s = nu.screen([setup(LONG, 107.0), setup(LONG, 96.0)])        # doel gehaald zonder vulling, stop geraakt
-        self.assertEqual(s["plans"], 0)
-        self.assertEqual(s["mode"], "rust")
-
-    def test_een_plan_in_de_zone_vult_het_scherm(self):
-        s = nu.screen([setup(LONG, 103.0), setup(SHORT, 80800.0)])
-        self.assertEqual(s["mode"], "zone")
-        f = s["focus"]
-        self.assertEqual((f["key"], f["coin"], f["dir_word"]), ("zone:8", "BTC", "Short"))
-        self.assertIn("in de zone", f["action"])
-        self.assertEqual(f["checklist_url"], "/nu/order/zone:8")
-        self.assertTrue(f["untested"])
-        self.assertEqual(f["trade_type"], "zone_radar")
-        self.assertEqual(s["also"], [])
-
-    def test_een_tweede_plan_in_de_zone_staat_eronder_en_niet_ernaast(self):
-        a, b = setup(SHORT, 80800.0), setup(LONG, 99.5)
-        s = nu.screen([a, b])
-        self.assertEqual(s["focus"]["key"], "zone:8")                 # het dichtst bij de limiet (0,03% voorbij) gaat voor
-        self.assertEqual([x["key"] for x in s["also"]], ["setup:7"])
-        self.assertEqual(nu.screen([a, b], prefer="setup:7")["focus"]["key"], "setup:7")
-
-    def test_een_overgeslagen_plan_valt_terug_op_rust_en_zegt_dat(self):
-        s = nu.screen([setup(SHORT, 80800.0)], skipped={"zone:8"})
-        self.assertEqual(s["mode"], "rust")
-        self.assertEqual([x["key"] for x in s["skipped"]], ["zone:8"])
-        self.assertIsNone(s["nearest"])                               # in de zone is geen afstand meer; het staat er als overgeslagen
-
-    def test_alleen_een_open_trade_toont_die_met_live_r(self):
-        s = nu.screen([radar.signal_card(TRADE, 97.0), setup(LONG, 103.0)])
-        self.assertEqual(s["mode"], "trade")
-        f = s["focus"]
-        self.assertEqual(f["key"], "signal:3")
-        self.assertEqual(f["live_r_text"], "+1,00 R")
-        self.assertEqual(f["url"], "/kans/3")
-        self.assertEqual(s["open_trades"], 1)
-
-    def test_een_plan_in_de_zone_gaat_voor_een_open_trade_die_eronder_staat(self):
-        s = nu.screen([radar.signal_card(TRADE, 97.0), setup(LONG, 99.5)])
-        self.assertEqual(s["mode"], "zone")
-        self.assertEqual([t["key"] for t in s["trades"]], ["signal:3"])
-
+class SkipTests(unittest.TestCase):
     def test_skip_cookie_houdt_alleen_geldige_sleutels(self):
         self.assertEqual(nu.parse_skip("zone:8,setup:7,<script>,signal:x"), frozenset({"zone:8", "setup:7"}))
         self.assertEqual(nu.parse_skip(None), frozenset())
@@ -125,7 +60,7 @@ class PlanRowTests(unittest.TestCase):
 
 class ChecklistTests(unittest.TestCase):
     def test_vier_stappen_in_de_volgorde_van_de_beurs_zonder_grootte(self):
-        item = nu.screen([setup(SHORT, 80800.0)])["focus"]
+        item = nu.item_for([setup(SHORT, 80800.0)], "zone:8")
         steps = nu.checklist(item)
         self.assertEqual([s["title"] for s in steps], ["Open BTC bij je beurs", "Limietprijs", "Stop", "Doel"])
         self.assertIn("Short en Limit", steps[0]["sub"])
@@ -146,8 +81,8 @@ class ChecklistTests(unittest.TestCase):
         self.assertIn("Kies", doel["sub"])
 
     def test_koersregel_onderaan(self):
-        self.assertEqual(nu.price_note(nu.screen([setup(SHORT, 80800.0)])["focus"]), "nog in zone")
-        self.assertEqual(nu.price_note(nu.screen([setup(SHORT, 80537.0)])["nearest"]), "nog 0,29% tot instap")
+        self.assertEqual(nu.price_note(nu.item_for([setup(SHORT, 80800.0)], "zone:8")), "nog in zone")
+        self.assertEqual(nu.price_note(nu.item_for([setup(SHORT, 80537.0)], "zone:8")), "nog 0,29% tot instap")
         self.assertEqual(nu.price_note(nu.plan_item("structuur:4", "SOL", "long", 100.0, 99.0, [(102.0, 2.0)], price=None, state=None)), "")
 
 
@@ -156,29 +91,28 @@ if __name__ == "__main__":
 
 
 class LadderItemTests(unittest.TestCase):
-    """V3: elk item op Nu draagt zijn ladder (app/ladder.py) met de getallen die de kaart al had; er wordt niets opnieuw berekend."""
+    """Elk item draagt zijn ladder (app/ladder.py) met de getallen die de kaart al had; er wordt niets opnieuw berekend."""
     def test_een_plan_in_de_zone_heeft_een_volle_ladder_met_zone(self):
-        f = nu.screen([setup(SHORT, 80800.0)])["focus"]
+        f = nu.item_for([setup(SHORT, 80800.0)], "zone:8")
         lad = f["ladder"]
         self.assertEqual([ln["name"] for ln in lad["lines"]], ["Stop", "Instap", "Doel"])
         self.assertEqual((lad["zone"]["low"], lad["zone"]["high"]), (80774.8, 80900.0))
         self.assertTrue(lad["in_zone"])
         self.assertEqual(f["zone_low"], 80774.8)
 
-    def test_het_eerstvolgende_plan_heeft_een_uitgezoomde_ladder(self):
-        near = nu.screen([setup(SHORT, 80537.0)])["nearest"]
-        self.assertTrue(near["ladder_compact"]["compact"])
-        self.assertEqual([ln["name"] for ln in near["ladder_compact"]["lines"]], ["Instap"])
-        self.assertEqual(near["ladder_compact"]["price"]["text"], "80537,00")
+    def test_de_koers_op_de_ladder_met_komma(self):
+        item = nu.item_for([setup(SHORT, 80537.0)], "zone:8")
+        self.assertEqual(item["ladder"]["price"]["text"], "80537,00")
+        self.assertEqual(item["distance_text"], "0,29%")
 
     def test_herkomst_is_een_regel_uit_de_zone(self):
         row = {**SHORT, "tf": "4h", "chart_zone": {"label": "Aanbodzone 4u", "tf": "4h"}}
-        f = nu.screen([setup(row, 80800.0)])["focus"]
+        f = nu.item_for([setup(row, 80800.0)], "zone:8")
         self.assertEqual(f["origin"], "Aanbodzone 4u")
-        self.assertEqual(nu.screen([setup(LONG, 99.5)])["focus"]["origin"], "")
+        self.assertEqual(nu.item_for([setup(LONG, 99.5)], "setup:7")["origin"], "")
 
     def test_een_open_trade_heeft_een_ladder_zonder_zone(self):
-        f = nu.screen([radar.signal_card(TRADE, 98.0)])["focus"]
+        f = nu._from_signal(radar.signal_card(TRADE, 98.0))
         self.assertIsNone(f["ladder"]["zone"])
         self.assertTrue(f["ladder"]["trade"])
         self.assertEqual(f["chart"]["entry"], 100.0)

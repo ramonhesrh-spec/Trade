@@ -1,13 +1,10 @@
-"""Het scherm Nu (/vandaag): er is niets te doen, of precies één ding. Pure functies zonder database of netwerk; de route geeft de kaarten
-van de Radar (radar.setup_card en radar.signal_card) en de overgeslagen sleutels mee, en de template tekent alleen.
-
-Rust: geen plan in de zone en geen open trade. Dan staat er één zin en het eerstvolgende plan met zijn gemeten afstand tot de limiet.
-Zone: een plan staat in de zone; die kaart vult het scherm, een tweede staat klein eronder en nooit ernaast.
-Trade: alleen een open trade; die staat er met zijn live R zoals op de Radar."""
+"""Eén plan of open trade als item voor het detailblad op Kansen (app/kansen.py) en de order-checklist (/nu/order/<sleutel>), plus overslaan.
+Pure functies zonder database of netwerk; de route geeft de kaarten van de Radar (radar.setup_card en radar.signal_card) mee.
+Het scherm Nu zelf (rust of één ding) verviel met ontwerp V4: de app opent op Kansen."""
 import re
 from typing import Iterable, Optional
 
-from app import chance_steps, ladder, radar
+from app import ladder, price_text, radar
 
 TRADE_TYPE_ZONE = "zone_radar"          # zelfde waarde als zone_radar.TRADE_TYPE; niet importeren houdt dit bestand los van pandas
 TRADE_TYPE_SWEEP = "zone_sweep"         # zelfde waarde als zone_sweep.TRADE_TYPE
@@ -18,8 +15,8 @@ DIR_WORD = {"long": "Long", "short": "Short"}
 
 
 def nl(value: float) -> str:
-    """Om te lezen: dezelfde cijfers als chance_steps.fmt, met een komma. Kopiëren gaat altijd met de punt van chance_steps.fmt."""
-    return chance_steps.fmt(value).replace(".", ",")
+    """Om te lezen: app/price_text.py. Kopiëren gaat met hetzelfde getal en een punt (price_text.plain)."""
+    return price_text.nl(value)
 
 
 def pct_nl(value: float) -> str:
@@ -27,7 +24,7 @@ def pct_nl(value: float) -> str:
 
 
 def r_nl(value: float) -> str:
-    return f"{value:+.2f}".replace(".", ",").replace("-", "\u2212") + " R"      # echt minteken, zoals nu.js
+    return f"{value:+.2f}".replace(".", ",").replace("-", "\u2212") + " R"      # echt minteken, zoals ladder.js
 
 
 def plan_rows(direction: str, entry: float, stop: float, targets: list[tuple[float, float]], entry_label: str = "Instap") -> list[dict]:
@@ -37,7 +34,7 @@ def plan_rows(direction: str, entry: float, stop: float, targets: list[tuple[flo
     rows += [{"label": (f"Doel {i} · " if many else "Doel · ") + f"{r:.1f} R".replace(".", ","), "value": t, "tone": "win"}
              for i, (t, r) in enumerate(targets, 1)]
     rows.sort(key=lambda r: -r["value"])
-    return [{**r, "text": nl(r["value"]), "copy": chance_steps.fmt(r["value"])} for r in rows]
+    return [{**r, "text": nl(r["value"]), "copy": price_text.plain(r["value"])} for r in rows]
 
 
 def plan_item(key: str, coin: str, direction: str, limit: float, stop: float, targets: list[tuple[float, float]], *, price: Optional[float],
@@ -46,8 +43,7 @@ def plan_item(key: str, coin: str, direction: str, limit: float, stop: float, ta
               chart: Optional[dict] = None, origin: str = "") -> dict:
     # De ladder (app/ladder.py) tekent dezelfde getallen; de afstand erop blijft distance_pct van de kaart.
     return {"kind": "plan", "zone_low": zone_low, "zone_high": zone_high, "chart": chart, "origin": origin,
-            "ladder": ladder.build(direction, stop, limit, targets, price, zone_low, zone_high),
-            "ladder_compact": ladder.build(direction, stop, limit, targets, price, zone_low, zone_high, compact=True), "key": key, "coin": coin, "direction": direction, "dir_word": DIR_WORD.get(direction, direction),
+            "ladder": ladder.build(direction, stop, limit, targets, price, zone_low, zone_high), "key": key, "coin": coin, "direction": direction, "dir_word": DIR_WORD.get(direction, direction),
             "limit": limit, "limit_text": nl(limit), "stop": stop, "targets": targets, "price": price, "price_text": nl(price) if price else "",
             "state": state, "distance_pct": distance_pct, "distance_text": pct_nl(distance_pct) if distance_pct is not None else "",
             "approach_pct": approach_pct, "action": action, "trade_type": trade_type, "untested": untested,
@@ -75,25 +71,6 @@ def _from_signal(c: dict) -> dict:
             "untested": s.get("trade_type") in UNTESTED_SOURCES, "created_at": c["created_at"], "url": f"/kans/{s['id']}",
             "rows": plan_rows(c["direction"], s["price"], s["stop_loss"], [(s["take_profit"], c["rr"])]), "chart": c.get("chart"),
             "ladder": ladder.build(c["direction"], s["stop_loss"], s["price"], [(s["take_profit"], c["rr"])], c["price"], trade=True)}
-
-
-def screen(cards: list[dict], skipped: Iterable[str] = (), prefer: Optional[str] = None) -> dict:
-    """Wat Nu toont. `cards` zijn de Radar-kaarten; alleen plannen die nog kunnen vullen tellen (radar.OPEN_STATES, dezelfde keuze als de tab
-    Wachten). Binnen de zone gaat het plan voor dat het dichtst bij zijn limiet staat; `prefer` (een tik op 'Ook in zone') zet een ander voorop."""
-    skipped = set(skipped)
-    plans = [_from_setup(c) for c in cards if c["kind"] == "setup" and c["state"] in radar.OPEN_STATES]
-    trades = sorted((_from_signal(c) for c in cards if c["kind"] == "signal"), key=lambda t: t["created_at"], reverse=True)
-    in_zone = sorted((p for p in plans if p["state"] == "in_zone"), key=lambda p: abs(p["distance_pct"] or 0))
-    live = [p for p in in_zone if p["key"] not in skipped]
-    live.sort(key=lambda p: p["key"] != prefer)
-    waiting = [p for p in plans if p["state"] == "wacht" and p["distance_pct"] is not None]
-    base = {"plans": len(plans), "open_trades": len(trades), "skipped": [p for p in in_zone if p["key"] in skipped],
-            "nearest": min(waiting, key=lambda p: p["distance_pct"]) if waiting else None}
-    if live:
-        return {**base, "mode": "zone", "focus": live[0], "also": live[1:], "trades": trades}
-    if trades:
-        return {**base, "mode": "trade", "focus": trades[0], "also": [], "trades": trades[1:]}
-    return {**base, "mode": "rust", "focus": None, "also": [], "trades": []}
 
 
 def item_for(cards: list[dict], key: str) -> Optional[dict]:
@@ -126,12 +103,12 @@ def checklist(item: dict) -> list[dict]:
     positiegrootte zit bewust niet in HesPulse."""
     targets = item["targets"]
     many = len(targets) > 1
-    choices = [{"label": f"Doel {i} · {r:.1f} R".replace(".", ","), "text": nl(t), "copy": chance_steps.fmt(t)} for i, (t, r) in enumerate(targets, 1)] if many else []
+    choices = [{"label": f"Doel {i} · {r:.1f} R".replace(".", ","), "text": nl(t), "copy": price_text.plain(t)} for i, (t, r) in enumerate(targets, 1)] if many else []
     goal_sub = "Kies een doel, de rest kun je later bijzetten." if many else f"{targets[0][1]:.1f} R vanaf je instap.".replace(".", ",", 1) if targets else ""
 
     def step(n, title, sub, value=None, tone=""):
         return {"n": n, "title": title, "sub": sub, "value": value, "text": nl(value) if value is not None else "",
-                "copy": chance_steps.fmt(value) if value is not None else "", "tone": tone, "choices": []}
+                "copy": price_text.plain(value) if value is not None else "", "tone": tone, "choices": []}
 
     first = [step(1, f"Open {item['coin']} bij je beurs", f"Kies {item['dir_word']} en Limit in het orderformulier."),
              step(2, "Limietprijs", "Plak in het prijsveld.", item["limit"]),

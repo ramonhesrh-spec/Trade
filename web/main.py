@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import announce, ceo, chance_checks, focus, freshness, chance_steps, kans_view, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep
+from app import announce, ceo, chance_checks, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -687,30 +687,28 @@ STRUCTURE_STATE_LABELS = {"schaduw": "Stil gevolgd, wacht op de terugkeer", "gee
                           "niet_gemeld": "Niet gemeld: het dagmaximum was bereikt", "overgeslagen": "Stop buiten het toegestane bereik", "geen_oordeel": "Niet gemeld"}
 
 
-@app.get("/structuur")
-async def structuur_page(request: Request, alleen: str = "", kant: str = "", user: dict = Depends(require_login)):
-    """De nieuwe methode: breuk van een lijn of range op 30m met het plan getekend (app/structure_live.py)."""
-    since = (datetime.now(timezone.utc) - timedelta(days=7)).isoformat()
+async def _structure_extras(user: dict) -> dict:
+    """Wat van de oude pagina Setups niet dubbel is, als inklapbare regels onder de tab Structuur: wat de laatste 7 dagen uitviel, de range sweep
+    en de ranges (proef, alleen zonder focus en voor wie ze mag zien), trend-trades die nog lopen en de stand van de motor."""
+    now = datetime.now(timezone.utc)
+    since = (now - timedelta(days=7)).isoformat()
     history = [{**h, "state_label": STRUCTURE_STATE_LABELS.get(h["state"], h["state"])}
                for h in repo.list_structure_setups(("fired", "expired", "niet_gemeld", "overgeslagen", "geen_oordeel", "geen_plan", "schaduw"), 40)
                if h["created_at"] >= since]
     beat = repo.get_beat("structuur")
-    minutes = None
-    if beat:
-        minutes = int((datetime.now(timezone.utc) - datetime.fromisoformat(beat["at"])).total_seconds() // 60)
-    since24 = (datetime.now(timezone.utc) - timedelta(hours=24)).isoformat()
-    trend_beat = repo.get_beat("trend")
-    trend_minutes = int((datetime.now(timezone.utc) - datetime.fromisoformat(trend_beat["at"])).total_seconds() // 60) if trend_beat else None
+    minutes = int((now - datetime.fromisoformat(beat["at"])).total_seconds() // 60) if beat else None
+    since24 = (now - timedelta(hours=24)).isoformat()
     trend_focus_off = not focus.engine_on("trend")        # uit door focus: alleen nog de trades die lopen
-    return templates.TemplateResponse(request, "structuur.html", {"trend_minutes": trend_minutes,
-        "user": user, "structure_cards": [c for c in await _structure_cards()
-                            if kant not in ("long", "short") or c["direction"] == kant],
-        "side": kant if kant in ("long", "short") else "", "history": history,
-        "engine_minutes": minutes, "counts": repo.structure_counts(since24), "engine_on": config.STRUCTURE_ENABLED,
-        "trend_signals": [s for s in repo.list_recent_signals_of_type("trend", since24) if not trend_focus_off or s["auto_outcome"] is None],
-        "trend_on": config.TREND_ENABLED and not trend_focus_off, "trend_focus_off": trend_focus_off,
-        "range_sweep_cards": await _range_sweep_cards(user), "range_watches": await _range_watch_rows(user), "range_visible": _range_sweep_shown(user),
-        "range_watch_on": config.RANGE_WATCH_ENABLED, "range_sweep_on": config.RANGE_SWEEP_ENABLED})
+    return {"history": history, "engine_minutes": minutes, "engine_on": config.STRUCTURE_ENABLED, "counts": repo.structure_counts(since24),
+            "trend_signals": [s for s in repo.list_recent_signals_of_type("trend", since24) if not trend_focus_off or s["auto_outcome"] is None],
+            "range_sweep_cards": await _range_sweep_cards(user), "range_watches": await _range_watch_rows(user), "range_visible": _range_sweep_shown(user)}
+
+
+@app.get("/structuur")
+async def structuur_page(request: Request):
+    """De oude pagina Setups is de tab Structuur op Kansen. Zonder hash in de Location: de browser houdt dan het anker van de melding
+    (/structuur#structuur-12) vast, en ?tab= opent de tab als er geen anker is."""
+    return RedirectResponse(url="/smc?tab=structuur", status_code=307)
 
 
 @app.get("/galerij")
@@ -732,30 +730,35 @@ async def galerij_file(kind: str, user: dict = Depends(require_login)):
     return HTMLResponse(gallery_job.decorate(gallery_job.path_of(kind).read_text(encoding="utf-8"), kind))
 
 
-@app.get("/smc")
-async def smc_page(request: Request, user: dict = Depends(require_login)):
-    """Trade Radar: bouwende setups en open SMC-signalen als handelsplan met candlegrafiek en live status (de limietorder
-    staat op de zone-rand, zie app/trade_plan.py), daaronder de afgeronde signalen in dezelfde stijl als /signalen.
-    Afgeronde signalen verschijnen ook op /signalen en het dashboard: deze pagina is een extra, gerichte weergave."""
+def _kansen_kinds(user: dict) -> list[str]:
+    """De soorten met een tab op Kansen: de focus-soorten (focus.FOCUS_TYPES), de zone-sweep alleen voor wie hem mag zien, en zonder focus ook SMC."""
+    kinds = ["structuur", "zone_radar"] + (["zone_sweep"] if _sees_zone_sweep(user) and focus.engine_on(zone_sweep.TRADE_TYPE) else [])
+    return kinds + ([] if focus.active() else ["smc"])
+
+
+async def _kansen_page(user: dict, skipped=()) -> dict:
     cards = await _radar_cards(user)
-    entries = [e for e in repo.list_signalen_for_user(user["id"]) if e["trade_type"] in ("smc", zone_radar.TRADE_TYPE, zone_sweep.TRADE_TYPE)]
-    winrate = repo.winrate_stats(user["id"])
-    pattern_winrate = repo.pattern_winrate_stats()
-    entries = _add_signal_context(entries, winrate, pattern_winrate)
-    # Zonder deze aanroep blijft entry["user_confirmed"] ongezet en leest
-    # macros.signal_card dat als Undefined (falsy), dus is-rejected voor
-    # elk SMC-signaal ongeacht de smc-tak in _apply_user_confirmed hieronder
-    # — zelfde patroon als signalen_page hierboven en het dashboard hieronder.
-    required_factors = repo.list_required_factors(user["id"])
-    _apply_user_confirmed(entries, user["confirm_threshold_pct"], required_factors)
-    entries.sort(key=lambda e: e["created_at"], reverse=True)
+    structure = await _structure_cards()
+    prices = await _cached_prices({c["coin"] for c in structure}) if structure else {}
+    now = datetime.now(timezone.utc)
+    struct = [(c, prices.get(c["coin"]), today.structure_state(c, c["plan"], prices.get(c["coin"]), now)) for c in structure]
+    open_struct = repo.list_open_smc_signals(types=("structuur", "structuur_c"))
+    sprices = await _cached_prices({s["coin"] for s in open_struct}) if open_struct else {}
+    trades = [c for s in open_struct if (c := radar.signal_card(s, sprices.get(s["coin"])))]
+    return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped)
+
+
+@app.get("/smc")
+async def smc_page(request: Request, tab: str = "", user: dict = Depends(require_login)):
+    """Kansen (ontwerp V4): een tab per soort met de kansen als kaart met grafiek; een tik opent het detailblad met ladder, getallen en de knop
+    naar de order-checklist (app/kansen.py). De tab met de meeste kansen in de zone gaat open; ?tab= (de oude /structuur) kiest er een."""
+    page = await _kansen_page(user, _skipped_keys(request, user))
+    if tab in {t["key"] for t in page["tabs"]}:
+        page["active"] = tab
+    items = [it for t in page["tabs"] for it in t["plans"] + t["trades"]]
     return templates.TemplateResponse(request, "smc.html", {
-        "user": user, "context": _context_lines(c["coin"] for c in cards),
-        "setup_cards": radar.waiting_cards(cards),
-        "moot_cards": radar.moot_cards(cards),
-        "signal_cards": [c for c in cards if c["kind"] == "signal"],
-        "entries": entries,
-    }, headers=_viewer_header(user))
+        "user": user, "page": page, "items": items, "context": _context_lines({it["coin"] for it in items}),
+        **await _structure_extras(user)}, headers=_viewer_header(user))
 
 
 async def _open_chances(user: dict, structure_cards: list[dict], scripts: list[dict], prices: dict, now: datetime,
@@ -816,23 +819,17 @@ async def _vandaag_context(user: dict) -> dict:
 
 @app.get("/vandaag")
 async def vandaag_page(request: Request, bron: str = "", user: dict = Depends(require_login)):
-    """Cockpit: het markt-script van nu, de agenda van de komende 24 uur, wat beweegt (liquidaties en nieuws) en de score van
-    wat HesPulse zelf voorspelde. Alles komt uit app/today.py en de verzamelaars; er staat niets op wat niet gemeten is.
-    ?bron=app is de start_url van het manifest: de CEO begint de app op zijn eigen pagina, een leerling hier. Zonder die markering (de
-    tab, een snelkoppeling) ziet ook de CEO Vandaag."""
-    if bron == "app" and is_ceo(user):
-        return RedirectResponse(url="/ceo", status_code=303)
+    """Markt: marktcontext, agenda, wat beweegt (liquidaties en nieuws), scenario's zolang het markt-script aan staat, en de score van wat
+    HesPulse zelf voorspelde. Alles komt uit app/today.py en de verzamelaars; er staat niets op wat niet gemeten is. De kansen staan op /smc.
+    ?bron=app was de start_url van een oudere manifest: die opent nu ook Kansen."""
+    if bron == "app":
+        return RedirectResponse(url="/smc", status_code=303)
     ctx = await _vandaag_context(user)
     greeting = ceo.greeting(today.local(datetime.now(timezone.utc)).hour, is_ceo(user), user["username"])
-    cards = ctx["radar_cards"]
-    screen = nu.screen(cards, _skipped_keys(request, user), request.query_params.get("plan"))
-    # Gekeken: hoe oud de oudste koers achter deze kaarten is (app/freshness.py), niet de tijd van de paginaweergave.
-    age = freshness.oldest_age(_price_fetched_at, {c["coin"] for c in cards}, time.time())
-    focus_coin = (screen["focus"] or {}).get("coin")
-    return templates.TemplateResponse(request, "vandaag.html", {
-        "user": user, "greeting": greeting, **ctx, "nu": screen, "nu_stale": ladder.stale_text(age),
-        "nu_context": _context_lines([focus_coin])[focus_coin] if focus_coin else [],
-        "nu_when": nu.date_line(today.local(datetime.now(timezone.utc)))}, headers=_viewer_header(user))
+    # Kansen toont de soorten met een tab; een open melding of wachtend scenario van een andere soort (markt-script, trend ...) blijft hier staan.
+    other = [c for c in ctx["chances"] if c["kind"] == "scenario" or (c["kind"] == "signal" and c.get("trade_type") not in kansen.TAB_OF)]
+    return templates.TemplateResponse(request, "vandaag.html", {"user": user, "greeting": greeting, **ctx, "other_open": other},
+                                      headers=_viewer_header(user))
 
 
 NU_SKIP_COOKIE = "hp_skip"
@@ -852,7 +849,7 @@ async def nu_skip(request: Request, key: str = Form(""), user: dict = Depends(re
     if nu.SKIP_KEY.match(key):
         item = nu.item_for(await _radar_cards(user), key)
         repo.record_plan_skip(user["id"], key, item["coin"] if item else None, item["direction"] if item else None, db.now_iso())
-    response = RedirectResponse(url="/vandaag", status_code=303)
+    response = RedirectResponse(url="/smc", status_code=303)
     response.set_cookie(NU_SKIP_COOKIE, nu.add_skip(request.cookies.get(NU_SKIP_COOKIE), key), max_age=24 * 3600, samesite="lax", path="/")
     return response
 

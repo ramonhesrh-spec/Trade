@@ -1,201 +1,38 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
-{% set ph_logo = true %}
-{% block title %}Nu — HesPulse{% endblock %}
-{% block page_title %}Nu{% endblock %}
+{% block title %}Markt — HesPulse{% endblock %}
+{% block page_title %}Markt{% endblock %}
 {% block content %}
-{# Nu (app/nu.py) op de prijsladder (ontwerp V3, app/ladder.py): rust, of precies één ladder. nu.js vergelijkt de handtekening met
-   /api/radar en laadt opnieuw zodra er iets in of uit de zone gaat; verder schuiven alleen koers, balk en getal (ladder.js).
-   Gebaren (nu.js): veeg de ladder opzij = overslaan met een ongedaan-balk, trek de greep omhoog = detailblad, houd een getal vast = kopiëren.
-   Elk gebaar heeft een knop ernaast: Sla over, Details en Enter op een getal. #}
-{% set n = nu %}
-{% set f = n.focus %}
-{% set zone_keys = ([f.key] if n.mode == "zone" else []) + n.also|map(attribute="key")|list %}
-{% set trade_keys = ([f.key] if n.mode == "trade" else []) + n.trades|map(attribute="key")|list %}
-{% set kinds = {"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "smc": "SMC"} %}
-<section class="nu nu-{{ n.mode }}" data-nu-mode="{{ n.mode }}" data-nu-sig="{{ zone_keys|sort|join(',') }}|{{ trade_keys|sort|join(',') }}"
-         data-nu-skip="{{ n.skipped|map(attribute='key')|join(',') }}" aria-labelledby="nu-title">
-{% if n.mode == "rust" %}
-  <div class="nu-calm">
-    <h2 class="nu-rest" id="nu-title">Rust</h2>
-    <p class="nu-lead">Niets te doen.</p>
-    {% if n.skipped %}{% set sk = n.skipped[0] %}<p class="nu-note">Je sloeg {{ sk.coin }} {{ sk.direction }} over. Het staat nog onder <a href="/smc">Plannen</a>.</p>{% endif %}
-  </div>
-  {% if n.nearest %}{% set p = n.nearest %}
-  <a class="nu-next" href="/smc#radar-{{ p.key|replace(':', '-') }}" data-nu-key="{{ p.key }}" data-nu-coin="{{ p.coin }}"
-     aria-label="Eerstvolgende plan: {{ p.coin }} {{ p.direction }}, nog {{ p.distance_text }} tot de instap. Open in Plannen.">
-    {{ macros.ladder(p.ladder_compact, "compact", coin=p.coin, limit=p.limit, num_text=p.distance_text, num_label=p.coin ~ " " ~ p.direction) }}
-  </a>
-  {{ macros.ladder_skeleton("compact") }}
-  <i data-live-coin="{{ p.coin }}" hidden></i>
-  {% else %}
-  <p class="nu-empty">Geen plan wacht op zijn zone. <a href="/smc">Naar Plannen</a></p>
-  {% endif %}
-  <p class="nu-stale" data-nu-stale{% if not nu_stale %} hidden{% endif %}>{{ nu_stale }}</p>
-{% else %}
-  {% set is_zone = n.mode == "zone" %}
-  <div class="nu-focus" data-nu-key="{{ f.key }}" data-nu-coin="{{ f.coin }}">
-    <header class="nu-top">
-      <h2 class="nu-head" id="nu-title"><span class="nu-coin">{{ f.coin }} {{ f.direction }}</span></h2>
-      <p class="nu-kind">
-        <span>{{ kinds.get(f.trade_type, f.trade_type) }}{% if not is_zone %} · Open trade{% endif %}</span>
-        {% if f.untested %}{{ macros.pill("ongetest") }}{% else %}{{ macros.proof_tag(f.trade_type, f.key|replace(':', '-')) }}{% endif %}
-      </p>
-    </header>
-    <div class="nu-swipe" data-nu-swipe{% if is_zone %} data-nu-skippable{% endif %}>
-      {% if is_zone %}
-      {{ macros.ladder(f.ladder, "plan", coin=f.coin, limit=f.limit, num_text="In zone", num_hook="state", price_left=true) }}
-      {% else %}
-      {{ macros.ladder(f.ladder, "trade", coin=f.coin, num_text=f.live_r_text or "-", num_hook="live_r",
-           stop=f.rows|selectattr('tone', 'equalto', 'loss')|map(attribute='value')|first,
-           num_class=("pos" if (f.live_r or 0) > 0 else "neg" if (f.live_r or 0) < 0 else "")) }}
-      {% endif %}
-    </div>
-    {{ macros.ladder_skeleton("plan") }}
-    <i data-live-coin="{{ f.coin }}" hidden></i>
-    <button type="button" class="nu-grab" data-nu-sheet-open aria-controls="nu-sheet" aria-expanded="false"><i aria-hidden="true"></i><span>Details</span></button>
-    <div class="nu-actions">
-      {% if is_zone %}
-      <a class="nu-cta" href="{{ f.checklist_url }}">Zet de order, stap voor stap</a>
-      <form method="post" action="/nu/overslaan" data-nu-skip-form><input type="hidden" name="key" value="{{ f.key }}"><button type="submit" class="nu-skip">Sla over</button></form>
-      {% else %}
-      <a class="nu-cta is-quiet" href="{{ f.url }}">Bekijk de trade</a>
-      {% endif %}
-    </div>
-    {% for a in n.also %}
-    <a class="nu-also" href="/vandaag?plan={{ a.key }}">Ook in zone<b>{{ a.coin }} {{ a.direction }}</b><span class="nu-chev" aria-hidden="true">›</span></a>
-    {% endfor %}
-    {% for t in n.trades %}
-    <a class="nu-also" href="{{ t.url }}">Loopt<b>{{ t.coin }} {{ t.direction }}</b><span class="nu-also-r">{{ t.live_r_text }}</span><span class="nu-chev" aria-hidden="true">›</span></a>
-    {% endfor %}
-    <p class="nu-stale" data-nu-stale{% if not nu_stale %} hidden{% endif %}>{{ nu_stale }}</p>
-  </div>
-  {% if is_zone %}
-  <div class="nu-undo" data-nu-undo hidden role="status"><span>Overgeslagen.</span><button type="button" class="nu-undo-btn" data-nu-undo-btn>Ongedaan</button><i class="nu-undo-bar" aria-hidden="true"></i></div>
-  {% endif %}
-  <div class="nu-sheet" id="nu-sheet" role="dialog" aria-modal="true" aria-labelledby="nu-sheet-title" data-nu-sheet hidden>
-    <div class="nu-sheet-panel" data-nu-sheet-panel>
-      <button type="button" class="nu-sheet-grab" data-nu-sheet-close aria-label="Details sluiten"><i aria-hidden="true"></i></button>
-      <div class="nu-sheet-head">
-        <h3 class="nu-sheet-title" id="nu-sheet-title" tabindex="-1">{{ f.coin }} {{ f.direction }}</h3>
-        <button type="button" class="nu-sheet-x" data-nu-sheet-close aria-label="Sluiten"><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
-      </div>
-      <p class="nu-say">{{ f.action }}</p>
-      {% if is_zone %}{{ macros.ladder(f.ladder, "mini", coin=f.coin, limit=f.limit, num_text="In zone", num_hook="state", price_left=true) }}{% else %}{{ macros.ladder(f.ladder, "mini", coin=f.coin, num_text=f.live_r_text or "-", num_hook="live_r", stop=f.rows|selectattr('tone', 'equalto', 'loss')|map(attribute='value')|first,
-           num_class=("pos" if (f.live_r or 0) > 0 else "neg" if (f.live_r or 0) < 0 else "")) }}{% endif %}
-      <ul class="hold-list">
-        {% for r in f.rows %}
-        <li><button type="button" class="hold is-{{ r.tone }}" data-hold-copy="{{ r["copy"] }}" aria-label="{{ r.label }} {{ r.text }}, houd vast om te kopiëren">
-          <span class="hold-top"><span class="hold-lab" data-hold-label>{{ r.label }}</span><span class="hold-val">{{ r.text }}</span></span>
-          <span class="hold-bar" aria-hidden="true"><i></i></span>
-        </button></li>
-        {% endfor %}
-      </ul>
-      <p class="nu-hint">Houd vast om te kopiëren.</p>
-      <div class="nu-origin">
-        <span>{{ f.origin or kinds.get(f.trade_type, f.trade_type) }} · {{ "limietplan" if is_zone else "open trade" }}</span>
-        {% if f.chart %}
-        <div class="lc nu-chart"><div class="level-chart" hidden data-levelchart='{{ f.chart|tojson }}' data-coin="{{ f.coin }}" data-tf="15m" role="img" aria-label="{{ f.chart.label }}"></div>
-          <button type="button" class="nu-chart-btn" data-lc-expand>Grafiek</button></div>
-        {% endif %}
-      </div>
-      {% if nu_context %}
-      <dl class="nu-ctx" aria-label="Context, gemeten">
-        {% for l in nu_context %}<div><dt>{{ l.label }}</dt><dd><span class="nu-ctx-v">{{ l.value }}</span><span class="nu-ctx-m">{{ [l.note, l.source, l.age]|select|join(" · ") }}</span></dd></div>{% endfor %}
-      </dl>
-      {% endif %}
-      {% if is_zone %}<a class="nu-cta" href="{{ f.checklist_url }}">Zet de order, stap voor stap</a>{% else %}<a class="nu-cta is-quiet" href="{{ f.url }}">Bekijk de trade</a>{% endif %}
-    </div>
-  </div>
-{% endif %}
-</section>
-
-<section class="nu-markt" id="markt" aria-labelledby="markt-title">
-<h2 class="nu-markt-title" id="markt-title">Markt</h2>
-
-{# Het getal is de lengte van dezelfde lijst als de Kansen-tab (today.open_chances): geen tweede definitie. #}
-{{ macros.headline("Open kansen nu", chances|length, chances_unit,
-     delta=((nearest.name ~ " " ~ nearest.dist)|trim if nearest else "Je krijgt een melding zodra er een staat."), href=(nearest.url if nearest else none)) }}
-
+{# Markt (ontwerp V4): wat de markt doet, gemeten. De kansen zelf staan op Kansen (/smc); hier geen tweede lijst. #}
 {% set ring %}{% if not budget.off %}<svg class="vd-budget-ring" viewBox="0 0 40 40" aria-hidden="true"><circle class="vd-budget-bg" cx="20" cy="20" r="17"/><circle class="vd-budget-fill" cx="20" cy="20" r="17" pathLength="100" stroke-dasharray="100" stroke-dashoffset="{{ budget.offset }}"/></svg>{% endif %}{% endset %}
 {{ macros.keylines([
   {"label": "Meldingen, 24 uur", "value": (budget.sent ~ " van " ~ budget.limit) if not budget.off else budget.sent, "explain": budget.label ~ ". Pas het budget aan bij Account.", "html": ring},
   {"label": "Laatste melding", "value": last_message_ago, "explain": "Wanneer het laatste Discord-bericht binnenkwam, van wie ook. Zo zie je dat de bot nog luistert."},
-  {"label": "Laatste controle", "value": last_check_ago, "explain": "Wanneer de structuurscan voor het laatst draaide, dezelfde tijd als op Setups."}], "vd") }}
+  {"label": "Laatste controle", "value": last_check_ago, "explain": "Wanneer de structuurscan voor het laatst draaide, dezelfde tijd als op Kansen."}], "vd") }}
 
 {{ macros.install_help("banner") }}
 
 {{ macros.utabs([
-  {"key": "kansen", "label": "Kansen", "href": "#tab-kansen", "count": chances|length},
   {"key": "markt", "label": "Markt", "href": "#tab-markt"},
   {"key": "agenda", "label": "Agenda", "href": "#tab-agenda"},
-  {"key": "score", "label": "Score", "href": "#tab-score"}], "kansen", "vandaag",
-  menu=[{"label": "Mijn week", "href": "/week"}, {"label": "Alle setups", "href": "/structuur"}, {"label": "Instellingen", "href": "/account"}]) }}
+  {"key": "score", "label": "Score", "href": "#tab-score"}], "markt", "vandaag",
+  menu=[{"label": "Mijn week", "href": "/week"}, {"label": "Instellingen", "href": "/account"}]) }}
 
 <div class="ut-panels" data-utabs-panels="vandaag">
 
-<section id="tab-kansen" data-utab-panel class="is-shown">
-{% if not chances %}
-<p class="muted empty">Geen open kansen. Je krijgt een melding zodra er een staat.</p>
-{% endif %}
-{% if chance_plans %}
-<div class="flat">
-  <h3>Getekende plannen <a class="vd-more" href="/structuur">alle setups</a></h3>
-  <div class="setup-grid">
-    {% for c in chance_plans %}{% if c.card_kind == "range_sweep" %}{{ macros.range_sweep_card(c) }}{% else %}{{ macros.setup_card(c, user.risk_per_trade_eur) }}{% endif %}{% endfor %}
-  </div>
-</div>
-{% endif %}
-{% if chance_rows %}
+
+<section id="tab-markt" data-utab-panel class="is-shown">
+<p class="muted tab-meta">{{ greeting }} · <span class="vd-clock">{{ now }}</span> · Sessie: <span data-session-name>-</span></p>
+{% if other_open %}
 <div class="flat">
   <h3>Verder open</h3>
   {{ macros.row_head("Kans", "Soort", "Afstand") }}
-  {% for r in chance_rows %}
+  {% for r in other_open %}
   {{ macros.market_row(r.coin, r.coin, chip=r.direction, chip_tone=("pos" if r.direction == "long" else "neg"), subtitle=r.soort ~ " · " ~ r.state,
        right_text=r.dist_text, href=r.url, coin=r.coin) }}
   {% endfor %}
 </div>
 {% endif %}
-{% if script_on %}
-<div class="flat" id="scripts">
-  <h3>{% if scenarios_waiting %}{{ macros.term("Markt-script per coin", scenarios_waiting ~ " scenario's wachten op een voorwaarde. Dat zijn hypotheses, geen getekende plannen.", "vd-script-pop") }}{% else %}Markt-script per coin{% endif %}</h3>
-  {% if not scripts %}
-  <p class="muted empty">Nog geen script geschreven.{% if not script_enabled %} Het markt-script staat uit.{% endif %}</p>
-  {% else %}
-  {{ macros.row_head("Markten", "Prijs", "24 uur") }}
-  {% for s in scripts %}
-  <details class="mrow-wrap vd-bias-{{ s.bias }}"{% if s.scenarios|selectattr("state", "equalto", "waiting")|list %} open{% endif %}>
-    {{ macros.market_row(s.coin, s.coin, chip=s.bias, chip_tone=("pos" if s.bias == "long" else "neg" if s.bias == "short" else ""),
-         subtitle=((s.scenarios|length ~ " scenario" ~ ("'s" if s.scenarios|length != 1 else "")) if s.scenarios else "Geen scenario"),
-         price_coin=s.coin, price_text=(fmt(s.price) if s.price else ""), chg_coin=s.coin, el="summary", coin=s.coin) }}
-    <div class="mrow-body">
-      <p class="vd-summary"><a class="vd-coin" href="/coins/{{ s.coin }}">{{ s.coin }}</a> {{ s.summary or "Geen duiding." }}</p>
-      {% if not s.scenarios %}
-      <p class="muted vd-fine">Geen scenario dat de toets haalt.{% if s.n_dropped %} {{ s.n_dropped }} afgevallen op stop, R:R of afstand.{% endif %}</p>
-      {% endif %}
-      {% for sc in s.scenarios %}
-      <div class="vd-scenario vd-scenario-{{ sc.state }}" data-vd-scenario="{{ sc.id }}">
-        {{ macros.card_tags(sc.state_short, sc.state, sc.state_label, kind="Markt-script", untested=true, hook="data-vd", direction=sc.direction) }}
-        {{ macros.now_line(sc.action, hook="data-vd") }}
-        {{ macros.level_chart(s.coin, sc.chart, extra_class="vd-chart") }}
-        {{ macros.level_chips(s.coin, sc.levels, "/vandaag", rr=sc.rr) }}
-        {{ macros.steps_list(sc.steps, user.risk_per_trade_eur) }}
-        <p class="muted vd-fine">{{ sc.reason }}</p>
-        <p class="muted vd-fine">Vervalt over <span data-vd="left">{{ "%.0f"|format(sc.hours_left) }}</span> uur</p>
-        {{ macros.share_button(s.coin, sc.direction, sc.steps) }}
-      </div>
-      {% endfor %}
-      <footer class="vd-script-foot muted">Geschreven om {{ s.written.strftime("%H:%M") }}</footer>
-    </div>
-  </details>
-  {% endfor %}
-  {% endif %}
-</div>
-{% endif %}
-</section>
-
-<section id="tab-markt" data-utab-panel>
-<p class="muted tab-meta">{{ greeting }} · <span class="vd-clock">{{ now }}</span> · Sessie: <span data-session-name>-</span></p>
 <div class="flat">
   <div class="vd-hero-price">
     <span class="vd-hero-label">BTC</span>
@@ -274,6 +111,42 @@
     {% endif %}
   </div>
 </div>
+{% if script_on %}
+<div class="flat" id="scripts">
+  <h3>{% if scenarios_waiting %}{{ macros.term("Markt-script per coin", scenarios_waiting ~ " scenario's wachten op een voorwaarde. Dat zijn hypotheses, geen getekende plannen.", "vd-script-pop") }}{% else %}Markt-script per coin{% endif %}</h3>
+  {% if not scripts %}
+  <p class="muted empty">Nog geen script geschreven.{% if not script_enabled %} Het markt-script staat uit.{% endif %}</p>
+  {% else %}
+  {{ macros.row_head("Markten", "Prijs", "24 uur") }}
+  {% for s in scripts %}
+  <details class="mrow-wrap vd-bias-{{ s.bias }}"{% if s.scenarios|selectattr("state", "equalto", "waiting")|list %} open{% endif %}>
+    {{ macros.market_row(s.coin, s.coin, chip=s.bias, chip_tone=("pos" if s.bias == "long" else "neg" if s.bias == "short" else ""),
+         subtitle=((s.scenarios|length ~ " scenario" ~ ("'s" if s.scenarios|length != 1 else "")) if s.scenarios else "Geen scenario"),
+         price_coin=s.coin, price_text=(fmt(s.price) if s.price else ""), chg_coin=s.coin, el="summary", coin=s.coin) }}
+    <div class="mrow-body">
+      <p class="vd-summary"><a class="vd-coin" href="/coins/{{ s.coin }}">{{ s.coin }}</a> {{ s.summary or "Geen duiding." }}</p>
+      {% if not s.scenarios %}
+      <p class="muted vd-fine">Geen scenario dat de toets haalt.{% if s.n_dropped %} {{ s.n_dropped }} afgevallen op stop, R:R of afstand.{% endif %}</p>
+      {% endif %}
+      {% for sc in s.scenarios %}
+      <div class="vd-scenario vd-scenario-{{ sc.state }}" data-vd-scenario="{{ sc.id }}">
+        {{ macros.card_tags(sc.state_short, sc.state, sc.state_label, kind="Markt-script", untested=true, hook="data-vd", direction=sc.direction) }}
+        {{ macros.now_line(sc.action, hook="data-vd") }}
+        {{ macros.level_chart(s.coin, sc.chart, extra_class="vd-chart") }}
+        {{ macros.level_chips(s.coin, sc.levels, "/vandaag", rr=sc.rr) }}
+        {{ macros.steps_list(sc.steps, user.risk_per_trade_eur) }}
+        <p class="muted vd-fine">{{ sc.reason }}</p>
+        <p class="muted vd-fine">Vervalt over <span data-vd="left">{{ "%.0f"|format(sc.hours_left) }}</span> uur</p>
+        {{ macros.share_button(s.coin, sc.direction, sc.steps) }}
+      </div>
+      {% endfor %}
+      <footer class="vd-script-foot muted">Geschreven om {{ s.written.strftime("%H:%M") }}</footer>
+    </div>
+  </details>
+  {% endfor %}
+  {% endif %}
+</div>
+{% endif %}
 </section>
 
 <section id="tab-agenda" data-utab-panel>
@@ -305,11 +178,8 @@
 </section>
 
 </div>
-</section>
 
 <script defer src="{{ asset('vendor/lightweight-charts-4.2.0.standalone.production.js') }}"></script>
 <script defer src="{{ asset('levelchart.js') }}"></script>
 <script src="/static/vandaag.js" defer></script>
-<script src="{{ asset('ladder.js') }}" defer></script>
-<script src="{{ asset('nu.js') }}" defer></script>
 {% endblock %}

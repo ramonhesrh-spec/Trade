@@ -1,4 +1,4 @@
-"""Scherm Nu (/vandaag) en de order-checklist (/nu/order/<sleutel>): rust, één kaart in de zone, overslaan en de stappen bij de beurs."""
+"""Kansen (/smc) met het detailblad en de order-checklist (/nu/order/<sleutel>): kaarten per soort, overslaan en de stappen bij de beurs."""
 import json
 import os
 import tempfile
@@ -37,130 +37,95 @@ class Base(unittest.TestCase):
         self.patch.stop()
         self.tmp.cleanup()
 
-    def nu(self, html):
-        return html[html.index('<section class="nu'):html.index("</section>", html.index('<section class="nu'))]
+    def tab(self, html, key):
+        start = html.index(f'<section id="tab-{key}"')
+        return html[start:html.index("\n</section>", start)]
+
+    def sheet(self, html, key):
+        start = html.index(f'data-kd-item="{key}"')
+        return html[start:html.index("</section>", start)]
 
 
-class NuPageTests(Base):
-    """V3 (Peil): rust of één ladder. De getallen komen van dezelfde Radar-kaart; de ladder zet ze op hun echte plek."""
-    def test_rust_zonder_plannen(self):
-        html = self.client.get("/vandaag").text
-        sec = self.nu(html)
-        self.assertIn('data-nu-mode="rust"', sec)
-        self.assertIn(">Rust<", sec)
-        self.assertIn("Niets te doen.", sec)
-        self.assertIn("Geen plan wacht op zijn zone.", sec)
-        self.assertIn('href="/smc"', sec)
-        self.assertNotIn("data-ladder=", sec)
-        for gone in ("Open trades", "Gekeken", "Eerstvolgende"):          # het ontwerp schrapte de tellers en "Bijgewerkt"
-            self.assertNotIn(gone, sec)
+class KansenPageTests(Base):
+    """V4: een tab per soort met kaarten (coin en richting, stand, grafiek); een tik opent het detailblad met ladder en getallen."""
+    def test_een_tab_per_soort_met_telling(self):
+        html = self.client.get("/smc").text
+        for key, label in (("structuur", "Structuur"), ("zone_radar", "Zone-radar"), ("zone_sweep", "Zone-sweep")):
+            self.assertIn(f'href="#tab-{key}"', html)
+            self.assertIn(f'id="tab-{key}"', html)
+        self.assertIn("Geen kansen", self.tab(html, "structuur"))
+        self.assertIn(">Kansen<", html)
 
-    def test_rust_toont_het_eerstvolgende_plan_uitgezoomd_met_de_gemeten_afstand(self):
-        zone("BTC", "short", 102.0, 103.0, 104.0, 95.0, "1h:bear:a")         # limiet 102, koers 100: nog 1,96%
-        zone("SOL", "long", 90.0, 91.0, 89.0, 110.0, "1h:bull:b")            # limiet 91: nog 9,89%
-        sec = self.nu(self.client.get("/vandaag").text)
-        self.assertIn('data-ladder="compact"', sec)
-        self.assertRegex(sec, r'class="lad-num"[^>]*data-lad="distance"[^>]*>1,96%<')
-        self.assertIn("BTC short", sec)
-        self.assertIn(">102,00<", sec)                                        # instap als tag-getal
-        self.assertIn('data-lad-limit="102.0"', sec)
-        self.assertNotIn(">Stop<", sec)                                       # uitgezoomd: geen stop en geen doel
-        self.assertNotIn("SOL", sec)
+    def test_een_kaart_is_coin_richting_stand_en_grafiek(self):
+        zid = zone("BTC", "short", 102.0, 103.0, 104.0, 95.0, "1h:bear:a")
+        sec = self.tab(self.client.get("/smc").text, "zone_radar")
+        card = sec[sec.index(f'id="radar-zone-{zid}"'):sec.index("</article>")]
+        self.assertIn('class="kc-title">BTC short<', card)
+        self.assertIn(">Wacht<", card)
+        self.assertIn('class="pill is-untested">ongetest<', card)
+        self.assertIn("data-levelchart", card)
+        self.assertIn("1 kans · 0 in de zone", sec)
+        for gone in ("coin-av", "24u", "level-copy", "data-copy=", "Nog ", "approach", "Volume"):
+            self.assertNotIn(gone, card, gone)
 
-    def test_een_plan_in_de_zone_vult_het_scherm_met_een_ladder(self):
-        zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")    # koers 100 staat in de zone
-        zone("ETH", "long", 99.0, 100.5, 98.0, 106.0, "1h:bull:b")           # ook in de zone, verder van zijn limiet
-        sec = self.nu(self.client.get("/vandaag").text)
-        self.assertIn('data-nu-mode="zone"', sec)
-        self.assertIn('data-ladder="plan"', sec)
-        self.assertIn("is-in-zone", sec)
-        self.assertIn('class="nu-coin">BTC short<', sec)
+    def test_in_de_zone_eerst_en_die_tab_gaat_open(self):
+        far = zone("SOL", "long", 90.0, 91.0, 89.0, 110.0, "1h:bull:b")
+        near = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")     # koers 100 staat in de zone
+        html = self.client.get("/smc").text
+        self.assertIn('class="ut-tab is-active" id="tab-zone_radar-tab"', html)
+        self.assertRegex(html, r'href="#tab-zone_radar"[^>]*>Zone-radar <i class="ut-count">1</i>')
+        sec = self.tab(html, "zone_radar")
+        self.assertLess(sec.index(f'id="radar-zone-{near}"'), sec.index(f'id="radar-zone-{far}"'))
+
+    def test_detailblad_met_ladder_getallen_een_keer_en_de_knop(self):
+        zid = zone("BTC", "short", 102.0, 103.0, 104.0, 95.0, "1h:bear:a")
+        html = self.client.get("/smc").text
+        sheet = self.sheet(html, f"zone:{zid}")
+        self.assertIn('data-ladder="plan"', sheet)
         for tag in (">Stop<", ">Instap<", ">Doel<"):
-            self.assertIn(tag, sec)
-        self.assertIn("De koers staat in de zone", sec)
-        self.assertIn(f'href="/nu/order/zone:{zid}"', sec)
-        self.assertIn("Zet de order, stap voor stap", sec)
-        self.assertIn('class="pill is-untested">ongetest<', sec)
-        ook = sec[sec.index("Zet de order"):]
-        self.assertIn("Ook in zone", ook)
-        self.assertIn("ETH long", ook)
-
-    def test_geschrapt_op_nu(self):
-        zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
-        sec = self.nu(self.client.get("/vandaag").text)
-        for gone in ("coin-av", "24u", "Volume", "winkans", "Winkans", "signaalsterkte", "verwachte R", "<dt>", "nu-plan"):
-            self.assertNotIn(gone, sec, gone)
-
-    def test_detailblad_met_vasthouden_om_te_kopieren(self):
-        zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
-        sec = self.nu(self.client.get("/vandaag").text)
-        sheet = sec[sec.index('id="nu-sheet"'):]
-        self.assertIn('role="dialog"', sec[sec.index('id="nu-sheet"') - 200:])
-        for copy in ("100.00", "102.00", "96.0000"):
-            self.assertIn(f'data-hold-copy="{copy}"', sheet)
-        self.assertIn("Houd vast", sheet)
-        self.assertIn("Aanbodzone 1u", sheet)                                # herkomst in één regel
-        self.assertIn("data-lc-expand", sheet)                               # grafiek pas na een tik, schermvullend
+            self.assertIn(tag, sheet)
+        for copy in ("104.00", "102.00", "95.00"):
+            self.assertEqual(sheet.count(f'data-hold-copy="{copy}"'), 1)
+        self.assertEqual(sheet.count(">102,00<"), 1)                         # het getal staat één keer: in de tabel, niet op de ladder
+        self.assertIn("Houd een getal vast", sheet)
+        self.assertIn("Aanbodzone 1u", sheet)
+        self.assertIn(">1,96%<", sheet)                                        # gemeten afstand tot de instap
         self.assertIn(f'href="/nu/order/zone:{zid}"', sheet)
+        self.assertIn("Zet de order, stap voor stap", sheet)
+        self.assertNotIn("102,00", sheet[sheet.index("kd-say"):sheet.index("data-ladder")])     # de zin herhaalt geen getallen
 
-    def test_overslaan_heeft_een_ongedaan_balk_en_een_knop_zonder_js(self):
-        zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
-        sec = self.nu(self.client.get("/vandaag").text)
-        self.assertIn('data-nu-undo hidden', sec)
-        self.assertIn("Ongedaan", sec)
-        self.assertIn(f'name="key" value="zone:{zid}"', sec)
-        self.assertIn("Sla over", sec)
-
-    def test_skelet_in_de_vorm_van_de_ladder(self):
-        zone("BTC", "short", 102.0, 103.0, 104.0, 95.0, "1h:bear:a")
-        sec = self.nu(self.client.get("/vandaag").text)
-        self.assertIn("data-ladder-skeleton", sec)
-
-    def test_sla_over_onthoudt_het_plan_en_valt_terug_op_rust(self):
-        zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
-        r = self.client.post("/nu/overslaan", data={"key": f"zone:{zid}"}, follow_redirects=False)
-        self.assertEqual((r.status_code, r.headers["location"]), (303, "/vandaag"))
-        self.assertIn(f"{main.NU_SKIP_COOKIE}=", r.headers["set-cookie"])
-        sec = self.nu(self.client.get("/vandaag").text)
-        self.assertIn('data-nu-mode="rust"', sec)
-        self.assertIn("Je sloeg BTC short over.", sec)
-
-    def test_ook_in_zone_wisselt_de_kaart(self):
-        zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
-        eid = zone("ETH", "long", 99.0, 100.5, 98.0, 106.0, "1h:bull:b")
-        sec = self.nu(self.client.get(f"/vandaag?plan=zone:{eid}").text)
-        self.assertIn('class="nu-coin">ETH long<', sec)
-
-    def test_alleen_een_open_trade_toont_de_ladder_met_live_r(self):
+    def test_open_trade_onder_open_met_live_r_en_zonder_actiezin(self):
         sid = repo.insert_signal({"coin": "BNB", "direction": "short", "category": "x", "confidence": "hoog", "technical_confirmed": 1, "hard_gates_ok": 1,
                                   "price": 101.0, "stop_loss": 103.0, "take_profit": 95.0, "trade_type": "zone_radar"})
-        sec = self.nu(self.client.get("/vandaag").text)
-        self.assertIn('data-nu-mode="trade"', sec)
-        self.assertIn('data-ladder="trade"', sec)
-        self.assertIn("· Open trade<", sec)
-        self.assertIn("+0,50 R", sec)
-        self.assertIn(f'href="/kans/{sid}"', sec)
-        self.assertNotIn("Zet de order", sec)
+        html = self.client.get("/smc").text
+        sec = self.tab(html, "zone_radar")
+        self.assertLess(sec.index(">Open</h3>"), sec.index(f'id="radar-signal-{sid}"'))
+        sheet = self.sheet(html, f"signal:{sid}")
+        self.assertIn('data-ladder="trade"', sheet)
+        self.assertIn("+0,50 R", sheet)
+        self.assertNotIn("Trade loopt", sheet)
+        self.assertNotIn("kd-say", sheet)
+        self.assertIn(f'href="/kans/{sid}"', sheet)
+        self.assertNotIn("Zet de order", sheet)
 
-    def test_de_markt_staat_eronder_en_niets_verdwijnt(self):
-        html = self.client.get("/vandaag").text
-        markt = html[html.index('id="markt"'):]
-        for needle in ('data-utabs="vandaag"', 'id="tab-kansen"', 'id="tab-markt"', 'id="tab-agenda"', 'id="tab-score"', "Open kansen nu"):
-            self.assertIn(needle, markt, needle)
-        self.assertLess(html.index('<section class="nu'), html.index('id="markt"'))
-        self.assertIn("ladder.js", html)
+    def test_scripts_voor_blad_en_ladder(self):
+        html = self.client.get("/smc").text
+        for js in ("ladder.js", "kaarten.js", "levelchart.js", "radar.js"):
+            self.assertIn(js, html)
 
-    def test_de_kop_toont_het_merk_en_een_verborgen_titel(self):
-        html = self.client.get("/vandaag").text
-        kop = html[html.index('class="ph'):html.index('<section class="nu')]
-        self.assertIn('class="ph ph-logo"', kop)
-        self.assertIn('<h1 class="sr-only">Nu</h1>', kop)
+    def test_sla_over_blijft_op_kansen_staan_maar_gemarkeerd(self):
+        zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
+        r = self.client.post("/nu/overslaan", data={"key": f"zone:{zid}"}, follow_redirects=False)
+        self.assertEqual((r.status_code, r.headers["location"]), (303, "/smc"))
+        self.assertIn(f"{main.NU_SKIP_COOKIE}=", r.headers["set-cookie"])
+        sec = self.tab(self.client.get("/smc").text, "zone_radar")
+        self.assertIn('class="kc-skipped">overgeslagen<', sec)
 
-    def test_een_verse_koers_krijgt_geen_leeftijdsregel(self):
-        zone("BTC", "short", 102.0, 103.0, 104.0, 95.0, "1h:bear:a")
-        sec = self.nu(self.client.get("/vandaag").text)
-        self.assertNotRegex(sec, r"Koers \d+ (s|min|u) oud")
-        self.assertIn("data-nu-stale", sec)
+    def test_oude_structuurpagina_stuurt_door_naar_de_tab(self):
+        r = self.client.get("/structuur", follow_redirects=False)
+        self.assertEqual(r.headers["location"], "/smc?tab=structuur")         # zonder hash: het anker van de melding blijft staan
+        html = self.client.get("/smc?tab=structuur").text
+        self.assertIn('class="ut-tab is-active" id="tab-structuur-tab"', html)
 
 
 class ChecklistPageTests(Base):
@@ -177,12 +142,12 @@ class ChecklistPageTests(Base):
             self.assertIn(title, html)
         self.assertIn('data-ck-copy="100.00"', html)
         self.assertIn('data-ck-copy="102.00"', html)
-        self.assertIn('data-ck-copy="96.0000"', html)
+        self.assertIn('data-ck-copy="96.00"', html)
         self.assertNotIn("Grootte", html)
         self.assertNotIn("€", html[html.index('class="ck"'):])
         self.assertIn("nog in zone", html)
-        self.assertIn("Order staat. Volg hem op Nu", html)
-        self.assertIn('href="/vandaag"', html)
+        self.assertIn("Order staat. Terug naar Kansen", html)
+        self.assertIn('href="/smc"', html)
         self.assertIn("Terug", html)
         self.assertIn("Sluit", html)
 
@@ -198,7 +163,7 @@ class ChecklistPageTests(Base):
         self.assertIn("Doel 2 · 3,0 R", html)
         self.assertIn('data-ck-choice="103.00"', html)
         self.assertIn('data-ck-copy="102.00"', html)
-        self.assertIn(f'href="/nu/order/structuur:{sid}"', self.client.get("/structuur").text)
+        self.assertIn(f'href="/nu/order/structuur:{sid}"', self.client.get("/smc").text)
 
     def test_onbekend_of_vervallen_plan_geeft_404(self):
         self.assertEqual(self.client.get("/nu/order/zone:999").status_code, 404)
@@ -232,9 +197,8 @@ class PlanLogWebTests(Base):
     def test_overgeslagen_op_een_ander_toestel_telt_ook_hier(self):
         zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
         repo.record_plan_skip(self.uid(), f"zone:{zid}", "BTC", "short", db.now_iso())
-        sec = self.nu(self.client.get("/vandaag").text)                      # geen cookie op dit toestel
-        self.assertIn('data-nu-mode="rust"', sec)
-        self.assertIn("Je sloeg BTC short over.", sec)
+        sec = self.tab(self.client.get("/smc").text, "zone_radar")          # geen cookie op dit toestel
+        self.assertIn('class="kc-skipped">overgeslagen<', sec)
 
     def test_de_checklist_bewaart_openen_en_afronden(self):
         zid = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")
