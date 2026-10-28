@@ -101,6 +101,94 @@ def find_breaks(bars: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame(out, columns=["bar", "direction", "kind", "p1", "p2", "a", "slope", "atr", "vol_ratio", "span", "touches", "with_trend"])
 
 
+# CHOCH: hogere bodem met breuk van de laatste top (en gespiegeld), live op verzoek van de CEO (2026-10-28) zonder labrun, dus ongetest. Vooraf
+# vastgelegd en nooit afgesteld: Structuur miste V-bodems en hogere bodems zonder dalende lijn of range. Zelfde 30m-candles, PIVOT_K, LOOKBACK,
+# MIN_GAP, BREAK_ATR en retest als LINE en RANGE, zodat het in hetzelfde recept past.
+CHOCH_HL_ATR = 0.25       # L2 minstens een kwart ATR boven L1: kleiner is een dubbele bodem binnen de ruis, geen hogere bodem
+CHOCH_CONTEXT_BARS = 40   # L1 is de laagste low van de 40 candles tot en met L1 (20 uur): een bodem na een daling, geen dip in een stijging
+CHOCH_DUP_PCT = 0.2       # zelfde breuk als een LINE/RANGE op dezelfde candle en kant met een niveau binnen 0,2% (gelijk aan kansen.DUP_PCT)
+CHOCH = "CHOCH"
+
+
+def find_choch(bars: pd.DataFrame) -> pd.DataFrame:
+    """Hogere bodem met breuk van de laatste top: twee opeenvolgende bevestigde lage zwaaipunten L1 < L2 (L2 minstens CHOCH_HL_ATR hoger, L1 de
+    laagste low van CHOCH_CONTEXT_BARS candles), H de hoogste bevestigde top ertussen, breuk het eerste slot BREAK_ATR boven H nadat L2 bekend is.
+    Short is het spiegelbeeld. Zelfde kolommen als find_breaks met kind CHOCH, slope 0, a = H en p1/p2 = de twee bodems (of toppen bij short),
+    zodat level_at, de retest en de grafiek zonder omweg werken."""
+    b = add_indicators(bars).reset_index(drop=True)
+    n = len(b)
+    high, low, close = b["high"].to_numpy(), b["low"].to_numpy(), b["close"].to_numpy()
+    atr, vol = b["atr"].to_numpy(), b["volume"].to_numpy()
+    ema_fast = b["close"].ewm(span=21, adjust=False).mean().to_numpy()
+    ema_slow = b["close"].ewm(span=200, adjust=False).mean().to_numpy()
+    p_high, p_low = _pivots(b)
+    known_high: list[int] = []
+    known_low: list[int] = []
+    out = []
+    for i in range(PIVOT_K, n):
+        q = i - PIVOT_K
+        if p_high[q]:
+            known_high.append(q)
+        if p_low[q]:
+            known_low.append(q)
+        if i < LOOKBACK or not np.isfinite(atr[i]):
+            continue
+        # long: bodems uit de lows, top uit de highs; short: toppen uit de highs, bodem uit de lows (sign spiegelt elke vergelijking)
+        for direction, swings, series, others, other_series, sign in (("long", known_low, low, known_high, high, 1),
+                                                                      (SHORT, known_high, high, known_low, low, -1)):
+            if len(swings) < 2:
+                continue
+            p1, p2 = swings[-2], swings[-1]
+            if p1 < i - LOOKBACK or p2 - p1 < MIN_GAP or p1 < CHOCH_CONTEXT_BARS - 1:
+                continue
+            if sign * (series[p2] - series[p1]) < CHOCH_HL_ATR * atr[i]:
+                continue
+            context = series[p1 - CHOCH_CONTEXT_BARS + 1:p1 + 1]
+            if sign * (series[p1] - (context.min() if sign == 1 else context.max())) > 0:
+                continue
+            between = [p for p in others if p1 < p < p2]
+            if not between:
+                continue
+            a = max(other_series[p] for p in between) if sign == 1 else min(other_series[p] for p in between)
+            idx = np.arange(p2 + 1, i + 1)
+            beyond = sign * (close[idx] - a) > BREAK_ATR * atr[idx]
+            # p2 staat pas vanaf i = p2 + PIVOT_K in swings; een slot voorbij H vóór dat moment maakt elke latere breuk 'niet de eerste'.
+            if not (beyond[-1] and not beyond[:-1].any()):
+                continue
+            recent = [p for p in others if p >= i - LOOKBACK]
+            touch = sum(1 for p in recent if abs(other_series[p] - a) <= FLAT_ATR * atr[i])
+            ratio = vol[i] / np.mean(vol[i - 20:i]) if np.mean(vol[i - 20:i]) > 0 else np.nan
+            out.append({"bar": i, "direction": direction, "kind": CHOCH, "p1": p1, "p2": p2, "a": float(a), "slope": 0.0,
+                        "atr": float(atr[i]), "vol_ratio": float(ratio), "span": p2 - p1, "touches": touch,
+                        "with_trend": bool(ema_fast[i] < ema_slow[i]) if direction == SHORT else bool(ema_fast[i] > ema_slow[i])})
+    return pd.DataFrame(out, columns=["bar", "direction", "kind", "p1", "p2", "a", "slope", "atr", "vol_ratio", "span", "touches", "with_trend"])
+
+
+def drop_duplicate_choch(breaks: pd.DataFrame, choch: pd.DataFrame) -> pd.DataFrame:
+    """CHOCH-rijen zonder de breuken die find_breaks al vond (zelfde candle en kant, niveau binnen CHOCH_DUP_PCT): de bestaande blijft."""
+    if choch.empty or breaks.empty:
+        return choch
+    keep = []
+    for ev in choch.itertuples():
+        same = breaks[(breaks["bar"] == ev.bar) & (breaks["direction"] == ev.direction)]
+        levels = same["a"] + same["slope"] * (ev.bar - same["p1"])
+        if not (abs(levels - ev.a) / ev.a * 100 <= CHOCH_DUP_PCT).any():
+            keep.append(ev.Index)
+    return choch.loc[keep]
+
+
+def find_structure_breaks(bars: pd.DataFrame) -> pd.DataFrame:
+    """Wat Structuur live meldt: de breuken van find_breaks (ongewijzigd, de toets en run gebruiken alleen die) plus de CHOCH-breuken die er niet
+    dubbel bij komen, op volgorde van de breukcandle."""
+    breaks = find_breaks(bars)
+    choch = drop_duplicate_choch(breaks, find_choch(bars))
+    if choch.empty:
+        return breaks
+    if breaks.empty:
+        return choch.reset_index(drop=True)
+    return pd.concat([breaks, choch], ignore_index=True).sort_values("bar", kind="stable").reset_index(drop=True)
+
+
 def known_levels(b: pd.DataFrame, p_high: np.ndarray, p_low: np.ndarray, direction: str, bar: int) -> list[float]:
     """Zwaaipunten die op candle `bar` al bevestigd zijn en als doel (liquiditeit) kunnen dienen: lage punten bij een short."""
     known = bar - PIVOT_K
