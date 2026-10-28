@@ -153,3 +153,21 @@ class SparkTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HiddenCountTests(unittest.TestCase):
+    """Het appicoon en het dok tellen geen kans die de kijker verborg (kans_hidden)."""
+    ROW = {"id": 8, "coin": "BTC", "direction": "short", "zone_low": 100.0, "zone_high": 101.0, "source": "zone_radar",
+           "preview_stop_loss": 102.0, "preview_take_profit": 96.0, "created_at": "2026-10-05T11:00:00+00:00"}
+
+    def test_verborgen_kans_in_de_zone_telt_niet(self):
+        rows = [self.ROW, {**self.ROW, "id": 9, "coin": "ETH"}]
+        prices = {"BTC": 100.5, "ETH": 100.5}
+        self.assertEqual(radar.in_zone_count(rows, prices), 2)
+        self.assertEqual(radar.in_zone_count(rows, prices, hidden={"zone:8"}), 1)
+        self.assertEqual(radar.waiting_count(rows, prices, hidden={"zone:8", "zone:9"}), 0)
+
+    def test_sleutel_zoals_de_kaart(self):
+        self.assertEqual(radar.setup_key(self.ROW), "zone:8")
+        self.assertEqual(radar.setup_key({**self.ROW, "source": "zone_sweep"}), "zsweep:8")
+        self.assertEqual(radar.setup_key({**self.ROW, "source": None}), "setup:8")

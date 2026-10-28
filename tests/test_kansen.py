@@ -257,3 +257,106 @@ class DuplicateTests(unittest.TestCase):
         self.assertEqual(kansen.similar_text(0), "")
         self.assertEqual(kansen.similar_text(1), "Nog 1 vergelijkbaar signaal")
         self.assertEqual(kansen.similar_text(3), "Nog 3 vergelijkbare signalen")
+
+
+class HiddenTests(unittest.TestCase):
+    """Verbergen (kans_hidden): alleen een weergavekeuze per gebruiker. Een verborgen kaart staat niet in de lijst en telt nergens mee, maar staat
+    onderaan zijn tab onder 'Verborgen (N)' met 'Toon weer'."""
+
+    def tab(self, p, key):
+        return next(t for t in p["tabs"] if t["key"] == key)
+
+    def trade(self, ident, coin="ETH", price=2357.5, created="2026-10-05T10:00:00+00:00"):
+        return radar.signal_card({**TRADE, "id": ident, "coin": coin, "price": price, "stop_loss": price * 1.01, "take_profit": price * 0.97,
+                                  "created_at": created}, price)
+
+    def test_verborgen_plan_staat_niet_in_de_lijst_maar_onder_verborgen(self):
+        p = kansen.page(cards((ZONE, 80800.0), (ZONE2, 2400.0)), [], [], KINDS, hidden={"zone:8"})
+        t = self.tab(p, "zone_radar")
+        self.assertEqual([x["key"] for x in t["plans"]], ["zone:9"])
+        self.assertEqual([(h["key"], h["title"], h["state_short"], h["group"]) for h in t["hidden"]], [("zone:8", "BTC short", "In zone", "plans")])
+        self.assertEqual(t["hidden_label"], "Verborgen (1)")
+        self.assertEqual([x["key"] for x in t["hidden_cards"]], ["zone:8"])
+
+    def test_ongedaan_is_gewoon_niet_meer_verborgen(self):
+        before = kansen.page(cards((ZONE, 80800.0)), [], [], KINDS)
+        after = kansen.page(cards((ZONE, 80800.0)), [], [], KINDS, hidden=set())
+        self.assertEqual(self.tab(before, "zone_radar")["plans"][0]["key"], self.tab(after, "zone_radar")["plans"][0]["key"])
+        self.assertEqual(self.tab(after, "zone_radar")["hidden"], [])
+        self.assertEqual(self.tab(after, "zone_radar")["hidden_label"], "")
+
+    def test_open_trade_verbergen(self):
+        p = kansen.page([self.trade(1), self.trade(2, coin="SOL", price=150.0)], [], [], KINDS, hidden={"signal:1"})
+        t = self.tab(p, "zone_radar")
+        self.assertEqual([x["key"] for x in t["trades"]], ["signal:2"])
+        self.assertEqual([(h["key"], h["state_short"], h["group"]) for h in t["hidden"]], [("signal:1", "Open", "trades")])
+        self.assertEqual(p["total"]["open"], 1)
+
+    def test_alles_verbergen(self):
+        trades = [self.trade(i, coin=c, price=pr) for i, (c, pr) in enumerate((("ETH", 2357.5), ("SOL", 150.0), ("ADA", 0.6)), 1)]
+        p = kansen.page(cards((ZONE, 80800.0)) + trades, [], [], KINDS, hidden={"signal:1", "signal:2", "signal:3", "zone:8"})
+        t = self.tab(p, "zone_radar")
+        self.assertEqual((t["plans"], t["trades"]), ([], []))
+        self.assertEqual(t["hidden_label"], "Verborgen (4)")
+        self.assertEqual(p["total"]["text"], "Geen kansen")
+
+    def test_tellers_zonder_verborgen(self):
+        p = kansen.page(cards((ZONE, 80800.0), (ZONE2, 2400.0)) + [self.trade(1)], [], [], KINDS, hidden={"zone:8", "signal:1"})
+        t = self.tab(p, "zone_radar")
+        self.assertEqual((t["n"], t["num"], t["in_zone"], t["badge"]), (1, 1, 0, None))       # de verborgen kans in de zone telt niet
+        self.assertEqual(t["summary"], "1 kans klaar")
+        self.assertEqual(p["total"], {"n": 1, "in_zone": 0, "open": 0, "text": "1 kans klaar"})
+        self.assertEqual(p["in_zone"], 0)
+
+    def test_verborgen_kans_in_de_zone_kiest_de_tab_niet(self):
+        p = kansen.page(cards((ZONE, 80800.0)), [], [], KINDS, hidden={"zone:8"})
+        self.assertEqual(p["active"], "structuur")
+
+    def test_per_gebruiker_apart(self):
+        rows = cards((ZONE, 80800.0), (ZONE2, 2400.0))
+        mine = kansen.page(rows, [], [], KINDS, hidden={"zone:8"})
+        other = kansen.page(rows, [], [], KINDS, hidden=set())
+        self.assertEqual(len(self.tab(mine, "zone_radar")["plans"]), 1)
+        self.assertEqual(len(self.tab(other, "zone_radar")["plans"]), 2)
+
+    def test_verborgen_tellen_niet_mee_als_vergelijkbaar(self):
+        a = self.trade(1, created="2026-10-05T09:00:00+00:00")
+        b = self.trade(2, created="2026-10-05T10:00:00+00:00")
+        c = self.trade(3, created="2026-10-05T11:00:00+00:00")
+        shown = self.tab(kansen.page([a, b, c], [], [], KINDS), "zone_radar")["trades"][0]
+        self.assertEqual((shown["key"], shown["similar"], shown["keys"]), ("signal:1", 2, ["signal:1", "signal:2", "signal:3"]))
+        t = self.tab(kansen.page([a, b, c], [], [], KINDS, hidden={"signal:3"}), "zone_radar")
+        self.assertEqual((t["trades"][0]["similar"], t["trades"][0]["similar_text"]), (1, "Nog 1 vergelijkbaar signaal"))
+        self.assertEqual(t["trades"][0]["keys"], ["signal:1", "signal:2"])
+
+    def test_verbergen_van_een_dubbele_kaart_neemt_zijn_tweelingen_mee(self):
+        # De knop verbergt card["keys"]: dan komt de jongere tweeling niet ineens als nieuwe kaart tevoorschijn.
+        a, b = self.trade(1, created="2026-10-05T09:00:00+00:00"), self.trade(2, created="2026-10-05T10:00:00+00:00")
+        t = self.tab(kansen.page([a, b], [], [], KINDS, hidden={"signal:1", "signal:2"}), "zone_radar")
+        self.assertEqual(t["trades"], [])
+        self.assertEqual([(h["key"], h["keys"]) for h in t["hidden"]], [("signal:1", ["signal:1", "signal:2"])])
+        self.assertEqual(t["hidden_label"], "Verborgen (1)")
+
+    def test_verborgen_valt_ook_uit_niet_meer_actief(self):
+        p = kansen.page(cards((ZONE, 81200.0)), [], [], KINDS, hidden={"zone:8"})
+        self.assertEqual(self.tab(p, "zone_radar")["moot"], [])
+
+    def test_structuurplan_verbergen(self):
+        p = kansen.page([], [(STRUCT_CARD, 81.5, "wacht")], [], KINDS, hidden={"structuur:12"})
+        t = self.tab(p, "structuur")
+        self.assertEqual((t["plans"], [h["key"] for h in t["hidden"]]), ([], ["structuur:12"]))
+
+
+class HideKeyTests(unittest.TestCase):
+    def test_alleen_geldige_sleutels_uniek(self):
+        self.assertEqual(kansen.parse_keys(["zone:8", "zone:8", "signal:3", "bla", "structuur:x", 5, "zsweep:2", "setup:1", "structuur:12"]),
+                         ["zone:8", "signal:3", "zsweep:2", "setup:1", "structuur:12"])
+        self.assertEqual(kansen.parse_keys("zone:8"), ["zone:8"])
+        self.assertEqual(kansen.parse_keys(None), [])
+        self.assertEqual(len(kansen.parse_keys([f"signal:{i}" for i in range(500)])), kansen.MAX_HIDE)
+
+    def test_tekst_van_de_ongedaan_balk(self):
+        self.assertEqual(kansen.hidden_text(["HYPE short"]), "HYPE short verborgen")
+        self.assertEqual(kansen.hidden_text(["HYPE short", "ETH long", "SOL long"]), "3 kaarten verborgen")
+        self.assertEqual(kansen.hidden_label(0), "")
+        self.assertEqual(kansen.hidden_label(2), "Verborgen (2)")

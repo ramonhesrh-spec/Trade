@@ -77,9 +77,11 @@ def _nav_context(request: Request) -> dict:
     pagina's (Markt, Kansen, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
     # Alleen de koersen uit de cache: het menu mag geen Binance-aanroep per paginaweergave doen. Zonder koers telt een setup mee.
     cached = {coin: hit[1] for coin, hit in _price_cache.items() if hit[1]}
-    forming = _forming_setups(_cookie_user(request))
-    # Het getal op Kansen in het dok: wat nu in de zone staat, zoals het appicoon (radar.in_zone_count).
-    return {"coins": repo.list_coins(), "nav_counts": {"radar": radar.waiting_count(forming, cached), "in_zone": radar.in_zone_count(forming, cached)}}
+    viewer = _cookie_user(request)
+    forming = _forming_setups(viewer)
+    # Het getal op Kansen in het dok: wat nu in de zone staat, zoals het appicoon (radar.in_zone_count), zonder wat deze kijker verborg.
+    hidden = repo.list_hidden_kansen(viewer["id"] if viewer else None)
+    return {"coins": repo.list_coins(), "nav_counts": {"radar": radar.waiting_count(forming, cached, hidden), "in_zone": radar.in_zone_count(forming, cached, hidden)}}
 
 
 def _announce_context(request: Request) -> dict:
@@ -731,7 +733,7 @@ async def _kansen_page(user: dict, skipped=()) -> dict:
     open_struct = repo.list_open_smc_signals(types=("structuur", "structuur_c"))
     sprices = await _cached_prices({s["coin"] for s in open_struct}) if open_struct else {}
     trades = [{**c, "svg": _structure_trade_svg(s, sprices.get(s["coin"]))} for s in open_struct if (c := radar.signal_card(s, sprices.get(s["coin"])))]
-    return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped)
+    return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped, repo.list_hidden_kansen(user["id"]))
 
 
 def _structure_trade_svg(signal: dict, price: Optional[float]) -> Markup:
@@ -749,7 +751,8 @@ async def smc_page(request: Request, tab: str = "", user: dict = Depends(require
     page = await _kansen_page(user, _skipped_keys(request, user))
     if tab in {t["key"] for t in page["tabs"]}:
         page["active"] = tab
-    items = [it for t in page["tabs"] for it in t["plans"] + t["trades"]]
+    # Ook de verborgen kaarten krijgen hun detailblad: Toon weer zet de kaart terug zonder te herladen (kaarten.js).
+    items = [it for t in page["tabs"] for it in t["plans"] + t["trades"] + t["hidden_cards"]]
     return templates.TemplateResponse(request, "smc.html", {
         "user": user, "page": page, "items": items, "context": _context_lines({it["coin"] for it in items}),
         **await _structure_extras(user)}, headers=_viewer_header(user))
@@ -846,6 +849,39 @@ async def nu_skip(request: Request, key: str = Form(""), user: dict = Depends(re
     response = RedirectResponse(url="/smc", status_code=303)
     response.set_cookie(NU_SKIP_COOKIE, nu.add_skip(request.cookies.get(NU_SKIP_COOKIE), key), max_age=24 * 3600, samesite="lax", path="/")
     return response
+
+
+async def _kans_keys(request: Request) -> tuple[list[str], bool]:
+    """De sleutels uit een verberg- of toon-verzoek: JSON {"keys": [...]} van kaarten.js, of een formulier met `key` als JavaScript ontbreekt."""
+    if request.headers.get("content-type", "").startswith("application/json"):
+        try:
+            data = await request.json()
+        except ValueError:
+            return [], True
+        return kansen.parse_keys(data.get("keys") if isinstance(data, dict) else None), True
+    form = await request.form()
+    return kansen.parse_keys(form.get("key")), False
+
+
+@app.post("/api/kans/verberg")
+async def api_kans_hide(request: Request, user: dict = Depends(require_login)):
+    """Verberg op Kansen: alleen voor de ingelogde gebruiker en alleen de weergave (kans_hidden). Het signaal, zijn uitkomst, Bewijs, Logboek,
+    het overslaan en de meldingen blijven zoals ze zijn."""
+    keys, is_json = await _kans_keys(request)
+    if not keys:
+        return JSONResponse({"error": "Geen geldige kaart"}, status_code=400)
+    repo.hide_kansen(user["id"], keys, db.now_iso())
+    return {"hidden": keys} if is_json else RedirectResponse(url="/smc", status_code=303)
+
+
+@app.post("/api/kans/toon")
+async def api_kans_show(request: Request, user: dict = Depends(require_login)):
+    """Toon weer (ook het Ongedaan van de balk): de kaart staat weer in de lijst en telt weer mee, alleen voor deze gebruiker."""
+    keys, is_json = await _kans_keys(request)
+    if not keys:
+        return JSONResponse({"error": "Geen geldige kaart"}, status_code=400)
+    repo.show_kansen(user["id"], keys)
+    return {"shown": keys} if is_json else RedirectResponse(url="/smc", status_code=303)
 
 
 @app.get("/nu/order/{key}")
@@ -1686,7 +1722,7 @@ async def api_system_status(user: dict = Depends(require_login)):
         "server_started_at": SERVER_STARTED_AT,
         "checked_at": db.now_iso(),
         "pending_count": repo.count_pending_signals(user["id"]),
-        "in_zone": radar.in_zone_count(forming, zone_prices),
+        "in_zone": radar.in_zone_count(forming, zone_prices, repo.list_hidden_kansen(user["id"])),
         "unread_notifications": repo.count_unread_notifications(user["id"]),
         "week_result_pct": repo.week_result_pct(user["id"]),
         "volatility_ratio": repo.largest_open_position_volatility(user["id"]),

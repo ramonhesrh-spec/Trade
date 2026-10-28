@@ -3631,3 +3631,21 @@ def story_seen(user_id: int, version: str) -> bool:
 def mark_story_seen(user_id: int, version: str) -> None:
     with db.session() as conn:
         conn.execute("INSERT OR IGNORE INTO user_flags (user_id, flag, created_at) VALUES (?, ?, ?)", (user_id, f"story:{version}", db.now_iso()))
+
+
+def hide_kansen(user_id: int, keys: list[str], at: str) -> None:
+    """Verberg op Kansen: alleen voor deze gebruiker en alleen de weergave. Een tweede keer verbergen houdt het eerste moment."""
+    with db.session() as conn:
+        conn.executemany("INSERT OR IGNORE INTO kans_hidden (user_id, key, at) VALUES (?, ?, ?)", [(user_id, k, at) for k in keys])
+
+
+def show_kansen(user_id: int, keys: list[str]) -> None:
+    with db.session() as conn:
+        conn.executemany("DELETE FROM kans_hidden WHERE user_id = ? AND key = ?", [(user_id, k) for k in keys])
+
+
+def list_hidden_kansen(user_id: Optional[int]) -> set:
+    if not user_id:
+        return set()
+    with db.session() as conn:
+        return {r["key"] for r in conn.execute("SELECT key FROM kans_hidden WHERE user_id = ?", (user_id,)).fetchall()}

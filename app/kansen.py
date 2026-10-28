@@ -4,6 +4,7 @@ Structuur-plannen met hun koers en stand, en de open Structuur-trades mee. Elk g
 
 Volgorde binnen een tab: in de zone eerst, dan op gemeten afstand tot de limiet, zonder koers achteraan. De tab met de meeste kansen in de zone
 gaat open, anders Structuur."""
+import re
 from typing import Iterable, Optional
 
 from app import nu, radar, trade_plan as tp
@@ -39,14 +40,14 @@ def _plan(item: dict, dom_id: str) -> dict:
         num = (item["distance_text"], "distance", "tot de instap")
     else:
         num = ("", "distance", "")
-    return {**item, "dom_id": dom_id, "title": f"{item['coin']} {item['direction']}", "tab": TAB_OF.get(item["trade_type"], item["trade_type"]),
+    return {**item, "dom_id": dom_id, "title": f"{item['coin']} {item['direction']}", "tab": TAB_OF.get(item["trade_type"], item["trade_type"]), "group": "plans",
             "svg_src": _svg_src(item),
             "state_short": tp.STATE_SHORT.get(state, "Geen koers") if state else "Geen koers", "say": say(state, item["direction"], item.get("zone_low") is not None),
             "num_text": num[0], "num_hook": num[1], "num_label": num[2]}
 
 
 def _trade(item: dict) -> dict:
-    return {**item, "dom_id": "radar-" + item["key"].replace(":", "-"), "title": f"{item['coin']} {item['direction']}", "state": "open",
+    return {**item, "dom_id": "radar-" + item["key"].replace(":", "-"), "title": f"{item['coin']} {item['direction']}", "state": "open", "group": "trades",
             "svg_src": _svg_src(item),
             "tab": TAB_OF.get(item["trade_type"], item["trade_type"]), "state_short": "Open", "say": "",
             "num_text": item["live_r_text"] or "", "num_hook": "live_r", "num_label": "nu, live" if item["live_r_text"] else ""}
@@ -76,19 +77,51 @@ def similar_text(n: int) -> str:
 
 def dedupe(items: list[dict], price_key: str) -> list[dict]:
     """Eén kaart per coin, richting en instap (binnen DUP_PCT) in deze lijst: de oudste blijft (created_at, daarna de volgorde), met `similar`
-    het aantal dat wegviel. Alleen voor de weergave van Kansen; de signalen zelf blijven overal staan (Bewijs, Logboek, meldingen)."""
+    het aantal dat wegviel en `keys` de sleutels van allemaal (Verberg neemt de tweelingen mee). Alleen voor de weergave van Kansen; de signalen
+    zelf blijven overal staan (Bewijs, Logboek, meldingen)."""
     kept: list[dict] = []
     for it in sorted(items, key=lambda x: x.get("created_at") or ""):
         p = it.get(price_key)
         twin = next((k for k in kept if k["coin"] == it["coin"] and k["direction"] == it["direction"] and p and k.get(price_key)
                      and abs(p - k[price_key]) / k[price_key] * 100 <= DUP_PCT), None)
         if twin is None:
-            kept.append({**it, "similar": 0})
+            kept.append({**it, "similar": 0, "keys": [it["key"]]})
         else:
             twin["similar"] += 1
+            twin["keys"].append(it["key"])
     for k in kept:
         k["similar_text"] = similar_text(k["similar"])
     return kept
+
+
+# Verbergen (tabel kans_hidden): een weergavekeuze per gebruiker. Dezelfde sleutels als de kaarten en het overslaan (nu.SKIP_KEY); MAX_HIDE per
+# verzoek is ruim boven wat één tab ooit toont en houdt een verzoek klein.
+HIDE_KEY = re.compile(r"^(zone|zsweep|setup|signal|structuur):\d+$")
+MAX_HIDE = 200
+
+
+def parse_keys(raw) -> list[str]:
+    """Geldige kaartsleutels uit een verzoek (één sleutel of een lijst), uniek en in volgorde."""
+    raw = [raw] if isinstance(raw, str) else (raw if isinstance(raw, list) else [])
+    keys: list[str] = []
+    for k in raw:
+        if isinstance(k, str) and HIDE_KEY.match(k) and k not in keys:
+            keys.append(k)
+    return keys[:MAX_HIDE]
+
+
+def hidden_text(titles: list[str]) -> str:
+    """De ongedaan-balk: "HYPE short verborgen" of "3 kaarten verborgen". kaarten.js zegt hetzelfde (tests/test_static_js.py)."""
+    return f"{titles[0]} verborgen" if len(titles) == 1 else f"{len(titles)} kaarten verborgen"
+
+
+def hidden_label(n: int) -> str:
+    return f"Verborgen ({n})" if n else ""
+
+
+def _hidden_rows(plans: list[dict], trades: list[dict]) -> list[dict]:
+    return [{"key": it["key"], "keys": it["keys"], "title": it["title"], "state": it["state"], "state_short": it["state_short"], "group": group,
+             "dom_id": it["dom_id"]} for group, items in (("plans", plans), ("trades", trades)) for it in items]
 
 
 def _sort_key(item: dict):
@@ -109,13 +142,15 @@ def summary(n: int, in_zone: int, trades: int) -> str:
 
 
 def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float], Optional[str]]], structure_trades: list[dict],
-         kinds: Iterable[str], skipped: Iterable[str] = ()) -> dict:
+         kinds: Iterable[str], skipped: Iterable[str] = (), hidden: Iterable[str] = ()) -> dict:
     """`kinds`: de soorten die een tab krijgen (focus.FOCUS_TYPES met de kijkrechten van de route). Een kaart van een andere soort valt weg.
-    `skipped`: plannen die je oversloeg (cookie en plan_skips, een dag); die blijven staan, achteraan en gemarkeerd."""
+    `skipped`: plannen die je oversloeg (cookie en plan_skips, een dag); die blijven staan, achteraan en gemarkeerd.
+    `hidden`: kaarten die deze gebruiker verborg (kans_hidden). Die staan niet in de lijst en tellen nergens mee (tab, badge, totaal, ook niet
+    als 'vergelijkbaar'), maar wel onderaan hun tab als `hidden` (rijen) en `hidden_cards` (de kaart zelf, voor Toon weer zonder herladen)."""
     wanted = set(kinds)
     plans = [{**structure_item(card, price, state), "created_at": card.get("created_at")} for card, price, state in structure]
     plans += [{**_plan(nu._from_setup(c), "radar-" + c["key"].replace(":", "-")), "created_at": c.get("created_at")} for c in radar.waiting_cards(radar_cards)]
-    skipped = set(skipped)
+    skipped, hidden = set(skipped), set(hidden)
     for p in plans:
         p["skipped"] = p["key"] in skipped
     # `svg`: de route zet bij een open Structuur-trade zijn getekende setup op de kaart (kans_view.chart); de andere soorten hebben er geen.
@@ -125,14 +160,21 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
     tabs = []
     for k in kinds:
         # Ontdubbelen per tab en per groep: een open trade telt nooit tegen een wachtend plan, en dezelfde coin in een andere tab is een andere soort.
-        mine = sorted(dedupe([p for p in plans if p["tab"] == k and k in wanted], "limit"), key=_sort_key)
-        open_ = sorted(dedupe([t for t in trades if t["tab"] == k], "entry"), key=lambda t: t["created_at"], reverse=True)
+        # Verborgen kaarten gaan eruit vóór het ontdubbelen, zodat ze ook niet als 'vergelijkbaar' meetellen.
+        tab_plans = [p for p in plans if p["tab"] == k and k in wanted]
+        tab_trades = [t for t in trades if t["tab"] == k]
+        mine = sorted(dedupe([p for p in tab_plans if p["key"] not in hidden], "limit"), key=_sort_key)
+        open_ = sorted(dedupe([t for t in tab_trades if t["key"] not in hidden], "entry"), key=lambda t: t["created_at"], reverse=True)
+        hid_plans = sorted(dedupe([p for p in tab_plans if p["key"] in hidden], "limit"), key=_sort_key)
+        hid_trades = sorted(dedupe([t for t in tab_trades if t["key"] in hidden], "entry"), key=lambda t: t["created_at"], reverse=True)
         zone = sum(1 for p in mine if p["state"] == "in_zone")
         moot = [{"title": f"{c['coin']} {c['direction']}", "label": c["state_label"], "dom_id": "radar-" + c["key"].replace(":", "-")}
-                for c in radar.moot_cards(radar_cards) if TAB_OF.get(c["setup"].get("source") or "smc") == k and k in wanted]
+                for c in radar.moot_cards(radar_cards) if TAB_OF.get(c["setup"].get("source") or "smc") == k and k in wanted and c["key"] not in hidden]
         # `num` staat naast de naam (ook 0, dan weet je dat de tab leeg is), `badge` is de accentteller en alleen er zolang er iets in de zone staat.
         tabs.append({"key": k, "label": LABELS[k], "href": f"#tab-{k}", "plans": mine, "trades": open_, "n": len(mine), "in_zone": zone,
-                     "num": len(mine), "badge": zone or None, "count": None, "summary": summary(len(mine), zone, len(open_)), "moot": moot})
+                     "num": len(mine), "badge": zone or None, "count": None, "summary": summary(len(mine), zone, len(open_)), "moot": moot,
+                     "hidden": _hidden_rows(hid_plans, hid_trades), "hidden_cards": hid_plans + hid_trades,
+                     "hidden_label": hidden_label(len(hid_plans) + len(hid_trades))})
     best = max(tabs, key=lambda t: t["in_zone"], default=None)
     active = best["key"] if best and best["in_zone"] else (DEFAULT_TAB if DEFAULT_TAB in kinds else (kinds[0] if kinds else DEFAULT_TAB))
     n, zone, open_n = sum(t["n"] for t in tabs), sum(t["in_zone"] for t in tabs), sum(len(t["trades"]) for t in tabs)

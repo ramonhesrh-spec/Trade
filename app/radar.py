@@ -10,6 +10,12 @@ from app import chance_steps, trade_plan as tp
 KEY_PREFIX = {"zone_radar": "zone", "zone_sweep": "zsweep"}
 
 
+def setup_key(setup: dict) -> str:
+    """De sleutel van de kaart: eigen voorvoegsel voor de zone-radar en de zone-sweep, hun ids komen uit een andere tabel en zouden anders botsen
+    met die van een SMC-setup. Ook de sleutel waarmee een gebruiker een kaart verbergt (kans_hidden)."""
+    return f"{KEY_PREFIX.get(setup.get('source'), 'setup')}:{setup['id']}"
+
+
 def setup_card(setup: dict, price: Optional[float]) -> Optional[dict]:
     """None als stop of doel niet aan de juiste kant van de limietprijs liggen: zo'n setup kan nooit een signaal worden."""
     plan = tp.limit_plan(setup["direction"], setup["zone_low"], setup["zone_high"],
@@ -23,8 +29,7 @@ def setup_card(setup: dict, price: Optional[float]) -> Optional[dict]:
     approach = None if state == "ongeldig" else tp.approach_pct(distance)
     # Een moot plan krijgt geen grafiek en geen stappen: er is niets meer te doen, alleen de uitkomst blijft staan.
     return {
-        # Eigen sleutel voor de zone-radar en de zone-sweep: hun ids komen uit een andere tabel en zouden anders botsen met die van een SMC-setup.
-        "key": f"{KEY_PREFIX.get(setup.get('source'), 'setup')}:{setup['id']}", "kind": "setup", "coin": setup["coin"], "direction": setup["direction"],
+        "key": setup_key(setup), "kind": "setup", "coin": setup["coin"], "direction": setup["direction"],
         "plan": plan, "price": price, "state": state, "state_label": tp.STATE_LABELS.get(state, "Koers wordt opgehaald"),
         "state_short": tp.STATE_SHORT.get(state, "Geen koers"),
         "action": chance_steps.now_line(state, setup["direction"], plan.limit, plan.stop, plan.take),
@@ -54,16 +59,18 @@ def moot_cards(cards: list[dict]) -> list[dict]:
     return [c for c in cards if c["kind"] == "setup" and c["state"] not in OPEN_STATES]
 
 
-def waiting_count(setups: list[dict], prices: dict) -> int:
-    """Aantal bouwende setups voor het menu-getal: precies wat de tab Wachten als kaart toont (met geldig limietplan en nog te vullen)."""
-    return sum(1 for s in setups if setup_state(s, prices.get(s["coin"])) in OPEN_STATES
+def waiting_count(setups: list[dict], prices: dict, hidden=frozenset()) -> int:
+    """Aantal bouwende setups voor het menu-getal: precies wat de tab Wachten als kaart toont (met geldig limietplan en nog te vullen). `hidden`:
+    de kaarten die deze kijker verborg (kans_hidden), die tellen nergens mee."""
+    return sum(1 for s in setups if setup_key(s) not in hidden and setup_state(s, prices.get(s["coin"])) in OPEN_STATES
                and tp.limit_plan(s["direction"], s["zone_low"], s["zone_high"], s["preview_stop_loss"], s["preview_take_profit"], limit=s.get("limit")) is not None)
 
 
-def in_zone_count(setups: list[dict], prices: dict) -> int:
+def in_zone_count(setups: list[dict], prices: dict, hidden=frozenset()) -> int:
     """Bouwende setups waarvan de koers nu in de zone staat, voor het getal op het appicoon. Zonder koers telt een setup niet mee:
-    het icoon zou anders iets beloven wat niet gemeten is. Een setup zonder geldig limietplan krijgt geen kaart en telt dus ook niet."""
-    return sum(1 for s in setups if setup_state(s, prices.get(s["coin"])) == "in_zone"
+    het icoon zou anders iets beloven wat niet gemeten is. Een setup zonder geldig limietplan krijgt geen kaart en telt dus ook niet, een kaart
+    die de kijker verborg (`hidden`) evenmin."""
+    return sum(1 for s in setups if setup_key(s) not in hidden and setup_state(s, prices.get(s["coin"])) == "in_zone"
                and tp.limit_plan(s["direction"], s["zone_low"], s["zone_high"], s["preview_stop_loss"], s["preview_take_profit"], limit=s.get("limit")) is not None)
 
 

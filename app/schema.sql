@@ -973,3 +973,15 @@ CREATE TABLE IF NOT EXISTS user_flags (
     created_at TEXT NOT NULL,
     PRIMARY KEY (user_id, flag)
 );
+
+-- Verborgen kaarten op Kansen: per gebruiker een weergavekeuze ("Verberg"), geen oordeel en geen demping. De kaart staat niet in de lijst en telt
+-- niet in de tellers van die gebruiker; het signaal, de uitkomst, Bewijs, Logboek en de meldingen lezen deze tabel nooit. `key` is de
+-- kaartsleutel van app/kansen.py (zone:N, zsweep:N, setup:N, signal:N, structuur:N). Een nieuwe tabel: CREATE TABLE IF NOT EXISTS bereikt ook
+-- een bestaande database, geen ALTER nodig.
+CREATE TABLE IF NOT EXISTS kans_hidden (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    key TEXT NOT NULL,
+    at TEXT NOT NULL,
+    UNIQUE (user_id, key)
+);
