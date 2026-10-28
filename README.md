@@ -436,7 +436,8 @@ sudo systemctl start crypto-news.service crypto-script.service
   SMC-snelcyclus: een voorwaarde die klopt wordt een gewoon signaal met `trade_type = 'script'` en het label ongetest. Max
   `SCRIPT_MAX_ALERTS_PER_DAY` (6) meldingen per dag. Gaat vanzelf uit als de laatste `SCRIPT_MAX_NEGATIVE` (30) afgeronde
   scenario's samen negatief zijn. `SCRIPT_ENABLED=false` zet het uit. Model: `SCRIPT_MODEL` (standaard `claude-haiku-5-5`).
-- `app/structure_live.py`: breuk van een lijn of range op 30m (detector uit `app/replay/breakretest.py`, alleen gesloten candles).
+- `app/structure_live.py`: breuk van een lijn of range op 30m, of van de laatste top na een hogere bodem (CHOCH, gespiegeld voor short; live
+  sinds 2026-10-28 zonder labrun, ongetest) (detectoren `find_breaks` en `find_choch` uit `app/replay/breakretest.py`, alleen gesloten candles).
   Claude geeft een oordeel A, B of C, maar dat is alleen nog een meting: het filtert niets en staat op geen scherm. De code berekent niveau, stop
   en doelen. Elke breuk met een plan krijgt dezelfde luide melding; bij een volle dagcap gaat de kans die het dichtst bij zijn limiet ligt voor.
   Bewijs houdt de vullingen met oordeel C apart als `structuur_c`, naar buiten heten beide Structuur. Het plan staat in de melding en op de pagina Setups (`/structuur#structuur-<id>`), vóórdat de limiet vult. Raakt de koers het niveau,
