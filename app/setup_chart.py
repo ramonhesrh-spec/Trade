@@ -7,6 +7,8 @@ from typing import Optional
 
 import pandas as pd
 
+from app import price_text
+
 W, H = 560, 320
 PAD_L, PAD_R, PAD_T, PAD_B = 6, 132, 14, 14
 LABEL_CHAR_W = 8.0        # breedte van een teken in .sc-label (13px monospace is 7,8); de rechtermarge groeit mee met het langste label
@@ -220,3 +222,100 @@ def demo_svg() -> str:
              "p1_at": candles[6][0], "break_at": candles[22][0]}
     plan = {"level": 100.0, "stop": 100.9, "targets": [97.6, 95.9], "targets_r": [2.7, 4.6]}
     return setup_svg(candles, setup, plan, price=99.9)
+
+
+# De kaartgrafiek van Zone-radar en Zone-sweep op Kansen: dezelfde tekenstijl als de galerij (range_sweep_svg), maar met een viewBox die op een
+# telefoonkaart 1:1 schaalt (de kaart is op 375px 317 pixels breed). 560 breed maakte van 13px labels 8px; zo blijven ze 12px (CSS .sc.is-card).
+CARD_W, CARD_H = 316, 180
+CARD_PAD_L, CARD_PAD_T, CARD_PAD_B = 4, 10, 10
+CARD_CHAR_W = 7.4           # 12px monospace
+CARD_FUTURE = 5
+CARD_LABEL_GAP = 15
+CARD_MARK_CHAR_W = 6.6     # 11px tekst van markeringen en vlakken
+
+
+def zone_svg(candles: list[list], coin: str, direction: str, zone: dict, lines: list[tuple], points: list[tuple] = (),
+             target_zone: Optional[dict] = None, price: Optional[float] = None, limit: Optional[float] = None) -> str:
+    """candles: [[unix_s, open, high, low, close], ...] oud naar nieuw, het venster kiest de aanroeper (card_chart.window). zone: {"low", "high",
+    "from" (unix_s of None = vanaf links), "label"}; target_zone idem zonder from. lines: [(prijs, klasse, tekst)] zoals sc-limit, sc-stop,
+    sc-target. points: [(unix_s, prijs, tekst)], een markering op de candle die ertoe doet (ontstaan, prik, herstel). Geeft '' zonder candles."""
+    if not candles:
+        return ""
+    n = len(candles)
+    times = [float(c[0]) for c in candles]
+    diffs = sorted(b - a for a, b in zip(times, times[1:]))
+    bar_seconds = diffs[len(diffs) // 2] if diffs else 3600.0
+    marks = list(lines) + ([(price, "sc-price", f"Nu {price_text.nl(price)}")] if price else [])
+    pad_r = int(max([len(m[2]) for m in marks] + [8]) * CARD_CHAR_W + 10)
+    plot_w, plot_h = CARD_W - CARD_PAD_L - pad_r, CARD_H - CARD_PAD_T - CARD_PAD_B
+    step = plot_w / (n + CARD_FUTURE)
+    values = [c[3] for c in candles] + [c[2] for c in candles] + [m[0] for m in marks] + [zone["low"], zone["high"]] + [p[1] for p in points]
+    if target_zone:
+        values += [target_zone["low"], target_zone["high"]]
+    lo, hi = min(values), max(values)
+    span = (hi - lo) or 1.0
+    lo, hi = lo - span * 0.06, hi + span * 0.06
+    right, left = CARD_PAD_L + plot_w, float(CARD_PAD_L)
+
+    def y(v: float) -> float:
+        return CARD_PAD_T + (hi - v) / (hi - lo) * plot_h
+
+    def x(i: float) -> float:
+        return CARD_PAD_L + (i + 0.5) * step
+
+    def at(ts: Optional[float]) -> float:
+        return left if ts is None else min(right, max(left, x((ts - times[0]) / bar_seconds)))
+
+    taken: list[tuple[float, float, float, float]] = []      # tekstvlakken die er al staan: een markering zoekt een plek ernaast
+
+    def box(x0: float, v_hi: float, v_lo: float, cls: str, label: str, below: bool, at_end: bool = False) -> str:
+        top, bottom = max(CARD_PAD_T, y(v_hi)), min(CARD_PAD_T + plot_h, y(v_lo))
+        ly = bottom + 13 if below else top - 4
+        ly = min(CARD_H - 2, max(11.0, ly))
+        # De eigen zone draagt zijn naam aan het rechteinde: links begint hij bij de ontstaanscandle, waar de markering al een naam heeft.
+        lx, anchor = (right - 3, "end") if at_end else (x0 + 3, "start")
+        w = len(label) * CARD_MARK_CHAR_W
+        taken.append((lx - w if at_end else lx, ly - 11, lx if at_end else lx + w, ly + 2))
+        return (f'<rect class="{cls}" x="{x0:.1f}" y="{top:.1f}" width="{max(1.0, right - x0):.1f}" height="{max(1.0, bottom - top):.1f}"/>'
+                f'<text class="sc-box-label" x="{lx:.1f}" y="{ly:.1f}" text-anchor="{anchor}">{escape(label)}</text>')
+
+    short = direction == "short"
+    out = [f'<svg class="sc is-card" viewBox="0 0 {CARD_W} {CARD_H}" role="img" aria-label="{escape(coin)} {escape(direction)}: {escape(zone["label"])}" '
+           f'data-chart-coin="{escape(coin)}" data-hi="{hi:.8g}" data-lo="{lo:.8g}" data-pad-t="{CARD_PAD_T}" data-plot-h="{plot_h}"'
+           + (f' data-level="{limit:.8g}"' if limit is not None else "") + ">"]
+    if target_zone:
+        # De doelzone ligt aan de overkant: label aan de kant weg van de eigen zone, zodat de twee namen nooit op elkaar staan.
+        out.append(box(left, target_zone["high"], target_zone["low"], "sc-zone is-target", target_zone["label"], below=short))
+    out.append(box(at(zone.get("from")), zone["high"], zone["low"], "sc-zone", zone["label"], below=not short, at_end=True))
+    for i, (_, o, h, low, c) in enumerate(candles):
+        cls = "sc-up" if c >= o else "sc-down"
+        out.append(f'<line class="sc-wick {cls}" x1="{x(i):.1f}" x2="{x(i):.1f}" y1="{y(h):.1f}" y2="{y(low):.1f}"/>'
+                   f'<rect class="sc-body {cls}" x="{x(i) - step * 0.34:.1f}" y="{min(y(o), y(c)):.1f}" width="{step * 0.68:.1f}" height="{max(1.0, abs(y(o) - y(c))):.1f}"/>')
+
+    def free(r: tuple) -> bool:
+        return (r[0] >= left and r[2] <= right and r[1] >= 0 and r[3] <= CARD_H
+                and not any(r[0] < t[2] and t[0] < r[2] and r[1] < t[3] and t[1] < r[3] for t in taken))
+
+    for ts, v, text in points:
+        px, py = at(ts), y(v)
+        w = len(text) * CARD_MARK_CHAR_W
+        # Rechts, links, onder of boven de stip: de eerste plek zonder andere tekst. Twee markeringen dicht bij elkaar (ontstaan en herstel)
+        # stonden anders op elkaar.
+        options = [(px + 8, py + 4, "start"), (px - 8, py + 4, "end"), (px, py + 18, "middle"), (px, py - 9, "middle")]
+        rects = [((tx if a == "start" else tx - w if a == "end" else tx - w / 2), ty - 11, (tx + w if a == "start" else tx if a == "end" else tx + w / 2), ty + 2)
+                 for tx, ty, a in options]
+        k = next((i for i, r in enumerate(rects) if free(r)), 0)
+        taken.append(rects[k])
+        tx, ty, anchor = options[k]
+        out.append(f'<circle class="sc-mark" cx="{px:.1f}" cy="{py:.1f}" r="4.5"/>'
+                   f'<text class="sc-mark-label" x="{tx:.1f}" y="{ty:.1f}" text-anchor="{anchor}">{escape(text)}</text>')
+    placed, last_y = [], -1e9
+    for v, cls, text in sorted(marks, key=lambda m: y(m[0])):
+        label_y = max(y(v), last_y + CARD_LABEL_GAP)
+        placed.append((v, cls, text, label_y))
+        last_y = label_y
+    for v, cls, text, label_y in placed:
+        out.append(f'<line class="sc-line {cls}" x1="{x(n - 1):.1f}" x2="{right:.1f}" y1="{y(v):.1f}" y2="{y(v):.1f}"/>'
+                   f'<text class="sc-label {cls}" x="{right + 6:.1f}" y="{min(CARD_H - 2, label_y + 4):.1f}">{escape(text)}</text>')
+    out.append("</svg>")
+    return "".join(out)

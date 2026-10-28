@@ -54,7 +54,7 @@ class TabTests(unittest.TestCase):
         self.assertEqual(sum(len(t["plans"]) for t in p["tabs"]), 0)
 
     def test_in_de_zone_eerst_dan_op_afstand(self):
-        p = self.page(cards((ZONE2, 2400.0), (ZONE, 80537.0), ({**ZONE, "id": 10}, 80800.0)))
+        p = self.page(cards((ZONE2, 2400.0), (ZONE, 80537.0), ({**ZONE, "id": 10, "coin": "LTC"}, 80800.0)))
         keys = [x["key"] for x in self.tab(p, "zone_radar")["plans"]]
         self.assertEqual(keys, ["zone:10", "zone:8", "zone:9"])          # in zone, dan 0,29% en dan 2,22%
 
@@ -80,17 +80,35 @@ class TabTests(unittest.TestCase):
     def test_telling_en_badge(self):
         p = self.page(cards((ZONE, 80800.0), (ZONE2, 2400.0)) + [radar.signal_card(TRADE, 97.0)])
         t = self.tab(p, "zone_radar")
-        self.assertEqual((t["n"], t["in_zone"], t["count"]), (2, 1, 1))
-        self.assertEqual(t["summary"], "2 kansen · 1 in de zone · 1 open")
-        self.assertIsNone(self.tab(p, "structuur")["count"])                 # geen badge zonder kans in de zone
-        self.assertEqual(self.tab(p, "structuur")["summary"], "Geen kansen")
+        self.assertEqual((t["n"], t["in_zone"], t["num"], t["badge"]), (2, 1, 2, 1))     # n telt de plannen in de zone mee, open trades niet
+        self.assertIsNone(t["count"])                                        # de oude accentteller van utabs is de badge geworden
+        self.assertEqual(t["summary"], "2 kansen klaar · 1 in de zone · 1 open")
+        s = self.tab(p, "structuur")
+        self.assertEqual((s["num"], s["badge"]), (0, None))                  # 0 staat er als getal, een badge pas bij 1 in de zone
+        self.assertEqual(s["summary"], "Geen kansen")
 
-    def test_enkelvoud(self):
+    def test_enkelvoud_en_geen_nul_in_de_zone(self):
         t = self.tab(self.page(cards((ZONE, 80537.0))), "zone_radar")
-        self.assertEqual(t["summary"], "1 kans · 0 in de zone")
+        self.assertEqual(t["summary"], "1 kans klaar")
+
+    def test_totaal_boven_de_tabs(self):
+        p = self.page(cards((ZONE, 80800.0), (ZONE2, 2400.0), (SWEEP, 145.0)) + [radar.signal_card(TRADE, 97.0)],
+                      structure=[(STRUCT_CARD, 81.5, "wacht")], trades=[radar.signal_card(STRUCT_TRADE, 99.0)])
+        self.assertEqual(p["total"], {"n": 4, "in_zone": 1, "open": 2, "text": "4 kansen klaar · 1 in de zone · 2 open"})
+
+    def test_totaal_leeg_en_enkelvoud(self):
+        self.assertEqual(self.page()["total"]["text"], "Geen kansen")
+        self.assertEqual(self.page(cards((ZONE, 80800.0)))["total"]["text"], "1 kans klaar · 1 in de zone")
+        self.assertEqual(self.page(trades=[radar.signal_card(STRUCT_TRADE, 99.0)])["total"]["text"], "1 open")
+        self.assertEqual(self.page(cards((ZONE, 80537.0)))["total"]["text"], "1 kans klaar")
+
+    def test_totaal_is_de_som_van_de_tabs(self):
+        p = self.page(cards((ZONE, 80800.0), (ZONE2, 2400.0), (SWEEP, 141.0)))
+        self.assertEqual(p["total"]["n"], sum(t["n"] for t in p["tabs"]))
+        self.assertEqual(p["total"]["in_zone"], p["in_zone"])
 
     def test_de_tab_met_de_meeste_kansen_in_de_zone_gaat_open(self):
-        p = self.page(cards((ZONE, 80800.0), ({**ZONE, "id": 10}, 80800.0), (SWEEP, 141.0)))
+        p = self.page(cards((ZONE, 80800.0), ({**ZONE, "id": 10, "coin": "LTC"}, 80800.0), (SWEEP, 141.0)))
         self.assertEqual(p["active"], "zone_radar")
 
     def test_anders_structuur(self):
@@ -104,6 +122,38 @@ class TabTests(unittest.TestCase):
         self.assertEqual(item["chart"]["limit"], 80.9234)
         self.assertEqual(item["chart"]["take"], 86.0)
         self.assertEqual(item["checklist_url"], "/nu/order/structuur:12")
+
+    def test_structuurplan_tekent_zijn_eigen_momentopname(self):
+        p = self.page(structure=[({**STRUCT_CARD, "chart": "<svg class=\"sc\"></svg>"}, 81.5, "wacht")])
+        self.assertEqual(self.tab(p, "structuur")["plans"][0]["svg"], '<svg class="sc"></svg>')
+
+    def test_structuurplan_zonder_momentopname_valt_terug_op_de_kaartgrafiek(self):
+        item = self.tab(self.page(structure=[({**STRUCT_CARD, "chart": ""}, 81.5, "wacht")]), "structuur")["plans"][0]
+        self.assertFalse(item["svg"])
+        self.assertEqual(item["chart"]["limit"], 80.9234)
+
+    def test_open_structuurtrade_draagt_zijn_tekening(self):
+        trade = {**radar.signal_card(STRUCT_TRADE, 99.0), "svg": '<svg class="sc"></svg>'}
+        it = self.tab(self.page(trades=[trade]), "structuur")["trades"][0]
+        self.assertEqual(it["svg"], '<svg class="sc"></svg>')
+
+    def test_zone_soorten_laden_hun_eigen_tekening(self):
+        p = self.page(cards((ZONE, 80537.0), (SWEEP, 145.0)) + [radar.signal_card(TRADE, 97.0)])
+        self.assertEqual(self.tab(p, "zone_radar")["plans"][0]["svg_src"], "/api/kaart_svg/zone:8")
+        self.assertEqual(self.tab(p, "zone_sweep")["plans"][0]["svg_src"], "/api/kaart_svg/zsweep:4")
+        self.assertEqual(self.tab(p, "zone_radar")["trades"][0]["svg_src"], "/api/kaart_svg/signal:3")
+
+    def test_smc_en_structuur_laden_geen_zonetekening(self):
+        p = self.page(cards((SMC, 103.0)), structure=[(STRUCT_CARD, 81.5, "wacht")], kinds=KINDS + ("smc",))
+        self.assertIsNone(self.tab(p, "smc")["plans"][0]["svg_src"])
+        self.assertIsNone(self.tab(p, "structuur")["plans"][0]["svg_src"])
+
+    def test_andere_soorten_houden_de_kaartgrafiek(self):
+        p = self.page(cards((ZONE, 80537.0)) + [radar.signal_card(TRADE, 97.0)])
+        z = self.tab(p, "zone_radar")
+        self.assertFalse(z["plans"][0].get("svg"))
+        self.assertTrue(z["plans"][0]["chart"])
+        self.assertFalse(z["trades"][0].get("svg"))
 
 
 class ItemTests(unittest.TestCase):
@@ -150,3 +200,60 @@ class SayTests(unittest.TestCase):
         self.assertIn("zone", kansen.say("in_zone", "short"))
         self.assertEqual(kansen.say("open", "long"), "")
         self.assertIn("de instap bereikt", kansen.say("wacht", "long", zone=False))       # Structuur heeft een niveau, geen zone
+
+
+class DuplicateTests(unittest.TestCase):
+    """Per tab één kaart per coin, richting en instap (binnen kansen.DUP_PCT): de oudste blijft, de rest telt als 'vergelijkbaar'. Alleen de
+    weergave van Kansen; Bewijs, Logboek en de database houden elk signaal."""
+
+    def trade(self, ident, coin="ETH", direction="short", price=2357.50, stop=2380.0, take=2300.0, created="2026-10-05T10:00:00+00:00", tt="zone_radar"):
+        return radar.signal_card({**TRADE, "id": ident, "coin": coin, "direction": direction, "price": price, "stop_loss": stop, "take_profit": take,
+                                  "trade_type": tt, "created_at": created}, 2350.0)
+
+    def tab(self, p, key):
+        return next(t for t in p["tabs"] if t["key"] == key)
+
+    def test_twee_eth_short_met_dezelfde_instap_worden_een_kaart(self):
+        p = kansen.page([self.trade(1, stop=2380.0, created="2026-10-05T11:00:00+00:00"), self.trade(2, stop=2390.0, created="2026-10-05T09:00:00+00:00")],
+                        [], [], KINDS)
+        t = self.tab(p, "zone_radar")
+        self.assertEqual([x["key"] for x in t["trades"]], ["signal:2"])               # de oudste trade blijft
+        self.assertEqual(t["trades"][0]["similar"], 1)
+        self.assertEqual(p["total"]["open"], 1)
+
+    def test_grens_net_onder_en_net_boven(self):
+        base = 2000.0
+        under = kansen.page([self.trade(1, price=base), self.trade(2, price=base * 1.00199, created="2026-10-05T11:00:00+00:00")], [], [], KINDS)
+        over = kansen.page([self.trade(1, price=base), self.trade(2, price=base * 1.00201, created="2026-10-05T11:00:00+00:00")], [], [], KINDS)
+        self.assertEqual(len(self.tab(under, "zone_radar")["trades"]), 1)
+        self.assertEqual(len(self.tab(over, "zone_radar")["trades"]), 2)
+
+    def test_ondo_long_en_short_blijven_allebei(self):
+        p = kansen.page([self.trade(1, coin="ONDO", direction="long", price=0.9, stop=0.88, take=0.95),
+                         self.trade(2, coin="ONDO", direction="short", price=0.9, stop=0.92, take=0.85)], [], [], KINDS)
+        self.assertEqual(len(self.tab(p, "zone_radar")["trades"]), 2)
+
+    def test_zelfde_coin_in_twee_tabs_blijft_in_beide(self):
+        p = kansen.page([self.trade(1, tt="zone_radar"), self.trade(2, tt="zone_sweep")], [], [], KINDS)
+        self.assertEqual(len(self.tab(p, "zone_radar")["trades"]), 1)
+        self.assertEqual(len(self.tab(p, "zone_sweep")["trades"]), 1)
+
+    def test_wachtende_plannen_apart_van_open_trades(self):
+        plan_a = {**ZONE, "id": 20, "created_at": "2026-10-05T12:00:00+00:00"}
+        plan_b = {**ZONE, "id": 21, "preview_stop_loss": 81200.0, "created_at": "2026-10-05T08:00:00+00:00"}
+        trade = radar.signal_card({**TRADE, "id": 30, "coin": "BTC", "direction": "short", "price": 80774.8, "stop_loss": 81097.9,
+                                   "take_profit": 80128.6}, 80537.0)
+        p = kansen.page(cards((plan_a, 80537.0), (plan_b, 80537.0)) + [trade], [], [], KINDS)
+        t = self.tab(p, "zone_radar")
+        self.assertEqual(([x["key"] for x in t["plans"]], t["plans"][0]["similar"]), (["zone:21"], 1))
+        self.assertEqual([x["key"] for x in t["trades"]], ["signal:30"])               # een open trade telt niet tegen een plan
+        self.assertEqual((t["n"], p["total"]["n"]), (1, 1))
+
+    def test_geen_dubbele_dan_nul(self):
+        p = kansen.page(cards((ZONE, 80537.0)), [], [], KINDS)
+        self.assertEqual(self.tab(p, "zone_radar")["plans"][0]["similar"], 0)
+
+    def test_similar_text(self):
+        self.assertEqual(kansen.similar_text(0), "")
+        self.assertEqual(kansen.similar_text(1), "Nog 1 vergelijkbaar signaal")
+        self.assertEqual(kansen.similar_text(3), "Nog 3 vergelijkbare signalen")

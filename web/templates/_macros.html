@@ -513,6 +513,9 @@
 {# Tekst-tabs met streep. items: lijst van {"key", "label", "href", "count"?}. Een href die met # begint is een paneeltab (utabs.js
    toont alleen dat paneel); anders is het een gewone link. `menu` is een lijst {"label", "href"} achter de drie puntjes; met {% call %} komt er vrije inhoud bij (een POST-formulier kan
    geen link zijn). Roep alleen met {% call %} aan als er iets in het menu hoort: een lege caller geeft lege puntjes. #}
+{# Getallen in een tab: `num` (stil, ook 0) naast de naam en `badge` (accent) voor wat nu aandacht vraagt; `count` is de oudere accentteller. #}
+{% macro ut_nums(t) %}{% if t.num is defined and t.num is not none %}<span class="ut-num" data-ut-num>{{ t.num }}</span>{% endif %}{% if t.badge %}<i class="ut-badge" data-ut-badge>{{ t.badge }}<span class="sr-only"> in de zone</span></i>{% endif %}{% if t.count %} <i class="ut-count">{{ t.count }}</i>{% endif %}{% endmacro %}
+
 {% macro utabs(items, active, group="main", menu=none) %}
 <div class="ut" data-utabs="{{ group }}">
   {% set ns = namespace(all_panels=true) %}{% for t in items %}{% if not t.href.startswith('#') %}{% set ns.all_panels = false %}{% endif %}{% endfor %}
@@ -521,7 +524,7 @@
     {% for t in items %}
     {% if t.href.startswith('#') %}
     <a class="ut-tab{% if t.key == active %} is-active{% endif %}" id="{{ t.href[1:] }}-tab" href="{{ t.href }}" role="tab" aria-selected="{{ 'true' if t.key == active else 'false' }}"
-       aria-controls="{{ t.href[1:] }}">{{ t.label }}{% if t.count %} <i class="ut-count">{{ t.count }}</i>{% endif %}</a>
+       aria-controls="{{ t.href[1:] }}">{{ t.label }}{{ ut_nums(t) }}</a>
     {% else %}
     <a class="ut-tab{% if t.key == active %} is-active{% endif %}" href="{{ t.href }}"{% if t.key == active %} aria-current="page"{% endif %}>{{ t.label }}{% if t.count %} <i class="ut-count">{{ t.count }}</i>{% endif %}</a>
     {% endif %}
@@ -677,7 +680,20 @@
     <svg class="kc-chev" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <span class="sr-only">Details</span>
   </button>
-  {% if it.chart %}{{ level_chart(it.coin, it.chart, legend=false) }}{% endif %}
+  {# Structuur tekent zijn eigen momentopname (svg, setup_chart): de breuk, het retest-niveau, de stop en T1 tot T3. Een tik erop opent het
+     detailblad zoals elders op de kaart; de koerslijn schuift live mee (live.js, data-chart-coin). De andere soorten krijgen de kaartgrafiek. #}
+  {% if it.svg %}<figure class="kc-svg is-structuur">{{ it.svg }}<figcaption class="lc-cap">30 min per candle · getekend bij de breuk</figcaption></figure>
+  {% elif it.svg_src %}
+  {# Zone-radar en Zone-sweep: hun eigen tekening (app/card_chart.py) komt lazy van /api/kaart_svg zodra de kaart in beeld komt (kaarten.js).
+     De verborgen level-chart is alleen de bron voor "Groot" (levelchart.js tekent een verborgen grafiek nooit). #}
+  <figure class="lc kc-svg is-zone" data-kc-svg="{{ it.svg_src }}">
+    <div class="kc-svg-box" role="img" aria-label="{{ it.chart.label if it.chart else it.title }}"><span class="kc-svg-wait">Grafiek laden…</span></div>
+    {% if it.chart %}<div class="level-chart" data-levelchart='{{ it.chart|tojson }}' data-coin="{{ it.coin }}" data-tf="15m" aria-label="{{ it.chart.label }}" hidden></div>{% endif %}
+    <figcaption class="lc-foot"><span class="lc-cap">Zone op zijn eigen tijdframe · jouw tijd</span>
+      {% if it.chart %}<button type="button" class="lc-expand" data-lc-expand aria-label="Grafiek van {{ it.coin }} groot openen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><span>Groot</span></button>{% endif %}
+    </figcaption>
+  </figure>
+  {% elif it.chart %}{{ level_chart(it.coin, it.chart, legend=false) }}{% endif %}
   <i data-live-coin="{{ it.coin }}" hidden></i>
 </article>
 {% endmacro %}
@@ -710,6 +726,8 @@
   </ul>
   <p class="kd-hint">Houd een getal vast om te kopiëren. De bel zet een prijsalarm.</p>
   <p class="kd-origin">{{ it.origin or kinds.get(it.trade_type, it.trade_type) }} · {{ "open trade" if it.kind == "trade" else "limietplan" }}</p>
+  {# Dubbele kaarten (zelfde soort, coin, richting en instap, app/kansen.dedupe) staan één keer op Kansen; hier het gemeten aantal dat wegviel. #}
+  {% if it.similar_text %}<p class="kd-origin kd-similar">{{ it.similar_text }}</p>{% endif %}
   {% if ctx %}
   <dl class="kd-ctx" aria-label="Context, gemeten">
     {% for l in ctx %}<div class="kd-ctx-row"><dt>{{ l.label }}{% if l.note %}<span class="kd-ctx-note">{{ l.note }}</span>{% endif %}</dt>

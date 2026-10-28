@@ -154,3 +154,12 @@ class LadderMathTest(unittest.TestCase):
         self.assertEqual(out["inZone"]["height"], 0)
         self.assertAlmostEqual(out["noZone"]["top"], ladder.y_pct(104, hi, lo))
         self.assertTrue(lad["gap"])
+
+
+@unittest.skipUnless(shutil.which("node"), "node ontbreekt")
+class KansenSummaryTest(unittest.TestCase):
+    def test_kaarten_js_zegt_hetzelfde_als_de_server(self):
+        from app import kansen
+        cases = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (12, 2, 3), (0, 0, 1), (2, 0, 1)]
+        out = subprocess.run(["node", str(ROOT / "tests/js/kaarten_harness.js"), str(ROOT / "web/static/kaarten.js")], capture_output=True, text=True, check=True)
+        self.assertEqual(json.loads(out.stdout), [kansen.summary(*c) for c in cases])

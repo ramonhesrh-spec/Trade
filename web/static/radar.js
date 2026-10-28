@@ -63,7 +63,8 @@
         if (!resp.ok) return false;
         var age = resp.headers.get("X-Price-Age");
         if (age !== null && window.hesPriceSeen) window.hesPriceSeen(age);
-        return resp.json().then(function (payload) { apply(payload); return true; });
+        // Kansen telt na elke verversing opnieuw (kaarten.js): een kaart die van stand wisselt, wisselt ook de tellers boven de tabs.
+        return resp.json().then(function (payload) { apply(payload); document.dispatchEvent(new CustomEvent("hp:radar")); return true; });
       })
       .catch(function () { return false; /* een mislukte verversing laat de laatste stand staan */ })
       .then(function (ok) { if (timer) clearTimeout(timer); return ok; });

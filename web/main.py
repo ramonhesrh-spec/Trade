@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import announce, ceo, chance_checks, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep
+from app import announce, card_chart, ceo, chance_checks, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -730,8 +730,16 @@ async def _kansen_page(user: dict, skipped=()) -> dict:
     struct = [(c, prices.get(c["coin"]), today.structure_state(c, c["plan"], prices.get(c["coin"]), now)) for c in structure]
     open_struct = repo.list_open_smc_signals(types=("structuur", "structuur_c"))
     sprices = await _cached_prices({s["coin"] for s in open_struct}) if open_struct else {}
-    trades = [c for s in open_struct if (c := radar.signal_card(s, sprices.get(s["coin"])))]
+    trades = [{**c, "svg": _structure_trade_svg(s, sprices.get(s["coin"]))} for s in open_struct if (c := radar.signal_card(s, sprices.get(s["coin"])))]
     return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped)
+
+
+def _structure_trade_svg(signal: dict, price: Optional[float]) -> Markup:
+    """De getekende setup van een open Structuur-trade, zoals de kanspagina hem toont, met de koers van nu. Zonder de candles sinds de breuk:
+    die kosten een beursaanroep per trade bij elke paginaweergave; de momentopname met de stippen van wat er gebeurde en de koerslijn (live.js)
+    is genoeg om de kaart te herkennen, de kanspagina verlengt hem wel."""
+    setup = repo.get_structure_setup_by_signal(signal["id"])
+    return Markup(kans_view.chart(signal, setup, None, price)) if setup else Markup("")
 
 
 @app.get("/smc")
@@ -1030,6 +1038,44 @@ async def api_radar_candles(coin: str, tf: str = "15m", limit: int = 96, user: d
     if rows is None:
         raise HTTPException(status_code=503, detail="candles niet beschikbaar")
     return {"coin": coin, "tf": tf, "candles": rows[-limit:]}
+
+
+def _card_setup(key: str, user: dict) -> Optional[tuple[str, dict]]:
+    """(soort, rij) achter een kaartsleutel van Kansen, of None: alleen zone:N, zsweep:N en een signal:N van die twee soorten, met dezelfde
+    kijkrechten als de kaart zelf (de zone-sweep is CEO-only zolang ZONE_SWEEP_PUBLIC uit staat)."""
+    m = re.fullmatch(r"(zone|zsweep|signal):(\d{1,9})", key)
+    if not m:
+        return None
+    kind, ident = m.group(1), int(m.group(2))
+    if kind == "signal":
+        sig = repo.get_signal(ident)
+        if not sig or sig["is_practice"]:
+            return None
+        kind = {zone_radar.TRADE_TYPE: "zone", zone_sweep.TRADE_TYPE: "zsweep"}.get(sig["trade_type"])
+        row = (repo.get_zone_radar_setup_by_signal(ident) if kind == "zone" else repo.get_zone_sweep_setup_by_signal(ident) if kind == "zsweep" else None)
+    else:
+        row = repo.get_zone_radar_setup(ident) if kind == "zone" else repo.get_zone_sweep_setup(ident)
+    if not row or (kind == "zsweep" and not _sees_zone_sweep(user)):
+        return None
+    return kind, row
+
+
+@app.get("/api/kaart_svg/{key}")
+async def api_kaart_svg(key: str, user: dict = Depends(require_login)):
+    """De eigen kaartgrafiek van een Zone-radar- of Zone-sweep-kaart op Kansen (app/card_chart.py), als SVG-fragment voor kaarten.js. Lazy per
+    kaart in beeld; de candles komen uit dezelfde minuutcache als de grafieken (_cached_candles), dus geen beursaanroep per kijker."""
+    found = _card_setup(key, user)
+    if not found:
+        raise HTTPException(status_code=404)
+    kind, row = found
+    origin = zone_radar.zone_origin(row.get("zone_key", ""), ("1h", "2h", "4h"))
+    tf = card_chart.candle_tf(origin[0] if origin else row["tf"])
+    rows = await _cached_candles(row["coin"], tf)
+    if not rows:
+        return HTMLResponse("", status_code=503)
+    price = (await _cached_prices({row["coin"]})).get(row["coin"])
+    svg = (card_chart.zone_radar_svg if kind == "zone" else card_chart.zone_sweep_svg)(row, rows, price)
+    return HTMLResponse(svg, headers={"Cache-Control": "no-store"})
 
 
 @app.get("/api/sparklines")

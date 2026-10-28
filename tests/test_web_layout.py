@@ -336,7 +336,7 @@ class RadarLayoutTests(BaseShellTests):
                        'data-radar-key="setup:1"', 'data-radar="state"', ">Wacht<", "<title>Kansen", 'id="kd"', "data-kd-item"]:
             self.assertIn(needle, html, needle)
         smc = html.split('<section id="tab-smc"')[1]
-        self.assertIn('class="kt-sum">1 kans · 0 in de zone · 1 open<', smc)
+        self.assertIn('class="kt-sum">1 kans klaar · 1 open<', smc)          # "0 in de zone" staat er niet: alleen wat er is
         for gone in ("r-progress", "level-chips", "coin-av", "Koers op "):
             self.assertNotIn(gone, smc[:smc.index('id="kd"')], gone)
 

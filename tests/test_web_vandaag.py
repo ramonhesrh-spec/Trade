@@ -60,7 +60,7 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("Laatste 24 uur: 1 gezien, 1 met plan", r.text)
         live = self.client.get("/api/kansen").json()
         self.assertIn(str(sid), live["structuur"])                         # live afstand per wachtend plan
-        self.assertIn("data-levelchart", r.text)
+        self.assertIn('<svg class="sc"', r.text)                           # zijn eigen momentopname, zoals vóór V4
         self.assertIn('data-live-coin="BTC"', r.text)                      # live.js volgt de koers van de beurt
         self.assertNotIn("Schone range.", r.text)                          # de toelichting bij het oordeel staat niet op de kaart
 
@@ -90,7 +90,7 @@ class WebVandaagTests(unittest.TestCase):
         text = self.client.get("/smc").text
         tab = text.split('<section id="tab-structuur"')[1].split("</section>\n")[0]
         self.assertEqual(tab.count('<article class="kc '), 3)              # geen afkapping: alles wat geteld wordt staat er
-        self.assertRegex(tab, r'class="kt-sum">3 kansen · \d in de zone<')
+        self.assertRegex(tab, r'class="kt-sum">3 kansen klaar( · \d in de zone)?<')
 
     def test_tabbar_filters_and_empty_state_invite_the_user(self):
         text = self.client.get("/vandaag").text

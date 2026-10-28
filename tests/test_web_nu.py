@@ -63,8 +63,8 @@ class KansenPageTests(Base):
         self.assertIn('class="kc-title">BTC short<', card)
         self.assertIn(">Wacht<", card)
         self.assertIn('class="pill is-untested">ongetest<', card)
-        self.assertIn("data-levelchart", card)
-        self.assertIn("1 kans · 0 in de zone", sec)
+        self.assertIn('data-kc-svg="/api/kaart_svg/zone:', card)          # de eigen zonetekening, lazy geladen
+        self.assertIn("1 kans klaar<", sec)
         for gone in ("coin-av", "24u", "level-copy", "data-copy=", "Nog ", "approach", "Volume"):
             self.assertNotIn(gone, card, gone)
 
@@ -73,7 +73,7 @@ class KansenPageTests(Base):
         near = zone("BTC", "short", 100.0, 101.0, 102.0, 96.0, "1h:bear:a")     # koers 100 staat in de zone
         html = self.client.get("/smc").text
         self.assertIn('class="ut-tab is-active" id="tab-zone_radar-tab"', html)
-        self.assertRegex(html, r'href="#tab-zone_radar"[^>]*>Zone-radar <i class="ut-count">1</i>')
+        self.assertRegex(html, r'href="#tab-zone_radar"[^>]*>Zone-radar<span class="ut-num" data-ut-num>2</span><i class="ut-badge" data-ut-badge>1<')
         sec = self.tab(html, "zone_radar")
         self.assertLess(sec.index(f'id="radar-zone-{near}"'), sec.index(f'id="radar-zone-{far}"'))
 

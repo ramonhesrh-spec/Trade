@@ -443,7 +443,9 @@ sudo systemctl start crypto-news.service crypto-script.service
   dan volgt een signaal met `trade_type = 'structuur'` (label ongetest, score op Bewijs). Max `STRUCTURE_MAX_ALERTS_PER_DAY` (30)
   per dag. Gaat vanzelf uit na `STRUCTURE_MAX_NEGATIVE` (30) afgeronde signalen die samen negatief zijn. `STRUCTURE_ENABLED=false`
   zet het uit. De mechanische versie scoorde -0,16R netto op een jaar candles (`scripts/breakretest_scan.py`): het oordeel van
-  Claude moet dat verschil maken, en dat is een hypothese die Bewijs toetst.
+  Claude moet dat verschil maken, en dat is een hypothese die Bewijs toetst. Komen er minder kansen dan je verwacht, draai dan
+  `.venv/bin/python3 scripts/structuur_check.py` (alleen-lezen): per dag breuken, plannen, gemeld, gevuld, doel/stop/open en of de
+  dagcap geraakt werd, de hartslag ("33 van 35 coins gecontroleerd in 41 s; mislukt: ...") en welke coins geen enkel plan kregen.
 - `app/zone_radar_live.py` (rekenregels in `app/zone_radar.py`): per coin de dichtstbijzijnde actieve vraagzone onder en aanbodzone boven de koers
   op 1u en 4u (binnen 6%), als limietplan op de Radar (`/smc`): limiet op de binnenrand, stop een kwart ATR voorbij de buitenrand (minstens
   `SMC_MIN_STOP_PCT`), doel de rand van de eerstvolgende tegenovergestelde zone, minimaal 2R. Melding bij een nieuwe kaart en bij de vulling;
@@ -526,10 +528,18 @@ oude `/structuur` stuurt door naar de tab Structuur op Kansen. Account, Meldinge
 Galerij en CEO (alleen de eigenaar) staan in het menu achter je initiaal rechtsboven. Het getal op Kansen telt de kansen die nu in de
 zone staan.
 
-Kansen (`app/kansen.py`) heeft een tab per soort: Structuur, Zone-radar en Zone-sweep (met `ENGINE_FOCUS=false` ook SMC). Elke tab
-begint met een regel als "3 kansen · 1 in de zone · 1 open"; de tab met de meeste kansen in de zone gaat vanzelf open. Een kaart toont
-coin en richting, de stand (Wacht, In zone, Open), het label ongetest of in proef en de grafiek met zone, instap, stop en doel; een tik
-op de grafiek opent hem groot. In de zone staat bovenaan, daarna op gemeten afstand tot de instap; open trades staan onder Open.
+Kansen (`app/kansen.py`) heeft een tab per soort: Structuur, Zone-radar en Zone-sweep (met `ENGINE_FOCUS=false` ook SMC). Boven de
+tabs staat het totaal over alle tabs ("12 kansen klaar · 2 in de zone · 3 open", alleen wat er is; "Geen kansen" als er niets is), naast
+elke tabnaam het aantal wachtende kansen en zolang er iets in de zone staat een accentbadge met dat aantal; elke tab herhaalt zijn eigen
+regel. Wisselt een kaart van stand terwijl de pagina openstaat, dan tellen de getallen mee (`kaarten.js` na elke `/api/radar`). De tab met
+de meeste kansen in de zone gaat vanzelf open. Een kaart toont coin en richting, de stand (Wacht, In zone, Open), het label ongetest of
+in proef en een grafiek die per soort anders is: Structuur zijn eigen momentopname bij de breuk (`setup_chart.setup_svg`: de gebroken
+lijn of range, het retest-niveau, de stop en T1 tot T3, ook voor een open Structuur-trade), Zone-radar en Zone-sweep een tekening in de
+stijl van de galerij op het tijdframe van de zone (`app/card_chart.py`, lazy via `/api/kaart_svg/<sleutel>`: de zone als vlak vanaf de
+ontstaanscandle met een markering, de doelzone, bij de zone-sweep ook de prik en het herstel, en limiet, stop en doel met prijs rechts;
+"Groot" opent de schermvullende grafiek). Dubbele kaarten (zelfde soort, coin en richting, instap binnen 0,2%) staan één keer, de oudste;
+het blad zegt "Nog 1 vergelijkbaar signaal". Dat geldt alleen voor deze weergave: Bewijs, Logboek en meldingen houden elk signaal.
+In de zone staat bovenaan, daarna op gemeten afstand tot de instap; open trades staan onder Open.
 Wat niet meer actief is, en onder Structuur ook wat uitviel, de trend-trades en de range sweep (proef), staat als inklapbare regel
 onder de lijst. Een tik op de kop van een kaart opent het **detailblad**: de prijs als ladder (koerslabel links, lijnen in het midden,
 alleen de namen Stop, Instap en Doel rechts, zodat tekst nooit botst; `app/ladder.py`, live in `web/static/ladder.js`), daaronder de

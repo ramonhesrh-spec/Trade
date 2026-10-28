@@ -2877,6 +2877,34 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .kc-skipped { font-size: 12px; color: var(--tx2); }
 .kc .level-chart { height: 168px; }
 .ut-list .ut-tab { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding-top: 0; padding-bottom: 0; }
+/* Tellers op Kansen (V5): het totaal boven de tabs en per tab het aantal wachtende kansen, met een accentbadge zolang er iets in de zone staat.
+   Smal gehouden zodat drie tabs met getal en badge op 375px passen; een vierde (SMC zonder focus) schuift, zoals de tabbalk al deed. */
+.kt-total { margin: 0 0 4px; font: 500 15px / 1.35 var(--sans); color: var(--tx); font-variant-numeric: tabular-nums; }
+.ut-num { font: 500 15px / 1 var(--sans); font-variant-numeric: tabular-nums; color: var(--tx2); }
+.ut-tab.is-active .ut-num, .ut-tab[aria-selected="true"] .ut-num { color: var(--tx); }
+.ut-badge { display: inline-grid; place-items: center; min-width: 19px; height: 19px; padding: 0 5px; border-radius: 10px; background: var(--ac);
+  color: var(--onac); font: 700 12px / 1 var(--sans); font-style: normal; font-variant-numeric: tabular-nums; }
+.ut[data-utabs="kansen"] .ut-list { gap: 10px; }
+.ut[data-utabs="kansen"] .ut-tab { gap: 4px; font-size: 14px; letter-spacing: -0.01em; }
+.ut[data-utabs="kansen"] .ut-num { font-size: 14px; }
+@media (min-width: 400px) { .ut[data-utabs="kansen"] .ut-list { gap: 18px; } .ut[data-utabs="kansen"] .ut-tab, .ut[data-utabs="kansen"] .ut-num { font-size: 16px; } }
+/* De Structuur-tekening op de kaart: even hoog als de kaartgrafiek van de andere soorten, de labels rechts blijven leesbaar. */
+.kc-svg { margin: 0; min-width: 0; }
+.kc-svg svg.sc { display: block; width: 100%; height: auto; }
+.kc-svg.is-structuur .lc-cap { display: block; margin-top: 6px; }
+/* Zone-radar en Zone-sweep: de tekening komt lazy (kaarten.js); de doos houdt de hoogte vast zodat de lijst niet verspringt. */
+.kc-svg-box { aspect-ratio: 316 / 180; display: grid; place-items: center; }
+.kc-svg.is-drawn .kc-svg-box { display: block; }
+.kc-svg-box[hidden] { display: none; }
+.kc-svg-wait { font-size: 13px; color: var(--tx2); }
+.kc-svg.is-zone .lc-foot { margin-top: 4px; }
+.kc-svg.is-fallback .level-chart::before { display: none; }
+/* De kaarttekening schaalt 1:1 op een telefoon (viewBox 316 breed): labels 12px, vaklabels en markeringen 11px, dus nooit kleiner dan 11px op een telefoon. */
+.sc.is-card .sc-label { font-size: 12px; }
+.sc.is-card .sc-box-label { font-size: 11px; fill: var(--tx2); }
+.sc-zone.is-target { fill: var(--win); fill-opacity: .10; stroke: var(--win); stroke-opacity: .5; stroke-dasharray: 3 3; }
+.sc-mark { fill: var(--tx); stroke: var(--s1); stroke-width: 2; }
+.sc-mark-label { font: 600 11px var(--sans); fill: var(--tx); stroke: var(--s1); stroke-width: 3px; paint-order: stroke; }
 .lc-bare .lc-foot { margin-top: 0; justify-content: space-between; align-items: center; }
 .lc-bare .level-chart::before { display: none; }
 .lc-cap { font-size: 12px; color: var(--tx2); }
