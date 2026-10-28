@@ -266,6 +266,42 @@ class LiveTest(DbCase):
         self.assertAlmostEqual(sl.stop_with_room("long", 100.0, 100.0, 0.05), 99.6)
         self.assertAlmostEqual(sl.stop_with_room("short", 100.0, 101.0, 0.4), 101.1)       # ruim genoeg: ongemoeid
 
+    def test_heartbeat_says_how_many_coins_were_really_checked(self):
+        # Vroeger stond er altijd "35 coins gecontroleerd", ook als een coin faalde of niet gevolgd werd: dan zag je niet dat er coins misten.
+        good = self.fetch(BREAK_BAR + 4)
+
+        def fetch(coin, timeframe="30m", limit=300, since=None):
+            if coin == "ETH":
+                raise RuntimeError("beurs weg")
+            return good(coin, timeframe, limit, since)
+
+        now = (self.bars.at[BREAK_BAR + 3, "close_time"]).to_pydatetime()
+        with mock.patch("app.exchange.fetch_ohlcv", fetch), mock.patch("app.push_notify.send_push", mock.AsyncMock()), \
+                mock.patch.object(sl, "call_claude", lambda ctx: {"grade": "B", "reason": ""}), \
+                mock.patch.object(config, "FIXED_COINS", ["BTC", "ETH", "XYZ"]), \
+                mock.patch.object(repo, "list_coins", lambda: [{"symbol": "BTC"}, {"symbol": "ETH"}]):
+            asyncio.run(sl.run(now))
+        detail = repo.get_beat("structuur")["detail"]
+        self.assertTrue(detail.startswith("1 van 3 coins gecontroleerd"), detail)
+        self.assertIn("mislukt: ETH", detail)
+        self.assertIn("niet gevolgd: XYZ", detail)
+        self.assertEqual(sl.parse_beat(detail), {"checked": 1, "total": 3})
+
+    def test_heartbeat_parse_of_the_old_text(self):
+        self.assertEqual(sl.parse_beat("35 coins gecontroleerd"), {"checked": 35, "total": 35})
+        self.assertIsNone(sl.parse_beat("Staat uit: focus"))
+
+    def test_claude_judgement_has_a_short_timeout(self):
+        # Het oordeel is alleen nog een meting; een haperende API mocht de melding en de hele 5-minutencyclus niet tien minuten ophouden.
+        fake = mock.MagicMock()
+        fake.Anthropic.return_value.messages.create.return_value.content = [mock.Mock(type="tool_use", input={"grade": "A", "reason": ""})]
+        with mock.patch.dict("sys.modules", {"anthropic": fake}):
+            sl.call_claude({})
+        kwargs = fake.Anthropic.call_args.kwargs
+        self.assertEqual(kwargs["timeout"], sl.CLAUDE_TIMEOUT_S)
+        self.assertLessEqual(sl.CLAUDE_TIMEOUT_S, 60)
+        self.assertEqual(kwargs["max_retries"], 1)
+
     def test_off_switch(self):
         with mock.patch.object(config, "STRUCTURE_ENABLED", False):
             self.run_live(BREAK_BAR + 4)

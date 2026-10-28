@@ -16,6 +16,8 @@ score, en de motor gaat vanzelf uit als de laatste STRUCTURE_MAX_NEGATIVE afgero
 import asyncio
 import json
 import logging
+import re
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -161,9 +163,15 @@ def judge_context(coin: str, ev, b: pd.DataFrame, plan: dict) -> dict:
     }
 
 
+# Het oordeel is alleen nog een meting. Met de standaard van de SDK (600 s en twee herhalingen) hield één haperende aanroep de melding en de
+# hele 5-minutencyclus (ook zone-radar erna) tot een half uur op; een overgeslagen timer mist dan snelle retests. Bij een timeout geen
+# oordeel (None), de kans wordt gewoon gemeld.
+CLAUDE_TIMEOUT_S = 30.0
+
+
 def call_claude(context: dict) -> dict:
     import anthropic
-    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, timeout=CLAUDE_TIMEOUT_S, max_retries=1)
     response = client.messages.create(
         model=config.STRUCTURE_MODEL, max_tokens=400, system=SYSTEM_PROMPT, tools=[TOOL],
         tool_choice={"type": "tool", "name": "record_grade"},
@@ -455,15 +463,20 @@ async def run(now: Optional[datetime] = None) -> None:
         repo.notify_engine_disabled("Structuur-breuken", f"De laatste {config.STRUCTURE_MAX_NEGATIVE} afgeronde signalen zijn samen negatief. Zie Bewijs.")
         return
     symbols = {c["symbol"] for c in repo.list_coins()}
-    found = []
+    found, checked, failed = [], 0, []
+    started = time.monotonic()
     # Alle gevolgde coins, niet alleen de basiscoins: meer breuken betekent eerder een cijfer waar we iets op kunnen afstellen.
     for coin in config.FIXED_COINS:
         if coin not in symbols:
             continue
         try:
             found += await _discover(coin, now)
+            checked += 1
         except Exception:
+            failed.append(coin)
             logger.exception("Structuur-check voor %s is mislukt", coin)
+    missing = [c for c in config.FIXED_COINS if c not in symbols]
+    seconds = time.monotonic() - started
     try:
         await _announce(found, now)
     except Exception:
@@ -475,7 +488,27 @@ async def run(now: Optional[datetime] = None) -> None:
         await digest.run(now)
     except Exception:
         logger.exception("Dagbrief is mislukt")
-    repo.beat("structuur", f"{len(config.FIXED_COINS)} coins gecontroleerd")
+    repo.beat("structuur", beat_detail(checked, len(config.FIXED_COINS), failed, missing, seconds))
+
+
+def beat_detail(checked: int, total: int, failed: list[str], missing: list[str], seconds: float) -> str:
+    """De hartslag zegt hoeveel coins echt bekeken zijn. Vroeger stond er altijd het aantal FIXED_COINS, ook als een coin faalde of niet in
+    de coinlijst stond, zodat een gat in de dekking onzichtbaar bleef (scripts/structuur_check.py leest dit terug met parse_beat)."""
+    parts = [f"{checked} van {total} coins gecontroleerd in {seconds:.0f} s"]
+    if failed:
+        parts.append("mislukt: " + ", ".join(failed))
+    if missing:
+        parts.append("niet gevolgd: " + ", ".join(missing))
+    return "; ".join(parts)
+
+
+def parse_beat(detail: str) -> Optional[dict]:
+    """{"checked", "total"} uit de hartslag, ook uit de oude tekst "35 coins gecontroleerd"; None als het geen telling is (uit of focus)."""
+    m = re.match(r"(\d+) van (\d+) coins gecontroleerd", detail or "")
+    if m:
+        return {"checked": int(m.group(1)), "total": int(m.group(2))}
+    m = re.match(r"(\d+) coins gecontroleerd", detail or "")
+    return {"checked": int(m.group(1)), "total": int(m.group(1))} if m else None
 
 
 if __name__ == "__main__":

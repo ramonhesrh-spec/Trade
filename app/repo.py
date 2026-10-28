@@ -2864,6 +2864,16 @@ def set_structure_state(setup_id: int, state: str, signal_id: Optional[int] = No
         )
 
 
+def list_structure_report_rows(since_iso: str) -> list[dict]:
+    """Elke structuur-setup sinds een moment met de uitkomst van zijn signaal (scripts/structuur_check.py, app/structure_report.py)."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT ss.id, ss.coin, ss.direction, ss.state, ss.created_at, ss.signal_id, s.auto_outcome
+               FROM structure_setups ss LEFT JOIN signals s ON s.id = ss.signal_id WHERE ss.created_at >= ? ORDER BY ss.created_at""",
+            (since_iso,)).fetchall()
+        return [dict(r) for r in rows]
+
+
 def count_structure_alerts_since(since_iso: str) -> int:
     with db.session() as conn:
         return conn.execute("SELECT COUNT(*) FROM structure_setups WHERE state NOT IN ('geen_plan', 'niet_gemeld', 'geen_oordeel', 'schaduw', 'oordeel') AND created_at >= ?",
@@ -3258,6 +3268,12 @@ def get_zone_radar_setup_by_signal(signal_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
+def get_zone_radar_setup(setup_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM zone_radar_setups WHERE id = ?", (setup_id,)).fetchone()
+        return dict(row) if row else None
+
+
 _ZONE_SWEEP_COLS = ("coin", "direction", "variant", "stop_name", "tf", "zone_key", "zone_low", "zone_high", "zone_at", "sweep_at", "extreme",
                     "placed_at", "expires_at", "ref_price", "range_high", "range_low", "atr_t", "limit_price", "stop_loss", "take_profit", "rr",
                     "target_tf", "target_low", "target_high", "prik_atr", "herstel_bars", "quiet")
@@ -3346,6 +3362,12 @@ def get_zone_sweep_trade(signal_id: int) -> Optional[dict]:
 def get_zone_sweep_setup_by_signal(signal_id: int) -> Optional[dict]:
     with db.session() as conn:
         row = conn.execute("SELECT * FROM zone_sweep_setups WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_zone_sweep_setup(setup_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM zone_sweep_setups WHERE id = ?", (setup_id,)).fetchone()
         return dict(row) if row else None
 
 
