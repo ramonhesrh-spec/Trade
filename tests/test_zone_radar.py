@@ -284,6 +284,27 @@ class LiveTests(unittest.TestCase):
         rows = [r for r in repo.list_signals_for_quality_report(None) if r["trade_type"] == "zone_radar"]
         self.assertEqual([r["ctx_funding"] for r in rows], [0.06])
 
+    def test_poc_samenval_is_een_kenmerk_en_geen_filter(self):
+        repo.set_poc_scan("TIA", self.now.isoformat(), self.now.isoformat())
+        repo.add_poc_levels("TIA", [{"period": "day", "period_start": (self.now - pd.Timedelta(days=2)).floor("D").isoformat(), "price": 104.2,
+                                     "touched_at": None}])
+        self.run_once()
+        cards = {c["direction"]: c for c in repo.list_zone_radar_setups()}
+        self.assertEqual(set(cards), {"long", "short"})                      # dezelfde kaarten als zonder POC
+        self.assertEqual((cards["long"]["poc_near"], cards["short"]["poc_near"]), (1, 0))
+        row = live.signal_row(cards["long"])
+        self.assertIn("✓ POC-samenval", row["reason"])
+        self.assertEqual(row["pass_pct"], 100.0)
+        self.assertEqual(live.signal_row(cards["short"])["pass_pct"], 0.0)
+
+    def test_zonder_poc_meting_geen_kenmerk(self):
+        self.run_once()
+        card = repo.list_zone_radar_setups()[0]
+        self.assertIsNone(card["poc_near"])
+        row = live.signal_row(card)
+        self.assertIsNone(row["pass_pct"])
+        self.assertNotIn("POC", row["reason"])
+
     def test_oude_context_wordt_niet_als_stand_bewaard(self):
         repo.add_market_context([("TIA", "binance", "funding_8h", 0.06, (self.now - pd.Timedelta(hours=3)).isoformat())])
         self.run_once()

@@ -10,6 +10,7 @@ from typing import Optional
 
 import pandas as pd
 
+from app import chance_checks
 from app import trade_plan as tp
 from app import zone_radar as zr
 from app.replay import zonesweep as zs
@@ -113,11 +114,15 @@ def signal_row(row: dict, entry: float) -> dict:
     """Het signaal bij de vulling. Buiten de openbare ketting (de aanroeper legt het met chain_it=False vast): de regel is ongetest."""
     zone = f"{zone_text(row)} {row['zone_low']:.6g} tot {row['zone_high']:.6g}"
     side = "onder" if row["direction"] == "long" else "boven"
+    near = row.get("poc_near")
+    reason, pass_pct = chance_checks.with_checks(
+        f"Gemeten: prik {row['prik_atr']:.2f} ATR {side} de zone, herstel in {row['herstel_bars']} candle(s) op 1u.".replace(".", ",", 1),
+        None if near is None else bool(near))
     goal = (f"Doel de rand van de {target_text(row)[5:]} op {row['take_profit']:.6g}." if row.get("take_profit") is not None
             else "Geen doel: dat kies je zelf. Bewijs telt de R bij een referentie-uitgang (meelopende stop 3 ATR op 1u).")
     return {"message_id": None, "coin": row["coin"], "direction": row["direction"], "category": "day_trading", "trade_type": TRADE_TYPE,
             "pattern_name": row["variant"], "price": entry, "stop_loss": row["stop_loss"], "take_profit": row.get("take_profit"),
-            "confidence": f"{LABEL} (ongetest)", "technical_confirmed": 1, "hard_gates_ok": 1, "is_practice": 0, "pass_pct": None,
-            "reason": f"Gemeten: prik {row['prik_atr']:.2f} ATR {side} de zone, herstel in {row['herstel_bars']} candle(s) op 1u.".replace(".", ",", 1),
+            "confidence": f"{LABEL} (ongetest)", "technical_confirmed": 1, "hard_gates_ok": 1, "is_practice": 0,
+            "reason": reason, "pass_pct": pass_pct,
             "plain_explanation": f"{zone}: de koers prikte erdoor en sloot terug. Limiet {entry:.6g}, stop voorbij de prik {row['stop_loss']:.6g}. {goal} Ongetest.",
             "suggested_entry_low": row["zone_low"], "suggested_entry_high": row["zone_high"]}

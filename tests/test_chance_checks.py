@@ -15,6 +15,18 @@ class ChanceChecksTests(unittest.TestCase):
         self.assertEqual(cc.parse_reason(None), [])
         self.assertEqual(cc.parse_reason("Toelichting zonder tekens"), [])
 
+    def test_poc_samenval_is_one_measured_feature_or_nothing(self):
+        self.assertEqual(cc.poc_checks(None), [])                  # niet gemeten: geen kenmerk, geen score
+        self.assertEqual(cc.poc_checks(True), [(cc.POC_LABEL, True)])
+        self.assertEqual(cc.poc_checks(False), [(cc.POC_LABEL, False)])
+        self.assertIn("POC-samenval", cc.POC_LABEL)
+        self.assertEqual(cc.with_checks("Gemeten: x.", None), ("Gemeten: x.", None))
+        reason, pct = cc.with_checks("Gemeten: x.", True)
+        self.assertEqual(reason, "Gemeten: x. | ✓ " + cc.POC_LABEL)
+        self.assertEqual(pct, 100.0)
+        self.assertEqual(cc.parse_reason(reason), [(cc.POC_LABEL, True)])
+        self.assertEqual(cc.with_checks("Gemeten: x.", False)[1], 0.0)
+
     def test_structure_checks_count_measured_features(self):
         plan = {"from_levels": True, "targets_r": [1.0, 2.0, 3.0]}
         full = cc.structure_checks({"vol_ratio": 2.0, "with_trend": True, "touches": 4, "span": 20}, plan, "A")
