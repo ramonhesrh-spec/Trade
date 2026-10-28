@@ -43,8 +43,8 @@ class ManifestTest(unittest.TestCase):
     def setUp(self):
         self.m = json.loads((STATIC / "manifest.json").read_text())
 
-    def test_start_url_is_vandaag_marked_as_app_start(self):
-        self.assertEqual(self.m["start_url"], "/vandaag?bron=app")
+    def test_start_url_is_kansen_for_everyone(self):
+        self.assertEqual(self.m["start_url"], "/smc")                     # V4: de app opent op Kansen, ook voor de CEO
 
     def test_id_keeps_existing_installs_the_same_app(self):
         # Zonder id is de start_url de identiteit: de oude installaties hadden /ceo, een nieuwe start_url zou er een tweede app van maken.
@@ -58,7 +58,7 @@ class ManifestTest(unittest.TestCase):
     def test_shortcuts_nu_plannen_bewijs_with_existing_icons(self):
         from PIL import Image
         got = [(s["name"], s["url"]) for s in self.m["shortcuts"]]
-        self.assertEqual(got, [("Nu", "/vandaag"), ("Plannen", "/smc"), ("Bewijs", "/bewijs")])       # de tabnamen van V2, dezelfde urls
+        self.assertEqual(got, [("Kansen", "/smc"), ("Markt", "/vandaag"), ("Bewijs", "/bewijs")])     # de tabnamen van V4, dezelfde urls
         for s in self.m["shortcuts"]:
             self.assertTrue(s.get("short_name"))
             self.assertTrue(s.get("description"))

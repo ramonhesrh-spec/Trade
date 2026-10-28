@@ -88,9 +88,9 @@ class BaseShellTests(unittest.TestCase):
 
     def test_vandaag_heeft_de_schil(self):
         html = self.client.get("/vandaag").text
-        self.assertNotIn('id="fsearch"', html)                  # Nu volgt het ontwerp: geen zoekveld over de kaart, zoeken blijft via Ctrl+K en Plannen
+        self.assertNotIn('id="fsearch"', html)                  # Markt heeft geen zoekveld; zoeken blijft via Ctrl+K en Kansen
         for needle in ['class="has-glow"', 'class="dock"', 'class="tabbar"', 'id="push-pause"', 'id="price-dot"',
-                       'id="system-status"', 'id="cmdk"', 'id="more-sheet"', 'id="push-banner"', ">Plannen</a>", ">Bewijs</a>",
+                       'id="system-status"', 'id="cmdk"', 'id="more-sheet"', 'id="push-banner"', ">Kansen</a>", ">Bewijs</a>",
                        "data-more-toggle"]:
             self.assertIn(needle, html, needle)
 
@@ -199,7 +199,7 @@ class BaseShellTests(unittest.TestCase):
 
 
 class NavTests(BaseShellTests):
-    """Vier tabs (Nu, Plannen, Logboek, Bewijs); de rest zit achter het initiaal rechtsboven. Geen url verandert."""
+    """Vier tabs (Kansen, Logboek, Bewijs, Markt); de rest zit achter het initiaal rechtsboven. Geen url verandert."""
 
     def tabs(self, html):
         import re
@@ -208,11 +208,11 @@ class NavTests(BaseShellTests):
 
     def test_dok_heeft_vier_tabs_zonder_meer_en_zonder_ceo(self):
         found, bar = self.tabs(self.client.get("/bewijs").text)
-        self.assertEqual(found, [("/vandaag", "Nu"), ("/smc", "Plannen"), ("/signalen", "Logboek"), ("/bewijs", "Bewijs")])
+        self.assertEqual(found, [("/smc", "Kansen"), ("/signalen", "Logboek"), ("/bewijs", "Bewijs"), ("/vandaag", "Markt")])
         self.assertNotIn("more-toggle", bar)
         self.assertNotIn("tab-ceo", bar)
 
-    def test_plannen_is_actief_op_radar_en_setups(self):
+    def test_kansen_is_actief_op_kansen(self):
         for pad in ("/smc", "/structuur"):
             _, bar = self.tabs(self.client.get(pad).text)
             self.assertRegex(bar, r'class="tab is-active" href="/smc" aria-current="page"', pad)
@@ -250,10 +250,10 @@ class NavTests(BaseShellTests):
         html = self.client.get("/bewijs").text
         nav = html[html.index('<div class="nav-links">'):html.index("</div>", html.index('<div class="nav-links">'))]
         self.assertEqual(re.findall(r'href="([^"]+)"[^>]*>([^<]+)</a>', nav),
-                         [("/vandaag", "Nu"), ("/smc", "Plannen"), ("/signalen", "Logboek"), ("/bewijs", "Bewijs")])
+                         [("/smc", "Kansen"), ("/signalen", "Logboek"), ("/bewijs", "Bewijs"), ("/vandaag", "Markt")])
         self.assertIn('class="topbar-avatar" data-more-toggle', html)
 
-    def test_plannen_badge_telt_wat_in_de_zone_staat(self):
+    def test_kansen_badge_telt_wat_in_de_zone_staat(self):
         repo.insert_zone_radar_setup({"coin": "TIA", "direction": "long", "tf": "1h", "zone_key": "1h:bull:x", "zone_low": 99.0, "zone_high": 101.0,
                                       "stop_loss": 98.0, "take_profit": 106.0, "rr": 5.0, "atr": 0.5, "target_tf": "4h", "target_low": 106.0,
                                       "target_high": 107.0}, db.now_iso())
@@ -262,7 +262,7 @@ class NavTests(BaseShellTests):
                                       "target_high": 105.0}, db.now_iso())
         self.client.get("/smc")                                 # warmt de koerscache (100 voor elke coin): TIA in de zone, SOL wacht
         _, bar = self.tabs(self.client.get("/bewijs").text)
-        self.assertRegex(bar, r'<span>Plannen</span>\s*<i class="tab-badge" aria-label="1 in de zone">1</i>')
+        self.assertRegex(bar, r'<span>Kansen</span>\s*<i class="tab-badge" aria-label="1 in de zone">1</i>')
 
     def test_logboek_heet_logboek_en_de_url_blijft(self):
         html = self.client.get("/signalen").text

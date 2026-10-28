@@ -33,8 +33,8 @@
 {% if _story %}<link rel="stylesheet" href="{{ asset('announce.css') }}">{% endif %}
 </head>
 {% import "_macros.html" as macros %}
-{# Vier tabs. Plannen is zowel de Radar (/smc) als de Setups (/structuur): die wisselen binnen Plannen (macro plan_switch). #}
-{% set main_tabs = (("/vandaag", "Nu"), ("/smc", "Plannen"), ("/signalen", "Logboek"), ("/bewijs", "Bewijs")) %}
+{# Vier tabs (ontwerp V4): Kansen is de startpagina, Markt de oude Vandaag zonder Nu. De oude /structuur stuurt door naar Kansen. #}
+{% set main_tabs = (("/smc", "Kansen"), ("/signalen", "Logboek"), ("/bewijs", "Bewijs"), ("/vandaag", "Markt")) %}
 {% set nav_here = "/smc" if request.url.path == "/structuur" else request.url.path %}
 {% set _pt %}{% block page_title %}{% endblock %}{% endset %}
 {# Zoekveld alleen op pagina's die het blok dock_search vullen; de body-klasse laat de CSS de onderruimte aanpassen. #}
@@ -277,7 +277,7 @@
 </script>
 <header class="topbar{% if not (user and _pt|trim) %} topbar-flow{% endif %}"{% if _bare %} hidden{% endif %}>
   <div class="topbar-top">
-    <a href="/ceo" class="brand">
+    <a href="/smc" class="brand">
       <span class="brand-logo-wrap">
         <svg class="brand-logo" viewBox="0 0 32 32" fill="none" aria-hidden="true">
           <circle cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="2"/>
@@ -594,9 +594,9 @@
 
     function buildItems() {
       var list = [
-        { label: "Nu", href: "/vandaag", hint: "pagina" },
-        { label: "Plannen: Radar", href: "/smc", hint: "pagina" },
-        { label: "Plannen: Setups", href: "/structuur", hint: "pagina" },
+        { label: "Kansen", href: "/smc", hint: "pagina" },
+        { label: "Kansen: Structuur", href: "/smc?tab=structuur", hint: "pagina" },
+        { label: "Markt", href: "/vandaag", hint: "pagina" },
         { label: "Logboek", href: "/signalen", hint: "pagina" },
         { label: "Bewijs", href: "/bewijs", hint: "pagina" },
         { label: "Meldingen", href: "/meldingen", hint: "pagina" },

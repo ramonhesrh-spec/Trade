@@ -72,28 +72,14 @@ def _cookie_user(request: Request) -> Optional[dict]:
     return repo.get_user(user_id) if user_id else None
 
 
-def _range_sweep_open_count(user: Optional[dict], prices: dict, now: datetime) -> int:
-    """Hetzelfde filter als _range_sweep_cards, maar met alleen de koerscache: het menu doet geen beursaanroep per pagina."""
-    if not user or not _range_sweep_shown(user):
-        return 0
-    return sum(1 for s in repo.list_range_sweep_setups(("waiting", "niet_gemeld")) if today.range_sweep_state(s, prices.get(s["coin"]), now) in today.OPEN_RANGE_STATES)
-
-
 def _nav_context(request: Request) -> dict:
     """De coinlijst in het menu staat in elke pagina. Zonder dit moest elke route `coins` zelf meegeven, en de nieuwere
-    pagina's (Vandaag, Setups, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
+    pagina's (Markt, Kansen, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
     # Alleen de koersen uit de cache: het menu mag geen Binance-aanroep per paginaweergave doen. Zonder koers telt een setup mee.
     cached = {coin: hit[1] for coin, hit in _price_cache.items() if hit[1]}
     forming = _forming_setups(_cookie_user(request))
-    radar_count = radar.waiting_count(forming, cached)
-    now = datetime.now(timezone.utc)
-    setups = sum(1 for r in repo.list_structure_setups(("waiting",), 50)
-                 if today.structure_state(r, json.loads(r["plan"]), cached.get(r["coin"]), now) in today.OPEN_PLAN_STATES)
-    # De range sweep hoort bij Setups (de melding en de kans wijzen naar /structuur), net als in today.open_chances.
-    setups += _range_sweep_open_count(_cookie_user(request), cached, now)
-    # Het getal op Plannen in het dok: wat nu in de zone staat, zoals het appicoon (radar.in_zone_count). De twee tellers van vroeger
-    # staan op de wisselaar Radar | Setups binnen Plannen.
-    return {"coins": repo.list_coins(), "nav_counts": {"setups": setups, "radar": radar_count, "in_zone": radar.in_zone_count(forming, cached)}}
+    # Het getal op Kansen in het dok: wat nu in de zone staat, zoals het appicoon (radar.in_zone_count).
+    return {"coins": repo.list_coins(), "nav_counts": {"radar": radar.waiting_count(forming, cached), "in_zone": radar.in_zone_count(forming, cached)}}
 
 
 def _announce_context(request: Request) -> dict:
@@ -291,7 +277,7 @@ async def landing(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     user_id = security.verify_session_token(token) if token else None
     if user_id and repo.get_user(user_id):
-        return RedirectResponse(url="/ceo", status_code=303)
+        return RedirectResponse(url="/smc", status_code=303)
 
     now = datetime.now(timezone.utc)
     scripts = repo.latest_scripts()
@@ -1178,7 +1164,7 @@ async def login_submit(request: Request, username: str = Form(...), password: st
         )
 
     token = security.create_session_token(user["id"])
-    response = RedirectResponse(url="/ceo", status_code=303)
+    response = RedirectResponse(url="/smc", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 
@@ -1244,7 +1230,7 @@ async def register_submit(
         return error("Deze gebruikersnaam is al in gebruik." if repo.get_user_by_username(username) else "Deze uitnodigingscode is net op of verlopen.")
 
     token = security.create_session_token(user_id)
-    response = RedirectResponse(url="/ceo", status_code=303)
+    response = RedirectResponse(url="/smc", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 
@@ -1500,7 +1486,7 @@ async def dashboard():
     # geen navigatielink wijst hier meer naartoe, maar een oude
     # PWA-snelkoppeling kan nog steeds deze URL openen. Doorsturen i.p.v.
     # verwijderen voorkomt een kale 404 op zo'n bestaande snelkoppeling.
-    return RedirectResponse(url="/vandaag", status_code=303)
+    return RedirectResponse(url="/smc", status_code=303)
 
 
 @app.get("/account")
@@ -2406,7 +2392,7 @@ async def beheer_invite_delete(invite_id: int, user: dict = Depends(require_logi
 
 @app.get("/ceo")
 async def ceo_page(request: Request, user: dict = Depends(require_login)):
-    """De startpagina: de CEO. Alleen echte gegevens waar het ertoe doet (dagen in functie, aantal leerlingen, het weekresultaat voor de geldregen),
+    """De pagina van de CEO (in het blad achter het initiaal). Alleen echte gegevens waar het ertoe doet (dagen in functie, aantal leerlingen, het weekresultaat voor de geldregen),
     de rest is de grap. Handelscijfers staan op Bewijs."""
     boss = ceo_user() or user
     rows = report_rows(user)

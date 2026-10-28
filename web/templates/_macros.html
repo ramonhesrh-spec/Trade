@@ -472,16 +472,6 @@
 </div>
 {% endmacro %}
 
-{# Plannen bestaat uit twee pagina's die blijven waar ze waren: de Radar (/smc) en de Setups (/structuur). Dezelfde linktabs als utabs,
-   met de tellers die eerst op de tabs in het dok stonden (wachtende Radar-plannen, klaarstaande setups). #}
-{% macro plan_switch(active, counts) %}
-<nav class="plan-switch" aria-label="Plannen">
-  {% for href, label, n in (("/smc", "Radar", counts.radar if counts else 0), ("/structuur", "Setups", counts.setups if counts else 0)) %}
-  <a class="ut-tab{% if href == active %} is-active{% endif %}" href="{{ href }}"{% if href == active %} aria-current="page"{% endif %}><span>{{ label }}</span>{% if n %}<i class="tab-badge">{{ n }}</i>{% endif %}</a>
-  {% endfor %}
-</nav>
-{% endmacro %}
-
 {# Rond coinplaatje: het echte logo uit web/static/coins (zie SOURCES.md), anders de letters. Of er een logo is weet de server al
    (coin_logo); laadt het toch niet, dan haalt onerror het weg en blijven de letters staan. #}
 {% macro coin_avatar(coin, size=36, extra="") %}{% set logo = coin_logo(coin) %}<span class="coin-av {{ extra }}{% if logo %} has-logo{% if logo.dark %} is-dark{% endif %}{% endif %}" style="--av: {{ size }}px" aria-hidden="true">{% if logo %}<img src="{{ logo.src }}" alt="" width="{{ size }}" height="{{ size }}" loading="lazy" decoding="async" onerror="this.parentNode.classList.remove('has-logo');this.remove()">{% endif %}<span class="coin-av-txt">{{ (coin or "?")[:4] }}</span></span>{% endmacro %}

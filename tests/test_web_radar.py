@@ -137,7 +137,7 @@ class WebRadarTests(unittest.TestCase):
 
     def test_navigatie_heeft_radar_en_bewijs(self):
         r = self.client.get("/bewijs")
-        self.assertIn('>Plannen</a>', r.text)                          # de Radar staat onder Plannen, op dezelfde url
+        self.assertIn('>Kansen</a>', r.text)                           # de Radar heet Kansen, op dezelfde url
         self.assertIn('href="/smc"', r.text)
         self.assertIn('>Bewijs</a>', r.text)
 

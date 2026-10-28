@@ -3035,15 +3035,6 @@ body.is-bare .footer, body.is-bare .push-banner { display: none !important; }
 .ck-next:hover { background: var(--ac); color: var(--onac); }
 .ck-next[hidden] { display: none; }
 
-/* Plannen: Radar en Setups als twee standen van één pagina. */
-.plan-switch { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 3px; margin: calc(-1 * var(--space-4)) 0 var(--space-9); padding: 3px;
-  border: 1px solid var(--bd); border-radius: 12px; background: var(--s1); }
-.plan-switch .ut-tab { display: flex; align-items: center; justify-content: center; gap: var(--space-3); min-height: 44px; padding: 0 var(--space-4); border: 0; border-radius: 9px;
-  color: var(--tx2); font: 500 15px var(--sans); text-decoration: none; }
-.plan-switch .ut-tab.is-active { background: var(--s2); color: var(--tx); font-weight: 600; }
-.plan-switch .tab-badge { position: static; display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--ac); color: var(--onac);
-  font: 600 11px / 18px var(--mono); font-style: normal; text-align: center; }
-@media (min-width: 761px) { .plan-switch { max-width: 360px; } }
 .order-link { display: flex; align-items: center; justify-content: center; min-height: 48px; margin: var(--space-6) 0 0; border-radius: 12px; background: var(--ac); color: var(--onac);
   font: 600 15px var(--sans); text-decoration: none; }
 .order-link:hover { color: var(--onac); }

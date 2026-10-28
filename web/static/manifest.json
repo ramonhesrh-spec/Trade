@@ -3,7 +3,7 @@
   "name": "HesPulse",
   "short_name": "HesPulse",
   "description": "Marktbrein, scenario's en meldingen voor crypto day-trading",
-  "start_url": "/vandaag?bron=app",
+  "start_url": "/smc",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0a0e0f",
@@ -13,10 +13,10 @@
     { "src": "/static/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "shortcuts": [
-    { "name": "Nu", "short_name": "Nu", "description": "Niets te doen, of het ene plan dat nu in de zone staat", "url": "/vandaag",
-      "icons": [{ "src": "/static/shortcut-vandaag.png", "sizes": "96x96", "type": "image/png" }] },
-    { "name": "Plannen", "short_name": "Plannen", "description": "Plannen die wachten, met limiet, stop en doel", "url": "/smc",
+    { "name": "Kansen", "short_name": "Kansen", "description": "Kansen per soort, met de grafiek en de order stap voor stap", "url": "/smc",
       "icons": [{ "src": "/static/shortcut-radar.png", "sizes": "96x96", "type": "image/png" }] },
+    { "name": "Markt", "short_name": "Markt", "description": "Marktcontext, agenda en nieuws, gemeten", "url": "/vandaag",
+      "icons": [{ "src": "/static/shortcut-vandaag.png", "sizes": "96x96", "type": "image/png" }] },
     { "name": "Bewijs", "short_name": "Bewijs", "description": "Gemeten resultaat per soort melding", "url": "/bewijs",
       "icons": [{ "src": "/static/shortcut-bewijs.png", "sizes": "96x96", "type": "image/png" }] }
   ]

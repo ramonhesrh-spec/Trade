@@ -420,7 +420,7 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn('href="/vandaag"', page)
         self.assertIn(">Logboek<", page)                                 # het journaal heet in de navigatie Logboek, de url bleef
         r = self.client.get("/", follow_redirects=False)
-        self.assertEqual(r.headers["location"], "/ceo")
+        self.assertEqual(r.headers["location"], "/smc")                   # ingelogd opent iedereen op Kansen, ook de CEO
 
 
     def test_public_landing_shows_live_vandaag_without_scenarios_and_manifest_opens_on_vandaag(self):
@@ -436,8 +436,8 @@ class WebVandaagTests(unittest.TestCase):
         self.assertNotIn("Geheime samenvatting", page)           # scenario's en duiding blijven achter het inloggen
         self.assertNotIn("Break boven gisteren hoog.", page)       # de reden bij een scenario blijft ook achter het inloggen
         self.assertNotIn("Wacht op de voorwaarde", page)
-        self.assertEqual(anon.get("/static/manifest.json").json()["start_url"], "/vandaag?bron=app")   # de CEO gaat door naar /ceo, zie test_pwa
-        self.assertEqual(self.client.get("/dashboard", follow_redirects=False).headers["location"], "/vandaag")
+        self.assertEqual(anon.get("/static/manifest.json").json()["start_url"], "/smc")
+        self.assertEqual(self.client.get("/dashboard", follow_redirects=False).headers["location"], "/smc")
 
 
     def test_meldingen_page_groups_by_day_with_chip_and_keeps_line_breaks(self):
