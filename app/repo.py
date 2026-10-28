@@ -3215,7 +3215,7 @@ def set_signal_price(signal_id: int, price: float) -> None:
 
 
 _ZONE_RADAR_COLS = ("coin", "direction", "tf", "zone_key", "zone_low", "zone_high", "stop_loss", "take_profit", "rr", "atr",
-                    "target_tf", "target_low", "target_high", "ctx_funding", "ctx_oi_change_24h", "ctx_spread")
+                    "target_tf", "target_low", "target_high", "ctx_funding", "ctx_oi_change_24h", "ctx_spread", "poc_near")
 
 
 def insert_zone_radar_setup(row: dict, created_at: str) -> Optional[int]:
@@ -3276,7 +3276,7 @@ def get_zone_radar_setup(setup_id: int) -> Optional[dict]:
 
 _ZONE_SWEEP_COLS = ("coin", "direction", "variant", "stop_name", "tf", "zone_key", "zone_low", "zone_high", "zone_at", "sweep_at", "extreme",
                     "placed_at", "expires_at", "ref_price", "range_high", "range_low", "atr_t", "limit_price", "stop_loss", "take_profit", "rr",
-                    "target_tf", "target_low", "target_high", "prik_atr", "herstel_bars", "quiet")
+                    "target_tf", "target_low", "target_high", "prik_atr", "herstel_bars", "quiet", "poc_near")
 
 
 def insert_zone_sweep_setup(row: dict, created_at: str) -> Optional[int]:
@@ -3371,6 +3371,129 @@ def get_zone_sweep_setup(setup_id: int) -> Optional[dict]:
         return dict(row) if row else None
 
 
+# ---------------------------------------------------------------------------
+# POC-radar (app/poc_radar_live.py): de POC-niveaus per coin, tot waar ze zijn bijgewerkt, de kaarten en de meting zonder doel.
+# ---------------------------------------------------------------------------
+
+def list_poc_levels(coin: str, since_iso: str) -> list[dict]:
+    """Niveaus van periodes die op of na `since_iso` begonnen, oudste eerst."""
+    with db.session() as conn:
+        rows = conn.execute("SELECT period, period_start, price, touched_at FROM poc_levels WHERE coin = ? AND period_start >= ? "
+                            "ORDER BY period_start, period", (coin, since_iso)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def add_poc_levels(coin: str, rows: list[dict]) -> None:
+    """rows: period, period_start, price, touched_at. Een periode die er al staat blijft zoals hij was: een gesloten periode verandert niet."""
+    if not rows:
+        return
+    with db.session() as conn:
+        conn.executemany("INSERT OR IGNORE INTO poc_levels (coin, period, period_start, price, touched_at, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                         [(coin, r["period"], r["period_start"], r["price"], r.get("touched_at"), db.now_iso()) for r in rows])
+
+
+def touch_poc_level(coin: str, period: str, period_start: str, touched_at: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE poc_levels SET touched_at = ? WHERE coin = ? AND period = ? AND period_start = ? AND touched_at IS NULL",
+                     (touched_at, coin, period, period_start))
+
+
+def get_poc_scan(coin: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM poc_scans WHERE coin = ?", (coin,)).fetchone()
+        return dict(row) if row else None
+
+
+def set_poc_scan(coin: str, checked_until: str, scanned_at: str) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT INTO poc_scans (coin, checked_until, scanned_at) VALUES (?, ?, ?) "
+                     "ON CONFLICT(coin) DO UPDATE SET checked_until = excluded.checked_until, scanned_at = excluded.scanned_at",
+                     (coin, checked_until, scanned_at))
+
+
+_POC_RADAR_COLS = ("coin", "direction", "period", "period_start", "level_key", "level", "limit_price", "stop_loss", "take_profit", "rr", "atr",
+                   "target_kind", "target_text", "target_tf", "target_low", "target_high", "expires_at")
+
+
+def insert_poc_radar_setup(row: dict, created_at: str) -> Optional[int]:
+    """None als dit niveau voor deze coin al een kaart had (UNIQUE coin, level_key): hij komt nooit terug."""
+    with db.session() as conn:
+        cur = conn.execute(
+            f"INSERT OR IGNORE INTO poc_radar_setups ({', '.join(_POC_RADAR_COLS)}, created_at) VALUES ({', '.join('?' for _ in _POC_RADAR_COLS)}, ?)",
+            (*(row.get(c) for c in _POC_RADAR_COLS), created_at))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def list_poc_radar_setups(states: tuple[str, ...] = ("waiting",)) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"SELECT * FROM poc_radar_setups WHERE state IN ({marks}) ORDER BY id", states).fetchall()]
+
+
+def count_poc_radar_setups_since(since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) AS n FROM poc_radar_setups WHERE created_at >= ?", (since_iso,)).fetchone()["n"]
+
+
+def mark_poc_radar_alert_sent(setup_id: int) -> bool:
+    """True als deze aanroep de vlag zette: alleen die mag de melding van de nieuwe kaart sturen."""
+    with db.session() as conn:
+        return conn.execute("UPDATE poc_radar_setups SET alert_sent = 1 WHERE id = ? AND alert_sent = 0", (setup_id,)).rowcount == 1
+
+
+def end_poc_radar_setup(setup_id: int, state: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("UPDATE poc_radar_setups SET state = ?, ended_at = ? WHERE id = ? AND state = 'waiting'",
+                            (state, db.now_iso(), setup_id)).rowcount == 1
+
+
+def fill_poc_radar_setup(setup_id: int, signal: dict, user_ids: list[int], measure: Optional[dict] = None) -> Optional[int]:
+    """Zoals fill_zone_sweep_setup: staat, signaal buiten de ketting, journaal van de kijkers en zonder doel de meetrij, in één transactie."""
+    with db.session() as conn:
+        if conn.execute("UPDATE poc_radar_setups SET state = 'filled', ended_at = ? WHERE id = ? AND state = 'waiting'",
+                        (db.now_iso(), setup_id)).rowcount != 1:
+            return None
+        signal_id = _insert_signal(conn, signal, False)
+        conn.execute("UPDATE poc_radar_setups SET signal_id = ? WHERE id = ?", (signal_id, setup_id))
+        if measure is not None:
+            conn.execute("""INSERT INTO poc_radar_trades (signal_id, setup_id, entry, stop, filled_at, checked_until, ref_stop, ref_extreme)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                         (signal_id, setup_id, measure["entry"], measure["stop"], measure["filled_at"], measure["checked_until"],
+                          measure["stop"], measure["entry"]))
+        for uid in user_ids:
+            _journal_in(conn, signal_id, uid)
+        return signal_id
+
+
+def update_poc_radar_trade(signal_id: int, **fields) -> None:
+    unknown = set(fields) - _ZONE_SWEEP_TRADE_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor poc_radar_trades: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE poc_radar_trades SET {', '.join(f + ' = ?' for f in fields)} WHERE signal_id = ?", (*fields.values(), signal_id))
+
+
+_POC_RADAR_TRADE_SELECT = """SELECT pt.*, s.coin, s.direction, s.price, s.created_at, s.auto_outcome, st.period
+                             FROM poc_radar_trades pt JOIN signals s ON s.id = pt.signal_id JOIN poc_radar_setups st ON st.id = pt.setup_id"""
+
+
+def list_open_poc_radar_trades() -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"{_POC_RADAR_TRADE_SELECT} WHERE pt.closed_at IS NULL ORDER BY pt.signal_id").fetchall()]
+
+
+def get_poc_radar_setup(setup_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM poc_radar_setups WHERE id = ?", (setup_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_poc_radar_setup_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM poc_radar_setups WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
 def add_market_context(rows: list[tuple]) -> None:
     """rows: (coin, bron, metric, waarde, gemeten_op)."""
     if not rows:
@@ -3457,6 +3580,8 @@ _PLAN_SOURCES = {
             "LEFT JOIN signals s ON s.id = z.signal_id WHERE z.id IN ({marks})",
     "zsweep": "SELECT z.id, z.coin, z.direction, z.created_at, z.signal_id, s.created_at AS zone_at FROM zone_sweep_setups z "
               "LEFT JOIN signals s ON s.id = z.signal_id WHERE z.id IN ({marks})",
+    "poc": "SELECT z.id, z.coin, z.direction, z.created_at, z.signal_id, s.created_at AS zone_at FROM poc_radar_setups z "
+           "LEFT JOIN signals s ON s.id = z.signal_id WHERE z.id IN ({marks})",
     "setup": "SELECT id, coin, direction, created_at, signal_id, zone_alert_at AS zone_at FROM smc_setups WHERE id IN ({marks})",
     "structuur": "SELECT id, coin, direction, created_at, signal_id, fired_at AS zone_at FROM structure_setups WHERE id IN ({marks})",
 }
@@ -3490,27 +3615,29 @@ def signals_by_ids(ids) -> dict[int, dict]:
         return {r["id"]: dict(r) for r in rows}
 
 
-def list_plan_moments(since_iso: str, include_zone_sweep: bool = True) -> list[dict]:
-    """Wat de app zag: elk Radar-plan (SMC, zone-radar en, als de kijker hem mag zien, zone-sweep) dat sinds `since_iso` ontstond of in de zone
-    kwam, met beide momenten."""
-    sweep = ("""UNION ALL
-               SELECT z.created_at, s.created_at AS zone_at FROM zone_sweep_setups z LEFT JOIN signals s ON s.id = z.signal_id
-               WHERE z.created_at >= ? OR s.created_at >= ?""" if include_zone_sweep else "")
+def list_plan_moments(since_iso: str, include_zone_sweep: bool = True, include_poc: bool = True) -> list[dict]:
+    """Wat de app zag: elk Radar-plan (SMC, zone-radar en, als de kijker ze mag zien, zone-sweep en POC-radar) dat sinds `since_iso` ontstond of
+    in de zone kwam, met beide momenten."""
+    extra = [table for table, on in (("zone_sweep_setups", include_zone_sweep), ("poc_radar_setups", include_poc)) if on]
+    more = "".join(f"""
+               UNION ALL
+               SELECT z.created_at, s.created_at AS zone_at FROM {table} z LEFT JOIN signals s ON s.id = z.signal_id
+               WHERE z.created_at >= ? OR s.created_at >= ?""" for table in extra)
     with db.session() as conn:
         rows = conn.execute(
             f"""SELECT z.created_at, s.created_at AS zone_at FROM zone_radar_setups z LEFT JOIN signals s ON s.id = z.signal_id
                WHERE z.created_at >= ? OR s.created_at >= ?
                UNION ALL
-               SELECT created_at, zone_alert_at AS zone_at FROM smc_setups WHERE created_at >= ? OR zone_alert_at >= ?
-               {sweep}""",
-            (since_iso,) * (6 if include_zone_sweep else 4)).fetchall()
+               SELECT created_at, zone_alert_at AS zone_at FROM smc_setups WHERE created_at >= ? OR zone_alert_at >= ?{more}""",
+            (since_iso,) * (4 + 2 * len(extra))).fetchall()
         return [dict(r) for r in rows]
 
 
 def plan_for_signal(signal_id: int) -> Optional[dict]:
     """Het Radar- of Setups-plan waaruit dit signaal ontstond, in dezelfde vorm als plans_for_keys; None voor een signaal zonder plan."""
     with db.session() as conn:
-        for kind, table in (("zone", "zone_radar_setups"), ("zsweep", "zone_sweep_setups"), ("setup", "smc_setups"), ("structuur", "structure_setups")):
+        for kind, table in (("zone", "zone_radar_setups"), ("zsweep", "zone_sweep_setups"), ("poc", "poc_radar_setups"), ("setup", "smc_setups"),
+                            ("structuur", "structure_setups")):
             row = conn.execute(f"SELECT id FROM {table} WHERE signal_id = ?", (signal_id,)).fetchone()
             if row:
                 return plans_for_keys([f"{kind}:{row['id']}"]).get(f"{kind}:{row['id']}")

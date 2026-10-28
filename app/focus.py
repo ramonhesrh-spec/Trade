@@ -1,6 +1,6 @@
 """Focus: welke soorten nog nieuwe kansen zoeken en melden. Eén bron van waarheid voor motoren, weergave en Bewijs.
 
-Besluit van de CEO (oktober 2026, live cijfers uit scripts/winnaars.py): alleen Structuur A/B, Structuur C, de zone-radar en de zone-sweep (live, ongetest, op verzoek van de CEO zonder labrun) melden nog iets nieuws.
+Besluit van de CEO (oktober 2026, live cijfers uit scripts/winnaars.py): alleen Structuur A/B, Structuur C, de zone-radar, de zone-sweep en de POC-radar (live, ongetest, op verzoek van de CEO zonder labrun) melden nog iets nieuws.
 Alle andere soorten staan uit om ze later één voor één te verbeteren. Uitzetten is geen weggooien: de
 code en de data blijven, open trades lopen door tot ze sluiten (level_check, rule_live.update_open, range_sweep_live.track/follow), en
 ENGINE_FOCUS=false zet alles terug zoals het was. Geen database of netwerk hier; config wordt pas bij de aanroep gelezen, zodat een test hem kan zetten."""
@@ -8,8 +8,8 @@ from typing import Iterable, Optional
 
 from app import config
 
-FOCUS_TYPES = ("structuur", "structuur_c", "zone_radar", "zone_sweep")
-LABELS = {"structuur": "Structuur A/B", "structuur_c": "Structuur C", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep"}
+FOCUS_TYPES = ("structuur", "structuur_c", "zone_radar", "zone_sweep", "poc_radar")
+LABELS = {"structuur": "Structuur A/B", "structuur_c": "Structuur C", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar"}
 # Wat een uitgezette motor in zijn hartslag zet (engine_heartbeat, scripts/push_diag.py) en in het log.
 OFF_DETAIL = "uit door focus"
 

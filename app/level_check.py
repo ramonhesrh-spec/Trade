@@ -94,11 +94,11 @@ def _level_hit_in_candles(
 
 
 def _self_measured(row: dict) -> bool:
-    """Soorten die hun uitkomst zelf zetten: de proefmotor (meelopende stop), de range sweep en een zone-sweep zonder doel (referentie-uitgang).
+    """Soorten die hun uitkomst zelf zetten: de proefmotor (meelopende stop), de range sweep en een zone-sweep of POC-radar zonder doel (referentie-uitgang).
     Een zone-sweep met doel blijft hier, die beslist op doel en stop zoals elk plan."""
     if row["trade_type"] in (rule_live.RULE, range_sweep_live.TRADE_TYPE):
         return True
-    return row["trade_type"] == rule_live.ZONE_SWEEP and row.get("take_profit") is None
+    return row["trade_type"] in (rule_live.ZONE_SWEEP, rule_live.POC_RADAR) and row.get("take_profit") is None
 
 
 async def check_open_trades() -> None:

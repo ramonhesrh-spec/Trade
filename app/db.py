@@ -305,6 +305,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for col in ("ctx_funding", "ctx_oi_change_24h", "ctx_spread"):
         if col not in zone_radar_cols:
             conn.execute(f"ALTER TABLE zone_radar_setups ADD COLUMN {col} REAL")
+    # POC-samenval (chance_checks.poc_checks) op de kaarten van de zone-radar en de zone-sweep; leeg op oude rijen: toen niet gemeten.
+    for table in ("zone_radar_setups", "zone_sweep_setups"):
+        if "poc_near" not in {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN poc_near INTEGER")
 
 
 def _migrate_rule_trades(conn: sqlite3.Connection) -> None:
