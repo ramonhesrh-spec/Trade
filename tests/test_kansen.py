@@ -360,3 +360,15 @@ class HideKeyTests(unittest.TestCase):
         self.assertEqual(kansen.hidden_text(["HYPE short", "ETH long", "SOL long"]), "3 kaarten verborgen")
         self.assertEqual(kansen.hidden_label(0), "")
         self.assertEqual(kansen.hidden_label(2), "Verborgen (2)")
+
+
+class StructureOriginTests(unittest.TestCase):
+    def card(self, kind, direction="long"):
+        return {"id": 4, "coin": "SOL", "direction": direction, "kind": kind, "plan": {"level": 100.0, "stop": 99.0},
+                "targets": [(102.0, 2.0), (103.0, 3.0)], "chart": ""}
+
+    def test_origin_says_which_shape_broke_in_plain_words(self):
+        self.assertEqual(kansen.structure_item(self.card("CHOCH"), 100.5, "wacht")["origin"], "Structuur · hogere bodem, breuk van de laatste top, 30m")
+        self.assertEqual(kansen.structure_item(self.card("CHOCH", "short"), 99.5, "wacht")["origin"], "Structuur · lagere top, breuk van de laatste bodem, 30m")
+        self.assertEqual(kansen.structure_item(self.card("RANGE"), 100.5, "wacht")["origin"], "Structuur · breuk van een range, 30m")
+        self.assertEqual(kansen.structure_item(self.card("LINE"), 100.5, "wacht")["origin"], "Structuur · breuk van een lijn, 30m")

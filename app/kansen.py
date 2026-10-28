@@ -7,7 +7,7 @@ gaat open, anders Structuur."""
 import re
 from typing import Iterable, Optional
 
-from app import nu, radar, trade_plan as tp
+from app import nu, radar, setup_chart, trade_plan as tp
 
 LABELS = {"structuur": "Structuur", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar", "smc": "SMC"}
 ORDER = ("structuur", "zone_radar", "zone_sweep", "poc_radar", "smc")
@@ -60,7 +60,7 @@ def structure_item(card: dict, price: Optional[float], state: Optional[str]) -> 
     momentopname blijft de kaartgrafiek als terugval."""
     item = nu.structure_item(card, price, state)
     chart = tp.chart_spec(card["direction"], card["plan"]["stop"], card["targets"][0][0] if card["targets"] else None, card["plan"]["level"], price)
-    return _plan({**item, "chart": chart, "svg": card.get("chart") or "", "origin": "Structuur · breuk van een lijn of range op 30m"},
+    return _plan({**item, "chart": chart, "svg": card.get("chart") or "", "origin": f"Structuur · {setup_chart.structure_words(card)}, 30m"},
                  f"structuur-{card['id']}")
 
 

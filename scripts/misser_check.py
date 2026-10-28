@@ -65,7 +65,7 @@ def judge(closed: pd.DataFrame, idx: int, direction: str) -> dict:
     rej = ev[(ev["direction"] == direction) & ev["bar"].between(lo, hi)]
     rej_plans = [rj.plan_for(e, closed, smc_eval.floor_stop) for e in rej.itertuples()]
     diag = None if len(rej) else rj.diagnose(closed, max(idx, 0), direction)
-    breaks = br.find_breaks(closed)
+    breaks = br.find_structure_breaks(closed)          # wat de live motor ziet: lijn, range en hogere bodem (CHOCH)
     near_breaks = breaks[(breaks["direction"] == direction) & breaks["bar"].between(max(0, idx - 24), hi)]
 
     engines = []
@@ -289,7 +289,7 @@ def main() -> None:
         for e in j["breaks"].itertuples():
             print(f"  breuk op {today.local(closed['timestamp'].iloc[int(e.bar)].to_pydatetime()):%d-%m %H:%M}, {e.kind}, {int(e.touches)} aanrakingen, niveau {e.a:g}")
     else:
-        print("  geen breuk van een lijn of range in de 12 uur ervoor. Structuur meldt alleen breuken met een terugkeer, geen afwijzing zonder breuk.")
+        print("  geen breuk van een lijn, range of laatste top/bodem in de 12 uur ervoor. Structuur meldt alleen breuken met een terugkeer, geen afwijzing zonder breuk.")
     print()
 
 

@@ -1,6 +1,6 @@
 """Komen er minder of slechtere Structuur-kansen? Alleen-lezen, via repo. Draai op de VPS:
 .venv/bin/python3 scripts/structuur_check.py [--dagen 10]
-Per dag: breuken, plannen, gemeld (luide melding), gevuld, en van de gevulde doel, stop of nog open; 'cap' is een kans die door de volle
+Per dag: breuken (en daarvan 'h.bodem': hogere bodem of lagere top met breuk van de laatste top of bodem), plannen, gemeld (luide melding), gevuld, en van de gevulde doel, stop of nog open; 'cap' is een kans die door de volle
 dagcap (STRUCTURE_MAX_ALERTS_PER_DAY) niet gemeld werd, 'vast' een plan dat ontdekt maar nooit gemeld of gehouden werd. Daaronder de hartslag
 van de motor (hoeveel van de FIXED_COINS de laatste run echt bekeek) en welke coins de meeste en geen enkele plannen kregen (7 dagen).
 Begrippen en telling: app/structure_report.py."""
@@ -20,10 +20,10 @@ def main() -> None:
     now = datetime.now(timezone.utc)
     rows = repo.list_structure_report_rows((now - timedelta(days=max(a.dagen, 7) + 1)).isoformat())
     print(f"Structuur, laatste {a.dagen} dagen (Nederlandse tijd). Dagcap {config.STRUCTURE_MAX_ALERTS_PER_DAY} meldingen per 24 uur.\n")
-    print(f"{'dag':<12}{'breuken':>8}{'plannen':>8}{'gemeld':>8}{'gevuld':>8}{'doel':>6}{'stop':>6}{'open':>6}{'cap':>5}{'vast':>6}")
+    print(f"{'dag':<12}{'breuken':>8}{'h.bodem':>8}{'plannen':>8}{'gemeld':>8}{'gevuld':>8}{'doel':>6}{'stop':>6}{'open':>6}{'cap':>5}{'vast':>6}")
     days = sr.daily(rows, now, a.dagen)
     for d in days:
-        print(f"{d['date']:<12}{d['breuken']:>8}{d['plannen']:>8}{d['gemeld']:>8}{d['gevuld']:>8}{d['doel']:>6}{d['stop']:>6}{d['open']:>6}"
+        print(f"{d['date']:<12}{d['breuken']:>8}{d['choch']:>8}{d['plannen']:>8}{d['gemeld']:>8}{d['gevuld']:>8}{d['doel']:>6}{d['stop']:>6}{d['open']:>6}"
               f"{d['niet_gemeld']:>5}{d['vast']:>6}")
     hit = [d["date"] for d in days if d["cap_hit"]]
     print(f"\nDagcap geraakt op: {', '.join(hit) if hit else 'geen enkele dag'}")

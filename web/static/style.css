@@ -1783,6 +1783,8 @@ a.nf-link:hover { background: var(--panel-hover); }
 .sc-sweep { stroke: var(--text); stroke-width: 2; }
 .sc-box-label { font-family: var(--mono); font-size: 10px; fill: var(--text-dim); stroke: none; }
 .sc-break { fill: var(--accent); stroke: none; font-size: 15px; }
+.sc-swing { fill: var(--accent); stroke: var(--bg); stroke-width: 1.5; }
+.sc-swing-label { font-family: var(--sans); font-size: 16px; fill: var(--text-dim); stroke: var(--bg); stroke-width: 3px; paint-order: stroke; }
 @media (max-width: 520px) { .setup-plan { grid-template-columns: repeat(2, 1fr); } }
 
 

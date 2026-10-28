@@ -28,6 +28,13 @@ def _ts(value: str) -> float:
     return datetime.fromisoformat(value).timestamp()
 
 
+def structure_words(setup: dict) -> str:
+    """Wat er brak, in gewone woorden voor kaart en grafiek. Naar buiten heet alles Structuur; dit zegt alleen welke vorm, nooit een oordeel."""
+    if setup.get("kind") == "CHOCH":
+        return "lagere top, breuk van de laatste bodem" if setup.get("direction") == "short" else "hogere bodem, breuk van de laatste top"
+    return "breuk van een lijn" if setup.get("kind") == "LINE" else "breuk van een range"
+
+
 def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[float] = None, events: Optional[list[dict]] = None) -> str:
     """candles: [[iso_tijd, open, hoog, laag, slot], ...] oud naar nieuw. setup: coin, direction, kind, line_a, line_slope,
     p1_at, break_at. plan: level, stop, targets, targets_r. Geeft '' als er geen candles zijn."""
@@ -65,7 +72,8 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
         return (t - times[0]) / bar_seconds
 
     # De data-attributen laten live.js de prijslijn verplaatsen zonder de pagina te herladen: y = pad_t + (hi - prijs) / (hi - lo) * plot_h.
-    out = [f'<svg class="sc" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(setup["coin"])} {escape(setup["direction"])} structuur-setup" '
+    words = f": {structure_words(setup)}" if setup.get("kind") else ""
+    out = [f'<svg class="sc" viewBox="0 0 {W} {H}" role="img" aria-label="{escape(setup["coin"])} {escape(setup["direction"])} structuur-setup{escape(words)}" '
            f'data-chart-coin="{escape(setup["coin"])}" data-hi="{hi:.8g}" data-lo="{lo:.8g}" data-pad-t="{PAD_T}" data-plot-h="{plot_h}" '
            f'data-level="{plan["level"]:.8g}" data-stop="{plan["stop"]:.8g}">']
     right = PAD_L + plot_w
@@ -95,6 +103,18 @@ def setup_svg(candles: list[list], setup: dict, plan: dict, price: Optional[floa
         bx = x(break_i)
         arrow_y = y(candles[int(break_i)][2]) - 8 if setup["direction"] == "short" else y(candles[int(break_i)][3]) + 8
         out.append(f'<text class="sc-break" x="{bx:.1f}" y="{arrow_y:.1f}" text-anchor="middle">{"▼" if setup["direction"] == "short" else "▲"}</text>')
+
+    # CHOCH: het niveau is de top (of bodem) tussen twee zwaaipunten; die twee punten maken de vorm, dus ze staan als stip in de grafiek.
+    if setup.get("kind") == "CHOCH":
+        short = setup["direction"] == "short"
+        for k, (at, v) in enumerate(plan.get("points") or []):
+            i = bar_index(_ts(at))
+            if not 0 <= i <= n - 1:
+                continue
+            name = ("top" if k == 0 else "lagere top") if short else ("bodem" if k == 0 else "hogere bodem")
+            ty = y(v) - 10 if short else y(v) + 20
+            out.append(f'<circle class="sc-swing" cx="{x(i):.1f}" cy="{y(v):.1f}" r="5"><title>{escape(name)}</title></circle>'
+                       f'<text class="sc-swing-label" x="{x(i):.1f}" y="{ty:.1f}" text-anchor="middle">{escape(name)}</text>')
 
     placed, last_y = [], -1e9
     for v, cls, text in sorted(marks, key=lambda m: y(m[0])):

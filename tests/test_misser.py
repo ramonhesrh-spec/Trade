@@ -147,7 +147,7 @@ class JudgeTest(unittest.TestCase):
         with mock.patch.object(misser_check.rj, "find_rejections", return_value=rej), \
              mock.patch.object(misser_check.rj, "plan_for", return_value=plan), \
              mock.patch.object(misser_check.rj, "diagnose", return_value=diag), \
-             mock.patch.object(misser_check.br, "find_breaks", return_value=brk):
+             mock.patch.object(misser_check.br, "find_structure_breaks", return_value=brk):
             return misser_check.judge(_bars(), 20, direction)
 
     GOOD = {"atr": 1.0, "touches": 3, "level": 100.0, "gap_to_level_atr": 0.0, "close_from_level_atr": 0.5, "bearish": True}

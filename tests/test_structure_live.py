@@ -287,6 +287,12 @@ class LiveTest(DbCase):
         self.assertIn("niet gevolgd: XYZ", detail)
         self.assertEqual(sl.parse_beat(detail), {"checked": 1, "total": 3})
 
+    def test_heartbeat_counts_new_plans_and_higher_low_breaks(self):
+        detail = sl.beat_detail(3, 3, [], [], 4.0, {"LINE": 1, "CHOCH": 2})
+        self.assertIn("nieuw: 3 plannen, waarvan 2 hogere bodem of lagere top", detail)
+        self.assertEqual(sl.parse_beat(detail), {"checked": 3, "total": 3})
+        self.assertNotIn("nieuw", sl.beat_detail(3, 3, [], [], 4.0))
+
     def test_heartbeat_parse_of_the_old_text(self):
         self.assertEqual(sl.parse_beat("35 coins gecontroleerd"), {"checked": 35, "total": 35})
         self.assertIsNone(sl.parse_beat("Staat uit: focus"))
@@ -306,6 +312,87 @@ class LiveTest(DbCase):
         with mock.patch.object(config, "STRUCTURE_ENABLED", False):
             self.run_live(BREAK_BAR + 4)
         self.assertEqual(self.pushed, [])
+
+
+class ChochLiveTest(DbCase):
+    """De derde soort breuk (hogere bodem, breuk van de laatste top) loopt door hetzelfde recept: plan, melding, dagcap, oordeel als meting, vulling."""
+    KNOTS = [(0, 133.0), (100, 100.0), (110, 106.0), (120, 103.0), (128, 106.733), (132, 105.95), (149, 112.0)]
+
+    def setUp(self):
+        super().setUp()
+        from tests.replay.test_choch import bars_from
+        self.bars = bars_from(self.KNOTS)
+        self.brk = int(br.find_choch(self.bars).iloc[0]["bar"])
+        self.pushed, self.graded = [], []
+
+    def run_live(self, n_closed):
+        bars = self.bars
+
+        def fake_fetch(coin, timeframe="30m", limit=300, since=None):
+            return bars.iloc[:n_closed + 1][["timestamp", "open", "high", "low", "close", "volume"]].tail(limit).reset_index(drop=True)
+
+        async def fake_push(user_id, title, body, url, silent=False, tag=None):
+            self.pushed.append((title, body, url, silent))
+
+        def fake_claude(ctx):
+            self.graded.append(ctx)
+            return {"grade": "A", "reason": "x"}
+
+        now = bars.at[n_closed - 1, "close_time"].to_pydatetime()
+        with mock.patch("app.exchange.fetch_ohlcv", fake_fetch), mock.patch("app.push_notify.send_push", fake_push), \
+                mock.patch.object(sl, "call_claude", fake_claude), mock.patch.object(config, "FIXED_COINS", ["BTC"]), \
+                mock.patch.object(repo, "list_coins", lambda: [{"symbol": "BTC"}]):
+            asyncio.run(sl.run(now))
+
+    def test_higher_low_break_is_announced_like_every_structure_chance(self):
+        from app import push_notify
+        self.run_live(self.brk + 1)
+        rows = repo.list_structure_setups(("waiting",))
+        self.assertEqual([(r["kind"], r["direction"]) for r in rows], [("CHOCH", "long")])
+        self.assertAlmostEqual(rows[0]["line_a"], self.bars.at[110, "high"])
+        self.assertEqual(rows[0]["line_slope"], 0.0)
+        plan = json.loads(rows[0]["plan"])
+        self.assertAlmostEqual(plan["level"], self.bars.at[110, "high"])
+        self.assertLess(plan["stop"], plan["level"])
+        self.assertEqual([p[1] for p in plan["points"]], [self.bars.at[100, "low"], self.bars.at[120, "low"]])     # de twee bodems voor de grafiek
+        self.assertEqual(self.pushed[0][0], push_notify.alert_title("BTC", "long", "Structuur wacht"))
+        self.assertEqual(self.graded[0]["soort"], "hogere bodem, breuk van de laatste top")
+
+    def test_cap_holds_a_higher_low_break_too(self):
+        with mock.patch.object(config, "STRUCTURE_MAX_ALERTS_PER_DAY", 0):
+            self.run_live(self.brk + 1)
+        self.assertEqual(self.pushed, [])
+        self.assertEqual([r["kind"] for r in repo.list_structure_setups(("niet_gemeld",))], ["CHOCH"])
+
+    def test_retest_of_the_broken_top_fills_as_structuur(self):
+        self.run_live(self.brk + 1)
+        self.pushed.clear()
+        self.run_live(133)
+        self.assertEqual([r["trade_type"] for r in repo.list_signals_for_quality_report(None)], ["structuur"])
+        self.assertTrue(any("gevuld" in t for t, *_ in self.pushed))
+
+
+class ChochChartTest(unittest.TestCase):
+    def test_choch_is_a_level_with_the_two_lows_marked(self):
+        from app import setup_chart
+        candles = [[f"2026-03-02T{h:02d}:00:00+00:00", 100 + h % 3, 101 + h % 3, 99 + h % 3, 100 + h % 3] for h in range(20)]
+        setup = {"coin": "BTC", "direction": "long", "kind": "CHOCH", "line_a": 102.0, "line_slope": 0.0,
+                 "p1_at": "2026-03-02T03:00:00+00:00", "break_at": "2026-03-02T15:00:00+00:00"}
+        plan = {"level": 102.0, "stop": 101.5, "targets": [102.5, 103.0], "targets_r": [1.0, 2.0],
+                "points": [["2026-03-02T03:00:00+00:00", 99.0], ["2026-03-02T09:00:00+00:00", 99.5]]}
+        svg = setup_chart.setup_svg(candles, setup, plan, price=102.4)
+        self.assertIn("sc-structure", svg)
+        self.assertEqual(svg.count('class="sc-swing"'), 2)
+        self.assertIn("hogere bodem, breuk van de laatste top", svg)
+        for word in (" A ", " B ", " C ", "sterk", "zwak", "redelijk", "CHOCH"):
+            self.assertNotIn(word, svg)
+
+    def test_short_says_lower_top(self):
+        from app import setup_chart
+        self.assertEqual(setup_chart.structure_words({"kind": "CHOCH", "direction": "short"}), "lagere top, breuk van de laatste bodem")
+        self.assertEqual(setup_chart.structure_words({"kind": "CHOCH", "direction": "long"}), "hogere bodem, breuk van de laatste top")
+        self.assertEqual(setup_chart.structure_words({"kind": "RANGE", "direction": "long"}), "breuk van een range")
+        self.assertEqual(setup_chart.structure_words({"kind": "LINE", "direction": "long"}), "breuk van een lijn")
 
 
 if __name__ == "__main__":

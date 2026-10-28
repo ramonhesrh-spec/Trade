@@ -1,5 +1,5 @@
-"""Structuur-setups live: het recept achter de handgetekende trades (breuk van een lijn of range op 30m, terugkeer naar het
-gebroken niveau, limietorder, stop net achter de terugkeer, ladder van doelen), gemeld vóórdat de trade uitspeelt.
+"""Structuur-setups live: het recept achter de handgetekende trades (breuk van een lijn of range op 30m, of van de laatste top na een
+hogere bodem (CHOCH, gespiegeld voor short; breakretest.find_choch, live zonder labrun en ongetest), terugkeer naar het gebroken niveau, limietorder, stop net achter de terugkeer, ladder van doelen), gemeld vóórdat de trade uitspeelt.
 
 Drie stappen, elke 5 minuten in de SMC-snelcyclus:
   1. Ontdekken: de detector uit app/replay/breakretest.py (zelfde code als de toets, alleen gesloten candles) vindt een verse
@@ -24,7 +24,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from app import chance_checks, config, repo, smc_eval
+from app import chance_checks, config, repo, setup_chart, smc_eval
 from app import trade_plan as tp
 from app.replay import breakretest as br
 from app.replay.lab import add_indicators
@@ -40,7 +40,7 @@ REASON_MAX = 240
 GRADES = ("A", "B", "C")
 
 SYSTEM_PROMPT = (
-    "Je bent een ervaren daytrader die breuken van een lijn of range op de 30-minutengrafiek beoordeelt voor een eigen "
+    "Je bent een ervaren daytrader die breuken van een lijn, een range of de laatste top na een hogere bodem (of de laatste bodem na een lagere top) op de 30-minutengrafiek beoordeelt voor een eigen "
     "handelsplan: breuk, terugkeer naar het gebroken niveau, limietorder daar, stop net erachter, doelen op liquiditeit. "
     "De code heeft de cijfers al gecontroleerd en berekend: jij verzint of wijzigt geen prijs. Jij beoordeelt alleen de kwaliteit. "
     "A: schone structuur (een duidelijke lijn of range met minstens drie aanrakingen), een breuk met overtuiging (volume boven gemiddeld), "
@@ -82,7 +82,7 @@ def fresh_breaks(bars: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, np.nda
     """(bars met indicatoren, verse breuken, pivot-hoog, pivot-laag). Vers is een breuk die nog binnen het retest-venster ligt
     en waarvan de koers het niveau sindsdien niet raakte of terug veroverde: dan staat de limietorder nog open."""
     b = add_indicators(bars).reset_index(drop=True)
-    events = br.find_breaks(bars)
+    events = br.find_structure_breaks(bars)
     n = len(b)
     keep = []
     for ev in events.itertuples():
@@ -147,11 +147,22 @@ def take_profit_of(plan: dict) -> float:
     return targets[1] if len(targets) > 1 else targets[0]
 
 
+STRUCTURE_KIND_WORDS = {"RANGE": "horizontale range", "LINE": "schuine lijn"}
+
+
+def swing_points(ev, b: pd.DataFrame) -> list[list]:
+    """De twee zwaaipunten van een CHOCH (bodems bij long, toppen bij short) als [iso, prijs], voor de grafiek; leeg bij LINE en RANGE."""
+    if ev.kind != br.CHOCH:
+        return []
+    col = "high" if ev.direction == br.SHORT else "low"
+    return [[b.at[p, "timestamp"].isoformat(), float(b.at[p, col])] for p in (ev.p1, ev.p2)]
+
+
 def judge_context(coin: str, ev, b: pd.DataFrame, plan: dict) -> dict:
     tail = b.tail(CANDLES_SHOWN)
     median_vol = float(b["volume"].tail(100).median()) or 1.0
     return {
-        "coin": coin, "kant": ev.direction, "soort": "horizontale range" if ev.kind == "RANGE" else "schuine lijn",
+        "coin": coin, "kant": ev.direction, "soort": STRUCTURE_KIND_WORDS.get(ev.kind) if ev.kind != br.CHOCH else setup_chart.structure_words({"kind": ev.kind, "direction": ev.direction}),
         "aanrakingen": int(ev.touches), "lengte_candles": int(ev.span), "breukvolume_x_gemiddeld": _r(ev.vol_ratio),
         "met_trend_ema21_200": bool(ev.with_trend), "atr_30m_pct": _r(ev.atr / float(b["close"].iloc[-1]) * 100),
         "plan": {"limiet": _r(plan["level"]), "stop": _r(plan["stop"]), "risico_pct": _r(plan["risk_pct"]),
@@ -262,7 +273,7 @@ async def _discover(coin: str, now: datetime) -> list[dict]:
                "features": json.dumps({"vol_ratio": ev.vol_ratio, "span": int(ev.span), "touches": int(ev.touches),
                                        "with_trend": bool(ev.with_trend)}),
                "expires_at": (next_start + br.RETEST_BARS * BAR).isoformat(),
-               "plan": json.dumps({**plan, "levels": levels, "break_extreme": extreme,
+               "plan": json.dumps({**plan, "levels": levels, "break_extreme": extreme, "points": swing_points(ev, b),
                                    "candles": [[c.timestamp.isoformat(), c.open, c.high, c.low, c.close] for c in b.tail(CHART_BARS).itertuples()]})}
         setup_id = repo.insert_structure_setup(row)
         if setup_id is None:
@@ -488,13 +499,18 @@ async def run(now: Optional[datetime] = None) -> None:
         await digest.run(now)
     except Exception:
         logger.exception("Dagbrief is mislukt")
-    repo.beat("structuur", beat_detail(checked, len(config.FIXED_COINS), failed, missing, seconds))
+    kinds = {}
+    for c in found:
+        kinds[c["ev"].kind] = kinds.get(c["ev"].kind, 0) + 1
+    repo.beat("structuur", beat_detail(checked, len(config.FIXED_COINS), failed, missing, seconds, kinds))
 
 
-def beat_detail(checked: int, total: int, failed: list[str], missing: list[str], seconds: float) -> str:
+def beat_detail(checked: int, total: int, failed: list[str], missing: list[str], seconds: float, kinds: Optional[dict] = None) -> str:
     """De hartslag zegt hoeveel coins echt bekeken zijn. Vroeger stond er altijd het aantal FIXED_COINS, ook als een coin faalde of niet in
     de coinlijst stond, zodat een gat in de dekking onzichtbaar bleef (scripts/structuur_check.py leest dit terug met parse_beat)."""
     parts = [f"{checked} van {total} coins gecontroleerd in {seconds:.0f} s"]
+    if kinds and sum(kinds.values()):
+        parts.append(f"nieuw: {sum(kinds.values())} plannen, waarvan {kinds.get(br.CHOCH, 0)} hogere bodem of lagere top")
     if failed:
         parts.append("mislukt: " + ", ".join(failed))
     if missing:

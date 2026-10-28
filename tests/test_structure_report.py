@@ -35,6 +35,12 @@ class DailyTests(unittest.TestCase):
         self.assertEqual((yesterday["plannen"], yesterday["gemeld"], yesterday["gevuld"], yesterday["stop"]), (2, 2, 1, 1))
         self.assertEqual(days[2]["breuken"], 0)
 
+    def test_higher_low_breaks_are_counted_apart_within_the_same_totals(self):
+        rows = ROWS + [{**row("BTC", "waiting", 1), "kind": "CHOCH"}, {**row("ETH", "geen_plan", 1), "kind": "CHOCH"}]
+        today = sr.daily(rows, NOW, days=1)[0]
+        self.assertEqual((today["breuken"], today["plannen"], today["choch"]), (8, 6, 2))
+        self.assertEqual(sr.daily(ROWS, NOW, days=1)[0]["choch"], 0)          # oude rijen zonder kind tellen gewoon niet als CHOCH
+
     def test_cap_is_hit_when_a_chance_was_held(self):
         self.assertTrue(sr.daily(ROWS, NOW, days=1)[0]["cap_hit"])
         self.assertFalse(sr.daily([row("BTC", "waiting", 1)], NOW, days=1)[0]["cap_hit"])

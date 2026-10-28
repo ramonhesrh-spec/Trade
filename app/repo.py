@@ -2868,7 +2868,7 @@ def list_structure_report_rows(since_iso: str) -> list[dict]:
     """Elke structuur-setup sinds een moment met de uitkomst van zijn signaal (scripts/structuur_check.py, app/structure_report.py)."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT ss.id, ss.coin, ss.direction, ss.state, ss.created_at, ss.signal_id, s.auto_outcome
+            """SELECT ss.id, ss.coin, ss.direction, ss.kind, ss.state, ss.created_at, ss.signal_id, s.auto_outcome
                FROM structure_setups ss LEFT JOIN signals s ON s.id = ss.signal_id WHERE ss.created_at >= ? ORDER BY ss.created_at""",
             (since_iso,)).fetchall()
         return [dict(r) for r in rows]

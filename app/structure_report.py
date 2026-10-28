@@ -6,6 +6,7 @@ Begrippen, gelijk aan de motor (app/structure_live.py) en repo.count_structure_a
   plannen   een breuk met plan (stand niet 'geen_plan')
   gemeld    stand niet in NOT_ANNOUNCED: kreeg de luide melding (en telt mee voor de dagcap)
   gevuld    met signal_id: de limiet raakte en het werd een signaal
+  choch     breuken van de soort hogere bodem (of lagere top) met breuk van de laatste top (of bodem), ook in breuken meegeteld
   niet_gemeld  door een volle dagcap gehouden (STRUCTURE_MAX_ALERTS_PER_DAY): dan is de cap geraakt
   vast      stand 'oordeel': ontdekt maar nooit gemeld of gehouden, de run brak tussen ontdekken en melden af"""
 from collections import Counter
@@ -32,7 +33,7 @@ def daily(rows: list[dict], now: datetime, days: int = 10) -> list[dict]:
         plans = [r for r in mine if r["state"] != "geen_plan"]
         filled = [r for r in mine if r.get("signal_id")]
         held = sum(1 for r in mine if r["state"] == "niet_gemeld")
-        out.append({"date": day.isoformat(), "breuken": len(mine), "plannen": len(plans),
+        out.append({"date": day.isoformat(), "breuken": len(mine), "plannen": len(plans), "choch": sum(1 for r in mine if r.get("kind") == "CHOCH"),
                     "gemeld": sum(1 for r in mine if r["state"] not in NOT_ANNOUNCED), "gevuld": len(filled),
                     "doel": sum(1 for r in filled if r.get("auto_outcome") == "take_profit"),
                     "stop": sum(1 for r in filled if r.get("auto_outcome") == "stop_loss"),
