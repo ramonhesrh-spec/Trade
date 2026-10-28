@@ -89,5 +89,29 @@ class ZoneSweepSvgTests(unittest.TestCase):
         self.assertIn("Stop 98,50", svg)
 
 
+PR = {"id": 3, "coin": "ETH", "direction": "long", "period": "day", "period_start": "2026-10-21T00:00:00+00:00", "level": 99.5,
+      "limit_price": 99.5, "stop_loss": 99.0, "take_profit": 102.0, "rr": 5.0, "target_kind": "poc", "target_text": "dag-POC 22 okt",
+      "target_tf": None, "target_low": None, "target_high": None, "created_at": "2026-10-23T10:00:00+00:00"}
+
+
+class PocRadarSvgTests(unittest.TestCase):
+    def test_lines_with_name_and_price_and_no_zone(self):
+        svg = card_chart.poc_radar_svg(PR, candles(60), 100.4)
+        for label in ("Limiet op POC 99,50", "Stop 99,00", "Doel 102,00", "Dag-POC 21 okt"):
+            self.assertIn(label, svg)
+        self.assertNotIn('class="sc-zone"', svg)
+        self.assertEqual(svg.count('class="sc-mark"'), 1)                       # het begin van de periode
+
+    def test_week_poc_and_no_target(self):
+        svg = card_chart.poc_radar_svg({**PR, "period": "week", "period_start": "2026-10-12T00:00:00+00:00", "take_profit": None, "rr": None},
+                                       candles(60, step=4 * H1, start=T0 - 200 * H1), 100.4)
+        self.assertIn("Week-POC week 42", svg)
+        self.assertNotIn("Doel", svg)
+
+    def test_chart_tf(self):
+        self.assertEqual(card_chart.poc_tf("day"), "1h")
+        self.assertEqual(card_chart.poc_tf("week"), "4h")
+
+
 if __name__ == "__main__":
     unittest.main()

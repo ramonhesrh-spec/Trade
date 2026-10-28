@@ -1,4 +1,4 @@
-"""De eigen kaartgrafiek per soort op Kansen, voor Zone-radar en Zone-sweep: de tekenstijl van de galerij (setup_chart.zone_svg) op het
+"""De eigen kaartgrafiek per soort op Kansen, voor Zone-radar, Zone-sweep en POC-radar: de tekenstijl van de galerij (setup_chart.zone_svg) op het
 tijdframe van de zone. Pure functies: de route haalt de candles uit de minuutcache en geeft de rij uit zone_radar_setups of zone_sweep_setups
 mee. Structuur tekent zijn eigen momentopname (setup_chart.setup_svg) en komt hier niet langs.
 
@@ -8,7 +8,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import price_text, setup_chart, trade_plan as tp, zone_radar
+from app import poc, price_text, setup_chart, trade_plan as tp, zone_radar
 
 LEAD_BARS = 4          # een paar candles vóór het ontstaan, zodat je ziet waar de beweging vandaan kwam
 MIN_BARS = 40          # een jonge zone krijgt toch genoeg aanloop om de structuur te lezen
@@ -97,3 +97,25 @@ def zone_sweep_svg(row: dict, candles: list[list], price: Optional[float]) -> st
     return setup_chart.zone_svg(shown, row["coin"], row["direction"], zone,
                                 _lines(row["direction"], row["limit_price"], row["stop_loss"], row.get("take_profit")),
                                 points, _target_zone(row), price, row["limit_price"])
+
+
+def poc_tf(period: str) -> str:
+    """Een dag-POC op 1u (zijn dag is 24 candles), een week-POC op 4u (zijn week is 42 candles)."""
+    return "4h" if period == "week" else "1h"
+
+
+def poc_radar_svg(row: dict, candles: list[list], price: Optional[float]) -> str:
+    """Een rij uit poc_radar_setups: geen zonevlak (een POC is één prijs), de lijnen limiet op de POC, stop en doel met naam en prijs, en een
+    markering op de eerste candle van de periode waar de POC uit komt. `candles` op poc_tf(periode)."""
+    if not candles:
+        return ""
+    start = _ts(row.get("period_start"))
+    shown = candles[window(candles, start):]
+    limit = row["limit_price"]
+    lines = [(limit, "sc-limit", f"Limiet op POC {price_text.nl(limit)}"), (row["stop_loss"], "sc-stop", f"Stop {price_text.nl(row['stop_loss'])}")]
+    if row.get("take_profit") is not None:
+        lines.append((row["take_profit"], "sc-target", f"Doel {price_text.nl(row['take_profit'])}"))
+    c = _candle_at(shown, start) if start is not None else None
+    name = poc.period_text(row["period"], row["period_start"])
+    points = [(c[0], row["level"], name[0].upper() + name[1:])] if c is not None and c[0] >= shown[0][0] else []
+    return setup_chart.zone_svg(shown, row["coin"], row["direction"], None, lines, points, _target_zone(row), price, limit)

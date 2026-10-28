@@ -834,6 +834,9 @@ CREATE TABLE IF NOT EXISTS zone_radar_setups (
     ctx_funding REAL,
     ctx_oi_change_24h REAL,
     ctx_spread REAL,
+    -- Kenmerk 'POC-samenval' (chance_checks.poc_checks): 1 als de limiet binnen 0,3% van een naakte dag- of week-POC lag, 0 als niet, leeg als er
+    -- toen geen POC-meting was. Beschrijvend: niets filtert erop, Bewijs toont via score_split of het samengaat.
+    poc_near INTEGER,
     UNIQUE (coin, zone_key)
 );
 CREATE INDEX IF NOT EXISTS idx_zone_radar_setups_state ON zone_radar_setups(state);
@@ -876,12 +879,84 @@ CREATE TABLE IF NOT EXISTS zone_sweep_setups (
     quiet INTEGER NOT NULL DEFAULT 0,
     alert_sent INTEGER NOT NULL DEFAULT 0,
     signal_id INTEGER REFERENCES signals(id),
+    poc_near INTEGER,                    -- zie zone_radar_setups.poc_near
     UNIQUE (coin, zone_key)
 );
 CREATE INDEX IF NOT EXISTS idx_zone_sweep_setups_state ON zone_sweep_setups(state);
 -- Gevulde zone-sweeps zonder doel: de meting van de stop en de referentie-uitgang (meelopende stop 3 ATR op 1u) die de R in trade_results geeft,
 -- zoals range_sweep_trades. Met een doel is er geen rij: dan beslist level_check de uitkomst op doel en stop.
 CREATE TABLE IF NOT EXISTS zone_sweep_trades (
+    signal_id INTEGER PRIMARY KEY,
+    setup_id INTEGER NOT NULL UNIQUE,
+    entry REAL NOT NULL,
+    stop REAL NOT NULL,
+    filled_at TEXT NOT NULL,
+    checked_until TEXT NOT NULL,
+    mae_r REAL NOT NULL DEFAULT 0,
+    mfe_r REAL NOT NULL DEFAULT 0,
+    reached_1r_at TEXT,
+    reached_2r_at TEXT,
+    reached_3r_at TEXT,
+    reached_4r_at TEXT,
+    reached_5r_at TEXT,
+    reached_6r_at TEXT,
+    stop_hit_at TEXT,
+    ref_stop REAL NOT NULL,
+    ref_extreme REAL NOT NULL,
+    ref_r REAL,
+    ref_closed_at TEXT,
+    closed_at TEXT
+);
+
+-- POC-radar (app/poc.py, app/poc_radar.py, app/poc_radar_live.py). poc_levels: de POC van elke gesloten UTC-dag en ISO-week per coin, één keer
+-- berekend (een gesloten periode verandert niet meer), met de eerste 5m-candle daarna die hem raakte (touched_at leeg = naakt). poc_scans: tot
+-- welke gesloten 5m-candle de aanrakingen per coin zijn bijgewerkt, zodat de motor alleen nieuwe candles ophaalt (één keer per uur per coin).
+CREATE TABLE IF NOT EXISTS poc_levels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    period TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    price REAL NOT NULL,
+    touched_at TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (coin, period, period_start)
+);
+CREATE TABLE IF NOT EXISTS poc_scans (
+    coin TEXT PRIMARY KEY,
+    checked_until TEXT NOT NULL,
+    scanned_at TEXT NOT NULL
+);
+-- Kaarten van de POC-radar: één rij per coin en niveau (level_key = periode en begin, UNIQUE): hetzelfde niveau komt nooit terug. state: waiting,
+-- filled (signal_id gezet, trade_type 'poc_radar'), doel_geraakt of verlopen. take_profit leeg: het eerste niveau voorbij de koers haalde geen 2R.
+CREATE TABLE IF NOT EXISTS poc_radar_setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    period TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    level_key TEXT NOT NULL,
+    level REAL NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    rr REAL,
+    atr REAL NOT NULL,
+    target_kind TEXT,
+    target_text TEXT,
+    target_tf TEXT,
+    target_low REAL,
+    target_high REAL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    ended_at TEXT,
+    alert_sent INTEGER NOT NULL DEFAULT 0,
+    signal_id INTEGER REFERENCES signals(id),
+    UNIQUE (coin, level_key)
+);
+CREATE INDEX IF NOT EXISTS idx_poc_radar_setups_state ON poc_radar_setups(state);
+-- Gevulde POC-kaarten zonder doel: dezelfde meting en referentie-uitgang als zone_sweep_trades (range_sweep_live.follow_trade).
+CREATE TABLE IF NOT EXISTS poc_radar_trades (
     signal_id INTEGER PRIMARY KEY,
     setup_id INTEGER NOT NULL UNIQUE,
     entry REAL NOT NULL,

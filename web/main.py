@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import announce, card_chart, ceo, chance_checks, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep
+from app import announce, card_chart, ceo, chance_checks, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep, poc_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -428,7 +428,7 @@ def _logbook_inputs(user: dict, since: str) -> dict:
 
 def _logbook_days(user: dict, now: datetime) -> list[dict]:
     since = (now - timedelta(days=LOGBOOK_DAYS + 1)).isoformat()
-    return logbook.timeline(**_logbook_inputs(user, since), seen=repo.list_plan_moments(since, include_zone_sweep=_sees_zone_sweep(user)), now=now, tz=today.LOCAL_TZ)
+    return logbook.timeline(**_logbook_inputs(user, since), seen=repo.list_plan_moments(since, include_zone_sweep=_sees_zone_sweep(user), include_poc=_sees_poc(user)), now=now, tz=today.LOCAL_TZ)
 
 
 def _week_review(user: dict, now: datetime) -> dict:
@@ -579,6 +579,11 @@ def _sees_zone_sweep(user: Optional[dict]) -> bool:
     return rule_live.ZONE_SWEEP not in rule_live.CEO_ONLY_TYPES or is_ceo(user)
 
 
+def _sees_poc(user: Optional[dict]) -> bool:
+    """De POC-radar is voor iedereen tot POC_RADAR_PUBLIC uit staat; dan alleen de CEO, zoals de zone-sweep."""
+    return rule_live.POC_RADAR not in rule_live.CEO_ONLY_TYPES or is_ceo(user)
+
+
 def _forming_setups(user: Optional[dict] = None) -> list[dict]:
     """Wat de Radar als wachtende kaart toont: bouwende SMC-setups, wachtende zone-radar-kaarten en, als de kijker hem mag zien, wachtende
     zone-sweep-kaarten, in de vorm die radar.setup_card leest.
@@ -587,6 +592,8 @@ def _forming_setups(user: Optional[dict] = None) -> list[dict]:
     rows = smc + [zone_radar.radar_setup(r) for r in repo.list_zone_radar_setups()]
     if _sees_zone_sweep(user):
         rows += [zone_sweep.radar_setup(r) for r in repo.list_zone_sweep_setups()]
+    if _sees_poc(user):
+        rows += [poc_radar.radar_setup(r) for r in repo.list_poc_radar_setups()]
     return rows
 
 
@@ -600,7 +607,8 @@ def _context_lines(coins) -> dict[str, list[dict]]:
 
 async def _radar_cards(user: Optional[dict] = None) -> list[dict]:
     forming = _forming_setups(user)
-    types = ("smc", zone_radar.TRADE_TYPE) + ((zone_sweep.TRADE_TYPE,) if _sees_zone_sweep(user) else ())
+    types = (("smc", zone_radar.TRADE_TYPE) + ((zone_sweep.TRADE_TYPE,) if _sees_zone_sweep(user) else ())
+             + ((poc_radar.TRADE_TYPE,) if _sees_poc(user) else ()))
     open_signals = repo.list_open_smc_signals(types=types)
     prices = await _cached_prices([s["coin"] for s in forming] + [s["coin"] for s in open_signals])
     cards = [c for s in forming if (c := radar.setup_card(s, prices.get(s["coin"])))]
@@ -721,6 +729,7 @@ async def galerij_file(kind: str, user: dict = Depends(require_login)):
 def _kansen_kinds(user: dict) -> list[str]:
     """De soorten met een tab op Kansen: de focus-soorten (focus.FOCUS_TYPES), de zone-sweep alleen voor wie hem mag zien, en zonder focus ook SMC."""
     kinds = ["structuur", "zone_radar"] + (["zone_sweep"] if _sees_zone_sweep(user) and focus.engine_on(zone_sweep.TRADE_TYPE) else [])
+    kinds += ["poc_radar"] if _sees_poc(user) and focus.engine_on(poc_radar.TRADE_TYPE) else []
     return kinds + ([] if focus.active() else ["smc"])
 
 
@@ -792,7 +801,7 @@ async def _vandaag_context(user: dict) -> dict:
     week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
     # Naar buiten is elke structuurkans Structuur: Vandaag telt structuur_c erbij; Bewijs houdt de twee interne soorten apart.
     summary = track_record.summarize([{**r, "trade_type": "structuur"} if r["trade_type"] == "structuur_c" else r for r in rows], config.TRACK_RECORD_COST_PCT)
-    score_types = focus.FOCUS_TYPES if focus.active() else ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing", "zone_radar", "zone_sweep")
+    score_types = focus.FOCUS_TYPES if focus.active() else ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing", "zone_radar", "zone_sweep", "poc_radar")
     score = [e for e in summary if e["trade_type"] in score_types or e["source"] == "alles"]
     for e in score:
         e["spark"] = Markup(track_record.sparkline_svg(e["cumulative"], width=180, height=36))
@@ -959,8 +968,8 @@ async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dic
     trailing = reference = None
     if signal["trade_type"] in rule_live.ENGINE_TYPES:          # meelopende stop: geen doel, de uitkomst is winst of verlies in R
         trailing = kans_view.trailing_outcome(signal, (repo.get_trade_result(signal_id) or {}).get("r_value"))
-    elif signal["trade_type"] == zone_sweep.TRADE_TYPE and signal["take_profit"] is None:
-        # Een zone-sweep zonder doel: de R op Bewijs komt van de referentie-uitgang, niet van een doel dat geraakt werd.
+    elif signal["trade_type"] in (zone_sweep.TRADE_TYPE, poc_radar.TRADE_TYPE) and signal["take_profit"] is None:
+        # Een zone-sweep of POC-kaart zonder doel: de R op Bewijs komt van de referentie-uitgang, niet van een doel dat geraakt werd.
         reference = kans_view.reference_outcome(signal, (repo.get_trade_result(signal_id) or {}).get("r_value"))
     facts = kans_view.facts(signal)
     still_open = signal["auto_outcome"] is None and facts["entry"] and facts["stop"]
@@ -1079,19 +1088,21 @@ async def api_radar_candles(coin: str, tf: str = "15m", limit: int = 96, user: d
 def _card_setup(key: str, user: dict) -> Optional[tuple[str, dict]]:
     """(soort, rij) achter een kaartsleutel van Kansen, of None: alleen zone:N, zsweep:N en een signal:N van die twee soorten, met dezelfde
     kijkrechten als de kaart zelf (de zone-sweep is CEO-only zolang ZONE_SWEEP_PUBLIC uit staat)."""
-    m = re.fullmatch(r"(zone|zsweep|signal):(\d{1,9})", key)
+    m = re.fullmatch(r"(zone|zsweep|poc|signal):(\d{1,9})", key)
     if not m:
         return None
     kind, ident = m.group(1), int(m.group(2))
+    by_signal = {"zone": repo.get_zone_radar_setup_by_signal, "zsweep": repo.get_zone_sweep_setup_by_signal, "poc": repo.get_poc_radar_setup_by_signal}
+    by_id = {"zone": repo.get_zone_radar_setup, "zsweep": repo.get_zone_sweep_setup, "poc": repo.get_poc_radar_setup}
     if kind == "signal":
         sig = repo.get_signal(ident)
         if not sig or sig["is_practice"]:
             return None
-        kind = {zone_radar.TRADE_TYPE: "zone", zone_sweep.TRADE_TYPE: "zsweep"}.get(sig["trade_type"])
-        row = (repo.get_zone_radar_setup_by_signal(ident) if kind == "zone" else repo.get_zone_sweep_setup_by_signal(ident) if kind == "zsweep" else None)
+        kind = {zone_radar.TRADE_TYPE: "zone", zone_sweep.TRADE_TYPE: "zsweep", poc_radar.TRADE_TYPE: "poc"}.get(sig["trade_type"])
+        row = by_signal[kind](ident) if kind else None
     else:
-        row = repo.get_zone_radar_setup(ident) if kind == "zone" else repo.get_zone_sweep_setup(ident)
-    if not row or (kind == "zsweep" and not _sees_zone_sweep(user)):
+        row = by_id[kind](ident)
+    if not row or (kind == "zsweep" and not _sees_zone_sweep(user)) or (kind == "poc" and not _sees_poc(user)):
         return None
     return kind, row
 
@@ -1104,13 +1115,16 @@ async def api_kaart_svg(key: str, user: dict = Depends(require_login)):
     if not found:
         raise HTTPException(status_code=404)
     kind, row = found
-    origin = zone_radar.zone_origin(row.get("zone_key", ""), ("1h", "2h", "4h"))
-    tf = card_chart.candle_tf(origin[0] if origin else row["tf"])
+    if kind == "poc":
+        tf = card_chart.poc_tf(row["period"])
+    else:
+        origin = zone_radar.zone_origin(row.get("zone_key", ""), ("1h", "2h", "4h"))
+        tf = card_chart.candle_tf(origin[0] if origin else row["tf"])
     rows = await _cached_candles(row["coin"], tf)
     if not rows:
         return HTMLResponse("", status_code=503)
     price = (await _cached_prices({row["coin"]})).get(row["coin"])
-    svg = (card_chart.zone_radar_svg if kind == "zone" else card_chart.zone_sweep_svg)(row, rows, price)
+    svg = {"zone": card_chart.zone_radar_svg, "zsweep": card_chart.zone_sweep_svg, "poc": card_chart.poc_radar_svg}[kind](row, rows, price)
     return HTMLResponse(svg, headers={"Cache-Control": "no-store"})
 
 
@@ -1171,7 +1185,8 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     # De zone-sweep draait live (ongetest): zodra zijn labrun is opgeslagen staat hij bij de regels met een motor, met zijn stoptoets als stop_lab.
     # Tot dan is zijn eigen rij onder Per soort de enige plek, zonder status.
     range_sweep = await _range_sweep_proof(user, rows, lab_types)
-    hidden = (rule_live.RANGE_SWEEP, "range_sweep_stop") + ZONE_SWEEP_LAB_KEYS
+    # De POC-radar heeft geen labrun: als CEO-only soort hoort hij niet bij "regels zonder live motor", zijn rij staat onder Per soort.
+    hidden = (rule_live.RANGE_SWEEP, "range_sweep_stop", rule_live.POC_RADAR) + ZONE_SWEEP_LAB_KEYS
     engine_types, other_types = track_record.split_rule_types([t for t in visible if t not in hidden], rule_live.ENGINE_TYPES + (rule_live.ZONE_SWEEP,))
     rule_statuses = []
     for trade_type in engine_types:

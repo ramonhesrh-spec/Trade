@@ -13,7 +13,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, market_context, repo
+from app import chance_checks, config, market_context, poc_radar_live, repo
 from app import zone_radar as zr
 
 logger = logging.getLogger("zone_radar_live")
@@ -51,13 +51,16 @@ async def _push_new_card(card: dict) -> None:
 
 def signal_row(card: dict) -> dict:
     limit = card["zone_high"] if card["direction"] == "long" else card["zone_low"]
+    near = card.get("poc_near")
+    reason, pass_pct = chance_checks.with_checks(f"Gemeten: actieve zone op {zr.TF_TEXT.get(card['tf'], card['tf'])}, R:R {card['rr']:.1f} vanaf de limiet.",
+                                                 None if near is None else bool(near))
     narrative = (f"{zr.zone_text(card['direction'], card['tf'])} {card['zone_low']:.6g} tot {card['zone_high']:.6g}, limiet op de binnenrand {limit:.6g}. "
                  f"Doel de rand van de {zr.target_text(card['direction'], card['target_tf'])} op {card['take_profit']:.6g}. Ongetest.")
     return {
         "message_id": None, "coin": card["coin"], "direction": card["direction"], "category": "day_trading", "trade_type": zr.TRADE_TYPE,
         "pattern_name": zr.LABEL, "price": limit, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None,
-        "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1,
-        "confidence": f"{zr.LABEL} (ongetest)", "reason": f"Gemeten: actieve zone op {zr.TF_TEXT.get(card['tf'], card['tf'])}, R:R {card['rr']:.1f} vanaf de limiet.",
+        "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": pass_pct, "hard_gates_ok": 1,
+        "confidence": f"{zr.LABEL} (ongetest)", "reason": reason,
         "stop_loss": card["stop_loss"], "take_profit": card["take_profit"], "context_note": None, "is_practice": 0, "plain_explanation": narrative,
         "suggested_entry_low": card["zone_low"], "suggested_entry_high": card["zone_high"], "sniper_entry_price": None, "sniper_reason": None,
     }
@@ -157,7 +160,10 @@ async def run(now: Optional[datetime] = None) -> None:
         if repo.count_zone_radar_setups_since(since) >= config.ZONE_RADAR_MAX_PER_DAY:
             logger.info("Zone-radar: dagcap van %s kaarten bereikt, %s %s wacht", config.ZONE_RADAR_MAX_PER_DAY, plan["coin"], plan["direction"])
             break
-        setup_id = repo.insert_zone_radar_setup({**{k: v for k, v in plan.items() if k != "distance"}, **_context(plan["coin"], stamp)}, stamp.isoformat())
+        # POC-samenval pas na de keuze van het plan, net als de context: een kenmerk, nooit een filter.
+        near = poc_radar_live.samenval(plan["coin"], plan["limit"], stamp)
+        setup_id = repo.insert_zone_radar_setup({**{k: v for k, v in plan.items() if k != "distance"}, **_context(plan["coin"], stamp),
+                                                 "poc_near": None if near is None else int(near)}, stamp.isoformat())
         if setup_id is None:
             continue
         logger.info("Zone-radar %s %s: kaart %s, %s %s-%s, R:R %.1f", plan["coin"], plan["direction"], setup_id, plan["tf"], plan["zone_low"], plan["zone_high"], plan["rr"])

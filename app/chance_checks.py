@@ -80,6 +80,24 @@ def smc_checks(rr: float, risk_pct: float, has_sniper: bool, warning: bool) -> l
     ]
 
 
+POC_LABEL = "POC-samenval: limiet binnen 0,3% van een naakte dag- of week-POC"
+
+
+def poc_checks(near: Optional[bool]) -> list[Check]:
+    """Het kenmerk POC-samenval op een kaart van de zone-radar of de zone-sweep (app/poc_radar_live.samenval). None: niet gemeten, dan geen
+    kenmerk, want 'nee' zou iets beweren wat niemand mat. Beschrijvend: niets filtert of sorteert erop, Bewijs toont via score_split of het samengaat."""
+    return [] if near is None else [(POC_LABEL, bool(near))]
+
+
+def with_checks(reason: str, poc_near: Optional[bool]) -> tuple[str, Optional[float]]:
+    """(reason met de kenmerken erachter in de ✓/✗-vorm, pass_pct), of de reason ongewijzigd en None als er niets gemeten is."""
+    checks = poc_checks(poc_near)
+    if not checks:
+        return reason, None
+    marks, pct = finish(checks)
+    return f"{reason} | {marks}", pct
+
+
 WeightedCheck = tuple[str, bool, int]
 GRADE_A, GRADE_B = 80.0, 60.0
 

@@ -9,14 +9,15 @@ from typing import Iterable, Optional
 
 from app import nu, radar, trade_plan as tp
 
-LABELS = {"structuur": "Structuur", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "smc": "SMC"}
-ORDER = ("structuur", "zone_radar", "zone_sweep", "smc")
+LABELS = {"structuur": "Structuur", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar", "smc": "SMC"}
+ORDER = ("structuur", "zone_radar", "zone_sweep", "poc_radar", "smc")
 # Naar buiten is elke structuurkans Structuur (CLAUDE.md, Structuur zonder oordeel): structuur_c staat in dezelfde tab.
-TAB_OF = {"structuur": "structuur", "structuur_c": "structuur", "zone_radar": "zone_radar", "zone_sweep": "zone_sweep", "smc": "smc"}
+TAB_OF = {"structuur": "structuur", "structuur_c": "structuur", "zone_radar": "zone_radar", "zone_sweep": "zone_sweep", "poc_radar": "poc_radar",
+          "smc": "smc"}
 DEFAULT_TAB = "structuur"
 # Soorten met een eigen getekende kaartgrafiek die de pagina lazy ophaalt (/api/kaart_svg, app/card_chart.py): de zone op zijn eigen tijdframe.
 # Structuur draagt zijn momentopname al in `svg`; SMC houdt de generieke kaartgrafiek.
-SVG_TYPES = ("zone_radar", "zone_sweep")
+SVG_TYPES = ("zone_radar", "zone_sweep", "poc_radar")
 
 
 def _svg_src(item: dict) -> Optional[str]:

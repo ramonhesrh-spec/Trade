@@ -30,7 +30,7 @@ blijft voor elke gebruiker apart.
 ## Focus: welke soorten nu melden
 
 Sinds oktober 2026 zoeken en melden alleen drie soorten nog nieuwe kansen: Structuur A/B (`structuur`), Structuur C (`structuur_c`) en de
-zone-radar (`zone_radar`). De zone-sweep draait live en ongetest (op verzoek van de eigenaar, zonder labrun). Alle andere soorten staan uit, zodat de app overzichtelijk blijft
+zone-radar (`zone_radar`). De zone-sweep en de POC-radar draaien live en ongetest (op verzoek van de eigenaar, zonder labrun). Alle andere soorten staan uit, zodat de app overzichtelijk blijft
 en ze later één voor één verbeterd kunnen worden: day trading via Discord, patroon (uitbraak, trendlijn, chart-patroon), trend, rejectie,
 het markt-script, SMC en SMC met waarschuwing, swing, samenval, de range sweep en range-watch, en de proefmotor (`don55_trend`).
 
@@ -459,6 +459,16 @@ sudo systemctl start crypto-news.service crypto-script.service
   `trade_type = 'zone_sweep'` buiten de `/keten`. `ZONE_SWEEP_ENABLED` (standaard `true`), `ZONE_SWEEP_PUBLIC` (standaard `true`; `false` is
   alleen de CEO), `ZONE_SWEEP_MAX_PER_DAY` (10 gemelde kaarten per 24 uur, de rest staat stil op de Radar). Draait in de snelle SMC-check, geen
   eigen unit. Handmatig: `python3 -m app.zone_sweep_live`.
+- `app/poc_radar_live.py` (POC in `app/poc.py`, kaart in `app/poc_radar.py`): de POC (point of control, de prijs met het meeste volume) van elke
+  gesloten UTC-dag en ISO-week uit 5m-candles (bakken van 0,05%, volume gelijk verdeeld over low tot high). Naakt zolang geen latere 5m-candle hem
+  raakte, ook niet met een lont. Per coin en richting de dichtstbijzijnde naakte POC binnen 6%: onder de koers long, erboven short, limiet op de
+  POC, stop een kwart ATR (1u) erachter, doel het eerste niveau voorbij de koers (een POC of zonerand) bij minstens 2R, anders geen doel
+  (referentie-uitgang zoals de zone-sweep). Live op verzoek van de eigenaar zonder labrun, altijd ongetest. De niveaus worden één keer per uur per
+  coin bijgewerkt met alleen de nieuwe candles en bewaard (`poc_levels`, `poc_scans`); kaarten in `poc_radar_setups`, gevuld een signaal met
+  `trade_type = 'poc_radar'` buiten de `/keten`. Een kaart die niet vult vervalt na 3 dagen. `POC_RADAR_ENABLED` (standaard `true`),
+  `POC_RADAR_PUBLIC` (standaard `true`; `false` is alleen de CEO), `POC_RADAR_MAX_PER_DAY` (10). Kaarten van de zone-radar en de zone-sweep
+  krijgen het kenmerk POC-samenval (limiet binnen 0,3% van een naakte POC), alleen als meting; Bewijs toont of het samengaat. Draait in de
+  snelle SMC-check, geen eigen unit. Handmatig: `python3 -m app.poc_radar_live`.
 - `app/calendar_alerts.py`: herinnering 30 minuten vóór de opening van de VS-beurs (stil) en vóór een macro-uitslag uit
   `data/macro_events.csv` (met geluid). De agenda toont alleen momenten die de toets als duidelijk anders mat, plus macro;
   funding-resets en opties-expiry stonden er eerst bij maar bewegen de markt niet meetbaar. De agenda is niet volledig
@@ -528,7 +538,7 @@ oude `/structuur` stuurt door naar de tab Structuur op Kansen. Account, Meldinge
 Galerij en CEO (alleen de eigenaar) staan in het menu achter je initiaal rechtsboven. Het getal op Kansen telt de kansen die nu in de
 zone staan.
 
-Kansen (`app/kansen.py`) heeft een tab per soort: Structuur, Zone-radar en Zone-sweep (met `ENGINE_FOCUS=false` ook SMC). Boven de
+Kansen (`app/kansen.py`) heeft een tab per soort: Structuur, Zone-radar, Zone-sweep en POC-radar (met `ENGINE_FOCUS=false` ook SMC). Boven de
 tabs staat het totaal over alle tabs ("12 kansen klaar · 2 in de zone · 3 open", alleen wat er is; "Geen kansen" als er niets is), naast
 elke tabnaam het aantal wachtende kansen en zolang er iets in de zone staat een accentbadge met dat aantal; elke tab herhaalt zijn eigen
 regel. Wisselt een kaart van stand terwijl de pagina openstaat, dan tellen de getallen mee (`kaarten.js` na elke `/api/radar`). De tab met
@@ -537,6 +547,7 @@ in proef en een grafiek die per soort anders is: Structuur zijn eigen momentopna
 lijn of range, het retest-niveau, de stop en T1 tot T3, ook voor een open Structuur-trade), Zone-radar en Zone-sweep een tekening in de
 stijl van de galerij op het tijdframe van de zone (`app/card_chart.py`, lazy via `/api/kaart_svg/<sleutel>`: de zone als vlak vanaf de
 ontstaanscandle met een markering, de doelzone, bij de zone-sweep ook de prik en het herstel, en limiet, stop en doel met prijs rechts;
+de POC-radar zonder vlak, met lijnen voor limiet op de POC, stop en doel en een markering op het begin van zijn dag of week;
 "Groot" opent de schermvullende grafiek). Dubbele kaarten (zelfde soort, coin en richting, instap binnen 0,2%) staan één keer, de oudste;
 het blad zegt "Nog 1 vergelijkbaar signaal". Dat geldt alleen voor deze weergave: Bewijs, Logboek en meldingen houden elk signaal.
 In de zone staat bovenaan, daarna op gemeten afstand tot de instap; open trades staan onder Open.

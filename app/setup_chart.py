@@ -234,11 +234,12 @@ CARD_LABEL_GAP = 15
 CARD_MARK_CHAR_W = 6.6     # 11px tekst van markeringen en vlakken
 
 
-def zone_svg(candles: list[list], coin: str, direction: str, zone: dict, lines: list[tuple], points: list[tuple] = (),
+def zone_svg(candles: list[list], coin: str, direction: str, zone: Optional[dict], lines: list[tuple], points: list[tuple] = (),
              target_zone: Optional[dict] = None, price: Optional[float] = None, limit: Optional[float] = None) -> str:
     """candles: [[unix_s, open, high, low, close], ...] oud naar nieuw, het venster kiest de aanroeper (card_chart.window). zone: {"low", "high",
     "from" (unix_s of None = vanaf links), "label"}; target_zone idem zonder from. lines: [(prijs, klasse, tekst)] zoals sc-limit, sc-stop,
-    sc-target. points: [(unix_s, prijs, tekst)], een markering op de candle die ertoe doet (ontstaan, prik, herstel). Geeft '' zonder candles."""
+    sc-target. points: [(unix_s, prijs, tekst)], een markering op de candle die ertoe doet (ontstaan, prik, herstel). zone None: geen vlak, alleen
+    lijnen (de POC-radar: een POC is één prijs). Geeft '' zonder candles."""
     if not candles:
         return ""
     n = len(candles)
@@ -249,7 +250,9 @@ def zone_svg(candles: list[list], coin: str, direction: str, zone: dict, lines: 
     pad_r = int(max([len(m[2]) for m in marks] + [8]) * CARD_CHAR_W + 10)
     plot_w, plot_h = CARD_W - CARD_PAD_L - pad_r, CARD_H - CARD_PAD_T - CARD_PAD_B
     step = plot_w / (n + CARD_FUTURE)
-    values = [c[3] for c in candles] + [c[2] for c in candles] + [m[0] for m in marks] + [zone["low"], zone["high"]] + [p[1] for p in points]
+    values = [c[3] for c in candles] + [c[2] for c in candles] + [m[0] for m in marks] + [p[1] for p in points]
+    if zone:
+        values += [zone["low"], zone["high"]]
     if target_zone:
         values += [target_zone["low"], target_zone["high"]]
     lo, hi = min(values), max(values)
@@ -280,13 +283,15 @@ def zone_svg(candles: list[list], coin: str, direction: str, zone: dict, lines: 
                 f'<text class="sc-box-label" x="{lx:.1f}" y="{ly:.1f}" text-anchor="{anchor}">{escape(label)}</text>')
 
     short = direction == "short"
-    out = [f'<svg class="sc is-card" viewBox="0 0 {CARD_W} {CARD_H}" role="img" aria-label="{escape(coin)} {escape(direction)}: {escape(zone["label"])}" '
+    what = zone["label"] if zone else (lines[0][2] if lines else "")
+    out = [f'<svg class="sc is-card" viewBox="0 0 {CARD_W} {CARD_H}" role="img" aria-label="{escape(coin)} {escape(direction)}: {escape(what)}" '
            f'data-chart-coin="{escape(coin)}" data-hi="{hi:.8g}" data-lo="{lo:.8g}" data-pad-t="{CARD_PAD_T}" data-plot-h="{plot_h}"'
            + (f' data-level="{limit:.8g}"' if limit is not None else "") + ">"]
     if target_zone:
         # De doelzone ligt aan de overkant: label aan de kant weg van de eigen zone, zodat de twee namen nooit op elkaar staan.
         out.append(box(left, target_zone["high"], target_zone["low"], "sc-zone is-target", target_zone["label"], below=short))
-    out.append(box(at(zone.get("from")), zone["high"], zone["low"], "sc-zone", zone["label"], below=not short, at_end=True))
+    if zone:
+        out.append(box(at(zone.get("from")), zone["high"], zone["low"], "sc-zone", zone["label"], below=not short, at_end=True))
     for i, (_, o, h, low, c) in enumerate(candles):
         cls = "sc-up" if c >= o else "sc-down"
         out.append(f'<line class="sc-wick {cls}" x1="{x(i):.1f}" x2="{x(i):.1f}" y1="{y(h):.1f}" y2="{y(low):.1f}"/>'

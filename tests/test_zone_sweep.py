@@ -28,6 +28,17 @@ def setup_and_zones(rows):
     return s, zsw.zone_levels(frames, now)
 
 
+class PocSamenvalTest(unittest.TestCase):
+    def test_signaal_draagt_het_kenmerk_alleen_als_het_gemeten_is(self):
+        s, zones = setup_and_zones(rows_with_target())
+        row = zsw.card_row("BTC", "ZS_1H", s, zones)
+        self.assertIsNone(zsw.signal_row(row, 100.3)["pass_pct"])
+        sig = zsw.signal_row({**row, "poc_near": 1}, 100.3)
+        self.assertIn("✓ POC-samenval", sig["reason"])
+        self.assertEqual(sig["pass_pct"], 100.0)
+        self.assertEqual(zsw.signal_row({**row, "poc_near": 0}, 100.3)["pass_pct"], 0.0)
+
+
 class CardRowTest(unittest.TestCase):
     def test_long_with_a_target_on_the_opposite_zone(self):
         s, zones = setup_and_zones(rows_with_target())

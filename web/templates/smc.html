@@ -11,6 +11,7 @@
   "structuur": ("Geen plan klaar", "Zodra een lijn of range breekt en het plan genoeg ruimte heeft, krijg je een melding en staat hier de kaart. De motor kijkt elke 5 minuten."),
   "zone_radar": ("Geen zone binnen bereik", "Een kaart verschijnt als de dichtstbijzijnde vraag- of aanbodzone op 1u of 4u binnen 6% van de koers ligt."),
   "zone_sweep": ("Geen sweep", "Een kaart verschijnt als de koers door een zone prikt en binnen een paar candles terug sluit."),
+  "poc_radar": ("Geen POC binnen bereik", "Een kaart verschijnt als een naakte dag- of week-POC binnen 6% van de koers ligt. De POC's worden elk uur bijgewerkt."),
   "smc": ("Geen SMC-setup", "Een kaart verschijnt als structuur breekt en een sweep de liquiditeit pakt.")} %}
 {# Het totaal over alle tabs, zonder te tikken (app/kansen.py summary): wachtend, in de zone en open. kaarten.js telt hem opnieuw als een kaart
    van stand verandert (radar.js). #}
@@ -86,6 +87,7 @@
   <p class="kt-meta">Laatste 24 uur: {{ counts.total }} gezien, {{ counts.met_plan }} met plan.</p>
   {% endif %}
   {% if t.key in ("zone_radar", "zone_sweep") %}<p class="kt-meta"><a href="/zone-radar">Zone-radar en zone-sweep: zo werkt het</a></p>{% endif %}
+  {% if t.key == "poc_radar" %}<p class="kt-meta"><a href="/zone-radar#poc">POC-radar: zo werkt het</a></p>{% endif %}
 </section>
 {% endfor %}
 </div>

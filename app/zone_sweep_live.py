@@ -18,7 +18,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, push_notify, range_sweep_live as rsl, repo
+from app import config, poc_radar_live, push_notify, range_sweep_live as rsl, repo
 from app import zone_sweep as zsw
 from app.replay import rangesweep as rs, stopquality as sq, trendlab as tl, zonesweep as zs, zonesweep_lab as zl
 
@@ -84,7 +84,8 @@ async def _register(row: dict, price: Optional[float], now: pd.Timestamp) -> Non
     capped = repo.count_zone_sweep_announced_since((now - zsw.TTL).isoformat()) >= config.ZONE_SWEEP_MAX_PER_DAY
     dead = not zsw.alive(row, price)
     # Stil boven de dagcap of bij een plan dat al voorbij stop of doel staat: de kaart wordt wel gevolgd, zoals het lab elke setup meet.
-    row = {**row, "quiet": 1 if capped or dead else 0}
+    near = poc_radar_live.samenval(row["coin"], row["limit_price"], now)      # kenmerk, geen filter: de kaart komt er hoe dan ook
+    row = {**row, "quiet": 1 if capped or dead else 0, "poc_near": None if near is None else int(near)}
     setup_id = repo.insert_zone_sweep_setup(row, now.isoformat())
     if setup_id is None:
         return
