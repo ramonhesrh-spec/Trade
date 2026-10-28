@@ -8,9 +8,10 @@ from app import ladder, price_text, radar
 
 TRADE_TYPE_ZONE = "zone_radar"          # zelfde waarde als zone_radar.TRADE_TYPE; niet importeren houdt dit bestand los van pandas
 TRADE_TYPE_SWEEP = "zone_sweep"         # zelfde waarde als zone_sweep.TRADE_TYPE
-UNTESTED_SOURCES = (TRADE_TYPE_ZONE, TRADE_TYPE_SWEEP)
+TRADE_TYPE_POC = "poc_radar"            # zelfde waarde als poc_radar.TRADE_TYPE
+UNTESTED_SOURCES = (TRADE_TYPE_ZONE, TRADE_TYPE_SWEEP, TRADE_TYPE_POC)
 MAX_SKIP = 20
-SKIP_KEY = re.compile(r"^(zone|zsweep|setup|signal|structuur):\d+$")
+SKIP_KEY = re.compile(r"^(zone|zsweep|poc|setup|signal|structuur):\d+$")
 DIR_WORD = {"long": "Long", "short": "Short"}
 
 
@@ -54,12 +55,16 @@ def _from_setup(c: dict) -> dict:
     source = (c.get("setup") or {}).get("source")
     untested = source in UNTESTED_SOURCES
     p = c["plan"]
-    # Een plan zonder doel (zone-sweep) heeft alleen instap en stop: het doel kies je zelf.
+    # Een plan zonder doel (zone-sweep, POC-radar) heeft alleen instap en stop: het doel kies je zelf. Een POC is één prijs: geen zone op de ladder.
     setup = c.get("setup") or {}
+    zone = not setup.get("no_zone")
+    origin = (setup.get("chart_zone") or {}).get("label") or setup.get("origin_label") or ""
+    if setup.get("poc_near"):
+        origin += " · bij een naakte POC"         # het gemeten kenmerk POC-samenval (chance_checks.poc_checks), geen oordeel
     return plan_item(c["key"], c["coin"], c["direction"], p.limit, p.stop, [(p.take, p.rr)] if p.take is not None else [], price=c["price"],
                      state=c["state"], distance_pct=c["distance_pct"], approach_pct=c["approach_pct"], action=c["action"],
-                     trade_type=source if untested else "smc", untested=untested, zone_low=setup.get("zone_low"), zone_high=setup.get("zone_high"),
-                     chart=c.get("chart"), origin=((setup.get("chart_zone") or {}).get("label") or ""))
+                     trade_type=source if untested else "smc", untested=untested, zone_low=setup.get("zone_low") if zone else None,
+                     zone_high=setup.get("zone_high") if zone else None, chart=c.get("chart"), origin=origin)
 
 
 def _from_signal(c: dict) -> dict:

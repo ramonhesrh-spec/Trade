@@ -114,9 +114,10 @@ def scenario_view(s: dict, price: Optional[float], now: datetime, coin: str = ""
 OPEN_SIGNAL_HOURS = 6
 SIGNAL_LABELS = {"structuur": "Structuur gevuld", "structuur_c": "Structuur gevuld", "trend": "Trend", "rejectie": "Rejectie", "smc": "SMC",
                  "smc_waarschuwing": "SMC met waarschuwing", "script": "Markt-script", "don55_trend": "Proefmotor",
-                 "range_sweep": "Range sweep gevuld", "zone_radar": "Zone-radar gevuld", "zone_sweep": "Zone-sweep gevuld"}
+                 "range_sweep": "Range sweep gevuld", "zone_radar": "Zone-radar gevuld", "zone_sweep": "Zone-sweep gevuld",
+                 "poc_radar": "POC-radar gevuld"}
 OPEN_PLAN_STATES = (None, "wacht", "in_zone")        # None: koers onbekend, dan is er niets dat het plan ongeldig maakt
-PLAN_KIND = {"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep"}     # Radar-kaarten met een eigen bron (radar.KEY_PREFIX)
+PLAN_KIND = {"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar"}     # Radar-kaarten met een eigen bron (radar.KEY_PREFIX)
 
 
 def _aware(iso: str) -> datetime:

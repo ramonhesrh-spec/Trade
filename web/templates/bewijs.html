@@ -68,6 +68,8 @@
       {% endif %}
       {% if e.trade_type == "range_sweep" %}<p class="proof-footnote muted">R gemeten bij de referentie-uitgang (meelopende stop 3 ATR op 1u), niet bij een doel; de stopkwaliteit staat onder Regels.</p>{% endif %}
       {% if e.trade_type == "zone_sweep" %}<p class="proof-footnote muted">Ongetest: live op verzoek, de labrun volgt later. Met een doel telt doel of stop; een kaart zonder doel telt de R bij de referentie-uitgang (meelopende stop 3 ATR op 1u).</p>{% endif %}
+      {% if e.trade_type == "poc_radar" %}<p class="proof-footnote muted">Ongetest: live op verzoek, zonder labrun. Met een doel telt doel of stop; een kaart zonder doel telt de R bij de referentie-uitgang (meelopende stop 3 ATR op 1u).</p>{% endif %}
+      {% if e.trade_type in ("zone_radar", "zone_sweep") and e.score_split %}<p class="proof-footnote muted">De score is hier één kenmerk, POC-samenval: 100% als de limiet binnen 0,3% van een naakte POC lag, anders 0%. Kaarten van vóór die meting tellen niet mee.</p>{% endif %}
       <p class="proof-footnote muted">{{ e.wins }} winst, {{ e.losses }} verlies. {{ e.open_or_expired }} nog open of vervallen, die tellen niet mee in winrate en R.</p>
     </div>
   </details>

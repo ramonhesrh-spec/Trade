@@ -32,6 +32,7 @@ TYPE_LABELS = {
     "range_sweep": "Range sweep (ongetest)",
     "zone_radar": "Zone-radar (ongetest)",
     "zone_sweep": "Zone-sweep (ongetest)",
+    "poc_radar": "POC-radar (ongetest)",
 }
 # Leesbare namen voor de labvarianten (sleutel: Variant.name.lower()); alleen de CEO ziet ze. Onbekend: de ruwe naam.
 LAB_LABELS = {
