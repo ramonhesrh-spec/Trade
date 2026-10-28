@@ -673,13 +673,18 @@
 {% macro kans_label(it) %}{% if it.untested %}{{ pill("ongetest") }}{% else %}{{ pill(proof(it.trade_type).label|lower) }}{% endif %}{% endmacro %}
 
 {% macro kans_card(it) %}
-<article class="kc is-{{ it.state or 'laden' }}" id="{{ it.dom_id }}" data-kc="{{ it.key }}"{% if it.kind == "plan" and not it.key.startswith("structuur:") %} data-radar-key="{{ it.key }}"{% endif %}>
+<article class="kc is-{{ it.state or 'laden' }}" id="{{ it.dom_id }}" data-kc="{{ it.key }}" data-kc-keys="{{ (it.get('keys') or [it.key])|join(',') }}"
+         data-kc-title="{{ it.title }}" data-kc-group="{{ it.group }}"{% if it.kind == "plan" and not it.key.startswith("structuur:") %} data-radar-key="{{ it.key }}"{% endif %}>
+  {# Verberg (kans_hidden, kaarten.js) staat naast de kop en niet erin: een knop in een knop kan niet, en zo opent een mis-tik nooit het blad. #}
+  <div class="kc-top">
   <button type="button" class="kc-head" data-kc-open="{{ it.key }}" aria-haspopup="dialog" aria-controls="kd">
     <span class="kc-title">{{ it.title }}</span>
     <span class="kc-tags">{% if it.skipped %}<span class="kc-skipped">overgeslagen</span>{% endif %}<span class="state-pill is-{{ it.state or 'laden' }}"{% if it.kind == "plan" %} data-radar="state"{% endif %}>{{ it.state_short }}</span>{{ kans_label(it) }}</span>
     <svg class="kc-chev" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     <span class="sr-only">Details</span>
   </button>
+  <button type="button" class="kc-hide" data-kc-hide aria-label="Verberg {{ it.title }}"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+  </div>
   {# Structuur tekent zijn eigen momentopname (svg, setup_chart): de breuk, het retest-niveau, de stop en T1 tot T3. Een tik erop opent het
      detailblad zoals elders op de kaart; de koerslijn schuift live mee (live.js, data-chart-coin). De andere soorten krijgen de kaartgrafiek. #}
   {% if it.svg %}<figure class="kc-svg is-structuur">{{ it.svg }}<figcaption class="lc-cap">30 min per candle · getekend bij de breuk</figcaption></figure>
@@ -697,6 +702,9 @@
   <i data-live-coin="{{ it.coin }}" hidden></i>
 </article>
 {% endmacro %}
+
+{# Een verborgen kaart als rij onder "Verborgen (N)" (app/kansen.py `hidden`); kaarten.js bouwt dezelfde rij als je een kaart net verbergt. #}
+{% macro kans_hidden_row(h) %}<li class="kt-hid-row" data-kh="{{ h.key }}" data-kh-keys="{{ h["keys"]|join(',') }}" data-kh-group="{{ h.group }}"><b>{{ h.title }}</b><span>{{ h.state_short }}</span><button type="button" class="kt-show" data-kt-show>Toon weer</button></li>{% endmacro %}
 
 {# Het detail van één kans in het blad: de opgeschoonde ladder, de getallen één keer (houd vast om te kopiëren), de herkomst in één regel,
    de gemeten context en vast onderaan de knop. `ctx` is market_context.coin_lines van deze coin. #}
@@ -735,9 +743,14 @@
       <dd class="kd-ctx-m">{{ [l.source, l.age]|select|join(" · ") }}</dd></div>{% endfor %}
   </dl>
   {% endif %}
+  {# Twee rustige acties onder de hoofdknop. Sla over voor vandaag (plan_skips, hp_skip) houdt het plan in de lijst, een dag achteraan; Verberg
+     (kans_hidden) haalt de kaart weg tot je hem terugzet. Zonder JavaScript gaat Verberg als formulier naar dezelfde route. #}
   <div class="kd-foot">
-    {% if it.kind == "trade" %}<a class="kd-cta is-quiet" href="{{ it.url }}">Bekijk de trade</a>{% else %}<a class="kd-cta" href="{{ it.checklist_url }}">Zet de order, stap voor stap</a>
-    <form method="post" action="/nu/overslaan" class="kd-skip-form"><input type="hidden" name="key" value="{{ it.key }}"><button type="submit" class="kd-skip">Sla over</button></form>{% endif %}
+    {% if it.kind == "trade" %}<a class="kd-cta is-quiet" href="{{ it.url }}">Bekijk de trade</a>{% else %}<a class="kd-cta" href="{{ it.checklist_url }}">Zet de order, stap voor stap</a>{% endif %}
+    <div class="kd-alt">
+      {% if it.kind != "trade" %}<form method="post" action="/nu/overslaan" class="kd-skip-form"><input type="hidden" name="key" value="{{ it.key }}"><button type="submit" class="kd-skip">Sla over voor vandaag</button></form>{% endif %}
+      <form method="post" action="/api/kans/verberg" class="kd-skip-form"><input type="hidden" name="key" value="{{ it.key }}"><button type="submit" class="kd-skip" data-kd-hide="{{ it.key }}">Verberg</button></form>
+    </div>
   </div>
 </section>
 {% endmacro %}

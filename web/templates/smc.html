@@ -21,15 +21,28 @@
 {% for t in page.tabs %}
 <section id="tab-{{ t.key }}" data-utab-panel{% if t.key == page.active %} class="is-shown"{% endif %}>
   <p class="kt-sum">{{ t.summary }}</p>
-  {% if t.plans %}
-  <div class="kc-list" data-kt-plans>{% for it in t.plans %}{{ macros.kans_card(it) }}{% endfor %}</div>
-  {% elif t.key in empty %}
+  {# Beide groepen staan er altijd (leeg verborgen): Toon weer en Ongedaan zetten een kaart terug zonder te herladen (kaarten.js). "Verberg alles"
+     staat er pas bij twee kaarten; bij één doet het kruisje op de kaart hetzelfde. #}
+  <div class="kt-group" data-kt-group="plans"{% if not t.plans %} hidden{% endif %}>
+    <div class="kt-subrow is-first"><h3 class="kt-sub">Wachtend</h3><button type="button" class="kt-hide-all" data-kt-hide-all{% if t.plans|length < 2 %} hidden{% endif %}>Verberg alles</button></div>
+    <div class="kc-list" data-kt-plans>{% for it in t.plans %}{{ macros.kans_card(it) }}{% endfor %}</div>
+  </div>
+  {% if not t.plans and not (t.hidden|selectattr("group", "equalto", "plans")|list) and t.key in empty %}
   {{ macros.empty_state(empty[t.key][0], empty[t.key][1]) }}
   {% endif %}
-  {% if t.trades %}
-  <h3 class="kt-sub">Open</h3>
-  <div class="kc-list" data-kt-trades>{% for it in t.trades %}{{ macros.kans_card(it) }}{% endfor %}</div>
-  {% endif %}
+  <div class="kt-group" data-kt-group="trades"{% if not t.trades %} hidden{% endif %}>
+    <div class="kt-subrow"><h3 class="kt-sub">Open</h3><button type="button" class="kt-hide-all" data-kt-hide-all{% if t.trades|length < 2 %} hidden{% endif %}>Verberg alles</button></div>
+    <div class="kc-list" data-kt-trades>{% for it in t.trades %}{{ macros.kans_card(it) }}{% endfor %}</div>
+  </div>
+
+  {# Verborgen (kans_hidden): alleen jouw weergave. De kaarten zelf staan onzichtbaar klaar in de voorraad, met hun detailblad, zodat Toon weer
+     direct werkt; een melding die naar een verborgen kaart wijst, klapt deze regel open (kaarten.js). #}
+  <details class="kt-more kt-hid" data-kt-hidden{% if not t.hidden %} hidden{% endif %}>
+    <summary><span data-kt-hidden-label>{{ t.hidden_label }}</span></summary>
+    <ul class="kt-rows" data-kt-hidden-rows>{% for h in t.hidden %}{{ macros.kans_hidden_row(h) }}{% endfor %}</ul>
+    <button type="button" class="kt-show-all" data-kt-show-all>Toon alles weer</button>
+  </details>
+  <div class="kt-stash" data-kt-stash hidden>{% for it in t.hidden_cards %}{{ macros.kans_card(it) }}{% endfor %}</div>
 
   {% if t.moot %}
   <details class="kt-more">

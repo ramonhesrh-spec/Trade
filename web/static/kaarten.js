@@ -3,6 +3,8 @@
 // de koers komt van /api/radar (radar.js haalt die al op, hier alleen de prijs) en tussendoor van de koersstroom van live.js als die vers is.
 (function () {
   window.hesKansenSummary = summary;
+  window.hesHiddenText = hiddenText;
+  window.hesHiddenLabel = hiddenLabel;
   var sheet = document.querySelector("[data-kd]");
   if (!sheet) return;
   var panel = sheet.querySelector("[data-kd-panel]");
@@ -40,6 +42,7 @@
   }
 
   document.addEventListener("click", function (e) {
+    if (hideClick(e)) return;
     var head = e.target.closest && e.target.closest("[data-kc-open]");
     if (head) { openSheet(head.getAttribute("data-kc-open"), head); return; }
     var card = e.target.closest && e.target.closest("[data-kc]");
@@ -186,6 +189,187 @@
       var next = summary(tn, tz, to);
       if (total.textContent !== next) total.textContent = next;
     }
+    groups();
   }
   document.addEventListener("hp:radar", recount);
+
+  // ===== Verbergen (kans_hidden, POST /api/kans/verberg en /api/kans/toon) =====
+  // Alleen de weergave van deze gebruiker. De kaart klapt meteen weg (eerst tonen, dan opslaan) en schuift naar de onzichtbare voorraad van zijn
+  // tab, met een rij onder "Verborgen (N)"; een balk van 5 s biedt Ongedaan. Een verborgen kaart staat buiten [data-kt-plans] en
+  // [data-kt-trades], dus recount telt hem nergens mee. Dezelfde woorden als app/kansen.py (tests/test_static_js.py).
+  function hiddenText(titles) { return titles.length === 1 ? titles[0] + " verborgen" : titles.length + " kaarten verborgen"; }
+  function hiddenLabel(n) { return n ? "Verborgen (" + n + ")" : ""; }
+  function send(url, keys) {
+    return fetch(url, { method: "POST", credentials: "same-origin", keepalive: true, headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ keys: keys }) })
+      .then(function (r) { if (!r.ok) throw new Error(r.status); return r; });
+  }
+  function keysOf(card) { return (card.getAttribute("data-kc-keys") || card.getAttribute("data-kc")).split(","); }
+  function panelOf(el) { return el.closest("[data-utab-panel]"); }
+  function listOf(panel, group) { return panel.querySelector("[data-kt-" + group + "]"); }
+
+  function groups() {
+    document.querySelectorAll('[data-utabs-panels="kansen"] > [data-utab-panel]').forEach(function (panel) {
+      panel.querySelectorAll("[data-kt-group]").forEach(function (g) {
+        var n = g.querySelectorAll(".kc-list > .kc").length, all = g.querySelector("[data-kt-hide-all]");
+        g.hidden = !n;
+        if (all) all.hidden = n < 2;
+      });
+      var box = panel.querySelector("[data-kt-hidden]");
+      if (!box) return;
+      var rows = box.querySelectorAll("[data-kh]").length;
+      box.hidden = !rows;
+      if (!rows) box.open = false;
+      box.querySelector("[data-kt-hidden-label]").textContent = hiddenLabel(rows);
+    });
+  }
+
+  function addRow(panel, card) {
+    var rows = panel.querySelector("[data-kt-hidden-rows]"), key = card.getAttribute("data-kc");
+    if (!rows || rows.querySelector('[data-kh="' + key + '"]')) return;
+    var li = document.createElement("li"), b = document.createElement("b"), st = document.createElement("span"), btn = document.createElement("button");
+    var pill = card.querySelector(".kc-head .state-pill");
+    li.className = "kt-hid-row";
+    li.setAttribute("data-kh", key);
+    li.setAttribute("data-kh-keys", keysOf(card).join(","));
+    li.setAttribute("data-kh-group", card.getAttribute("data-kc-group"));
+    b.textContent = card.getAttribute("data-kc-title");
+    st.textContent = pill ? pill.textContent : "";
+    btn.type = "button"; btn.className = "kt-show"; btn.setAttribute("data-kt-show", ""); btn.textContent = "Toon weer";
+    li.appendChild(b); li.appendChild(st); li.appendChild(btn);
+    rows.insertBefore(li, rows.firstChild);
+  }
+
+  // Klapt de kaarten dicht (hoogte vast, dan nul) en zet ze daarna in de voorraad. Zonder beweging meteen.
+  function collapse(cards, done) {
+    if (rm) { done(); return; }
+    cards.forEach(function (c) { c.style.height = c.offsetHeight + "px"; });
+    void document.body.offsetWidth;
+    cards.forEach(function (c) { c.classList.add("is-leaving"); c.style.height = "0px"; c.style.paddingBottom = "0px"; c.style.borderWidth = "0px"; });
+    setTimeout(done, 200);
+  }
+  function stash(card) {
+    var panel = panelOf(card), box = panel && panel.querySelector("[data-kt-stash]");
+    card.classList.remove("is-leaving", "is-back");
+    card.style.height = card.style.paddingBottom = card.style.borderWidth = "";
+    if (box) box.appendChild(card);
+    if (panel) addRow(panel, card);
+  }
+  // Terug in de lijst: op zijn oude plek als die er nog is (Ongedaan), anders onderaan zijn groep (Toon weer; de volgende keer staat hij weer op volgorde).
+  function unstash(card, parent, next) {
+    var panel = panelOf(card), row = panel && panel.querySelector('[data-kh="' + card.getAttribute("data-kc") + '"]');
+    if (row) row.remove();
+    var list = parent || (panel && listOf(panel, card.getAttribute("data-kc-group")));
+    if (!list) return;
+    if (next && next.parentNode === list) list.insertBefore(card, next); else list.appendChild(card);
+    card.classList.remove("is-leaving");
+    card.style.height = card.style.paddingBottom = card.style.borderWidth = "";
+    if (!rm) { card.classList.remove("is-back"); void card.offsetWidth; card.classList.add("is-back"); }
+  }
+
+  var toastEl = null, toastTimer = 0;
+  function toast(text, onUndo) {
+    if (!toastEl) {
+      toastEl = document.createElement("div");
+      toastEl.className = "kt-toast";
+      toastEl.setAttribute("role", "status");
+      toastEl.setAttribute("aria-live", "polite");
+      toastEl.innerHTML = '<span class="kt-toast-text"></span><button type="button" class="kt-toast-undo">Ongedaan</button><i class="kt-toast-time" aria-hidden="true"></i>';
+      document.body.appendChild(toastEl);
+    }
+    var undo = toastEl.querySelector(".kt-toast-undo"), time = toastEl.querySelector(".kt-toast-time");
+    toastEl.querySelector(".kt-toast-text").textContent = text;
+    undo.hidden = !onUndo;
+    undo.onclick = function () { hideToast(); if (onUndo) onUndo(); };
+    clearTimeout(toastTimer);
+    toastEl.classList.remove("is-on");
+    time.style.animation = "none"; void time.offsetWidth; time.style.animation = "";
+    toastEl.hidden = false;
+    void toastEl.offsetWidth;
+    toastEl.classList.add("is-on");
+    toastTimer = setTimeout(hideToast, 5000);
+  }
+  function hideToast() {
+    clearTimeout(toastTimer);
+    if (!toastEl) return;
+    toastEl.classList.remove("is-on");
+    setTimeout(function () { if (!toastEl.classList.contains("is-on")) toastEl.hidden = true; }, rm ? 0 : 200);
+  }
+
+  // Het getal op Kansen in het dok en op het appicoon komt van de server (radar.in_zone_count zonder jouw verborgen kaarten): na een wijziging opnieuw vragen.
+  function refreshBadge() {
+    fetch("/api/system_status", { cache: "no-store", credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (s) {
+        if (!s || typeof s.in_zone !== "number") return;
+        var tab = document.querySelector('.tabbar a[href="/smc"]'), badge = tab && tab.querySelector(".tab-badge");
+        if (tab && s.in_zone && !badge) {
+          badge = document.createElement("i");
+          badge.className = "tab-badge";
+          tab.appendChild(badge);
+        }
+        if (badge && !s.in_zone) badge.remove();
+        else if (badge) { badge.textContent = s.in_zone; badge.setAttribute("aria-label", s.in_zone + " in de zone"); }
+        try {
+          if ("setAppBadge" in navigator) (s.in_zone > 0 ? navigator.setAppBadge(s.in_zone) : navigator.clearAppBadge()).catch(function () {});
+        } catch (e) { /* geen appicoon */ }
+      })
+      .catch(function () { /* de volgende statuspoll van base.html zet het goed */ });
+  }
+
+  function hide(cards) {
+    cards = cards.filter(function (c) { return c && !c.closest("[data-kt-stash]"); });
+    if (!cards.length) return;
+    var spots = cards.map(function (c) { return { card: c, parent: c.parentNode, next: c.nextElementSibling }; });
+    var keys = [].concat.apply([], cards.map(keysOf)), titles = cards.map(function (c) { return c.getAttribute("data-kc-title"); });
+    var back = function () {
+      spots.slice().reverse().forEach(function (s) { unstash(s.card, s.parent, s.next); });
+      recount();
+    };
+    collapse(cards, function () { cards.forEach(stash); recount(); });
+    var saved = send("/api/kans/verberg", keys).then(refreshBadge).catch(function () { back(); toast("Verbergen lukte niet, de kaart staat er weer", null); });
+    toast(hiddenText(titles), function () {
+      back();
+      // Pas na het verbergen: anders kan Toon de server eerder bereiken en blijft de kaart daar verborgen.
+      saved.then(function () { return send("/api/kans/toon", keys); }).then(refreshBadge).catch(function () { location.reload(); });
+    });
+  }
+  function show(rows) {
+    if (!rows.length) return;
+    var keys = [];
+    rows.forEach(function (row) {
+      keys = keys.concat(row.getAttribute("data-kh-keys").split(","));
+      var panel = panelOf(row), card = panel && panel.querySelector('[data-kt-stash] [data-kc="' + row.getAttribute("data-kh") + '"]');
+      if (card) unstash(card); else row.remove();
+    });
+    recount();
+    send("/api/kans/toon", keys).then(refreshBadge).catch(function () { location.reload(); });
+  }
+
+  function hideClick(e) {
+    var t = e.target.closest && e.target.closest("[data-kc-hide], [data-kd-hide], [data-kt-hide-all], [data-kt-show], [data-kt-show-all]");
+    if (!t) return false;
+    e.preventDefault();
+    if (t.hasAttribute("data-kc-hide")) hide([t.closest("[data-kc]")]);
+    else if (t.hasAttribute("data-kd-hide")) {
+      closeSheet();
+      var key = t.getAttribute("data-kd-hide");
+      hide([].filter.call(document.querySelectorAll('[data-kc="' + key + '"]'), function (c) { return !c.closest("[data-kt-stash]"); }));
+    } else if (t.hasAttribute("data-kt-hide-all")) hide([].slice.call(t.closest("[data-kt-group]").querySelectorAll(".kc-list > .kc")));
+    else if (t.hasAttribute("data-kt-show")) show([t.closest("[data-kh]")]);
+    else show([].slice.call(t.closest("[data-kt-hidden]").querySelectorAll("[data-kh]")));
+    return true;
+  }
+
+  // Een melding die naar een verborgen kaart wijst (/smc#radar-zone-8): utabs.js opent de tab, hier klapt "Verborgen" open op die rij.
+  function revealHashed() {
+    var id = decodeURIComponent((location.hash || "").slice(1)), el = id && document.getElementById(id);
+    var box = el && el.closest("[data-kt-stash]") && panelOf(el).querySelector("[data-kt-hidden]");
+    if (!box) return;
+    box.open = true;
+    var row = box.querySelector('[data-kh="' + el.getAttribute("data-kc") + '"]');
+    if (row) row.scrollIntoView({ block: "center" });
+  }
+  revealHashed();
+  window.addEventListener("hashchange", revealHashed);
 })();

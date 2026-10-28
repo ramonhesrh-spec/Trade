@@ -163,3 +163,9 @@ class KansenSummaryTest(unittest.TestCase):
         cases = [(0, 0, 0), (1, 0, 0), (1, 1, 0), (12, 2, 3), (0, 0, 1), (2, 0, 1)]
         out = subprocess.run(["node", str(ROOT / "tests/js/kaarten_harness.js"), str(ROOT / "web/static/kaarten.js")], capture_output=True, text=True, check=True)
         self.assertEqual(json.loads(out.stdout), [kansen.summary(*c) for c in cases])
+
+    def test_ongedaan_balk_en_verborgen_regel_zeggen_hetzelfde_als_de_server(self):
+        from app import kansen
+        out = run_node("kaarten_hidden_harness.js", "kaarten.js")
+        self.assertEqual(out["text"], [kansen.hidden_text(t) for t in (["HYPE short"], ["HYPE short", "ETH long", "SOL long"], ["A", "B"])])
+        self.assertEqual(out["label"], [kansen.hidden_label(n) for n in (0, 1, 7)])

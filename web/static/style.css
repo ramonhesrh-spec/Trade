@@ -2163,6 +2163,22 @@ html { -webkit-tap-highlight-color: transparent; }
               border-radius: 999px; background: var(--panel); border: 1px solid var(--border-strong); color: var(--text); font-size: var(--text-sm);
               opacity: 0; pointer-events: none; transition: opacity 0.15s ease; }
 .copy-toast.is-on { opacity: 1; }
+/* De ongedaan-balk na Verberg op Kansen (kaarten.js). De dunne lijn onderaan is de tijd die nog rest om ongedaan te maken (5 s), dus een echte
+   waarde; zonder beweging bij prefers-reduced-motion. */
+.kt-toast { position: fixed; left: 16px; right: 16px; bottom: calc(100px + env(safe-area-inset-bottom)); z-index: 960; max-width: 420px; margin: 0 auto;
+  display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 16px; overflow: hidden; border: 1px solid var(--bd); border-radius: 14px;
+  background: var(--s2); color: var(--tx); font: 500 15px / 1.3 var(--sans); box-shadow: 0 8px 24px rgba(0, 0, 0, .28);
+  opacity: 0; transform: translateY(8px); transition: opacity var(--t-staat) var(--e-mee), transform var(--t-staat) var(--e-mee); }
+.kt-toast.is-on { opacity: 1; transform: none; }
+.kt-toast[hidden] { display: none; }
+.kt-toast-text { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.kt-toast-undo { flex: none; min-height: 44px; padding: 0 12px; border: 0; border-radius: 10px; background: none; color: var(--aci); font: 600 15px var(--sans); cursor: pointer; }
+.kt-toast-undo:hover { background: var(--s1); color: var(--aci); }
+.kt-toast-undo:focus-visible { outline: 2px solid var(--ac); outline-offset: -2px; }
+.kt-toast-time { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--ac); transform-origin: left; }
+.kt-toast.is-on .kt-toast-time { animation: kt-toast-time 5s linear forwards; }
+@keyframes kt-toast-time { to { transform: scaleX(0); } }
+@media (prefers-reduced-motion: reduce) { .kt-toast { transition: none; transform: none; } .kt-toast.is-on .kt-toast-time { animation: none; } }
 @media (prefers-reduced-motion: reduce) { .copy-toast { transition: none; } }
 .win-toast { position: fixed; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 960; display: flex; align-items: center; gap: var(--space-4);
              padding: 6px 16px 6px 6px; border-radius: 18px; background: var(--panel); border: 1px solid var(--border-strong); color: var(--text); font-weight: 600; cursor: pointer; }
@@ -2457,7 +2473,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 @media (min-width: 761px) { .fsearch, .ph-avatar { display: none; } }
 @media (max-width: 760px) {
   /* De dock is hier ongeveer 138px hoog; lagere meldingen verdwijnen erachter. */
-  .copy-toast, .ceo-toast, .win-toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
+  .copy-toast, .ceo-toast, .win-toast, .kt-toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
 }
 @media (prefers-reduced-motion: reduce) { .dock { transition: none; } }
 
@@ -2875,6 +2891,31 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .kc-tags { display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: auto; }
 .kc-chev { flex: none; color: var(--tx2); }
 .kc-skipped { font-size: 12px; color: var(--tx2); }
+/* Verberg (kans_hidden): een rustig kruisje naast de kop, 44px tikvlak dat tot in de kaartrand loopt zodat het de kop niet versmalt. */
+.kc-top { display: flex; align-items: center; margin-right: -10px; }
+.kc-top .kc-head { flex: 1; min-width: 0; }
+.kc-hide { flex: none; display: grid; place-items: center; width: 44px; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 12px; background: none;
+  color: var(--tx2); cursor: pointer; }
+.kc-hide:hover { background: var(--s2); color: var(--tx); }
+.kc-hide:focus-visible { outline: 2px solid var(--ac); outline-offset: -2px; }
+/* Wegklappen na Verberg (kaarten.js zet de hoogte vast en dan op nul). Zonder beweging bij prefers-reduced-motion: dan is hij meteen weg. */
+.kc.is-leaving { overflow: hidden; opacity: 0; transition: height var(--t-staat) var(--e-mee), opacity var(--t-tik) var(--e-mee), padding var(--t-staat) var(--e-mee),
+  border-width var(--t-staat) var(--e-mee); }
+.kc.is-back { animation: kc-back var(--t-staat) var(--e-mee); }
+@keyframes kc-back { from { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .kc.is-leaving { transition: none; } .kc.is-back { animation: none; } }
+.kt-group[hidden], .kt-stash[hidden], .kt-hid[hidden] { display: none; }
+.kt-subrow { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 24px 0 10px; }
+.kt-subrow.is-first { margin-top: 8px; }
+.kt-subrow .kt-sub { margin: 0; }
+.kt-hide-all, .kt-show, .kt-show-all { min-height: 44px; margin: 0; padding: 0 4px; border: 0; background: none; color: var(--aci); font: 500 14px var(--sans); cursor: pointer; }
+.kt-hide-all { margin-right: -4px; color: var(--tx2); }
+.kt-hide-all:hover, .kt-show:hover, .kt-show-all:hover { background: none; color: var(--tx); text-decoration: underline; text-underline-offset: 3px; }
+.kt-hide-all:focus-visible, .kt-show:focus-visible, .kt-show-all:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; border-radius: 6px; }
+.kt-hide-all[hidden] { display: none; }
+.kt-rows li.kt-hid-row { align-items: center; padding: 0; }
+.kt-show { margin-left: auto; }
+.kt-show-all { display: block; margin: 0 0 8px auto; }
 .kc .level-chart { height: 168px; }
 .ut-list .ut-tab { display: inline-flex; align-items: center; gap: 6px; min-height: 44px; padding-top: 0; padding-bottom: 0; }
 /* Tellers op Kansen (V5): het totaal boven de tabs en per tab het aantal wachtende kansen, met een accentbadge zolang er iets in de zone staat.
@@ -3006,6 +3047,9 @@ html.kd-lock { overflow: hidden; }
   font: 600 17px / 1.2 var(--sans); text-align: center; text-decoration: none; }
 .kd-cta:hover { background: var(--ac); color: var(--onac); }
 .kd-cta.is-quiet { background: var(--s2); color: var(--tx); }
+.kd-alt { display: flex; gap: 8px; margin-top: 4px; }
+.kd-alt .kd-skip-form { flex: 1; min-width: 0; margin: 0; }
+.kd-alt .kd-skip { font-size: 14px; white-space: nowrap; }
 .kd-skip-form { margin: 4px 0 0; }
 .kd-skip { display: block; width: 100%; min-height: 44px; border: 0; background: transparent; color: var(--tx2); font: 500 15px var(--sans); cursor: pointer; }
 .kd-skip:hover { background: transparent; color: var(--tx); }

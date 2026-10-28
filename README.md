@@ -545,7 +545,19 @@ onder de lijst. Een tik op de kop van een kaart opent het **detailblad**: de pri
 alleen de namen Stop, Instap en Doel rechts, zodat tekst nooit botst; `app/ladder.py`, live in `web/static/ladder.js`), daaronder de
 getallen één keer (houd vast om te kopiëren, de bel zet een prijsalarm), de herkomst, de gemeten context en vast onderaan
 "Zet de order, stap voor stap" naar de order-checklist (`/nu/order/<sleutel>`: instrument en richting, limietprijs, stop, doel; geen
-positiegrootte) of "Bekijk de trade". Sla over zet een kans een dag achteraan (cookie `hp_skip` en `plan_skips`, ook in het Logboek).
+positiegrootte) of "Bekijk de trade". "Sla over voor vandaag" zet een kans een dag achteraan (cookie `hp_skip` en `plan_skips`, ook in
+het Logboek).
+
+**Verbergen.** Elke kaart op Kansen (wachtend plan of open trade, in elke tab) heeft een kruisje naast de kop en in het blad de knop
+"Verberg"; onder Wachtend en onder Open staat bij twee of meer kaarten "Verberg alles". De kaart klapt meteen weg en een balk van 5 s
+biedt "Ongedaan" ("HYPE short verborgen · Ongedaan"), zonder bevestigingsvraag. Verborgen kaarten staan onderaan hun tab onder
+"Verborgen (N)" met "Toon weer" per rij en "Toon alles weer". Het is per gebruiker op de server bewaard (tabel `kans_hidden`, routes
+`POST /api/kans/verberg` en `/api/kans/toon` met `{"keys": [...]}`, alleen voor wie ingelogd is) en alleen een weergavekeuze: een
+verborgen kaart telt niet mee in het tab-getal, de badge, de totaalregel, het getal op Kansen in het dok en op het appicoon
+(`radar.in_zone_count(..., hidden)`), en niet als "vergelijkbaar". Het signaal zelf, de uitkomst, Bewijs, Logboek, Replay, het journaal
+en de meldingen veranderen niet: een verborgen open trade wordt gevolgd zoals altijd en een vulling of uitkomst geeft nog steeds een
+melding. Een verborgen plan dat vult, komt als nieuwe open trade terug (andere kaart). Verbergen is sterker dan overslaan: overslaan
+houdt de kaart een dag achteraan, verbergen haalt hem weg tot je hem terugzet.
 Prijzen staan overal met een komma en zoveel decimalen als bij de prijs past (`app/price_text.py`: 80,92 voor HYPE); kopiëren geeft
 hetzelfde getal met een punt. Pushteksten houden hun oude notatie (golden tests).
 
