@@ -5,7 +5,9 @@ Structuur-plannen met hun koers en stand, en de open Structuur-trades mee. Elk g
 Volgorde binnen een tab: in de zone eerst, dan op gemeten afstand tot de limiet, zonder koers achteraan. De tab met de meeste kansen in de zone
 gaat open, anders Structuur."""
 import re
+from datetime import datetime, timezone
 from typing import Iterable, Optional
+from zoneinfo import ZoneInfo
 
 from app import nu, radar, setup_chart, trade_plan as tp
 
@@ -34,6 +36,33 @@ def say(state: Optional[str], direction: str, zone: bool = True) -> str:
     return f"Wacht tot de koers {where} bereikt. Zet dan een limit {direction} op de instap, met de stop en het doel uit de tabel."
 
 
+LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
+MONTHS = ("jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec")
+
+
+def when_text(stamp: Optional[str], now: Optional[datetime] = None) -> str:
+    """Het moment van een kaart in Nederlandse tijd: "08:58" vandaag, "gisteren 08:58", anders "27 okt 08:58". Leeg als er geen tijdstip is.
+    Een tijd zonder zone telt als UTC, zoals de database ze schrijft."""
+    if not stamp:
+        return ""
+    try:
+        at = datetime.fromisoformat(str(stamp))
+    except ValueError:
+        return ""
+    at = (at if at.tzinfo else at.replace(tzinfo=timezone.utc)).astimezone(LOCAL_TZ)
+    today = (now or datetime.now(timezone.utc)).astimezone(LOCAL_TZ).date()
+    days = (today - at.date()).days
+    clock = at.strftime("%H:%M")
+    if days == 0:
+        return clock
+    return f"gisteren {clock}" if days == 1 else f"{at.day} {MONTHS[at.month - 1]} {clock}"
+
+
+def _shared(item: dict, label: str) -> str:
+    when = when_text(item.get("created_at"))
+    return f"{label} {when}" if when else ""
+
+
 def _plan(item: dict, dom_id: str) -> dict:
     state = item["state"]
     # In de zone geen groot getal: de stand staat al als pil en in de zin erboven, drie keer "In zone" was ruis.
@@ -49,7 +78,7 @@ def _plan(item: dict, dom_id: str) -> dict:
 
 def _trade(item: dict) -> dict:
     return {**item, "dom_id": "radar-" + item["key"].replace(":", "-"), "title": f"{item['coin']} {item['direction']}", "state": "open", "group": "trades",
-            "svg_src": _svg_src(item),
+            "svg_src": _svg_src(item), "shared_text": _shared(item, "Open sinds"),
             "tab": TAB_OF.get(item["trade_type"], item["trade_type"]), "state_short": "Open", "say": "",
             "num_text": item["live_r_text"] or "", "num_hook": "live_r", "num_label": "nu, live" if item["live_r_text"] else ""}
 
@@ -97,7 +126,7 @@ def dedupe(items: list[dict], price_key: str) -> list[dict]:
 
 # Verbergen (tabel kans_hidden): een weergavekeuze per gebruiker. Dezelfde sleutels als de kaarten en het overslaan (nu.SKIP_KEY); MAX_HIDE per
 # verzoek is ruim boven wat één tab ooit toont en houdt een verzoek klein.
-HIDE_KEY = re.compile(r"^(zone|zsweep|setup|signal|structuur):\d+$")
+HIDE_KEY = re.compile(r"^(zone|zsweep|poc|setup|signal|structuur):\d+$")
 MAX_HIDE = 200
 
 
@@ -154,6 +183,7 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
     skipped, hidden = set(skipped), set(hidden)
     for p in plans:
         p["skipped"] = p["key"] in skipped
+        p["shared_text"] = _shared(p, "Gedeeld")
     # `svg`: de route zet bij een open Structuur-trade zijn getekende setup op de kaart (kans_view.chart); de andere soorten hebben er geen.
     trades = [_trade({**nu._from_signal(c), "svg": c.get("svg") or ""}) for c in radar_cards + structure_trades if c and c["kind"] == "signal"]
     # Een open trade blijft staan, ook als zijn soort geen nieuwe kansen meer zoekt (focus): dan krijgt die soort toch een tab.

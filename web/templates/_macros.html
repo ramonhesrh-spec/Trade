@@ -687,6 +687,7 @@
   </button>
   <button type="button" class="kc-hide" data-kc-hide aria-label="Verberg {{ it.title }}"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
   </div>
+  {% if it.shared_text %}<p class="kc-when">{{ it.shared_text }}</p>{% endif %}
   {# Structuur tekent zijn eigen momentopname (svg, setup_chart): de breuk, het retest-niveau, de stop en T1 tot T3. Een tik erop opent het
      detailblad zoals elders op de kaart; de koerslijn schuift live mee (live.js, data-chart-coin). De andere soorten krijgen de kaartgrafiek. #}
   {% if it.svg %}<figure class="kc-svg is-structuur">{{ it.svg }}<figcaption class="lc-cap">30 min per candle · getekend bij de breuk</figcaption></figure>
@@ -717,7 +718,7 @@
     <h3 class="kd-title" id="kd-t-{{ it.dom_id }}" tabindex="-1">{{ it.title }}</h3>
     <button type="button" class="kd-x" data-kd-close aria-label="Sluiten"><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
   </div>
-  <p class="kd-kind"><span class="state-pill is-{{ it.state or 'laden' }}">{{ it.state_short }}</span><span class="kd-type">{{ kinds.get(it.trade_type, it.trade_type) }}</span>{{ kans_label(it) }}</p>
+  <p class="kd-kind"><span class="state-pill is-{{ it.state or 'laden' }}">{{ it.state_short }}</span><span class="kd-type">{{ kinds.get(it.trade_type, it.trade_type) }}</span>{{ kans_label(it) }}{% if it.shared_text %}<span class="kd-type">· {{ it.shared_text }}</span>{% endif %}</p>
   {% if it.say %}<p class="kd-say">{{ it.say }}</p>{% endif %}
   {% if it.kind == "trade" %}
   {{ ladder(it.ladder, "trade", coin=it.coin, num_text=it.num_text, num_label=it.num_label, num_hook="live_r",

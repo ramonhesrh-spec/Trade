@@ -372,3 +372,24 @@ class StructureOriginTests(unittest.TestCase):
         self.assertEqual(kansen.structure_item(self.card("CHOCH", "short"), 99.5, "wacht")["origin"], "Structuur · lagere top, breuk van de laatste bodem, 30m")
         self.assertEqual(kansen.structure_item(self.card("RANGE"), 100.5, "wacht")["origin"], "Structuur · breuk van een range, 30m")
         self.assertEqual(kansen.structure_item(self.card("LINE"), 100.5, "wacht")["origin"], "Structuur · breuk van een lijn, 30m")
+
+
+class SharedTimeTests(unittest.TestCase):
+    """Het moment waarop een kaart gedeeld werd staat op de kaart, in Nederlandse tijd (de CEO miste het, 29 oktober 2026)."""
+    NOW = __import__("datetime").datetime(2026, 10, 29, 12, 0, tzinfo=__import__("datetime").timezone.utc)
+
+    def test_vandaag_alleen_de_tijd(self):
+        self.assertEqual(kansen.when_text("2026-10-29T07:58:00+00:00", self.NOW), "08:58")       # CET: UTC + 1
+
+    def test_gisteren_en_eerder(self):
+        self.assertEqual(kansen.when_text("2026-10-28T08:15:00+00:00", self.NOW), "gisteren 09:15")
+        self.assertEqual(kansen.when_text("2026-10-25T09:04:00+00:00", self.NOW), "25 okt 10:04")      # CET
+        self.assertEqual(kansen.when_text("2026-09-24T08:00:00+00:00", self.NOW), "24 sep 10:00")      # CEST: UTC + 2
+
+    def test_zonder_zone_telt_als_utc_en_zonder_tijd_is_leeg(self):
+        self.assertEqual(kansen.when_text("2026-10-29T07:58:00", self.NOW), "08:58")
+        self.assertEqual(kansen.when_text(None, self.NOW), "")
+        self.assertEqual(kansen.when_text("geen tijd", self.NOW), "")
+
+    def test_poc_kaart_kan_verborgen_worden(self):
+        self.assertEqual(kansen.parse_keys(["poc:7", "zone:3", "poc:x"]), ["poc:7", "zone:3"])

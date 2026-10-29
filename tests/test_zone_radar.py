@@ -67,6 +67,27 @@ class ActiveZoneTests(unittest.TestCase):
         self.assertEqual(zr.active_zones(df, "1h", now_after(df)), [])
 
 
+class GeenMinimaleRRTests(unittest.TestCase):
+    """WLD, 29 oktober 2026: de brede 4u-vraagzone haalde op het dichtste doel 1,6R en kreeg geen kaart. Er is geen minimale R:R meer."""
+
+    def setUp(self):
+        self.BULL = Z("bull", 0.4007, 0.4174, tf="4h", atr=0.0183)
+
+    def test_wld_krijgt_een_kaart_met_het_dichtste_doel(self):
+        zones = [self.BULL, Z("bear", 0.4512, 0.4582), Z("bear", 0.4621, 0.4668)]
+        plan = zr.plan_for("long", zones, 0.4182)
+        self.assertEqual(plan["take_profit"], 0.4512)                    # het dichtste doel, niet een verder doel
+        self.assertLess(plan["rr"], 2.0)
+        self.assertEqual(plan["zone_key"], self.BULL.key)
+
+    def test_short_spiegelt(self):
+        bear = Z("bear", 0.4400, 0.4600, tf="4h", atr=0.0183)
+        zones = [bear, Z("bull", 0.4100, 0.4150), Z("bull", 0.3700, 0.3760)]
+        plan = zr.plan_for("short", zones, 0.4390)
+        self.assertEqual(plan["take_profit"], 0.4150)
+        self.assertLess(plan["rr"], 2.0)
+
+
 class ZoneAgeTests(unittest.TestCase):
     """De 4u-steun van 24 september 2026 verdween na 200 candles, anderhalve dag voor de terugkeer van de koers: 4u leeft nu 400 candles, 1u blijft op 200."""
 
@@ -132,17 +153,20 @@ class PlanTests(unittest.TestCase):
         near = 100.0 * (1 - (zr.MAX_DISTANCE_PCT - 0.5) / 100)
         self.assertIsNotNone(zr.plan_for("long", [Z("bull", near - 1, near), Z("bear", 130.0, 131.0)], 100.0))
 
-    def test_onder_2r_geen_kaart(self):
-        # risico ~1,6 (95 -> 93,4), doel 97: 1,25R
-        self.assertIsNone(zr.plan_for("long", [Z("bull", 93.5, 95.0), Z("bear", 97.0, 98.0)], 96.0))
+    def test_onder_2r_is_ook_een_kaart(self):
+        # risico ~1,6 (95 -> 93,4), doel 97: 1,25R. De CEO wil elke kans zien; de kaart toont de R:R.
+        plan = zr.plan_for("long", [Z("bull", 93.5, 95.0), Z("bear", 97.0, 98.0)], 96.0)
+        self.assertIsNotNone(plan)
+        self.assertLess(plan["rr"], 2.0)
 
     def test_zonder_tegenovergestelde_zone_geen_kaart(self):
         self.assertIsNone(zr.plan_for("long", [Z("bull", 93.5, 95.0)], 96.0))
 
     def test_alleen_de_dichtstbijzijnde_zone_telt(self):
-        # De dichtste vraagzone haalt geen 2R; een verdere wel. Er wordt niet doorgezocht.
+        # Er wordt nooit doorgezocht naar een verdere zone met een betere R:R: de dichtste zone krijgt de kaart.
         zones = [Z("bull", 98.0, 99.0), Z("bull", 94.0, 94.5), Z("bear", 100.5, 101.0)]
-        self.assertIsNone(zr.plan_for("long", zones, 99.5))
+        plan = zr.plan_for("long", zones, 99.5)
+        self.assertEqual((plan["zone_low"], plan["zone_high"]), (98.0, 99.0))
 
     def test_koers_in_de_zone_is_geen_wachtende_kaart(self):
         self.assertIsNone(zr.plan_for("long", [Z("bull", 95.0, 100.0), Z("bear", 120.0, 121.0)], 99.0))

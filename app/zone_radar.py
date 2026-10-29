@@ -3,7 +3,7 @@ voor wie gewoon niveaus wil zien en zelf een limietorder zet. Geen structuurbreu
 
 De zones komen uit app/replay/rangesweep.find_zones en zone_active (dezelfde definitie als lab en range sweep), alleen op gesloten candles.
 Limiet op de binnenrand, stop voorbij de buitenrand met een kwart ATR en de ondergrens van smc_eval.floor_stop, doel de rand van de
-eerstvolgende tegenovergestelde actieve zone, minimaal MIN_RR. Alle drempels liggen vooraf vast; er is niets op data afgesteld.
+eerstvolgende tegenovergestelde actieve zone, zonder minimale R:R. Alle drempels liggen vooraf vast; er is niets op data afgesteld.
 
 Eerlijk over wat dit is: ongetest. De kaart beschrijft een niveau, hij voorspelt niets; Bewijs toont de score (trade_type 'zone_radar').
 Pure functies zonder database of netwerk: de motor (app/zone_radar_live.py), de pagina en de tests rekenen met dezelfde code."""
@@ -26,6 +26,7 @@ TF_TEXT = {"1h": "1u", "2h": "2u", "4h": "4u"}
 MAX_DISTANCE_PCT = 6.0
 # Zelfde buffer als de geteste stop 'zone_025' van de range sweep: net voorbij de buitenrand, buiten een wick die de zone alleen aantikt.
 STOP_ATR = 0.25
+# Geldt alleen voor de motoren die zonder doel kunnen (zone-sweep, POC-radar): onder deze R:R krijgt hun kaart geen doel. De zone-radar weigert geen kaart op R:R.
 MIN_RR = 2.0
 # Een 4u-zone bleef 200 candles (33 dagen) actief: de steun van 24 september verdween daardoor op 28 oktober, anderhalve dag voordat de koers
 # terugkwam en de CEO er met de hand op kocht (WLD, 29 oktober 2026). De 4u-zone leeft nu 400 candles (66 dagen), de 1u-zone blijft op 200 (8 dagen).
@@ -69,8 +70,9 @@ def _distance_pct(direction: str, z: ZoneLevel, price: float) -> float:
 
 
 def plan_for(direction: str, zones: list[ZoneLevel], price: float) -> Optional[dict]:
-    """Het plan voor de dichtstbijzijnde eigen zone, of None. Alleen die ene zone telt: valt hij af op het doel of de 2R, dan wordt er niet
-    naar een verdere zone gezocht die wel past, anders kiest de code net zo lang tot er een kaart uitkomt."""
+    """Het plan voor de dichtstbijzijnde eigen zone, of None. Alleen die ene zone telt: valt hij af, dan wordt er niet naar een verdere zone gezocht.
+    Het doel is de eerstvolgende tegenovergestelde zone. Er is geen minimale R:R: de CEO wil elke kans zien (29 oktober 2026, WLD haalde op het
+    dichtste doel 1,6R en kreeg geen kaart); de kaart toont de R:R en jij beslist."""
     own_kind = "bull" if direction == "long" else "bear"
     own = [z for z in zones if z.kind == own_kind and 0 < _distance_pct(direction, z, price) <= MAX_DISTANCE_PCT]
     if not own:
@@ -86,7 +88,7 @@ def plan_for(direction: str, zones: list[ZoneLevel], price: float) -> Optional[d
     take = target_edge(direction, target)
     stop = smc_eval.floor_stop(direction, limit, raw_stop)
     plan = tp.limit_plan(direction, zone.low, zone.high, stop, take)
-    if plan is None or plan.rr < MIN_RR:
+    if plan is None:
         return None
     # Zelfde wacht als structure_live: een plan dat bij het ontstaan al voorbij doel of stop staat, of al in de zone, is geen kaart om op te wachten.
     if tp.plan_state(direction, zone.low, zone.high, stop, price, take=take) != "wacht":

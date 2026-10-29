@@ -2896,6 +2896,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 /* Verberg (kans_hidden): een rustig kruisje naast de kop, 44px tikvlak dat tot in de kaartrand loopt zodat het de kop niet versmalt. */
 .kc-top { display: flex; align-items: center; margin-right: -10px; }
 .kc-top .kc-head { flex: 1; min-width: 0; }
+.kc-when { margin: -6px 0 10px; font-size: 13px; color: var(--tx2); }
 .kc-hide { flex: none; display: grid; place-items: center; width: 44px; height: 44px; margin: 0; padding: 0; border: 0; border-radius: 12px; background: none;
   color: var(--tx2); cursor: pointer; }
 .kc-hide:hover { background: var(--s2); color: var(--tx); }
