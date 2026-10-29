@@ -24,7 +24,7 @@
   function esc(s) { return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
 
   function build(card, data, shot) {
-    var chart = card.querySelector("svg.sc, svg[data-share-chart]");
+    var chart = card.querySelector("svg.sc, svg[data-share-chart], .kc-svg-box svg, .kc-svg.is-structuur > svg");
     var rootStyle = window.getComputedStyle(document.documentElement);
     var bg = rootStyle.getPropertyValue("--bg").trim() || "#0a0e0f";
     var text = rootStyle.getPropertyValue("--text").trim() || "#e8eeee";
@@ -49,7 +49,7 @@
     var y = 78 + chartH + 36;
     var lines = "";
     (data.lines || []).forEach(function (line, i) {
-      wrap((i + 1) + ". " + line, 46).forEach(function (part) {
+      wrap((data.plain ? "" : (i + 1) + ". ") + line, 46).forEach(function (part) {
         lines += '<text x="' + PAD + '" y="' + y + '" fill="' + text + '" font-size="20" font-weight="600">' + esc(part) + "</text>";
         y += 28;
       });
@@ -83,12 +83,16 @@
   document.addEventListener("click", function (e) {
     var btn = e.target.closest("[data-share-card]");
     if (!btn) return;
-    var card = btn.closest(".setup-card, .radar-card, .vd-scenario, .kans-card, .week-card");
+    // Het detailblad op Kansen (macro kans_detail) deelt de kaart zelf: de grafiek staat daar, niet in het blad.
+    var forKey = btn.getAttribute("data-share-for");
+    var card = btn.closest(".setup-card, .radar-card, .vd-scenario, .kans-card, .week-card") || (forKey && document.querySelector('[data-kc="' + forKey + '"]'));
     if (!card) return;
     var data;
     try { data = JSON.parse(btn.getAttribute("data-share-card")); } catch (err) { return; }
-    var holder = card.querySelector("[data-levelchart]");
+    var holder = card.querySelector("[data-levelchart]:not([hidden])");
     var shot = holder && window.hesLevelChart ? window.hesLevelChart.screenshot(holder) : Promise.resolve(null);
+    // Een grafiek die niet laadde (geen koersdata) mag het delen niet blokkeren: dan gaat de afbeelding zonder grafiek.
+    shot = Promise.race([shot.catch(function () { return null; }), new Promise(function (resolve) { setTimeout(function () { resolve(null); }, 2500); })]);
     shot.then(function (canvas) { return toPng(build(card, data, canvas)); }).then(function (blob) {
       var file = new File([blob], "hespulse-kans.png", { type: "image/png" });
       if (navigator.canShare && navigator.canShare({ files: [file] })) {

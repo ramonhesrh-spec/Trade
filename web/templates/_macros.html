@@ -751,6 +751,8 @@
   <div class="kd-foot">
     {% if it.kind == "trade" %}<a class="kd-cta is-quiet" href="{{ it.url }}">Bekijk de trade</a>{% else %}<a class="kd-cta" href="{{ it.checklist_url }}">Zet de order, stap voor stap</a>{% endif %}
     <div class="kd-alt">
+      {# Deel (web/static/share.js): een afbeelding van de kaart voor een groepschat, met de grafiek van de kaart en de getallen die je zelf ziet. #}
+      <div class="kd-skip-form"><button type="button" class="kd-skip kd-share" data-share-for="{{ it.key }}" data-share-card='{{ {"title": it.title, "lines": it.share_lines, "plain": true}|tojson }}'>Deel</button></div>
       {% if it.kind != "trade" %}<form method="post" action="/nu/overslaan" class="kd-skip-form"><input type="hidden" name="key" value="{{ it.key }}"><button type="submit" class="kd-skip">Sla over voor vandaag</button></form>{% endif %}
       <form method="post" action="/api/kans/verberg" class="kd-skip-form"><input type="hidden" name="key" value="{{ it.key }}"><button type="submit" class="kd-skip" data-kd-hide="{{ it.key }}">Verberg</button></form>
     </div>

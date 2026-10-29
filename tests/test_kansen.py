@@ -393,3 +393,11 @@ class SharedTimeTests(unittest.TestCase):
 
     def test_poc_kaart_kan_verborgen_worden(self):
         self.assertEqual(kansen.parse_keys(["poc:7", "zone:3", "poc:x"]), ["poc:7", "zone:3"])
+
+
+class ShareLinesTests(unittest.TestCase):
+    def test_regels_voor_de_deelafbeelding(self):
+        item = {"rows": [{"label": "Doel · 2,5 R", "text": "0,3600"}, {"label": "Instap", "text": "0,3350"}, {"label": "Stop", "text": "0,3250"}],
+                "shared_text": "Gedeeld 08:58"}
+        self.assertEqual(kansen.share_lines(item), ["Doel 0,3600 (2,5 R)", "Instap 0,3350", "Stop 0,3250", "Gedeeld 08:58"])
+        self.assertEqual(kansen.share_lines({}), [])

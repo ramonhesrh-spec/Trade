@@ -127,3 +127,12 @@ class HideTests(Base):
         req = mock.Mock(cookies={main.SESSION_COOKIE: security.create_session_token(self.ceo_id)})
         self.assertEqual(main._nav_context(req)["nav_counts"]["in_zone"], 0)
         self.assertEqual(main._nav_context(mock.Mock(cookies={}))["nav_counts"]["in_zone"], 1)
+
+
+class ShareButtonTests(Base):
+    def test_elk_detailblad_heeft_een_deelknop_met_de_getallen(self):
+        html = self.client.get("/smc").text
+        self.assertIn('data-share-for="zone:', html)
+        self.assertIn('class="kd-skip kd-share"', html)
+        self.assertRegex(html, r'data-share-card=\'\{[^\']*"plain": ?true')
+        self.assertRegex(html, r'data-share-card=\'\{[^\']*(Stop|Instap)')

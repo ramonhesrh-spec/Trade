@@ -3050,8 +3050,8 @@ html.kd-lock { overflow: hidden; }
   font: 600 17px / 1.2 var(--sans); text-align: center; text-decoration: none; }
 .kd-cta:hover { background: var(--ac); color: var(--onac); }
 .kd-cta.is-quiet { background: var(--s2); color: var(--tx); }
-.kd-alt { display: flex; gap: 8px; margin-top: 4px; }
-.kd-alt .kd-skip-form { flex: 1; min-width: 0; margin: 0; }
+.kd-alt { display: flex; flex-wrap: wrap; gap: 0 8px; margin-top: 4px; }
+.kd-alt .kd-skip-form { flex: 1 1 auto; min-width: 0; margin: 0; }
 .kd-alt .kd-skip { font-size: 14px; white-space: nowrap; }
 .kd-skip-form { margin: 4px 0 0; }
 .kd-skip { display: block; width: 100%; min-height: 44px; border: 0; background: transparent; color: var(--tx2); font: 500 15px var(--sans); cursor: pointer; }

@@ -58,6 +58,15 @@ def when_text(stamp: Optional[str], now: Optional[datetime] = None) -> str:
     return f"gisteren {clock}" if days == 1 else f"{at.day} {MONTHS[at.month - 1]} {clock}"
 
 
+def share_lines(item: dict) -> list[str]:
+    """De regels onder de grafiek in de deelafbeelding (share.js): dezelfde getallen als het blad, plus wanneer de kaart gedeeld werd."""
+    lines = []
+    for r in item.get("rows") or []:
+        name, _, extra = r["label"].partition(" · ")          # "Doel · 2,5 R" wordt "Doel 0,3600 (2,5 R)"
+        lines.append(f"{name} {r['text']}" + (f" ({extra})" if extra else ""))
+    return lines + ([item["shared_text"]] if item.get("shared_text") else [])
+
+
 def _shared(item: dict, label: str) -> str:
     when = when_text(item.get("created_at"))
     return f"{label} {when}" if when else ""
@@ -184,8 +193,11 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
     for p in plans:
         p["skipped"] = p["key"] in skipped
         p["shared_text"] = _shared(p, "Gedeeld")
+        p["share_lines"] = share_lines(p)
     # `svg`: de route zet bij een open Structuur-trade zijn getekende setup op de kaart (kans_view.chart); de andere soorten hebben er geen.
     trades = [_trade({**nu._from_signal(c), "svg": c.get("svg") or ""}) for c in radar_cards + structure_trades if c and c["kind"] == "signal"]
+    for t in trades:
+        t["share_lines"] = share_lines(t)
     # Een open trade blijft staan, ook als zijn soort geen nieuwe kansen meer zoekt (focus): dan krijgt die soort toch een tab.
     kinds = [k for k in ORDER if k in set(kinds) or any(t["tab"] == k for t in trades)]
     tabs = []
