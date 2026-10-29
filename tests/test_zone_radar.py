@@ -67,6 +67,34 @@ class ActiveZoneTests(unittest.TestCase):
         self.assertEqual(zr.active_zones(df, "1h", now_after(df)), [])
 
 
+class ZoneAgeTests(unittest.TestCase):
+    """De 4u-steun van 24 september 2026 verdween na 200 candles, anderhalve dag voor de terugkeer van de koers: 4u leeft nu 400 candles, 1u blijft op 200."""
+
+    def _old_demand(self, extra: int, step: pd.Timedelta):
+        rows = _flat(110.0, 60) + [(104.0, 104.1, 103.7, 103.8), (103.8, 106.6, 103.8, 106.5)] + _flat(106.5, extra)
+        return frame(rows, step=step)
+
+    def test_4u_zone_blijft_na_200_candles_actief(self):
+        df = self._old_demand(260, 4 * HOUR)
+        zones = zr.active_zones(df, "4h", df["timestamp"].iloc[-1] + 4 * HOUR)
+        self.assertIn((103.7, 104.1), {(z.low, z.high) for z in zones if z.kind == "bull"})
+
+    def test_4u_zone_vervalt_na_400_candles(self):
+        df = self._old_demand(420, 4 * HOUR)
+        zones = zr.active_zones(df, "4h", df["timestamp"].iloc[-1] + 4 * HOUR)
+        self.assertNotIn((103.7, 104.1), {(z.low, z.high) for z in zones if z.kind == "bull"})
+
+    def test_1u_zone_vervalt_na_200_candles(self):
+        df = self._old_demand(260, HOUR)
+        zones = zr.active_zones(df, "1h", now_after(df))
+        self.assertNotIn((103.7, 104.1), {(z.low, z.high) for z in zones if z.kind == "bull"})
+
+    def test_de_zone_sweep_houdt_de_geteste_levensduur(self):
+        df = self._old_demand(260, 4 * HOUR)
+        zones = zr.active_zones(df, "4h", df["timestamp"].iloc[-1] + 4 * HOUR, zr.rs.ZONE_MAX_AGE)
+        self.assertNotIn((103.7, 104.1), {(z.low, z.high) for z in zones if z.kind == "bull"})
+
+
 def Z(kind, low, high, tf="1h", atr=0.4):
     return zr.ZoneLevel(tf, kind, low, high, atr, f"{tf}:{kind}:{low}")
 

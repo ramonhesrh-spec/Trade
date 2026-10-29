@@ -109,7 +109,7 @@ async def _zones(coin: str, now: pd.Timestamp) -> tuple[list[zr.ZoneLevel], Opti
     from app import exchange
     zones, price = [], None
     for tf in zr.TFS:
-        df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe=tf, limit=zr.FETCH_LIMIT)
+        df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe=tf, limit=zr.FETCH_LIMIT_BY_TF[tf])
         zones += zr.active_zones(df, tf, now)
         if tf == zr.TFS[0] and len(df):
             price = float(df["close"].iloc[-1])      # de candle die nog vormt: zijn slot is de koers van nu

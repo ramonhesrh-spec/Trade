@@ -162,11 +162,11 @@ def _overlap(a: tuple[float, float], b: tuple[float, float]) -> float:
     return max(0.0, inter) / max(1e-12, min(a[1] - a[0], b[1] - b[0]))
 
 
-def zone_active(z: Zone, i: int) -> bool:
-    return z.known_idx < i <= z.known_idx + ZONE_MAX_AGE and (z.broken_idx is None or i < z.broken_idx)
+def zone_active(z: Zone, i: int, max_age: int = ZONE_MAX_AGE) -> bool:
+    return z.known_idx < i <= z.known_idx + max_age and (z.broken_idx is None or i < z.broken_idx)
 
 
-def find_zones(b: pd.DataFrame) -> list[Zone]:
+def find_zones(b: pd.DataFrame, max_age: int = ZONE_MAX_AGE) -> list[Zone]:
     """Aanbodzone: de laatste groene candle k (hooguit DISP_BARS vóór m) waarna een slot op m minstens DISP_ATR ATR onder het laag van k komt.
     Zone = laag tot hoog van k, bekend op m. Vraagzone gespiegeld. broken_idx is de eerste candle na m die voorbij de buitenkant sluit; consumenten
     vergelijken hem alleen met hun eigen index, zodat er niets uit de toekomst lekt. Een zone die voor meer dan ZONE_OVERLAP overlapt met een
@@ -184,9 +184,9 @@ def find_zones(b: pd.DataFrame) -> list[Zone]:
             if moved < DISP_ATR * atr[m]:
                 continue
             seen.add((kind, k))
-            if any(z.kind == kind and zone_active(z, m) and _overlap((z.low, z.high), (lo[k], hi[k])) > ZONE_OVERLAP for z in out):
+            if any(z.kind == kind and zone_active(z, m, max_age) and _overlap((z.low, z.high), (lo[k], hi[k])) > ZONE_OVERLAP for z in out):
                 continue
-            after = cl[m + 1:min(n, m + 1 + ZONE_MAX_AGE)]
+            after = cl[m + 1:min(n, m + 1 + max_age)]
             beyond = np.flatnonzero(after > hi[k]) if kind == "bear" else np.flatnonzero(after < lo[k])
             window = cl[k + 1:m + 1]
             disp = ((lo[k] - window.min()) if kind == "bear" else (window.max() - hi[k])) / atr[m]

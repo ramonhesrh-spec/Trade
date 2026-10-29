@@ -13,6 +13,7 @@ import pandas as pd
 from app import chance_checks
 from app import trade_plan as tp
 from app import zone_radar as zr
+from app.replay import rangesweep as rs
 from app.replay import zonesweep as zs
 
 TRADE_TYPE = "zone_sweep"
@@ -26,10 +27,10 @@ TTL = pd.Timedelta(hours=24)             # pre-registratie: orders vervallen na 
 
 
 def zone_levels(frames: dict, now: pd.Timestamp) -> list[zr.ZoneLevel]:
-    """De actieve zones op 1u, 2u en 4u op dit moment (alleen gesloten candles), om een doel te zoeken. Dezelfde regels als de zone-radar."""
+    """De actieve zones op 1u, 2u en 4u op dit moment (alleen gesloten candles), om een doel te zoeken. Dezelfde regels als de zone-radar, met de geteste levensduur van 200 candles."""
     out: list[zr.ZoneLevel] = []
     for tf in TFS:
-        out += zr.active_zones(frames[tf], tf, now)
+        out += zr.active_zones(frames[tf], tf, now, rs.ZONE_MAX_AGE)
     return out
 
 

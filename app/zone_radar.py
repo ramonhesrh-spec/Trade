@@ -27,9 +27,14 @@ MAX_DISTANCE_PCT = 6.0
 # Zelfde buffer als de geteste stop 'zone_025' van de range sweep: net voorbij de buitenrand, buiten een wick die de zone alleen aantikt.
 STOP_ATR = 0.25
 MIN_RR = 2.0
-# 400 candles: een zone blijft hooguit ZONE_MAX_AGE (200) candles actief, en find_zones heeft ervoor ruimte nodig voor de ATR en de
-# overlapregel, anders hangt welke zone telt af van waar het venster toevallig begint.
-FETCH_LIMIT = 400
+# Een 4u-zone bleef 200 candles (33 dagen) actief: de steun van 24 september verdween daardoor op 28 oktober, anderhalve dag voordat de koers
+# terugkwam en de CEO er met de hand op kocht (WLD, 29 oktober 2026). De 4u-zone leeft nu 400 candles (66 dagen), de 1u-zone blijft op 200 (8 dagen).
+# Vooraf gekozen, niet afgesteld. Alleen de zone-radar: lab en range sweep houden ZONE_MAX_AGE.
+MAX_AGE = {"1h": rs.ZONE_MAX_AGE, "4h": 2 * rs.ZONE_MAX_AGE}
+# De candles die find_zones nodig heeft: de levensduur plus ruimte voor de ATR en de overlapregel, anders hangt welke zone telt af van waar het
+# venster toevallig begint.
+FETCH_LIMIT_BY_TF = {tf: age + 200 for tf, age in MAX_AGE.items()}
+FETCH_LIMIT = max(FETCH_LIMIT_BY_TF.values())
 MIN_CANDLES = 60
 
 
@@ -43,8 +48,10 @@ class ZoneLevel:
     key: str           # tf, soort en openmoment van de order block-candle: dezelfde zone krijgt in elke cyclus dezelfde sleutel
 
 
-def active_zones(bars: pd.DataFrame, tf: str, now: pd.Timestamp) -> list[ZoneLevel]:
-    """Zones die actief zijn op de candle na de laatst gesloten candle. De ATR is die van de laatst gesloten candle van dit timeframe."""
+def active_zones(bars: pd.DataFrame, tf: str, now: pd.Timestamp, max_age: Optional[int] = None) -> list[ZoneLevel]:
+    """Zones die actief zijn op de candle na de laatst gesloten candle. De ATR is die van de laatst gesloten candle van dit timeframe.
+    `max_age` (candles) is standaard de levensduur van de zone-radar (MAX_AGE); de zone-sweep geeft de geteste ZONE_MAX_AGE mee."""
+    age = max_age or MAX_AGE.get(tf, rs.ZONE_MAX_AGE)
     closed = rs.closed_only(bars, now, tf)
     if len(closed) < MIN_CANDLES:
         return []
@@ -54,7 +61,7 @@ def active_zones(bars: pd.DataFrame, tf: str, now: pd.Timestamp) -> list[ZoneLev
         return []
     n = len(b)
     return [ZoneLevel(tf, z.kind, z.low, z.high, atr, f"{tf}:{z.kind}:{pd.Timestamp(b.at[z.ob_idx, 'timestamp']).isoformat()}")
-            for z in rs.find_zones(b) if rs.zone_active(z, n)]
+            for z in rs.find_zones(b, age) if rs.zone_active(z, n, age)]
 
 
 def _distance_pct(direction: str, z: ZoneLevel, price: float) -> float:

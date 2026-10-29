@@ -16,7 +16,7 @@ def main(coin: str) -> None:
     now = pd.Timestamp.now(tz="UTC")
     zones, price = [], None
     for tf in zr.TFS:
-        df = exchange.fetch_ohlcv(coin, timeframe=tf, limit=zr.FETCH_LIMIT)
+        df = exchange.fetch_ohlcv(coin, timeframe=tf, limit=zr.FETCH_LIMIT_BY_TF[tf])
         zones += zr.active_zones(df, tf, now)
         if tf == zr.TFS[0]:
             price = float(df["close"].iloc[-1])
