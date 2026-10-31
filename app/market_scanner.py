@@ -15,6 +15,7 @@ docs/superpowers/specs/2026-09-14-autonome-marktscan-design.md.
 import asyncio
 import logging
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -1210,7 +1211,28 @@ async def scan_market() -> None:
     logger.info("Marktscan klaar")
 
 
+# Hartslag van de snelcyclus zelf: hoe laat na het 5m-slot hij begon en hoe lang hij duurde. De timer (deploy/crypto-market-scan-smc.timer,
+# *:3/5:00) start drie minuten na een slot; zonder deze meting was de werkelijke vertraging tot een melding niet te zien.
+FAST_CYCLE_BEAT = "snelcyclus"
+
+
+def seconds_after_slot(moment: datetime) -> float:
+    """Seconden sinds het laatste 5m-slot (:00, :05, ...) in UTC."""
+    return float((moment.minute % 5) * 60 + moment.second)
+
+
 async def scan_smc_fast() -> None:
+    started, t0 = datetime.now(timezone.utc), time.monotonic()
+    try:
+        await _scan_smc_fast()
+    finally:
+        try:
+            repo.beat(FAST_CYCLE_BEAT, f"start {seconds_after_slot(started):.0f} s na het 5m-slot, duur {time.monotonic() - t0:.0f} s")
+        except Exception:
+            logger.exception("Hartslag van de snelcyclus is mislukt")
+
+
+async def _scan_smc_fast() -> None:
     """Zelfde SMC-check als binnen scan_market() (_run_smc_check), maar
     los daarvan en op een veel kortere cyclus (zie
     deploy/crypto-market-scan-smc.timer) — SMC reageert op 15m-candles,

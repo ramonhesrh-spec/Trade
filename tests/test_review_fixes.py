@@ -227,6 +227,26 @@ class PatternScoreIsNotAChanceTest(unittest.TestCase):
         self.assertIn("score 72", html)
 
 
+class FastCycleTimingTest(DbCase):
+    """scan_smc_fast schrijft in zijn hartslag hoe laat na het 5m-slot hij begon en hoe lang hij duurde (deploy timer *:3/5:00)."""
+
+    def test_seconds_after_the_five_minute_slot(self):
+        from app import market_scanner
+        self.assertEqual(market_scanner.seconds_after_slot(datetime(2026, 10, 31, 12, 8, 7, tzinfo=timezone.utc)), 187.0)
+        self.assertEqual(market_scanner.seconds_after_slot(datetime(2026, 10, 31, 12, 10, 0, tzinfo=timezone.utc)), 0.0)
+
+    def test_the_cycle_writes_its_timing_even_when_the_scan_is_off(self):
+        from app import market_scanner
+
+        async def nothing():
+            return None
+        with mock.patch.object(market_scanner.announce_live, "run", nothing), \
+                mock.patch.object(repo, "is_market_scan_enabled", lambda: False):
+            asyncio.run(market_scanner.scan_smc_fast())
+        detail = repo.get_beat(market_scanner.FAST_CYCLE_BEAT)["detail"]
+        self.assertRegex(detail, r"start \d+ s na het 5m-slot, duur \d+ s")
+
+
 class AmbiguousOutcomeIsStoredTest(DbCase):
     def _run_outcomes(self, frame):
         with mock.patch("app.exchange.fetch_ohlcv", lambda *a, **k: frame):
