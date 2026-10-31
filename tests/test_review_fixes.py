@@ -211,6 +211,22 @@ class EngineAnnounceRecordsFailureTest(DbCase):
         self.assertIn("stuk", attempts[0]["error"])
 
 
+class PatternScoreIsNotAChanceTest(unittest.TestCase):
+    """repo.pattern_kansberekening is (factoren + historische winrate)/2: een samengestelde score, geen gemeten winkans."""
+
+    def _card(self) -> str:
+        from web import main
+        entry = {"id": 1, "signal_id": 1, "coin": "BTC", "direction": "long", "trade_type": "patroon", "pattern_name": "Vlag",
+                 "success_rate": 72.0, "user_confirmed": False, "pass_pct": 80.0, "reason": "✓ a | ✗ b", "price": 100.0,
+                 "stop_loss": 99.0, "take_profit": 102.0, "auto_outcome": None, "created_at": db.now_iso()}
+        return main.templates.env.from_string('{% import "_macros.html" as m %}{{ m.signal_card(e) }}').render(e=entry)
+
+    def test_the_pattern_card_calls_it_a_score(self):
+        html = self._card()
+        self.assertNotIn("kans 72%", html)
+        self.assertIn("score 72", html)
+
+
 class AmbiguousOutcomeIsStoredTest(DbCase):
     def _run_outcomes(self, frame):
         with mock.patch("app.exchange.fetch_ohlcv", lambda *a, **k: frame):
