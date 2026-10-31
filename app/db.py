@@ -309,6 +309,10 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for table in ("zone_radar_setups", "zone_sweep_setups"):
         if "poc_near" not in {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN poc_near INTEGER")
+    # De niveaus voorbij de limiet bij het ontstaan van de kaart (zone_radar.obstacles, poc_radar.obstacles); leeg op oude rijen.
+    for table in ("zone_radar_setups", "poc_radar_setups"):
+        if "obstacles" not in {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN obstacles TEXT")
 
 
 def _migrate_rule_trades(conn: sqlite3.Connection) -> None:

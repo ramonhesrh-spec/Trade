@@ -10,6 +10,8 @@ from typing import Iterable, Optional
 from zoneinfo import ZoneInfo
 
 from app import nu, radar, setup_chart, trade_plan as tp
+from app import zone_radar as zr
+from app.price_text import nl
 
 LABELS = {"structuur": "Structuur", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar", "smc": "SMC"}
 ORDER = ("structuur", "zone_radar", "zone_sweep", "poc_radar", "smc")
@@ -56,6 +58,25 @@ def when_text(stamp: Optional[str], now: Optional[datetime] = None) -> str:
     if days == 0:
         return clock
     return f"gisteren {clock}" if days == 1 else f"{at.day} {MONTHS[at.month - 1]} {clock}"
+
+
+def _obstacle_text(o: dict) -> str:
+    r = o.get("r")
+    return f"{o['label']} {nl(o['rand'])}" + (f" ({r:.1f}\u00a0R)".replace(".", ",") if r is not None else "")    # harde spatie: "3,9" en "R" nooit op twee regels
+
+
+def obstacle_lines(raw, now: Optional[datetime] = None) -> list[str]:
+    """Het detailblad onder de herkomst: het eerste obstakel vanaf de instap (het doel van de kaart, met R en sinds wanneer het bekend is) en
+    hoogstens twee daarna. Leeg voor een kaart zonder bewaarde obstakels (van voor 31 oktober 2026)."""
+    found = zr.parse_obstacles(raw)
+    if not found:
+        return []
+    first = found[0]
+    since = when_text(first.get("known_at"), now)
+    lines = [f"Eerste obstakel: {_obstacle_text(first)}" + (f" · bekend sinds {since}" if since else "")]
+    if len(found) > 1:
+        lines.append("Daarna: " + ", ".join(_obstacle_text(o) for o in found[1:3]))
+    return lines
 
 
 def share_lines(item: dict) -> list[str]:
@@ -188,7 +209,8 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
     als 'vergelijkbaar'), maar wel onderaan hun tab als `hidden` (rijen) en `hidden_cards` (de kaart zelf, voor Toon weer zonder herladen)."""
     wanted = set(kinds)
     plans = [{**structure_item(card, price, state), "created_at": card.get("created_at")} for card, price, state in structure]
-    plans += [{**_plan(nu._from_setup(c), "radar-" + c["key"].replace(":", "-")), "created_at": c.get("created_at")} for c in radar.waiting_cards(radar_cards)]
+    plans += [{**_plan(nu._from_setup(c), "radar-" + c["key"].replace(":", "-")), "created_at": c.get("created_at"),
+               "obstacle_lines": obstacle_lines((c.get("setup") or {}).get("obstacles"))} for c in radar.waiting_cards(radar_cards)]
     skipped, hidden = set(skipped), set(hidden)
     for p in plans:
         p["skipped"] = p["key"] in skipped

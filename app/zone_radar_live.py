@@ -95,7 +95,7 @@ async def _track(waiting: list[dict]) -> None:
             # Ook de candle die nog vormt: een aanraking van de limiet is een vulling, ook vóór het slot. Alleen candles die na de kaart openden,
             # anders telt een prik van vóór de kaart als vulling.
             after = df[df["timestamp"] >= pd.Timestamp(card["created_at"])]
-            what, _at = zr.walk(card["direction"], card["zone_high"] if card["direction"] == "long" else card["zone_low"], card["take_profit"], after)
+            what, _at = zr.walk(card["direction"], card["zone_high"] if card["direction"] == "long" else card["zone_low"], zr.miss_take(card), after)
             try:
                 if what == "filled":
                     await _fill(card)

@@ -217,7 +217,7 @@ async def track(now: Optional[datetime] = None) -> None:
             try:
                 # Ook de candle die nog vormt: een aanraking is een vulling, ook vóór het slot. Alleen candles die na de kaart openden.
                 after = bars[bars["timestamp"] >= pd.Timestamp(card["created_at"])]
-                what, at = pr.walk(card["direction"], card["limit_price"], card["take_profit"], after)
+                what, at = pr.walk(card["direction"], card["limit_price"], zr.miss_take(card), after)
                 if what == "filled":
                     await _fill(card, pd.Timestamp(at))
                 elif what == "doel_geraakt":

@@ -43,8 +43,9 @@ def setup_card(setup: dict, price: Optional[float]) -> Optional[dict]:
 
 
 def setup_state(setup: dict, price: Optional[float]) -> Optional[str]:
-    return tp.plan_state(setup["direction"], setup["zone_low"], setup["zone_high"], setup["preview_stop_loss"], price,
-                         take=setup["preview_take_profit"]) if price else None
+    # miss_take: zone- en POC-radar zetten hem op None als hun doel bij het ontstaan tussen limiet en koers lag (zone_radar.miss_take).
+    take = setup["miss_take"] if "miss_take" in setup else setup["preview_take_profit"]
+    return tp.plan_state(setup["direction"], setup["zone_low"], setup["zone_high"], setup["preview_stop_loss"], price, take=take) if price else None
 
 
 OPEN_STATES = (None, "wacht", "in_zone")        # dezelfde stand-keuze als today.OPEN_PLAN_STATES: wat nog kan vullen

@@ -3038,6 +3038,8 @@ html.kd-lock { overflow: hidden; }
 .hold.is-failed .hold-lab { color: var(--loss); }
 .kd-hint { margin: 8px 0 0; font-size: 13px; color: var(--tx2); }
 .kd-origin { margin: 16px 0 0; overflow: hidden; font-size: 13px; color: var(--tx2); white-space: nowrap; text-overflow: ellipsis; }
+/* Een obstakelregel draagt prijs, R en tijd: afkappen zou juist die weglaten, dus hij loopt door op een tweede regel. */
+.kd-obstacle { margin-top: 6px; white-space: normal; overflow: visible; }
 .kd-ctx { margin: 12px 0 0; }
 .kd-ctx-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: baseline; gap: 10px; min-height: 44px; padding: 10px 0; border-top: 1px solid var(--bd); }
 .kd-ctx-row dt { min-width: 0; font-size: 14px; color: var(--tx2); }

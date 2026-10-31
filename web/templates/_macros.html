@@ -737,6 +737,8 @@
   </ul>
   <p class="kd-hint">Houd een getal vast om te kopiëren. De bel zet een prijsalarm.</p>
   <p class="kd-origin">{{ it.origin or kinds.get(it.trade_type, it.trade_type) }} · {{ "open trade" if it.kind == "trade" else "limietplan" }}</p>
+  {# Obstakels vanaf de instap (kansen.obstacle_lines): alleen op kaarten die ze bewaarden; het eerste is het doel. #}
+  {% for line in it.obstacle_lines or [] %}<p class="kd-origin kd-obstacle">{{ line }}</p>{% endfor %}
   {# Dubbele kaarten (zelfde soort, coin, richting en instap, app/kansen.dedupe) staan één keer op Kansen; hier het gemeten aantal dat wegviel. #}
   {% if it.similar_text %}<p class="kd-origin kd-similar">{{ it.similar_text }}</p>{% endif %}
   {% if ctx %}

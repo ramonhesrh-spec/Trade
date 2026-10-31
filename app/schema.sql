@@ -837,6 +837,9 @@ CREATE TABLE IF NOT EXISTS zone_radar_setups (
     -- Kenmerk 'POC-samenval' (chance_checks.poc_checks): 1 als de limiet binnen 0,3% van een naakte dag- of week-POC lag, 0 als niet, leeg als er
     -- toen geen POC-meting was. Beschrijvend: niets filtert erop, Bewijs toont via score_split of het samengaat.
     poc_near INTEGER,
+    -- De tegenovergestelde zones voorbij de limiet bij het ontstaan (zone_radar.obstacles, JSON, hoogstens 5, de eerste is het doel), elk met
+    -- soort, tf, rand, R en known_at. Leeg op kaarten van voor 31 oktober 2026. Verandert nooit achteraf.
+    obstacles TEXT,
     UNIQUE (coin, zone_key)
 );
 CREATE INDEX IF NOT EXISTS idx_zone_radar_setups_state ON zone_radar_setups(state);
@@ -952,6 +955,7 @@ CREATE TABLE IF NOT EXISTS poc_radar_setups (
     ended_at TEXT,
     alert_sent INTEGER NOT NULL DEFAULT 0,
     signal_id INTEGER REFERENCES signals(id),
+    obstacles TEXT,                      -- de niveaus voorbij de limiet (poc_radar.obstacles, JSON), zoals zone_radar_setups.obstacles
     UNIQUE (coin, level_key)
 );
 CREATE INDEX IF NOT EXISTS idx_poc_radar_setups_state ON poc_radar_setups(state);

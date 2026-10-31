@@ -3215,7 +3215,13 @@ def set_signal_price(signal_id: int, price: float) -> None:
 
 
 _ZONE_RADAR_COLS = ("coin", "direction", "tf", "zone_key", "zone_low", "zone_high", "stop_loss", "take_profit", "rr", "atr",
-                    "target_tf", "target_low", "target_high", "ctx_funding", "ctx_oi_change_24h", "ctx_spread", "poc_near")
+                    "target_tf", "target_low", "target_high", "ctx_funding", "ctx_oi_change_24h", "ctx_spread", "poc_near", "obstacles")
+
+
+def _setup_value(row: dict, col: str):
+    """De obstakels van een kaart gaan als JSON-tekst de database in; een lijst kan SQLite niet bewaren."""
+    value = row.get(col)
+    return json.dumps(value) if col == "obstacles" and isinstance(value, list) else value
 
 
 def insert_zone_radar_setup(row: dict, created_at: str) -> Optional[int]:
@@ -3224,7 +3230,7 @@ def insert_zone_radar_setup(row: dict, created_at: str) -> Optional[int]:
     with db.session() as conn:
         cur = conn.execute(
             f"INSERT OR IGNORE INTO zone_radar_setups ({', '.join(_ZONE_RADAR_COLS)}, created_at) VALUES ({', '.join('?' for _ in _ZONE_RADAR_COLS)}, ?)",
-            (*(row.get(c) for c in _ZONE_RADAR_COLS), created_at))
+            (*(_setup_value(row, c) for c in _ZONE_RADAR_COLS), created_at))
         return cur.lastrowid if cur.rowcount else None
 
 
@@ -3412,7 +3418,7 @@ def set_poc_scan(coin: str, checked_until: str, scanned_at: str) -> None:
 
 
 _POC_RADAR_COLS = ("coin", "direction", "period", "period_start", "level_key", "level", "limit_price", "stop_loss", "take_profit", "rr", "atr",
-                   "target_kind", "target_text", "target_tf", "target_low", "target_high", "expires_at")
+                   "target_kind", "target_text", "target_tf", "target_low", "target_high", "expires_at", "obstacles")
 
 
 def insert_poc_radar_setup(row: dict, created_at: str) -> Optional[int]:
@@ -3420,7 +3426,7 @@ def insert_poc_radar_setup(row: dict, created_at: str) -> Optional[int]:
     with db.session() as conn:
         cur = conn.execute(
             f"INSERT OR IGNORE INTO poc_radar_setups ({', '.join(_POC_RADAR_COLS)}, created_at) VALUES ({', '.join('?' for _ in _POC_RADAR_COLS)}, ?)",
-            (*(row.get(c) for c in _POC_RADAR_COLS), created_at))
+            (*(_setup_value(row, c) for c in _POC_RADAR_COLS), created_at))
         return cur.lastrowid if cur.rowcount else None
 
 

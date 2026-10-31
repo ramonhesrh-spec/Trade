@@ -3,10 +3,11 @@ voor wie gewoon niveaus wil zien en zelf een limietorder zet. Geen structuurbreu
 
 De zones komen uit app/replay/rangesweep.find_zones en zone_active (dezelfde definitie als lab en range sweep), alleen op gesloten candles.
 Limiet op de binnenrand, stop voorbij de buitenrand met een kwart ATR en de ondergrens van smc_eval.floor_stop, doel de rand van de
-eerstvolgende tegenovergestelde actieve zone, zonder minimale R:R. Alle drempels liggen vooraf vast; er is niets op data afgesteld.
+eerste tegenovergestelde actieve zone voorbij de limiet (obstacles), zonder minimale R:R. Alle drempels liggen vooraf vast; er is niets op data afgesteld.
 
 Eerlijk over wat dit is: ongetest. De kaart beschrijft een niveau, hij voorspelt niets; Bewijs toont de score (trade_type 'zone_radar').
 Pure functies zonder database of netwerk: de motor (app/zone_radar_live.py), de pagina en de tests rekenen met dezelfde code."""
+import json
 from dataclasses import dataclass
 from typing import Optional
 
@@ -37,6 +38,8 @@ MAX_AGE = {"1h": rs.ZONE_MAX_AGE, "4h": 2 * rs.ZONE_MAX_AGE}
 FETCH_LIMIT_BY_TF = {tf: age + 200 for tf, age in MAX_AGE.items()}
 FETCH_LIMIT = max(FETCH_LIMIT_BY_TF.values())
 MIN_CANDLES = 60
+# Hoeveel obstakels een kaart bewaart: het doel plus wat daarna komt. Meer leest niemand op een telefoon, en de kaart verandert achteraf nooit.
+MAX_OBSTACLES = 5
 
 
 @dataclass(frozen=True)
@@ -47,6 +50,7 @@ class ZoneLevel:
     high: float
     atr: float
     key: str           # tf, soort en openmoment van de order block-candle: dezelfde zone krijgt in elke cyclus dezelfde sleutel
+    known_at: str = ""  # ISO-slot van de candle waarop de zone bekend werd (rangesweep.Zone.known_idx); leeg waar de aanroeper hem niet kent
 
 
 def active_zones(bars: pd.DataFrame, tf: str, now: pd.Timestamp, max_age: Optional[int] = None) -> list[ZoneLevel]:
@@ -61,7 +65,8 @@ def active_zones(bars: pd.DataFrame, tf: str, now: pd.Timestamp, max_age: Option
     if not atr > 0:
         return []
     n = len(b)
-    return [ZoneLevel(tf, z.kind, z.low, z.high, atr, f"{tf}:{z.kind}:{pd.Timestamp(b.at[z.ob_idx, 'timestamp']).isoformat()}")
+    return [ZoneLevel(tf, z.kind, z.low, z.high, atr, f"{tf}:{z.kind}:{pd.Timestamp(b.at[z.ob_idx, 'timestamp']).isoformat()}",
+                      (pd.Timestamp(b.at[z.known_idx, "timestamp"]) + rs.TF_DELTA[tf]).isoformat())
             for z in rs.find_zones(b, age) if rs.zone_active(z, n, age)]
 
 
@@ -71,7 +76,8 @@ def _distance_pct(direction: str, z: ZoneLevel, price: float) -> float:
 
 def plan_for(direction: str, zones: list[ZoneLevel], price: float) -> Optional[dict]:
     """Het plan voor de dichtstbijzijnde eigen zone, of None. Alleen die ene zone telt: valt hij af, dan wordt er niet naar een verdere zone gezocht.
-    Het doel is de eerstvolgende tegenovergestelde zone. Er is geen minimale R:R: de CEO wil elke kans zien (29 oktober 2026, WLD haalde op het
+    Het doel is het eerste obstakel vanaf de limiet, ook als dat tussen limiet en koers ligt (CEO, v2-plan punt 2: vanaf de koers zoeken liet zo'n
+    niveau buiten beeld), en nooit een verder obstakel voor een mooier R-getal. Er is geen minimale R:R: de CEO wil elke kans zien (29 oktober 2026, WLD haalde op het
     dichtste doel 1,6R en kreeg geen kaart); de kaart toont de R:R en jij beslist."""
     own_kind = "bull" if direction == "long" else "bear"
     own = [z for z in zones if z.kind == own_kind and 0 < _distance_pct(direction, z, price) <= MAX_DISTANCE_PCT]
@@ -82,25 +88,78 @@ def plan_for(direction: str, zones: list[ZoneLevel], price: float) -> Optional[d
         limit, raw_stop = zone.high, zone.low - STOP_ATR * zone.atr
     else:
         limit, raw_stop = zone.low, zone.high + STOP_ATR * zone.atr
-    target = target_for(direction, zones, price)
-    if target is None:
-        return None
-    take = target_edge(direction, target)
     stop = smc_eval.floor_stop(direction, limit, raw_stop)
+    found = mark_between(direction, obstacles(direction, zones, limit, stop), price)
+    if not found:
+        return None
+    first = found[0]
+    take = first["rand"]
     plan = tp.limit_plan(direction, zone.low, zone.high, stop, take)
     if plan is None:
         return None
-    # Zelfde wacht als structure_live: een plan dat bij het ontstaan al voorbij doel of stop staat, of al in de zone, is geen kaart om op te wachten.
-    if tp.plan_state(direction, zone.low, zone.high, stop, price, take=take) != "wacht":
+    # Zelfde wacht als structure_live: een plan dat bij het ontstaan al voorbij de stop staat, of al in de zone, is geen kaart om op te wachten.
+    if tp.plan_state(direction, zone.low, zone.high, stop, price, take=miss_take({"take_profit": take, "obstacles": found})) != "wacht":
         return None
     return {"direction": direction, "tf": zone.tf, "zone_key": zone.key, "zone_low": zone.low, "zone_high": zone.high,
             "limit": limit, "stop_loss": stop, "take_profit": take, "rr": plan.rr, "atr": zone.atr,
-            "target_tf": target.tf, "target_low": target.low, "target_high": target.high,
-            "distance_pct": _distance_pct(direction, zone, price)}
+            "target_tf": first["tf"], "target_low": first["low"], "target_high": first["high"],
+            "distance_pct": _distance_pct(direction, zone, price), "obstacles": found[:MAX_OBSTACLES]}
+
+
+def obstacles(direction: str, zones: list[ZoneLevel], entry: float, stop: Optional[float] = None) -> list[dict]:
+    """Alle tegenovergestelde actieve zones voorbij `entry`, in de volgorde waarin de koers ze vanaf de instap tegenkomt: aanbodzones met low boven
+    de instap oplopend (long), vraagzones met high eronder aflopend (short). `r`: de afstand van de instap tot de rand in R met deze stop."""
+    if direction == "long":
+        found = sorted((z for z in zones if z.kind == "bear" and z.low > entry), key=lambda z: z.low)
+    else:
+        found = sorted((z for z in zones if z.kind == "bull" and z.high < entry), key=lambda z: -z.high)
+    return [zone_obstacle(direction, z, entry, stop) for z in found]
+
+
+def zone_obstacle(direction: str, z: ZoneLevel, entry: float, stop: Optional[float]) -> dict:
+    rand = target_edge(direction, z)
+    tf = TF_TEXT.get(z.tf, z.tf)
+    soort = "aanbod" if z.kind == "bear" else "vraag"
+    return {"soort": soort, "bron": f"zone {tf}", "label": f"{soort.capitalize()} {tf}", "tf": z.tf, "low": z.low, "high": z.high, "rand": rand,
+            "key": z.key, "known_at": z.known_at, "r": r_from(entry, stop, rand)}
+
+
+def r_from(entry: float, stop: Optional[float], level: float) -> Optional[float]:
+    risk = abs(entry - stop) if stop is not None else 0
+    return abs(level - entry) / risk if risk > 0 else None
+
+
+def mark_between(direction: str, found: list[dict], price: float) -> list[dict]:
+    """`tussen`: lag het niveau bij het ontstaan van de kaart tussen instap en koers. Bij zo'n doel staat de koers al voorbij het doel; dat is
+    dan geen gemiste kans maar de route terug (zie miss_take)."""
+    sign = 1 if direction == "long" else -1
+    return [{**o, "tussen": (price - o["rand"]) * sign >= 0} for o in found]
+
+
+def parse_obstacles(raw) -> list[dict]:
+    """De obstakels van een kaart: een lijst, of de JSON-tekst uit de database. Een oude rij (NULL) of onleesbare tekst geeft een lege lijst."""
+    if isinstance(raw, list):
+        return raw
+    try:
+        value = json.loads(raw) if raw else []
+    except (TypeError, ValueError):
+        return []
+    return value if isinstance(value, list) else []
+
+
+def miss_take(row: dict) -> Optional[float]:
+    """Het doel waarop een wachtende kaart als gemist vervalt (walk, plan_state). Lag het doel bij het ontstaan tussen limiet en koers, dan stond
+    de koers er al voorbij: dan vervalt de kaart er niet op, anders zou hij meteen 'gemist' heten terwijl de trade nog niet kon beginnen."""
+    take = row.get("take_profit")
+    first = (parse_obstacles(row.get("obstacles")) or [None])[0]
+    if take is not None and first and first.get("tussen") and first.get("rand") == take:
+        return None
+    return take
 
 
 def target_for(direction: str, zones: list[ZoneLevel], price: float) -> Optional[ZoneLevel]:
-    """De eerstvolgende tegenovergestelde zone voorbij `price`: de laagste aanbodzone boven de koers (long), de hoogste vraagzone eronder (short)."""
+    """De eerstvolgende tegenovergestelde zone voorbij `price`: de laagste aanbodzone boven de koers (long), de hoogste vraagzone eronder (short).
+    Alleen nog voor de zone-sweep, vooraf vastgelegd met dit gedrag; zone-radar en POC-radar zoeken vanaf de limiet (obstacles)."""
     if direction == "long":
         targets = [z for z in zones if z.kind == "bear" and z.low > price]
         return min(targets, key=lambda z: z.low) if targets else None
@@ -191,4 +250,4 @@ def radar_setup(row: dict) -> dict:
     """Een rij uit zone_radar_setups in de vorm die radar.setup_card leest (zoals web.main._with_preview voor SMC), met source zodat de kaart
     een eigen sleutel en tekst krijgt."""
     return {**row, "source": TRADE_TYPE, "preview_stop_loss": row["stop_loss"], "preview_take_profit": row["take_profit"],
-            "chart_zone": chart_zone(row)}
+            "miss_take": miss_take(row), "chart_zone": chart_zone(row)}
