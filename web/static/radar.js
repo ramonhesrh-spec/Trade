@@ -24,7 +24,8 @@
       if (data.action) setText(card, "action", data.action);
       // Doel gehaald terwijl de pagina openstaat: grafiek en stappen verdwijnen, de rest van de kaart komt bij de volgende paginaweergave.
       card.classList.toggle("is-moot", data.state === "doel_geraakt");
-      if (!(window.hesLiveFresh && window.hesLiveFresh()) && data.distance_pct !== null && data.distance_pct !== undefined) {
+      var liveEl = card.querySelector("[data-live-coin]"), liveCoin = liveEl && liveEl.getAttribute("data-live-coin");
+      if (!(liveCoin && window.hesLiveFresh && window.hesLiveFresh(liveCoin)) && data.distance_pct !== null && data.distance_pct !== undefined) {
         setText(card, "distance", (data.distance_pct >= 0 ? "+" : "") + data.distance_pct.toFixed(2) + "%");
       }
       var approach = card.querySelector(".approach"), dot = card.querySelector('[data-radar="approach"]');

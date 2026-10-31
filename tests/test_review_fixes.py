@@ -247,6 +247,27 @@ class FastCycleTimingTest(DbCase):
         self.assertRegex(detail, r"start \d+ s na het 5m-slot, duur \d+ s")
 
 
+@unittest.skipUnless(__import__("shutil").which("node"), "node ontbreekt")
+class LiveFreshnessPerCoinTest(unittest.TestCase):
+    """live.js hield één gedeeld tijdstip (__liveAt) voor alle coins: één tikkende coin liet een stille coin vers lijken."""
+
+    def test_freshness_is_per_coin(self):
+        from tests.test_static_js import run_node
+        out = run_node("live_harness.js", "live.js")
+        self.assertEqual((out["btc"], out["eth"], out["sol"]), (True, False, False))
+        self.assertFalse(out["all"])                       # zonder coin: pas vers als elke coin op de pagina vers is
+        self.assertTrue(out["allFresh"])
+        self.assertFalse(out["none"])
+
+    def test_the_dot_follows_the_stalest_shown_price(self):
+        from tests.test_static_js import run_node
+        out = run_node("live_harness.js", "live.js")
+        self.assertEqual(out["shownStalest"], 80000)       # ETH, niet de verse BTC
+        self.assertEqual(out["shownPollHelps"], 95000)     # een verse poll dekt beide coins
+        self.assertEqual(out["shownOnlyPoll"], 93000)
+        self.assertIsNone(out["shownNothing"])
+
+
 class AmbiguousOutcomeIsStoredTest(DbCase):
     def _run_outcomes(self, frame):
         with mock.patch("app.exchange.fetch_ohlcv", lambda *a, **k: frame):

@@ -1,7 +1,18 @@
 // Koersen die echt live bewegen: de browser luistert rechtstreeks naar de koersstroom van de beurt (eens per seconde per coin) en werkt
 // prijzen en afstanden bij zodra er een nieuwe koers is. De server blijft de bron voor kaarten en uitkomsten, dit maakt alleen het getal levend.
 // Valt de verbinding weg of staat het tabblad verborgen, dan verversen de gewone polls het weer.
-(function () {
+(function (root) {
+  var LIVE_FRESH_MS = 8000;
+  // Versheid per coin: vroeger één gedeeld tijdstip (__liveAt) voor alle coins, zodat één tikkende coin een stille coin vers liet lijken en
+  // radar.js de serverafstand van die stille coin oversloeg. Zonder coin: pas vers als elke coin op de pagina vers is.
+  function freshAt(byCoin, coins, now, coin) {
+    var list = coin ? [coin] : coins;
+    if (!list.length) return false;
+    return list.every(function (c) { return byCoin[c] !== undefined && now - byCoin[c] < LIVE_FRESH_MS; });
+  }
+  root.hesLiveFreshAt = freshAt;
+  if (typeof document === "undefined") return;
+
   function meta(name) { var m = document.querySelector('meta[name="' + name + '"]'); return m ? m.getAttribute("content") : ""; }
   var exchange = meta("live-exchange"), quote = (meta("live-quote") || "usdt").toLowerCase();
   if (exchange !== "binance") return;
@@ -14,7 +25,9 @@
   if (!list.length) return;
 
   window.__livePrices = {};
-  window.hesLiveFresh = function () { return !!window.__liveAt && Date.now() - window.__liveAt < 8000; };
+  window.__liveAtByCoin = {};
+  window.__liveCoins = list;
+  window.hesLiveFresh = function (coin) { return freshAt(window.__liveAtByCoin, list, Date.now(), coin); };
 
   function fmtPrice(value, coin) {
     if (coin === "BTC") return Math.round(value).toLocaleString("nl-NL");
@@ -85,7 +98,7 @@
         var d = JSON.parse(e.data).data;
         var coin = d.s.slice(0, d.s.length - quote.length), p = parseFloat(d.c);
         if (isNaN(p)) return;
-        window.__liveAt = Date.now();
+        window.__liveAtByCoin[coin] = Date.now();
         window.__livePrices[coin] = p;
         apply(coin, p);
       } catch (err) { /* een kapot bericht slaan we over */ }
@@ -97,4 +110,4 @@
     if (document.hidden) { clearTimeout(timer); if (ws) ws.close(); } else { retry = 1000; connect(); }
   });
   connect();
-})();
+})(typeof window !== "undefined" ? window : globalThis);
