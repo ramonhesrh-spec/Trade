@@ -248,6 +248,8 @@ CREATE TABLE IF NOT EXISTS signals (
     -- geraakt is.
     auto_outcome TEXT,
     auto_outcome_at TEXT,
+    -- Gezet als stop en doel in dezelfde candle vielen: de volgorde is dan onbekend en de uitkomst is conservatief als stop geteld.
+    auto_outcome_note TEXT,
     -- Dichtstbijzijnde zelf-gedetecteerde steun/weerstand-zonerand aan de
     -- stop-kant van de prijs op het moment van dit signaal (los prijsgetal,
     -- niet de hele zone) — NULL als er geen bruikbare zone dichtbij was.

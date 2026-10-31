@@ -209,6 +209,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE signals ADD COLUMN auto_outcome TEXT")
     if "auto_outcome_at" not in existing_signals:
         conn.execute("ALTER TABLE signals ADD COLUMN auto_outcome_at TEXT")
+    if "auto_outcome_note" not in existing_signals:
+        conn.execute("ALTER TABLE signals ADD COLUMN auto_outcome_note TEXT")
     if "nearest_sr_zone_price" not in existing_signals:
         conn.execute("ALTER TABLE signals ADD COLUMN nearest_sr_zone_price REAL")
     if "suggested_entry_low" not in existing_signals:

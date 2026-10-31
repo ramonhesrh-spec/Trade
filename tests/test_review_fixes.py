@@ -88,6 +88,47 @@ class OpenTradeAlertTest(DbCase):
         self.assertEqual(len(self.sent), 1)
         self.assertEqual(self._alert_sent(entry), 1)
 
+    def test_stop_and_target_in_one_candle_says_order_unknown(self):
+        self._taken(minutes_ago=40)
+        start = datetime.now(timezone.utc) - timedelta(minutes=30)
+        self._run(_bars(start, [(100, 100.3, 99.6, 100.1)] * 3 + [(100, 102.5, 98.5, 100.0)]))
+        title, body = self.sent[0]
+        self.assertIn("Stop loss geraakt", body)
+        self.assertIn(level_check.AMBIGUOUS_NOTE, body)
+
+    def test_a_clean_stop_does_not_say_order_unknown(self):
+        self._taken(minutes_ago=40)
+        start = datetime.now(timezone.utc) - timedelta(minutes=30)
+        self._run(_bars(start, [(100, 100.3, 99.6, 100.1)] * 3 + [(100, 100.2, 98.5, 99.0)]))
+        self.assertNotIn(level_check.AMBIGUOUS_NOTE, self.sent[0][1])
+
+
+class AmbiguousOutcomeIsStoredTest(DbCase):
+    def _run_outcomes(self, frame):
+        with mock.patch("app.exchange.fetch_ohlcv", lambda *a, **k: frame):
+            asyncio.run(level_check.check_signal_outcomes())
+
+    def _signal(self, minutes_ago: float) -> int:
+        sid = self.insert_signal(direction="long", price=100.0, stop_loss=99.0, take_profit=102.0)
+        with db.session() as conn:
+            conn.execute("UPDATE signals SET created_at = ? WHERE id = ?",
+                         ((datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).isoformat(), sid))
+        return sid
+
+    def test_both_levels_in_one_candle_is_stop_with_a_note(self):
+        sid = self._signal(60)
+        start = datetime.now(timezone.utc) - timedelta(minutes=50)
+        self._run_outcomes(_bars(start, [(100, 102.5, 98.5, 100.0)] + [(100, 100.2, 99.9, 100.0)] * 8))
+        signal = repo.get_signal(sid)
+        self.assertEqual(signal["auto_outcome"], "stop_loss")
+        self.assertEqual(signal["auto_outcome_note"], level_check.AMBIGUOUS_NOTE)
+
+    def test_a_clean_stop_has_no_note(self):
+        sid = self._signal(60)
+        start = datetime.now(timezone.utc) - timedelta(minutes=50)
+        self._run_outcomes(_bars(start, [(100, 100.2, 98.5, 99.0)] + [(100, 100.2, 99.9, 100.0)] * 8))
+        self.assertIsNone(repo.get_signal(sid)["auto_outcome_note"])
+
 
 if __name__ == "__main__":
     unittest.main()

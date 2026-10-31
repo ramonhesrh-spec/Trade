@@ -1878,11 +1878,11 @@ def list_expired_signals_with_levels() -> list[dict]:
         return [dict(row) for row in rows]
 
 
-def mark_signal_auto_outcome(signal_id: int, outcome: str, occurred_at: str) -> None:
+def mark_signal_auto_outcome(signal_id: int, outcome: str, occurred_at: str, note: Optional[str] = None) -> None:
     with db.session() as conn:
         conn.execute(
-            "UPDATE signals SET auto_outcome = ?, auto_outcome_at = ? WHERE id = ?",
-            (outcome, occurred_at, signal_id),
+            "UPDATE signals SET auto_outcome = ?, auto_outcome_at = ?, auto_outcome_note = ? WHERE id = ?",
+            (outcome, occurred_at, note, signal_id),
         )
 
 

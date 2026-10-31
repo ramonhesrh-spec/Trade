@@ -93,6 +93,20 @@ def _level_hit_in_candles(
     return None
 
 
+# Stop en doel in dezelfde candle: zonder fijnere candles in dit pad is de volgorde onbekend. De stop telt (conservatief), en dat staat er dan bij.
+AMBIGUOUS_NOTE = "Stop en doel in dezelfde candle: volgorde onbekend, conservatief als stop geteld."
+
+
+def _both_levels_at(direction: str, stop_loss: Optional[float], take_profit: Optional[float], candles, hit_at) -> bool:
+    """True als de candle van de treffer ook het andere niveau raakte (alleen zinvol bij een stoptreffer: die wint in _level_hit_in_candles)."""
+    if stop_loss is None or take_profit is None:
+        return False
+    candle = candles[candles["timestamp"] == hit_at].iloc[0]
+    if direction == "long":
+        return candle["low"] <= stop_loss and candle["high"] >= take_profit
+    return candle["high"] >= stop_loss and candle["low"] <= take_profit
+
+
 def _self_measured(row: dict) -> bool:
     """Soorten die hun uitkomst zelf zetten: de proefmotor (meelopende stop), de range sweep en een zone-sweep of POC-radar zonder doel (referentie-uitgang).
     Een zone-sweep met doel blijft hier, die beslist op doel en stop zoals elk plan."""
@@ -131,7 +145,8 @@ async def check_open_trades() -> None:
         hit_result = _level_hit_in_candles(entry["direction"], entry["stop_loss"], entry["take_profit"], candles)
         if hit_result is None:
             continue
-        hit, hit_price, _hit_at = hit_result
+        hit, hit_price, hit_at = hit_result
+        ambiguous = _both_levels_at(entry["direction"], entry["stop_loss"], entry["take_profit"], candles, hit_at)
 
         # Geen telegram_chat_id-gate meer hier (Taak 11): push_notify.send_push
         # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend over,
@@ -139,7 +154,8 @@ async def check_open_trades() -> None:
         # ingevuld voor nieuwe gebruikers, dus zou hier iedereen overslaan.
         hit_emoji = "🎯" if hit == "take profit" else "🛑"
         title = f"{hit_emoji} {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
-        body = f"{hit.capitalize()} geraakt\nEntry {entry['entry_price']:.4f} · Op {hit_price:.4f}\nTik voor de uitkomst en je journaal."
+        body = f"{hit.capitalize()} geraakt\nEntry {entry['entry_price']:.4f} · Op {hit_price:.4f}\n" + (f"{AMBIGUOUS_NOTE}\n" if ambiguous else "") \
+            + "Tik voor de uitkomst en je journaal."
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
         try:
             await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
@@ -215,7 +231,8 @@ async def check_signal_outcomes() -> None:
             # het trackrecord, en kan door de bredere candle-lookback
             # hierboven best een stukje in het verleden liggen.
             occurred_at = hit_at.isoformat()
-            repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at)
+            ambiguous = _both_levels_at(signal["direction"], signal["stop_loss"], signal["take_profit"], candles, hit_at)
+            repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at, AMBIGUOUS_NOTE if ambiguous else None)
             # Een zelf-gedetecteerde zone die net een stop loss veroorzaakte
             # gaat op cooldown (zie repo.recent_sr_zone_failure) zodat een
             # volgend signaal vlakbij dezelfde rand niet meteen dezelfde fout
