@@ -2,7 +2,8 @@
 // Zonder bestanden delen (navigator.share met files) valt het terug op een download.
 (function () {
   var W = 720, PAD = 28;
-  var STYLE_PROPS = ["fill", "stroke", "stroke-width", "stroke-dasharray", "opacity", "fill-opacity", "stroke-opacity", "font-family", "font-size", "font-weight", "text-anchor"];
+  var STYLE_PROPS = ["fill", "stroke", "stroke-width", "stroke-dasharray", "opacity", "fill-opacity", "stroke-opacity", "font-family", "font-size", "font-weight", "text-anchor", "paint-order", "stroke-linejoin", "letter-spacing"];
+  // paint-order hoort erbij: de namen op de kaart hebben een lichte rand die achter de letters hoort; zonder deze eigenschap ligt hij erover.
 
   function inlineStyles(src, dst) {
     var cs = window.getComputedStyle(src);

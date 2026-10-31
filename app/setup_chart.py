@@ -294,6 +294,9 @@ def zone_svg(candles: list[list], coin: str, direction: str, zone: Optional[dict
     def box(x0: float, v_hi: float, v_lo: float, cls: str, label: str, below: bool, at_end: bool = False) -> str:
         top, bottom = max(CARD_PAD_T, y(v_hi)), min(CARD_PAD_T + plot_h, y(v_lo))
         ly = bottom + 13 if below else top - 4
+        # De eigen zone zet zijn naam binnen de buitenrand: erbuiten loopt de stoplijn, en die streepte de naam door (DOGE short, 29 oktober 2026).
+        if at_end and bottom - top >= 22:
+            ly = bottom - 5 if below else top + 13
         ly = min(CARD_H - 2, max(11.0, ly))
         # De eigen zone draagt zijn naam aan het rechteinde: links begint hij bij de ontstaanscandle, waar de markering al een naam heeft.
         lx, anchor = (right - 3, "end") if at_end else (x0 + 3, "start")

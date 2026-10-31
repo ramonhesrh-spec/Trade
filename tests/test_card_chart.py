@@ -71,6 +71,15 @@ class ZoneRadarSvgTests(unittest.TestCase):
             self.assertGreaterEqual(y, -0.1)
             self.assertLessEqual(y + h, setup_chart.CARD_H + 0.1)
 
+    def test_the_zone_name_sits_inside_a_tall_zone_not_on_the_stop_line(self):
+        tall = {**ZR, "zone_low": 99.0, "zone_high": 101.0, "stop_loss": 101.2}
+        svg = card_chart.zone_radar_svg(tall, candles(80), 98.0)
+        rect = re.search(r'<rect class="sc-zone" x="[\d.]+" y="([\d.]+)" width="[\d.]+" height="([\d.]+)"', svg)
+        top, height = float(rect.group(1)), float(rect.group(2))
+        name_y = float(re.search(r'<text class="sc-box-label" x="[\d.]+" y="([\d.]+)" text-anchor="end">Aanbod 1u', svg).group(1))
+        self.assertGreater(name_y, top)
+        self.assertLess(name_y, top + height)
+
     def test_no_candles_no_svg(self):
         self.assertEqual(card_chart.zone_radar_svg(ZR, [], 99.8), "")
 
