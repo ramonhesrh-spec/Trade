@@ -674,6 +674,19 @@ CREATE TABLE IF NOT EXISTS push_log (
 );
 CREATE INDEX IF NOT EXISTS idx_push_log_user_at ON push_log(user_id, at);
 
+-- Pogingen die een push niet afleverden (en de pogingen van de niveaumelding, ook geslaagd), per gebruiker. Een claim tegen dubbele meldingen
+-- (alert_sent eerst) blijft staan; dit legt vast wat er misging, en level_check telt hier zijn herkansingen (MAX_LEVEL_ALERT_ATTEMPTS).
+CREATE TABLE IF NOT EXISTS push_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    attempted_at TEXT NOT NULL,
+    ok INTEGER NOT NULL,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_push_attempts_ref ON push_attempts(kind, ref);
+
 -- Uitkomst van het strategie-lab per regel (scripts/strategy_lab.py --opslaan); de regel heet als de labvariant in kleine letters.
 CREATE TABLE IF NOT EXISTS rule_status (
     rule TEXT PRIMARY KEY,

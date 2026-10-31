@@ -1817,6 +1817,22 @@ def record_push(user_id: int, coin: str, direction: str, at: str) -> None:
         conn.execute("DELETE FROM push_log WHERE at < ?", ((datetime.fromisoformat(at) - timedelta(days=3)).isoformat(),))
 
 
+def record_push_attempt(user_id: int, kind: str, ref: str, ok: bool, error: Optional[str] = None) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT INTO push_attempts (user_id, kind, ref, attempted_at, ok, error) VALUES (?, ?, ?, ?, ?, ?)",
+                     (user_id, kind, ref, db.now_iso(), 1 if ok else 0, (error or "")[:500] or None))
+
+
+def list_push_attempts(kind: str, ref: str) -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM push_attempts WHERE kind = ? AND ref = ? ORDER BY id", (kind, ref)).fetchall()]
+
+
+def count_failed_push_attempts(kind: str, ref: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM push_attempts WHERE kind = ? AND ref = ? AND ok = 0", (kind, ref)).fetchone()[0]
+
+
 def list_recent_pushes(user_id: int, since: str) -> list[dict]:
     with db.session() as conn:
         return [dict(r) for r in conn.execute("SELECT coin, direction, at FROM push_log WHERE user_id = ? AND at >= ? ORDER BY at", (user_id, since)).fetchall()]

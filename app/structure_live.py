@@ -226,8 +226,9 @@ async def _push_all(title: str, body: str, url: str, tag: str, loud: bool, coin:
                 await push_notify.send_kans_push(user["id"], coin, direction, title, body, url, silent=quiet or not loud, tag=tag)
             else:
                 await push_notify.send_push(user["id"], title, body, url, silent=quiet or not loud, tag=tag)
-        except Exception:
+        except Exception as exc:
             logger.exception("Structuur-melding voor %s naar gebruiker %s is mislukt", tag, user["username"])
+            push_notify.record_failure(user["id"], "kans" if coin and direction else "update", url, exc)
 
 
 async def _discover(coin: str, now: datetime) -> list[dict]:

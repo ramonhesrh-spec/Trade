@@ -38,7 +38,7 @@ def _bars(start: datetime, rows: list[tuple]) -> pd.DataFrame:
                          for i, (o, h, l, c) in enumerate(rows)])
 
 
-class OpenTradeAlertTest(DbCase):
+class TakenTradeCase(DbCase):
     """level_check.check_open_trades: de stop-/doelmelding voor een genomen trade."""
 
     def setUp(self):
@@ -66,6 +66,9 @@ class OpenTradeAlertTest(DbCase):
     def _alert_sent(self, entry_id: int) -> int:
         with db.session() as conn:
             return conn.execute("SELECT level_alert_sent FROM journal_entries WHERE id = ?", (entry_id,)).fetchone()[0]
+
+
+class OpenTradeAlertTest(TakenTradeCase):
 
     def test_a_stop_touch_before_the_signal_existed_does_not_alert(self):
         entry = self._taken(minutes_ago=12)
@@ -118,6 +121,94 @@ class OpenTradeAlertTest(DbCase):
         body = self.sent[0][1]
         self.assertIn("Doel 102.0000", body)
         self.assertIn("koers raakte 102.7000", body)
+
+
+class FailedLevelAlertIsRetriedTest(TakenTradeCase):
+    def _stop_frame(self):
+        start = datetime.now(timezone.utc) - timedelta(minutes=30)
+        return _bars(start, [(100, 100.3, 99.6, 100.1)] * 3 + [(100, 100.2, 98.5, 99.0)])
+
+    async def _boom(self, *a, **k):
+        raise RuntimeError("netwerk weg")
+
+    async def _devices_failed(self, *a, **k):
+        return "1 van 1 apparaten mislukt"
+
+    def test_a_raised_send_leaves_the_flag_and_logs_the_attempt(self):
+        entry = self._taken(minutes_ago=40)
+        self._run(self._stop_frame(), push=self._boom)
+        self.assertEqual(self._alert_sent(entry), 0)
+        attempts = repo.list_push_attempts("niveau", f"journal:{entry}")
+        self.assertEqual(len(attempts), 1)
+        self.assertEqual(attempts[0]["ok"], 0)
+        self.assertIn("netwerk weg", attempts[0]["error"])
+
+    def test_a_send_that_reached_no_device_is_retried(self):
+        entry = self._taken(minutes_ago=40)
+        self._run(self._stop_frame(), push=self._devices_failed)
+        self.assertEqual(self._alert_sent(entry), 0)
+        self._run(self._stop_frame())
+        self.assertEqual(self._alert_sent(entry), 1)
+        self.assertEqual([a["ok"] for a in repo.list_push_attempts("niveau", f"journal:{entry}")], [0, 1])
+
+    def test_after_the_maximum_attempts_the_flag_is_set(self):
+        entry = self._taken(minutes_ago=40)
+        for _ in range(level_check.MAX_LEVEL_ALERT_ATTEMPTS):
+            self._run(self._stop_frame(), push=self._boom)
+        self.assertEqual(self._alert_sent(entry), 1)
+        self.assertEqual(len(repo.list_push_attempts("niveau", f"journal:{entry}")), level_check.MAX_LEVEL_ALERT_ATTEMPTS)
+
+
+class SendPushReportsFailureTest(DbCase):
+    def setUp(self):
+        super().setUp()
+        self.uid = repo.list_users()[0]["id"]
+        repo.upsert_push_subscription(self.uid, "https://push.example/1", "p", "a")
+
+    def _send(self, send_one):
+        from app import config, push_notify
+        with mock.patch.object(config, "VAPID_PRIVATE_KEY", "k"), mock.patch.object(push_notify, "_send_one", send_one):
+            return asyncio.run(push_notify.send_push(self.uid, "t", "b", "/x"))
+
+    def test_every_device_failing_returns_the_error(self):
+        def fail(sub, payload):
+            raise RuntimeError("503")
+        self.assertIn("503", self._send(fail))
+
+    def test_a_delivered_push_returns_none(self):
+        self.assertIsNone(self._send(lambda sub, payload: None))
+
+    def test_a_failed_kans_push_lands_on_the_notifications_page(self):
+        from app import push_notify
+
+        async def failed(*a, **k):
+            return "1 van 1 apparaten mislukt: 503"
+        with mock.patch.object(push_notify, "send_push", failed):
+            asyncio.run(push_notify.send_kans_push(self.uid, "BTC", "long", "Titel", "Tekst", "/smc"))
+        notes = repo.list_notifications(self.uid)
+        self.assertEqual(len(notes), 1)
+        self.assertIn("kwam niet aan", notes[0]["body"])
+        attempts = repo.list_push_attempts("kans", "/smc")
+        self.assertEqual([(a["user_id"], a["ok"]) for a in attempts], [(self.uid, 0)])
+
+
+class EngineAnnounceRecordsFailureTest(DbCase):
+    """De claim (alert_sent eerst) blijft: een mislukte verzending wordt per gebruiker vastgelegd in push_attempts."""
+
+    async def _boom(self, *a, **k):
+        raise RuntimeError("stuk")
+
+    def test_zone_radar_new_card(self):
+        from app import zone_radar_live
+        card = {"id": 7, "coin": "BTC", "direction": "long", "tf": "1h", "zone_low": 99.0, "zone_high": 100.0, "stop_loss": 98.0,
+                "take_profit": 104.0, "rr": 4.0, "target_tf": "1h"}
+        with mock.patch.object(repo, "mark_zone_radar_alert_sent", lambda i: True), \
+                mock.patch.object(zone_radar_live, "new_card_body", lambda c: "x"), \
+                mock.patch("app.push_notify.send_kans_push", self._boom):
+            asyncio.run(zone_radar_live._push_new_card(card))
+        attempts = repo.list_push_attempts("kans", zone_radar_live.card_url(7))
+        self.assertEqual(len(attempts), 1)
+        self.assertIn("stuk", attempts[0]["error"])
 
 
 class AmbiguousOutcomeIsStoredTest(DbCase):

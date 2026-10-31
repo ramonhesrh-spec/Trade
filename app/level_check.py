@@ -70,6 +70,10 @@ PENDING_LEVEL_MIN_AGE_MINUTES = 90
 LEVEL_CHECK_CANDLE_TIMEFRAME = "5m"
 LEVEL_CHECK_CANDLE_LOOKBACK = 6
 
+# Een niveaumelding die niet aankwam, wordt de volgende ronde opnieuw geprobeerd, hoogstens zo vaak; daarna gaat de vlag toch aan, anders
+# herhaalt een kapot abonnement zich elk kwartier zonder einde. Elke poging staat in push_attempts.
+MAX_LEVEL_ALERT_ATTEMPTS = 3
+
 
 def _level_hit_in_candles(
     direction: str, stop_loss: Optional[float], take_profit: Optional[float], candles,
@@ -159,11 +163,17 @@ async def check_open_trades() -> None:
         body = (f"{hit.capitalize()} geraakt\nEntry {entry['entry_price']:.4f} · {level_name} {level:.4f} (koers raakte {hit_price:.4f})\n"
                 + (f"{AMBIGUOUS_NOTE}\n" if ambiguous else "") + "Tik voor de uitkomst en je journaal.")
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
+        ref = f"journal:{entry['id']}"
         try:
-            await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
-            logger.info("Seintje verstuurd naar %s voor %s (%s)", entry["username"], coin, hit)
-        except Exception:
+            error = await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
+        except Exception as exc:
             logger.exception("Seintje naar %s voor %s is mislukt", entry["username"], coin)
+            error = repr(exc)
+        repo.record_push_attempt(entry["user_id"], "niveau", ref, not error, error)
+        if not error:
+            logger.info("Seintje verstuurd naar %s voor %s (%s)", entry["username"], coin, hit)
+        elif repo.count_failed_push_attempts("niveau", ref) < MAX_LEVEL_ALERT_ATTEMPTS:
+            continue
         repo.mark_level_alert_sent(entry["id"])
 
 
