@@ -1161,6 +1161,10 @@ def find_open_signal(coin: str, direction: str) -> Optional[dict]:
         if not row:
             return None
         signal = dict(row)
+        # Een plan met een uitkomst is af: een nieuw bericht maakt dan een vers signaal, anders overschreef update_signal de niveaus van een
+        # plan dat Bewijs al als doel of stop telt (externe review 2026-10-31).
+        if signal.get("auto_outcome") is not None:
+            return None
         still_open = conn.execute(
             """SELECT COUNT(*) FROM journal_entries
                WHERE signal_id = ? AND exit_price IS NULL AND status != 'genegeerd'""",
@@ -1199,7 +1203,7 @@ def update_signal(signal_id: int, data: dict) -> None:
             f"""UPDATE signals SET {", ".join(f"{f} = ?" for f in fields)},
                 sniper_entry_price = COALESCE(?, sniper_entry_price),
                 sniper_reason = COALESCE(?, sniper_reason)
-                WHERE id = ?""",
+                WHERE id = ? AND auto_outcome IS NULL""",
             (*values, data.get("sniper_entry_price"), data.get("sniper_reason"), signal_id),
         )
 
@@ -1711,7 +1715,7 @@ def list_open_entries_with_levels() -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(
             """SELECT je.id AS id, je.user_id AS user_id, je.entry_price AS entry_price, je.signal_id AS signal_id,
-                      s.coin AS coin, s.direction AS direction, s.trade_type AS trade_type,
+                      s.coin AS coin, s.direction AS direction, s.trade_type AS trade_type, s.created_at AS signal_created_at,
                       COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss,
                       COALESCE(je.take_profit_override, s.take_profit) AS take_profit,
                       u.username AS username, u.telegram_chat_id AS telegram_chat_id,
@@ -1813,6 +1817,22 @@ def record_push(user_id: int, coin: str, direction: str, at: str) -> None:
         conn.execute("DELETE FROM push_log WHERE at < ?", ((datetime.fromisoformat(at) - timedelta(days=3)).isoformat(),))
 
 
+def record_push_attempt(user_id: int, kind: str, ref: str, ok: bool, error: Optional[str] = None) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT INTO push_attempts (user_id, kind, ref, attempted_at, ok, error) VALUES (?, ?, ?, ?, ?, ?)",
+                     (user_id, kind, ref, db.now_iso(), 1 if ok else 0, (error or "")[:500] or None))
+
+
+def list_push_attempts(kind: str, ref: str) -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM push_attempts WHERE kind = ? AND ref = ? ORDER BY id", (kind, ref)).fetchall()]
+
+
+def count_failed_push_attempts(kind: str, ref: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM push_attempts WHERE kind = ? AND ref = ? AND ok = 0", (kind, ref)).fetchone()[0]
+
+
 def list_recent_pushes(user_id: int, since: str) -> list[dict]:
     with db.session() as conn:
         return [dict(r) for r in conn.execute("SELECT coin, direction, at FROM push_log WHERE user_id = ? AND at >= ? ORDER BY at", (user_id, since)).fetchall()]
@@ -1874,11 +1894,11 @@ def list_expired_signals_with_levels() -> list[dict]:
         return [dict(row) for row in rows]
 
 
-def mark_signal_auto_outcome(signal_id: int, outcome: str, occurred_at: str) -> None:
+def mark_signal_auto_outcome(signal_id: int, outcome: str, occurred_at: str, note: Optional[str] = None) -> None:
     with db.session() as conn:
         conn.execute(
-            "UPDATE signals SET auto_outcome = ?, auto_outcome_at = ? WHERE id = ?",
-            (outcome, occurred_at, signal_id),
+            "UPDATE signals SET auto_outcome = ?, auto_outcome_at = ?, auto_outcome_note = ? WHERE id = ?",
+            (outcome, occurred_at, note, signal_id),
         )
 
 

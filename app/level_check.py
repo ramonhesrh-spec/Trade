@@ -70,6 +70,10 @@ PENDING_LEVEL_MIN_AGE_MINUTES = 90
 LEVEL_CHECK_CANDLE_TIMEFRAME = "5m"
 LEVEL_CHECK_CANDLE_LOOKBACK = 6
 
+# Een niveaumelding die niet aankwam, wordt de volgende ronde opnieuw geprobeerd, hoogstens zo vaak; daarna gaat de vlag toch aan, anders
+# herhaalt een kapot abonnement zich elk kwartier zonder einde. Elke poging staat in push_attempts.
+MAX_LEVEL_ALERT_ATTEMPTS = 3
+
 
 def _level_hit_in_candles(
     direction: str, stop_loss: Optional[float], take_profit: Optional[float], candles,
@@ -91,6 +95,20 @@ def _level_hit_in_candles(
             if take_profit is not None and candle["low"] <= take_profit:
                 return "take profit", float(candle["low"]), candle["timestamp"]
     return None
+
+
+# Stop en doel in dezelfde candle: zonder fijnere candles in dit pad is de volgorde onbekend. De stop telt (conservatief), en dat staat er dan bij.
+AMBIGUOUS_NOTE = "Stop en doel in dezelfde candle: volgorde onbekend, conservatief als stop geteld."
+
+
+def _both_levels_at(direction: str, stop_loss: Optional[float], take_profit: Optional[float], candles, hit_at) -> bool:
+    """True als de candle van de treffer ook het andere niveau raakte (alleen zinvol bij een stoptreffer: die wint in _level_hit_in_candles)."""
+    if stop_loss is None or take_profit is None:
+        return False
+    candle = candles[candles["timestamp"] == hit_at].iloc[0]
+    if direction == "long":
+        return candle["low"] <= stop_loss and candle["high"] >= take_profit
+    return candle["high"] >= stop_loss and candle["low"] <= take_profit
 
 
 def _self_measured(row: dict) -> bool:
@@ -124,11 +142,15 @@ async def check_open_trades() -> None:
         candles = coin_candles[coin]
         if candles is None:
             continue
+        # De 30 minuten terug kunnen van vóór het signaal zijn: een stopaanraking van daarvoor gaf een stopmelding voor een trade die toen nog
+        # niet bestond (externe review 2026-10-31).
+        candles = candles_after(candles, entry["signal_created_at"])
 
         hit_result = _level_hit_in_candles(entry["direction"], entry["stop_loss"], entry["take_profit"], candles)
         if hit_result is None:
             continue
-        hit, hit_price, _hit_at = hit_result
+        hit, hit_price, hit_at = hit_result
+        ambiguous = _both_levels_at(entry["direction"], entry["stop_loss"], entry["take_profit"], candles, hit_at)
 
         # Geen telegram_chat_id-gate meer hier (Taak 11): push_notify.send_push
         # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend over,
@@ -136,13 +158,22 @@ async def check_open_trades() -> None:
         # ingevuld voor nieuwe gebruikers, dus zou hier iedereen overslaan.
         hit_emoji = "🎯" if hit == "take profit" else "🛑"
         title = f"{hit_emoji} {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
-        body = f"{hit.capitalize()} geraakt\nEntry {entry['entry_price']:.4f} · Op {hit_price:.4f}\nTik voor de uitkomst en je journaal."
+        # Het niveau zelf, niet het candle-extreem: dat stond eerder achter "Op" en las als de prijs waarop je eruit ging.
+        level_name, level = ("Doel", entry["take_profit"]) if hit == "take profit" else ("Stop", entry["stop_loss"])
+        body = (f"{hit.capitalize()} geraakt\nEntry {entry['entry_price']:.4f} · {level_name} {level:.4f} (koers raakte {hit_price:.4f})\n"
+                + (f"{AMBIGUOUS_NOTE}\n" if ambiguous else "") + "Tik voor de uitkomst en je journaal.")
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
+        ref = f"journal:{entry['id']}"
         try:
-            await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
-            logger.info("Seintje verstuurd naar %s voor %s (%s)", entry["username"], coin, hit)
-        except Exception:
+            error = await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
+        except Exception as exc:
             logger.exception("Seintje naar %s voor %s is mislukt", entry["username"], coin)
+            error = repr(exc)
+        repo.record_push_attempt(entry["user_id"], "niveau", ref, not error, error)
+        if not error:
+            logger.info("Seintje verstuurd naar %s voor %s (%s)", entry["username"], coin, hit)
+        elif repo.count_failed_push_attempts("niveau", ref) < MAX_LEVEL_ALERT_ATTEMPTS:
+            continue
         repo.mark_level_alert_sent(entry["id"])
 
 
@@ -151,7 +182,14 @@ def candles_in_validity(candles, created_at: str):
     als uitkomst, anders geldt voor oude en nieuwe signalen een andere regel en klopt Bewijs niet."""
     created = pd.Timestamp(_aware(datetime.fromisoformat(created_at)))
     end = created + timedelta(days=SIGNAL_MAX_AGE_DAYS + 1)
-    return candles[(candles["timestamp"] >= created) & (candles["timestamp"] < end)]
+    return candles_after(candles, created_at)[lambda c: c["timestamp"] < end]
+
+
+def candles_after(candles, created_at: str):
+    """Alleen candles die op of na het ontstaan openden. Een candle die het ontstaansmoment overlapt, telt niet: zijn hoog of laag kan van
+    vóór het signaal zijn."""
+    created = pd.Timestamp(_aware(datetime.fromisoformat(created_at)))
+    return candles[candles["timestamp"] >= created]
 
 
 def _aware(moment: datetime) -> datetime:
@@ -205,7 +243,8 @@ async def check_signal_outcomes() -> None:
             # het trackrecord, en kan door de bredere candle-lookback
             # hierboven best een stukje in het verleden liggen.
             occurred_at = hit_at.isoformat()
-            repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at)
+            ambiguous = _both_levels_at(signal["direction"], signal["stop_loss"], signal["take_profit"], candles, hit_at)
+            repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at, AMBIGUOUS_NOTE if ambiguous else None)
             # Een zelf-gedetecteerde zone die net een stop loss veroorzaakte
             # gaat op cooldown (zie repo.recent_sr_zone_failure) zodat een
             # volgend signaal vlakbij dezelfde rand niet meteen dezelfde fout

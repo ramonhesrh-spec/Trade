@@ -56,14 +56,18 @@ def _send_one(subscription: dict, payload: dict) -> None:
 
 
 async def send_push(user_id: int, title: str, body: str, url: str, silent: bool = False, tag: Optional[str] = None,
-                    badge: Optional[int] = None) -> None:
+                    badge: Optional[int] = None) -> Optional[str]:
     """Stuurt naar elk geregistreerd apparaat van deze gebruiker. Een
     apparaat dat de browser/OS niet meer kent (404/410 terug) wordt
     meteen verwijderd, anders blijft push_subscriptions vervuild raken
     met dode abonnementen. Eén mislukt apparaat blokkeert de andere
     apparaten van dezelfde gebruiker niet (zelfde patroon als de oude
     Telegram-verstuurfunctie al per gebruiker in zijn eigen try/except
-    draaide)."""
+    draaide).
+
+    Geeft de fout terug als geen enkel apparaat de melding aannam en minstens één het om een andere reden dan 404/410 weigerde, anders None
+    (ook bij niets te doen: geen sleutel, pauze, geen abonnement). Vroeger werd zo'n fout alleen gelogd en kon een aanroeper hem als verstuurd
+    markeren."""
     if not config.VAPID_PRIVATE_KEY:
         logger.warning("VAPID_PRIVATE_KEY ontbreekt, pushmelding niet verstuurd")
         return
@@ -80,9 +84,11 @@ async def send_push(user_id: int, title: str, body: str, url: str, silent: bool 
     payload = {"title": title, "body": body, "url": url, "icon": "/static/icon-192.png", "silent": silent, "tag": tag}
     if badge is not None:
         payload["badge"] = badge
+    delivered, errors = 0, []
     for sub in subscriptions:
         try:
             await asyncio.to_thread(_send_one, sub, payload)
+            delivered += 1
         except WebPushException as exc:
             status = exc.response.status_code if exc.response is not None else None
             if status in (404, 410):
@@ -90,8 +96,21 @@ async def send_push(user_id: int, title: str, body: str, url: str, silent: bool 
                 logger.info("Dood push-abonnement verwijderd (status %s): %s", status, sub["endpoint"])
             else:
                 logger.exception("Pushmelding naar abonnement %s mislukt (status %s)", sub["id"], status)
-        except Exception:
+                errors.append(f"status {status}: {exc}")
+        except Exception as exc:
             logger.exception("Pushmelding naar abonnement %s mislukt", sub["id"])
+            errors.append(repr(exc))
+    if errors and not delivered:
+        return f"{len(errors)} van {len(subscriptions)} apparaten mislukt: " + "; ".join(errors)
+    return None
+
+
+def record_failure(user_id: int, kind: str, ref: str, error) -> None:
+    """Een mislukte verzending per gebruiker in push_attempts, zodat hij niet alleen in een log verdwijnt."""
+    try:
+        repo.record_push_attempt(user_id, kind, ref, False, error if isinstance(error, str) else repr(error))
+    except Exception:
+        logger.exception("Kon mislukte push voor gebruiker %s niet vastleggen", user_id)
 
 
 async def send_kans_push(user_id: int, coin: str, direction: str, title: str, body: str, url: str, silent: bool = False,
@@ -115,7 +134,11 @@ async def send_kans_push(user_id: int, coin: str, direction: str, title: str, bo
         repo.create_notification(user_id, "kans", title, f"{body}\n{reason}", url)
         return False
     repo.record_push(user_id, coin, direction, now.isoformat())
-    await send_push(user_id, title, body, url, silent=silent, **({"tag": tag} if tag else {}), **({"badge": badge} if badge is not None else {}))
+    error = await send_push(user_id, title, body, url, silent=silent, **({"tag": tag} if tag else {}), **({"badge": badge} if badge is not None else {}))
+    if error:
+        # De kaart is al geclaimd (alert_sent), dus geen nieuwe poging: de kans komt dan op de meldingenpagina in plaats van stil te verdwijnen.
+        record_failure(user_id, "kans", url, error)
+        repo.create_notification(user_id, "kans", title, f"{body}\nDe push kwam niet aan, daarom staat hij hier.", url)
     return True
 
 

@@ -75,8 +75,9 @@ async def _announce(card: dict) -> None:
         quiet = push_notify.is_quiet_now(user.get("quiet_hours_start"), user.get("quiet_hours_end"))
         try:
             await push_notify.send_kans_push(uid, card["coin"], card["direction"], title, body, card_url(card["id"]), silent=quiet, tag=_tag(card["id"]))
-        except Exception:
+        except Exception as exc:
             logger.exception("Zone-sweep-melding %s naar gebruiker %s is mislukt", card["id"], uid)
+            push_notify.record_failure(uid, "kans", card_url(card["id"]), exc)
 
 
 async def _register(row: dict, price: Optional[float], now: pd.Timestamp) -> None:

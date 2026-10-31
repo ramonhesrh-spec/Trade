@@ -45,8 +45,9 @@ async def _push_new_card(card: dict) -> None:
         try:
             await push_notify.send_kans_push(user["id"], card["coin"], card["direction"], title, body, card_url(card["id"]), silent=quiet,
                                              tag=f"zone-radar-{card['id']}")
-        except Exception:
+        except Exception as exc:
             logger.exception("Zone-radar-melding voor %s naar gebruiker %s is mislukt", card["coin"], user["username"])
+            push_notify.record_failure(user["id"], "kans", card_url(card["id"]), exc)
 
 
 def signal_row(card: dict) -> dict:
