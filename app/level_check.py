@@ -124,6 +124,9 @@ async def check_open_trades() -> None:
         candles = coin_candles[coin]
         if candles is None:
             continue
+        # De 30 minuten terug kunnen van vóór het signaal zijn: een stopaanraking van daarvoor gaf een stopmelding voor een trade die toen nog
+        # niet bestond (externe review 2026-10-31).
+        candles = candles_after(candles, entry["signal_created_at"])
 
         hit_result = _level_hit_in_candles(entry["direction"], entry["stop_loss"], entry["take_profit"], candles)
         if hit_result is None:
@@ -151,7 +154,14 @@ def candles_in_validity(candles, created_at: str):
     als uitkomst, anders geldt voor oude en nieuwe signalen een andere regel en klopt Bewijs niet."""
     created = pd.Timestamp(_aware(datetime.fromisoformat(created_at)))
     end = created + timedelta(days=SIGNAL_MAX_AGE_DAYS + 1)
-    return candles[(candles["timestamp"] >= created) & (candles["timestamp"] < end)]
+    return candles_after(candles, created_at)[lambda c: c["timestamp"] < end]
+
+
+def candles_after(candles, created_at: str):
+    """Alleen candles die op of na het ontstaan openden. Een candle die het ontstaansmoment overlapt, telt niet: zijn hoog of laag kan van
+    vóór het signaal zijn."""
+    created = pd.Timestamp(_aware(datetime.fromisoformat(created_at)))
+    return candles[candles["timestamp"] >= created]
 
 
 def _aware(moment: datetime) -> datetime:

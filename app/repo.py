@@ -1715,7 +1715,7 @@ def list_open_entries_with_levels() -> list[dict]:
     with db.session() as conn:
         rows = conn.execute(
             """SELECT je.id AS id, je.user_id AS user_id, je.entry_price AS entry_price, je.signal_id AS signal_id,
-                      s.coin AS coin, s.direction AS direction, s.trade_type AS trade_type,
+                      s.coin AS coin, s.direction AS direction, s.trade_type AS trade_type, s.created_at AS signal_created_at,
                       COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss,
                       COALESCE(je.take_profit_override, s.take_profit) AS take_profit,
                       u.username AS username, u.telegram_chat_id AS telegram_chat_id,
