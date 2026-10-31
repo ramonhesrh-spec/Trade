@@ -449,7 +449,9 @@ sudo systemctl start crypto-news.service crypto-script.service
   dagcap geraakt werd, de hartslag ("33 van 35 coins gecontroleerd in 41 s; mislukt: ...") en welke coins geen enkel plan kregen.
 - `app/zone_radar_live.py` (rekenregels in `app/zone_radar.py`): per coin de dichtstbijzijnde actieve vraagzone onder en aanbodzone boven de koers
   op 1u en 4u (binnen 6%), als limietplan op de Radar (`/smc`): limiet op de binnenrand, stop een kwart ATR voorbij de buitenrand (minstens
-  `SMC_MIN_STOP_PCT`), doel de rand van de eerstvolgende tegenovergestelde zone, zonder minimale R:R (de kaart toont hem). Melding bij een nieuwe kaart en bij de vulling;
+  `SMC_MIN_STOP_PCT`), doel de rand van de eerste tegenovergestelde zone vanaf de limiet (ook als die tussen limiet en koers ligt), zonder minimale
+  R:R (de kaart toont hem). De kaart bewaart tot 5 obstakels voorbij de limiet met R en het moment waarop ze bekend werden (`obstacles`); het
+  detailblad toont het eerste en er hoogstens twee daarna. Melding bij een nieuwe kaart en bij de vulling;
   gevuld wordt het een signaal met `trade_type = 'zone_radar'` (ongetest, apart op Bewijs). Max `ZONE_RADAR_MAX_PER_DAY` (20, de kaarten dichtst bij de koers gaan voor) nieuwe kaarten
   per dag, `ZONE_RADAR_ENABLED=false` zet het uit. Handmatig draaien: `python3 -m app.zone_radar_live`.
 - `app/zone_sweep_live.py` (kaart in `app/zone_sweep.py`, detector `app/replay/zonesweep.py`): de koers prikt door een actieve vraagzone (long) of
@@ -463,7 +465,7 @@ sudo systemctl start crypto-news.service crypto-script.service
 - `app/poc_radar_live.py` (POC in `app/poc.py`, kaart in `app/poc_radar.py`): de POC (point of control, de prijs met het meeste volume) van elke
   gesloten UTC-dag en ISO-week uit 5m-candles (bakken van 0,05%, volume gelijk verdeeld over low tot high). Naakt zolang geen latere 5m-candle hem
   raakte, ook niet met een lont. Per coin en richting de dichtstbijzijnde naakte POC binnen 6%: onder de koers long, erboven short, limiet op de
-  POC, stop een kwart ATR (1u) erachter, doel het eerste niveau voorbij de koers (een POC of zonerand) bij minstens 2R, anders geen doel
+  POC, stop een kwart ATR (1u) erachter, doel het eerste niveau voorbij de limiet (een POC of zonerand) bij minstens 2R, anders geen doel
   (referentie-uitgang zoals de zone-sweep). Live op verzoek van de eigenaar zonder labrun, altijd ongetest. De niveaus worden één keer per uur per
   coin bijgewerkt met alleen de nieuwe candles en bewaard (`poc_levels`, `poc_scans`); kaarten in `poc_radar_setups`, gevuld een signaal met
   `trade_type = 'poc_radar'` buiten de `/keten`. Een kaart die niet vult vervalt na 3 dagen. `POC_RADAR_ENABLED` (standaard `true`),
