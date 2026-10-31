@@ -1161,6 +1161,10 @@ def find_open_signal(coin: str, direction: str) -> Optional[dict]:
         if not row:
             return None
         signal = dict(row)
+        # Een plan met een uitkomst is af: een nieuw bericht maakt dan een vers signaal, anders overschreef update_signal de niveaus van een
+        # plan dat Bewijs al als doel of stop telt (externe review 2026-10-31).
+        if signal.get("auto_outcome") is not None:
+            return None
         still_open = conn.execute(
             """SELECT COUNT(*) FROM journal_entries
                WHERE signal_id = ? AND exit_price IS NULL AND status != 'genegeerd'""",
@@ -1199,7 +1203,7 @@ def update_signal(signal_id: int, data: dict) -> None:
             f"""UPDATE signals SET {", ".join(f"{f} = ?" for f in fields)},
                 sniper_entry_price = COALESCE(?, sniper_entry_price),
                 sniper_reason = COALESCE(?, sniper_reason)
-                WHERE id = ?""",
+                WHERE id = ? AND auto_outcome IS NULL""",
             (*values, data.get("sniper_entry_price"), data.get("sniper_reason"), signal_id),
         )
 
