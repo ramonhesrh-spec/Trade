@@ -102,6 +102,23 @@ class OpenTradeAlertTest(DbCase):
         self._run(_bars(start, [(100, 100.3, 99.6, 100.1)] * 3 + [(100, 100.2, 98.5, 99.0)]))
         self.assertNotIn(level_check.AMBIGUOUS_NOTE, self.sent[0][1])
 
+    def test_the_alert_names_the_level_not_the_candle_extreme(self):
+        self._taken(minutes_ago=40)
+        start = datetime.now(timezone.utc) - timedelta(minutes=30)
+        self._run(_bars(start, [(100, 100.3, 99.6, 100.1)] * 3 + [(100, 100.2, 98.5, 99.0)]))
+        body = self.sent[0][1]
+        self.assertIn("Stop 99.0000", body)
+        self.assertIn("koers raakte 98.5000", body)
+        self.assertNotIn("Op 98.5000", body)
+
+    def test_a_target_alert_names_the_target(self):
+        self._taken(minutes_ago=40)
+        start = datetime.now(timezone.utc) - timedelta(minutes=30)
+        self._run(_bars(start, [(100, 100.3, 99.6, 100.1)] * 3 + [(100, 102.7, 99.9, 102.4)]))
+        body = self.sent[0][1]
+        self.assertIn("Doel 102.0000", body)
+        self.assertIn("koers raakte 102.7000", body)
+
 
 class AmbiguousOutcomeIsStoredTest(DbCase):
     def _run_outcomes(self, frame):

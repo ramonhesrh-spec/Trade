@@ -154,8 +154,10 @@ async def check_open_trades() -> None:
         # ingevuld voor nieuwe gebruikers, dus zou hier iedereen overslaan.
         hit_emoji = "🎯" if hit == "take profit" else "🛑"
         title = f"{hit_emoji} {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
-        body = f"{hit.capitalize()} geraakt\nEntry {entry['entry_price']:.4f} · Op {hit_price:.4f}\n" + (f"{AMBIGUOUS_NOTE}\n" if ambiguous else "") \
-            + "Tik voor de uitkomst en je journaal."
+        # Het niveau zelf, niet het candle-extreem: dat stond eerder achter "Op" en las als de prijs waarop je eruit ging.
+        level_name, level = ("Doel", entry["take_profit"]) if hit == "take profit" else ("Stop", entry["stop_loss"])
+        body = (f"{hit.capitalize()} geraakt\nEntry {entry['entry_price']:.4f} · {level_name} {level:.4f} (koers raakte {hit_price:.4f})\n"
+                + (f"{AMBIGUOUS_NOTE}\n" if ambiguous else "") + "Tik voor de uitkomst en je journaal.")
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
         try:
             await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
