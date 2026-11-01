@@ -55,6 +55,9 @@ def stop_then_target(signals: list[dict], now: datetime, fetch: Callable = _stop
             candles = fetch(s["coin"], int(closed.timestamp() * 1000))
         except Exception:
             continue
+        finally:
+            if fetch is _stop_fetch:
+                time.sleep(0.1)                     # zacht voor de beurs
         if candles is None or not len(candles):
             continue
         after = candles[(candles["timestamp"] > closed) & (candles["timestamp"] <= closed + excursion.AFTER_STOP)]
