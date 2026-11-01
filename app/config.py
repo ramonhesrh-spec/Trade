@@ -27,6 +27,10 @@ ANTHROPIC_EXPLAIN_MODEL = _get("ANTHROPIC_EXPLAIN_MODEL", "claude-haiku-4-5-2025
 
 EXCHANGE_ID = _get("EXCHANGE_ID", "binance")
 QUOTE_CURRENCY = _get("QUOTE_CURRENCY", "USDT")
+# Waar candles en koersen vandaan komen (app/candle_source.py): 'perp' = Binance USDⓈ-M perpetuals (de CEO en zijn kring handelen perps,
+# dus niveaus, vullingen en uitkomsten horen op die markt), 'spot' = de spotmarkt van EXCHANGE_ID als terugval. Een coin zonder perp valt
+# per coin terug op spot. Perps alleen met EXCHANGE_ID=binance. Lab en replay lezen hun eigen data en volgen dit niet.
+CANDLE_MARKET = _get("CANDLE_MARKET", "perp").strip().lower()
 TIMEFRAME = "4h"
 
 # Vaste coinlijst (HesPulse-verkleinen, 2026-09-30): geen onbeperkte
