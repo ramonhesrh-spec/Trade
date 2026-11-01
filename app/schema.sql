@@ -1140,3 +1140,73 @@ CREATE TABLE IF NOT EXISTS kans_hidden (
     at TEXT NOT NULL,
     UNIQUE (user_id, key)
 );
+
+-- Automatische missers (app/auto_misser.py, scripts/auto_misser.py): grote omkeringen op gesloten 1u-candles, met wie ze zag (seen_by, JSON-lijst
+-- van bronnen; leeg = een misser) en per motor de weigerreden (reasons, JSON). Eén rij per coin, richting en begin; een nieuwe run overschrijft
+-- de meting. Nieuwe tabel: CREATE TABLE IF NOT EXISTS bereikt ook een bestaande database.
+CREATE TABLE IF NOT EXISTS auto_missers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    begin_at TEXT NOT NULL,
+    end_at TEXT NOT NULL,
+    begin_price REAL NOT NULL,
+    end_price REAL NOT NULL,
+    size_atr REAL NOT NULL,
+    size_pct REAL NOT NULL,
+    seen_by TEXT NOT NULL DEFAULT '[]',
+    reasons TEXT NOT NULL DEFAULT '{}',
+    found_at TEXT NOT NULL,
+    UNIQUE (coin, direction, begin_at)
+);
+
+-- Schaduwvarianten (app/shadow.py): elke variant vooraf vastgelegd met reden en parameterwijziging (JSON). Hoogstens één actieve schaduw per
+-- soort (de gedeeltelijke unieke index). status: schaduw, gepromoveerd of afgevallen.
+CREATE TABLE IF NOT EXISTS shadow_variants (
+    id TEXT PRIMARY KEY,
+    trade_type TEXT NOT NULL,
+    description TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    params TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'schaduw',
+    decided_at TEXT,
+    decision_note TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shadow_one_active ON shadow_variants(trade_type) WHERE status = 'schaduw';
+
+-- Wat een schaduw meet: per variant de plannen van de hoofdversie (arm 'hoofd') en van de variant (arm 'variant') op dezelfde coins en momenten,
+-- gevolgd op dezelfde 5m-candles. Geen melding, geen journaal, geen signals-rij. state: waiting, filled, take_profit, stop_loss, gemist,
+-- verlopen, zonder_doel. r_net is na kosten (TRACK_RECORD_COST_PCT), zonder funding, voor beide armen gelijk.
+CREATE TABLE IF NOT EXISTS shadow_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    variant_id TEXT NOT NULL REFERENCES shadow_variants(id),
+    arm TEXT NOT NULL,
+    plan_key TEXT NOT NULL,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    filled_at TEXT,
+    outcome_at TEXT,
+    checked_until TEXT,
+    r_gross REAL,
+    r_net REAL,
+    UNIQUE (variant_id, arm, plan_key)
+);
+CREATE INDEX IF NOT EXISTS idx_shadow_results_state ON shadow_results(state);
+
+-- Gepromoveerde parameters (scripts/schaduw.py --promoveer): de motor leest ze bij de start (shadow.live_params). Eén waarde per soort en
+-- parameter; terugdraaien (--terug) haalt de rijen van die variant weg.
+CREATE TABLE IF NOT EXISTS engine_overrides (
+    trade_type TEXT NOT NULL,
+    param TEXT NOT NULL,
+    value REAL NOT NULL,
+    variant_id TEXT NOT NULL,
+    set_at TEXT NOT NULL,
+    PRIMARY KEY (trade_type, param)
+);

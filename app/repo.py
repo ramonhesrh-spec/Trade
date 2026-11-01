@@ -3916,3 +3916,46 @@ def list_hidden_kansen(user_id: Optional[int]) -> set:
         return set()
     with db.session() as conn:
         return {r["key"] for r in conn.execute("SELECT key FROM kans_hidden WHERE user_id = ?", (user_id,)).fetchall()}
+
+
+# ---------------------------------------------------------------------------
+# Automatische verbeterlus: auto-missers, lekken en schaduwvarianten (app/auto_misser.py, app/leaks.py, app/shadow.py).
+# ---------------------------------------------------------------------------
+
+def auto_misser_seen_rows(coin: str, lo_iso: str, hi_iso: str) -> list[dict]:
+    """Kaarten en signalen van deze coin tussen lo en hi, als bron, richting en moment. Een Structuur-breuk zonder plan (geen_plan) is geen kaart:
+    die weigerde de motor zelf."""
+    parts = [("structuur", "SELECT direction, created_at FROM structure_setups WHERE coin = ? AND state != 'geen_plan' AND created_at BETWEEN ? AND ?"),
+             ("zone_radar", "SELECT direction, created_at FROM zone_radar_setups WHERE coin = ? AND created_at BETWEEN ? AND ?"),
+             ("zone_sweep", "SELECT direction, created_at FROM zone_sweep_setups WHERE coin = ? AND created_at BETWEEN ? AND ?"),
+             ("poc_radar", "SELECT direction, created_at FROM poc_radar_setups WHERE coin = ? AND created_at BETWEEN ? AND ?")]
+    out = []
+    with db.session() as conn:
+        for source, sql in parts:
+            out += [{"source": source, "direction": r["direction"], "at": r["created_at"]} for r in conn.execute(sql, (coin, lo_iso, hi_iso))]
+        out += [{"source": f"signaal:{r['trade_type']}", "direction": r["direction"], "at": r["created_at"]}
+                for r in conn.execute("SELECT trade_type, direction, created_at FROM signals WHERE coin = ? AND is_practice = 0 AND created_at BETWEEN ? AND ?",
+                                      (coin, lo_iso, hi_iso))]
+    return out
+
+
+def save_auto_misser(row: dict, found_at: str) -> None:
+    with db.session() as conn:
+        conn.execute("""INSERT INTO auto_missers (coin, direction, begin_at, end_at, begin_price, end_price, size_atr, size_pct, seen_by, reasons, found_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(coin, direction, begin_at) DO UPDATE SET end_at = excluded.end_at, end_price = excluded.end_price,
+                          size_atr = excluded.size_atr, size_pct = excluded.size_pct, seen_by = excluded.seen_by, reasons = excluded.reasons,
+                          found_at = excluded.found_at""",
+                     (row["coin"], row["direction"], row["begin_at"], row["end_at"], row["begin_price"], row["end_price"], row["size_atr"],
+                      row["size_pct"], json.dumps(row.get("seen_by") or []), json.dumps(row.get("reasons") or {}), found_at))
+
+
+def list_auto_missers(since_iso: str) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT * FROM auto_missers WHERE begin_at >= ? ORDER BY begin_at", (since_iso,)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["seen_by"], d["reasons"] = json.loads(d["seen_by"] or "[]"), json.loads(d["reasons"] or "{}")
+        out.append(d)
+    return out
