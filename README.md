@@ -293,7 +293,9 @@ Checkt elke 15 minuten twee dingen:
 
 Beide sturen één keer een seintje per logboekregel, geen herhaling zolang
 er niets verandert. Een reset in het dashboard maakt een nieuw seintje
-weer mogelijk.
+weer mogelijk. Kwam een seintje niet aan, dan probeert de volgende ronde
+het opnieuw, hoogstens drie keer; elke poging staat in `push_attempts`
+(soort `niveau` voor stop en doel, `terug_bij_niveau` voor de terugkeer).
 Zo ja, dan krijg je daar één keer een pushmelding over, met het
 verzoek om de trade zelf te sluiten in het dashboard. Er wordt niets
 automatisch gesloten, en je krijgt niet elke 15 minuten opnieuw hetzelfde
@@ -550,6 +552,19 @@ begint met de limietorder en de R:R vanaf die prijs.
 `TRACK_RECORD_COST_PCT`): aantal afgeronde trades, winrate, gemiddelde R met en zonder kosten, een curve per week en een status
 die een vaste regel volgt (onder 30 afgeronde trades "nog te weinig data", daarboven positief of negatief na kosten, "voordeel
 gemeten" pas bij 100 trades en een positief gemiddelde). Vervallen en open signalen staan er bewust bij maar tellen niet mee.
+Per soort staan bruto en netto R naast elkaar, met de kosten per trade in R en de regel in woorden ("netto na 0,06% kosten per
+rondreis, omgerekend naar R met de stopafstand"); het Logboek blijft bruto en zegt dat erbij. Per focus-soort staat ook één gemeten
+regel over hoe ver winnaars eerst tegen je in gingen (MAE, `app/excursion.py`, tabel `trade_excursions`, gezet bij de uitkomst door
+`level_check` of door de motor zelf bij een kaart zonder doel), en hoe vaak stop en doel in dezelfde candle vielen (volgorde onbekend,
+als stop geteld). Voor oude trades, alleen-lezen, met de MAE van winnaars en verliezers en hoeveel stops binnen 24 uur toch het doel haalden:
+
+```bash
+.venv/bin/python3 scripts/mae_check.py --dagen 60
+```
+
+Een kaart die eindigt zonder vulling (zone gebroken, verlopen, doel eerst, weggelopen, stop vóór de vulling) staat 7 dagen onder
+"Uitgevallen, gemist of vervallen" in de tab van zijn soort, met de reden in gewone woorden (`app/end_reason.py`), en in het Logboek
+op de dag dat hij eindigde. Het anker van de kaart blijft, zodat een oude melding er nog naartoe leidt.
 
 ### Navigatie, Kansen en thema (ontwerp V4)
 

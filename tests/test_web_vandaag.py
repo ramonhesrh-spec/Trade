@@ -373,7 +373,9 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("Leerling van de maand", page)
         self.assertNotIn("Winrate", page)                                 # geen handelscijfers op de CEO-pagina
         self.assertIn("CEO tester", self.client.get("/vandaag").text)     # de CEO ziet zichzelf als CEO
-        self.assertIn("Goede", self.client.get("/vandaag").text)
+        # De begroeting hangt van het uur af (voor 06:00 "De CEO werkt over"): toets de CEO-begroeting van dit moment, niet "Goede".
+        from app import ceo, today
+        self.assertIn(ceo.greeting(today.local(datetime.now(timezone.utc)).hour, True), self.client.get("/vandaag").text)
 
     def test_week_page_shows_totals_and_share_button(self):
         r = self.client.get("/week")
