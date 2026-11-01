@@ -70,7 +70,16 @@ class TabTests(unittest.TestCase):
     def test_vervallen_plannen_staan_er_niet(self):
         p = self.page(cards((ZONE, 81200.0)))                                # voorbij de stop
         self.assertEqual(self.tab(p, "zone_radar")["plans"], [])
-        self.assertEqual(self.tab(p, "zone_radar")["moot"], [{"title": "BTC short", "label": "Plan vervallen, de stop is geraakt", "dom_id": "radar-zone-8"}])
+        self.assertEqual(self.tab(p, "zone_radar")["moot"], [{"title": "BTC short", "label": "Plan vervallen, de stop is geraakt",
+                                                               "reason": "De koers raakte de stop voordat je limiet vulde.", "dom_id": "radar-zone-8"}])
+
+    def test_een_geeindigde_kaart_houdt_zijn_anker_en_zegt_waarom(self):
+        ended = [{"kind": "zone_radar", "id": 4, "coin": "ETH", "direction": "long", "state": "zone_weg", "ended_at": "2026-11-01T10:00:00+00:00"},
+                 {"kind": "poc_radar", "id": 5, "coin": "SOL", "direction": "short", "state": "verlopen", "ended_at": "2026-11-01T09:00:00+00:00"}]
+        p = kansen.page([], [], [], ["structuur", "zone_radar", "poc_radar"], ended=ended, hidden={"poc:5"})
+        self.assertEqual(self.tab(p, "zone_radar")["ended"], [{"title": "ETH long", "reason": "De zone is gebroken of te oud geworden.",
+                                                               "ended_at": "2026-11-01T10:00:00+00:00", "dom_id": "radar-zone-4"}])
+        self.assertEqual(self.tab(p, "poc_radar")["ended"], [])          # verborgen blijft verborgen
 
     def test_open_trades_onder_hun_soort(self):
         p = self.page(cards((ZONE, 80537.0)) + [radar.signal_card(TRADE, 97.0)], trades=[radar.signal_card(STRUCT_TRADE, 99.0)])

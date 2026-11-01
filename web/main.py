@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import candle_source, config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import announce, card_chart, ceo, chance_checks, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep, poc_radar
+from app import announce, card_chart, ceo, chance_checks, end_reason, excursion, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep, poc_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -431,7 +431,9 @@ def _logbook_inputs(user: dict, since: str) -> dict:
 
 def _logbook_days(user: dict, now: datetime) -> list[dict]:
     since = (now - timedelta(days=LOGBOOK_DAYS + 1)).isoformat()
-    return logbook.timeline(**_logbook_inputs(user, since), seen=repo.list_plan_moments(since, include_zone_sweep=_sees_zone_sweep(user), include_poc=_sees_poc(user)), now=now, tz=today.LOCAL_TZ)
+    zs, poc = _sees_zone_sweep(user), _sees_poc(user)
+    return logbook.timeline(**_logbook_inputs(user, since), seen=repo.list_plan_moments(since, include_zone_sweep=zs, include_poc=poc),
+                            ended=repo.list_ended_cards(since, include_zone_sweep=zs, include_poc=poc), now=now, tz=today.LOCAL_TZ)
 
 
 def _week_review(user: dict, now: datetime) -> dict:
@@ -691,7 +693,8 @@ async def _structure_extras(user: dict) -> dict:
     en de ranges (proef, alleen zonder focus en voor wie ze mag zien), trend-trades die nog lopen en de stand van de motor."""
     now = datetime.now(timezone.utc)
     since = (now - timedelta(days=7)).isoformat()
-    history = [{**h, "state_label": STRUCTURE_STATE_LABELS.get(h["state"], h["state"])}
+    history = [{**h, "state_label": STRUCTURE_STATE_LABELS.get(h["state"], h["state"]),
+                "reason_text": end_reason.text("structuur", h["state"]) if h["state"] not in ("fired", "schaduw") else ""}
                for h in repo.list_structure_setups(("fired", "expired", "niet_gemeld", "overgeslagen", "geen_oordeel", "geen_plan", "schaduw"), 40)
                if h["created_at"] >= since]
     beat = repo.get_beat("structuur")
@@ -736,6 +739,9 @@ def _kansen_kinds(user: dict) -> list[str]:
     return kinds + ([] if focus.active() else ["smc"])
 
 
+ENDED_DAYS = 7      # zoals 'Uitgevallen, gemist of vervallen' onder Structuur
+
+
 async def _kansen_page(user: dict, skipped=()) -> dict:
     cards = await _radar_cards(user)
     structure = await _structure_cards()
@@ -745,7 +751,8 @@ async def _kansen_page(user: dict, skipped=()) -> dict:
     open_struct = repo.list_open_smc_signals(types=("structuur", "structuur_c"))
     sprices = await _cached_prices({s["coin"] for s in open_struct}) if open_struct else {}
     trades = [{**c, "svg": _structure_trade_svg(s, sprices.get(s["coin"]))} for s in open_struct if (c := radar.signal_card(s, sprices.get(s["coin"])))]
-    return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped, repo.list_hidden_kansen(user["id"]))
+    ended = repo.list_ended_cards((now - timedelta(days=ENDED_DAYS)).isoformat(), include_zone_sweep=_sees_zone_sweep(user), include_poc=_sees_poc(user))
+    return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped, repo.list_hidden_kansen(user["id"]), ended)
 
 
 def _structure_trade_svg(signal: dict, price: Optional[float]) -> Markup:
@@ -1182,6 +1189,10 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
         entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
     total = next((e for e in summary if e["source"] == "alles"), None)
     per_type, off_types = focus.split(e for e in summary if e["source"] != "alles")
+    moves = excursion.stats(rows)
+    for e in per_type:
+        if focus.is_focus(e["trade_type"]):
+            e["mae_line"] = excursion.line(moves.get(e["trade_type"]))
     lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
     visible = track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES)
     # De range sweep heeft zijn eigen sectie met de stopmeting; als 'andere regel zonder motor' zou hij een live motor ontkennen die er wel is.
@@ -1206,7 +1217,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
         "curves": curves, "total": total, "per_type": per_type, "off_types": off_types, "funding_split": track_record.funding_split(rows, config.TRACK_RECORD_COST_PCT),
         "hours": track_record.hour_grid(rows, config.TRACK_RECORD_COST_PCT),
         "rule_statuses": rule_statuses, "other_rules": other_rules, "range_sweep": range_sweep, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
-        "cost_pct": config.TRACK_RECORD_COST_PCT, "recent_days": track_record.RECENT_DAYS,
+        "cost_pct": config.TRACK_RECORD_COST_PCT, "cost_line": track_record.cost_text(config.TRACK_RECORD_COST_PCT), "recent_days": track_record.RECENT_DAYS,
         "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,
     })
 

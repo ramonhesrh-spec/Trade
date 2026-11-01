@@ -18,7 +18,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, poc_radar_live, push_notify, range_sweep_live as rsl, repo
+from app import config, latency, poc_radar_live, push_notify, range_sweep_live as rsl, repo
 from app import zone_sweep as zsw
 from app.replay import rangesweep as rs, stopquality as sq, trendlab as tl, zonesweep as zs, zonesweep_lab as zl
 
@@ -65,16 +65,20 @@ async def _frames(coin: str, now: pd.Timestamp) -> tuple[dict, Optional[float]]:
     return rs.build_frames(*parts), price
 
 
-async def _announce(card: dict) -> None:
+async def _announce(card: dict, detected=None) -> None:
     if not repo.mark_zone_sweep_alert_sent(card["id"]):
         return
+    # placed_at is het slot van de candle die de setup liet zien (gesloten candles, fresh_setups).
+    timing = latency.timing(TRADE_TYPE, "nieuw", pd.Timestamp(card["placed_at"]) if card.get("placed_at") else None,
+                            detected or datetime.now(timezone.utc))
     title = push_notify.alert_title(card["coin"], card["direction"], f"{zsw.LABEL} · ongetest")
     body = zsw.new_card_body(card)
     for uid in viewers():
         user = repo.get_user(uid) or {}
         quiet = push_notify.is_quiet_now(user.get("quiet_hours_start"), user.get("quiet_hours_end"))
         try:
-            await push_notify.send_kans_push(uid, card["coin"], card["direction"], title, body, card_url(card["id"]), silent=quiet, tag=_tag(card["id"]))
+            await push_notify.send_kans_push(uid, card["coin"], card["direction"], title, body, card_url(card["id"]), silent=quiet, tag=_tag(card["id"]),
+                                             timing=timing)
         except Exception as exc:
             logger.exception("Zone-sweep-melding %s naar gebruiker %s is mislukt", card["id"], uid)
             push_notify.record_failure(uid, "kans", card_url(card["id"]), exc)
@@ -93,7 +97,7 @@ async def _register(row: dict, price: Optional[float], now: pd.Timestamp) -> Non
     logger.info("Zone-sweep %s %s %s: kaart %s, doel %s%s", row["coin"], row["direction"], row["variant"], setup_id, row["take_profit"],
                 " (stil: dagcap)" if capped else " (stil: plan al voorbij)" if dead else "")
     if not row["quiet"]:
-        await _announce({**row, "id": setup_id})
+        await _announce({**row, "id": setup_id}, now)
 
 
 async def scan(now: Optional[datetime] = None) -> None:
@@ -128,12 +132,13 @@ async def _fill(card: dict, entry: float, filled_at: pd.Timestamp) -> None:
     logger.info("Zone-sweep %s %s gevuld op %s, stop %s, doel %s", card["coin"], card["direction"], entry, card["stop_loss"], card["take_profit"])
     title = push_notify.alert_title(card["coin"], card["direction"], f"{zsw.LABEL} gevuld")
     body = zsw.fill_body(card, entry)
+    timing = latency.timing(TRADE_TYPE, "vulling", filled_at + M15, datetime.now(timezone.utc))
     for uid in uids:
         user = repo.get_user(uid) or {}
         quiet = push_notify.is_quiet_now(user.get("quiet_hours_start"), user.get("quiet_hours_end"))
         try:
             await push_notify.send_kans_push(uid, card["coin"], card["direction"], title, body, push_notify.signal_url(card["coin"], signal_id),
-                                             silent=quiet, tag=_tag(card["id"]))
+                                             silent=quiet, tag=_tag(card["id"]), timing=timing)
         except Exception:
             logger.exception("Zone-sweep-vulling %s naar gebruiker %s is mislukt", card["id"], uid)
 

@@ -20,7 +20,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from app import chance_checks, config, focus, push_notify, push_policy, range_watch, repo, structure_live
+from app import chance_checks, config, excursion, focus, push_notify, push_policy, range_watch, repo, structure_live
 from app.replay import rangesweep as rs, rangesweep_lab as rl, stopquality as sq, trendlab as tl
 from app.replay.lab import add_indicators
 
@@ -438,6 +438,16 @@ async def _follow_trade(t: dict, b15: pd.DataFrame, b1h: pd.DataFrame, now: pd.T
     await follow_trade(t, b15, b1h, now, update=repo.update_range_sweep_trade, label=FAMILY_LABEL[t["family"]], tag=_tag(t["setup_id"]), uids=viewers())
 
 
+def _store_excursion(signal_id: int, out: dict) -> None:
+    """MAE en MFE tot de referentie-uitgang. Het venster van candles reikt niet terug tot een vulling van dagen geleden, dus hier de meting die
+    follow_step sinds de vulling per cyclus bijhoudt (zelfde regels als stopquality: in de vulcandle telt alleen het nadeel). Ze loopt tot en met de
+    cyclus van de uitgang, hoogstens een paar candles na de uitgang zelf. Een meting die faalt, mag de uitkomst niet tegenhouden."""
+    try:
+        repo.set_trade_excursion(signal_id, min(out["mae_r"], 1.0) if out["stop_hit_at"] else out["mae_r"], out["mfe_r"], "15m")
+    except Exception:
+        logger.exception("MAE/MFE van trade %s niet vastgelegd", signal_id)
+
+
 async def follow_trade(t: dict, b15: pd.DataFrame, b1h: pd.DataFrame, now: pd.Timestamp, *, update, label: str, tag: str, uids: list[int]) -> None:
     """Eén cyclus van de meting en de referentie-uitgang voor een gevulde trade zonder doel. Ook de zone-sweep zonder doel volgt zo (`update` schrijft
     naar zijn eigen tabel): dezelfde regels, dus dezelfde code."""
@@ -469,6 +479,7 @@ async def follow_trade(t: dict, b15: pd.DataFrame, b1h: pd.DataFrame, now: pd.Ti
         closed_at = max(now, pd.Timestamp(t["created_at"])).isoformat()
         repo.set_trade_result(t["signal_id"], out["ref_r"], closed_at)
         repo.mark_signal_auto_outcome(t["signal_id"], "take_profit" if out["ref_r"] > 0 else "stop_loss", closed_at)
+        _store_excursion(t["signal_id"], out)
     fields = {k: out[k] for k in _MEASURE_KEYS}
     if finished:
         fields["closed_at"] = now.isoformat()

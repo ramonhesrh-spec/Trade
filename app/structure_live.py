@@ -24,7 +24,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from app import chance_checks, config, repo, setup_chart, smc_eval
+from app import chance_checks, config, latency, repo, setup_chart, smc_eval
 from app import trade_plan as tp
 from app.replay import breakretest as br
 from app.replay.lab import add_indicators
@@ -215,7 +215,8 @@ def choose(candidates: list[dict], room: int) -> tuple[list[dict], list[dict]]:
     return ordered[:room], ordered[room:]
 
 
-async def _push_all(title: str, body: str, url: str, tag: str, loud: bool, coin: Optional[str] = None, direction: Optional[str] = None) -> None:
+async def _push_all(title: str, body: str, url: str, tag: str, loud: bool, coin: Optional[str] = None, direction: Optional[str] = None,
+                    timing: Optional[dict] = None) -> None:
     """Met coin en richting is het een nieuwe kans en gelden de pushregels (geen tegenstrijdige richting, dagbudget). Zonder is het een update van een
     lopende trade en komt de push altijd."""
     from app import push_notify
@@ -223,7 +224,8 @@ async def _push_all(title: str, body: str, url: str, tag: str, loud: bool, coin:
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             if coin and direction:
-                await push_notify.send_kans_push(user["id"], coin, direction, title, body, url, silent=quiet or not loud, tag=tag)
+                await push_notify.send_kans_push(user["id"], coin, direction, title, body, url, silent=quiet or not loud, tag=tag,
+                                                 **({"timing": timing} if timing else {}))
             else:
                 await push_notify.send_push(user["id"], title, body, url, silent=quiet or not loud, tag=tag)
         except Exception as exc:
@@ -302,7 +304,8 @@ async def _announce(found: list[dict], now: datetime) -> None:
         repo.update_structure_judgement(c["id"], grade, reason, "waiting")
         logger.info("Structuur %s %s %s: gemeld, oordeel %s als meting", coin, ev.direction, ev.kind, grade)
         await _push_all(push_notify.alert_title(coin, ev.direction, "Structuur wacht"), alert_body({**c["row"], "id": c["id"]}, plan),
-                        f"/structuur#structuur-{c['id']}", f"structuur-{coin}", loud=True, coin=coin, direction=ev.direction)
+                        f"/structuur#structuur-{c['id']}", f"structuur-{coin}", loud=True, coin=coin, direction=ev.direction,
+                        timing=latency.timing("structuur", "nieuw", pd.Timestamp(c["row"]["break_at"]), now))
 
 
 async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: pd.Timestamp) -> None:
@@ -335,6 +338,8 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
         make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, f"Doelen {targets}", "Limiet geraakt, de trade loopt."),
         reason=reason, signal_type="structuur_c" if setup["grade"] == "C" else "structuur",
         tag=trade_tag(signal_id),
+        timing=latency.timing("structuur_c" if setup["grade"] == "C" else "structuur", "vulling", filled_at + pd.Timedelta(minutes=5),
+                              datetime.now(timezone.utc)),
     )
 
 

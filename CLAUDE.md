@@ -91,12 +91,29 @@ a new alert path, or you'll spam.
 (`candles_after`, ook in `candles_in_validity`), noemt in de melding het
 niveau zelf ("koers raakte X" voor het extreem) en zet `level_alert_sent`
 pas na een geslaagde push of na `MAX_LEVEL_ALERT_ATTEMPTS` mislukte;
-elke poging staat in `push_attempts`. `push_notify.send_push` geeft de
+elke poging staat in `push_attempts`; `check_pending_signals` (terug bij
+niveau) doet hetzelfde met soort `level_check.PENDING_ALERT_KIND`. `push_notify.send_push` geeft de
 fout terug als geen apparaat de push aannam; `send_kans_push` zet een
 mislukte kans dan op de meldingenpagina (de claim `alert_sent` vooraf
 blijft). Stop en doel in één candle telt als stop, met
-`signals.auto_outcome_note` = `level_check.AMBIGUOUS_NOTE`.
-`scan_smc_fast` schrijft hartslag `snelcyclus` (start na het 5m-slot, duur).
+`signals.auto_outcome_note` = `level_check.AMBIGUOUS_NOTE`; Bewijs telt dat per soort (`summarize`'s `ambiguous`) en Logboek en replay
+zeggen "Volgorde onbekend" (`logbook.ORDER_UNKNOWN`).
+`scan_smc_fast` schrijft hartslag `snelcyclus` (start na het 5m-slot, duur); de timer staat op `*:0/5:20` (gemeten met `*:3/5:00`: start 183 s
+na het slot, duur 83 s).
+
+**Meting rond de focus-soorten (alleen meting, geen motor leest het).** Kosten: Bewijs toont per soort bruto, netto en kosten per trade in R
+(`summarize`'s `gross_total`/`avg_cost_r`, uitleg `track_record.cost_text` met `TRACK_RECORD_COST_PCT`); het Logboek blijft bruto en zegt dat.
+MAE/MFE: `app/excursion.py` (zuiver; stop in een candle telt als 1R tegen zonder meebeweging, doel telt tot het doel, de vulcandle niet), tabel
+`trade_excursions` (schema.sql, nieuwe tabel), gezet in `level_check.check_signal_outcomes` op dezelfde candles als de uitkomst en in
+`range_sweep_live.follow_trade` bij de referentie-uitgang (de lopende meting van `follow_step`, het candlevenster reikt niet tot de vulling);
+Bewijs toont per focus-soort `excursion.line`, `scripts/mae_check.py` rekent alleen-lezen achteraf (`excursion.measure_row`, stops die binnen 24
+uur toch het doel haalden). Vertraging: `app/latency.py` en tabel `alert_timing` (één rij per verzonden push uit `send_kans_push(..., timing=)`;
+geweerde kansen hebben geen rij); de vier focus-motoren geven `latency.timing(soort, "nieuw"|"vulling", candlesluiting, detectie)` mee, ook via
+`fanout_confirmed_signal(timing=)`; een vulling in de vormende candle telt vanaf het laatste 5m-slot. `scripts/vertraging.py` toont per soort
+mediaan en 90e percentiel. Afsluiten met reden: `app/end_reason.py` is de enige vertaling van een eindstand zonder vulling naar gewone woorden
+(`tests/test_basis_afsluiten.py` leest elke stand uit de code en eist een tekst; een nieuwe stand heeft dus een tekst nodig). `repo.list_ended_cards`
+voedt `kansen.page(..., ended=)` (rijen onder "Uitgevallen, gemist of vervallen" per tab, met het anker van de kaart) en `logbook.timeline(ended=)`;
+"Niet meer actief" en de Structuur-geschiedenis tonen dezelfde tekst.
 
 **Multi-tenant model, not multi-tenant data.** `signals`, `messages`, and
 `source_levels` are global — every user sees the same signals, computed

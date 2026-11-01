@@ -1807,7 +1807,7 @@ def list_unresolved_signals_with_levels() -> list[dict]:
     markeerde."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT id, coin, direction, stop_loss, take_profit, created_at, nearest_sr_zone_price, trade_type
+            """SELECT id, coin, direction, price, stop_loss, take_profit, created_at, nearest_sr_zone_price, trade_type
                FROM signals
                WHERE auto_outcome IS NULL
                  AND stop_loss IS NOT NULL
@@ -1832,6 +1832,18 @@ def record_push_attempt(user_id: int, kind: str, ref: str, ok: bool, error: Opti
 def list_push_attempts(kind: str, ref: str) -> list[dict]:
     with db.session() as conn:
         return [dict(r) for r in conn.execute("SELECT * FROM push_attempts WHERE kind = ? AND ref = ? ORDER BY id", (kind, ref)).fetchall()]
+
+
+def record_alert_timing(user_id: int, ref: str, ok: bool, timing: dict, sent_at: str) -> None:
+    with db.session() as conn:
+        conn.execute("""INSERT INTO alert_timing (user_id, trade_type, event, ref, candle_at, detected_at, sent_at, ok)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                     (user_id, timing.get("trade_type"), timing.get("event"), ref, timing["candle_at"], timing["detected_at"], sent_at, 1 if ok else 0))
+
+
+def list_alert_timings(since: Optional[str] = None) -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM alert_timing WHERE (? IS NULL OR sent_at >= ?) ORDER BY id", (since, since)).fetchall()]
 
 
 def count_failed_push_attempts(kind: str, ref: str) -> int:
@@ -2649,9 +2661,11 @@ def list_signals_for_quality_report(since_iso: Optional[str] = None) -> list[dic
     with db.session() as conn:
         rows = conn.execute(
             """SELECT s.id, s.coin, s.direction, s.message_id, s.trade_type, s.auto_outcome, s.auto_outcome_at, s.price, s.stop_loss, s.take_profit,
-                      s.created_at, s.pass_pct, (sv.id IS NOT NULL) AS samenval, tr.r_value AS r_override, zr.ctx_funding
+                      s.created_at, s.pass_pct, (sv.id IS NOT NULL) AS samenval, tr.r_value AS r_override, zr.ctx_funding,
+                      s.auto_outcome_note, tx.mae_r, tx.mfe_r
                FROM signals s LEFT JOIN samenvallen sv ON sv.smc_signal_id = s.id
                LEFT JOIN trade_results tr ON tr.signal_id = s.id
+               LEFT JOIN trade_excursions tx ON tx.signal_id = s.id
                LEFT JOIN zone_radar_setups zr ON zr.signal_id = s.id
                WHERE s.is_practice = 0 AND (? IS NULL OR s.created_at >= ?) ORDER BY s.created_at""",
             (since_iso, since_iso),
@@ -3014,6 +3028,22 @@ def set_trade_result(signal_id: int, r_value: float, closed_at: str) -> None:
             """INSERT INTO trade_results (signal_id, r_value, closed_at) VALUES (?, ?, ?)
                ON CONFLICT(signal_id) DO UPDATE SET r_value = excluded.r_value, closed_at = excluded.closed_at""",
             (signal_id, r_value, closed_at))
+
+
+def set_trade_excursion(signal_id: int, mae_r: float, mfe_r: float, timeframe: Optional[str]) -> None:
+    """MAE en MFE van een afgeronde trade (app/excursion.py); een tweede meting van hetzelfde signaal vervangt de eerste."""
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO trade_excursions (signal_id, mae_r, mfe_r, timeframe, measured_at) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(signal_id) DO UPDATE SET mae_r = excluded.mae_r, mfe_r = excluded.mfe_r, timeframe = excluded.timeframe,
+               measured_at = excluded.measured_at""",
+            (signal_id, mae_r, mfe_r, timeframe, db.now_iso()))
+
+
+def get_trade_excursion(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM trade_excursions WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
 
 
 def set_rule_lab(rule: str, passes: bool, summary: dict, now: str) -> None:
@@ -3647,7 +3677,7 @@ def signals_by_ids(ids) -> dict[int, dict]:
     with db.session() as conn:
         rows = conn.execute(
             f"""SELECT s.id, s.coin, s.direction, s.trade_type, s.price, s.stop_loss, s.take_profit, s.created_at, s.auto_outcome,
-                       s.auto_outcome_at, s.is_practice, tr.r_value AS r_override
+                       s.auto_outcome_at, s.auto_outcome_note, s.is_practice, tr.r_value AS r_override
                 FROM signals s LEFT JOIN trade_results tr ON tr.signal_id = s.id
                 WHERE s.is_practice = 0 AND s.id IN ({", ".join("?" for _ in wanted)})""", wanted).fetchall()
         return {r["id"]: dict(r) for r in rows}
@@ -3668,6 +3698,21 @@ def list_plan_moments(since_iso: str, include_zone_sweep: bool = True, include_p
                UNION ALL
                SELECT created_at, zone_alert_at AS zone_at FROM smc_setups WHERE created_at >= ? OR zone_alert_at >= ?{more}""",
             (since_iso,) * (4 + 2 * len(extra))).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_ended_cards(since_iso: str, include_zone_sweep: bool = True, include_poc: bool = True) -> list[dict]:
+    """Kaarten die sinds `since_iso` eindigden zonder vulling, met hun stand (app/end_reason.py zegt waarom): zone-radar, zone-sweep en POC-radar
+    met ended_at, en Structuur-plannen die verliepen of bij de vulling werden overgeslagen (op hun verloopmoment). Nieuwste eerst."""
+    tables = [("zone_radar", "zone_radar_setups")] + [(k, t) for k, t, on in (("zone_sweep", "zone_sweep_setups", include_zone_sweep),
+                                                                              ("poc_radar", "poc_radar_setups", include_poc)) if on]
+    parts = [f"""SELECT '{kind}' AS kind, id, coin, direction, state, COALESCE(ended_at, created_at) AS ended_at, created_at FROM {table}
+                 WHERE state NOT IN ('waiting', 'filled') AND COALESCE(ended_at, created_at) >= ?""" for kind, table in tables]
+    parts.append("""SELECT 'structuur' AS kind, id, coin, direction, state, CASE WHEN state = 'expired' THEN expires_at ELSE created_at END AS ended_at,
+                    created_at FROM structure_setups
+                    WHERE state IN ('expired', 'overgeslagen') AND CASE WHEN state = 'expired' THEN expires_at ELSE created_at END >= ?""")
+    with db.session() as conn:
+        rows = conn.execute(" UNION ALL ".join(parts) + " ORDER BY ended_at DESC", (since_iso,) * len(parts)).fetchall()
         return [dict(r) for r in rows]
 
 

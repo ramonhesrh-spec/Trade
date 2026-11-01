@@ -2,7 +2,7 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import Optional
 
-from app import track_record
+from app import end_reason, track_record
 
 
 def _parse(value: str) -> datetime:
@@ -28,6 +28,8 @@ def duration_text(seconds: int) -> str:
     return f"{secs} s"
 
 DAYS_SHOWN = 14
+# Bij een uitkomst met signals.auto_outcome_note (stop en doel in dezelfde candle, level_check.AMBIGUOUS_NOTE); ook in de replay.
+ORDER_UNKNOWN = "Volgorde onbekend: stop en doel in dezelfde candle, als stop geteld."
 TAKEN_STATUSES = ("genomen", "aangepast")
 DAY_NAMES = ("maandag", "dinsdag", "woensdag", "donderdag", "vrijdag", "zaterdag", "zondag")
 MONTHS = ("januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december")
@@ -78,6 +80,8 @@ def _close_events(signal: dict, entered: datetime, tz) -> list[dict]:
     what = "Doel geraakt" if outcome == "take_profit" else "Stop geraakt"
     after = int((closed - entered).total_seconds())
     sub = f"{what}, {duration_text(after)} na instap." if after >= 0 else f"{what}."
+    if signal.get("auto_outcome_note"):
+        sub += " " + ORDER_UNKNOWN
     return [_event("closed", closed, tz, f"{name} gesloten", sub, r=r, tone="win" if r > 0 else "loss",
                    url=f"/kans/{signal['id']}", replay_url=f"/logboek/replay/{signal['id']}")]
 
@@ -155,8 +159,14 @@ def skip_outcomes(skips: list[dict], runs: list[dict], plans: dict, signals: dic
     return out
 
 
+def _ended_events(ended: list[dict], tz) -> list[dict]:
+    """Een kaart die eindigde zonder vulling (repo.list_ended_cards), op de dag dat hij eindigde, met de reden in gewone woorden."""
+    return [_event("ended", _parse(e["ended_at"]), tz, f"{e['coin']} {e['direction']}, geen trade",
+                   f"{end_reason.LABELS.get(e['kind'], e['kind'])}. {end_reason.text(e['kind'], e['state'])}", tone="quiet") for e in ended]
+
+
 def timeline(*, skips: list[dict], runs: list[dict], plans: dict, signals: dict, taken: list[dict], seen: list[dict], now: datetime, tz,
-             days: int = DAYS_SHOWN) -> list[dict]:
+             days: int = DAYS_SHOWN, ended: list[dict] = ()) -> list[dict]:
     """De dagen van het Logboek, nieuwste eerst, met hun momenten van laat naar vroeg. Alles komt van deze ene gebruiker: zijn overgeslagen
     plannen (skips), zijn checklists (runs) en zijn genomen journaalregels (taken). `plans` (sleutel -> plan met signal_id) en `signals`
     (id -> signaalrij met r_override) zijn gedeeld. Een trade is een plan waarvan jij de checklist afrondde, of een journaalregel die je als
@@ -193,6 +203,7 @@ def timeline(*, skips: list[dict], runs: list[dict], plans: dict, signals: dict,
                              replay_url=f"/logboek/replay/{signal['id']}" if _resolved(signal) is not None else None))
 
     events += _seen_events(seen, tz)
+    events += _ended_events(list(ended), tz)
 
     today_local = now.astimezone(tz).date()
     first = today_local - timedelta(days=days - 1)

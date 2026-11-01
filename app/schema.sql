@@ -691,6 +691,21 @@ CREATE TABLE IF NOT EXISTS push_attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_push_attempts_ref ON push_attempts(kind, ref);
 
+-- Vertraging per kansmelding (app/latency.py): het slot van de candle waarop de kans ontstond of vulde, de detectie door de motor en het moment
+-- dat de push verzonden was. Eén rij per gebruiker per verzonden push uit send_kans_push; een geweerde kans (budget, pauze) heeft geen rij.
+CREATE TABLE IF NOT EXISTS alert_timing (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    trade_type TEXT,
+    event TEXT,
+    ref TEXT NOT NULL,
+    candle_at TEXT NOT NULL,
+    detected_at TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    ok INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_alert_timing_sent ON alert_timing(sent_at);
+
 -- Uitkomst van het strategie-lab per regel (scripts/strategy_lab.py --opslaan); de regel heet als de labvariant in kleine letters.
 CREATE TABLE IF NOT EXISTS rule_status (
     rule TEXT PRIMARY KEY,
@@ -704,6 +719,16 @@ CREATE TABLE IF NOT EXISTS trade_results (
     signal_id INTEGER PRIMARY KEY,
     r_value REAL NOT NULL,
     closed_at TEXT NOT NULL
+);
+
+-- Hoe ver een afgeronde trade eerst tegen je in ging (MAE) en met je mee (MFE), in R, op candles van na de vulling tot de uitkomst (app/excursion.py).
+-- Gezet bij de uitkomst door level_check of de motor zelf (range_sweep_live.follow_trade). Alleen meting: niets in een motor leest dit.
+CREATE TABLE IF NOT EXISTS trade_excursions (
+    signal_id INTEGER PRIMARY KEY,
+    mae_r REAL NOT NULL,
+    mfe_r REAL NOT NULL,
+    timeframe TEXT,
+    measured_at TEXT NOT NULL
 );
 
 -- Lopende trades van de proefmotor (app/rule_live.py). signals.stop_loss blijft de eerste stop, want risico, R en kosten rekenen daarmee;

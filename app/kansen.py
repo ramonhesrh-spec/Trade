@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Iterable, Optional
 from zoneinfo import ZoneInfo
 
-from app import candle_source, nu, radar, setup_chart, trade_plan as tp
+from app import candle_source, end_reason, nu, radar, setup_chart, trade_plan as tp
 from app import zone_radar as zr
 from app.price_text import nl
 
@@ -207,8 +207,22 @@ def summary(n: int, in_zone: int, trades: int) -> str:
     return " · ".join(parts)
 
 
+# Sleutel en anker van een kaart per soort, zoals radar.setup_card ze maakt (radar-zone-N en zo): een geëindigde kaart houdt zo zijn anker.
+ENDED_PREFIX = {"zone_radar": "zone", "zone_sweep": "zsweep", "poc_radar": "poc"}
+
+
+def ended_rows(ended: Iterable[dict], kind: str, hidden=frozenset()) -> list[dict]:
+    """Geëindigde kaarten zonder vulling van één soort (repo.list_ended_cards), met de reden in gewone woorden. Het anker blijft dat van de kaart,
+    zodat een melding die naar de kaart wijst hier landt."""
+    prefix = ENDED_PREFIX.get(kind)
+    if not prefix:
+        return []
+    return [{"title": f"{e['coin']} {e['direction']}", "reason": end_reason.text(kind, e["state"]), "ended_at": e["ended_at"],
+             "dom_id": f"radar-{prefix}-{e['id']}"} for e in ended if e["kind"] == kind and f"{prefix}:{e['id']}" not in hidden]
+
+
 def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float], Optional[str]]], structure_trades: list[dict],
-         kinds: Iterable[str], skipped: Iterable[str] = (), hidden: Iterable[str] = ()) -> dict:
+         kinds: Iterable[str], skipped: Iterable[str] = (), hidden: Iterable[str] = (), ended: Iterable[dict] = ()) -> dict:
     """`kinds`: de soorten die een tab krijgen (focus.FOCUS_TYPES met de kijkrechten van de route). Een kaart van een andere soort valt weg.
     `skipped`: plannen die je oversloeg (cookie en plan_skips, een dag); die blijven staan, achteraan en gemarkeerd.
     `hidden`: kaarten die deze gebruiker verborg (kans_hidden). Die staan niet in de lijst en tellen nergens mee (tab, badge, totaal, ook niet
@@ -219,7 +233,7 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
     plans += [{**_plan(nu._from_setup(c), "radar-" + c["key"].replace(":", "-")), "created_at": c.get("created_at"),
                "obstacle_lines": obstacle_lines((c.get("setup") or {}).get("obstacles")), "source_text": source_text(c.get("setup"))}
               for c in radar.waiting_cards(radar_cards)]
-    skipped, hidden = set(skipped), set(hidden)
+    skipped, hidden, ended = set(skipped), set(hidden), list(ended)
     for p in plans:
         p["skipped"] = p["key"] in skipped
         p["shared_text"] = _shared(p, "Gedeeld")
@@ -242,11 +256,13 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
         hid_plans = sorted(dedupe([p for p in tab_plans if p["key"] in hidden], "limit"), key=_sort_key)
         hid_trades = sorted(dedupe([t for t in tab_trades if t["key"] in hidden], "entry"), key=lambda t: t["created_at"], reverse=True)
         zone = sum(1 for p in mine if p["state"] == "in_zone")
-        moot = [{"title": f"{c['coin']} {c['direction']}", "label": c["state_label"], "dom_id": "radar-" + c["key"].replace(":", "-")}
+        moot = [{"title": f"{c['coin']} {c['direction']}", "label": c["state_label"], "reason": end_reason.text(k, c["state"]),
+                 "dom_id": "radar-" + c["key"].replace(":", "-")}
                 for c in radar.moot_cards(radar_cards) if TAB_OF.get(c["setup"].get("source") or "smc") == k and k in wanted and c["key"] not in hidden]
         # `num` staat naast de naam (ook 0, dan weet je dat de tab leeg is), `badge` is de accentteller en alleen er zolang er iets in de zone staat.
         tabs.append({"key": k, "label": LABELS[k], "href": f"#tab-{k}", "plans": mine, "trades": open_, "n": len(mine), "in_zone": zone,
                      "num": len(mine), "badge": zone or None, "count": None, "summary": summary(len(mine), zone, len(open_)), "moot": moot,
+                     "ended": ended_rows(ended, k, hidden) if k in wanted else [],
                      "hidden": _hidden_rows(hid_plans, hid_trades), "hidden_cards": hid_plans + hid_trades,
                      "hidden_label": hidden_label(len(hid_plans) + len(hid_trades))})
     best = max(tabs, key=lambda t: t["in_zone"], default=None)

@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
-from app import db, exchange, focus, indicators, price_alerts, push_notify, range_sweep_live, repo, rule_live
+from app import db, exchange, excursion, focus, indicators, price_alerts, push_notify, range_sweep_live, repo, rule_live
 from app.signal_processor import (
     SWING_WATCH_MAX_AGE_DAYS, _price_broke_through, _price_near_level, run_swing_check,
 )
@@ -73,6 +73,8 @@ LEVEL_CHECK_CANDLE_LOOKBACK = 6
 # Een niveaumelding die niet aankwam, wordt de volgende ronde opnieuw geprobeerd, hoogstens zo vaak; daarna gaat de vlag toch aan, anders
 # herhaalt een kapot abonnement zich elk kwartier zonder einde. Elke poging staat in push_attempts.
 MAX_LEVEL_ALERT_ATTEMPTS = 3
+# Soort in push_attempts voor het seintje "terug bij een niveau" (check_pending_signals); de stop-/doelmelding heet "niveau".
+PENDING_ALERT_KIND = "terug_bij_niveau"
 
 
 def _level_hit_in_candles(
@@ -245,6 +247,7 @@ async def check_signal_outcomes() -> None:
             occurred_at = hit_at.isoformat()
             ambiguous = _both_levels_at(signal["direction"], signal["stop_loss"], signal["take_profit"], candles, hit_at)
             repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at, AMBIGUOUS_NOTE if ambiguous else None)
+            _store_excursion(signal, candles)
             # Een zelf-gedetecteerde zone die net een stop loss veroorzaakte
             # gaat op cooldown (zie repo.recent_sr_zone_failure) zodat een
             # volgend signaal vlakbij dezelfde rand niet meteen dezelfde fout
@@ -262,6 +265,16 @@ async def check_signal_outcomes() -> None:
         if age_days > SIGNAL_MAX_AGE_DAYS:
             repo.mark_signal_auto_outcome(signal["id"], "vervallen", db.now_iso())
             logger.info("Signaal %s (%s) vervallen na %s dagen zonder uitkomst", signal["id"], coin, age_days)
+
+
+def _store_excursion(signal: dict, candles) -> None:
+    """MAE en MFE op dezelfde candles die de uitkomst vonden; een meting die faalt, mag de uitkomst niet tegenhouden."""
+    try:
+        x = excursion.measure(signal["direction"], signal["price"], signal["stop_loss"], signal["take_profit"], candles)
+        if x:
+            repo.set_trade_excursion(signal["id"], x["mae_r"], x["mfe_r"], excursion.timeframe_of(candles))
+    except Exception:
+        logger.exception("MAE/MFE van signaal %s niet vastgelegd", signal["id"])
 
 
 def _nearest_level(current_price: float, atr: float, levels: list[dict]) -> Optional[dict]:
@@ -549,12 +562,20 @@ async def check_pending_signals() -> None:
             heading = "Terug in de betere-entry-zone" if in_entry_zone else "Terug bij een interessant niveau"
             body = f"{heading} ({entry['confidence']})\n{level_line} · Nu {current_price:.4f}\nTik voor de grafiek en het plan."
 
+        # Zelfde patroon als check_open_trades: pas verzonden na een geslaagde push of na MAX_LEVEL_ALERT_ATTEMPTS mislukte, elke poging in
+        # push_attempts. Eerder ging de vlag ook na een mislukte push aan, en verdween het seintje stil.
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
+        ref = f"journal:{entry['id']}"
         try:
-            await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
-            logger.info("Niveau-seintje verstuurd naar %s voor %s", entry["username"], coin)
-        except Exception:
+            error = await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
+        except Exception as exc:
             logger.exception("Niveau-seintje naar %s voor %s is mislukt", entry["username"], coin)
+            error = repr(exc)
+        repo.record_push_attempt(entry["user_id"], PENDING_ALERT_KIND, ref, not error, error)
+        if not error:
+            logger.info("Niveau-seintje verstuurd naar %s voor %s", entry["username"], coin)
+        elif repo.count_failed_push_attempts(PENDING_ALERT_KIND, ref) < MAX_LEVEL_ALERT_ATTEMPTS:
+            continue
         repo.mark_level_alert_sent(entry["id"])
 
 
