@@ -25,7 +25,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, focus, repo
+from app import config, end_reason, repo
 from app.replay import stats
 
 logger = logging.getLogger("shadow")
@@ -117,6 +117,11 @@ def live_params(trade_type: str) -> dict:
 
 def variant_params(variant: dict) -> dict:
     return {**live_params(variant["trade_type"]), **json.loads(variant["params"])}
+
+
+def label(trade_type: str) -> str:
+    """De naam naar buiten: Structuur zonder A/B/C (CLAUDE.md, Structuur zonder oordeel)."""
+    return end_reason.LABELS.get(trade_type, trade_type)
 
 
 def _ts(value) -> pd.Timestamp:
@@ -224,7 +229,7 @@ def _r(value: Optional[float]) -> str:
 
 
 def promote_text(variant: dict, v: dict, base: dict) -> str:
-    return (f"{focus.label(variant['trade_type'])}: {change_text(variant['trade_type'], json.loads(variant['params']), base)}, "
+    return (f"{label(variant['trade_type'])}: {change_text(variant['trade_type'], json.loads(variant['params']), base)}, "
             f"netto {_r(v['verschil'])} per trade over {v['n_variant']} trades. Terugdraaien: python3 scripts/schaduw.py --terug {variant['id']}")
 
 

@@ -103,7 +103,7 @@ def markdown(data: dict) -> str:
             ended = ", ".join(f"{s} {v['n']}" for s, v in k["vervallen"].items()) or "geen"
             top = max(k["missers"]["redenen"].items(), key=lambda kv: kv[1])[0] if k["missers"]["redenen"] else "-"
             lag = f"{k['vertraging']['median_s']:.0f} s" if k["vertraging"] and k["vertraging"]["median_s"] is not None else "-"
-            lines.append(f"- {focus.label(kind)}: {k['kaarten']} kaarten, {k['gevuld']} gevuld, {k['wachtend']} wachtend, vervallen: {ended}; "
+            lines.append(f"- {shadow.label(kind)}: {k['kaarten']} kaarten, {k['gevuld']} gevuld, {k['wachtend']} wachtend, vervallen: {ended}; "
                          f"{k['afgerond']} afgerond, netto {_r(k['netto_r'])} per trade; stop daarna toch doel {k['stop_dan_doel']['toch_doel']} van "
                          f"{k['stop_dan_doel']['gecontroleerd']}; dagcap {k['dagcap']}; vertraging mediaan {lag}; missers {k['missers']['n']} "
                          f"(meest: {top})")

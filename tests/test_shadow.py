@@ -351,3 +351,11 @@ class SeedTest(DbCase):
     def test_auto_legt_eerst_de_seeds_vast(self):
         with mock.patch.object(shadow, "SEEDS", self.SEED[:1]):
             self.assertEqual(schaduw.auto(NOW), {"zr-stop-040": "wachten"})
+
+
+class LabelTest(unittest.TestCase):
+    def test_structuur_zonder_oordeel(self):
+        variant = {"id": "st-1", "trade_type": "structuur", "params": '{"stop_atr": 0.4}'}
+        text = shadow.promote_text(variant, {"verschil": 0.05, "n_variant": 51}, {"stop_atr": 0.25})
+        self.assertTrue(text.startswith("Structuur: stop 0,4 ATR in plaats van 0,25"))
+        self.assertNotIn("A/B", text)

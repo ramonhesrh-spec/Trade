@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from app import db, focus, push_notify, repo, shadow  # noqa: E402
+from app import db, push_notify, repo, shadow  # noqa: E402
 
 
 def _push_ceo(title: str, body: str) -> None:
@@ -37,7 +37,7 @@ def promote(variant_id: str, now: datetime, force: bool = False) -> dict:
     base = shadow.live_params(variant["trade_type"])
     text = shadow.promote_text(variant, v, base)
     repo.promote_shadow(variant_id, variant["trade_type"], json.loads(variant["params"]), now.isoformat(), text)
-    _push_ceo(f"{focus.label(variant['trade_type'])}: schaduw gepromoveerd", text)
+    _push_ceo(f"{shadow.label(variant['trade_type'])}: schaduw gepromoveerd", text)
     print(text)
     return v
 
@@ -47,8 +47,8 @@ def revert(variant_id: str, now: datetime) -> None:
     if variant is None or variant["status"] != "gepromoveerd":
         raise SystemExit(f"{variant_id}: niet gepromoveerd, niets terug te draaien")
     n = repo.revert_shadow(variant_id, now.isoformat(), f"teruggedraaid op {now:%Y-%m-%d %H:%M} UTC")
-    text = f"{focus.label(variant['trade_type'])}: {variant['description']} teruggedraaid, de motor gebruikt weer de vorige waarde."
-    _push_ceo(f"{focus.label(variant['trade_type'])}: schaduw teruggedraaid", text)
+    text = f"{shadow.label(variant['trade_type'])}: {variant['description']} teruggedraaid, de motor gebruikt weer de vorige waarde."
+    _push_ceo(f"{shadow.label(variant['trade_type'])}: schaduw teruggedraaid", text)
     print(f"{text} ({n} parameter{'s' if n != 1 else ''})")
 
 
