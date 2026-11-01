@@ -2969,6 +2969,32 @@ def beat(name: str, detail: str = "") -> None:
             "ON CONFLICT(name) DO UPDATE SET at = excluded.at, detail = excluded.detail", (name, db.now_iso(), detail))
 
 
+def record_cap_hold(engine: str, key: str, at_iso: str) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT INTO cap_holds (engine, key, at) VALUES (?, ?, ?) ON CONFLICT(engine, key) DO UPDATE SET at = excluded.at",
+                     (engine, key, at_iso))
+
+
+def count_cap_holds(engine: str, since_iso: str) -> int:
+    return cap_hold_counts(since_iso).get(engine, 0)
+
+
+def cap_hold_counts(since_iso: str) -> dict:
+    with db.session() as conn:
+        return {r["engine"]: r["n"] for r in conn.execute(
+            "SELECT engine, COUNT(*) AS n FROM cap_holds WHERE at >= ? GROUP BY engine", (since_iso,)).fetchall()}
+
+
+def has_zone_radar_setup(coin: str, zone_key: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("SELECT 1 FROM zone_radar_setups WHERE coin = ? AND zone_key = ?", (coin, zone_key)).fetchone() is not None
+
+
+def has_poc_radar_setup(coin: str, level_key: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("SELECT 1 FROM poc_radar_setups WHERE coin = ? AND level_key = ?", (coin, level_key)).fetchone() is not None
+
+
 def get_beat(name: str) -> Optional[dict]:
     with db.session() as conn:
         row = conn.execute("SELECT * FROM engine_heartbeat WHERE name = ?", (name,)).fetchone()

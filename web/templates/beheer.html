@@ -12,6 +12,18 @@
   </div>
   {% if fout %}<p class="bh-error" role="alert">{{ fout }}</p>{% endif %}
 
+  {# Alleen als een dagcap de laatste 24 uur een kans tegenhield (app/daycap.py): dan knelt de cap en zag niemand die kans. #}
+  {% if held %}
+  <section id="dagcap" aria-labelledby="bh-c">
+    <div class="bh-head"><h2 id="bh-c">Dagcap</h2><span>laatste 24 uur</span></div>
+    <div class="bh-list">
+      {% for h in held %}
+      <div class="bh-row"><span class="bh-main"><span class="bh-name">{{ h.label }}</span><span class="bh-sub">{{ h.text }}</span></span></div>
+      {% endfor %}
+    </div>
+  </section>
+  {% endif %}
+
   <section id="leerlingen" aria-labelledby="bh-l">
     <div class="bh-head"><h2 id="bh-l">Leerlingen · {{ students|length }}</h2><span>Week-R · laatst gekeken</span></div>
     {% if students %}

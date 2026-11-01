@@ -642,6 +642,15 @@ CREATE TABLE IF NOT EXISTS engine_heartbeat (
     detail TEXT
 );
 
+-- Kansen die een dagcap tegenhield (app/daycap.py): één rij per motor en kans, `at` is de laatste keer dat de cap hem tegenhield. Zo telt een kans die
+-- elke cyclus terugkomt één keer per 24 uur. Alleen meting: geen motor leest dit om te beslissen.
+CREATE TABLE IF NOT EXISTS cap_holds (
+    engine TEXT NOT NULL,
+    key TEXT NOT NULL,
+    at TEXT NOT NULL,
+    PRIMARY KEY (engine, key)
+);
+
 -- Trend-pullback-instappen (app/trend_live.py): de sleutel (coin, kant, tijd van de impuls) voorkomt dat dezelfde instap twee keer gemeld wordt.
 CREATE TABLE IF NOT EXISTS trend_entries (
     key TEXT PRIMARY KEY,

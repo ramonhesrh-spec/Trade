@@ -61,6 +61,18 @@ class OwnerOnlyTests(Base):
         self.assertNotIn("bh-seen", lotte[:lotte.index("</summary>")])          # nooit gekeken: geen getal
         self.assertNotIn(">ceo<", sec)
 
+    def test_dagcap_regel_alleen_als_er_iets_is_tegengehouden(self):
+        self.assertNotIn('id="dagcap"', self.client.get("/beheer").text)
+        now = datetime.now(timezone.utc)
+        repo.record_cap_hold("zone_radar", "BTC:1h:a", now.isoformat())
+        repo.record_cap_hold("zone_radar", "ETH:1h:b", now.isoformat())
+        repo.record_cap_hold("structuur", "9", (now - timedelta(hours=30)).isoformat())          # buiten de 24 uur
+        html = self.client.get("/beheer").text
+        sec = html[html.index('id="dagcap"'):html.index('id="leerlingen"')]
+        self.assertIn("Zone-radar", sec)
+        self.assertIn(f"2 kansen tegengehouden door de dagcap van {config.ZONE_RADAR_MAX_PER_DAY}", sec)
+        self.assertNotIn("Structuur", sec)
+
     def test_set_maken_toewijzen_en_weghalen(self):
         self.client.post("/beheer/sets", data={"name": "Alts", "coins": "sol, link avax"})
         alts = repo.list_follow_sets()[0]

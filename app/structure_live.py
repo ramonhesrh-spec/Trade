@@ -24,7 +24,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from app import chance_checks, config, latency, repo, setup_chart, smc_eval
+from app import chance_checks, config, daycap, latency, repo, setup_chart, smc_eval
 from app import trade_plan as tp
 from app.replay import breakretest as br
 from app.replay.lab import add_indicators
@@ -292,6 +292,7 @@ async def _announce(found: list[dict], now: datetime) -> None:
     send, hold = choose(found, room)
     for c in hold:
         repo.update_structure_judgement(c["id"], None, "", "niet_gemeld")
+        repo.record_cap_hold("structuur", str(c["id"]), now.isoformat())
         logger.info("Structuur %s %s: dagcap vol, niet gemeld (%.2f%% van de limiet)", c["coin"], c["ev"].direction, c["dist_pct"])
     for c in send:
         coin, ev, plan = c["coin"], c["ev"], c["plan"]
@@ -508,7 +509,9 @@ async def run(now: Optional[datetime] = None) -> None:
     kinds = {}
     for c in found:
         kinds[c["ev"].kind] = kinds.get(c["ev"].kind, 0) + 1
-    repo.beat("structuur", beat_detail(checked, len(config.FIXED_COINS), failed, missing, seconds, kinds))
+    held = repo.count_cap_holds("structuur", (now - daycap.WINDOW).isoformat())
+    repo.beat("structuur", daycap.with_held(beat_detail(checked, len(config.FIXED_COINS), failed, missing, seconds, kinds), held,
+                                            config.STRUCTURE_MAX_ALERTS_PER_DAY))
 
 
 def beat_detail(checked: int, total: int, failed: list[str], missing: list[str], seconds: float, kinds: Optional[dict] = None) -> str:

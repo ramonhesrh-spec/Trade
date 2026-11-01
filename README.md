@@ -483,12 +483,16 @@ sudo systemctl start crypto-news.service crypto-script.service
   Claude moet dat verschil maken, en dat is een hypothese die Bewijs toetst. Komen er minder kansen dan je verwacht, draai dan
   `.venv/bin/python3 scripts/structuur_check.py` (alleen-lezen): per dag breuken, plannen, gemeld, gevuld, doel/stop/open en of de
   dagcap geraakt werd, de hartslag ("33 van 35 coins gecontroleerd in 41 s; mislukt: ...") en welke coins geen enkel plan kregen.
+  Hield een dagcap de laatste 24 uur kansen tegen, dan zegt de hartslag dat ("...; 3 kansen tegengehouden door de dagcap van 30"), net als die
+  van de zone-radar, de zone-sweep en de POC-radar, en staat er per soort één regel onder Dagcap in Beheer (`app/daycap.py`, tabel `cap_holds`).
+  Een kans die elke cyclus terugkomt telt één keer. Zo zie je of een cap nog knelt; de caps gingen op 2026-11-01 omhoog omdat de volle
+  Structuur-cap op 29 oktober de WLD-breuk tegenhield.
 - `app/zone_radar_live.py` (rekenregels in `app/zone_radar.py`): per coin de dichtstbijzijnde actieve vraagzone onder en aanbodzone boven de koers
   op 1u en 4u (binnen 6%), als limietplan op de Radar (`/smc`): limiet op de binnenrand, stop een kwart ATR voorbij de buitenrand (minstens
   `SMC_MIN_STOP_PCT`), doel de rand van de eerste tegenovergestelde zone vanaf de limiet (ook als die tussen limiet en koers ligt), zonder minimale
-  R:R (de kaart toont hem). De kaart bewaart tot 5 obstakels voorbij de limiet met R en het moment waarop ze bekend werden (`obstacles`); het
+  R:R (de kaart op Kansen toont de geplande R:R vanaf de limiet als klein label, "2,4 R"; het blad zegt "gepland" bij Doel). De kaart bewaart tot 5 obstakels voorbij de limiet met R en het moment waarop ze bekend werden (`obstacles`); het
   detailblad toont het eerste en er hoogstens twee daarna. Melding bij een nieuwe kaart en bij de vulling;
-  gevuld wordt het een signaal met `trade_type = 'zone_radar'` (ongetest, apart op Bewijs). Max `ZONE_RADAR_MAX_PER_DAY` (20, de kaarten dichtst bij de koers gaan voor) nieuwe kaarten
+  gevuld wordt het een signaal met `trade_type = 'zone_radar'` (ongetest, apart op Bewijs). Max `ZONE_RADAR_MAX_PER_DAY` (40, de kaarten dichtst bij de koers gaan voor) nieuwe kaarten
   per dag, `ZONE_RADAR_ENABLED=false` zet het uit. Handmatig draaien: `python3 -m app.zone_radar_live`.
 - `app/zone_sweep_live.py` (kaart in `app/zone_sweep.py`, detector `app/replay/zonesweep.py`): de koers prikt door een actieve vraagzone (long) of
   aanbodzone (short) en sluit binnen 6 candles op 1u terug. Live vóór de labrun, op verzoek van de gebruiker, altijd ongetest (zie

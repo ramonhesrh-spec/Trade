@@ -156,7 +156,9 @@ SCRIPT_MAX_NEGATIVE = int(_get("SCRIPT_MAX_NEGATIVE", "30"))
 # signalen samen negatief zijn.
 STRUCTURE_ENABLED = _get("STRUCTURE_ENABLED", "true").lower() == "true"
 STRUCTURE_MODEL = _get("STRUCTURE_MODEL", ANTHROPIC_MODEL)
-STRUCTURE_MAX_ALERTS_PER_DAY = int(_get("STRUCTURE_MAX_ALERTS_PER_DAY", "12"))
+# Dagcap 30 (was 12, gelijk aan .env.example): op 2026-10-29 hield de volle cap de WLD-breuk tegen (structure_setups.state 'niet_gemeld'). De CEO
+# wil elke kans zien en zelf kiezen; de hartslag en Beheer tonen hoeveel kansen de cap nog tegenhoudt (app/daycap.py).
+STRUCTURE_MAX_ALERTS_PER_DAY = int(_get("STRUCTURE_MAX_ALERTS_PER_DAY", "30"))
 STRUCTURE_MAX_NEGATIVE = int(_get("STRUCTURE_MAX_NEGATIVE", "30"))
 
 # Trend plus pullback (app/trend_live.py): 4u en 1u trend, impuls op 15m, zone, bevestiging op 5m. Gemeten op een jaar: -0,06R netto, dus altijd ongetest en alleen als stille
@@ -194,7 +196,9 @@ ENGINE_FOCUS = _get("ENGINE_FOCUS", "true").strip().lower() != "false"
 # Zone-radar (app/zone_radar.py, app/zone_radar_live.py): de dichtstbijzijnde actieve vraag- en aanbodzone op 1u en 4u als limietplan op de Radar,
 # met een melding bij een nieuwe kaart en bij de vulling. Voor iedereen, altijd ongetest: Bewijs telt hem apart (trade_type 'zone_radar').
 ZONE_RADAR_ENABLED = _get("ZONE_RADAR_ENABLED", "true").lower() == "true"
-ZONE_RADAR_MAX_PER_DAY = int(_get("ZONE_RADAR_MAX_PER_DAY", "20"))
+# Dagcap 40 (was 20): sinds 2026-10-29 zonder minimale R:R, en bij een volle cap gaat de kaart dichtst bij de koers voor, dus kon een kaart van 0,5R
+# een van 3R verdringen. Dezelfde aanleiding als Structuur hierboven (WLD, 29 okt, niet_gemeld): elke kans zien, zelf kiezen.
+ZONE_RADAR_MAX_PER_DAY = int(_get("ZONE_RADAR_MAX_PER_DAY", "40"))
 # Zone-sweep (app/zone_sweep.py, app/zone_sweep_live.py): prik door een actieve zone met herstel, docs/onderzoek/zone-sweep/preregistratie.md.
 # De pre-registratie wil eerst een geslaagde labrun; op 2026-10-27 koos de gebruiker (CEO) uitdrukkelijk voor live zonder labrun, met het label
 # ongetest, zoals RANGE_SWEEP_UNTESTED. De labrun (zs_*, zone_sweep_stop, zone_sweep) blijft de toets die later volgt; Bewijs toont de live score apart.

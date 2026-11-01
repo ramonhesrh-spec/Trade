@@ -13,7 +13,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import chance_checks, config, latency, market_context, poc_radar_live, repo
+from app import chance_checks, config, daycap, latency, market_context, poc_radar_live, repo
 from app import zone_radar as zr
 
 logger = logging.getLogger("zone_radar_live")
@@ -163,8 +163,11 @@ async def run(now: Optional[datetime] = None) -> None:
     since = (stamp - pd.Timedelta(hours=24)).isoformat()
     for plan in sorted(found, key=lambda p: (p["distance"], p["coin"], p["direction"])):
         if repo.count_zone_radar_setups_since(since) >= config.ZONE_RADAR_MAX_PER_DAY:
-            logger.info("Zone-radar: dagcap van %s kaarten bereikt, %s %s wacht", config.ZONE_RADAR_MAX_PER_DAY, plan["coin"], plan["direction"])
-            break
+            # Een zone die al een kaart had, komt nooit terug (UNIQUE): die hield de cap niet tegen.
+            if not repo.has_zone_radar_setup(plan["coin"], plan["zone_key"]):
+                logger.info("Zone-radar: dagcap van %s kaarten bereikt, %s %s wacht", config.ZONE_RADAR_MAX_PER_DAY, plan["coin"], plan["direction"])
+                repo.record_cap_hold(zr.TRADE_TYPE, f"{plan['coin']}:{plan['zone_key']}", stamp.isoformat())
+            continue
         # POC-samenval pas na de keuze van het plan, net als de context: een kenmerk, nooit een filter.
         near = poc_radar_live.samenval(plan["coin"], plan["limit"], stamp)
         setup_id = repo.insert_zone_radar_setup({**{k: v for k, v in plan.items() if k != "distance"}, **_context(plan["coin"], stamp),
@@ -173,7 +176,8 @@ async def run(now: Optional[datetime] = None) -> None:
             continue
         logger.info("Zone-radar %s %s: kaart %s, %s %s-%s, R:R %.1f", plan["coin"], plan["direction"], setup_id, plan["tf"], plan["zone_low"], plan["zone_high"], plan["rr"])
         await _push_new_card({**plan, "id": setup_id}, stamp)
-    repo.beat("zone_radar", f"{len(coins)} coins gecontroleerd")
+    repo.beat("zone_radar", daycap.with_held(f"{len(coins)} coins gecontroleerd", repo.count_cap_holds(zr.TRADE_TYPE, (stamp - daycap.WINDOW).isoformat()),
+                                             config.ZONE_RADAR_MAX_PER_DAY))
 
 
 if __name__ == "__main__":

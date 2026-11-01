@@ -410,3 +410,53 @@ class ShareLinesTests(unittest.TestCase):
                 "shared_text": "Gedeeld 08:58"}
         self.assertEqual(kansen.share_lines(item), ["Doel 0,3600 (2,5 R)", "Instap 0,3350", "Stop 0,3250", "Gedeeld 08:58"])
         self.assertEqual(kansen.share_lines({}), [])
+
+
+class PlannedRRTests(unittest.TestCase):
+    """De geplande R:R op de kaart (CEO, 2026-11-01): elke kans zien en zelf kiezen. Vanaf de limiet, geen resultaat; nooit een volgorde."""
+
+    def page(self, radar_cards=(), structure=(), trades=()):
+        return kansen.page(list(radar_cards), list(structure), list(trades), KINDS)
+
+    def item(self, page, key):
+        return next(x for t in page["tabs"] for x in t["plans"] + t["trades"] if x["key"] == key)
+
+    def test_kaart_met_doel_toont_de_geplande_rr(self):
+        it = self.item(self.page(cards((ZONE, 80537.0))), "zone:8")
+        self.assertEqual(it["rr_text"], "2,0 R")
+
+    def test_geen_rr_zonder_doel(self):
+        it = self.item(self.page(cards(({**SWEEP, "preview_take_profit": None}, 145.0))), "zsweep:4")
+        self.assertEqual(it["rr_text"], "")
+
+    def test_structuur_neemt_het_doel_dat_het_signaal_meet(self):
+        it = self.item(self.page(structure=[(STRUCT_CARD, 82.0, "wacht")]), "structuur:12")
+        self.assertEqual(it["rr_text"], "3,8 R")            # structure_live.take_profit_of: het tweede doel
+
+    def test_open_trade_toont_geen_geplande_rr(self):
+        it = self.item(self.page(cards((ZONE, 80537.0)) + [radar.signal_card(TRADE, 99.0)]), "signal:3")
+        self.assertEqual(it["rr_text"], "")
+
+    def test_gepland_staat_een_keer_bij_doel_in_het_blad(self):
+        it = self.item(self.page(structure=[(STRUCT_CARD, 82.0, "wacht")]), "structuur:12")
+        labels = [r["label"] for r in it["rows"]]
+        self.assertEqual(sum("gepland" in lab for lab in labels), 1)
+        self.assertIn("Doel 1 · 2,1 R gepland", labels)
+        zone = self.item(self.page(cards((ZONE, 80537.0))), "zone:8")
+        self.assertIn("Doel · 2,0 R gepland", [r["label"] for r in zone["rows"]])
+
+    def test_volgorde_niet_op_rr(self):
+        better = {**ZONE, "id": 10, "coin": "LTC", "preview_take_profit": 78000.0}           # verder doel, hogere R:R, verder van de koers
+        p = self.page(cards((better, 80000.0), (ZONE, 80537.0)))
+        keys = [x["key"] for t in p["tabs"] if t["key"] == "zone_radar" for x in t["plans"]]
+        self.assertEqual(keys, ["zone:8", "zone:10"])
+
+    def test_kaart_toont_het_label_naast_de_stand(self):
+        from web import main
+        p = self.page(cards((ZONE, 80537.0)) + [radar.signal_card(TRADE, 99.0)])
+        render = lambda it: main.templates.env.from_string('{% import "_macros.html" as m %}{{ m.kans_card(it) }}').render(it=it)
+        html = render(self.item(p, "zone:8"))
+        tags = html[html.index('class="kc-tags"'):html.index('class="kc-chev"')]
+        self.assertIn('<span class="kc-rr">2,0 R</span>', tags)
+        self.assertNotIn("kc-rr", render(self.item(p, "signal:3")))
+        self.assertNotIn("kc-rr", render(self.item(self.page(cards(({**SWEEP, "preview_take_profit": None}, 145.0))), "zsweep:4")))

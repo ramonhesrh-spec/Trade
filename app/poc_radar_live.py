@@ -16,7 +16,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, focus, latency, poc, push_notify, range_sweep_live as rsl, repo
+from app import config, daycap, focus, latency, poc, push_notify, range_sweep_live as rsl, repo
 from app import poc_radar as pr
 from app import zone_radar as zr
 from app.replay import rangesweep as rs
@@ -170,8 +170,11 @@ async def scan(now: Optional[datetime] = None) -> None:
     since = (stamp - pd.Timedelta(hours=24)).isoformat()
     for plan in sorted(found, key=lambda p: (p["distance"], p["coin"], p["direction"])):
         if repo.count_poc_radar_setups_since(since) >= config.POC_RADAR_MAX_PER_DAY:
-            logger.info("POC-radar: dagcap van %s kaarten bereikt, %s %s wacht", config.POC_RADAR_MAX_PER_DAY, plan["coin"], plan["direction"])
-            break
+            # Een niveau dat al een kaart had, komt nooit terug (UNIQUE): dat hield de cap niet tegen.
+            if not repo.has_poc_radar_setup(plan["coin"], plan["level_key"]):
+                logger.info("POC-radar: dagcap van %s kaarten bereikt, %s %s wacht", config.POC_RADAR_MAX_PER_DAY, plan["coin"], plan["direction"])
+                repo.record_cap_hold(TRADE_TYPE, f"{plan['coin']}:{plan['level_key']}", stamp.isoformat())
+            continue
         row = {**{k: v for k, v in plan.items() if k != "distance"}, "expires_at": (stamp + pr.TTL).isoformat()}
         setup_id = repo.insert_poc_radar_setup(row, stamp.isoformat())
         if setup_id is None:
@@ -180,7 +183,8 @@ async def scan(now: Optional[datetime] = None) -> None:
                     plan["take_profit"])
         await _announce({**row, "id": setup_id}, stamp)
     if checked or failed:
-        repo.beat("poc_radar", f"{checked} van {len(coins)} coins bijgewerkt" + (f", {failed} mislukt" if failed else ""))
+        repo.beat("poc_radar", daycap.with_held(f"{checked} van {len(coins)} coins bijgewerkt" + (f", {failed} mislukt" if failed else ""),
+                                                repo.count_cap_holds(TRADE_TYPE, (stamp - daycap.WINDOW).isoformat()), config.POC_RADAR_MAX_PER_DAY))
 
 
 async def _fill(card: dict, filled_at: pd.Timestamp) -> None:

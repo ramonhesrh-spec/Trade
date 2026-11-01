@@ -18,7 +18,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, latency, poc_radar_live, push_notify, range_sweep_live as rsl, repo
+from app import config, daycap, latency, poc_radar_live, push_notify, range_sweep_live as rsl, repo
 from app import zone_sweep as zsw
 from app.replay import rangesweep as rs, stopquality as sq, trendlab as tl, zonesweep as zs, zonesweep_lab as zl
 
@@ -94,6 +94,8 @@ async def _register(row: dict, price: Optional[float], now: pd.Timestamp) -> Non
     setup_id = repo.insert_zone_sweep_setup(row, now.isoformat())
     if setup_id is None:
         return
+    if capped:
+        repo.record_cap_hold(TRADE_TYPE, str(setup_id), now.isoformat())
     logger.info("Zone-sweep %s %s %s: kaart %s, doel %s%s", row["coin"], row["direction"], row["variant"], setup_id, row["take_profit"],
                 " (stil: dagcap)" if capped else " (stil: plan al voorbij)" if dead else "")
     if not row["quiet"]:
@@ -117,7 +119,12 @@ async def scan(now: Optional[datetime] = None) -> None:
                     await _register(zsw.card_row(coin, v.name, s, zones), price, stamp)
         except Exception:
             logger.exception("Zone-sweep voor %s is mislukt", coin)
-    repo.beat("zone_sweep", f"{len(COINS)} coins gecontroleerd")
+    repo.beat("zone_sweep", beat_detail(len(COINS), stamp))
+
+
+def beat_detail(n_coins: int, now) -> str:
+    held = repo.count_cap_holds(TRADE_TYPE, (pd.Timestamp(now) - daycap.WINDOW).isoformat())
+    return daycap.with_held(f"{n_coins} coins gecontroleerd", held, config.ZONE_SWEEP_MAX_PER_DAY)
 
 
 async def _fill(card: dict, entry: float, filled_at: pd.Timestamp) -> None:

@@ -2890,9 +2890,12 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .kc-head:hover { background: none; color: var(--tx); }
 .kc-head:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; border-radius: 8px; }
 .kc-title { font: 600 17px / 1.2 var(--sans); letter-spacing: -0.01em; white-space: nowrap; }
-.kc-tags { display: flex; align-items: center; gap: 6px; min-width: 0; margin-left: auto; }
+/* wrap: met de geplande R:R erbij past "Door de zone" of "Geen koers" plus ongetest niet altijd op 375px; dan zakt een label, de kop loopt nooit over. */
+.kc-tags { display: flex; flex-wrap: wrap; justify-content: flex-end; align-items: center; gap: 4px 6px; min-width: 0; margin-left: auto; padding: 6px 0; }
 .kc-chev { flex: none; color: var(--tx2); }
 .kc-skipped { font-size: 12px; color: var(--tx2); }
+/* De geplande R:R (kansen.rr_text): één klein label, bewust zonder kleur, want het is een plan en geen oordeel over kwaliteit. */
+.kc-rr { font: 500 13px / 1 var(--sans); font-variant-numeric: tabular-nums; color: var(--tx2); white-space: nowrap; }
 /* Verberg (kans_hidden): een rustig kruisje naast de kop, 44px tikvlak dat tot in de kaartrand loopt zodat het de kop niet versmalt. */
 .kc-top { display: flex; align-items: center; margin-right: -10px; }
 .kc-top .kc-head { flex: 1; min-width: 0; }

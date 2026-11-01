@@ -99,6 +99,23 @@ def _shared(item: dict, label: str) -> str:
     return f"{label} {when}" if when else ""
 
 
+def planned_rr(targets) -> Optional[float]:
+    """De geplande R:R vanaf de limiet: het doel dat het signaal na de vulling meet. Bij Structuur met meer doelen is dat het tweede
+    (structure_live.take_profit_of), anders het enige. None zonder doel. Beschrijft het plan; de volgorde op Kansen leest het nooit."""
+    if not targets:
+        return None
+    return targets[1][1] if len(targets) > 1 else targets[0][1]
+
+
+def rr_text(rr: Optional[float]) -> str:
+    return f"{rr:.1f}\u00a0R".replace(".", ",") if rr is not None else ""     # harde spatie: "2,4" en "R" nooit op twee regels
+
+
+def _planned_rows(rows: list[dict]) -> list[dict]:
+    """Eén keer "gepland" bij het doel in het blad ("Doel" of bij meer doelen "Doel 1"): de verhouding van het plan, geen resultaat."""
+    return [{**r, "label": r["label"] + " gepland"} if r["label"].startswith(("Doel · ", "Doel 1 · ")) else r for r in rows]
+
+
 def _plan(item: dict, dom_id: str) -> dict:
     state = item["state"]
     # In de zone geen groot getal: de stand staat al als pil en in de zin erboven, drie keer "In zone" was ruis.
@@ -107,14 +124,14 @@ def _plan(item: dict, dom_id: str) -> dict:
     else:
         num = ("", "distance", "")
     return {**item, "dom_id": dom_id, "title": f"{item['coin']} {item['direction']}", "tab": TAB_OF.get(item["trade_type"], item["trade_type"]), "group": "plans",
-            "svg_src": _svg_src(item),
+            "svg_src": _svg_src(item), "rr_text": rr_text(planned_rr(item.get("targets"))), "rows": _planned_rows(item.get("rows") or []),
             "state_short": tp.STATE_SHORT.get(state, "Geen koers") if state else "Geen koers", "say": say(state, item["direction"], item.get("zone_low") is not None),
             "num_text": num[0], "num_hook": num[1], "num_label": num[2]}
 
 
 def _trade(item: dict) -> dict:
     return {**item, "dom_id": "radar-" + item["key"].replace(":", "-"), "title": f"{item['coin']} {item['direction']}", "state": "open", "group": "trades",
-            "svg_src": _svg_src(item), "shared_text": _shared(item, "Open sinds"),
+            "svg_src": _svg_src(item), "shared_text": _shared(item, "Open sinds"), "rr_text": "",
             "tab": TAB_OF.get(item["trade_type"], item["trade_type"]), "state_short": "Open", "say": "",
             "num_text": item["live_r_text"] or "", "num_hook": "live_r", "num_label": "nu, live" if item["live_r_text"] else ""}
 

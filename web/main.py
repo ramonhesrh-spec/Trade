@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import candle_source, config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import announce, card_chart, ceo, chance_checks, end_reason, excursion, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep, poc_radar
+from app import announce, card_chart, ceo, chance_checks, daycap, end_reason, excursion, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep, poc_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -2440,8 +2440,11 @@ async def beheer_page(request: Request, fout: str = "", user: dict = Depends(req
                          "set": names.get(u.get("follow_set_id"), "Geen set"), "week_r": _week_review(u, now)["total_text"],
                          "seen": beheer.seen_text((visits.get(u["id"]) or {}).get("last_at"), now)})
     invites = [{**i, "line": beheer.invite_line(i, now), "usable": beheer.invite_usable(i, now)} for i in repo.list_invites()]
+    caps = {"structuur": config.STRUCTURE_MAX_ALERTS_PER_DAY, "zone_radar": config.ZONE_RADAR_MAX_PER_DAY,
+            "zone_sweep": config.ZONE_SWEEP_MAX_PER_DAY, "poc_radar": config.POC_RADAR_MAX_PER_DAY}
+    held = daycap.lines(repo.cap_hold_counts((now - daycap.WINDOW).isoformat()), caps)
     return templates.TemplateResponse(request, "beheer.html", {
-        "user": user, "students": students, "sets": sets, "invites": invites, "open_invites": sum(1 for i in invites if i["usable"]),
+        "user": user, "students": students, "sets": sets, "invites": invites, "open_invites": sum(1 for i in invites if i["usable"]), "held": held,
         "invite_required": config.REGISTRATION_REQUIRES_INVITE, "fout": fout[:120]})
 
 
