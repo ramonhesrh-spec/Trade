@@ -74,20 +74,24 @@ def _distance_pct(direction: str, z: ZoneLevel, price: float) -> float:
     return (price - z.high) / price * 100 if direction == "long" else (z.low - price) / price * 100
 
 
-def plan_for(direction: str, zones: list[ZoneLevel], price: float) -> Optional[dict]:
+def plan_for(direction: str, zones: list[ZoneLevel], price: float, stop_atr: Optional[float] = None,
+             max_distance_pct: Optional[float] = None) -> Optional[dict]:
     """Het plan voor de dichtstbijzijnde eigen zone, of None. Alleen die ene zone telt: valt hij af, dan wordt er niet naar een verdere zone gezocht.
     Het doel is het eerste obstakel vanaf de limiet, ook als dat tussen limiet en koers ligt (CEO, v2-plan punt 2: vanaf de koers zoeken liet zo'n
     niveau buiten beeld), en nooit een verder obstakel voor een mooier R-getal. Er is geen minimale R:R: de CEO wil elke kans zien (29 oktober 2026, WLD haalde op het
-    dichtste doel 1,6R en kreeg geen kaart); de kaart toont de R:R en jij beslist."""
+    dichtste doel 1,6R en kreeg geen kaart); de kaart toont de R:R en jij beslist.
+    stop_atr en max_distance_pct: alleen voor een schaduwvariant of een gepromoveerde waarde (app/shadow.py); standaard de constanten."""
+    stop_atr = STOP_ATR if stop_atr is None else stop_atr
+    max_distance_pct = MAX_DISTANCE_PCT if max_distance_pct is None else max_distance_pct
     own_kind = "bull" if direction == "long" else "bear"
-    own = [z for z in zones if z.kind == own_kind and 0 < _distance_pct(direction, z, price) <= MAX_DISTANCE_PCT]
+    own = [z for z in zones if z.kind == own_kind and 0 < _distance_pct(direction, z, price) <= max_distance_pct]
     if not own:
         return None
     zone = min(own, key=lambda z: (_distance_pct(direction, z, price), TFS.index(z.tf)))
     if direction == "long":
-        limit, raw_stop = zone.high, zone.low - STOP_ATR * zone.atr
+        limit, raw_stop = zone.high, zone.low - stop_atr * zone.atr
     else:
-        limit, raw_stop = zone.low, zone.high + STOP_ATR * zone.atr
+        limit, raw_stop = zone.low, zone.high + stop_atr * zone.atr
     stop = smc_eval.floor_stop(direction, limit, raw_stop)
     found = mark_between(direction, obstacles(direction, zones, limit, stop), price)
     if not found:
@@ -172,8 +176,8 @@ def target_edge(direction: str, target: ZoneLevel) -> float:
     return target.low if direction == "long" else target.high
 
 
-def plans(zones: list[ZoneLevel], price: float) -> list[dict]:
-    return [p for d in ("long", "short") if (p := plan_for(d, zones, price))]
+def plans(zones: list[ZoneLevel], price: float, **params) -> list[dict]:
+    return [p for d in ("long", "short") if (p := plan_for(d, zones, price, **params))]
 
 
 def walk(direction: str, limit: float, take: float, candles: pd.DataFrame) -> tuple[Optional[str], Optional[pd.Timestamp]]:

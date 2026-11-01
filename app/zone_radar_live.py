@@ -13,7 +13,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import chance_checks, config, daycap, latency, market_context, poc_radar_live, repo
+from app import chance_checks, config, daycap, latency, market_context, poc_radar_live, repo, shadow, shadow_live
 from app import zone_radar as zr
 
 logger = logging.getLogger("zone_radar_live")
@@ -121,8 +121,15 @@ async def _zones(coin: str, now: pd.Timestamp) -> tuple[list[zr.ZoneLevel], Opti
     return zones, price
 
 
-async def _scan(coin: str, now: pd.Timestamp, waiting: list[dict]) -> list[dict]:
-    """Ruimt vervallen kaarten op en geeft de nieuwe plannen terug; `run` kiest daaruit, zodat de volgorde van de coins niet bepaalt wie binnen de dagcap valt."""
+def _shadow_plan(coin: str, plan: dict, now: pd.Timestamp) -> dict:
+    return {"key": f"{coin}:{plan['direction']}:{plan['zone_key']}", "direction": plan["direction"], "limit": plan["limit"], "stop": plan["stop_loss"],
+            "take": plan["take_profit"], "expires_at": (now + shadow.NO_TTL).isoformat()}
+
+
+async def _scan(coin: str, now: pd.Timestamp, waiting: list[dict], params: Optional[dict] = None) -> list[dict]:
+    """Ruimt vervallen kaarten op en geeft de nieuwe plannen terug; `run` kiest daaruit, zodat de volgorde van de coins niet bepaalt wie binnen de dagcap valt.
+    params: de parameters van deze cyclus (shadow.live_params); leeg = de constanten."""
+    params = params or {}
     zones, price = await _zones(coin, now)
     keys = {z.key for z in zones}
     mine = [c for c in waiting if c["coin"] == coin]
@@ -131,8 +138,10 @@ async def _scan(coin: str, now: pd.Timestamp, waiting: list[dict]) -> list[dict]
             repo.end_zone_radar_setup(card["id"], "zone_weg")
     if not price:
         return []
+    shadow_live.observe(zr.TRADE_TYPE, coin, lambda p: [_shadow_plan(coin, plan, now) for plan in zr.plans(zones, price, **p)], now)
     busy = {c["direction"] for c in mine if c["zone_key"] in keys}
-    return [{**plan, "coin": coin, "distance": abs(plan["limit"] - price) / price} for plan in zr.plans(zones, price) if plan["direction"] not in busy]
+    return [{**plan, "coin": coin, "distance": abs(plan["limit"] - price) / price} for plan in zr.plans(zones, price, **params)
+            if plan["direction"] not in busy]
 
 
 def _context(coin: str, stamp: pd.Timestamp) -> dict:
@@ -151,13 +160,14 @@ async def run(now: Optional[datetime] = None) -> None:
     if not config.ZONE_RADAR_ENABLED:
         return
     stamp = pd.Timestamp(now or datetime.now(timezone.utc))
+    params = shadow.live_params(zr.TRADE_TYPE)        # een gepromoveerde schaduwwaarde geldt vanaf deze cyclus
     await _track(repo.list_zone_radar_setups())
     waiting = repo.list_zone_radar_setups()
     coins = [c["symbol"] for c in repo.list_coins()]
     found: list[dict] = []
     for coin in coins:
         try:
-            found += await _scan(coin, stamp, waiting)
+            found += await _scan(coin, stamp, waiting, params=params)
         except Exception:
             logger.exception("Zone-radar voor %s is mislukt", coin)
     since = (stamp - pd.Timedelta(hours=24)).isoformat()

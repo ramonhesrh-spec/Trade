@@ -74,7 +74,7 @@ def plan(coin, distance, key):
 
 class ZoneRadarCapTest(DbCase):
     def run_once(self, found):
-        async def scan(coin, stamp, waiting):
+        async def scan(coin, stamp, waiting, params=None):
             return [p for p in found if p["coin"] == coin]
 
         async def nothing(*a, **k):
@@ -152,7 +152,7 @@ class PocRadarCapTest(DbCase):
         from app import poc_radar_live
         found = [poc_plan("BTC", 0.01, "dag:a"), poc_plan("ETH", 0.02, "dag:b")]
 
-        async def scan(coin, stamp, waiting):
+        async def scan(coin, stamp, waiting, params=None):
             return [p for p in found if p["coin"] == coin]
 
         async def nothing(*a, **k):

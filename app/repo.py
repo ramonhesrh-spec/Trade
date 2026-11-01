@@ -3976,3 +3976,82 @@ def leak_inputs(since_iso: str) -> dict:
                                                  (since_iso,))]
     return {"cards": cards, "signals": list_signals_for_quality_report(since_iso), "cap_holds": holds, "timings": timings,
             "missers": list_auto_missers(since_iso)}
+
+
+def insert_shadow_variant(variant_id: str, trade_type: str, description: str, reason: str, params_json: str, created_at: str) -> None:
+    with db.session() as conn:
+        conn.execute("""INSERT INTO shadow_variants (id, trade_type, description, reason, params, created_at) VALUES (?, ?, ?, ?, ?, ?)""",
+                     (variant_id, trade_type, description, reason, params_json, created_at))
+
+
+def get_shadow_variant(variant_id: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM shadow_variants WHERE id = ?", (variant_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def active_shadow(trade_type: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM shadow_variants WHERE trade_type = ? AND status = 'schaduw'", (trade_type,)).fetchone()
+        return dict(row) if row else None
+
+
+def list_shadow_variants(statuses: tuple = ("schaduw",)) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(f"SELECT * FROM shadow_variants WHERE status IN ({','.join('?' * len(statuses))}) ORDER BY created_at, id",
+                            tuple(statuses)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_shadow_status(variant_id: str, status: str, at_iso: str, note: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE shadow_variants SET status = ?, decided_at = ?, decision_note = ? WHERE id = ?", (status, at_iso, note, variant_id))
+
+
+def insert_shadow_result(variant_id: str, arm: str, plan: dict, created_at: str) -> bool:
+    """Eén plan van een arm; hetzelfde plan (plan_key) in een volgende cyclus telt niet opnieuw. True als de rij nieuw is."""
+    with db.session() as conn:
+        cur = conn.execute("""INSERT OR IGNORE INTO shadow_results (variant_id, arm, plan_key, coin, direction, created_at, expires_at, limit_price,
+                              stop_loss, take_profit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                           (variant_id, arm, plan["key"], plan["coin"], plan["direction"], created_at, plan["expires_at"], plan["limit"],
+                            plan["stop"], plan.get("take")))
+        return cur.rowcount > 0
+
+
+def list_shadow_results(variant_id: str) -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM shadow_results WHERE variant_id = ? ORDER BY id", (variant_id,)).fetchall()]
+
+
+def list_open_shadow_results() -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM shadow_results WHERE state IN ('waiting', 'filled') ORDER BY id").fetchall()]
+
+
+def update_shadow_result(result_id: int, upd: dict) -> None:
+    with db.session() as conn:
+        conn.execute("""UPDATE shadow_results SET state = ?, filled_at = ?, outcome_at = ?, checked_until = ?, r_gross = ?, r_net = ? WHERE id = ?""",
+                     (upd["state"], upd["filled_at"], upd["outcome_at"], upd["checked_until"], upd["r_gross"], upd["r_net"], result_id))
+
+
+def list_engine_overrides(trade_type: str) -> dict:
+    with db.session() as conn:
+        return {r["param"]: r["value"] for r in conn.execute("SELECT param, value FROM engine_overrides WHERE trade_type = ?", (trade_type,))}
+
+
+def promote_shadow(variant_id: str, trade_type: str, params: dict, at_iso: str, note: str) -> None:
+    """Zet de parameters van de variant in de overlay en markeert hem gepromoveerd, in één transactie."""
+    with db.session() as conn:
+        for name, value in params.items():
+            conn.execute("""INSERT INTO engine_overrides (trade_type, param, value, variant_id, set_at) VALUES (?, ?, ?, ?, ?)
+                            ON CONFLICT(trade_type, param) DO UPDATE SET value = excluded.value, variant_id = excluded.variant_id, set_at = excluded.set_at""",
+                         (trade_type, name, float(value), variant_id, at_iso))
+        conn.execute("UPDATE shadow_variants SET status = 'gepromoveerd', decided_at = ?, decision_note = ? WHERE id = ?", (at_iso, note, variant_id))
+
+
+def revert_shadow(variant_id: str, at_iso: str, note: str) -> int:
+    """Haalt de overlay van deze variant weg (alleen zijn eigen rijen) en markeert hem afgevallen. Geeft het aantal weggehaalde parameters."""
+    with db.session() as conn:
+        n = conn.execute("DELETE FROM engine_overrides WHERE variant_id = ?", (variant_id,)).rowcount
+        conn.execute("UPDATE shadow_variants SET status = 'afgevallen', decided_at = ?, decision_note = ? WHERE id = ?", (at_iso, note, variant_id))
+        return n
