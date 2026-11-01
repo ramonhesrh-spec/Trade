@@ -330,9 +330,26 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now crypto-market-scan-smc.timer
 ```
 
-Draait los van de marktscan hierboven, elke 5 minuten (op minuten
-03/08/13/.../58, buiten zowel `crypto-level-check.timer`'s als
-`crypto-market-scan.timer`'s eigen grid). Alleen de SMC-structuurbreuk-
+Draait los van de marktscan hierboven, elke 5 minuten, 20 seconden na elk
+5m-slot (`OnCalendar=*:0/5:20`): gemeten op de VPS begon de oude timer
+(`*:3/5:00`) 183 s na het slot en duurde de cyclus 83 s. Na een wijziging
+aan de timer op de VPS opnieuw laden:
+
+```bash
+sudo cp deploy/crypto-market-scan-smc.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart crypto-market-scan-smc.timer
+systemctl list-timers crypto-market-scan-smc.timer   # de volgende start hoort op :x0:20 of :x5:20 te staan
+```
+
+Hoe lang een kansmelding onderweg was, van de candle-sluiting tot de verzonden push, per soort (mediaan en 90e
+percentiel, alleen-lezen):
+
+```bash
+.venv/bin/python3 scripts/vertraging.py --dagen 7
+```
+
+Alleen de SMC-structuurbreuk-
 check, niets van de drie 4u-detectoren: SMC reageert op 15m-candles en
 heeft dus veel meer baat bij een korte cyclus dan die 4u-detectoren, die
 toch pas om de 4 uur nieuwe data krijgen. Gebruikt dezelfde

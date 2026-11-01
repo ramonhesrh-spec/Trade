@@ -11,12 +11,12 @@ Per cyclus:
 De snelcyclus is elke 5 minuten een nieuw proces, dus alles wat de motor onthoudt staat in de database (poc_levels, poc_scans)."""
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 import pandas as pd
 
-from app import config, focus, poc, push_notify, range_sweep_live as rsl, repo
+from app import config, focus, latency, poc, push_notify, range_sweep_live as rsl, repo
 from app import poc_radar as pr
 from app import zone_radar as zr
 from app.replay import rangesweep as rs
@@ -132,16 +132,19 @@ async def _scan_coin(coin: str, now: pd.Timestamp, waiting: list[dict]) -> list[
             if p["direction"] not in busy]
 
 
-async def _announce(card: dict) -> None:
+async def _announce(card: dict, detected=None) -> None:
     if not repo.mark_poc_radar_alert_sent(card["id"]):
         return
+    # De kaart komt uit de koers van deze cyclus: het candlemoment is het laatste 5m-slot vóór de detectie.
+    timing = latency.timing(TRADE_TYPE, "nieuw", None, detected or datetime.now(timezone.utc))
     title = push_notify.alert_title(card["coin"], card["direction"], f"{pr.LABEL} · ongetest")
     body = pr.new_card_body(card)
     for uid in viewers():
         user = repo.get_user(uid) or {}
         quiet = push_notify.is_quiet_now(user.get("quiet_hours_start"), user.get("quiet_hours_end"))
         try:
-            await push_notify.send_kans_push(uid, card["coin"], card["direction"], title, body, card_url(card["id"]), silent=quiet, tag=_tag(card["id"]))
+            await push_notify.send_kans_push(uid, card["coin"], card["direction"], title, body, card_url(card["id"]), silent=quiet, tag=_tag(card["id"]),
+                                             timing=timing)
         except Exception as exc:
             logger.exception("POC-radar-melding %s naar gebruiker %s is mislukt", card["id"], uid)
             push_notify.record_failure(uid, "kans", card_url(card["id"]), exc)
@@ -175,7 +178,7 @@ async def scan(now: Optional[datetime] = None) -> None:
             continue
         logger.info("POC-radar %s %s: kaart %s, %s op %s, doel %s", plan["coin"], plan["direction"], setup_id, plan["level_key"], plan["level"],
                     plan["take_profit"])
-        await _announce({**row, "id": setup_id})
+        await _announce({**row, "id": setup_id}, stamp)
     if checked or failed:
         repo.beat("poc_radar", f"{checked} van {len(coins)} coins bijgewerkt" + (f", {failed} mislukt" if failed else ""))
 
@@ -194,12 +197,13 @@ async def _fill(card: dict, filled_at: pd.Timestamp) -> None:
     logger.info("POC-radar %s %s gevuld op %s, stop %s, doel %s", card["coin"], card["direction"], entry, card["stop_loss"], card["take_profit"])
     title = push_notify.alert_title(card["coin"], card["direction"], f"{pr.LABEL} gevuld")
     body = pr.fill_body(card, entry)
+    timing = latency.timing(TRADE_TYPE, "vulling", filled_at + pd.Timedelta(minutes=5), datetime.now(timezone.utc))
     for uid in uids:
         user = repo.get_user(uid) or {}
         quiet = push_notify.is_quiet_now(user.get("quiet_hours_start"), user.get("quiet_hours_end"))
         try:
             await push_notify.send_kans_push(uid, card["coin"], card["direction"], title, body, push_notify.signal_url(card["coin"], signal_id),
-                                             silent=quiet, tag=_tag(card["id"]))
+                                             silent=quiet, tag=_tag(card["id"]), timing=timing)
         except Exception:
             logger.exception("POC-radar-vulling %s naar gebruiker %s is mislukt", card["id"], uid)
 

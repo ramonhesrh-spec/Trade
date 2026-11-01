@@ -228,7 +228,7 @@ class PatternScoreIsNotAChanceTest(unittest.TestCase):
 
 
 class FastCycleTimingTest(DbCase):
-    """scan_smc_fast schrijft in zijn hartslag hoe laat na het 5m-slot hij begon en hoe lang hij duurde (deploy timer *:3/5:00)."""
+    """scan_smc_fast schrijft in zijn hartslag hoe laat na het 5m-slot hij begon en hoe lang hij duurde (deploy timer *:0/5:20)."""
 
     def test_seconds_after_the_five_minute_slot(self):
         from app import market_scanner

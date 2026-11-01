@@ -13,7 +13,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import chance_checks, config, market_context, poc_radar_live, repo
+from app import chance_checks, config, latency, market_context, poc_radar_live, repo
 from app import zone_radar as zr
 
 logger = logging.getLogger("zone_radar_live")
@@ -34,17 +34,19 @@ def new_card_body(card: dict) -> str:
                                   "Zet je limietorder klaar als je hem wilt. Ongetest.")
 
 
-async def _push_new_card(card: dict) -> None:
+async def _push_new_card(card: dict, detected=None) -> None:
     from app import push_notify
     if not repo.mark_zone_radar_alert_sent(card["id"]):
         return
+    # De kaart komt uit de zones en de koers van deze cyclus: het candlemoment is het laatste 5m-slot vóór de detectie.
+    timing = latency.timing(zr.TRADE_TYPE, "nieuw", None, detected or datetime.now(timezone.utc))
     title = push_notify.alert_title(card["coin"], card["direction"], f"{zr.LABEL} · ongetest")
     body = new_card_body(card)
     for user in repo.list_users():
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             await push_notify.send_kans_push(user["id"], card["coin"], card["direction"], title, body, card_url(card["id"]), silent=quiet,
-                                             tag=f"zone-radar-{card['id']}")
+                                             tag=f"zone-radar-{card['id']}", timing=timing)
         except Exception as exc:
             logger.exception("Zone-radar-melding voor %s naar gebruiker %s is mislukt", card["coin"], user["username"])
             push_notify.record_failure(user["id"], "kans", card_url(card["id"]), exc)
@@ -67,7 +69,7 @@ def signal_row(card: dict) -> dict:
     }
 
 
-async def _fill(card: dict) -> None:
+async def _fill(card: dict, filled_at=None) -> None:
     from app import push_notify
     from app.signal_processor import fanout_confirmed_signal
     from app.structure_live import trade_tag
@@ -81,6 +83,8 @@ async def _fill(card: dict) -> None:
         title=push_notify.alert_title(card["coin"], direction, f"{zr.LABEL} gevuld"),
         make_body=lambda sl, tp_, _capped: push_notify.trade_body("Entry", entry, sl, tp_, card["rr"], "De koers is in de zone, je limiet is geraakt.", "Ongetest."),
         reason="", signal_type=zr.TRADE_TYPE, tag=trade_tag(signal_id),
+        timing=latency.timing(zr.TRADE_TYPE, "vulling", None if filled_at is None else pd.Timestamp(filled_at) + pd.Timedelta(FILL_TF),
+                              datetime.now(timezone.utc)),
     )
 
 
@@ -96,10 +100,10 @@ async def _track(waiting: list[dict]) -> None:
             # Ook de candle die nog vormt: een aanraking van de limiet is een vulling, ook vóór het slot. Alleen candles die na de kaart openden,
             # anders telt een prik van vóór de kaart als vulling.
             after = df[df["timestamp"] >= pd.Timestamp(card["created_at"])]
-            what, _at = zr.walk(card["direction"], card["zone_high"] if card["direction"] == "long" else card["zone_low"], zr.miss_take(card), after)
+            what, at = zr.walk(card["direction"], card["zone_high"] if card["direction"] == "long" else card["zone_low"], zr.miss_take(card), after)
             try:
                 if what == "filled":
-                    await _fill(card)
+                    await _fill(card, at)
                 elif what == "doel_geraakt":
                     repo.end_zone_radar_setup(card["id"], "doel_geraakt")
             except Exception:
@@ -168,7 +172,7 @@ async def run(now: Optional[datetime] = None) -> None:
         if setup_id is None:
             continue
         logger.info("Zone-radar %s %s: kaart %s, %s %s-%s, R:R %.1f", plan["coin"], plan["direction"], setup_id, plan["tf"], plan["zone_low"], plan["zone_high"], plan["rr"])
-        await _push_new_card({**plan, "id": setup_id})
+        await _push_new_card({**plan, "id": setup_id}, stamp)
     repo.beat("zone_radar", f"{len(coins)} coins gecontroleerd")
 
 

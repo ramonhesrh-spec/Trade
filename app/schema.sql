@@ -687,6 +687,21 @@ CREATE TABLE IF NOT EXISTS push_attempts (
 );
 CREATE INDEX IF NOT EXISTS idx_push_attempts_ref ON push_attempts(kind, ref);
 
+-- Vertraging per kansmelding (app/latency.py): het slot van de candle waarop de kans ontstond of vulde, de detectie door de motor en het moment
+-- dat de push verzonden was. Eén rij per gebruiker per verzonden push uit send_kans_push; een geweerde kans (budget, pauze) heeft geen rij.
+CREATE TABLE IF NOT EXISTS alert_timing (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    trade_type TEXT,
+    event TEXT,
+    ref TEXT NOT NULL,
+    candle_at TEXT NOT NULL,
+    detected_at TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    ok INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_alert_timing_sent ON alert_timing(sent_at);
+
 -- Uitkomst van het strategie-lab per regel (scripts/strategy_lab.py --opslaan); de regel heet als de labvariant in kleine letters.
 CREATE TABLE IF NOT EXISTS rule_status (
     rule TEXT PRIMARY KEY,

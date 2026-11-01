@@ -1828,6 +1828,18 @@ def list_push_attempts(kind: str, ref: str) -> list[dict]:
         return [dict(r) for r in conn.execute("SELECT * FROM push_attempts WHERE kind = ? AND ref = ? ORDER BY id", (kind, ref)).fetchall()]
 
 
+def record_alert_timing(user_id: int, ref: str, ok: bool, timing: dict, sent_at: str) -> None:
+    with db.session() as conn:
+        conn.execute("""INSERT INTO alert_timing (user_id, trade_type, event, ref, candle_at, detected_at, sent_at, ok)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                     (user_id, timing.get("trade_type"), timing.get("event"), ref, timing["candle_at"], timing["detected_at"], sent_at, 1 if ok else 0))
+
+
+def list_alert_timings(since: Optional[str] = None) -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM alert_timing WHERE (? IS NULL OR sent_at >= ?) ORDER BY id", (since, since)).fetchall()]
+
+
 def count_failed_push_attempts(kind: str, ref: str) -> int:
     with db.session() as conn:
         return conn.execute("SELECT COUNT(*) FROM push_attempts WHERE kind = ? AND ref = ? AND ok = 0", (kind, ref)).fetchone()[0]

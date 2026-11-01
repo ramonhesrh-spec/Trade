@@ -1212,7 +1212,7 @@ async def scan_market() -> None:
 
 
 # Hartslag van de snelcyclus zelf: hoe laat na het 5m-slot hij begon en hoe lang hij duurde. De timer (deploy/crypto-market-scan-smc.timer,
-# *:3/5:00) start drie minuten na een slot; zonder deze meting was de werkelijke vertraging tot een melding niet te zien.
+# *:0/5:20) start 20 s na een slot (eerder *:3/5:00, gemeten 183 s); zonder deze meting was de werkelijke vertraging tot een melding niet te zien.
 FAST_CYCLE_BEAT = "snelcyclus"
 
 

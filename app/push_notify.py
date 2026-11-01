@@ -114,10 +114,11 @@ def record_failure(user_id: int, kind: str, ref: str, error) -> None:
 
 
 async def send_kans_push(user_id: int, coin: str, direction: str, title: str, body: str, url: str, silent: bool = False,
-                         tag: Optional[str] = None, badge: Optional[int] = None) -> bool:
+                         tag: Optional[str] = None, badge: Optional[int] = None, timing: Optional[dict] = None) -> bool:
     """Push voor een nieuwe kans, met de regels van app/push_policy.py: geen tegenstrijdige richting kort na elkaar op dezelfde coin en een dagbudget per
     gebruiker. Een geweerde kans wordt een rustige melding op de meldingenpagina, dus niets verdwijnt. Geeft True als er een push is gestuurd.
-    Updates van een lopende trade, stop en doel en de agenda gaan rechtstreeks via send_push en komen altijd."""
+    Updates van een lopende trade, stop en doel en de agenda gaan rechtstreeks via send_push en komen altijd.
+    timing (app/latency.timing): candle- en detectiemoment van de kans; met het moment van verzenden komt het in alert_timing."""
     now = datetime.now(timezone.utc)
     user = repo.get_user(user_id) or {}
     if push_policy.pause_minutes_left(user.get("push_paused_until"), now):
@@ -135,6 +136,11 @@ async def send_kans_push(user_id: int, coin: str, direction: str, title: str, bo
         return False
     repo.record_push(user_id, coin, direction, now.isoformat())
     error = await send_push(user_id, title, body, url, silent=silent, **({"tag": tag} if tag else {}), **({"badge": badge} if badge is not None else {}))
+    if timing:
+        try:
+            repo.record_alert_timing(user_id, url, not error, timing, datetime.now(timezone.utc).isoformat())
+        except Exception:
+            logger.exception("Vertraging van de melding voor %s niet vastgelegd", coin)
     if error:
         # De kaart is al geclaimd (alert_sent), dus geen nieuwe poging: de kans komt dan op de meldingenpagina in plaats van stil te verdwijnen.
         record_failure(user_id, "kans", url, error)
