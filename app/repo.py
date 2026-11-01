@@ -1801,7 +1801,7 @@ def list_unresolved_signals_with_levels() -> list[dict]:
     markeerde."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT id, coin, direction, stop_loss, take_profit, created_at, nearest_sr_zone_price, trade_type
+            """SELECT id, coin, direction, price, stop_loss, take_profit, created_at, nearest_sr_zone_price, trade_type
                FROM signals
                WHERE auto_outcome IS NULL
                  AND stop_loss IS NOT NULL
@@ -2643,9 +2643,11 @@ def list_signals_for_quality_report(since_iso: Optional[str] = None) -> list[dic
     with db.session() as conn:
         rows = conn.execute(
             """SELECT s.id, s.coin, s.direction, s.message_id, s.trade_type, s.auto_outcome, s.auto_outcome_at, s.price, s.stop_loss, s.take_profit,
-                      s.created_at, s.pass_pct, (sv.id IS NOT NULL) AS samenval, tr.r_value AS r_override, zr.ctx_funding
+                      s.created_at, s.pass_pct, (sv.id IS NOT NULL) AS samenval, tr.r_value AS r_override, zr.ctx_funding,
+                      s.auto_outcome_note, tx.mae_r, tx.mfe_r
                FROM signals s LEFT JOIN samenvallen sv ON sv.smc_signal_id = s.id
                LEFT JOIN trade_results tr ON tr.signal_id = s.id
+               LEFT JOIN trade_excursions tx ON tx.signal_id = s.id
                LEFT JOIN zone_radar_setups zr ON zr.signal_id = s.id
                WHERE s.is_practice = 0 AND (? IS NULL OR s.created_at >= ?) ORDER BY s.created_at""",
             (since_iso, since_iso),
@@ -3007,6 +3009,22 @@ def set_trade_result(signal_id: int, r_value: float, closed_at: str) -> None:
             """INSERT INTO trade_results (signal_id, r_value, closed_at) VALUES (?, ?, ?)
                ON CONFLICT(signal_id) DO UPDATE SET r_value = excluded.r_value, closed_at = excluded.closed_at""",
             (signal_id, r_value, closed_at))
+
+
+def set_trade_excursion(signal_id: int, mae_r: float, mfe_r: float, timeframe: Optional[str]) -> None:
+    """MAE en MFE van een afgeronde trade (app/excursion.py); een tweede meting van hetzelfde signaal vervangt de eerste."""
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO trade_excursions (signal_id, mae_r, mfe_r, timeframe, measured_at) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(signal_id) DO UPDATE SET mae_r = excluded.mae_r, mfe_r = excluded.mfe_r, timeframe = excluded.timeframe,
+               measured_at = excluded.measured_at""",
+            (signal_id, mae_r, mfe_r, timeframe, db.now_iso()))
+
+
+def get_trade_excursion(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM trade_excursions WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
 
 
 def set_rule_lab(rule: str, passes: bool, summary: dict, now: str) -> None:

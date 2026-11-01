@@ -702,6 +702,16 @@ CREATE TABLE IF NOT EXISTS trade_results (
     closed_at TEXT NOT NULL
 );
 
+-- Hoe ver een afgeronde trade eerst tegen je in ging (MAE) en met je mee (MFE), in R, op candles van na de vulling tot de uitkomst (app/excursion.py).
+-- Gezet bij de uitkomst door level_check of de motor zelf (range_sweep_live.follow_trade). Alleen meting: niets in een motor leest dit.
+CREATE TABLE IF NOT EXISTS trade_excursions (
+    signal_id INTEGER PRIMARY KEY,
+    mae_r REAL NOT NULL,
+    mfe_r REAL NOT NULL,
+    timeframe TEXT,
+    measured_at TEXT NOT NULL
+);
+
 -- Lopende trades van de proefmotor (app/rule_live.py). signals.stop_loss blijft de eerste stop, want risico, R en kosten rekenen daarmee;
 -- de meelopende stop staat hier. entered_at is het openmoment van de instapcandle: één trade per regel, coin en candle, ook na een herstart.
 -- checked_until is het openmoment van de laatst verwerkte gesloten candle: alleen nieuwere candles worden getoetst, anders raakt een oude candle

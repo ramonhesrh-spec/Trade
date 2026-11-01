@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
-from app import db, exchange, focus, indicators, price_alerts, push_notify, range_sweep_live, repo, rule_live
+from app import db, exchange, excursion, focus, indicators, price_alerts, push_notify, range_sweep_live, repo, rule_live
 from app.signal_processor import (
     SWING_WATCH_MAX_AGE_DAYS, _price_broke_through, _price_near_level, run_swing_check,
 )
@@ -245,6 +245,7 @@ async def check_signal_outcomes() -> None:
             occurred_at = hit_at.isoformat()
             ambiguous = _both_levels_at(signal["direction"], signal["stop_loss"], signal["take_profit"], candles, hit_at)
             repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at, AMBIGUOUS_NOTE if ambiguous else None)
+            _store_excursion(signal, candles)
             # Een zelf-gedetecteerde zone die net een stop loss veroorzaakte
             # gaat op cooldown (zie repo.recent_sr_zone_failure) zodat een
             # volgend signaal vlakbij dezelfde rand niet meteen dezelfde fout
@@ -262,6 +263,16 @@ async def check_signal_outcomes() -> None:
         if age_days > SIGNAL_MAX_AGE_DAYS:
             repo.mark_signal_auto_outcome(signal["id"], "vervallen", db.now_iso())
             logger.info("Signaal %s (%s) vervallen na %s dagen zonder uitkomst", signal["id"], coin, age_days)
+
+
+def _store_excursion(signal: dict, candles) -> None:
+    """MAE en MFE op dezelfde candles die de uitkomst vonden; een meting die faalt, mag de uitkomst niet tegenhouden."""
+    try:
+        x = excursion.measure(signal["direction"], signal["price"], signal["stop_loss"], signal["take_profit"], candles)
+        if x:
+            repo.set_trade_excursion(signal["id"], x["mae_r"], x["mfe_r"], excursion.timeframe_of(candles))
+    except Exception:
+        logger.exception("MAE/MFE van signaal %s niet vastgelegd", signal["id"])
 
 
 def _nearest_level(current_price: float, atr: float, levels: list[dict]) -> Optional[dict]:

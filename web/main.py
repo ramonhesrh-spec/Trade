@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import announce, card_chart, ceo, chance_checks, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep, poc_radar
+from app import announce, card_chart, ceo, chance_checks, excursion, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep, poc_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
 from web import splash
@@ -1179,6 +1179,10 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
         entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
     total = next((e for e in summary if e["source"] == "alles"), None)
     per_type, off_types = focus.split(e for e in summary if e["source"] != "alles")
+    moves = excursion.stats(rows)
+    for e in per_type:
+        if focus.is_focus(e["trade_type"]):
+            e["mae_line"] = excursion.line(moves.get(e["trade_type"]))
     lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
     visible = track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES)
     # De range sweep heeft zijn eigen sectie met de stopmeting; als 'andere regel zonder motor' zou hij een live motor ontkennen die er wel is.
