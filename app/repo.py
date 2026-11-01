@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import announce, chain, config, db, risk
+from app import announce, candle_source, chain, config, db, risk
 
 logger = logging.getLogger(__name__)
 
@@ -1007,6 +1007,11 @@ def update_confirm_threshold(user_id: int, threshold_pct: float) -> None:
 # Signalen: gedeelde technische toetsing, hetzelfde voor iedereen
 # ---------------------------------------------------------------------------
 
+def _candle_market(row: dict) -> str:
+    """De markt van de candles waarop deze rij berekend is: wat de aanroeper meegaf, anders wat dit proces voor de coin ophaalde."""
+    return row.get("candle_market") or candle_source.market_of(row["coin"])
+
+
 def insert_signal(data: dict, chain_it: bool = True) -> int:
     """chain_it=False: geen schakel in de openbare ketting (/keten), voor de proefmotor die alleen de CEO ziet."""
     with db.session() as conn:
@@ -1021,11 +1026,12 @@ def _insert_signal(conn, data: dict, chain_it: bool) -> int:
         "technical_confirmed", "pass_pct", "hard_gates_ok", "confidence", "reason", "stop_loss", "take_profit",
         "context_note", "is_practice", "plain_explanation", "trade_type", "nearest_sr_zone_price",
         "suggested_entry_low", "suggested_entry_high", "pattern_name",
-        "sniper_entry_price", "sniper_reason",
+        "sniper_entry_price", "sniper_reason", "candle_market",
     ]
     values = [
         data.get("is_practice", 0) if f == "is_practice"
         else data.get("trade_type", "day_trading") if f == "trade_type"
+        else _candle_market(data) if f == "candle_market"
         else data.get(f)
         for f in fields
     ]
@@ -2853,10 +2859,11 @@ def insert_structure_setup(row: dict) -> Optional[int]:
     with db.session() as conn:
         cur = conn.execute(
             """INSERT OR IGNORE INTO structure_setups (coin, direction, kind, break_at, p1_at, line_a, line_slope, atr, grade,
-                   reason, features, state, created_at, expires_at, plan)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                   reason, features, state, created_at, expires_at, plan, candle_market)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (row["coin"], row["direction"], row["kind"], row["break_at"], row["p1_at"], row["line_a"], row["line_slope"],
-             row["atr"], row["grade"], row["reason"], row["features"], row["state"], db.now_iso(), row["expires_at"], row.get("plan")),
+             row["atr"], row["grade"], row["reason"], row["features"], row["state"], db.now_iso(), row["expires_at"], row.get("plan"),
+             _candle_market(row)),
         )
         return cur.lastrowid if cur.rowcount else None
 
@@ -3126,14 +3133,15 @@ def count_range_watch_pushes(user_id: int, since_iso: str) -> int:
 
 
 _SETUP_COLS = ("coin", "direction", "variant", "family", "stop_name", "range_tf", "range_high", "range_low", "range_first_at", "zone_low", "zone_high",
-               "zone_at", "sweep_at", "extreme", "placed_at", "legs", "stop", "atr_t", "score", "grade", "reason", "features", "liq_json", "expires_at", "plan")
+               "zone_at", "sweep_at", "extreme", "placed_at", "legs", "stop", "atr_t", "score", "grade", "reason", "features", "liq_json", "expires_at", "plan",
+               "candle_market")
 
 
 def insert_range_sweep_setup(row: dict) -> Optional[int]:
     """None als dezelfde setup al bestaat: de motor draait elke cyclus over dezelfde candles en mag er niet twee van maken."""
     with db.session() as conn:
         cur = conn.execute(f"INSERT OR IGNORE INTO range_sweep_setups ({', '.join(_SETUP_COLS)}) VALUES ({', '.join(':' + c for c in _SETUP_COLS)})",
-                           {c: row[c] for c in _SETUP_COLS})
+                           {c: _candle_market(row) if c == "candle_market" else row[c] for c in _SETUP_COLS})
         return cur.lastrowid if cur.rowcount else None
 
 
@@ -3235,11 +3243,14 @@ def set_signal_price(signal_id: int, price: float) -> None:
 
 
 _ZONE_RADAR_COLS = ("coin", "direction", "tf", "zone_key", "zone_low", "zone_high", "stop_loss", "take_profit", "rr", "atr",
-                    "target_tf", "target_low", "target_high", "ctx_funding", "ctx_oi_change_24h", "ctx_spread", "poc_near", "obstacles")
+                    "target_tf", "target_low", "target_high", "ctx_funding", "ctx_oi_change_24h", "ctx_spread", "poc_near", "obstacles",
+                    "candle_market")
 
 
 def _setup_value(row: dict, col: str):
     """De obstakels van een kaart gaan als JSON-tekst de database in; een lijst kan SQLite niet bewaren."""
+    if col == "candle_market":
+        return _candle_market(row)
     value = row.get(col)
     return json.dumps(value) if col == "obstacles" and isinstance(value, list) else value
 
@@ -3302,7 +3313,7 @@ def get_zone_radar_setup(setup_id: int) -> Optional[dict]:
 
 _ZONE_SWEEP_COLS = ("coin", "direction", "variant", "stop_name", "tf", "zone_key", "zone_low", "zone_high", "zone_at", "sweep_at", "extreme",
                     "placed_at", "expires_at", "ref_price", "range_high", "range_low", "atr_t", "limit_price", "stop_loss", "take_profit", "rr",
-                    "target_tf", "target_low", "target_high", "prik_atr", "herstel_bars", "quiet", "poc_near")
+                    "target_tf", "target_low", "target_high", "prik_atr", "herstel_bars", "quiet", "poc_near", "candle_market")
 
 
 def insert_zone_sweep_setup(row: dict, created_at: str) -> Optional[int]:
@@ -3310,7 +3321,7 @@ def insert_zone_sweep_setup(row: dict, created_at: str) -> Optional[int]:
     with db.session() as conn:
         cur = conn.execute(
             f"INSERT OR IGNORE INTO zone_sweep_setups ({', '.join(_ZONE_SWEEP_COLS)}, created_at) VALUES ({', '.join('?' for _ in _ZONE_SWEEP_COLS)}, ?)",
-            (*(row.get(c, 0 if c == "quiet" else None) for c in _ZONE_SWEEP_COLS), created_at))
+            (*(row.get(c, 0) if c == "quiet" else _setup_value(row, c) for c in _ZONE_SWEEP_COLS), created_at))
         return cur.lastrowid if cur.rowcount else None
 
 
@@ -3438,7 +3449,8 @@ def set_poc_scan(coin: str, checked_until: str, scanned_at: str) -> None:
 
 
 _POC_RADAR_COLS = ("coin", "direction", "period", "period_start", "level_key", "level", "limit_price", "stop_loss", "take_profit", "rr", "atr",
-                   "target_kind", "target_text", "target_tf", "target_low", "target_high", "expires_at", "obstacles")
+                   "target_kind", "target_text", "target_tf", "target_low", "target_high", "expires_at", "obstacles",
+                   "candle_market")
 
 
 def insert_poc_radar_setup(row: dict, created_at: str) -> Optional[int]:

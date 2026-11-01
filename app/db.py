@@ -315,6 +315,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     for table in ("zone_radar_setups", "poc_radar_setups"):
         if "obstacles" not in {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN obstacles TEXT")
+    # De markt van de candles (app/candle_source.py); oude rijen blijven leeg, ze worden nooit herberekend. Niet op smc_setups: de golden
+    # test van de SMC-motor (tests/test_smc_golden.py) legt elke kolom van die tabel vast, en de SMC-motor staat uit (focus).
+    for table in ("signals", "structure_setups", "range_sweep_setups", "zone_radar_setups", "zone_sweep_setups", "poc_radar_setups"):
+        cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if cols and "candle_market" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN candle_market TEXT")
 
 
 def _migrate_rule_trades(conn: sqlite3.Connection) -> None:

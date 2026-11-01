@@ -199,6 +199,8 @@ CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message_id INTEGER REFERENCES messages(id),
     coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
     direction TEXT NOT NULL,
     category TEXT NOT NULL,
     price REAL,
@@ -604,6 +606,8 @@ CREATE INDEX IF NOT EXISTS idx_registration_attempts_ip_time ON registration_att
 CREATE TABLE IF NOT EXISTS structure_setups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
     direction TEXT NOT NULL,
     kind TEXT NOT NULL,
     break_at TEXT NOT NULL,
@@ -750,6 +754,8 @@ CREATE INDEX IF NOT EXISTS idx_range_watch_log_user ON range_watch_log(user_id, 
 CREATE TABLE IF NOT EXISTS range_sweep_setups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
     direction TEXT NOT NULL,
     variant TEXT NOT NULL,
     family TEXT NOT NULL,
@@ -827,6 +833,8 @@ CREATE INDEX IF NOT EXISTS idx_price_alerts_open ON price_alerts(sent_at, coin);
 CREATE TABLE IF NOT EXISTS zone_radar_setups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
     direction TEXT NOT NULL,
     tf TEXT NOT NULL,
     zone_key TEXT NOT NULL,
@@ -866,6 +874,8 @@ CREATE INDEX IF NOT EXISTS idx_zone_radar_setups_state ON zone_radar_setups(stat
 CREATE TABLE IF NOT EXISTS zone_sweep_setups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
     direction TEXT NOT NULL,
     variant TEXT NOT NULL,
     stop_name TEXT NOT NULL,
@@ -949,6 +959,8 @@ CREATE TABLE IF NOT EXISTS poc_scans (
 CREATE TABLE IF NOT EXISTS poc_radar_setups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
     direction TEXT NOT NULL,
     period TEXT NOT NULL,
     period_start TEXT NOT NULL,

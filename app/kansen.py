@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Iterable, Optional
 from zoneinfo import ZoneInfo
 
-from app import nu, radar, setup_chart, trade_plan as tp
+from app import candle_source, nu, radar, setup_chart, trade_plan as tp
 from app import zone_radar as zr
 from app.price_text import nl
 
@@ -77,6 +77,12 @@ def obstacle_lines(raw, now: Optional[datetime] = None) -> list[str]:
     if len(found) > 1:
         lines.append("Daarna: " + ", ".join(_obstacle_text(o) for o in found[1:3]))
     return lines
+
+
+def source_text(row: Optional[dict]) -> Optional[str]:
+    """"Binance perps" of "Binance spot": de markt van de candles waarop de kaart of het signaal berekend is. Leeg bij rijen van vóór die
+    meting (candle_market NULL): dan zeggen we niets in plaats van te raden."""
+    return candle_source.label((row or {}).get("candle_market"))
 
 
 def share_lines(item: dict) -> list[str]:
@@ -208,16 +214,19 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
     `hidden`: kaarten die deze gebruiker verborg (kans_hidden). Die staan niet in de lijst en tellen nergens mee (tab, badge, totaal, ook niet
     als 'vergelijkbaar'), maar wel onderaan hun tab als `hidden` (rijen) en `hidden_cards` (de kaart zelf, voor Toon weer zonder herladen)."""
     wanted = set(kinds)
-    plans = [{**structure_item(card, price, state), "created_at": card.get("created_at")} for card, price, state in structure]
+    plans = [{**structure_item(card, price, state), "created_at": card.get("created_at"), "source_text": source_text(card)}
+             for card, price, state in structure]
     plans += [{**_plan(nu._from_setup(c), "radar-" + c["key"].replace(":", "-")), "created_at": c.get("created_at"),
-               "obstacle_lines": obstacle_lines((c.get("setup") or {}).get("obstacles"))} for c in radar.waiting_cards(radar_cards)]
+               "obstacle_lines": obstacle_lines((c.get("setup") or {}).get("obstacles")), "source_text": source_text(c.get("setup"))}
+              for c in radar.waiting_cards(radar_cards)]
     skipped, hidden = set(skipped), set(hidden)
     for p in plans:
         p["skipped"] = p["key"] in skipped
         p["shared_text"] = _shared(p, "Gedeeld")
         p["share_lines"] = share_lines(p)
     # `svg`: de route zet bij een open Structuur-trade zijn getekende setup op de kaart (kans_view.chart); de andere soorten hebben er geen.
-    trades = [_trade({**nu._from_signal(c), "svg": c.get("svg") or ""}) for c in radar_cards + structure_trades if c and c["kind"] == "signal"]
+    trades = [_trade({**nu._from_signal(c), "svg": c.get("svg") or "", "source_text": source_text(c.get("signal"))})
+              for c in radar_cards + structure_trades if c and c["kind"] == "signal"]
     for t in trades:
         t["share_lines"] = share_lines(t)
     # Een open trade blijft staan, ook als zijn soort geen nieuwe kansen meer zoekt (focus): dan krijgt die soort toch een tab.
