@@ -59,9 +59,12 @@
       <dl class="proof-facts">
         <div><dt>Afgeronde trades</dt><dd>{{ e.resolved }}</dd></div>
         <div><dt>Winrate</dt><dd>{% if e.winrate is not none %}{{ "%.0f"|format(e.winrate * 100) }}%{% else %}-{% endif %}</dd></div>
-        <div><dt>Zonder kosten</dt><dd>{% if e.avg_gross is not none %}{{ "%+.2f"|format(e.avg_gross) }}R{% else %}-{% endif %}</dd></div>
+        <div><dt>Bruto per trade</dt><dd>{% if e.avg_gross is not none %}{{ "%+.2f"|format(e.avg_gross)|replace(".", ",") }}R{% else %}-{% endif %}</dd></div>
+        <div><dt>Netto per trade</dt><dd>{% if e.avg_net is not none %}{{ "%+.2f"|format(e.avg_net)|replace(".", ",") }}R{% else %}-{% endif %}</dd></div>
+        <div><dt>Kosten per trade</dt><dd>{% if e.avg_cost_r is not none %}{{ "%.2f"|format(e.avg_cost_r)|replace(".", ",") }}R{% else %}-{% endif %}</dd></div>
         <div><dt>Laatste {{ recent_days }} dagen</dt><dd>{% if e.recent_avg_net is not none %}{{ "%+.2f"|format(e.recent_avg_net) }}R ({{ e.recent_resolved }})</dd>{% else %}-</dd>{% endif %}</div>
       </dl>
+      {% if e.gross_total is not none %}<p class="proof-footnote muted proof-cost">Samen {{ "%+.2f"|format(e.gross_total)|replace(".", ",") }}R bruto, {{ "%+.2f"|format(e.net_total)|replace(".", ",") }}R {{ cost_line }}. Een krappe stop maakt de kosten in R groter.</p>{% endif %}
       {% if e.score_split and e.source != 'alles' %}
       <p class="proof-footnote muted">Score van {{ "%.0f"|format(e.score_split.cut) }}% of hoger: {% if e.score_split.high_avg is not none %}{{ "%+.2f"|format(e.score_split.high_avg) }}R ({{ e.score_split.high_n }}){% else %}nog geen afgeronde kans{% endif %}.
         Lager: {% if e.score_split.low_avg is not none %}{{ "%+.2f"|format(e.score_split.low_avg) }}R ({{ e.score_split.low_n }}){% else %}nog geen afgeronde kans{% endif %}. Dit toont of de gemeten kenmerken iets zeggen.</p>
