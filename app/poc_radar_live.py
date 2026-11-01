@@ -16,7 +16,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, daycap, focus, latency, poc, push_notify, range_sweep_live as rsl, repo
+from app import config, daycap, focus, latency, poc, push_notify, range_sweep_live as rsl, repo, shadow, shadow_live
 from app import poc_radar as pr
 from app import zone_radar as zr
 from app.replay import rangesweep as rs
@@ -111,7 +111,14 @@ def refresh(coin: str, now: pd.Timestamp) -> tuple[list[poc.PocLevel], Optional[
     return stored_levels(coin, now), price
 
 
-async def _scan_coin(coin: str, now: pd.Timestamp, waiting: list[dict]) -> list[dict]:
+def _shadow_plan(coin: str, plan: dict, now: pd.Timestamp) -> dict:
+    return {"key": f"{coin}:{plan['direction']}:{plan['level_key']}", "direction": plan["direction"], "limit": plan["limit_price"],
+            "stop": plan["stop_loss"], "take": plan["take_profit"], "expires_at": (now + pr.TTL).isoformat()}
+
+
+async def _scan_coin(coin: str, now: pd.Timestamp, waiting: list[dict], params: Optional[dict] = None) -> list[dict]:
+    """params: de parameters van deze cyclus (shadow.live_params); leeg = de constanten."""
+    params = params or {}
     levels, price = await asyncio.to_thread(refresh, coin, now)
     if not price or not levels:
         return []
@@ -127,8 +134,9 @@ async def _scan_coin(coin: str, now: pd.Timestamp, waiting: list[dict]) -> list[
             atr = float(add_indicators(closed)["atr"].iloc[-1]) if len(closed) > 14 else None
     if not atr or not atr > 0:
         return []
+    shadow_live.observe(TRADE_TYPE, coin, lambda prm: [_shadow_plan(coin, p, now) for p in pr.plans(levels, zones, price, atr, **prm)], now)
     busy = {c["direction"] for c in waiting if c["coin"] == coin}
-    return [{**p, "coin": coin, "distance": abs(p["limit_price"] - price) / price} for p in pr.plans(levels, zones, price, atr)
+    return [{**p, "coin": coin, "distance": abs(p["limit_price"] - price) / price} for p in pr.plans(levels, zones, price, atr, **params)
             if p["direction"] not in busy]
 
 
@@ -155,6 +163,7 @@ async def scan(now: Optional[datetime] = None) -> None:
         repo.beat("poc_radar", "uit" if not config.POC_RADAR_ENABLED else focus.OFF_DETAIL)
         return
     stamp = rsl._utc(now)
+    params = shadow.live_params(TRADE_TYPE)            # een gepromoveerde schaduwwaarde geldt vanaf deze cyclus
     waiting = repo.list_poc_radar_setups()
     coins = [c["symbol"] for c in repo.list_coins()]
     found, checked, failed = [], 0, 0
@@ -162,7 +171,7 @@ async def scan(now: Optional[datetime] = None) -> None:
         if not due(coin, stamp):
             continue
         try:
-            found += await _scan_coin(coin, stamp, waiting)
+            found += await _scan_coin(coin, stamp, waiting, params=params)
             checked += 1
         except Exception:
             failed += 1

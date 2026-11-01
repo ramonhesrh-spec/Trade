@@ -10,7 +10,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import chance_checks
+from app import chance_checks, smc_eval
 from app import trade_plan as tp
 from app import zone_radar as zr
 from app.replay import rangesweep as rs
@@ -40,12 +40,22 @@ def zone_key(s: dict) -> str:
     return f"{s['tf']}:{kind}:{pd.Timestamp(s['zone_at']).isoformat()}"
 
 
-def card_row(coin: str, variant: str, s: dict, zones: list[zr.ZoneLevel]) -> dict:
+def stop_with_buffer(s: dict, buffer_atr: float) -> float:
+    """zonesweep.final_stop met een andere buffer dan wick_025: dezelfde formule (voorbij de prik plus buffer x ATR, ondergrens rs.MIN_STOP_PCT
+    vanaf de gewogen instap), voor een schaduwvariant of een gepromoveerde waarde (app/shadow.py)."""
+    legs = s["legs"]
+    planned = sum(w * p for w, p in legs) / sum(w for w, _ in legs)
+    side = 1 if s["direction"] == zs.SHORT else -1
+    return smc_eval.floor_stop(s["direction"], planned, s["extreme"] + side * buffer_atr * s["atr_t"], min_pct=rs.MIN_STOP_PCT)
+
+
+def card_row(coin: str, variant: str, s: dict, zones: list[zr.ZoneLevel], stop_buffer_atr: Optional[float] = None) -> dict:
     """De kaart van een setup. Alleen de eerstvolgende tegenovergestelde zone voorbij het slot van de herstelcandle telt als doel: haalt die
-    MIN_RR niet, dan geen doel, nooit doorzoeken naar een verdere zone die wel past."""
+    MIN_RR niet, dan geen doel, nooit doorzoeken naar een verdere zone die wel past. stop_buffer_atr: alleen voor een schaduwvariant of een
+    gepromoveerde waarde; standaard de geteste stop wick_025 (zonesweep.final_stop)."""
     direction = s["direction"]
     limit = float(s["legs"][0][1])
-    stop = zs.final_stop(s, STOP_NAME)
+    stop = zs.final_stop(s, STOP_NAME) if stop_buffer_atr is None else stop_with_buffer(s, stop_buffer_atr)
     target = zr.target_for(direction, zones, s["ref_price"])
     take = rr = None
     if target is not None:

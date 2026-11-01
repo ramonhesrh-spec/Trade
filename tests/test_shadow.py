@@ -263,3 +263,39 @@ class ZoneRadarParamTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class OtherEngineParamTest(unittest.TestCase):
+    def test_poc_radar_stop(self):
+        from app import poc, poc_radar as pr
+        lv = poc.PocLevel("day", pd.Timestamp("2026-10-28T00:00:00Z"), 97.0, None)
+        base = pr.plan_for("long", [lv], [], 100.0, 4.0)
+        self.assertEqual(base, pr.plan_for("long", [lv], [], 100.0, 4.0, stop_atr=pr.STOP_ATR))
+        self.assertAlmostEqual(pr.plan_for("long", [lv], [], 100.0, 4.0, stop_atr=0.5)["stop_loss"], 95.0)
+
+    def test_zone_sweep_stopbuffer(self):
+        from app import zone_sweep as zsw
+        from app.replay import zonesweep as zs
+        s = {"direction": "long", "legs": [(1.0, 100.0)], "extreme": 98.0, "atr_t": 1.0}
+        self.assertEqual(zsw.stop_with_buffer(s, zs.BUFFERS["wick_025"]), zs.final_stop(s, "wick_025"))
+        self.assertAlmostEqual(zsw.stop_with_buffer(s, 0.5), 97.5)
+
+    def test_structuur_stop(self):
+        from app import structure_live as sl
+        from app.replay import breakretest as br
+        self.assertEqual(sl.stop_with_room("long", 100.0, 99.0, 2.0), sl.stop_with_room("long", 100.0, 99.0, 2.0, stop_atr=br.STOP_ATR))
+        self.assertAlmostEqual(sl.stop_with_room("long", 100.0, 99.0, 2.0, stop_atr=0.5), 98.0)
+
+
+from tests import test_web_focus as web_focus  # noqa: E402
+
+
+class BewijsShadowLineTest(web_focus.Base):
+    def test_alleen_de_ceo_ziet_de_schaduwregel(self):
+        web_focus.signal("BTC", "zone_radar", "take_profit")
+        shadow.register("zr-stop-040", "zone_radar", "Stop 0,4 ATR", "reden vooraf", {"stop_atr": 0.4}, START)
+        html = self.client.get("/bewijs").text
+        self.assertIn("Schaduw zr-stop-040: stop 0,4 ATR in plaats van 0,25", html)
+        self.assertIn("Verdict: wachten", html)
+        self.as_student()
+        self.assertNotIn("Schaduw zr-stop-040", self.client.get("/bewijs").text)

@@ -55,6 +55,13 @@ class ExportTest(DbCase):
         self.assertEqual([s["trade_type"] for s in data["signalen"]], ["zone_radar"])
         self.assertIn("zone_radar", data["lekken"]["7d"])
 
+    def test_schaduw_staat_erin(self):
+        from app import shadow
+        shadow.register("zr-stop-040", "zone_radar", "Stop 0,4 ATR", "reden vooraf", {"stop_atr": 0.4}, NOW)
+        data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None)
+        self.assertEqual([(s["id"], s["status"], s["verdict"]["verdict"]) for s in data["schaduw"]], [("zr-stop-040", "schaduw", "wachten")])
+        self.assertIn("zr-stop-040", nacht.markdown(data))
+
     def test_schrijft_json_en_markdown_met_datum(self):
         data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None)
         paths = nacht.write_files(data, Path(self.out.name), NOW)
@@ -62,6 +69,21 @@ class ExportTest(DbCase):
         md = (Path(self.out.name) / "hespulse-2026-11-01.md").read_text()
         self.assertIn("Zone-radar", md)
         self.assertNotIn("geheimenaam", md)
+
+
+class StopThenTargetTest(unittest.TestCase):
+    def test_stop_die_later_het_doel_haalde(self):
+        import pandas as pd
+        closed = pd.Timestamp("2026-10-30T12:00:00Z")
+        candles = pd.DataFrame({"timestamp": [closed + pd.Timedelta(minutes=5 * i) for i in range(1, 300)], "open": 99.0, "high": 99.5,
+                                "low": 98.8, "close": 99.0, "volume": 1.0})
+        candles.loc[100, "high"] = 102.5
+        sig = {"id": 7, "auto_outcome": "stop_loss", "take_profit": 102.0, "r_override": None, "auto_outcome_at": closed.isoformat(),
+               "coin": "BTC", "direction": "long"}
+        self.assertEqual(nacht.stop_then_target([sig], NOW, lambda coin, since: candles), {7: True})
+        self.assertEqual(nacht.stop_then_target([sig], NOW, lambda coin, since: candles.assign(high=99.5)), {7: False})
+        self.assertEqual(nacht.stop_then_target([{**sig, "take_profit": None}], NOW, lambda coin, since: candles), {})
+        self.assertEqual(nacht.stop_then_target([sig], closed.to_pydatetime(), lambda coin, since: candles), {})     # 24 uur nog niet voorbij
 
 
 def git(*args, cwd):

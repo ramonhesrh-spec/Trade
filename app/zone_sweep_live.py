@@ -18,7 +18,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, daycap, latency, poc_radar_live, push_notify, range_sweep_live as rsl, repo
+from app import config, daycap, latency, poc_radar_live, push_notify, range_sweep_live as rsl, repo, shadow, shadow_live
 from app import zone_sweep as zsw
 from app.replay import rangesweep as rs, stopquality as sq, trendlab as tl, zonesweep as zs, zonesweep_lab as zl
 
@@ -109,6 +109,7 @@ async def scan(now: Optional[datetime] = None) -> None:
     if stamp.minute >= SCAN_MINUTES:
         return
     variants = [v for v in zl.VARIANTS if v.name in LIVE_VARIANTS]
+    params = shadow.live_params(TRADE_TYPE)            # een gepromoveerde schaduwwaarde geldt vanaf deze cyclus
     for coin in COINS:
         try:
             frames, price = await _frames(coin, stamp)
@@ -116,10 +117,20 @@ async def scan(now: Optional[datetime] = None) -> None:
             for v in variants:
                 for s in fresh_setups(frames, v, stamp):
                     zones = zsw.zone_levels(frames, stamp) if zones is None else zones
-                    await _register(zsw.card_row(coin, v.name, s, zones), price, stamp)
+                    shadow_live.observe(TRADE_TYPE, coin, lambda p, v=v, s=s: _shadow_plans(coin, v.name, s, zones, price, p), stamp)
+                    await _register(zsw.card_row(coin, v.name, s, zones, **params), price, stamp)
         except Exception:
             logger.exception("Zone-sweep voor %s is mislukt", coin)
     repo.beat("zone_sweep", beat_detail(len(COINS), stamp))
+
+
+def _shadow_plans(coin: str, variant: str, s: dict, zones: list, price: Optional[float], params: dict) -> list[dict]:
+    """De kaart met deze parameters als schaduwplan; een kaart die de motor stil zou houden omdat het plan al voorbij stop of doel stond, ook niet."""
+    row = zsw.card_row(coin, variant, s, zones, **params)
+    if not zsw.alive(row, price):
+        return []
+    return [{"key": f"{coin}:{variant}:{row['zone_key']}:{row['placed_at']}", "direction": row["direction"], "limit": row["limit_price"],
+             "stop": row["stop_loss"], "take": row["take_profit"], "expires_at": row["expires_at"]}]
 
 
 def beat_detail(n_coins: int, now) -> str:

@@ -19,7 +19,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import announce_live, calendar_alerts, chance_checks, config, exchange, focus, indicators, market_context_live, market_script, trend_live, rejection_live, patterns, push_notify, range_sweep_live, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan, zone_radar_live, zone_sweep_live, poc_radar_live
+from app import announce_live, calendar_alerts, chance_checks, config, exchange, focus, indicators, market_context_live, market_script, trend_live, rejection_live, patterns, push_notify, range_sweep_live, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan, zone_radar_live, zone_sweep_live, poc_radar_live, shadow_live
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
     LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
@@ -1327,6 +1327,11 @@ async def _scan_smc_fast() -> None:
         await poc_radar_live.run()       # zoekt in de eerste cyclus na het uurslot, als de zone-sweep zijn 1u- en 4u-candles al in de cache zette
     except Exception:
         logger.exception("POC-radar is mislukt")
+    try:
+        # Na de motoren: hun schaduwplannen van deze cyclus staan er dan al. Alleen meting, geen melding (app/shadow_live.py).
+        await asyncio.to_thread(shadow_live.track)
+    except Exception:
+        logger.exception("Schaduwmeting is mislukt")
 
 
 if __name__ == "__main__":

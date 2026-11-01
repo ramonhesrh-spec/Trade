@@ -24,7 +24,7 @@ from typing import Callable, Optional
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
-from app import auto_misser as am, config, db, excursion, focus, leaks, repo, track_record  # noqa: E402
+from app import auto_misser as am, config, db, excursion, focus, leaks, repo, shadow, track_record  # noqa: E402
 
 EXPORT_DIR = ROOT / "data" / "export"
 GIT_DIR = ROOT / "data" / "export-git"
@@ -70,14 +70,6 @@ def _signal_row(s: dict) -> dict:
     return row
 
 
-def _shadows() -> list[dict]:
-    try:
-        from app import shadow
-    except ImportError:
-        return []
-    return shadow.export_rows()
-
-
 def build_export(now: datetime, stop_fetch: Callable = _stop_fetch) -> dict:
     since = (now - timedelta(days=DAYS)).isoformat()
     inputs = repo.leak_inputs(since)
@@ -94,7 +86,7 @@ def build_export(now: datetime, stop_fetch: Callable = _stop_fetch) -> dict:
         "auto_missers": [{k: m[k] for k in ("coin", "direction", "begin_at", "end_at", "begin_price", "end_price", "size_atr", "size_pct", "seen_by",
                                              "reasons")} for m in inputs["missers"]],
         "signalen": [_signal_row(s) for s in signals],
-        "schaduw": _shadows(),
+        "schaduw": shadow.export_rows(),
     }
 
 

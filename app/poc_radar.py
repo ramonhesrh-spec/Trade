@@ -48,14 +48,17 @@ def obstacles(direction: str, levels: Iterable[poc.PocLevel], zones: list[zr.Zon
     return sorted(found, key=lambda o: (o["rand"] - entry) * sign)
 
 
-def plan_for(direction: str, levels: list[poc.PocLevel], zones: list[zr.ZoneLevel], price: float, atr: float) -> Optional[dict]:
-    """Het plan voor de dichtstbijzijnde naakte POC aan deze kant, of None. Zonder doel is ook een plan: dan zijn take_profit en rr None."""
+def plan_for(direction: str, levels: list[poc.PocLevel], zones: list[zr.ZoneLevel], price: float, atr: float,
+             stop_atr: Optional[float] = None) -> Optional[dict]:
+    """Het plan voor de dichtstbijzijnde naakte POC aan deze kant, of None. Zonder doel is ook een plan: dan zijn take_profit en rr None.
+    stop_atr: alleen voor een schaduwvariant of een gepromoveerde waarde (app/shadow.py); standaard STOP_ATR."""
+    stop_atr = STOP_ATR if stop_atr is None else stop_atr
     own = [lv for lv in levels if lv.naked and 0 < _distance_pct(direction, lv.price, price) <= MAX_DISTANCE_PCT]
     if not own or not atr > 0:
         return None
     level = min(own, key=lambda lv: (_distance_pct(direction, lv.price, price), PERIOD_ORDER.index(lv.period)))
     limit = level.price
-    raw_stop = limit - STOP_ATR * atr if direction == "long" else limit + STOP_ATR * atr
+    raw_stop = limit - stop_atr * atr if direction == "long" else limit + stop_atr * atr
     stop = smc_eval.floor_stop(direction, limit, raw_stop)
     found = zr.mark_between(direction, obstacles(direction, levels, zones, limit, stop), price)
     target = found[0] if found else None
@@ -76,8 +79,8 @@ def plan_for(direction: str, levels: list[poc.PocLevel], zones: list[zr.ZoneLeve
             "distance_pct": _distance_pct(direction, limit, price), "obstacles": found[:zr.MAX_OBSTACLES]}
 
 
-def plans(levels: list[poc.PocLevel], zones: list[zr.ZoneLevel], price: float, atr: float) -> list[dict]:
-    return [p for d in ("long", "short") if (p := plan_for(d, levels, zones, price, atr))]
+def plans(levels: list[poc.PocLevel], zones: list[zr.ZoneLevel], price: float, atr: float, **params) -> list[dict]:
+    return [p for d in ("long", "short") if (p := plan_for(d, levels, zones, price, atr, **params))]
 
 
 def walk(direction: str, limit: float, take: Optional[float], candles: pd.DataFrame) -> tuple[Optional[str], Optional[pd.Timestamp]]:

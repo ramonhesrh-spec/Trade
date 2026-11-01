@@ -24,7 +24,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from app import chance_checks, config, daycap, latency, repo, setup_chart, smc_eval
+from app import chance_checks, config, daycap, latency, repo, setup_chart, shadow, shadow_live, smc_eval
 from app import trade_plan as tp
 from app.replay import breakretest as br
 from app.replay.lab import add_indicators
@@ -103,18 +103,19 @@ def fresh_breaks(bars: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, np.nda
     return b, events.loc[keep].reset_index(drop=True), p_high, p_low
 
 
-def stop_with_room(direction: str, level: float, extreme: float, atr: float) -> float:
+def stop_with_room(direction: str, level: float, extreme: float, atr: float, stop_atr: Optional[float] = None) -> float:
     """Stop net voorbij de terugkeer (kwart ATR), minstens SMC_MIN_STOP_PCT van het niveau: een stop vlak achter het niveau wordt door een wick geraakt
-    waarna de koers alsnog de goede kant op gaat."""
+    waarna de koers alsnog de goede kant op gaat. stop_atr: alleen voor een schaduwvariant of een gepromoveerde waarde (app/shadow.py)."""
     short = direction == br.SHORT
-    stop = max(level, extreme) + br.STOP_ATR * atr if short else min(level, extreme) - br.STOP_ATR * atr
+    buf = br.STOP_ATR if stop_atr is None else stop_atr
+    stop = max(level, extreme) + buf * atr if short else min(level, extreme) - buf * atr
     return smc_eval.floor_stop(direction, level, stop)
 
 
-def plan_for(ev, b: pd.DataFrame, levels: list[float], level: float, extreme: float) -> Optional[dict]:
+def plan_for(ev, b: pd.DataFrame, levels: list[float], level: float, extreme: float, stop_atr: Optional[float] = None) -> Optional[dict]:
     """Stop en doelen uit code. None als de stopafstand buiten het toegestane bereik valt of er geen doel ligt."""
     short = ev.direction == br.SHORT
-    stop = stop_with_room(ev.direction, level, extreme, ev.atr)
+    stop = stop_with_room(ev.direction, level, extreme, ev.atr, stop_atr)
     risk = abs(level - stop)
     risk_pct = risk / level * 100
     if risk_pct > br.MAX_STOP_PCT or (short and level >= stop) or (not short and level <= stop):
@@ -130,9 +131,9 @@ def plan_for(ev, b: pd.DataFrame, levels: list[float], level: float, extreme: fl
             "targets": [level + sign * risk * r for r in r_list], "from_levels": on_levels}
 
 
-def explain_no_plan(ev, levels: list[float], level: float, extreme: float) -> str:
+def explain_no_plan(ev, levels: list[float], level: float, extreme: float, stop_atr: Optional[float] = None) -> str:
     """Waarom er geen plan kwam, met de getallen: de stopafstand, en de ruimte tot de eerstvolgende doelen op zwaaipunten."""
-    stop = stop_with_room(ev.direction, level, extreme, ev.atr)
+    stop = stop_with_room(ev.direction, level, extreme, ev.atr, stop_atr)
     risk = abs(level - stop)
     risk_pct = risk / level * 100 if level else 0.0
     if risk_pct > br.MAX_STOP_PCT:
@@ -233,9 +234,22 @@ async def _push_all(title: str, body: str, url: str, tag: str, loud: bool, coin:
             push_notify.record_failure(user["id"], "kans" if coin and direction else "update", url, exc)
 
 
-async def _discover(coin: str, now: datetime) -> list[dict]:
-    """Nieuwe breuken met een plan, opgeslagen in de stand 'oordeel'. Melden doet run(), over alle coins samen, zodat de dagcap op afstand kiest."""
+def _shadow_plans(coin: str, ev, b: pd.DataFrame, levels: list[float], level: float, extreme: float, price_now: float, break_at: str,
+                  expires_at: str, params: dict) -> list[dict]:
+    """Het plan met deze parameters als schaduwplan, met dezelfde weigeringen als hieronder (geen plan, of al voorbij doel of stop). De schaduw
+    volgt een vaste limiet op het niveau van nu, ook bij een schuine lijn; dat geldt voor beide armen."""
+    plan = plan_for(ev, b, levels, level, extreme, **params)
+    if plan is None or tp.plan_state(ev.direction, plan["level"], plan["level"], plan["stop"], price_now, take=plan["targets"][0]) in ("doel_geraakt", "ongeldig"):
+        return []
+    return [{"key": f"{coin}:{ev.direction}:{ev.kind}:{break_at}", "direction": ev.direction, "limit": plan["level"], "stop": plan["stop"],
+             "take": take_profit_of(plan), "expires_at": expires_at}]
+
+
+async def _discover(coin: str, now: datetime, params: Optional[dict] = None) -> list[dict]:
+    """Nieuwe breuken met een plan, opgeslagen in de stand 'oordeel'. Melden doet run(), over alle coins samen, zodat de dagcap op afstand kiest.
+    params: de parameters van deze cyclus (shadow.live_params); leeg = de constanten."""
     from app import exchange
+    params = params or {}
     df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="30m", limit=300)
     closed = df[df["timestamp"] + BAR <= pd.Timestamp(now)].reset_index(drop=True)
     if len(closed) < br.LOOKBACK + 20:
@@ -249,18 +263,21 @@ async def _discover(coin: str, now: datetime) -> list[dict]:
         level = br.level_at(ev, n)
         extreme = float(b["high" if ev.direction == br.SHORT else "low"].iloc[ev.bar:n].agg("max" if ev.direction == br.SHORT else "min"))
         levels = br.known_levels(b, p_high, p_low, ev.direction, ev.bar)
-        plan = plan_for(ev, b, levels, level, extreme)
+        price_now = float(b["close"].iloc[-1])
+        expires_at = (next_start + br.RETEST_BARS * BAR).isoformat()
+        shadow_live.observe("structuur", coin, lambda p, ev=ev, levels=levels, level=level, extreme=extreme, break_at=break_at:
+                            _shadow_plans(coin, ev, b, levels, level, extreme, price_now, break_at, expires_at, p), now)
+        plan = plan_for(ev, b, levels, level, extreme, **params)
         if plan is None:
             # Bewaard zodat de pagina Setups kan tonen hoeveel breuken er waren en waarom er niets uitkwam.
             repo.insert_structure_setup({
                 "coin": coin, "direction": ev.direction, "kind": ev.kind, "break_at": break_at, "p1_at": b.at[ev.p1, "timestamp"].isoformat(),
                 "line_a": ev.a, "line_slope": ev.slope, "atr": ev.atr, "grade": None,
-                "reason": explain_no_plan(ev, levels, level, extreme), "features": "{}", "state": "geen_plan",
+                "reason": explain_no_plan(ev, levels, level, extreme, **params), "features": "{}", "state": "geen_plan",
                 "expires_at": break_at, "plan": None})
             continue
         # Een plan waarvan de koers al voorbij het eerste doel of de stop staat, valt op de pagina Setups direct weg (today.structure_state). Er valt
         # niets meer te wachten, dus ook geen melding: anders krijg je een push voor een kans die je nergens kunt vinden.
-        price_now = float(b["close"].iloc[-1])
         gone = tp.plan_state(ev.direction, plan["level"], plan["level"], plan["stop"], price_now, take=plan["targets"][0])
         if gone in ("doel_geraakt", "ongeldig"):
             repo.insert_structure_setup({
@@ -275,7 +292,7 @@ async def _discover(coin: str, now: datetime) -> list[dict]:
                "grade": None, "reason": None, "state": "oordeel",
                "features": json.dumps({"vol_ratio": ev.vol_ratio, "span": int(ev.span), "touches": int(ev.touches),
                                        "with_trend": bool(ev.with_trend)}),
-               "expires_at": (next_start + br.RETEST_BARS * BAR).isoformat(),
+               "expires_at": expires_at,
                "plan": json.dumps({**plan, "levels": levels, "break_extreme": extreme, "points": swing_points(ev, b),
                                    "candles": [[c.timestamp.isoformat(), c.open, c.high, c.low, c.close] for c in b.tail(CHART_BARS).itertuples()]})}
         setup_id = repo.insert_structure_setup(row)
@@ -364,8 +381,9 @@ async def _fire_shadow(setup: dict, plan: dict, entry: float, stop: float) -> No
     repo.set_structure_state(setup["id"], "fired", signal_id)
 
 
-async def _track(now: datetime) -> None:
+async def _track(now: datetime, params: Optional[dict] = None) -> None:
     from app import exchange
+    stop_atr = (params or {}).get("stop_atr")
     waiting = repo.list_structure_setups(("waiting", "schaduw"))
     for coin in sorted({s["coin"] for s in waiting}):
         try:
@@ -383,7 +401,7 @@ async def _track(now: datetime) -> None:
                 # aparte "teruggewonnen"-tak. Een mislukte breuk eindigt zo meteen in de stop, zoals de toets het ook meet.
                 reach = c.high >= level if s["direction"] == br.SHORT else c.low <= level
                 if reach:
-                    stop = stop_with_room(s["direction"], level, extreme, s["atr"])
+                    stop = stop_with_room(s["direction"], level, extreme, s["atr"], stop_atr)
                     risk_pct = abs(level - stop) / level * 100
                     if risk_pct <= br.MAX_STOP_PCT:
                         try:
@@ -481,6 +499,7 @@ async def run(now: Optional[datetime] = None) -> None:
         repo.notify_engine_disabled("Structuur-breuken", f"De laatste {config.STRUCTURE_MAX_NEGATIVE} afgeronde signalen zijn samen negatief. Zie Bewijs.")
         return
     symbols = {c["symbol"] for c in repo.list_coins()}
+    params = shadow.live_params("structuur")           # een gepromoveerde schaduwwaarde geldt vanaf deze cyclus, ook bij de vulling
     found, checked, failed = [], 0, []
     started = time.monotonic()
     # Alle gevolgde coins, niet alleen de basiscoins: meer breuken betekent eerder een cijfer waar we iets op kunnen afstellen.
@@ -488,7 +507,7 @@ async def run(now: Optional[datetime] = None) -> None:
         if coin not in symbols:
             continue
         try:
-            found += await _discover(coin, now)
+            found += await _discover(coin, now, params=params)
             checked += 1
         except Exception:
             failed.append(coin)
@@ -499,7 +518,7 @@ async def run(now: Optional[datetime] = None) -> None:
         await _announce(found, now)
     except Exception:
         logger.exception("Structuur-meldingen zijn mislukt")
-    await _track(now)
+    await _track(now, params=params)
     await _follow(now)
     try:
         from app import digest
