@@ -299,3 +299,29 @@ class BewijsShadowLineTest(web_focus.Base):
         self.assertIn("Verdict: wachten", html)
         self.as_student()
         self.assertNotIn("Schaduw zr-stop-040", self.client.get("/bewijs").text)
+
+
+
+class EnginePlanShapeTest(unittest.TestCase):
+    """De schaduwplannen van zone-sweep en POC-radar hebben de vorm die shadow_live.observe opslaat (een fout daar zou de motor niet stoppen
+    maar de schaduw stil leeg laten)."""
+    KEYS = {"key", "direction", "limit", "stop", "take", "expires_at"}
+
+    def test_zone_sweep(self):
+        from app import zone_sweep_live
+        t = pd.Timestamp("2026-10-31T10:00:00Z")
+        s = {"direction": "long", "legs": [(1.0, 100.0)], "extreme": 98.0, "atr_t": 1.0, "tf": "1h", "zone_low": 99.0, "zone_high": 100.0,
+             "zone_at": t - pd.Timedelta(hours=20), "sweep_at": t - pd.Timedelta(hours=1), "placed_at": t, "ref_price": 100.5, "range_high": 106.0,
+             "range_low": 98.0, "features": {"prik_atr": 1.0, "herstel_bars": 1}}
+        plans = zone_sweep_live._shadow_plans("BTC", "ZS_1H", s, zones(), 100.5, {"stop_buffer_atr": 0.5})
+        self.assertEqual(len(plans), 1)
+        self.assertEqual(set(plans[0]), self.KEYS)
+        self.assertAlmostEqual(plans[0]["stop"], 97.5)
+
+    def test_poc_radar(self):
+        from app import poc, poc_radar as pr, poc_radar_live
+        lv = poc.PocLevel("day", pd.Timestamp("2026-10-28T00:00:00Z"), 97.0, None)
+        plan = pr.plan_for("long", [lv], [], 100.0, 4.0, stop_atr=0.5)
+        row = poc_radar_live._shadow_plan("BTC", plan, pd.Timestamp(NOW))
+        self.assertEqual(set(row), self.KEYS)
+        self.assertEqual((row["limit"], row["stop"]), (97.0, 95.0))

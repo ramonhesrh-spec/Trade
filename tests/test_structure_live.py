@@ -110,6 +110,18 @@ class LiveTest(DbCase):
                 mock.patch.object(repo, "list_coins", lambda: [{"symbol": "BTC"}]):
             asyncio.run(sl.run(now))
 
+    def test_schaduw_geeft_beide_armen_zonder_extra_melding(self):
+        from app import shadow
+        shadow.register("st-stop-050", "structuur", "Stop 0,5 ATR", "reden vooraf", {"stop_atr": 0.5}, datetime(2026, 9, 1, tzinfo=timezone.utc))
+        self.run_live(BREAK_BAR + 4)
+        rows = repo.list_shadow_results("st-stop-050")
+        self.assertEqual(sorted(r["arm"] for r in rows), ["hoofd", "variant"])
+        hoofd, variant = (next(r for r in rows if r["arm"] == a) for a in ("hoofd", "variant"))
+        self.assertEqual(hoofd["limit_price"], variant["limit_price"])
+        self.assertGreater(variant["stop_loss"], hoofd["stop_loss"])          # short: een grotere buffer zet de stop hoger
+        self.assertEqual(len(self.pushed), 1)                                  # alleen de gewone melding van de motor
+        self.assertEqual(len(repo.list_structure_setups(("waiting",))), 1)
+
     def test_discovers_break_grades_it_and_alerts_once_with_plan(self):
         self.run_live(BREAK_BAR + 4)
         rows = repo.list_structure_setups(("waiting",))
