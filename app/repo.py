@@ -3959,3 +3959,20 @@ def list_auto_missers(since_iso: str) -> list[dict]:
         d["seen_by"], d["reasons"] = json.loads(d["seen_by"] or "[]"), json.loads(d["reasons"] or "{}")
         out.append(d)
     return out
+
+
+def leak_inputs(since_iso: str) -> dict:
+    """De invoer van app/leaks.py vanaf `since_iso`: kaarten van de vier focus-motoren (soort, stand, moment), signalen zoals Bewijs ze leest,
+    dagcap-houds, meldingsvertraging en auto-missers. Geen gebruikers: alert_timing zonder user_id."""
+    cards = []
+    with db.session() as conn:
+        for kind, table in (("zone_radar", "zone_radar_setups"), ("zone_sweep", "zone_sweep_setups"), ("poc_radar", "poc_radar_setups")):
+            cards += [{"kind": kind, "state": r["state"], "created_at": r["created_at"]}
+                      for r in conn.execute(f"SELECT state, created_at FROM {table} WHERE created_at >= ?", (since_iso,))]
+        cards += [{"kind": "structuur", "state": r["state"], "created_at": r["created_at"]}
+                  for r in conn.execute("SELECT state, created_at FROM structure_setups WHERE state != 'geen_plan' AND created_at >= ?", (since_iso,))]
+        holds = [dict(r) for r in conn.execute("SELECT engine, at FROM cap_holds WHERE at >= ?", (since_iso,))]
+        timings = [dict(r) for r in conn.execute("SELECT trade_type, event, candle_at, detected_at, sent_at, ok FROM alert_timing WHERE sent_at >= ?",
+                                                 (since_iso,))]
+    return {"cards": cards, "signals": list_signals_for_quality_report(since_iso), "cap_holds": holds, "timings": timings,
+            "missers": list_auto_missers(since_iso)}
