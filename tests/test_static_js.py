@@ -169,3 +169,22 @@ class KansenSummaryTest(unittest.TestCase):
         out = run_node("kaarten_hidden_harness.js", "kaarten.js")
         self.assertEqual(out["text"], [kansen.hidden_text(t) for t in (["HYPE short"], ["HYPE short", "ETH long", "SOL long"], ["A", "B"])])
         self.assertEqual(out["label"], [kansen.hidden_label(n) for n in (0, 1, 7)])
+
+
+@unittest.skipUnless(shutil.which("node"), "node ontbreekt")
+class LiveStreamsTest(unittest.TestCase):
+    """De koers in de browser komt van dezelfde markt als de candles (app/candle_source.py)."""
+
+    def test_perps_op_fstream_met_symboolkaart_en_terugval_op_spot(self):
+        out = run_node("live_streams_harness.js", "live.js")
+        self.assertEqual(out["perp"], [
+            {"url": "wss://fstream.binance.com/stream?streams=btcusdt@miniTicker/1000pepeusdt@miniTicker",
+             "symbols": {"BTCUSDT": ["BTC", 1], "1000PEPEUSDT": ["PEPE", 1000]}},
+            {"url": "wss://stream.binance.com:9443/stream?streams=noperpusdt@miniTicker", "symbols": {"NOPERPUSDT": ["NOPERP", 1]}},
+        ])
+
+    def test_spot_als_terugval_voor_alles(self):
+        out = run_node("live_streams_harness.js", "live.js")
+        self.assertEqual(out["spot"], [{"url": "wss://stream.binance.com:9443/stream?streams=btcusdt@miniTicker/pepeusdt@miniTicker",
+                                        "symbols": {"BTCUSDT": ["BTC", 1], "PEPEUSDT": ["PEPE", 1]}}])
+        self.assertEqual(len(out["onlyPerp"]), 1)                        # geen lege spotverbinding

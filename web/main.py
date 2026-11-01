@@ -31,7 +31,7 @@ from markupsafe import Markup
 
 from app import advice as advice_module
 from app import patterns as chart_patterns
-from app import config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
+from app import candle_source, config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
 from app import announce, card_chart, ceo, chance_checks, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep, poc_radar
@@ -169,6 +169,9 @@ templates.env.globals["fmt_price"] = today.fmt_price
 templates.env.globals["is_ceo"] = lambda user: is_ceo(user)
 templates.env.globals["live_exchange"] = config.EXCHANGE_ID
 templates.env.globals["live_quote"] = config.QUOTE_CURRENCY.lower()
+# De koersstroom in de browser volgt de markt van de candles (app/candle_source.py, live.js): perps of spot, met de symboolkaart.
+templates.env.globals["live_market"] = candle_source.configured
+templates.env.globals["live_symbols"] = candle_source.stream_map
 templates.env.globals["pause_minutes_left"] = lambda u: push_policy.pause_minutes_left((u or {}).get("push_paused_until"), datetime.now(timezone.utc))
 templates.env.globals["pause_text"] = push_policy.pause_text
 templates.env.globals["stale_after_s"] = freshness.STALE_AFTER_S

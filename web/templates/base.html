@@ -5,6 +5,8 @@
 <meta charset="utf-8">
 <meta name="live-exchange" content="{{ live_exchange }}">
 <meta name="live-quote" content="{{ live_quote }}">
+<meta name="live-market" content="{{ live_market() }}">
+<meta name="live-symbols" content="{{ live_symbols()|tojson|forceescape }}">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="color-scheme" content="{{ 'dark light' if _theme == 'system' else _theme }}">
 <style>html{background:{{ theme_bg['light' if _theme == 'light' else 'dark'] }}}{% if _theme == 'system' %}@media (prefers-color-scheme: light){html{background:{{ theme_bg.light }}}}{% endif %}</style>

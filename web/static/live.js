@@ -11,10 +11,29 @@
     return list.every(function (c) { return byCoin[c] !== undefined && now - byCoin[c] < LIVE_FRESH_MS; });
   }
   root.hesLiveFreshAt = freshAt;
+
+  // Dezelfde markt als de candles (app/candle_source.py): perps op fstream, spot op de spotstroom. `map` (meta live-symbols) geeft per
+  // afwijkende coin [streamsymbool, schaal, markt]: 1000PEPEUSDT noteert 1000 munten, dus de koers wordt gedeeld door 1000 (prijs per munt,
+  // zoals de kaarten). Eén verbinding per markt die echt nodig is.
+  var HOSTS = { perp: "wss://fstream.binance.com/stream?streams=", spot: "wss://stream.binance.com:9443/stream?streams=" };
+  function streams(list, market, map, quote) {
+    var groups = {}, order = [];
+    list.forEach(function (c) {
+      var m = map[c], sym = m ? m[0] : (c + quote).toUpperCase(), scale = m ? m[1] : 1, mk = m ? m[2] : market;
+      if (!HOSTS[mk]) mk = "spot";
+      if (!groups[mk]) { groups[mk] = { names: [], symbols: {} }; order.push(mk); }
+      groups[mk].names.push(sym.toLowerCase() + "@miniTicker");
+      groups[mk].symbols[sym] = [c, scale];
+    });
+    return order.map(function (mk) { return { url: HOSTS[mk] + groups[mk].names.join("/"), symbols: groups[mk].symbols }; });
+  }
+  root.hesLiveStreams = streams;
   if (typeof document === "undefined") return;
 
   function meta(name) { var m = document.querySelector('meta[name="' + name + '"]'); return m ? m.getAttribute("content") : ""; }
   var exchange = meta("live-exchange"), quote = (meta("live-quote") || "usdt").toLowerCase();
+  var market = meta("live-market") || "spot", symbolMap = {};
+  try { symbolMap = JSON.parse(meta("live-symbols") || "{}"); } catch (e) { symbolMap = {}; }
   if (exchange !== "binance") return;
 
   var coins = {};
@@ -87,27 +106,30 @@
     });
   }
 
-  var ws = null, retry = 1000, timer = null;
-  function connect() {
-    if (document.hidden || ws) return;
-    var url = "wss://stream.binance.com:9443/stream?streams=" + list.map(function (c) { return c.toLowerCase() + quote + "@miniTicker"; }).join("/");
-    try { ws = new WebSocket(url); } catch (e) { ws = null; return; }
-    ws.onopen = function () { retry = 1000; };
-    ws.onmessage = function (e) {
+  // Per markt een eigen verbinding met eigen herstart, zodat een haperende spotstroom de perpstroom niet stillegt.
+  var conns = streams(list, market, symbolMap, quote).map(function (g) { return { g: g, ws: null, retry: 1000, timer: null }; });
+  function connect(c) {
+    if (document.hidden || c.ws) return;
+    try { c.ws = new WebSocket(c.g.url); } catch (e) { c.ws = null; return; }
+    c.ws.onopen = function () { c.retry = 1000; };
+    c.ws.onmessage = function (e) {
       try {
-        var d = JSON.parse(e.data).data;
-        var coin = d.s.slice(0, d.s.length - quote.length), p = parseFloat(d.c);
+        var d = JSON.parse(e.data).data, hit = c.g.symbols[d.s];
+        if (!hit) return;
+        var coin = hit[0], p = parseFloat(d.c) / hit[1];
         if (isNaN(p)) return;
         window.__liveAtByCoin[coin] = Date.now();
         window.__livePrices[coin] = p;
         apply(coin, p);
       } catch (err) { /* een kapot bericht slaan we over */ }
     };
-    ws.onclose = function () { ws = null; if (!document.hidden) { timer = setTimeout(connect, retry); retry = Math.min(retry * 2, 15000); } };
-    ws.onerror = function () { try { ws.close(); } catch (e) {} };
+    c.ws.onclose = function () { c.ws = null; if (!document.hidden) { c.timer = setTimeout(function () { connect(c); }, c.retry); c.retry = Math.min(c.retry * 2, 15000); } };
+    c.ws.onerror = function () { try { c.ws.close(); } catch (e) {} };
   }
   document.addEventListener("visibilitychange", function () {
-    if (document.hidden) { clearTimeout(timer); if (ws) ws.close(); } else { retry = 1000; connect(); }
+    conns.forEach(function (c) {
+      if (document.hidden) { clearTimeout(c.timer); if (c.ws) c.ws.close(); } else { c.retry = 1000; connect(c); }
+    });
   });
-  connect();
+  conns.forEach(connect);
 })(typeof window !== "undefined" ? window : globalThis);
