@@ -373,6 +373,23 @@ sudo systemctl start crypto-derivs.service   # eerste keer: haalt 29 dagen terug
 `data/derivs/<COIN>.csv`. Candle-kenmerken zijn uitgeput, dit is nieuwe informatie om SMC en day trading mee te
 toetsen. Binance geeft maar ~30 dagen history; elke dag zonder verzamelaar is voorgoed kwijt.
 
+### Candlebron: perps of spot
+
+Alle live motoren, `level_check`, de koerscache van het dashboard en de koers in de browser lezen candles en koersen uit één markt
+(`app/candle_source.py`, `app/exchange.py`). Standaard is dat Binance USDⓈ-M perpetuals (`CANDLE_MARKET=perp`, ccxt `binanceusdm`,
+symbool `BTC/USDT:USDT`, browserstroom `wss://fstream.binance.com`), want daar wordt gehandeld. `CANDLE_MARKET=spot` zet alles terug op de
+spotmarkt van `EXCHANGE_ID`. Een coin zonder perpcontract valt per coin terug op spot. Een 1000-contract (PEPE heet `1000PEPEUSDT`) noteert
+de prijs van 1000 munten; HesPulse rekent die om naar de prijs per munt (prijs gedeeld door 1000, volume maal 1000), zodat oude kaarten
+en open trades in dezelfde eenheid blijven. Elke nieuwe kaart en elk nieuw signaal bewaart de markt in `candle_market`; het detailblad
+toont "Bron: Binance perps" of "Bron: Binance spot". Oude rijen blijven leeg en worden niet herberekend. Lab en replay lezen hun eigen data.
+
+Controle na een update op de VPS:
+
+```bash
+cd /opt/crypto-alerts && sudo -u crypto .venv/bin/python -c "from app import exchange as e; [print(c, e.resolve(c), e.fetch_last_price(c)) for c in ('BTC','PEPE')]"
+sqlite3 data/trading.db "SELECT candle_market, COUNT(*) FROM zone_radar_setups GROUP BY 1"
+```
+
 ### Extra coins
 
 `EXTRA_COINS=XRP,HBAR` in `.env` voegt coins toe aan de vaste zeven. Daarop draait alleen de SMC-check, niet de 4u-detectoren
