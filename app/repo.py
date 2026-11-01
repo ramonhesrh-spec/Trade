@@ -2662,10 +2662,12 @@ def list_signals_for_quality_report(since_iso: Optional[str] = None) -> list[dic
         rows = conn.execute(
             """SELECT s.id, s.coin, s.direction, s.message_id, s.trade_type, s.auto_outcome, s.auto_outcome_at, s.price, s.stop_loss, s.take_profit,
                       s.created_at, s.pass_pct, (sv.id IS NOT NULL) AS samenval, tr.r_value AS r_override, zr.ctx_funding,
-                      s.auto_outcome_note, tx.mae_r, tx.mfe_r
+                      s.auto_outcome_note, tx.mae_r, tx.mfe_r, tx.timeframe AS mae_timeframe, s.candle_market, tf.funding_r,
+                      tf.status AS funding_status
                FROM signals s LEFT JOIN samenvallen sv ON sv.smc_signal_id = s.id
                LEFT JOIN trade_results tr ON tr.signal_id = s.id
                LEFT JOIN trade_excursions tx ON tx.signal_id = s.id
+               LEFT JOIN trade_funding tf ON tf.signal_id = s.id
                LEFT JOIN zone_radar_setups zr ON zr.signal_id = s.id
                WHERE s.is_practice = 0 AND (? IS NULL OR s.created_at >= ?) ORDER BY s.created_at""",
             (since_iso, since_iso),
@@ -3056,8 +3058,9 @@ def set_trade_result(signal_id: int, r_value: float, closed_at: str) -> None:
             (signal_id, r_value, closed_at))
 
 
-def set_trade_excursion(signal_id: int, mae_r: float, mfe_r: float, timeframe: Optional[str]) -> None:
-    """MAE en MFE van een afgeronde trade (app/excursion.py); een tweede meting van hetzelfde signaal vervangt de eerste."""
+def set_trade_excursion(signal_id: int, mae_r: Optional[float], mfe_r: Optional[float], timeframe: Optional[str]) -> None:
+    """MAE en MFE van een afgeronde trade (app/excursion.py); een tweede meting van hetzelfde signaal vervangt de eerste. Leeg met timeframe
+    'onbekend': niet te meten (app/outcome_measure.py)."""
     with db.session() as conn:
         conn.execute(
             """INSERT INTO trade_excursions (signal_id, mae_r, mfe_r, timeframe, measured_at) VALUES (?, ?, ?, ?, ?)
@@ -3069,6 +3072,34 @@ def set_trade_excursion(signal_id: int, mae_r: float, mfe_r: float, timeframe: O
 def get_trade_excursion(signal_id: int) -> Optional[dict]:
     with db.session() as conn:
         row = conn.execute("SELECT * FROM trade_excursions WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def reference_exits() -> dict[int, str]:
+    """Per signaal zonder doel het moment van de referentie-uitgang (openmoment van de 15m-candle), uit de tabellen van de drie motoren die hun
+    uitkomst zelf zetten. Voor funding_check en mae_check --opnieuw."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT signal_id, ref_closed_at FROM range_sweep_trades WHERE ref_closed_at IS NOT NULL
+               UNION ALL SELECT signal_id, ref_closed_at FROM zone_sweep_trades WHERE ref_closed_at IS NOT NULL
+               UNION ALL SELECT signal_id, ref_closed_at FROM poc_radar_trades WHERE ref_closed_at IS NOT NULL""").fetchall()
+        return {r["signal_id"]: r["ref_closed_at"] for r in rows}
+
+
+def set_trade_funding(signal_id: int, funding_r: Optional[float], funding_pct: Optional[float], events: Optional[int], status: str,
+                      start_at: str, end_at: str) -> None:
+    """Funding van een afgeronde trade (app/funding.py); een nieuwe meting (funding_check --opslaan) vervangt de oude."""
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO trade_funding (signal_id, funding_r, funding_pct, events, status, start_at, end_at, measured_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(signal_id) DO UPDATE SET funding_r = excluded.funding_r, funding_pct = excluded.funding_pct, events = excluded.events,
+               status = excluded.status, start_at = excluded.start_at, end_at = excluded.end_at, measured_at = excluded.measured_at""",
+            (signal_id, funding_r, funding_pct, events, status, start_at, end_at, db.now_iso()))
+
+
+def get_trade_funding(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM trade_funding WHERE signal_id = ?", (signal_id,)).fetchone()
         return dict(row) if row else None
 
 

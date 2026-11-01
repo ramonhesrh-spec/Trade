@@ -2509,6 +2509,9 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .mrow-body .proof-caption, .mrow-body .proof-footnote { margin-top: var(--space-4); }
 #tab-soort .proof-source { display: block; margin-bottom: var(--space-3); }
 .hl + .kl + .proof-footnote { margin: var(--space-5) 0 var(--space-8); }
+/* Het spot-tijdperk van een focus-soort: kleiner en apart, zodat het nooit voor het hoofdcijfer doorgaat. */
+.proof-older { margin-top: var(--space-5); padding-top: var(--space-4); border-top: 1px dashed var(--bd); }
+.proof-older-title { margin: 0; font-size: var(--text-xs); font-weight: 600; color: var(--tx2); }
 .onboarding-checklist { margin-bottom: var(--space-9); }
 
 /* ===== Rust (tweede ronde, 2026-10-13) =====

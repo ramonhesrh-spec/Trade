@@ -23,7 +23,7 @@ from datetime import datetime, timedelta, timezone
 
 import pandas as pd
 
-from app import db, exchange, excursion, focus, indicators, price_alerts, push_notify, range_sweep_live, repo, rule_live
+from app import db, exchange, excursion, focus, indicators, outcome_measure, price_alerts, push_notify, range_sweep_live, repo, rule_live
 from app.signal_processor import (
     SWING_WATCH_MAX_AGE_DAYS, _price_broke_through, _price_near_level, run_swing_check,
 )
@@ -248,6 +248,9 @@ async def check_signal_outcomes() -> None:
             ambiguous = _both_levels_at(signal["direction"], signal["stop_loss"], signal["take_profit"], candles, hit_at)
             repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at, AMBIGUOUS_NOTE if ambiguous else None)
             _store_excursion(signal, candles)
+            # Funding tot het einde van de uitgangscandle (app/funding.py); alleen de focus-soorten, één aanroep, bij falen 'onbekend'.
+            await asyncio.to_thread(outcome_measure.record_funding, signal, signal["created_at"],
+                                    hit_at + pd.Timedelta(excursion.timeframe_of(candles) or outcome_measure.TIMEFRAME))
             # Een zelf-gedetecteerde zone die net een stop loss veroorzaakte
             # gaat op cooldown (zie repo.recent_sr_zone_failure) zodat een
             # volgend signaal vlakbij dezelfde rand niet meteen dezelfde fout

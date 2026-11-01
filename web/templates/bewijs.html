@@ -65,6 +65,7 @@
         <div><dt>Laatste {{ recent_days }} dagen</dt><dd>{% if e.recent_avg_net is not none %}{{ "%+.2f"|format(e.recent_avg_net) }}R ({{ e.recent_resolved }})</dd>{% else %}-</dd>{% endif %}</div>
       </dl>
       {% if e.gross_total is not none %}<p class="proof-footnote muted proof-cost">Samen {{ "%+.2f"|format(e.gross_total)|replace(".", ",") }}R bruto, {{ "%+.2f"|format(e.net_total)|replace(".", ",") }}R {{ cost_line }}. Een krappe stop maakt de kosten in R groter.</p>{% endif %}
+      {% if e.trade_type in focus_types and e.resolved %}<p class="proof-footnote muted proof-funding">{% if e.avg_funding_r is not none %}Kosten per trade waarvan funding {{ "%+.2f"|format(e.avg_funding_r)|replace(".", ",") }}R ({{ e.funding_measured }} gemeten{% if e.funding_unknown %}, {{ e.funding_unknown }} trade{{ "s" if e.funding_unknown != 1 }} met onbekende funding, niet meegeteld{% endif %}).{% else %}Funding nog niet gemeten: {{ e.funding_unknown }} trade{{ "s" if e.funding_unknown != 1 }} met onbekende funding, niet meegeteld.{% endif %}</p>{% endif %}
       {% if e.ambiguous %}<p class="proof-footnote muted proof-ambiguous">{{ e.ambiguous }} keer stop en doel in dezelfde candle: volgorde onbekend, als stop geteld.</p>{% endif %}
       {% if e.mae_line %}<p class="proof-footnote muted proof-mae">{{ e.mae_line }} Gemeten op de candles van na de vulling tot doel of stop.</p>{% endif %}
       {% if e.score_split and e.source != 'alles' %}
@@ -76,6 +77,13 @@
       {% if e.trade_type == "poc_radar" %}<p class="proof-footnote muted">Ongetest: live op verzoek, zonder labrun. Met een doel telt doel of stop; een kaart zonder doel telt de R bij de referentie-uitgang (meelopende stop 3 ATR op 1u).</p>{% endif %}
       {% if e.trade_type in ("zone_radar", "zone_sweep") and e.score_split %}<p class="proof-footnote muted">De score is hier één kenmerk, POC-samenval: 100% als de limiet binnen 0,3% van een naakte POC lag, anders 0%. Kaarten van vóór die meting tellen niet mee.</p>{% endif %}
       <p class="proof-footnote muted">{{ e.wins }} winst, {{ e.losses }} verlies. {{ e.open_or_expired }} nog open of vervallen, die tellen niet mee in winrate en R.</p>
+      {% if e.trade_type in focus_types %}<p class="proof-footnote muted proof-era">Bovenstaande cijfers zijn op perps-candles, de bron sinds 1 november.</p>{% endif %}
+      {% if e.older %}{% set o = e.older %}
+      <div class="proof-older">
+        <p class="proof-older-title">{{ o.label }}</p>
+        <p class="proof-footnote muted">{{ o.resolved }} afgerond ({{ o.wins }} winst, {{ o.losses }} verlies){% if o.winrate is not none %}, winrate {{ "%.0f"|format(o.winrate * 100) }}%{% endif %}{% if o.avg_net is not none %}, netto {{ "%+.2f"|format(o.avg_net)|replace(".", ",") }}R per trade (samen {{ "%+.2f"|format(o.net_total)|replace(".", ",") }}R){% endif %}. {{ o.open_or_expired }} open of vervallen.{% if o.ambiguous %} {{ o.ambiguous }} keer volgorde onbekend, als stop geteld.{% endif %} Apart gehouden: uitkomsten op andere candles.</p>
+      </div>
+      {% endif %}
     </div>
   </details>
   {% endfor %}

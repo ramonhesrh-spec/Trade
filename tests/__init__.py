@@ -4,3 +4,15 @@ import os
 # toetsen tests/test_focus.py, test_focus_gates.py en test_web_focus.py met config.ENGINE_FOCUS expliciet aan; test_focus bewaakt ook dat de
 # standaard in productie aan is. Vóór de eerste import van app.config, en setdefault zodat een expliciete omgevingswaarde wint.
 os.environ.setdefault("ENGINE_FOCUS", "false")
+
+# De metingen bij de uitkomst (app/outcome_measure.py) halen candles en funding van de beurs. Geen test mag dat echt doen: zonder eigen nabootsing
+# faalt het meteen en staat er 'onbekend'. Tests van die metingen zelf vervangen deze naden met mock.patch.object.
+from app import outcome_measure as _om  # noqa: E402
+
+
+def _offline(*_a, **_k):
+    raise OSError("geen netwerk in tests")
+
+
+_om._candles_fetch = _offline
+_om._funding_get = _offline

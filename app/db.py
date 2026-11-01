@@ -321,6 +321,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
         cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
         if cols and "candle_market" not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN candle_market TEXT")
+    # trade_excursions had mae_r en mfe_r NOT NULL; 'onbekend' (outcome_measure.record_excursion) slaat ze leeg op. SQLite kan NOT NULL niet
+    # weghalen, dus de tabel wordt één keer herbouwd met dezelfde rijen.
+    if any(r["name"] == "mae_r" and r["notnull"] for r in conn.execute("PRAGMA table_info(trade_excursions)")):
+        conn.execute("ALTER TABLE trade_excursions RENAME TO trade_excursions_old")
+        conn.execute("""CREATE TABLE trade_excursions (signal_id INTEGER PRIMARY KEY, mae_r REAL, mfe_r REAL, timeframe TEXT,
+                        measured_at TEXT NOT NULL)""")
+        conn.execute("""INSERT INTO trade_excursions (signal_id, mae_r, mfe_r, timeframe, measured_at)
+                        SELECT signal_id, mae_r, mfe_r, timeframe, measured_at FROM trade_excursions_old""")
+        conn.execute("DROP TABLE trade_excursions_old")
 
 
 def _migrate_rule_trades(conn: sqlite3.Connection) -> None:

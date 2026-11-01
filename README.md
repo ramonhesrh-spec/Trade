@@ -573,14 +573,31 @@ begint met de limietorder en de R:R vanaf die prijs.
 `TRACK_RECORD_COST_PCT`): aantal afgeronde trades, winrate, gemiddelde R met en zonder kosten, een curve per week en een status
 die een vaste regel volgt (onder 30 afgeronde trades "nog te weinig data", daarboven positief of negatief na kosten, "voordeel
 gemeten" pas bij 100 trades en een positief gemiddelde). Vervallen en open signalen staan er bewust bij maar tellen niet mee.
-Per soort staan bruto en netto R naast elkaar, met de kosten per trade in R en de regel in woorden ("netto na 0,06% kosten per
-rondreis, omgerekend naar R met de stopafstand"); het Logboek blijft bruto en zegt dat erbij. Per focus-soort staat ook één gemeten
-regel over hoe ver winnaars eerst tegen je in gingen (MAE, `app/excursion.py`, tabel `trade_excursions`, gezet bij de uitkomst door
-`level_check` of door de motor zelf bij een kaart zonder doel), en hoe vaak stop en doel in dezelfde candle vielen (volgorde onbekend,
-als stop geteld). Voor oude trades, alleen-lezen, met de MAE van winnaars en verliezers en hoeveel stops binnen 24 uur toch het doel haalden:
+Per soort staan bruto en netto R naast elkaar, met de kosten per trade in R en de regel in woorden (`track_record.cost_text`);
+het Logboek blijft bruto en zegt dat erbij. Netto is bruto min de vaste kosten per rondreis min de funding: per afgeronde trade van
+een focus-soort de som van de funding-rates van het perpcontract van de vulling tot het einde van de uitgangscandle (long betaalt
+een positieve rate, short ontvangt hem; het interval volgt het contract), omgerekend naar R met de stopafstand (`app/funding.py`,
+tabel `trade_funding`, één aanroep naar `/fapi/v1/fundingRate` per uitkomst met een timeout van 5 s). Lukt dat niet, dan staat er
+"onbekend" en telt die trade zonder funding; Bewijs zegt "waarvan funding X R" en hoeveel trades onbekend bleven.
+
+Sinds 1 november komen de candles van perps. Per focus-soort zijn de hoofdcijfers daarom alleen de trades op perps-candles
+(`signals.candle_market = 'perp'`); het oudere deel (spot of leeg) staat kleiner eronder als "Vóór 1 november (spot-candles)".
+
+Per focus-soort staat ook één gemeten regel over hoe ver winnaars eerst tegen je in gingen (MAE, `app/excursion.py`, tabel
+`trade_excursions`), en hoe vaak stop en doel in dezelfde candle vielen (volgorde onbekend, als stop geteld). Met en zonder doel
+gelijk gemeten: `level_check` op de candles van de vulling tot de uitkomst, en een kaart zonder doel bij de referentie-uitgang op de
+5m-candles van de vulling tot het einde van de uitgangscandle (`app/outcome_measure.py`); lukt ophalen niet, dan "onbekend".
+Voor oude trades, alleen-lezen, met de MAE van winnaars en verliezers en hoeveel stops binnen 24 uur toch het doel haalden:
 
 ```bash
 .venv/bin/python3 scripts/mae_check.py --dagen 60
+```
+
+Eenmalig na deze versie op de VPS (beide schrijven; zonder de vlag rekenen ze alleen):
+
+```bash
+.venv/bin/python3 scripts/funding_check.py --dagen 60 --opslaan     # funding van oude afgeronde trades
+.venv/bin/python3 scripts/mae_check.py --opnieuw --dagen 60         # oude metingen zonder doel opnieuw op 5m-candles
 ```
 
 Een kaart die eindigt zonder vulling (zone gebroken, verlopen, doel eerst, weggelopen, stop vóór de vulling) staat 7 dagen onder
