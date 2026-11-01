@@ -373,7 +373,9 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIn("Leerling van de maand", page)
         self.assertNotIn("Winrate", page)                                 # geen handelscijfers op de CEO-pagina
         self.assertIn("CEO tester", self.client.get("/vandaag").text)     # de CEO ziet zichzelf als CEO
-        self.assertIn("Goede", self.client.get("/vandaag").text)
+        text = self.client.get("/vandaag").text
+        # Vóór 06:00 (Amsterdam) zegt ceo.greeting "De CEO werkt over" in plaats van "Goede...": de test hing af van het uur waarop hij draaide.
+        self.assertTrue("Goede" in text or "De CEO werkt over" in text)
 
     def test_week_page_shows_totals_and_share_button(self):
         r = self.client.get("/week")
