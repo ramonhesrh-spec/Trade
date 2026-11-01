@@ -14,3 +14,5 @@ venv/
 .superpowers/
 scratchpad/
 .claude/worktrees/
+data/export/
+data/export-git/

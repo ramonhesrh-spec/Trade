@@ -101,6 +101,10 @@ BACKUP_PATH = str(BASE_DIR / _get("BACKUP_PATH", "data/backups"))
 # bijvoorbeeld user@andere-server:/pad/naar/backups/. Leeg = geen externe
 # kopie, alleen lokaal op de VPS.
 BACKUP_REMOTE = _get("BACKUP_REMOTE")
+# Automatische verbeterlus (scripts/nacht_export.py --git): de SSH-url van de GitHub-repo en de deploy key waarmee de nacht alleen naar de tak
+# hespulse-data pusht. Leeg: --git weigert. Zie README, "Automatische verbeterlus".
+HESPULSE_DATA_REMOTE = _get("HESPULSE_DATA_REMOTE")
+HESPULSE_DATA_KEY = _get("HESPULSE_DATA_KEY")
 
 MAX_LOGIN_ATTEMPTS = int(_get("MAX_LOGIN_ATTEMPTS", "5"))
 LOGIN_LOCKOUT_MINUTES = int(_get("LOGIN_LOCKOUT_MINUTES", "15"))

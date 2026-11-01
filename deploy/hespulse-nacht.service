@@ -1,0 +1,13 @@
+[Unit]
+Description=HesPulse - nachtelijke export (auto-missers, lekken) en schaduwverdicts
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=crypto
+WorkingDirectory=/opt/crypto-alerts
+EnvironmentFile=/opt/crypto-alerts/.env
+# Het minteken: een mislukte export of push houdt de schaduwverdicts van deze nacht niet tegen; de fout staat wel in journalctl.
+ExecStart=-/opt/crypto-alerts/.venv/bin/python3 scripts/nacht_export.py --git
+ExecStart=/opt/crypto-alerts/.venv/bin/python3 scripts/schaduw.py --auto
