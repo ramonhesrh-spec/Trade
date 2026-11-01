@@ -73,6 +73,8 @@ LEVEL_CHECK_CANDLE_LOOKBACK = 6
 # Een niveaumelding die niet aankwam, wordt de volgende ronde opnieuw geprobeerd, hoogstens zo vaak; daarna gaat de vlag toch aan, anders
 # herhaalt een kapot abonnement zich elk kwartier zonder einde. Elke poging staat in push_attempts.
 MAX_LEVEL_ALERT_ATTEMPTS = 3
+# Soort in push_attempts voor het seintje "terug bij een niveau" (check_pending_signals); de stop-/doelmelding heet "niveau".
+PENDING_ALERT_KIND = "terug_bij_niveau"
 
 
 def _level_hit_in_candles(
@@ -560,12 +562,20 @@ async def check_pending_signals() -> None:
             heading = "Terug in de betere-entry-zone" if in_entry_zone else "Terug bij een interessant niveau"
             body = f"{heading} ({entry['confidence']})\n{level_line} · Nu {current_price:.4f}\nTik voor de grafiek en het plan."
 
+        # Zelfde patroon als check_open_trades: pas verzonden na een geslaagde push of na MAX_LEVEL_ALERT_ATTEMPTS mislukte, elke poging in
+        # push_attempts. Eerder ging de vlag ook na een mislukte push aan, en verdween het seintje stil.
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
+        ref = f"journal:{entry['id']}"
         try:
-            await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
-            logger.info("Niveau-seintje verstuurd naar %s voor %s", entry["username"], coin)
-        except Exception:
+            error = await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
+        except Exception as exc:
             logger.exception("Niveau-seintje naar %s voor %s is mislukt", entry["username"], coin)
+            error = repr(exc)
+        repo.record_push_attempt(entry["user_id"], PENDING_ALERT_KIND, ref, not error, error)
+        if not error:
+            logger.info("Niveau-seintje verstuurd naar %s voor %s", entry["username"], coin)
+        elif repo.count_failed_push_attempts(PENDING_ALERT_KIND, ref) < MAX_LEVEL_ALERT_ATTEMPTS:
+            continue
         repo.mark_level_alert_sent(entry["id"])
 
 

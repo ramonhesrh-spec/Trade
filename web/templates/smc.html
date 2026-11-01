@@ -48,7 +48,14 @@
   {% if t.moot %}
   <details class="kt-more">
     <summary>Niet meer actief <span class="kt-n">{{ t.moot|length }}</span></summary>
-    <ul class="kt-rows">{% for m in t.moot %}<li id="{{ m.dom_id }}"><b>{{ m.title }}</b><span>{{ m.label }}</span></li>{% endfor %}</ul>
+    <ul class="kt-rows">{% for m in t.moot %}<li id="{{ m.dom_id }}"><b>{{ m.title }}</b><span>{{ m.reason }}</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% if t.ended %}
+  {# Het anker van de kaart blijft (radar-zone-N): een melding die naar een geëindigde kaart wijst, landt hier bij de reden. #}
+  <details class="kt-more">
+    <summary>Uitgevallen, gemist of vervallen, 7 dagen <span class="kt-n">{{ t.ended|length }}</span></summary>
+    <ul class="kt-rows">{% for e in t.ended %}<li id="{{ e.dom_id }}"><b>{{ e.title }}</b><span>{{ e.ended_at | age }}</span><span class="kt-reason">{{ e.reason }}</span></li>{% endfor %}</ul>
   </details>
   {% endif %}
 
@@ -65,7 +72,7 @@
   {% if history %}
   <details class="kt-more">
     <summary>Uitgevallen, gemist of vervallen, 7 dagen <span class="kt-n">{{ history|length }}</span></summary>
-    <ul class="kt-rows">{% for h in history %}<li><b>{{ h.coin }} {{ h.direction }}</b><span>{{ h.state_label }} · {{ h.created_at | age }}</span>{% if h.state == "geen_plan" and h.reason %}<span class="kt-reason">{{ h.reason }}</span>{% endif %}</li>{% endfor %}</ul>
+    <ul class="kt-rows">{% for h in history %}<li><b>{{ h.coin }} {{ h.direction }}</b><span>{{ h.state_label }} · {{ h.created_at | age }}</span>{% if h.reason_text %}<span class="kt-reason">{{ h.reason_text }}</span>{% endif %}{% if h.state == "geen_plan" and h.reason %}<span class="kt-reason">{{ h.reason }}</span>{% endif %}</li>{% endfor %}</ul>
   </details>
   {% endif %}
   {% if trend_signals %}

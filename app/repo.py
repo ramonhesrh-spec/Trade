@@ -3665,7 +3665,7 @@ def signals_by_ids(ids) -> dict[int, dict]:
     with db.session() as conn:
         rows = conn.execute(
             f"""SELECT s.id, s.coin, s.direction, s.trade_type, s.price, s.stop_loss, s.take_profit, s.created_at, s.auto_outcome,
-                       s.auto_outcome_at, s.is_practice, tr.r_value AS r_override
+                       s.auto_outcome_at, s.auto_outcome_note, s.is_practice, tr.r_value AS r_override
                 FROM signals s LEFT JOIN trade_results tr ON tr.signal_id = s.id
                 WHERE s.is_practice = 0 AND s.id IN ({", ".join("?" for _ in wanted)})""", wanted).fetchall()
         return {r["id"]: dict(r) for r in rows}
@@ -3686,6 +3686,21 @@ def list_plan_moments(since_iso: str, include_zone_sweep: bool = True, include_p
                UNION ALL
                SELECT created_at, zone_alert_at AS zone_at FROM smc_setups WHERE created_at >= ? OR zone_alert_at >= ?{more}""",
             (since_iso,) * (4 + 2 * len(extra))).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_ended_cards(since_iso: str, include_zone_sweep: bool = True, include_poc: bool = True) -> list[dict]:
+    """Kaarten die sinds `since_iso` eindigden zonder vulling, met hun stand (app/end_reason.py zegt waarom): zone-radar, zone-sweep en POC-radar
+    met ended_at, en Structuur-plannen die verliepen of bij de vulling werden overgeslagen (op hun verloopmoment). Nieuwste eerst."""
+    tables = [("zone_radar", "zone_radar_setups")] + [(k, t) for k, t, on in (("zone_sweep", "zone_sweep_setups", include_zone_sweep),
+                                                                              ("poc_radar", "poc_radar_setups", include_poc)) if on]
+    parts = [f"""SELECT '{kind}' AS kind, id, coin, direction, state, COALESCE(ended_at, created_at) AS ended_at, created_at FROM {table}
+                 WHERE state NOT IN ('waiting', 'filled') AND COALESCE(ended_at, created_at) >= ?""" for kind, table in tables]
+    parts.append("""SELECT 'structuur' AS kind, id, coin, direction, state, CASE WHEN state = 'expired' THEN expires_at ELSE created_at END AS ended_at,
+                    created_at FROM structure_setups
+                    WHERE state IN ('expired', 'overgeslagen') AND CASE WHEN state = 'expired' THEN expires_at ELSE created_at END >= ?""")
+    with db.session() as conn:
+        rows = conn.execute(" UNION ALL ".join(parts) + " ORDER BY ended_at DESC", (since_iso,) * len(parts)).fetchall()
         return [dict(r) for r in rows]
 
 

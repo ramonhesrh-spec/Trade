@@ -69,7 +69,8 @@ def _sentence(m: dict, signal: dict, final_r: Optional[float]) -> str:
     if key == "filled":
         return f"Gevuld op {logbook.price_text(signal['price'])}. Stop {logbook.price_text(signal['stop_loss'])}."
     what = "Doel geraakt" if key == "target" else "Stop geraakt"
-    return f"{what}. Trade gesloten" + (f" op {logbook.r_text(final_r)}." if final_r is not None else ".")
+    note = f" {logbook.ORDER_UNKNOWN}" if key == "stop" and signal.get("auto_outcome_note") else ""
+    return f"{what}. Trade gesloten" + (f" op {logbook.r_text(final_r)}." if final_r is not None else ".") + note
 
 
 def build(rows: list, signal: dict, ms: list[dict], tf: str, tz) -> Optional[dict]:

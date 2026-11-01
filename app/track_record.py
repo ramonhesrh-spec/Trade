@@ -257,6 +257,8 @@ def summarize(rows: list[dict], round_trip_cost_pct: float, now: Optional[dateti
             "avg_gross": sum(gross) / n_resolved if n_resolved else None,
             "avg_net": avg_net, "net_total": sum(net) if n_resolved else None, "gross_total": sum(gross) if n_resolved else None,
             "avg_cost_r": (sum(gross) - sum(net)) / n_resolved if n_resolved else None,
+            # Stop en doel in dezelfde candle (level_check.AMBIGUOUS_NOTE): als stop geteld, het aantal staat erbij zodat het niet stil verdwijnt.
+            "ambiguous": sum(1 for r, _ in resolved if r.get("auto_outcome_note")),
             "recent_resolved": len(recent), "recent_avg_net": sum(n for _, n in recent) / len(recent) if recent else None,
             "status": _status(n_resolved, avg_net), "cumulative": cumulative, "cost_pct": round_trip_cost_pct,
             "score_split": score_split,
