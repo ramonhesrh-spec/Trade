@@ -38,9 +38,9 @@ def cache_path(coin: str) -> Path:
     return DERIVS_DIR / f"{coin.upper()}.csv"
 
 
-def _http_get(path: str, params: dict) -> list:
+def _http_get(path: str, params: dict, timeout: float = 20) -> list:
     url = f"{BASE_URL}{path}?{urllib.parse.urlencode(params)}"
-    with urllib.request.urlopen(url, timeout=20) as resp:
+    with urllib.request.urlopen(url, timeout=timeout) as resp:
         return json.loads(resp.read())
 
 
@@ -67,6 +67,21 @@ def _fetch_funding(coin: str, since_ms: int, get: Callable) -> pd.Series:
     s = pd.Series({pd.Timestamp(int(r["fundingTime"]), unit="ms", tz="UTC"): float(r["fundingRate"]) for r in page},
                   name="funding", dtype=float)
     return s
+
+
+FUNDING_PAGE = 1000
+
+
+def funding_between(symbol: str, start_ms: int, end_ms: int, get: Callable, timeout: float) -> list[tuple[pd.Timestamp, float]]:
+    """Alle funding-momenten van een contract in [start, end], voor de funding van een afgeronde trade (app/outcome_measure.py). Meestal één
+    aanroep; alleen een venster met meer dan FUNDING_PAGE momenten (een uurcontract over 41 dagen) vraagt een volgende pagina."""
+    out, start = [], start_ms
+    while True:
+        page = get("/fapi/v1/fundingRate", {"symbol": symbol, "limit": FUNDING_PAGE, "startTime": start, "endTime": end_ms}, timeout=timeout)
+        out += [(pd.Timestamp(int(r["fundingTime"]), unit="ms", tz="UTC"), float(r["fundingRate"])) for r in page]
+        if len(page) < FUNDING_PAGE:
+            return out
+        start = int(page[-1]["fundingTime"]) + 1
 
 
 def collect(coin: str, now: Optional[pd.Timestamp] = None, get: Optional[Callable] = None) -> pd.DataFrame:

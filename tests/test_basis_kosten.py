@@ -3,7 +3,7 @@ stopafstand) en de kostenvoet uit config.TRACK_RECORD_COST_PCT in de uitleg. Het
 import unittest
 from unittest import mock
 
-from app import config, track_record
+from app import config, db, track_record
 from tests.test_web_focus import Base, signal
 
 
@@ -26,13 +26,16 @@ class CostSummaryTest(unittest.TestCase):
         self.assertIsNone(entry["avg_cost_r"])
 
     def test_cost_text_names_the_rate_and_the_stop_distance(self):
-        self.assertEqual(track_record.cost_text(0.06), "netto na 0,06% kosten per rondreis, omgerekend naar R met de stopafstand")
+        self.assertIn("netto na 0,06% kosten per rondreis", track_record.cost_text(0.06))
+        self.assertTrue(track_record.cost_text(0.06).endswith("omgerekend naar R met de stopafstand"))
 
 
 class BewijsShowsGrossAndNetTest(Base):
     def test_a_focus_type_shows_gross_and_net_side_by_side(self):
-        signal("SOL", "zone_radar", "take_profit")
-        signal("SOL", "zone_radar", "stop_loss")
+        for outcome in ("take_profit", "stop_loss"):        # op perps-candles: de hoofdcijfers (tests/test_bewijs_v2.py)
+            sid = signal("SOL", "zone_radar", outcome)
+            with db.session() as conn:
+                conn.execute("UPDATE signals SET candle_market = 'perp' WHERE id = ?", (sid,))
         with mock.patch.object(config, "TRACK_RECORD_COST_PCT", 0.06):
             html = self.client.get("/bewijs").text
         self.assertIn("Bruto per trade", html)
@@ -40,7 +43,7 @@ class BewijsShowsGrossAndNetTest(Base):
         self.assertIn("Netto per trade", html)
         self.assertIn("+0,44R", html)                                     # 0,50 - 0,06
         self.assertIn("Kosten per trade", html)
-        self.assertIn("netto na 0,06% kosten per rondreis, omgerekend naar R met de stopafstand", html)
+        self.assertIn("netto na 0,06% kosten per rondreis en de funding", html)
 
     def test_the_logbook_says_its_r_is_gross(self):
         html = self.client.get("/signalen").text

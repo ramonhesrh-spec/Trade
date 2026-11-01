@@ -7,7 +7,7 @@ from unittest import mock
 
 import pandas as pd
 
-from app import db, excursion, level_check, repo
+from app import db, excursion, level_check, outcome_measure, repo
 from tests.test_range_sweep_live import EngineCase, FollowEngineTest
 from tests.test_samenval import DbCase
 from tests.test_web_focus import Base, signal
@@ -116,13 +116,29 @@ class FollowStoresExcursionTest(EngineCase):
     _flat_market = FollowEngineTest._flat_market
     _synthetic_long = FollowEngineTest._synthetic_long
 
-    def test_a_reference_exit_stores_the_excursion_once(self):
+    def test_a_reference_exit_stores_the_excursion_on_5m_candles(self):
+        sid = self._synthetic_long()
+        with db.session() as conn:                  # het signaal ontstond bij de vulling, in de tijd van de kunstmatige markt
+            conn.execute("UPDATE signals SET created_at = '2025-03-07T01:00:00+00:00' WHERE id = ?", (sid,))
+        five = self._flat_market_5m()
+        with mock.patch.object(outcome_measure, "_candles_fetch", lambda coin, timeframe, limit, since: five[
+                five["timestamp"] >= pd.Timestamp(since, unit="ms", tz="UTC")].head(limit).reset_index(drop=True)):
+            self.run_(__import__("app.range_sweep_live", fromlist=["follow"]).follow, pd.Timestamp("2025-03-15 00:05", tz="UTC"))
+        x = repo.get_trade_excursion(sid)
+        self.assertEqual(x["timeframe"], "5m")
+        self.assertAlmostEqual(x["mae_r"], (100.4 - 100.4) / 1.4)          # vlakke markt: laag 100,4 op een instap van 100,4
+        self.assertAlmostEqual(x["mfe_r"], (100.6 - 100.4) / 1.4)
+
+    def test_without_candles_the_reference_exit_is_unknown(self):
         sid = self._synthetic_long()
         self.run_(__import__("app.range_sweep_live", fromlist=["follow"]).follow, pd.Timestamp("2025-03-15 00:05", tz="UTC"))
         x = repo.get_trade_excursion(sid)
-        self.assertIsNotNone(x)
-        self.assertGreaterEqual(x["mae_r"], 0.0)
-        self.assertEqual(x["timeframe"], "15m")
+        self.assertEqual(x["timeframe"], "onbekend")
+        self.assertIsNone(x["mae_r"])
+
+    def _flat_market_5m(self, price=100.5):
+        idx = pd.date_range("2025-03-01", periods=15 * 24 * 12, freq="5min", tz="UTC")
+        return pd.DataFrame({"timestamp": idx, "open": price, "high": price + 0.1, "low": price - 0.1, "close": price, "volume": 1.0})
 
 
 class BewijsShowsExcursionTest(Base):

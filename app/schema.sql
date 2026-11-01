@@ -723,11 +723,26 @@ CREATE TABLE IF NOT EXISTS trade_results (
 
 -- Hoe ver een afgeronde trade eerst tegen je in ging (MAE) en met je mee (MFE), in R, op candles van na de vulling tot de uitkomst (app/excursion.py).
 -- Gezet bij de uitkomst door level_check of de motor zelf (range_sweep_live.follow_trade). Alleen meting: niets in een motor leest dit.
+-- Leeg (mae_r NULL, timeframe 'onbekend'): de candles van vulling tot uitgang waren niet op te halen (app/outcome_measure.py).
 CREATE TABLE IF NOT EXISTS trade_excursions (
     signal_id INTEGER PRIMARY KEY,
-    mae_r REAL NOT NULL,
-    mfe_r REAL NOT NULL,
+    mae_r REAL,
+    mfe_r REAL,
     timeframe TEXT,
+    measured_at TEXT NOT NULL
+);
+
+-- Funding van een afgeronde trade van een focus-soort (app/funding.py, opgehaald in app/outcome_measure.py): de som van de rates van vulling
+-- (start_at) tot het einde van de uitgangscandle (end_at), in procenten van de instap en in R. status 'onbekend' (funding_r NULL): het ophalen
+-- lukte niet, nooit als nul geteld. Alleen meting: Bewijs trekt het af van de netto R, geen motor leest het.
+CREATE TABLE IF NOT EXISTS trade_funding (
+    signal_id INTEGER PRIMARY KEY,
+    funding_r REAL,
+    funding_pct REAL,
+    events INTEGER,
+    status TEXT NOT NULL,
+    start_at TEXT NOT NULL,
+    end_at TEXT NOT NULL,
     measured_at TEXT NOT NULL
 );
 

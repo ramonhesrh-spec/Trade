@@ -1183,7 +1183,8 @@ async def _range_sweep_proof(user: dict, rows: list[dict], labs: dict) -> Option
 async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     """Eerlijk, automatisch gemeten trackrecord per soort melding in R na kosten (zie app/track_record.py)."""
     rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
-    summary = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT)
+    # Focus-soorten: hoofdcijfers op perps-candles, het oudere deel op spot-candles apart (track_record.SPOT_ERA_LABEL).
+    summary = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT, era_types=focus.FOCUS_TYPES)
     summary.sort(key=lambda e: e["source"] != "alles")      # het totaal bovenaan, de rest in vaste volgorde
     for entry in summary:
         entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
@@ -1217,7 +1218,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
         "curves": curves, "total": total, "per_type": per_type, "off_types": off_types, "funding_split": track_record.funding_split(rows, config.TRACK_RECORD_COST_PCT),
         "hours": track_record.hour_grid(rows, config.TRACK_RECORD_COST_PCT),
         "rule_statuses": rule_statuses, "other_rules": other_rules, "range_sweep": range_sweep, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
-        "cost_pct": config.TRACK_RECORD_COST_PCT, "cost_line": track_record.cost_text(config.TRACK_RECORD_COST_PCT), "recent_days": track_record.RECENT_DAYS,
+        "focus_types": focus.FOCUS_TYPES, "cost_pct": config.TRACK_RECORD_COST_PCT, "cost_line": track_record.cost_text(config.TRACK_RECORD_COST_PCT), "recent_days": track_record.RECENT_DAYS,
         "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,
     })
 

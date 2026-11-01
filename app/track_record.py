@@ -88,9 +88,20 @@ def signal_r(row: dict) -> Optional[float]:
     return None
 
 
+FUNDING_KNOWN = "gemeten"
+# Sinds 1 november 2026 komen de candles van perps (app/candle_source.py); oudere rijen hebben candle_market leeg of 'spot'.
+PERP_MARKET = "perp"
+SPOT_ERA_LABEL = "Vóór 1 november (spot-candles)"
+
+
+def _funding_r(row: dict) -> Optional[float]:
+    """Gemeten funding in R (app/funding.py), of None: onbekend of nog niet nagerekend. None telt als niets, het aantal staat op Bewijs."""
+    return row.get("funding_r") if row.get("funding_status") == FUNDING_KNOWN else None
+
+
 def _cost_r(row: dict, round_trip_cost_pct: float) -> float:
     stop_pct = abs(row["price"] - row["stop_loss"]) / row["price"] * 100
-    return round_trip_cost_pct / stop_pct if stop_pct else 0.0
+    return (round_trip_cost_pct / stop_pct if stop_pct else 0.0) + (_funding_r(row) or 0.0)
 
 
 def net_signal_r(row: dict, round_trip_cost_pct: float) -> Optional[float]:
@@ -103,7 +114,8 @@ def net_signal_r(row: dict, round_trip_cost_pct: float) -> Optional[float]:
 
 def cost_text(round_trip_cost_pct: float) -> str:
     """De kostenregel van _cost_r in woorden, voor de uitleg naast bruto en netto op Bewijs."""
-    return f"netto na {round_trip_cost_pct:.2f}".replace(".", ",") + "% kosten per rondreis, omgerekend naar R met de stopafstand"
+    return (f"netto na {round_trip_cost_pct:.2f}".replace(".", ",") + "% kosten per rondreis en de funding die de trade betaalde of ontving"
+            " (long betaalt bij een positieve rate, short ontvangt hem), beide omgerekend naar R met de stopafstand")
 
 
 def _status(n_resolved: int, avg_net: Optional[float]) -> str:
@@ -208,11 +220,58 @@ def funding_split(rows: list[dict], round_trip_cost_pct: float) -> list[dict]:
             for t, g in sorted(groups.items(), key=lambda kv: order.index(kv[0]) if kv[0] in order else len(order)) if g["measured"]]
 
 
-def summarize(rows: list[dict], round_trip_cost_pct: float, now: Optional[datetime] = None) -> list[dict]:
-    """Eén entry per (bron, soort), gesorteerd op aantal afgeronde trades. Alles samen staat als laatste entry
-    met bron 'alles'. 'recent' zijn de laatste RECENT_DAYS dagen, de status gaat uit van alles sinds het begin."""
-    now = now or datetime.now(timezone.utc)
+def _entry(source: str, trade_type: str, items: list[dict], round_trip_cost_pct: float, now: datetime) -> dict:
     recent_cut = now - timedelta(days=RECENT_DAYS)
+    resolved = [(r, signal_r(r)) for r in items]
+    resolved = [(r, g) for r, g in resolved if g is not None]
+    net = [g - _cost_r(r, round_trip_cost_pct) for r, g in resolved]
+    gross = [g for _, g in resolved]
+    wins = sum(1 for g in gross if g > 0)
+    recent = [(r, n) for (r, _), n in zip(resolved, net) if _parse(r["created_at"]) >= recent_cut]
+    weekly: dict[tuple, float] = defaultdict(float)
+    for (r, _), n in zip(resolved, net):
+        weekly[_week_key(_parse(r["auto_outcome_at"] or r["created_at"]))] += n
+    weeks = []
+    cursor = now
+    for _ in range(WEEKS_SHOWN):
+        weeks.append(_week_key(cursor))
+        cursor -= timedelta(days=7)
+    weeks.reverse()
+    cumulative = []
+    running = sum(v for k, v in weekly.items() if k < weeks[0])
+    for k in weeks:
+        running += weekly.get(k, 0.0)
+        cumulative.append(running)
+    n_resolved = len(resolved)
+    avg_net = sum(net) / n_resolved if n_resolved else None
+    funded = [f for r, _ in resolved if (f := _funding_r(r)) is not None]
+    return {
+        "source": source, "trade_type": trade_type,
+        "label": "Alle meldingen samen" if source == "alles" else f"{TYPE_LABELS.get(trade_type, trade_type)}",
+        "source_label": "" if source == "alles" else SOURCE_LABELS[source],
+        "total": len(items), "resolved": n_resolved, "wins": wins, "losses": n_resolved - wins,
+        "open_or_expired": len(items) - n_resolved,
+        "winrate": wins / n_resolved if n_resolved else None,
+        "avg_gross": sum(gross) / n_resolved if n_resolved else None,
+        "avg_net": avg_net, "net_total": sum(net) if n_resolved else None, "gross_total": sum(gross) if n_resolved else None,
+        "avg_cost_r": (sum(gross) - sum(net)) / n_resolved if n_resolved else None,
+        # Funding zit in de kosten; 'waarvan funding' is het deel daarvan per afgeronde trade. Zonder één meting None, geen nul.
+        "funding_total": sum(funded) if funded else None, "avg_funding_r": sum(funded) / n_resolved if funded else None,
+        "funding_measured": len(funded), "funding_unknown": n_resolved - len(funded),
+        # Stop en doel in dezelfde candle (level_check.AMBIGUOUS_NOTE): als stop geteld, het aantal staat erbij zodat het niet stil verdwijnt.
+        "ambiguous": sum(1 for r, _ in resolved if r.get("auto_outcome_note")),
+        "recent_resolved": len(recent), "recent_avg_net": sum(n for _, n in recent) / len(recent) if recent else None,
+        "status": _status(n_resolved, avg_net), "cumulative": cumulative, "cost_pct": round_trip_cost_pct,
+        "score_split": _score_split(resolved, net),
+    }
+
+
+def summarize(rows: list[dict], round_trip_cost_pct: float, now: Optional[datetime] = None, era_types=()) -> list[dict]:
+    """Eén entry per (bron, soort), gesorteerd op aantal afgeronde trades. Alles samen staat als laatste entry
+    met bron 'alles'. 'recent' zijn de laatste RECENT_DAYS dagen, de status gaat uit van alles sinds het begin.
+    Voor de soorten in era_types tellen de hoofdcijfers alleen trades op perps-candles; het oudere deel (spot of leeg) staat apart onder
+    'older', zodat uitkomsten op twee soorten candles niet door elkaar lopen. Het totaal en de andere soorten blijven alles samen."""
+    now = now or datetime.now(timezone.utc)
     groups: dict[tuple, list[dict]] = defaultdict(list)
     for r in rows:
         source = "community" if r["message_id"] is not None else "scan"
@@ -223,46 +282,14 @@ def summarize(rows: list[dict], round_trip_cost_pct: float, now: Optional[dateti
 
     out = []
     for (source, trade_type), items in groups.items():
-        resolved = [(r, signal_r(r)) for r in items]
-        resolved = [(r, g) for r, g in resolved if g is not None]
-        net = [g - _cost_r(r, round_trip_cost_pct) for r, g in resolved]
-        gross = [g for _, g in resolved]
-        wins = sum(1 for g in gross if g > 0)
-        recent = [(r, n) for (r, _), n in zip(resolved, net) if _parse(r["created_at"]) >= recent_cut]
-        weekly: dict[tuple, float] = defaultdict(float)
-        for (r, _), n in zip(resolved, net):
-            weekly[_week_key(_parse(r["auto_outcome_at"] or r["created_at"]))] += n
-        weeks = []
-        cursor = now
-        for _ in range(WEEKS_SHOWN):
-            weeks.append(_week_key(cursor))
-            cursor -= timedelta(days=7)
-        weeks.reverse()
-        cumulative, running = [], 0.0
-        before = sum(v for k, v in weekly.items() if k < weeks[0])
-        running = before
-        for k in weeks:
-            running += weekly.get(k, 0.0)
-            cumulative.append(running)
-        n_resolved = len(resolved)
-        avg_net = sum(net) / n_resolved if n_resolved else None
-        score_split = _score_split(resolved, net)
-        out.append({
-            "source": source, "trade_type": trade_type,
-            "label": "Alle meldingen samen" if source == "alles" else f"{TYPE_LABELS.get(trade_type, trade_type)}",
-            "source_label": "" if source == "alles" else SOURCE_LABELS[source],
-            "total": len(items), "resolved": n_resolved, "wins": wins, "losses": n_resolved - wins,
-            "open_or_expired": len(items) - n_resolved,
-            "winrate": wins / n_resolved if n_resolved else None,
-            "avg_gross": sum(gross) / n_resolved if n_resolved else None,
-            "avg_net": avg_net, "net_total": sum(net) if n_resolved else None, "gross_total": sum(gross) if n_resolved else None,
-            "avg_cost_r": (sum(gross) - sum(net)) / n_resolved if n_resolved else None,
-            # Stop en doel in dezelfde candle (level_check.AMBIGUOUS_NOTE): als stop geteld, het aantal staat erbij zodat het niet stil verdwijnt.
-            "ambiguous": sum(1 for r, _ in resolved if r.get("auto_outcome_note")),
-            "recent_resolved": len(recent), "recent_avg_net": sum(n for _, n in recent) / len(recent) if recent else None,
-            "status": _status(n_resolved, avg_net), "cumulative": cumulative, "cost_pct": round_trip_cost_pct,
-            "score_split": score_split,
-        })
+        if source != "alles" and trade_type in era_types:
+            perp = [r for r in items if r.get("candle_market") == PERP_MARKET]
+            older = [r for r in items if r.get("candle_market") != PERP_MARKET]
+            e = _entry(source, trade_type, perp, round_trip_cost_pct, now)
+            e["older"] = {**_entry(source, trade_type, older, round_trip_cost_pct, now), "label": SPOT_ERA_LABEL} if older else None
+            out.append(e)
+        else:
+            out.append(_entry(source, trade_type, items, round_trip_cost_pct, now))
     out.sort(key=lambda e: (e["source"] == "alles", -e["resolved"]))
     return out
 

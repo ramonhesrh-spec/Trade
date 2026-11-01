@@ -1,6 +1,9 @@
 """Hoe ver gingen afgeronde trades van de focus-soorten eerst tegen je in (MAE) en met je mee (MFE)? Alleen-lezen: rekent achteraf op candles van de
 beurs en schrijft niets. Draai op de VPS:
 .venv/bin/python3 scripts/mae_check.py [--dagen 60] [--soort zone_radar]
+.venv/bin/python3 scripts/mae_check.py --opnieuw [--dagen 60]
+--opnieuw schrijft wel: het meet de trades zonder doel (zone-sweep, POC-radar) opnieuw op de 5m-candles van de vulling tot het einde van de
+uitgangscandle, zoals bij de uitgang nu (app/outcome_measure.py), en vervangt de oude lopende meting; lukt ophalen niet, dan 'onbekend'.
 Per soort: aantal gemeten trades, mediaan en 75e percentiel van de MAE van winnaars en verliezers, en hoeveel stops binnen 24 uur toch het doel
 haalden. Regels in app/excursion.py, dezelfde als bij de uitkomst in level_check. Dit is meting, geen advies over waar een stop hoort."""
 import argparse
@@ -10,7 +13,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from app import exchange, excursion, focus, repo  # noqa: E402
+from app import exchange, excursion, focus, outcome_measure, repo  # noqa: E402
 
 # 5m-candles tot 1000 per keer: het venster van een signaal (hoogstens twee dagen) plus 24 uur na de stop past erin.
 TIMEFRAME = "5m"
@@ -25,15 +28,40 @@ def _fmt(x) -> str:
     return "-" if x is None else f"{x:.2f}".replace(".", ",")
 
 
+def redo(rows: list[dict]) -> None:
+    """Trades zonder doel (de motor zette de uitkomst): opnieuw meten zoals range_sweep_live.follow_trade dat nu bij de uitgang doet."""
+    refs = repo.reference_exits()
+    todo = [r for r in rows if r.get("r_override") is not None and r.get("take_profit") is None]
+    done = unknown = skipped = 0
+    for r in todo:
+        ref = refs.get(r["id"])
+        if not ref:
+            skipped += 1        # geen referentie-uitgang bekend: dan valt er geen venster te kiezen
+            continue
+        m = outcome_measure.record_excursion(r["id"], r["coin"], r["direction"], r["price"], r["stop_loss"], r["created_at"],
+                                             outcome_measure.exit_end(r, ref))
+        if m is None:
+            unknown += 1
+        else:
+            done += 1
+        time.sleep(0.1)                   # zacht voor de beurs
+    print(f"Trades zonder doel: {done} opnieuw gemeten op 5m-candles, {unknown} onbekend (candles niet op te halen), "
+          f"{skipped} zonder referentie-uitgang overgeslagen.")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dagen", type=int, default=60)
     ap.add_argument("--soort", choices=focus.FOCUS_TYPES)
+    ap.add_argument("--opnieuw", action="store_true", help="meet trades zonder doel opnieuw op 5m-candles en sla het op")
     a = ap.parse_args()
     since = (datetime.now(timezone.utc) - timedelta(days=a.dagen)).isoformat()
     types = (a.soort,) if a.soort else focus.FOCUS_TYPES
     rows = [r for r in repo.list_signals_for_quality_report(since)
             if r["trade_type"] in types and r["auto_outcome"] in ("take_profit", "stop_loss") and r.get("auto_outcome_at")]
+    if a.opnieuw:
+        redo(rows)
+        return
     print(f"MAE en MFE van afgeronde trades, laatste {a.dagen} dagen, in R van de stopafstand. Alleen-lezen.\n")
     measured, failed = [], 0
     for r in rows:

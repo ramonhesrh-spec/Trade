@@ -118,7 +118,8 @@ class AmbiguousOnBewijsTest(Base):
     def test_bewijs_counts_order_unknown(self):
         sid = signal("SOL", "zone_radar", "stop_loss")
         with db.session() as conn:
-            conn.execute("UPDATE signals SET auto_outcome_note = ? WHERE id = ?", (AMB, sid))
+            # Op perps-candles: de hoofdcijfers van een focus-soort (tests/test_bewijs_v2.py)
+            conn.execute("UPDATE signals SET auto_outcome_note = ?, candle_market = 'perp' WHERE id = ?", (AMB, sid))
         html = self.client.get("/bewijs").text
         self.assertIn("1 keer stop en doel in dezelfde candle: volgorde onbekend, als stop geteld.", html)
 

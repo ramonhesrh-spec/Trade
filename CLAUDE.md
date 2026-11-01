@@ -103,11 +103,22 @@ na het slot, duur 83 s).
 
 **Meting rond de focus-soorten (alleen meting, geen motor leest het).** Kosten: Bewijs toont per soort bruto, netto en kosten per trade in R
 (`summarize`'s `gross_total`/`avg_cost_r`, uitleg `track_record.cost_text` met `TRACK_RECORD_COST_PCT`); het Logboek blijft bruto en zegt dat.
+Funding zit in de kosten: `track_record._cost_r` telt de gemeten `funding_r` mee (dus ook live_net_r, curves, uurkaart), `summarize` geeft
+`avg_funding_r` ("waarvan funding"), `funding_measured` en `funding_unknown`. Regel in `app/funding.py` (zuiver: momenten strikt na de vulling en
+strikt vóór het einde van de uitgangscandle, long betaalt een positieve rate, short ontvangt, over de instapwaarde, naar R met de stopafstand; het
+interval komt uit de API), ophalen in `app/outcome_measure.py` (`derivs.funding_between`, timeout 5 s, cache per contract, bij falen status
+'onbekend' en `funding_r` NULL, nooit 0), tabel `trade_funding`, alleen focus-soorten; gezet in `level_check.check_signal_outcomes` (einde =
+`hit_at` + candlelengte) en `range_sweep_live._measure_exit`; `scripts/funding_check.py` rekent oude trades na, `--opslaan` schrijft. Perps en
+spot: `summarize(..., era_types=focus.FOCUS_TYPES)` op Bewijs maakt de hoofdcijfers per focus-soort alleen `candle_market = 'perp'`; de rest
+(NULL of 'spot') staat in `older` met `SPOT_ERA_LABEL` "Vóór 1 november (spot-candles)"; het totaal en de andere soorten blijven gemengd.
 MAE/MFE: `app/excursion.py` (zuiver; stop in een candle telt als 1R tegen zonder meebeweging, doel telt tot het doel, de vulcandle niet), tabel
-`trade_excursions` (schema.sql, nieuwe tabel), gezet in `level_check.check_signal_outcomes` op dezelfde candles als de uitkomst en in
-`range_sweep_live.follow_trade` bij de referentie-uitgang (de lopende meting van `follow_step`, het candlevenster reikt niet tot de vulling);
+`trade_excursions` (mae_r/mfe_r mogen leeg zijn: timeframe 'onbekend'; `_migrate` herbouwt een oude tabel met NOT NULL één keer), gezet in
+`level_check.check_signal_outcomes` op dezelfde candles als de uitkomst en zonder doel in `range_sweep_live.follow_trade` bij de referentie-uitgang
+via `outcome_measure.record_excursion`: 5m-candles via `exchange.fetch_ohlcv(since=)` van het signaalmoment tot het einde van de uitgangscandle
+(hoogstens nu), dezelfde `excursion.measure` met doel None; halen ze de uitgang niet, dan 'onbekend', nooit de lopende meting van `follow_step`.
+Tests vervangen de naden `outcome_measure._candles_fetch`/`_funding_get` (in `tests/__init__.py` standaard offline).
 Bewijs toont per focus-soort `excursion.line`, `scripts/mae_check.py` rekent alleen-lezen achteraf (`excursion.measure_row`, stops die binnen 24
-uur toch het doel haalden). Vertraging: `app/latency.py` en tabel `alert_timing` (één rij per verzonden push uit `send_kans_push(..., timing=)`;
+uur toch het doel haalden); `--opnieuw` meet de trades zonder doel opnieuw zoals live (`repo.reference_exits`, `outcome_measure.exit_end`) en schrijft. Vertraging: `app/latency.py` en tabel `alert_timing` (één rij per verzonden push uit `send_kans_push(..., timing=)`;
 geweerde kansen hebben geen rij); de vier focus-motoren geven `latency.timing(soort, "nieuw"|"vulling", candlesluiting, detectie)` mee, ook via
 `fanout_confirmed_signal(timing=)`; een vulling in de vormende candle telt vanaf het laatste 5m-slot. `scripts/vertraging.py` toont per soort
 mediaan en 90e percentiel. Afsluiten met reden: `app/end_reason.py` is de enige vertaling van een eindstand zonder vulling naar gewone woorden
