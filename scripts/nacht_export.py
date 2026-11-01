@@ -139,7 +139,9 @@ def push_to_branch(files: list[Path], work: Path, remote: str, key: Optional[str
             raise ValueError(f"{f}: alleen exportbestanden (hespulse-JJJJ-MM-DD.json/.md) gaan naar {BRANCH}")
     env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
     if key:
-        env["GIT_SSH_COMMAND"] = f"ssh -i {key} -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new"
+        # known_hosts naast de sleutel: de service-gebruiker heeft mogelijk geen schrijfbare home (adduser --system).
+        hosts = Path(key).parent / "known_hosts"
+        env["GIT_SSH_COMMAND"] = f"ssh -i {key} -o IdentitiesOnly=yes -o UserKnownHostsFile={hosts} -o StrictHostKeyChecking=accept-new"
     work.mkdir(parents=True, exist_ok=True)
     if not (work / ".git").exists():
         _git(["init", "-q"], work, env)

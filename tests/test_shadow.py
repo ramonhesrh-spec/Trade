@@ -325,3 +325,29 @@ class EnginePlanShapeTest(unittest.TestCase):
         row = poc_radar_live._shadow_plan("BTC", plan, pd.Timestamp(NOW))
         self.assertEqual(set(row), self.KEYS)
         self.assertEqual((row["limit"], row["stop"]), (97.0, 95.0))
+
+
+class SeedTest(DbCase):
+    SEED = ({"id": "zr-stop-040", "trade_type": "zone_radar", "description": "Stop 0,4 ATR", "reason": "lek uit de export van 2026-11-08",
+             "params": {"stop_atr": 0.4}},
+            {"id": "zr-afstand-8", "trade_type": "zone_radar", "description": "Afstand 8%", "reason": "reden", "params": {"max_distance_pct": 8.0}})
+
+    def test_seed_legt_vast_eenmalig_en_een_per_soort(self):
+        with mock.patch.object(shadow, "SEEDS", self.SEED):
+            self.assertEqual(shadow.seed(NOW), ["zr-stop-040"])
+            self.assertEqual(shadow.seed(NOW), [])                    # al vastgelegd; de tweede wacht tot de soort vrij is
+            repo.set_shadow_status("zr-stop-040", "afgevallen", NOW.isoformat(), "test")
+            self.assertEqual(shadow.seed(NOW), ["zr-afstand-8"])
+            repo.set_shadow_status("zr-afstand-8", "afgevallen", NOW.isoformat(), "test")
+            self.assertEqual(shadow.seed(NOW), [])                    # een besloten variant komt nooit terug
+
+    def test_seeds_in_code_zijn_geldig(self):
+        ids = [s["id"] for s in shadow.SEEDS]
+        self.assertEqual(len(ids), len(set(ids)))
+        for s in shadow.SEEDS:
+            shadow.validate(s["trade_type"], s["params"])
+            self.assertTrue(s["reason"].strip() and s["description"].strip())
+
+    def test_auto_legt_eerst_de_seeds_vast(self):
+        with mock.patch.object(shadow, "SEEDS", self.SEED[:1]):
+            self.assertEqual(schaduw.auto(NOW), {"zr-stop-040": "wachten"})

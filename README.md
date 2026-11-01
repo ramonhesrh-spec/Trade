@@ -801,6 +801,67 @@ Het rapport schrijft naast de signalen-CSV ook `data/replay/smc_setups_*.csv` me
 Met `scripts/replay_lab.py --positioning` test je regels op positioneringsdata van Binance (open interest, top-traders, takers, funding), gratis van data.binance.vision. Dat is informatie die niet in een candle zit.
 De trage equivalentietest (`tests/test_smc_equivalence.py`, enkele minuten) sla je over met `SKIP_SLOW_TESTS=1 python3 -m unittest discover -s tests -t .`.
 
+### Automatische verbeterlus
+
+HesPulse meet elke nacht zelf waar de focus-soorten (Structuur, Zone-radar, Zone-sweep, POC-radar) kansen laten liggen, zonder dat je trades
+instuurt. Om 03:17 UTC draait `deploy/hespulse-nacht.timer`:
+
+1. `scripts/nacht_export.py --git` zoekt de auto-missers van de laatste 24 uur (`scripts/auto_misser.py`: een omkeer van minstens 3 ATR op
+   gesloten 1u-candles binnen 24 uur, met per motor de weigerreden als geen motor hem zag), telt per soort de lekken over 7 en 30 dagen
+   (`app/leaks.py`), schrijft `data/export/hespulse-JJJJ-MM-DD.json` en `.md` en pusht alleen die twee bestanden naar de tak `hespulse-data`.
+   In de export staan marktdata en uitkomsten per signaal; nooit gebruikers, e-mail, journaal, push-abonnementen of `.env`-waarden.
+2. `scripts/schaduw.py --auto` voert de verdicts van de schaduwvarianten uit (`app/shadow.py`): promoveren, afvallen of wachten volgens de vaste
+   regel. Een promotie zet de parameter in de overlay die de motor bij zijn volgende cyclus leest en stuurt de CEO één push met de terugdraai-opdracht.
+
+Een wekelijkse Claude-sessie leest de nieuwste export en legt per soort hoogstens één variant vooraf vast (`docs/verbeterlus.md`).
+
+Handmatig:
+
+```bash
+cd /opt/crypto-alerts
+sudo -u crypto .venv/bin/python3 scripts/auto_misser.py --droog        # alleen tonen
+sudo -u crypto .venv/bin/python3 scripts/nacht_export.py               # export zonder push
+sudo -u crypto .venv/bin/python3 scripts/schaduw.py --lijst
+sudo -u crypto .venv/bin/python3 scripts/schaduw.py --terug <id>       # een promotie terugdraaien
+```
+
+**Eenmalig op de VPS: de deploy key.** De nacht pusht met een eigen SSH-sleutel van de service-gebruiker `crypto`. Let op: een deploy key met
+schrijfrechten geeft toegang tot de hele repository; GitHub kent voor deploy keys geen rechten per tak. Het script pusht alleen naar
+`hespulse-data` (de tak staat vast in de code, en het weigert elk ander bestand dan de twee exportbestanden), maar wie de sleutel heeft, kan
+meer. Bewaar hem dus alleen op de VPS, leesbaar voor `crypto`.
+
+```bash
+sudo apt install -y git
+# De home van crypto; adduser --system geeft soms /nonexistent, dan dezelfde map als de back-up-sleutel.
+CRYPTO_HOME=$(getent passwd crypto | cut -d: -f6)
+{ [ -d "$CRYPTO_HOME" ] && [ "$CRYPTO_HOME" != /nonexistent ]; } || CRYPTO_HOME=/opt/crypto-alerts
+sudo -u crypto mkdir -p "$CRYPTO_HOME/.ssh" && sudo -u crypto chmod 700 "$CRYPTO_HOME/.ssh"
+sudo -u crypto ssh-keygen -t ed25519 -N "" -C "hespulse-nacht" -f "$CRYPTO_HOME/.ssh/hespulse_data_ed25519"
+sudo cat "$CRYPTO_HOME/.ssh/hespulse_data_ed25519.pub"
+```
+
+Kopieer die regel (begint met `ssh-ed25519`). Op GitHub: open de repository, **Settings > Deploy keys > Add deploy key**, titel
+`hespulse-nacht`, plak de sleutel, vink **Allow write access** aan en klik **Add key**. Daarna, terug op de VPS:
+
+```bash
+echo "HESPULSE_DATA_REMOTE=git@github.com:ramonhesrh-spec/Trade.git" | sudo -u crypto tee -a /opt/crypto-alerts/.env
+echo "HESPULSE_DATA_KEY=$CRYPTO_HOME/.ssh/hespulse_data_ed25519" | sudo -u crypto tee -a /opt/crypto-alerts/.env
+# verbinding testen: GitHub antwoordt met "Hi ramonhesrh-spec/Trade! You've successfully authenticated"
+sudo -u crypto ssh -i "$CRYPTO_HOME/.ssh/hespulse_data_ed25519" -o IdentitiesOnly=yes \
+  -o UserKnownHostsFile="$CRYPTO_HOME/.ssh/known_hosts" -o StrictHostKeyChecking=accept-new -T git@github.com
+# eerste run met de hand
+cd /opt/crypto-alerts && sudo -u crypto .venv/bin/python3 scripts/nacht_export.py --git
+# timer installeren
+sudo cp deploy/hespulse-nacht.service deploy/hespulse-nacht.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hespulse-nacht.timer
+systemctl list-timers hespulse-nacht.timer
+```
+
+De git-remote voor de tak hoef je niet zelf te zetten: het script houdt een aparte kloon van alleen `hespulse-data` in `data/export-git/`
+met `HESPULSE_DATA_REMOTE` als `origin`, los van de code in `/opt/crypto-alerts` (die hoeft geen git-checkout te zijn). Bestaat de tak nog
+niet, dan maakt de eerste run hem aan als losse tak zonder de code. Logboek: `journalctl -u hespulse-nacht`.
+
 ### HTTPS met Let's Encrypt
 
 ```bash

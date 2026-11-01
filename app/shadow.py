@@ -19,6 +19,7 @@ Een plan zonder doel ('zonder_doel') telt niet mee: de referentie-uitgang van de
 track_record._cost_r zonder funding (die meet de schaduw niet), voor beide armen gelijk. Structuur volgt in de schaduw een vaste limiet op het
 niveau bij het plan; ook dat geldt voor beide armen."""
 import json
+import logging
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -27,6 +28,7 @@ import pandas as pd
 from app import config, focus, repo
 from app.replay import stats
 
+logger = logging.getLogger("shadow")
 TRADE_TYPES = ("structuur", "zone_radar", "zone_sweep", "poc_radar")
 STATUSES = ("schaduw", "gepromoveerd", "afgevallen")
 ARMS = ("hoofd", "variant")
@@ -59,6 +61,12 @@ def defaults(trade_type: str) -> dict:
     raise ValueError(f"onbekende soort {trade_type}")
 
 
+# Het register in code: de wekelijkse verbetersessie (docs/verbeterlus.md) zet hier een variant bij, vooraf vastgelegd met reden. De nacht
+# (scripts/schaduw.py --auto) legt elke nieuwe variant vast zodra zijn soort geen actieve schaduw heeft; een besloten variant komt nooit terug.
+# Vorm: {"id", "trade_type", "description", "reason", "params"}.
+SEEDS: tuple = ()
+
+
 def validate(trade_type: str, params: dict) -> None:
     if trade_type not in PARAMS:
         raise ValueError(f"{trade_type}: geen schaduw mogelijk, alleen {', '.join(TRADE_TYPES)}")
@@ -81,6 +89,21 @@ def register(variant_id: str, trade_type: str, description: str, reason: str, pa
     if repo.get_shadow_variant(variant_id):
         raise ValueError(f"variant {variant_id} bestaat al")
     repo.insert_shadow_variant(variant_id, trade_type, description, reason, json.dumps(params), at.isoformat())
+
+
+def seed(at: datetime) -> list[str]:
+    """Legt de varianten uit SEEDS vast die er nog niet zijn en waarvan de soort vrij is, in de volgorde van SEEDS. Geeft de nieuwe ids."""
+    added = []
+    for s in SEEDS:
+        if repo.get_shadow_variant(s["id"]) or repo.active_shadow(s["trade_type"]):
+            continue
+        try:
+            register(s["id"], s["trade_type"], s["description"], s["reason"], s["params"], at)
+        except ValueError:
+            logger.exception("Seed %s is ongeldig en niet vastgelegd", s.get("id"))      # de verdicts van de andere schaduwen gaan door
+            continue
+        added.append(s["id"])
+    return added
 
 
 def live_params(trade_type: str) -> dict:

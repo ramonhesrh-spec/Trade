@@ -53,8 +53,11 @@ def revert(variant_id: str, now: datetime) -> None:
 
 
 def auto(now: datetime) -> dict:
-    """Elk actief verdict uitvoeren: promoveren of afvallen; wachten laat de schaduw staan. Geeft {id: verdict}."""
+    """Eerst de nieuwe varianten uit shadow.SEEDS vastleggen, dan elk actief verdict uitvoeren: promoveren of afvallen; wachten laat de schaduw
+    staan. Geeft {id: verdict}."""
     done = {}
+    for variant_id in shadow.seed(now):
+        print(f"{variant_id}: vastgelegd uit shadow.SEEDS")
     for variant in repo.list_shadow_variants(("schaduw",)):
         v = shadow.verdict(repo.list_shadow_results(variant["id"]))
         done[variant["id"]] = v["verdict"]

@@ -207,6 +207,25 @@ levert is een hypothese: valideer in code, label ongetest, laat Bewijs de score 
 
 **Focus.** `app/focus.py` (zuiver) is de enige bron voor welke soorten nog nieuwe kansen zoeken en melden: `FOCUS_TYPES` = `structuur`, `structuur_c`, `zone_radar`, `zone_sweep` en `poc_radar` (beide live, ongetest). `ENGINE_FOCUS` (standaard true; false zet alles terug) zet de andere motoren uit met een gate op de aanroep via `focus.engine_on(trade_type)`, nooit in de beslislogica: `scan_market` (smc, patroon, de autonome day trading; een al open day-trading-signaal wordt nog ververst), `scan_smc_fast` (de SMC-check), `trend_live.run`, `rejection_live.run`, `rule_live.scan`, `range_watch.run`, `range_sweep_live.scan`, `market_script.generate_all`/`run_triggers`, `samenval.run`, `level_check` (swing-watches) en `signal_processor.handle_message` (na opslaan en dedupe, vóór de Anthropic-aanroep; `process_day_trading_signal` blijft onaangeroerd voor de golden test). Een uitgezette motor schrijft `focus.OFF_DETAIL` in zijn hartslag. Lopende trades volgen `level_check`, `rule_live.update_open` en `range_sweep_live.track`/`follow` altijd verder. In de weergave filtert `web.main._forming_setups` de SMC-setups weg (Radar, Nu, dok, appicoon tellen daardoor gelijk), `_open_chances` de wachtende scenario's en `_range_sweep_shown` de range sweep; open signalen van elke soort blijven staan. Bewijs splitst met `focus.split` in de focus-soorten (open, bovenaan) en "Uitgezet, ter verbetering" (n, doel, stop, netto R uit `summarize`'s `net_total`). Tests: `tests/test_focus.py`, `test_focus_gates.py`, `test_web_focus.py`; de andere tests draaien met focus uit (`tests/__init__.py`).
 
+**Automatische verbeterlus.** Elke nacht om 03:17 UTC (`deploy/hespulse-nacht.timer`) draait `scripts/nacht_export.py --git`: auto-missers
+(`app/auto_misser.py` zuiver, `scripts/auto_misser.py`: omkeer vanaf een bevestigd 1u-swing-punt van minstens `MIN_MOVE_ATR` 3 ATR binnen 24 uur,
+vooraf vast; gezien als een kaart of signaal binnen ±12 uur van het begin, anders per focus-motor de weigerreden uit `scripts/misser_check.py`;
+tabel `auto_missers`), lekken per soort over 7 en 30 dagen (`app/leaks.py`, `repo.leak_inputs`) en de schaduw, als JSON en Markdown in
+`data/export/`, gepusht via een aparte kloon (`data/export-git/`) naar alleen de tak `hespulse-data` met deploy key (`HESPULSE_DATA_REMOTE`,
+`HESPULSE_DATA_KEY`). De export bevat nooit gebruikers, e-mail, journaal of push-abonnementen (`tests/test_nacht_export.py`). Daarna
+`scripts/schaduw.py --auto`. Schaduwvarianten (`app/shadow.py`, `app/shadow_live.py`, tabellen `shadow_variants`, `shadow_results`,
+`engine_overrides`): elke variant ligt vooraf vast met reden (`shadow.SEEDS` in code, vastgelegd door `--auto`, of `--nieuw`), hoogstens één
+actieve schaduw per soort, alleen parameters uit `shadow.PARAMS` (zone-radar `stop_atr`/`max_distance_pct`, zone-sweep `stop_buffer_atr`,
+POC-radar `stop_atr`, Structuur `stop_atr`), ingespoten als optioneel argument van de planfunctie met de constante als standaard. De motor roept
+`shadow_live.observe` aan met dezelfde invoer voor de hoofd- en de variant-arm; beide gaan alleen naar `shadow_results` (geen melding, journaal of
+signals-rij) en `shadow_live.track` volgt ze in `scan_smc_fast` op gesloten 5m-candles met dezelfde meting (`shadow.step`, netto na
+`TRACK_RECORD_COST_PCT`, zonder funding, kaarten zonder doel tellen niet). Promotieregel `shadow.verdict` (vast): minstens 50 afgeronde trades per
+arm; promoveren als de variant netto beter is in beide helften én `stats.cluster_bootstrap_diff` per week boven 0 ligt; afvallen als dat interval
+onder 0 ligt of na 100 per arm; anders wachten. Promoveren zet de waarde in `engine_overrides`, die de motor elke cyclus leest
+(`shadow.live_params`), en stuurt de CEO één push; `--terug <id>` haalt hem weg. Bewijs toont per soort een schaduwregel, alleen voor de CEO.
+Wijzig nooit een gewone motorregel of constante buiten deze route; de wekelijkse sessie volgt `docs/verbeterlus.md`. Tests: `tests/test_auto_misser.py`,
+`test_leaks.py`, `test_nacht_export.py`, `test_shadow.py`.
+
 **Conventions to preserve**: comments explain non-obvious *why* (a past
 bug, a deliberate tradeoff, a constraint that isn't visible from the code
 itself) — not what the code does; keep that ratio, don't add narration
