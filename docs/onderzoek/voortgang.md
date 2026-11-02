@@ -2,6 +2,27 @@
 
 Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
 
+## Ronde 5 (2026-11-02): zelfstandig, de spec van het model tegen de code
+
+**Aanleiding.** De CEO: "Bedoel meer dat je zelfstandig te werk gaat."
+
+**Werk.** Ik heb de eisen uit de spec en de rapporten langsgelopen tegen de code van het model.
+
+**Gevonden.** Twee meetfouten in de uitkomst van het model, beide in strijd met preregistratie §4.14:
+- `level_check` mat vanaf `signals.created_at`, het moment van opslaan, in plaats van vanaf de vulcandle. De een of twee 5m-candles
+  direct na de vulling vielen weg, zodat een vroege stop gemist werd en een later doel als winst telde.
+- Elk signaal verviel na één dag (`SIGNAL_MAX_AGE_DAYS = 1`). De spec vraagt 7 dagen en daarna `tijd`.
+
+**Opgelost.** `model_live.track_trade` zet de uitkomst nu met `model.outcome`, dezelfde regel als V1 (commit 4d3e50a). Vier tests vallen
+om zonder de fix; er is een tegenvoorbeeld zonder stop. De volledige testrun is groen: 2329 tests.
+
+**Open, en niet gerepareerd.** Bij de andere soorten telt het deel van de vulcandle na de vulling ook niet mee (`candles_after`). Bij een
+vulling in een lopende candle is dat klein. Die soorten melden niet meer, maar hun data voedt H1 en de vergelijkingen V2 en V3. Het werkt
+in alle groepen gelijk, dus het verschil tussen mee en tegen blijft eerlijk; de niveaus niet. Het staat in het bewijsregister als E3.
+
+**Nieuwe case.** `cases/2026-11-02-pump-1u-1815.md`. Het model geeft bij lagere toppen zonder sweep per ontwerp geen short. Of er een
+tweede model "voortzetting vanuit aanbod" komt, is een productkeuze voor de CEO.
+
 ## Ronde 4 (2026-11-02)
 
 **Aanleiding.** De CEO: "Heb het gevoel dat je niet alles leest?"

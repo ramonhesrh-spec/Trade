@@ -59,3 +59,31 @@ wel om "kleine stop = verlies" als vaststaand te behandelen.
 **Regressietest.** `tests/test_web_model.py`, `test_groot_opens_the_movable_chart_with_timeframe_choice`.
 
 **Niet gecontroleerd.** Echte Binance-candles. Vanuit deze container is er geen netwerk naar Binance.
+
+## E3. Meetfout in de uitkomst van het HesPulse-model, gerepareerd (2026-11-02)
+
+**Waarneming in de code.**
+- `level_check.check_signal_outcomes` toetst alleen candles vanaf `signals.created_at` (`candles_after`).
+- Het model zet `created_at` bij het opslaan (`repo._insert_signal`, `db.now_iso()`). Dat is een of twee 5m-candles na de vulcandle,
+  want `walk_fill` werkt op gesloten 5m-candles.
+- Signalen vervallen na `SIGNAL_MAX_AGE_DAYS = 1`.
+
+**Gevolg.** Een stop in de eerste candles na de vulling werd niet gezien. Een doel na dag één telde niet. Beide maken H mooier of
+onvollediger dan de spec, en de vergelijking met V1 (die wel vanaf de vulling meet) klopte niet.
+
+**Reparatie.** `model_live.track_trade`, commit 4d3e50a.
+
+**Regressietests.** `tests/test_model_live.py` `OutcomeFromFillTest`:
+- stop in de eerste candle en doel later telt als stop;
+- tegenvoorbeeld zonder stop telt als doel;
+- doel op dag drie telt;
+- na 7 dagen `tijd` met R apart;
+- `level_check` haalt geen candles voor het model.
+
+Vier van de vijf falen met de oude route (mutatiecontrole).
+
+**Niet onderzocht.** Hoeveel modeltrades op de VPS al zo zijn afgesloten. Het model draait sinds vandaag, dus waarschijnlijk geen of
+weinig. Controle op de VPS: `sqlite3 data/trading.db "SELECT COUNT(*) FROM signals WHERE trade_type='hespulse_model' AND auto_outcome IS NOT NULL;"`
+
+**Bekend restpunt bij de andere soorten.** Het deel van de vulcandle na een vulling in een lopende candle telt niet mee. Niet gerepareerd;
+die soorten melden niet meer.
