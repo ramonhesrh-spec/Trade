@@ -923,6 +923,21 @@ async def api_kans_show(request: Request, user: dict = Depends(require_login)):
     return {"shown": keys} if is_json else RedirectResponse(url="/smc", status_code=303)
 
 
+async def _model_point_item(entry_id: int) -> Optional[dict]:
+    """Een B-, R- of B0-plan van het model als checklist-item, alleen zolang het wacht en geldig is (model_card.ready_plan)."""
+    e = repo.get_model_entry(entry_id)
+    if not e or e["code"] not in model_card.READY_CODES or e["state"] != "wacht" or e.get("take_profit") is None:
+        return None
+    if e.get("expires_at") and datetime.fromisoformat(e["expires_at"]) <= datetime.now(timezone.utc):
+        return None
+    price = (await _cached_prices({e["coin"]})).get(e["coin"])
+    sign = 1 if e["direction"] == "long" else -1
+    dist = (price - e["limit_price"]) / e["limit_price"] * 100 * sign if price else None
+    return nu.plan_item(model_card.point_key(entry_id), e["coin"], e["direction"], e["limit_price"], e["stop_loss"],
+                        [(e["take_profit"], e.get("rr") or 0.0)], price=price, state="wacht", distance_pct=dist,
+                        trade_type=model.TRADE_TYPE, untested=True, origin=f"HesPulse-model · plan {e['code']}")
+
+
 @app.get("/nu/order/{key}")
 async def nu_order(request: Request, key: str, user: dict = Depends(require_login)):
     """De order-checklist, schermvullend: de stappen van het orderformulier met een tik-om-te-kopiëren per getal."""
@@ -932,6 +947,8 @@ async def nu_order(request: Request, key: str, user: dict = Depends(require_logi
         if card:
             price = (await _cached_prices({card["coin"]})).get(card["coin"])
             item = nu.structure_item(card, price, today.structure_state(card, card["plan"], price, datetime.now(timezone.utc)))
+    elif key.startswith(model_card.POINT_KEY + ":") and nu.SKIP_KEY.match(key):
+        item = await _model_point_item(int(key.split(":")[1]))
     elif nu.SKIP_KEY.match(key):
         item = nu.item_for(await _radar_cards(user), key)
     if item is None:

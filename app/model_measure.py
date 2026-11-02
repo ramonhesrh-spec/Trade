@@ -185,13 +185,34 @@ def entry_trades(entries: list[dict], code: str, cost_pct: float) -> list[dict]:
     return out
 
 
+# Stopregel per instappunt (B-2026-11-03-08, vooraf vast, CEO "ja prima"): na FIRST_LOOK afgeronde trades een eerste blik, na DECIDE_N beslist
+# het interval van de netto R per week (LEVEL). Ligt dat helemaal onder 0, dan meldt het punt niet meer luid; de stille meting loopt door.
+FIRST_LOOK = 30
+DECIDE_N = 50
+VERDICT_TEXT = {"meten": "meten", "eerste_blik": "eerste blik", "door": "melding blijft", "stop": "geen melding meer: netto duidelijk onder 0"}
+
+
+def verdict(a: dict) -> str:
+    if a["n"] < FIRST_LOOK:
+        return "meten"
+    if a["n"] < DECIDE_N:
+        return "eerste_blik"
+    return "stop" if a["ci"] is not None and a["ci"][1] < 0 else "door"
+
+
+def point_verdict(entries: list[dict], code: str, cost_pct: float) -> str:
+    return verdict(arm(entry_trades(entries, code, cost_pct)))
+
+
 def entry_arms(entries: list[dict], cost_pct: float) -> list[dict]:
-    """Per instappunt: hoeveel gevonden, gevuld en afgerond, en de arm met dezelfde maten als H (§8). """
+    """Per instappunt: hoeveel gevonden, gevuld en afgerond, de arm met dezelfde maten als H (§8) en de stand van de stopregel."""
     out = []
     for code, name in ENTRY_NAMES.items():
         mine = [e for e in entries if e.get("code") == code]
-        t = entry_trades(entries, code, cost_pct)
-        out.append({"code": code, "label": name, "gevonden": len(mine), "gevuld": sum(1 for e in mine if e.get("filled_at")), "arm": arm(t)})
+        a = arm(entry_trades(entries, code, cost_pct))
+        v = verdict(a)
+        out.append({"code": code, "label": name, "gevonden": len(mine), "gevuld": sum(1 for e in mine if e.get("filled_at")), "arm": a,
+                    "verdict": v, "verdict_text": VERDICT_TEXT[v]})
     return out
 
 

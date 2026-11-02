@@ -111,6 +111,14 @@
   </dl>
   {% if h.dd_flag %}<p class="proof-footnote muted">De grootste daling is groter dan bij 95% van 2000 willekeurige volgordes van dezelfde trades.</p>{% endif %}
   <p class="proof-footnote muted">{{ ex.niet_vulbaar }} entries stonden bij de melding al door de limiet, {{ ex.terugtest_al_geweest }} keer was de terugtest al geweest voordat de entry bekend was.{% if m.cost_median_r is not none %} Kosten per trade, mediaan: {{ "%.2f"|format(m.cost_median_r)|replace(".", ",") }}R.{% endif %}{% if m.funding_unknown %} {{ m.funding_unknown }} trades met onbekende funding.{% endif %}</p>
+  {% if m.instappunten %}
+  {# Per instappunt de stopregel (model_measure.verdict): na 30 een eerste blik, na 50 stopt de melding als de netto R duidelijk onder 0 ligt. #}
+  <table class="ctx-table" aria-label="Meting per instappunt">
+    <thead><tr><th scope="col">Instappunt</th><th scope="col">Afgerond</th><th scope="col">Netto</th><th scope="col">Stand</th></tr></thead>
+    <tbody>{% for x in m.instappunten %}<tr><td>{{ x.label }}</td><td>{{ x.arm.n }}</td><td>{{ r_text(x.arm.mean) }}</td><td>{{ x.verdict_text }}</td></tr>{% endfor %}</tbody>
+  </table>
+  <p class="proof-footnote muted">Per instappunt: na 30 afgeronde trades een eerste blik; na 50 stopt de melding als de netto R per week duidelijk onder 0 ligt. Meten gaat altijd door.</p>
+  {% endif %}
   {% if m.compare %}
   <table class="ctx-table" aria-label="Vergelijkingen met het model, alleen voor de CEO">
     <thead><tr><th scope="col">Arm</th><th scope="col">n</th><th scope="col">Netto</th><th scope="col">Min model, 98,75%</th></tr></thead>

@@ -4248,6 +4248,12 @@ def list_model_entries(states: Optional[tuple[str, ...]] = None, scenario_ids: O
         return [dict(r) for r in conn.execute(q, args).fetchall()]
 
 
+def get_model_entry(entry_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        r = conn.execute("SELECT * FROM model_entries WHERE id = ?", (entry_id,)).fetchone()
+        return dict(r) if r else None
+
+
 def get_model_v1(scenario_id: int) -> Optional[dict]:
     with db.session() as conn:
         r = conn.execute("SELECT * FROM model_v1 WHERE scenario_id = ?", (scenario_id,)).fetchone()

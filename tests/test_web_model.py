@@ -218,3 +218,52 @@ class CompactScenarioList(ModelTab):
         html = self.html()
         start = html.rindex("<article", 0, html.index(f'id="radar-model-{self.ready}"'))
         self.assertNotIn("is-compact", html[start:html.index(">", start)])
+
+
+class OnePlanOnTheCard(ModelTab):
+    """CEO 2026-11-03: "het moet wel duidelijk blijven". Eén plan per kaart (B voor B0), de getallen en de orderknop op de kaart, alleen
+    zolang het plan geldig is."""
+
+    def point(self, code, limit, expires_h=5.0, state="wacht"):
+        known = (NOW - pd.Timedelta(minutes=30)).isoformat()
+        repo.insert_model_entry(self.sc, {"code": code, "coin": "SOL", "direction": "long", "known_at": known, "detected_at": known,
+                                          "limit_price": limit, "stop_loss": 97.5, "take_profit": 110.0, "rr": 4.0,
+                                          "expires_at": (NOW + pd.Timedelta(hours=expires_h)).isoformat(), "basis": "{}"})
+        (e,) = [x for x in repo.list_model_entries(scenario_ids=[self.sc]) if x["code"] == code]
+        if state != "wacht":
+            repo.update_model_entry(e["id"], state=state)
+        return e["id"]
+
+    def card(self, html):
+        start = html.rindex("<article", 0, html.index(f'id="radar-model-{self.sc}"'))
+        return html[start:html.index("</article>", start)]
+
+    def test_b_gaat_voor_b0_en_de_kaart_toont_getallen_en_knop(self):
+        b = self.point("B", 100.0)
+        self.point("B0", 100.1)
+        card = self.card(self.html())
+        self.assertIn("Plan B klaar", card)
+        self.assertIn("Plan B: Limiet 100,00 · Stop 97,50 · Doel 110,00", card)
+        self.assertNotIn("Plan B0", card)
+        self.assertIn(f'href="/nu/order/mpoint:{b}"', card)
+        self.assertIn("geldig", card)
+
+    def test_de_orderknop_opent_de_checklist(self):
+        b = self.point("B", 100.0)
+        r = self.client.get(f"/nu/order/mpoint:{b}")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("100", r.text)
+
+    def test_tegenvoorbeeld_verlopen_of_vervallen_plan_geen_knop(self):
+        old = self.point("B", 100.0, expires_h=-1)
+        gone = self.point("R", 100.2, state="vervallen")
+        card = self.card(self.html())
+        self.assertNotIn("/nu/order/mpoint", card)
+        self.assertIn("is-compact", card)
+        self.assertEqual(self.client.get(f"/nu/order/mpoint:{old}").status_code, 404)
+        self.assertEqual(self.client.get(f"/nu/order/mpoint:{gone}").status_code, 404)
+
+    def test_tegenvoorbeeld_p_is_geen_plan(self):
+        p = self.point("P", 99.0)
+        self.assertNotIn("/nu/order/mpoint", self.card(self.html()))
+        self.assertEqual(self.client.get(f"/nu/order/mpoint:{p}").status_code, 404)

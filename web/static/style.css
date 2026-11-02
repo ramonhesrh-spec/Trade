@@ -3373,3 +3373,8 @@ details.mrow-wrap.is-focus .mrow-body .proof-number { font-size: 44px; }
 .kc-dist { color: var(--tx); }
 /* De ongetest-pil staat in het blad en onder de lijst; in de korte regel houdt hij de rij twee regels hoog. */
 .kc.is-compact .kc-tags .pill { display: none; }
+/* Het ene plan van een scenario op de kaart (model_card.ready_plan). */
+.kc-plan { margin: -4px 0 8px; font-size: 13px; color: var(--tx2); font-variant-numeric: tabular-nums; }
+.kc-plan b { color: var(--tx); font-weight: 600; }
+.kc-order { display: inline-block; margin: 0 0 12px; padding: 8px 14px; border-radius: 999px; background: var(--ac); color: var(--s1);
+  font: 600 13px / 1.2 var(--sans); text-decoration: none; }

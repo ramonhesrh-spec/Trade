@@ -355,3 +355,36 @@ class AltAlertTest(Case):
             self.assertEqual(self.run_with("b0", self.point("B0"), btc="bearish"), [])
         (e,) = repo.list_model_entries()
         self.assertEqual(e["state"], "wacht")                   # wel stil gevolgd
+
+
+class PointStopRuleTest(Case):
+    """B-2026-11-03-08: per instappunt na 50 afgeronde trades geen luide melding meer als de netto R per week duidelijk onder 0 ligt."""
+
+    def trades(self, code, rs, start="2026-09-01"):
+        t0 = pd.Timestamp(start, tz="UTC")
+        out = []
+        for i, r in enumerate(rs):
+            t = t0 + pd.Timedelta(hours=37 * i)                 # over ruim tien weken
+            out.append({"code": code, "outcome": "take_profit" if r > 0 else "stop_loss", "r_gross": r, "limit_price": 100.0, "stop_loss": 99.0,
+                        "direction": "long", "filled_at": t.isoformat(), "outcome_at": (t + pd.Timedelta(hours=2)).isoformat()})
+        return out
+
+    def test_vijftig_verliezers_stoppen_de_melding(self):
+        self.assertEqual(model_measure_verdict(self.trades("B0", [-1.0] * 50), "B0"), "stop")
+
+    def test_tegenvoorbeelden_te_weinig_of_niet_duidelijk_onder_nul(self):
+        self.assertEqual(model_measure_verdict(self.trades("B0", [-1.0] * 29), "B0"), "meten")
+        self.assertEqual(model_measure_verdict(self.trades("B0", [-1.0] * 40), "B0"), "eerste_blik")
+        self.assertEqual(model_measure_verdict(self.trades("B0", [-1.0, 2.0] * 25), "B0"), "door")
+        self.assertEqual(model_measure_verdict(self.trades("B", [-1.0] * 50), "B0"), "meten")      # een ander punt telt niet mee
+
+    def test_een_gestopt_punt_meldt_niet_maar_wordt_wel_vastgelegd(self):
+        with mock.patch.object(model_live.model_measure, "point_verdict", return_value="stop"):
+            loud = AltAlertTest.run_with(self, "b0", AltAlertTest.point(self, "B0"))
+        self.assertEqual(loud, [])
+        self.assertEqual(repo.list_model_entries()[0]["code"], "B0")
+
+
+def model_measure_verdict(rows, code):
+    from app import model_measure
+    return model_measure.point_verdict(rows, code, 0.06)

@@ -186,7 +186,7 @@ def markdown(data: dict) -> str:
                   f"verliesreeks {h['streak']}, daling {_r(-h['max_dd'] if h['n'] else None)}"]
         for x in m.get("instappunten") or []:
             lines.append(f"- Instappunt {x['label']}: {x['gevonden']} gevonden, {x['gevuld']} gevuld, {x['arm']['n']} afgerond, "
-                         f"netto {_r(x['arm']['mean'])} per trade")
+                         f"netto {_r(x['arm']['mean'])} per trade, stand: {x.get('verdict_text', '-')}")
         g = m.get("btc_poort")
         if g:
             lines.append(f"- BTC-poort: {g['tegengehouden']} entries tegengehouden, {g['gevuld']} hadden gevuld; afgerond {g['arm']['n']}, "

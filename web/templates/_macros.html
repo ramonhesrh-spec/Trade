@@ -691,6 +691,9 @@
   {% if it.compact %}<button type="button" class="kc-unfold" data-kc-unfold>Grafiek</button>{% endif %}
   {% if it.shared_text %}<p class="kc-when">{{ it.shared_text }}</p>{% endif %}
   {% if it.model_face %}<p class="kc-when kc-model">{{ it.model_face }}</p>{% endif %}
+  {# Het ene plan van een scenario (model_card.ready_plan): de getallen op de kaart zelf en de orderknop, zolang het plan geldig is. #}
+  {% if it.plan %}<p class="kc-plan"><b>{{ it.plan.line }}</b>{% if it.plan.valid_text %} · {{ it.plan.valid_text }}{% endif %}</p>
+  <a class="kc-order" href="{{ it.plan.url }}">Zet de order, stap voor stap</a>{% endif %}
   {# Structuur tekent zijn eigen momentopname (svg, setup_chart): de breuk, het retest-niveau, de stop en T1 tot T3. Een tik erop opent het
      detailblad zoals elders op de kaart; de koerslijn schuift live mee (live.js, data-chart-coin). De andere soorten krijgen de kaartgrafiek. #}
   {% if it.svg %}<figure class="kc-svg is-structuur">{{ it.svg }}<figcaption class="lc-cap">30 min per candle · getekend bij de breuk</figcaption></figure>
@@ -779,7 +782,7 @@
   {# Twee rustige acties onder de hoofdknop. Sla over voor vandaag (plan_skips, hp_skip) houdt het plan in de lijst, een dag achteraan; Verberg
      (kans_hidden) haalt de kaart weg tot je hem terugzet. Zonder JavaScript gaat Verberg als formulier naar dezelfde route. #}
   <div class="kd-foot">
-    {% if it.kind == "trade" %}<a class="kd-cta is-quiet" href="{{ it.url }}">Bekijk de trade</a>{% elif it.kind == "scenario" %}<p class="kd-cta is-quiet" aria-disabled="true">Nog geen order: wacht op de entry</p>{% else %}<a class="kd-cta" href="{{ it.checklist_url }}">Zet de order, stap voor stap</a>{% endif %}
+    {% if it.kind == "trade" %}<a class="kd-cta is-quiet" href="{{ it.url }}">Bekijk de trade</a>{% elif it.kind == "scenario" and it.plan %}<a class="kd-cta" href="{{ it.plan.url }}">Zet de order voor plan {{ it.plan.code }}, stap voor stap</a>{% elif it.kind == "scenario" %}<p class="kd-cta is-quiet" aria-disabled="true">Nog geen order: wacht op de entry</p>{% else %}<a class="kd-cta" href="{{ it.checklist_url }}">Zet de order, stap voor stap</a>{% endif %}
     <div class="kd-alt">
       {# Deel (web/static/share.js): een afbeelding van de kaart voor een groepschat, met de grafiek van de kaart en de getallen die je zelf ziet. #}
       <div class="kd-skip-form"><button type="button" class="kd-skip kd-share" data-share-for="{{ it.key }}" data-share-card='{{ {"title": it.title, "lines": it.share_lines, "plain": true}|tojson }}'>Deel</button></div>

@@ -18,7 +18,7 @@ from typing import Callable, Optional
 
 import pandas as pd
 
-from app import btc_context, config, excursion, latency, model, model_card as mc, outcome_measure, push_notify, range_sweep_live as rsl, repo
+from app import btc_context, config, excursion, latency, model, model_card as mc, model_measure, outcome_measure, push_notify, range_sweep_live as rsl, repo
 
 logger = logging.getLogger("model_live")
 
@@ -87,6 +87,8 @@ async def _announce_alt(scenario_id: int, coin: str, direction: str, e: dict, st
     """Eén luide melding voor een nieuw instappunt B, B0 of R, met de regels van A: niet als de koers al door de limiet stond, niet als het
     plan omgekeerd is en niet tegen BTC 4u (MODEL_BTC_GATE). Het punt zelf wordt altijd stil gevolgd (track_entry)."""
     sign = 1 if direction == "long" else -1
+    if model_measure.point_verdict(repo.list_model_entries(("klaar",)), e["code"], config.TRACK_RECORD_COST_PCT) == "stop":
+        return False                    # stopregel B-2026-11-03-08: na 50 trades netto duidelijk onder 0, alleen nog stil gemeten
     if e["take_profit"] is None or not ((e["take_profit"] - e["limit_price"]) * sign > 0 > (e["stop_loss"] - e["limit_price"]) * sign):
         return False
     if price is not None and (price - e["limit_price"]) * sign <= 0:

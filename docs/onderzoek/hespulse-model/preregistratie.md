@@ -812,3 +812,25 @@ rand geeft geen opgerekte range; met de dag omlaag geen long; zonder dagcandles 
 niets veranderen aan wat eerder vaststond.
 
 **Nooit.** Afstellen op ZEC. Er is geen nieuwe constante.
+
+---
+
+## Aanvullend besluit CEO 2026-11-03: één plan per kaart en een stopregel per instappunt (vooraf vast)
+
+**Aanleiding.** ETH 2 november: B en B0 lagen op hetzelfde niveau, maar de kaart zei "Nog geen order". De CEO: "het moet wel duidelijk
+blijven, en een legitieme kans zijn". Daarna: "ja prima".
+
+**Kaart.** Een scenario met een wachtend, geldig B-, R- of B0-plan met een doel toont er één. De voorrang is B, dan R, dan B0. De kaart
+toont limiet, stop, doel, hoe lang het plan nog geldig is en de orderknop (`/nu/order/mpoint:N`). Een verlopen of vervallen plan staat
+er niet meer. De andere punten staan in het blad. Alleen weergave.
+
+**Stopregel per instappunt (B, B0, R).** Netto R na `TRACK_RECORD_COST_PCT`, zonder funding, alleen afgeronde trades (doel of stop):
+1. minder dan 30 afgerond: meten;
+2. 30 tot 49: eerste blik op Bewijs en in de nachtexport, geen wijziging;
+3. vanaf 50: ligt het interval van de netto R per ISO-week (98,75%, zoals §8) helemaal onder 0, dan meldt het punt niet meer luid;
+   anders blijft de melding.
+
+De stille meting loopt altijd door. De regel wordt elke cyclus opnieuw berekend; er is geen opgeslagen status. Een punt dat stopte kan dus
+terugkomen als het interval later niet meer helemaal onder 0 ligt. A valt onder §8, niet onder deze regel.
+
+**Nooit.** De drempels 30 en 50 of het niveau achteraf aanpassen.

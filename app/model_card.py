@@ -117,7 +117,7 @@ def entry_points(row: dict, v1: Optional[dict], extra: list[dict]) -> list[dict]
     for e in sorted(extra, key=lambda e: e["code"]):
         if e["code"] in ENTRY_INFO:
             out.append({"code": e["code"], "limit": e["limit_price"], "stop": e["stop_loss"], "take": e.get("take_profit"), "rr": e.get("rr"),
-                        "known_at": e.get("known_at"), "state": e.get("state")})
+                        "known_at": e.get("known_at"), "state": e.get("state"), "id": e.get("id"), "expires_at": e.get("expires_at")})
     for p in out:
         name, basis = ENTRY_INFO[p["code"]]
         p.update(name=name, basis=basis, state_text=ENTRY_STATE_WORDS.get(p["state"], p["state"] or ""),
@@ -236,7 +236,30 @@ def scenario_rows(row: dict) -> list[dict]:
     return [{**r, "text": price_text.nl(r["value"]), "copy": price_text.plain(r["value"])} for r in rows]
 
 
-READY_CODES = ("B", "B0", "R")
+READY_CODES = ("B", "B0", "R")            # volgorde = voorrang: B is de strengste, B0 alleen als B er niet is (B-2026-11-03-07)
+POINT_KEY = "mpoint"
+
+
+def point_key(entry_id: int) -> str:
+    """De sleutel van één instappunt voor de order-checklist (/nu/order/mpoint:N)."""
+    return f"{POINT_KEY}:{entry_id}"
+
+
+def ready_plan(row: dict, now: Optional[datetime] = None) -> Optional[dict]:
+    """Het ene plan dat de kaart toont (CEO 2026-11-03: "het moet wel duidelijk blijven"): het eerste wachtende B-, R- of B0-punt met doel
+    dat nog geldig is. Liggen B en B0 op hetzelfde niveau, dan staat er dus één. De andere punten blijven in het blad onder Instappunten."""
+    now = now or datetime.now(timezone.utc)
+    live = [p for p in row.get("entry_points") or [] if p["code"] in READY_CODES and p.get("state") == "wacht" and p.get("take") is not None
+            and p.get("id") is not None and (not p.get("expires_at") or datetime.fromisoformat(p["expires_at"]) > now)]
+    if not live:
+        return None
+    p = min(live, key=lambda p: READY_CODES.index(p["code"]))
+    left = None
+    if p.get("expires_at"):
+        mins = int((datetime.fromisoformat(p["expires_at"]) - now).total_seconds() // 60)
+        left = f"nog {mins // 60}u {mins % 60:02d}m geldig" if mins >= 60 else f"nog {mins} min geldig"
+    return {**p, "valid_text": left, "url": f"/nu/order/{point_key(p['id'])}",
+            "line": f"Plan {p['code']}: Limiet {price_text.nl(p['limit'])} · Stop {price_text.nl(p['stop'])} · Doel {price_text.nl(p['take'])}"}
 
 
 def nearest_point(row: dict) -> tuple[Optional[str], Optional[float]]:
@@ -259,12 +282,12 @@ def scenario_item(row: dict, now: Optional[datetime] = None) -> dict:
     `ready` en blijft hij een volle kaart; anders een korte regel (`compact`) met de afstand tot het dichtste instappunt (CEO 2026-11-03:
     "28 open en moet je heel lang scrollen")."""
     sid = row["id"]
-    ready = any(p["code"] in READY_CODES and p.get("state") == "wacht" for p in row.get("entry_points") or [])
+    plan = ready_plan(row, now)
+    ready = plan is not None
     code, dist = nearest_point(row)
-    ready_codes = [p["code"] for p in row.get("entry_points") or [] if p["code"] in READY_CODES and p.get("state") == "wacht"]
     dist_text = "" if dist is None else f"{dist:.1f}".replace(".", ",") + f"% tot {code}"
     return {"ready": ready, "compact": not ready, "dist_pct": dist, "dist_text": dist_text,"kind": "scenario", "key": key(sid), "dom_id": dom_id(sid), "coin": row["coin"], "direction": row["direction"],
-            "title": f"{row['coin']} {row['direction']}", "state": "scenario", "state_short": f"Plan {'/'.join(ready_codes)} klaar" if ready else STATE_SHORT.get(row["status"], "Scenario"),
+            "title": f"{row['coin']} {row['direction']}", "state": "scenario", "state_short": f"Plan {plan['code']} klaar" if ready else STATE_SHORT.get(row["status"], "Scenario"), "plan": plan,
             "group": "scenarios", "tab": TRADE_TYPE, "trade_type": TRADE_TYPE, "untested": True, "rr_text": "",
             "svg_src": f"/api/kaart_svg/{key(sid)}", "chart": scenario_chart(row), "say": waiting_text(row), "steps_done": step_lines(row, now),
             "candidates_text": candidate_text(row), "rows": scenario_rows(row), "created_at": row.get("detected_at"),
