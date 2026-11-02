@@ -38,7 +38,11 @@ het voor aan de CEO met de cijfers, geen stille wijziging. Bij "tegen" met een p
 4u-context (goud, `cases/2026-11-02-goud.md`) als aparte variant te toetsen.
 
 **H1b (BTC).** Dezelfde regel met `btc_4u` in plaats van `context_4u`. BTC-context is alleen een kenmerk tot H1b gesteund is. Een filter op
-BTC zonder deze toets is niet toegestaan (besluit B-2026-11-02-05).
+BTC zonder deze toets is niet toegestaan (besluit B-2026-11-02-05). *Herzien door B-2026-11-02-10: op besluit van de CEO is de BTC-poort live vóór deze toets. De stille arm meet wat hij tegenhoudt.*
+
+**Stand 2026-11-02 (B-2026-11-02-11).** De oude soorten zoeken niet meer, dus H1 krijgt geen nieuwe trades van hen. Het model neemt alleen
+trades mee met de 4u-context, dus de groep "tegen" blijft leeg. H1 staat daarmee stil. H1b wordt deels vervangen door de stille arm van de
+BTC-poort (`model_measure.gate`): die laat zien wat entries tegen BTC hadden gedaan.
 
 ## H2. Het model doet live wat de spec zegt (vastgelegd 2026-11-02)
 

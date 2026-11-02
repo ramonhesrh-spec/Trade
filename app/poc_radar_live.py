@@ -159,9 +159,23 @@ async def _announce(card: dict, detected=None) -> None:
             push_notify.record_failure(uid, "kans", card_url(card["id"]), exc)
 
 
+async def refresh_levels(stamp: pd.Timestamp) -> None:
+    """Zonder POC-radar: alleen de niveaus en hun aanrakingen bijwerken, want het HesPulse-model kiest een naakte POC als doel
+    (model_live._pocs leest stored_levels). Zonder dit zouden oude niveaus 'naakt' blijven terwijl de koers ze al raakte."""
+    for coin in [c["symbol"] for c in repo.list_coins()]:
+        if not due(coin, stamp):
+            continue
+        try:
+            await asyncio.to_thread(refresh, coin, stamp)
+        except Exception:
+            logger.exception("POC-niveaus voor %s niet bijgewerkt", coin)
+
+
 async def scan(now: Optional[datetime] = None) -> None:
     if not config.POC_RADAR_ENABLED or not focus.engine_on(TRADE_TYPE):
         repo.beat("poc_radar", "uit" if not config.POC_RADAR_ENABLED else focus.OFF_DETAIL)
+        if focus.model_on():
+            await refresh_levels(rsl._utc(now))
         return
     stamp = rsl._utc(now)
     params = shadow.live_params(TRADE_TYPE)            # een gepromoveerde schaduwwaarde geldt vanaf deze cyclus
@@ -223,7 +237,9 @@ async def _fill(card: dict, filled_at: pd.Timestamp) -> None:
 
 
 async def track(now: Optional[datetime] = None) -> None:
-    """Draait ook als de motor uit staat: wat al gemeld is, wordt afgemaakt."""
+    """Draait ook als de motor uit staat: wat al gemeld is, wordt afgemaakt. Niet met model_only: dan vullen wachtende kaarten niet meer."""
+    if not focus.engine_on(TRADE_TYPE):
+        return
     stamp = rsl._utc(now)
     waiting = repo.list_poc_radar_setups()
     for coin in sorted({c["coin"] for c in waiting}):

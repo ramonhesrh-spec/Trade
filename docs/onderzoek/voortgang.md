@@ -2,6 +2,24 @@
 
 Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
 
+## Ronde 6 (2026-11-02): BTC-poort en alleen het model
+
+**CEO-besluiten.**
+- "De short is gebaseerd op het BTC-verhaal." Dat is meermaals gestuurd en ik had het alleen als kenmerk verwerkt.
+- "Alle modellen weg, alleen het HesPulse-model."
+
+**Gebouwd.**
+- *BTC-poort.* Een entry tegen BTC 4u wordt niet gemeld en wordt stil gevolgd met dezelfde regels (`cf_*`). Tests: long tegen bearish
+  BTC geeft geen melding; tegenvoorbeeld bullish of onbekend houdt niets tegen; met de poort uit werkt alles zoals eerst.
+- *Alleen het model.* De vier oude motoren zoeken en vullen niet meer. Lopende trades lopen af, de dagbrief blijft en de POC-niveaus
+  blijven bijgewerkt. Tests met tegenvoorbeeld zonder model.
+
+**Tegenspraak, vastgelegd.**
+- De BTC-poort is niet getoetst. Daarom loopt de stille arm mee: als die na 50 trades duidelijk boven 0 staat, kost de poort winst.
+- De oude soorten uitzetten stopt de vergelijkingsdata (H1, V2, V3).
+
+**Nog open.** Welke soort gaf de PUMP-long. Dat bepaalt of de 4u-contextregel van het model zelf te ruim is.
+
 ## Ronde 5 (2026-11-02): zelfstandig, de spec van het model tegen de code
 
 **Aanleiding.** De CEO: "Bedoel meer dat je zelfstandig te werk gaat."

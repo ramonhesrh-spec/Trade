@@ -162,6 +162,9 @@ async def run(now: Optional[datetime] = None) -> None:
     """Draait in de SMC-snelcyclus (market_scanner.scan_smc_fast)."""
     if not config.ZONE_RADAR_ENABLED:
         return
+    if not focus.engine_on(zr.TRADE_TYPE):
+        repo.beat("zone_radar", focus.OFF_DETAIL)     # gevulde trades volgt level_check; wachtende kaarten vullen niet meer
+        return
     stamp = pd.Timestamp(now or datetime.now(timezone.utc))
     params = shadow.live_params(zr.TRADE_TYPE)        # een gepromoveerde schaduwwaarde geldt vanaf deze cyclus
     await _track(repo.list_zone_radar_setups())

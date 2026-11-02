@@ -146,7 +146,10 @@ het. Meting: `app/model_measure.py` (vulbaar, vertraging, trechter, N_eff, verli
 per week; V1/V2/V3 alleen CEO) op Bewijs en in de nachtexport (`model`). Controle achteraf: `scripts/model_kaarten.py` (14 dagen, eerste 30,
 `app/model_chart.full_svg`, per stap herberekend zonder latere candles). `HESPULSE_MODEL_ENABLED` (standaard true) en `MODEL_ONLY_ALERTS`
 (standaard gelijk): met beide aan sturen Structuur, zone-radar, zone-sweep en POC-radar niets (`focus.alerts_on` in hun meldpaden en
-`skip_push` op hun fanout), `_kansen_kinds` geeft alleen het model en `_forming_setups` alleen modelkaarten; open trades van oude soorten
+`skip_push` op hun fanout) en zoeken ze sinds 2026-11-02 ook niets meer (CEO: "alle modellen weg, alleen het HesPulse-model"; `focus.engine_on`
+geeft False voor elke andere soort): geen nieuwe kaarten, wachtende kaarten vullen niet (`track` van zone-sweep en POC-radar, `_track` van
+zone-radar en Structuur slaan over), gevulde trades lopen af (`level_check`, Structuur `_follow`, zone-sweep en POC-radar `follow`), de
+dagbrief blijft, en `poc_radar_live.refresh_levels` houdt de POC-niveaus bij voor het doel van het model, `_kansen_kinds` geeft alleen het model en `_forming_setups` alleen modelkaarten; open trades van oude soorten
 houden hun tab. Tests draaien met beide uit (`tests/__init__.py`); de modeltests zetten ze aan: `tests/hespulse_model/`, `test_model_live.py`,
 `test_model_only_alerts.py`, `test_model_acceptance.py`, `test_web_model.py`.
 

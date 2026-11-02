@@ -25,7 +25,11 @@ def is_focus(trade_type: Optional[str]) -> bool:
 
 
 def engine_on(trade_type: str, enabled: bool = True, focus_on: Optional[bool] = None) -> bool:
-    """Mag de motor van deze soort nieuwe kansen zoeken? Zijn eigen vlag (TREND_ENABLED enz.) gaat altijd voor; focus zet alleen verder uit."""
+    """Mag de motor van deze soort nieuwe kansen zoeken? Zijn eigen vlag (TREND_ENABLED enz.) gaat altijd voor; focus zet alleen verder uit.
+    Met model_only zoekt alleen het HesPulse-model nog (besluit CEO 2026-11-02: "ik wil alle modellen weg, alleen het HesPulse-model"):
+    Structuur, zone-radar, zone-sweep en POC-radar maken geen kaarten meer en vullen hun wachtende kaarten niet; lopende trades lopen af."""
+    if trade_type != MODEL and model_only():
+        return False
     return bool(enabled) and (not active(focus_on) or is_focus(trade_type))
 
 

@@ -502,6 +502,16 @@ async def run(now: Optional[datetime] = None) -> None:
     repo.expire_structure_setups(now.isoformat())
     if not config.STRUCTURE_ENABLED:
         return
+    if not focus.engine_on("structuur"):
+        # Alleen afmaken wat al loopt, en de dagbrief; geen nieuwe kaarten en geen vullingen van wachtende kaarten.
+        await _follow(now)
+        try:
+            from app import digest
+            await digest.run(now)
+        except Exception:
+            logger.exception("Dagbrief is mislukt")
+        repo.beat("structuur", focus.OFF_DETAIL)
+        return
     if should_disable(repo.list_type_results("structuur", config.STRUCTURE_MAX_NEGATIVE), config.STRUCTURE_MAX_NEGATIVE):
         repo.notify_engine_disabled("Structuur-breuken", f"De laatste {config.STRUCTURE_MAX_NEGATIVE} afgeronde signalen zijn samen negatief. Zie Bewijs.")
         return

@@ -84,3 +84,45 @@ class DefaultTest(DbCase):
 
     def test_model_is_a_focus_kind(self):
         self.assertIn("hespulse_model", focus.FOCUS_TYPES)
+
+
+class OnlyTheModelRuns(DbCase):
+    """Besluit CEO 2026-11-02: "ik wil alle modellen weg, alleen het HesPulse-model". Met het model aan zoeken de vier oude motoren niets en
+    vullen hun wachtende kaarten niet; de POC-niveaus blijven bijgewerkt omdat het model een naakte POC als doel neemt."""
+
+    def setUp(self):
+        super().setUp()
+        for p in (mock.patch.object(config, "HESPULSE_MODEL_ENABLED", True), mock.patch.object(config, "MODEL_ONLY_ALERTS", True),
+                  mock.patch.object(repo, "list_coins", return_value=[{"symbol": "BTC"}])):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def test_de_vier_oude_motoren_zoeken_niet(self):
+        for t in ("structuur", "structuur_c", "zone_radar", "zone_sweep", "poc_radar"):
+            self.assertFalse(focus.engine_on(t), t)
+        self.assertTrue(focus.engine_on("hespulse_model"))
+        with mock.patch.object(zone_radar_live, "_scan") as zr_scan, mock.patch.object(zone_radar_live, "_track") as zr_track, \
+                mock.patch.object(structure_live, "_discover") as discover, mock.patch.object(structure_live, "_track") as st_track, \
+                mock.patch.object(structure_live, "_follow") as st_follow, mock.patch("app.digest.run") as brief, \
+                mock.patch.object(zone_sweep_live, "_track_one") as zs_track, mock.patch.object(poc_radar_live, "_scan_coin") as poc_scan, \
+                mock.patch.object(poc_radar_live, "refresh") as refresh, mock.patch.object(repo, "list_zone_sweep_setups", return_value=[{"coin": "BTC", "id": 1}]), \
+                mock.patch.object(repo, "list_poc_radar_setups", return_value=[]):
+            async def go():
+                await zone_radar_live.run()
+                await structure_live.run()
+                await zone_sweep_live.scan()
+                await zone_sweep_live.track()
+                await poc_radar_live.scan()
+                await poc_radar_live.track()
+            asyncio.run(go())
+        for m in (zr_scan, zr_track, discover, st_track, zs_track, poc_scan):
+            m.assert_not_called()
+        st_follow.assert_called_once()           # lopende Structuur-trades lopen af
+        brief.assert_called_once()               # de dagbrief blijft
+        refresh.assert_called_once()             # POC-niveaus voor het doel van het model
+        self.assertEqual(repo.get_beat("zone_radar")["detail"], focus.OFF_DETAIL)
+
+    def test_tegenvoorbeeld_zonder_model_zoeken_ze_zoals_eerst(self):
+        with mock.patch.object(config, "HESPULSE_MODEL_ENABLED", False):
+            for t in ("structuur", "zone_radar", "zone_sweep", "poc_radar"):
+                self.assertTrue(focus.engine_on(t), t)

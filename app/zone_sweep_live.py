@@ -106,6 +106,9 @@ async def _register(row: dict, price: Optional[float], now: pd.Timestamp) -> Non
 async def scan(now: Optional[datetime] = None) -> None:
     if not config.ZONE_SWEEP_ENABLED:
         return
+    if not focus.engine_on(TRADE_TYPE):
+        repo.beat("zone_sweep", focus.OFF_DETAIL)
+        return
     stamp = rsl._utc(now)
     if stamp.minute >= SCAN_MINUTES:
         return
@@ -177,7 +180,9 @@ async def _track_one(card: dict, b15: pd.DataFrame, now: pd.Timestamp) -> None:
 
 
 async def track(now: Optional[datetime] = None) -> None:
-    """Draait ook als de motor uit staat: wat al gemeld is, wordt afgemaakt."""
+    """Draait ook als de motor uit staat: wat al gemeld is, wordt afgemaakt. Niet met model_only: dan vullen wachtende kaarten niet meer."""
+    if not focus.engine_on(TRADE_TYPE):
+        return
     stamp = rsl._utc(now)
     cache: dict[str, pd.DataFrame] = {}
     for card in repo.list_zone_sweep_setups(("waiting",)):
