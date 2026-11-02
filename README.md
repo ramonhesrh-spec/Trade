@@ -27,6 +27,29 @@ aanmaken, dat is een bewuste keuze, geen invite-only systeem. Na
 registreren of inloggen kom je op `/dashboard`, het besloten logboek, dat
 blijft voor elke gebruiker apart.
 
+## HesPulse-model: het ene model dat meldt
+
+Sinds 2026-11-02 (besluit CEO) meldt alleen het HesPulse-model: het hoofdmodel uit hoofdstuk 25 van het boek, in vaste regels vastgelegd in
+`docs/onderzoek/hespulse-model/preregistratie.md`. Context op 4u (richting uit de laatste breuk, dealing range met evenwicht), een
+onaangeraakte pool op 1u in discount (long) of premium (short), dan op 15m een sweep van die pool, een slot voorbij de top ervoor met
+displacement en een fair value gap, en een limiet op de gap. Stop voorbij het uiterste van de sweep, doel de rand van de range of een
+dichtere naakte dag- of week-POC; de kaart toont de R:R, er is geen minimum. Live, ongetest, voor iedereen.
+
+- **Twee momenten op één kaart** in de tab "HesPulse" op Kansen: "scenario ontdekt" (alleen in de app, wat er nog moet gebeuren, elke stap
+  met zijn tijdstip) en "entry beschikbaar" (limiet, stop, doel: de ene luide melding, binnen het dagbudget en gebundeld per cyclus). De
+  vulling is stil (een rij op `/meldingen`); gevuld wordt het een gewoon signaal `hespulse_model` en `level_check` meldt doel of stop.
+- **De andere soorten meten stil mee** (`MODEL_ONLY_ALERTS`): Structuur, zone-radar, zone-sweep en POC-radar maken nog kaarten en
+  signalen voor Bewijs, maar sturen niets en hebben geen tab; een open trade van zo'n soort blijft onder Open tot hij klaar is.
+- **Aan en uit:** `HESPULSE_MODEL_ENABLED` (standaard `true`) en `MODEL_ONLY_ALERTS` (standaard gelijk aan het model). `false` in `.env`
+  zet het terug; herstart daarna `crypto-bot` en `crypto-web` (de snelcyclus-timer leest het bij zijn volgende ronde).
+- **Controle achteraf:** `python3 scripts/model_kaarten.py` laat het model over de laatste 14 dagen op alle coins lopen (alleen gesloten
+  candles, per stap opnieuw zonder latere candles) en tekent de eerste 30 scenario's in één bestand, standaard `data/model_kaarten.html`
+  (`--uit`, `--dagen`, `--aantal`, `--coins BTC,ETH`). Haal het op met bijvoorbeeld
+  `scp gebruiker@vps:/pad/naar/Trade/data/model_kaarten.html .` en open het in een browser.
+- **Meting:** Bewijs toont onder "HesPulse-model, meting" de trechter, vulbaarheid, vertraging, N_eff, verliesreeks, daling en het
+  gemiddelde zonder de beste 5%; de vergelijkingen V1 (vroege limiet, stil in `model_v1`), V2 (zone-sweep) en V3 (POC-radar) alleen voor de
+  CEO. De nachtexport heeft hetzelfde onder `model`.
+
 ## Focus: welke soorten nu melden
 
 Sinds oktober 2026 zoeken en melden alleen drie soorten nog nieuwe kansen: Structuur A/B (`structuur`), Structuur C (`structuur_c`) en de
@@ -54,6 +77,9 @@ Uitzetten is geen weggooien: code en data blijven, en `ENGINE_FOCUS=false` in `.
 
 Sinds 2026-11-02, op verzoek van de CEO (in een week ~560 nieuwe kaarten en ~255 vullingen, veel te veel meldingen):
 
+- **Met het HesPulse-model aan** (standaard) meldt alleen het model: "entry beschikbaar" luid (telt in het budget, bundel "3 entries
+  klaar"), de vulling stil, "scenario ontdekt" niet. De vier soorten hieronder sturen dan niets (`MODEL_ONLY_ALERTS`); de regels hieronder
+  gelden voor hen alleen met `MODEL_ONLY_ALERTS=false`.
 - **Nieuwe kaart = stil.** Een nieuwe kaart van Structuur, zone-radar, zone-sweep of POC-radar staat op Kansen en op `/meldingen` en komt
   hoogstens als stille push (geen geluid, geen trilling). Hij telt niet mee in het dagbudget en valt niet onder de conflictregel
   (`push_notify.send_new_card`).
@@ -530,6 +556,8 @@ sudo systemctl start crypto-news.service crypto-script.service
   `POC_RADAR_PUBLIC` (standaard `true`; `false` is alleen de CEO), `POC_RADAR_MAX_PER_DAY` (30). Kaarten van de zone-radar en de zone-sweep
   krijgen het kenmerk POC-samenval (limiet binnen 0,3% van een naakte POC), alleen als meting; Bewijs toont of het samengaat. Draait in de
   snelle SMC-check, geen eigen unit. Handmatig: `python3 -m app.poc_radar_live`.
+- `app/model_live.py` (regels in `app/model.py`, kaart in `app/model_card.py`): het HesPulse-model (zie bovenaan). Draait in de snelle
+  SMC-check na de POC-radar, geen eigen unit; tabellen `model_scenarios` en `model_v1`. Handmatig: `python3 -m app.model_live`.
 - `app/calendar_alerts.py`: herinnering 30 minuten vóór de opening van de VS-beurs (stil) en vóór een macro-uitslag uit
   `data/macro_events.csv` (met geluid). De agenda toont alleen momenten die de toets als duidelijk anders mat, plus macro;
   funding-resets en opties-expiry stonden er eerst bij maar bewegen de markt niet meetbaar. De agenda is niet volledig

@@ -126,7 +126,34 @@ mediaan en 90e percentiel. Afsluiten met reden: `app/end_reason.py` is de enige 
 voedt `kansen.page(..., ended=)` (rijen onder "Uitgevallen, gemist of vervallen" per tab, met het anker van de kaart) en `logbook.timeline(ended=)`;
 "Niet meer actief" en de Structuur-geschiedenis tonen dezelfde tekst.
 
+**HesPulse-model (CEO, 2026-11-02; bindende spec `docs/onderzoek/hespulse-model/preregistratie.md` met "Besluiten CEO 2026-11-02" en het
+aanvullend besluit over kenmerken).** Het enige model dat meldt. `app/model.py` (zuiver): context 4u (`Context4h`, bias uit de laatste breuk,
+60 candles, range L/H/EQ), pools 1u (`Pools`, onaangeraakt ook op 15m, gelijke lows binnen 0,1 ATR één pool), sweep/shift/displacement/FVG op
+15m, limiet op de zone (laagste ongevulde FVG of de overlap met het OB), stop met de 0,4%-vloer (`_floor`, gelijk aan `smc_eval.floor_stop`),
+doel de dichtste van de range-rand en een naakte POC, geen R:R-eis; short = long op gespiegelde candles. Alle constanten vooraf vast; nooit
+afstellen. `scenarios(frames, now, pocs)` is prefix-vast (een stap verandert nooit met meer candles; `tests/hespulse_model/test_model.py`), dus
+`app/model_live.py` rekent elke cyclus opnieuw (in `scan_smc_fast` na de POC-radar, `rsl.fetch_bars` 1000 candles) en bewaart alleen wat nieuw
+is in `model_scenarios` (UNIQUE coin, range_id; `repo.sync_model_scenario` raakt een afgerond scenario nooit meer aan; detected_at en
+entry_detected_at zijn de momenten van vastleggen). Een scenario dat al voorbij was voordat de motor het zag, komt niet in de app. Moment A
+(scenario ontdekt): geen push. Moment B (entry beschikbaar): de ene luide melding (`send_kans_push(kind="entry")`, budget, conflictregel,
+bundel "N entries klaar"), niet als de koers al door de limiet stond (`niet_vulbaar`) of het plan omgekeerd is (`model_card.plan_ok`).
+`track` vult op 5m na de publicatie (`model.walk_fill`): gevuld een signaal `hespulse_model` (journaal, `chain_it=False`, stil via
+`send_new_card`), `level_check` beslist doel/stop; verder `vervallen` (6 uur), `weggelopen`, `context_weg` (`end_reason`). V1 stil in
+`model_v1` (`track_v1`). Kaart: `model_card` (moment A `scenario_item` in groep `scenarios` zonder order en buiten de tellers, moment B
+`radar_setup` met sleutel `model:N`, anker `radar-model-N`), context/entrytype/status apart (`context_lines`, `face_line`), BTC-context
+(`app/btc_context.py`: BTC 4u, Pearson 96/672 op uitgelijnde 15m-log-rendementen, relatieve sterkte 24u; kolom `btc_context` "a"/"b"; alleen
+kenmerk, niets leest het), grafiek `card_chart.model_svg` (zone heet "oorsprong zone"), `/api/kaart_svg/model:N` met `no-store`. Iedereen ziet
+het. Meting: `app/model_measure.py` (vulbaar, vertraging, trechter, N_eff, verliesreeks, drawdown met herschikking, zonder beste 5%, 98,75%
+per week; V1/V2/V3 alleen CEO) op Bewijs en in de nachtexport (`model`). Controle achteraf: `scripts/model_kaarten.py` (14 dagen, eerste 30,
+`app/model_chart.full_svg`, per stap herberekend zonder latere candles). `HESPULSE_MODEL_ENABLED` (standaard true) en `MODEL_ONLY_ALERTS`
+(standaard gelijk): met beide aan sturen Structuur, zone-radar, zone-sweep en POC-radar niets (`focus.alerts_on` in hun meldpaden en
+`skip_push` op hun fanout), `_kansen_kinds` geeft alleen het model en `_forming_setups` alleen modelkaarten; open trades van oude soorten
+houden hun tab. Tests draaien met beide uit (`tests/__init__.py`); de modeltests zetten ze aan: `tests/hespulse_model/`, `test_model_live.py`,
+`test_model_only_alerts.py`, `test_model_acceptance.py`, `test_web_model.py`.
+
 **Meldingen: alleen de vulling is luid (CEO, 2026-11-02, "veel te veel meldingen": ~560 nieuwe kaarten en ~255 vullingen in een week).**
+Met het HesPulse-model aan (standaard) geldt dit alleen nog voor het model zelf (entry luid, vulling stil, ontdekt niets); de vier soorten
+hieronder sturen dan niets (`MODEL_ONLY_ALERTS`).
 Een nieuwe kaart van de vier focus-motoren gaat via `push_notify.send_new_card`: een rij op `/meldingen` plus hoogstens een stille push, buiten
 het budget en de conflictregel (pauze en volg-set houden de push tegen). Een vulling gaat via `send_kans_push` en `push_policy`: conflictregel
 (6 uur), dan het dagbudget `DEFAULT_BUDGET` 8 (`users.push_budget`, Account), waarin elke luide push telt (de oude uitzondering voor dezelfde coin
@@ -217,7 +244,7 @@ levert is een hypothese: valideer in code, label ongetest, laat Bewijs de score 
 
 **Dagcaps zichtbaar.** Sinds 2026-11-01 (WLD-breuk van 29 okt bleef `niet_gemeld` door een volle cap) staan de caps hoger en telt elke focus-motor met een dagcap (Structuur, zone-radar, zone-sweep, POC-radar) wat de cap tegenhield: `repo.record_cap_hold` in tabel `cap_holds` (één rij per motor en kans, dus een kans die elke cyclus terugkomt telt één keer per 24 uur; een zone of niveau dat al een kaart had telt niet), tekst uit `app/daycap.py` achter de hartslag ("; 3 kansen tegengehouden door de dagcap van 40") en per soort één regel onder Dagcap in Beheer. Alleen meting: geen motor leest het. Tests: `tests/test_dagcap.py`.
 
-**Focus.** `app/focus.py` (zuiver) is de enige bron voor welke soorten nog nieuwe kansen zoeken en melden: `FOCUS_TYPES` = `structuur`, `structuur_c`, `zone_radar`, `zone_sweep` en `poc_radar` (beide live, ongetest). `ENGINE_FOCUS` (standaard true; false zet alles terug) zet de andere motoren uit met een gate op de aanroep via `focus.engine_on(trade_type)`, nooit in de beslislogica: `scan_market` (smc, patroon, de autonome day trading; een al open day-trading-signaal wordt nog ververst), `scan_smc_fast` (de SMC-check), `trend_live.run`, `rejection_live.run`, `rule_live.scan`, `range_watch.run`, `range_sweep_live.scan`, `market_script.generate_all`/`run_triggers`, `samenval.run`, `level_check` (swing-watches) en `signal_processor.handle_message` (na opslaan en dedupe, vóór de Anthropic-aanroep; `process_day_trading_signal` blijft onaangeroerd voor de golden test). Een uitgezette motor schrijft `focus.OFF_DETAIL` in zijn hartslag. Lopende trades volgen `level_check`, `rule_live.update_open` en `range_sweep_live.track`/`follow` altijd verder. In de weergave filtert `web.main._forming_setups` de SMC-setups weg (Radar, Nu, dok, appicoon tellen daardoor gelijk), `_open_chances` de wachtende scenario's en `_range_sweep_shown` de range sweep; open signalen van elke soort blijven staan. Bewijs splitst met `focus.split` in de focus-soorten (open, bovenaan) en "Uitgezet, ter verbetering" (n, doel, stop, netto R uit `summarize`'s `net_total`). Tests: `tests/test_focus.py`, `test_focus_gates.py`, `test_web_focus.py`; de andere tests draaien met focus uit (`tests/__init__.py`).
+**Focus.** `app/focus.py` (zuiver) is de enige bron voor welke soorten nog nieuwe kansen zoeken en melden: `FOCUS_TYPES` = `structuur`, `structuur_c`, `zone_radar`, `zone_sweep`, `poc_radar` en `hespulse_model` (alle live, ongetest); `focus.model_only()`/`alerts_on(trade_type)` beslissen wie nog meldt. `ENGINE_FOCUS` (standaard true; false zet alles terug) zet de andere motoren uit met een gate op de aanroep via `focus.engine_on(trade_type)`, nooit in de beslislogica: `scan_market` (smc, patroon, de autonome day trading; een al open day-trading-signaal wordt nog ververst), `scan_smc_fast` (de SMC-check), `trend_live.run`, `rejection_live.run`, `rule_live.scan`, `range_watch.run`, `range_sweep_live.scan`, `market_script.generate_all`/`run_triggers`, `samenval.run`, `level_check` (swing-watches) en `signal_processor.handle_message` (na opslaan en dedupe, vóór de Anthropic-aanroep; `process_day_trading_signal` blijft onaangeroerd voor de golden test). Een uitgezette motor schrijft `focus.OFF_DETAIL` in zijn hartslag. Lopende trades volgen `level_check`, `rule_live.update_open` en `range_sweep_live.track`/`follow` altijd verder. In de weergave filtert `web.main._forming_setups` de SMC-setups weg (Radar, Nu, dok, appicoon tellen daardoor gelijk), `_open_chances` de wachtende scenario's en `_range_sweep_shown` de range sweep; open signalen van elke soort blijven staan. Bewijs splitst met `focus.split` in de focus-soorten (open, bovenaan) en "Uitgezet, ter verbetering" (n, doel, stop, netto R uit `summarize`'s `net_total`). Tests: `tests/test_focus.py`, `test_focus_gates.py`, `test_web_focus.py`; de andere tests draaien met focus uit (`tests/__init__.py`).
 
 **Automatische verbeterlus.** Elke nacht om 03:17 UTC (`deploy/hespulse-nacht.timer`) draait `scripts/nacht_export.py --git`: auto-missers
 (`app/auto_misser.py` zuiver, `scripts/auto_misser.py`: omkeer vanaf een bevestigd 1u-swing-punt van minstens `MIN_MOVE_ATR` 3 ATR binnen 24 uur,
