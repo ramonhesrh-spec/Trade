@@ -122,8 +122,13 @@ class ModelChart(Base):
 
 
 class ModelChecklist(ModelTab):
-    def test_groot_button_opens_the_same_drawing(self):
-        self.assertIn(f'data-kc-big="/api/kaart_svg/model:{self.entry}?groot=1"', self.html())
+    def test_groot_opens_the_movable_chart_with_timeframe_choice(self):
+        # CEO 2026-11-02: "je kan de tijdzone niet meer aanpassen en de grafiek kan niet meer bewegen". Groot is weer levelchart.js.
+        html = self.html()
+        self.assertNotIn("data-kc-big", html)
+        self.assertGreaterEqual(html.count("data-lc-expand"), 2)                # scenario en entry
+        self.assertIn('"label": "4u range"', html.replace("&#34;", '"'))
+        self.assertIn('"label": "15m FVG"', html.replace("&#34;", '"'))
 
     def test_entry_has_the_order_checklist_and_a_scenario_has_none(self):
         self.assertEqual(self.client.get(f"/nu/order/model:{self.entry}").status_code, 200)

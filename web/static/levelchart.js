@@ -55,7 +55,8 @@
 
   // Zelfde decimalen als app/price_text.py (en ladder.js): 2 vanaf 10, 3 vanaf 1, 4 vanaf 0,01, daaronder minstens drie cijfers die tellen.
   function precision(s) {
-    var ref = Math.abs(s.entry != null ? s.entry : s.limit);
+    // Een modelscenario (moment A) heeft nog geen limiet: dan bepaalt de range de decimalen.
+    var ref = Math.abs(s.entry != null ? s.entry : s.limit != null ? s.limit : s.zone_low);
     if (!(ref > 0)) return 2;
     return ref >= 10 ? 2 : ref >= 1 ? 3 : ref >= 0.01 ? 4 : Math.max(6, 2 - Math.floor(Math.log10(ref)));
   }
@@ -463,12 +464,12 @@
     } else if (num(s.zone_low) && num(s.zone_high)) {
       legend.appendChild(legendItem("is-zone", "Zone"));
     }
-    legend.appendChild(legendItem("is-line-entry", "Instap"));
-    legend.appendChild(legendItem("is-line-stop", "Stop"));
+    if (num(s.limit) || num(s.entry)) legend.appendChild(legendItem("is-line-entry", "Instap"));
+    if (num(s.stop)) legend.appendChild(legendItem("is-line-stop", "Stop"));
     // Een plan zonder doel (zone-sweep) heeft geen doellijn en geen winstvlak: dan ook niet in de legenda.
     if (num(s.take)) legend.appendChild(legendItem("is-line-take", "Doel"));
     legend.appendChild(legendItem("is-line-now", "Nu"));
-    legend.appendChild(legendItem("is-risk", "Risico"));
+    if (num(s.stop)) legend.appendChild(legendItem("is-risk", "Risico"));
     if (num(s.take)) legend.appendChild(legendItem("is-reward", "Winst"));
     foot.appendChild(note);
     foot.appendChild(legend);

@@ -2982,8 +2982,6 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .sc.mc .mc-tag { font: 500 11px var(--sans); fill: var(--tx); stroke: var(--bg); stroke-width: 3px; paint-order: stroke; }
 .sc.mc .mc-meta { font: 500 11px var(--sans); fill: var(--tx2); }
 /* "Groot" van de modelkaart: dezelfde tekening, zo groot als het scherm toelaat (kaarten.js). */
-.mc-full-body { flex: 1; min-height: 0; display: grid; place-items: start center; padding: var(--space-2) var(--gutter); overflow: auto; }
-.mc-full-body svg.sc { width: 100%; height: auto; max-width: 680px; }
 .lc-bare .lc-foot { margin-top: 0; justify-content: space-between; align-items: center; }
 .lc-bare .level-chart::before { display: none; }
 .lc-cap { font-size: 12px; color: var(--tx2); }

@@ -199,17 +199,34 @@ def scenario_item(row: dict, now: Optional[datetime] = None) -> dict:
     return {"kind": "scenario", "key": key(sid), "dom_id": dom_id(sid), "coin": row["coin"], "direction": row["direction"],
             "title": f"{row['coin']} {row['direction']}", "state": "scenario", "state_short": STATE_SHORT.get(row["status"], "Scenario"),
             "group": "scenarios", "tab": TRADE_TYPE, "trade_type": TRADE_TYPE, "untested": True, "rr_text": "",
-            "svg_src": f"/api/kaart_svg/{key(sid)}", "chart": None, "say": waiting_text(row), "steps_done": step_lines(row, now),
+            "svg_src": f"/api/kaart_svg/{key(sid)}", "chart": scenario_chart(row), "say": waiting_text(row), "steps_done": step_lines(row, now),
             "candidates_text": candidate_text(row), "rows": scenario_rows(row), "created_at": row.get("detected_at"),
             "shared_text": f"Ontdekt {when(row.get('discovered_at'), now)}", "origin": f"{LABEL} · context 4u, pools 1u, sweep en shift op 15m",
             "num_text": "", "num_label": "", "num_hook": "distance", "share_lines": [], "model_lines": context_lines(row),
             "model_face": face_line(row)}
 
 
+def chart_zone(row: dict) -> dict:
+    """Wat "Groot" (de schuifbare candlegrafiek van levelchart.js, keuze 15m/1u/4u) over de entryzone tekent: het vlak met zijn naam,
+    zonder ontstaansmoment, want de rij bewaart dat niet; levelchart.js zegt dan niets over waar hij ontstond."""
+    return {"tf": "15m", "kind": "bull" if row["direction"] == "long" else "bear",
+            "label": "15m OB" if row.get("ob_overlap") else "15m FVG", "origin": None, "note": None, "note_other_tf": None,
+            "note_outside": None, "target_low": None, "target_high": None, "target_label": None}
+
+
+def scenario_chart(row: dict) -> dict:
+    """Moment A heeft nog geen order: "Groot" toont de 4u-range als vlak op een schuifbare grafiek (4u eerst), zonder limiet, stop of doel."""
+    return {"direction": row["direction"], "stop": None, "take": None, "limit": None, "entry": None, "price": None,
+            "zone_low": row["range_low"], "zone_high": row["range_high"],
+            "zone": {"tf": "4h", "kind": "bull" if row["direction"] == "long" else "bear", "label": "4u range", "origin": None,
+                     "note": None, "note_other_tf": None, "note_outside": None, "target_low": None, "target_high": None, "target_label": None},
+            "label": f"Scenario {row['direction']}: 4u range {price_text.nl(row['range_low'])} tot {price_text.nl(row['range_high'])}"}
+
+
 def radar_setup(row: dict) -> dict:
     """Moment B (entry beschikbaar) in de vorm die radar.setup_card leest: de zone is de FVG of de overlap met het order block."""
     return {**row, "source": TRADE_TYPE, "limit": row["limit_price"], "preview_stop_loss": row["stop_loss"], "preview_take_profit": row["take_profit"],
-            "created_at": row.get("entry_detected_at") or row.get("entry_at"), "chart_zone": None,
+            "created_at": row.get("entry_detected_at") or row.get("entry_at"), "chart_zone": chart_zone(row),
             "origin_label": f"{LABEL} · " + ("overlap van gap en order block" if row.get("ob_overlap") else "fair value gap") + " op 15m"
                             + (" · bij een naakte POC" if row.get("poc_samenval") else "")}
 
