@@ -693,3 +693,52 @@ lager dan de vorige top en niet boven H.
 - De vergelijking B tegen B0 volgt dezelfde regel als de schaduwvarianten (`shadow.verdict`): minstens 50 per arm, beide helften, en een
   interval per week boven 0.
 - Er komen geen verdere varianten bij.
+
+---
+
+## Aanvullend besluit CEO 2026-11-03: alle instappunten op één kaart, de gebruiker kiest
+
+**Besluit.** "Ik wil gewoon alles op 1 grafiek zien [...] dat er 3/4 verschillende entry punten zijn en dat de gebruiker gewoon zelf kan
+aanklikken welke waarop is gebaseerd." Een scenario toont voortaan elk instappunt dat de regels vinden, elk met zijn eigen basis, limiet,
+stop, doel en stand.
+
+De instappunten, alle vooraf vast:
+
+| Code | Naam op de kaart | Basis | Regel |
+|---|---|---|---|
+| A | Na sweep | Sweep van een pool, shift, gap | §4.8–4.12, ongewijzigd |
+| B | Lagere top | Lagere 1u-top in premium, shift, gap | Aanvullend besluit 2026-11-02 avond, ook voor long (hogere bodem in discount) |
+| V1 | Vroege limiet op de pool | Limiet op de pool bij moment A | §6, stop 1,0 ATR(1u), ongewijzigd |
+| P | POC-limiet | Limiet op de dichtste naakte dag- of week-POC aan de juiste kant | Hieronder |
+
+**P (short; long gespiegeld).**
+- Bij moment A de dichtste naakte POC (bekend aan het einde van zijn periode, nog niet aangeraakt) boven het slot van 15m.
+- De POC moet in premium liggen (vanaf EQ tot en met H) en binnen 6% van het slot.
+- Limiet op de POC, stop 1,0 ATR(1u) erboven met de vloer van 0,4% (zoals V1).
+- Doel: de dichtste kandidaat voorbij de limiet (§4.7).
+- Geldig zolang het scenario leeft, net als V1.
+- Is er geen naakte POC bij moment A, dan krijgt het scenario geen P.
+
+Dit is onze toetsbare lezing van de vPOC-short (`cases/2026-11-btc-1u-vpoc.md`). Een vPOC van een periode die de beweging zelf bevat, telt
+niet: dat is vooruitkijken.
+
+**B (uitwerking voor de bouw).** De trigger is een 1u-swing low (long-frame; short gespiegeld) die bekend wordt op het sluiten van de derde
+candle rechts. Hij moet aan vier eisen voldoen:
+- hoger liggen dan de vorige bekende 1u-swing low sinds de swing van de range;
+- tussen L en EQ liggen (B0: tussen L en H);
+- binnen 6% van het slot liggen;
+- nog niet gevolgd zijn door een slot onder hem.
+
+Het uiterste X is die low. Daarna geldt hetzelfde als bij A:
+- de top om te breken: de laatste 15m-top vóór de 15m-candle met X;
+- de shift binnen 24 candles van 15m na X, en een slot onder X maakt de poging ongeldig;
+- displacement, gap, limiet, stop X − 0,25·ATR met de vloer, en doel zoals bij A.
+
+Per scenario hoogstens één B-entry en één B0-entry. B loopt naast A en beëindigt het scenario niet. Eindigt het scenario, dan stopt ook het
+zoeken naar B.
+
+**Meldingen.** Alleen A houdt zijn luide melding (besluit 3). B, V1 en P staan op de kaart zonder push. Een melding per extra instappunt
+zou het aantal meldingen weer verveelvoudigen (B-2026-11-02-04). Dat is een keuze die makkelijk om te zetten is.
+
+**Meting.** Elk instappunt is een eigen arm met dezelfde vul- en uitkomstregels (§4.14) en dezelfde maten (§8). De keuze van de gebruiker
+verandert niets aan de meting: elk punt wordt gevolgd, ook als niemand hem neemt. B0 meldt nooit en staat niet op de kaart.
