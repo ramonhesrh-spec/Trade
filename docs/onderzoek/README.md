@@ -23,4 +23,6 @@ Werkregels voor elke stap:
 - Een screenshot bewijst het moment van de screenshot, niet het moment waarop een setup bekend werd. Een open candle is geen bevestiging.
 - Leg de regel en de beslisregel vast vóór de vergelijking. Data die de hypothese opleverde, telt niet als bevestiging ervan.
 - Elke bevestigde fout wordt een regressietest plus een tegenvoorbeeld waarin dezelfde correctie geen trade mag geven.
+- Bij een bijlage eerst tellen: tekstlengte, aantal beelden en verborgen inhoud. Per beeld noteren of het bekeken is. Nooit "alles gelezen"
+  zonder die telling (ronde 4: twee van vijf beelden bekeken en "alle vijf" gemeld).
 - Verzin geen controles. Schrijf op wat wel en niet te controleren was, en waarom.

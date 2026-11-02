@@ -2,6 +2,28 @@
 
 Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
 
+## Ronde 4 (2026-11-02)
+
+**Aanleiding.** De CEO: "Heb het gevoel dat je niet alles leest?"
+
+**Gecontroleerd.** Beide rapporten op inhoud die mijn tekstextractie zou missen:
+- geen scripts, verborgen blokken, commentaar of templates;
+- de alt-teksten noemen alleen de beelden.
+
+De tekst was dus volledig gelezen.
+
+**Fout gevonden.** In ronde 2 had ik van de vijf PUMP-beelden er maar twee bekeken (A en E). In de chat zei ik daarna ten onrechte "alle
+vijf". De drie BTC-beelden (B, C, D) heb ik nu bekeken en verwerkt in `cases/2026-11-02-pump.md`.
+
+**Nieuw inhoudelijk.**
+- Alle externe grafieken komen van één maker, binnen 5 minuten gemaakt. Ze zijn dus niet onafhankelijk.
+- BTC 4u is dalend sinds 21 oktober, maar binnen een grotere range van ongeveer 75.000 tot 84.000.
+
+**Werkwijze aangepast.**
+- Bij elke bijlage tel ik eerst de beelden en de tekstlengte.
+- Ik meld per beeld of het bekeken is.
+- Ik zeg nooit "alles bekeken" zonder die telling.
+
 ## Ronde 3 (2026-11-02)
 
 **Aanleiding.** Het goudrapport kwam opnieuw binnen.
