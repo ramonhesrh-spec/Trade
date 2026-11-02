@@ -682,3 +682,14 @@ voordat B op zichzelf een eerste beoordeling heeft.
 **Nog door de CEO te kiezen.** Krijgt B meteen luide meldingen, net als A, of loopt hij eerst stil tot de eerste beoordeling?
 
 **Nooit.** Constanten afstellen op deze twee voorbeelden. K, de premiumgrens EQ en de 0,25 ATR liggen hierboven vast.
+
+**Aanvulling 2026-11-02 (18:50), vóór de bouw en vóór enige uitkomst.** Een BTC-voorbeeld van de CEO (`cases/2026-11-02-btc-4u-1847.md`)
+had zijn lagere top onder EQ. De premium-eis van type B is dus een keuze die de data moet toetsen.
+
+Daarom loopt naast B één extra arm stil mee: **B0**. B0 is gelijk aan B, maar zonder de eis "boven EQ". De andere voorwaarden blijven:
+lager dan de vorige top en niet boven H.
+
+- B0 meldt nooit.
+- De vergelijking B tegen B0 volgt dezelfde regel als de schaduwvarianten (`shadow.verdict`): minstens 50 per arm, beide helften, en een
+  interval per week boven 0.
+- Er komen geen verdere varianten bij.
