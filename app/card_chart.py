@@ -5,6 +5,7 @@ mee. Structuur tekent zijn eigen momentopname (setup_chart.setup_svg) en komt hi
 Zone-radar: de zone als vlak vanaf de ontstaanscandle (zone_key) met een markering op die candle, de doelzone als vlak, limiet, stop en doel.
 Zone-sweep: daarbij de prik (sweep_at, het uiterste) en de herstelcandle (de laatste gesloten candle vóór placed_at).
 HesPulse-model: een eigen tekening in analistenstijl (model_svg, onderaan), op het tijdframe uit model_tf."""
+from datetime import datetime
 from html import escape
 from typing import Optional
 
@@ -199,6 +200,15 @@ def _model_zones(row: dict, e: dict, steps: dict) -> list[dict]:
     return out
 
 
+def _unix(stamp) -> Optional[int]:
+    if not stamp:
+        return None
+    try:
+        return int(datetime.fromisoformat(str(stamp).replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
+
+
 def model_marks(row: dict, points: Optional[list[dict]] = None) -> list[dict]:
     """Dezelfde niveaus als de kaarttekening, als benoemde lijnen voor de schuifbare grafiek ("Groot", levelchart.js `marks`): de 4u-range met
     evenwicht, de 1u-pool (swing of EQH/EQL), de sweep, de 15m-breuk en de andere instappunten. CEO 2026-11-03: "als je op de grafiek klikt zie
@@ -222,7 +232,10 @@ def model_marks(row: dict, points: Optional[list[dict]] = None) -> list[dict]:
         marks.append({"value": shift["top"], "label": f"15m {SHIFT_WORDS.get(shift.get('label'), 'MSB')}", "kind": "shift"})
     for p in points or []:
         if p["code"] != "A" and p.get("limit") is not None:
-            marks.append({"value": p["limit"], "label": f"{p['code']} limiet", "kind": "alt"})
+            # De lijn begint waar de app hem zag (CEO 2026-11-03, ONDO: over de hele breedte leek V1 er al vóór de top te zijn): het
+            # latere van het moment in de regel en het opslaan van het scenario.
+            seen = [t for t in (_unix(p.get("known_at")), _unix(row.get("detected_at"))) if t is not None]
+            marks.append({"value": p["limit"], "label": f"{p['code']} limiet", "kind": "alt", "time": max(seen) if seen else None})
     return [m for m in marks if m["value"] is not None]
 
 

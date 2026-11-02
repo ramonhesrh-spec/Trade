@@ -46,7 +46,7 @@ class KaartenTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             out = Path(d) / "k.html"
             orig = kaarten.fetch
-            kaarten.fetch = lambda coin, tf, n: self.fr[tf]
+            kaarten.fetch = lambda coin, tf, n: self.fr.get(tf)
             try:
                 kaarten.main(["--coins", "BTC", "--uit", str(out), "--dagen", "3650"])
             finally:

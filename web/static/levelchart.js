@@ -221,7 +221,10 @@
     // Van het model alleen wat bij deze setup hoort: de andere instappunten en de sweep, rechts met hun letter.
     (s && s.marks || []).forEach(function (m) {
       if (m.kind !== "alt" && m.kind !== "sweep") return;
-      hl.push({ value: m.value, time: null, label: m.label, color: accent, text: accent, dash: true, right: true });
+      // Een instappunt begint op het moment dat de app hem zag; vóór die tijd stond hij er niet.
+      hl.push({ value: m.value, time: !num(m.time) || !times.length ? null : m.time >= times[times.length - 1] ? times[times.length - 1]
+                : originBar(times, m.time, lc.tf), label: m.label, color: accent, text: accent,
+                dash: true, right: true });
     });
     lc.hlines = hl;
     lc.boxes = boxes;

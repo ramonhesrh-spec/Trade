@@ -184,3 +184,28 @@ class TimeframeChoice(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class EntryLineStart(unittest.TestCase):
+    """Een instappunt op "Groot" begint op het moment dat de app hem zag, niet links van de grafiek (CEO 2026-11-03, ONDO V1)."""
+
+    def setUp(self):
+        self.row, _, _ = scenario_row()
+
+    def alt(self, row, point):
+        (m,) = [m for m in card_chart.model_marks(row, [point]) if m["kind"] == "alt"]
+        return m
+
+    def test_line_starts_at_the_later_of_rule_moment_and_storing(self):
+        row = {**self.row, "detected_at": "2026-11-02T12:30:39+00:00"}
+        m = self.alt(row, {"code": "V1", "limit": 0.4063, "known_at": "2026-11-02T08:00:00+00:00"})
+        self.assertEqual(m["time"], int(pd.Timestamp("2026-11-02T12:30:39Z").timestamp()))
+
+    def test_counterexample_rule_moment_after_storing_wins(self):
+        row = {**self.row, "detected_at": "2026-11-02T08:00:00+00:00"}
+        m = self.alt(row, {"code": "B", "limit": 0.4016, "known_at": "2026-11-02T09:15:00+00:00"})
+        self.assertEqual(m["time"], int(pd.Timestamp("2026-11-02T09:15:00Z").timestamp()))
+
+    def test_without_any_moment_the_line_has_no_start(self):
+        row = {**self.row, "detected_at": None}
+        self.assertIsNone(self.alt(row, {"code": "P", "limit": 1.0})["time"])
