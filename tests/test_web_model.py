@@ -246,7 +246,8 @@ class OnePlanOnTheCard(ModelTab):
         self.assertIn("Plan B: Limiet 100,00 · Stop 97,50 · Doel 110,00", card)
         self.assertNotIn("Plan B0", card)
         self.assertIn(f'href="/nu/order/mpoint:{b}"', card)
-        self.assertIn("geldig", card)
+        self.assertIn("geldig tot ", card)
+        self.assertIn("6 uur na de breuk", card)
 
     def test_de_orderknop_opent_de_checklist(self):
         b = self.point("B", 100.0)

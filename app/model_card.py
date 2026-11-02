@@ -256,8 +256,9 @@ def ready_plan(row: dict, now: Optional[datetime] = None) -> Optional[dict]:
     p = min(live, key=lambda p: READY_CODES.index(p["code"]))
     left = None
     if p.get("expires_at"):
-        mins = int((datetime.fromisoformat(p["expires_at"]) - now).total_seconds() // 60)
-        left = f"nog {mins // 60}u {mins % 60:02d}m geldig" if mins >= 60 else f"nog {mins} min geldig"
+        # "nog 12 min geldig" zei niet waarom (CEO 2026-11-03, ETH): een plan geldt 6 uur na de breuk (preregistratie 4.13).
+        until = datetime.fromisoformat(p["expires_at"]).astimezone(LOCAL_TZ).strftime("%H:%M")
+        left = f"geldig tot {until}, 6 uur na de breuk"
     return {**p, "valid_text": left, "url": f"/nu/order/{point_key(p['id'])}",
             "line": f"Plan {p['code']}: Limiet {price_text.nl(p['limit'])} · Stop {price_text.nl(p['stop'])} · Doel {price_text.nl(p['take'])}"}
 

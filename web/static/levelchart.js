@@ -652,8 +652,36 @@
   setInterval(function () {
     if (document.hidden) return;
     live.forEach(function (el) { if (el._lc) load(el._lc).catch(function () { /* laatste stand blijft staan */ }); });
+    if (full && full.el._lc) refreshFull(full.el._lc);
     fill();
   }, REFRESH_MS);
+
+  // Schermvullend live (CEO 2026-11-03: "de grafiek lijkt niet live mee te bewegen"): elke minuut de candles opnieuw zonder het beeld te
+  // verschuiven dat jij koos, en elke twee seconden de koers uit de live-stroom (live.js) op de laatste candle, met een nieuwe candle zodra
+  // het tijdframe omslaat.
+  function refreshFull(lc) {
+    var ts = lc.chart.timeScale(), range = ts.getVisibleLogicalRange();
+    fetchCandles(lc.el.getAttribute("data-coin"), lc.tf, FULL_MAX).then(function (candles) {
+      if (lc.dead || !candles.length) return;
+      lc.candles = candles.map(function (c) { return Object.assign({}, c); });
+      lc.series.setData(lc.candles);
+      if (range) ts.setVisibleLogicalRange(range);
+    }).catch(function () { /* laatste stand blijft staan */ });
+  }
+  function tickFull() {
+    var lc = full && full.el._lc, coin = full && full.el.getAttribute("data-coin");
+    var p = coin && window.__livePrices ? window.__livePrices[coin] : null;
+    if (!lc || lc.dead || !num(p) || !lc.candles || !lc.candles.length || !TF_SEC[lc.tf]) return;
+    var last = lc.candles[lc.candles.length - 1], bar = Math.floor(Date.now() / 1000 / TF_SEC[lc.tf]) * TF_SEC[lc.tf];
+    if (bar > last.time) {
+      last = { time: bar, open: last.close, high: p, low: p, close: p };
+      lc.candles.push(last);
+    } else {
+      last.close = p; last.high = Math.max(last.high, p); last.low = Math.min(last.low, p);
+    }
+    lc.series.update(last);
+  }
+  setInterval(function () { if (!document.hidden) tickFull(); }, 2000);
 
   var observer = "IntersectionObserver" in window ? new IntersectionObserver(onIntersect, { rootMargin: "300px 0px" }) : null;
   els.forEach(function (el) { if (observer) observer.observe(el); else want(el); });

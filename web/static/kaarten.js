@@ -135,23 +135,38 @@
         .then((function (b, f) { return function (svg) {
           if (svg === "fallback") return;
           if (svg && svg.indexOf("<svg") === 0) { b.innerHTML = svg; f.classList.add("is-drawn"); }
-          else { b.querySelector(".kc-svg-wait").textContent = "Grafiek nu niet beschikbaar"; f._svgDone = false; }
+          else failed(b, f);
         }; })(box, fig))
-        .catch((function (b, f) { return function () { b.querySelector(".kc-svg-wait").textContent = "Grafiek nu niet beschikbaar"; f._svgDone = false; }; })(box, fig))
+        .catch((function (b, f) { return function () { failed(b, f); }; })(box, fig))
         .then(function () { busy--; pump(); });
     }
   }
-  var figs = document.querySelectorAll("[data-kc-svg]");
+  // Een mislukte verversing laat de vorige tekening staan; alleen zonder tekening komt de melding.
+  function failed(b, f) {
+    var wait = b.querySelector(".kc-svg-wait");
+    if (wait) wait.textContent = "Grafiek nu niet beschikbaar";
+    f._svgDone = f.classList.contains("is-drawn");
+  }
+  var figs = document.querySelectorAll("[data-kc-svg]"), inView = new Set();
   if ("IntersectionObserver" in window) {
     var io = new IntersectionObserver(function (entries) {
-      entries.forEach(function (en) { if (en.isIntersecting) { io.unobserve(en.target); queue.push(en.target); } });
+      entries.forEach(function (en) {
+        if (en.isIntersecting) { inView.add(en.target); if (!en.target._svgDone) queue.push(en.target); } else inView.delete(en.target);
+      });
       pump();
     }, { rootMargin: "300px 0px" });
     figs.forEach(function (f) { io.observe(f); });
   } else {
-    figs.forEach(function (f) { queue.push(f); });
+    figs.forEach(function (f) { queue.push(f); inView.add(f); });
     pump();
   }
+  // De tekening is een momentopname van de server (CEO 2026-11-03: "de grafiek lijkt niet live mee te bewegen"): elke minuut opnieuw voor
+  // de kaarten in beeld, met de nieuwe candles. De oude tekening blijft staan tot de nieuwe er is.
+  setInterval(function () {
+    if (document.hidden) return;
+    inView.forEach(function (f) { if (f.classList.contains("is-drawn") && queue.indexOf(f) < 0) { f._svgDone = false; queue.push(f); } });
+    pump();
+  }, 60000);
 
   // ===== Tellers boven de kansen =====
   // De server zet de getallen (app/kansen.py, tabs[].n en in_zone); hier alleen opnieuw tellen wat er op de pagina staat zodra radar.js een
