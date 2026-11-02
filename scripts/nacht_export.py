@@ -24,7 +24,7 @@ from typing import Callable, Optional
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
-from app import auto_misser as am, config, db, excursion, focus, leaks, model_measure, repo, shadow, track_record  # noqa: E402
+from app import auto_misser as am, config, context_split, db, excursion, focus, leaks, model_measure, repo, shadow, track_record  # noqa: E402
 
 EXPORT_DIR = ROOT / "data" / "export"
 GIT_DIR = ROOT / "data" / "export-git"
@@ -39,6 +39,47 @@ SIGNAL_FIELDS = ("id", "trade_type", "coin", "direction", "created_at", "price",
 def _stop_fetch(coin: str, since_ms: int):
     from app import exchange
     return exchange.fetch_ohlcv(coin, timeframe="5m", limit=300, since=since_ms)
+
+
+def _fetch_4h(coin: str):
+    from app import exchange
+    return exchange.fetch_ohlcv(coin, timeframe="4h", limit=context_split.FETCH_4H)
+
+
+def with_context(rows: list[dict], fetch: Callable = _fetch_4h) -> list[dict]:
+    """H1 (docs/onderzoek/hypotheses.md): per signaal de 4u-context van de eigen coin en van BTC op het moment van het signaal.
+    Lukt het ophalen niet, dan 'onbekend', nooit 'neutraal'."""
+    cache: dict[str, context_split.Bias] = {}
+
+    def bias(coin: str) -> context_split.Bias:
+        if coin not in cache:
+            try:
+                cache[coin] = context_split.Bias(fetch(coin))
+            except Exception:
+                cache[coin] = context_split.Bias(None)
+        return cache[coin]
+
+    for r in rows:
+        r["context_4u"] = bias(r["coin"]).group(r["direction"], r["created_at"])
+        r["btc_4u"] = bias("BTC").group(r["direction"], r["created_at"])
+    return rows
+
+
+def context_table(rows: list[dict]) -> dict:
+    """Per soort en per bron (eigen coin, BTC) per groep: n afgerond, netto R gemiddeld. Alleen doel of stop telt."""
+    out: dict = {}
+    for r in rows:
+        if r.get("auto_outcome") not in ("take_profit", "stop_loss") or r.get("r_netto") is None or "context_4u" not in r:
+            continue
+        for src, key in (("eigen", "context_4u"), ("btc", "btc_4u")):
+            cell = out.setdefault(r["trade_type"], {}).setdefault(src, {}).setdefault(r[key], {"n": 0, "som": 0.0})
+            cell["n"] += 1
+            cell["som"] += r["r_netto"]
+    for kind in out.values():
+        for groups in kind.values():
+            for cell in groups.values():
+                cell["netto_r"] = cell.pop("som") / cell["n"]
+    return out
 
 
 def stop_then_target(signals: list[dict], now: datetime, fetch: Callable = _stop_fetch) -> dict:
@@ -73,12 +114,13 @@ def _signal_row(s: dict) -> dict:
     return row
 
 
-def build_export(now: datetime, stop_fetch: Callable = _stop_fetch) -> dict:
+def build_export(now: datetime, stop_fetch: Callable = _stop_fetch, fetch_4h: Callable = _fetch_4h) -> dict:
     since = (now - timedelta(days=DAYS)).isoformat()
     inputs = repo.leak_inputs(since)
     focus_types = set().union(*leaks.TYPES.values())
     signals = [s for s in inputs["signals"] if s["trade_type"] in focus_types]
     inputs["stop_then_target"] = stop_then_target(signals, now, stop_fetch)
+    rows = with_context([_signal_row(s) for s in signals], fetch_4h)
     return {
         "versie": 1,
         "gemaakt": now.isoformat(),
@@ -88,7 +130,8 @@ def build_export(now: datetime, stop_fetch: Callable = _stop_fetch) -> dict:
         "lekken": leaks.report(inputs, now),
         "auto_missers": [{k: m[k] for k in ("coin", "direction", "begin_at", "end_at", "begin_price", "end_price", "size_atr", "size_pct", "seen_by",
                                              "reasons")} for m in inputs["missers"]],
-        "signalen": [_signal_row(s) for s in signals],
+        "signalen": rows,
+        "context_4u": context_table(rows),
         "schaduw": shadow.export_rows(),
         # HesPulse-model (preregistratie §8): uitvoerbaarheid, trechter, N_eff, drawdown, zonder de beste 5% en de vergelijkingen V1-V3.
         "model": model_measure.jsonable(model_measure.report(repo.list_model_scenarios(), repo.list_model_v1(),
@@ -119,6 +162,15 @@ def markdown(data: dict) -> str:
     for m in unseen[-10:]:
         lines.append(f"- {m['coin']} {m['direction']} {m['begin_at'][:16]}: {m['size_atr']:.1f} ATR ({m['size_pct']:.1f}%)".replace(".", ","))
     lines.append("")
+    ctx = data.get("context_4u")
+    if ctx:
+        lines.append("## Context 4u (H1, alleen meting): netto R per trade, mee / tegen / neutraal / onbekend")
+        for kind, srcs in ctx.items():
+            for src in ("eigen", "btc"):
+                g = srcs.get(src, {})
+                cells = [f"{name} {g[name]['n']}x {_r(g[name]['netto_r'])}" for name in context_split.GROUPS if name in g]
+                lines.append(f"- {shadow.label(kind)}, {'coin' if src == 'eigen' else 'BTC'}: " + ", ".join(cells))
+        lines.append("")
     lines.append("## Schaduw")
     lines += [f"- {s['trade_type']} {s['id']} ({s['status']}): {s['verdict']['tekst']}" for s in data["schaduw"]] or ["- geen"]
     m = data.get("model")

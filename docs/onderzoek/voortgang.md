@@ -1,0 +1,64 @@
+# Voortgang
+
+Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
+
+## Ronde 1 (2026-11-02)
+
+**Inventaris.**
+- Code: deze repo, tak `claude/crypto-day-trading-alerts-geb2v7`.
+- Specs: `hespulse-model/preregistratie.md` en de preregistraties van range-sweep en zone-sweep.
+- Nachtexport: `origin/hespulse-data`, één export van 2026-11-02.
+- Twee rapporten van de CEO: goud en PUMP.
+- `CLAUDE.md` met de besluiten tot en met vandaag.
+
+**Ontbreekt.**
+- Marktdata in de ontwikkelcontainer. Binance, Bybit en OKX zijn vanaf hier niet bereikbaar (netwerkbeleid), dus geen replay op echte
+  candles hier.
+- De eerdere bijlagen (screenshots) van deze sessie. Die zijn weg na een herstart van de container.
+- Signaal-id's bij de PUMP- en DOGE-voorbeelden.
+- Een eerste uitvoer van `scripts/model_kaarten.py` (H2).
+
+**Onderzocht.**
+1. Melding CEO: "Groot" op de modelkaart kon niet schuiven en het tijdframe niet wisselen. Opgelost (E2, B-2026-11-02-08).
+2. De nachtexport van 2026-11-02, 374 afgeronde trades (E1).
+
+**Aangetoond binnen E1.**
+- Zone-radar long verloor −0,81R over 70 trades.
+- Trades zijn sterk geclusterd: 374 trades in 196 unieke uren.
+- Er zijn nog maar 17 trades uit het perps-tijdperk.
+
+**Niet aangetoond.**
+- Een voordeel van welke soort ook.
+- Dat shorts structureel beter zijn.
+
+**Tegenbewijs.**
+- Kleine stops waren in deze data niet slechter. Dat gaat in tegen een eerdere labbewering.
+- De WLD-correctie gaf een kaart die verloor.
+
+**Gedaan.**
+- Hypothese H1 (4u-context mee of tegen, coin en BTC) vooraf vastgelegd met een beslisregel.
+- De meting zit in de nachtexport, dus de data verzamelt zichzelf. Het telt pas vanaf 2026-11-03.
+- `scripts/export_analyse.py` maakt E1 reproduceerbaar.
+- Projectgeheugen ingericht en vier cases vastgelegd.
+
+**Advies.**
+- Geen nieuwe regels nu.
+- Eerst H2 (doet het model live wat de spec zegt), dan H1 laten lopen tot de beslisregel iets zegt.
+
+**Volgende stap.**
+- CEO op de VPS: `scripts/model_kaarten.py` draaien en de uitvoer delen (H2).
+- Vanaf dinsdag 03:17 UTC staat H1 automatisch in elke export.
+- De wekelijkse sessie (`docs/verbeterlus.md`) leest hem.
+
+## Onderzoeksagenda (geprioriteerd)
+
+1. **H2: het model live controleren.** Het enige model dat meldt, is nog niet op echte candles nagerekend. Grootste risico: een
+   stap die met latere candles anders uitkomt, of entries die al voorbij zijn bij de melding. Blokkade: kan alleen op de VPS.
+2. **H1: 4u-context mee of tegen.** Toetst de kernfilter van het model op data van de oude soorten. Loopt automatisch; eerste beoordeling
+   na 8 weken en 50 trades per groep.
+3. **Effectieve steekproef.** Elke beoordeling telt unieke uren en weken, niet alleen trades. Dat staat al in `export_analyse.py` en
+   `model_measure` (N_eff).
+4. **Perps-tijdperk apart.** Pas na 1 november zijn de candles van het contract zelf. Oudere uitkomsten blijven apart staan (Bewijs doet dit
+   al).
+5. **Geparkeerd tot er data is:** bevestigde entry tegen vroege limiet (V1 loopt al), herstel-long tegen de context (wacht op H1 "tegen"),
+   goud als instrument (productvraag).

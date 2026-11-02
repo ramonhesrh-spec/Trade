@@ -142,7 +142,7 @@ bundel "N entries klaar"), niet als de koers al door de limiet stond (`niet_vulb
 `model_v1` (`track_v1`). Kaart: `model_card` (moment A `scenario_item` in groep `scenarios` zonder order en buiten de tellers, moment B
 `radar_setup` met sleutel `model:N`, anker `radar-model-N`), context/entrytype/status apart (`context_lines`, `face_line`), BTC-context
 (`app/btc_context.py`: BTC 4u, Pearson 96/672 op uitgelijnde 15m-log-rendementen, relatieve sterkte 24u; kolom `btc_context` "a"/"b"; alleen
-kenmerk, niets leest het), grafiek `card_chart.model_svg` in analistenstijl (rustige candles `--mc-*`, 4u range high/low en evenwicht, zones "15m FVG"/"15m OB" als lichtpaars vlak `--mz` met de naam erin, "1u swing low"/EQL uit de stap `sweep.pool_at`/`pool_n`, sweep, "15m CHoCH", limiet/stop/doel met prijs, labels rechts met `ladder.spread`; alleen uit de opgeslagen rij, de range van de entry uit `entry.range_low/high`; tijdframe `model_tf`: het kleinste waarop swing tot nu in 96 candles past; `tests/test_model_chart_card.py`), `/api/kaart_svg/model:N` met `no-store` (`?groot=1`: dezelfde tekening hoger, "Groot" via `data-kc-big` in `kaarten.js`). Iedereen ziet
+kenmerk, niets leest het), grafiek `card_chart.model_svg` in analistenstijl (rustige candles `--mc-*`, 4u range high/low en evenwicht, zones "15m FVG"/"15m OB" als lichtpaars vlak `--mz` met de naam erin, "1u swing low"/EQL uit de stap `sweep.pool_at`/`pool_n`, sweep, "15m CHoCH", limiet/stop/doel met prijs, labels rechts met `ladder.spread`; alleen uit de opgeslagen rij, de range van de entry uit `entry.range_low/high`; tijdframe `model_tf`: het kleinste waarop swing tot nu in 96 candles past; `tests/test_model_chart_card.py`), `/api/kaart_svg/model:N` met `no-store` (`?groot=1`: dezelfde tekening hoger; "Groot" op de kaart opent sinds 2026-11-02 weer de schuifbare `levelchart.js` met keuze 15m/1u/4u, CEO: "de grafiek kan niet meer bewegen": entryzone uit `model_card.chart_zone`, moment A de 4u-range uit `scenario_chart`). Iedereen ziet
 het. Meting: `app/model_measure.py` (vulbaar, vertraging, trechter, N_eff, verliesreeks, drawdown met herschikking, zonder beste 5%, 98,75%
 per week; V1/V2/V3 alleen CEO) op Bewijs en in de nachtexport (`model`). Controle achteraf: `scripts/model_kaarten.py` (14 dagen, eerste 30,
 `app/model_chart.full_svg`, per stap herberekend zonder latere candles). `HESPULSE_MODEL_ENABLED` (standaard true) en `MODEL_ONLY_ALERTS`
@@ -264,6 +264,11 @@ onder 0 ligt of na 100 per arm; anders wachten. Promoveren zet de waarde in `eng
 (`shadow.live_params`), en stuurt de CEO één push; `--terug <id>` haalt hem weg. Bewijs toont per soort een schaduwregel, alleen voor de CEO.
 Wijzig nooit een gewone motorregel of constante buiten deze route; de wekelijkse sessie volgt `docs/verbeterlus.md`. Tests: `tests/test_auto_misser.py`,
 `test_leaks.py`, `test_nacht_export.py`, `test_shadow.py`.
+
+**Onderzoeksgeheugen.** Bij elke onderzoeks- of ontwikkelsessie eerst `docs/onderzoek/README.md`, dan `voortgang.md`, `besluiten.md` en
+`hypotheses.md`; cases in `docs/onderzoek/cases/`, uitkomsten met reproductiecommando in `bewijsregister.md`. Een besluit wordt nooit stil
+overschreven; een hypothese ligt vast vóór de toets. H1 (4u-context mee/tegen van coin en BTC, `app/context_split.py`, alleen meting) staat
+per signaal in de nachtexport (`context_4u`, `btc_4u`) en telt vanaf 2026-11-03; `scripts/export_analyse.py` leest een export.
 
 **Conventions to preserve**: comments explain non-obvious *why* (a past
 bug, a deliberate tradeoff, a constraint that isn't visible from the code

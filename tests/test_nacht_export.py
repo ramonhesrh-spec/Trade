@@ -46,7 +46,7 @@ class ExportTest(DbCase):
         self.addCleanup(self.out.cleanup)
 
     def test_geen_persoonsgegevens(self):
-        data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None)
+        data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None, fetch_4h=lambda coin: None)
         text = json.dumps(data)
         self.assertNotIn("geheimenaam", text)
         self.assertNotIn("iemand@voorbeeld.nl", text)
@@ -58,21 +58,36 @@ class ExportTest(DbCase):
     def test_schaduw_staat_erin(self):
         from app import shadow
         shadow.register("zr-stop-040", "zone_radar", "Stop 0,4 ATR", "reden vooraf", {"stop_atr": 0.4}, NOW)
-        data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None)
+        data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None, fetch_4h=lambda coin: None)
         self.assertEqual([(s["id"], s["status"], s["verdict"]["verdict"]) for s in data["schaduw"]], [("zr-stop-040", "schaduw", "wachten")])
         self.assertIn("zr-stop-040", nacht.markdown(data))
 
     def test_model_staat_erin(self):
         from tests.test_web_model import scenario
         scenario("ADA", entry=True)
-        data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None)
+        data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None, fetch_4h=lambda coin: None)
         self.assertEqual(data["model"]["funnel"]["entry"], 1)
         self.assertEqual([c["key"] for c in data["model"]["compare"]], ["V1", "V2", "V3"])
         self.assertIn("## HesPulse-model (ongetest)", nacht.markdown(data))
         self.assertFalse(keys_of(data["model"]) & set(PERSONAL_KEYS))
 
+    def test_context_4u_per_signaal_en_onbekend_zonder_candles(self):
+        # H1 (docs/onderzoek/hypotheses.md): elke rij krijgt de groep van de eigen coin en van BTC; zonder candles 'onbekend', nooit 'neutraal'.
+        from tests.test_context_split import zigzag
+        up = zigzag(True)
+        with self.subTest("met candles"):
+            with_up = nacht.with_context([{"coin": "BTC", "direction": "long", "created_at": up["timestamp"].iloc[-1].isoformat()}],
+                                         fetch=lambda coin: up)
+            self.assertEqual((with_up[0]["context_4u"], with_up[0]["btc_4u"]), ("mee", "mee"))
+        def boom(coin):
+            raise RuntimeError("geen netwerk")
+        data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None, fetch_4h=boom)
+        self.assertEqual([(s["context_4u"], s["btc_4u"]) for s in data["signalen"]], [("onbekend", "onbekend")])
+        self.assertEqual(data["context_4u"]["zone_radar"]["eigen"]["onbekend"]["n"], 1)
+        self.assertIn("## Context 4u (H1, alleen meting)", nacht.markdown(data))
+
     def test_schrijft_json_en_markdown_met_datum(self):
-        data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None)
+        data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None, fetch_4h=lambda coin: None)
         paths = nacht.write_files(data, Path(self.out.name), NOW)
         self.assertEqual(sorted(p.name for p in paths), ["hespulse-2026-11-01.json", "hespulse-2026-11-01.md"])
         md = (Path(self.out.name) / "hespulse-2026-11-01.md").read_text()

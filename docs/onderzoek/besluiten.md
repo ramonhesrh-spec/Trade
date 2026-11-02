@@ -1,0 +1,20 @@
+# Besluiten
+
+Aangenomen (A) of verworpen (V), met datum, reden, versie of commit, en waar de onderbouwing staat. Een herziening is een nieuwe regel die
+naar de oude verwijst; oude regels blijven staan. Oudere besluiten tot en met 2026-11-02 staan uitgebreider in `CLAUDE.md` en in de
+preregistraties; hier staat het overzicht.
+
+| Id | Datum | A/V | Besluit | Reden en bron |
+|---|---|---|---|---|
+| B-2026-10-29-01 | 2026-10-29 | A | Zone-radar zonder minimale R:R | CEO: WLD-zone kreeg geen kaart bij 1,6R. `CLAUDE.md` Zone-radar |
+| B-2026-10-29-02 | 2026-10-29 | A | 4u-zones leven 400 candles in plaats van 200 | WLD-steun van 24 sep verdween op 28 okt. `CLAUDE.md` Zone-radar |
+| B-2026-11-01-01 | 2026-11-01 | A | Dagcaps hoger en tegengehouden kansen geteld | WLD-breuk bleef `niet_gemeld`. `CLAUDE.md` Dagcaps |
+| B-2026-11-02-01 | 2026-11-02 | A | Eén model meldt: het HesPulse-model (ICT hoofdstuk 25), live vóór de controle | CEO. `hespulse-model/preregistratie.md` |
+| B-2026-11-02-02 | 2026-11-02 | V | Kill zones en tijdvensters | CEO: "de tijdzones doen we niet" |
+| B-2026-11-02-03 | 2026-11-02 | A | POC geen eigen radar meer maar doel binnen het model | CEO. Preregistratie |
+| B-2026-11-02-04 | 2026-11-02 | A | Alleen "entry beschikbaar" is luid; vulling stil; andere soorten stil | CEO: te veel meldingen. `CLAUDE.md` Meldingen |
+| B-2026-11-02-05 | 2026-11-02 | A | BTC-context alleen als kenmerk, geen filter tot H1b gesteund is | PUMP-rapport v3 §4, `hypotheses.md` H1b |
+| B-2026-11-02-06 | 2026-11-02 | V | De richting van een externe analist overnemen | PUMP: een andere visie is geen bewijs. `cases/2026-11-02-pump.md` |
+| B-2026-11-02-07 | 2026-11-02 | V | Automatisch long bij historische steun | Goud: de les is beide richtingen onderzoeken, niet een vaste long. `cases/2026-11-02-goud.md` |
+| B-2026-11-02-08 | 2026-11-02 | A | "Groot" op de modelkaart is weer de schuifbare grafiek met keuze 15m/1u/4u; de analistentekening blijft op de kaart | CEO-melding, E2 |
+| B-2026-11-02-09 | 2026-11-02 | A | De nachtexport meet per signaal de 4u-context van coin en BTC (H1), alleen meting | `hypotheses.md` H1 |
