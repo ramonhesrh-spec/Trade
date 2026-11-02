@@ -1,6 +1,28 @@
 # HesPulse-model: preregistratie
 
-Status: **concept ter goedkeuring door de CEO**, 2026-11-02. Er wordt niets gebouwd voordat de CEO dit document en de open beslissingen
+## Besluiten CEO 2026-11-02
+
+De CEO keurde dit document goed met de volgende besluiten op de open beslissingen (§12). Ze gaan voor wat verderop anders staat; waar een
+paragraaf erdoor verandert, staat dat erbij.
+
+1. **Live direct, controle achteraf** (gewijzigd ten opzichte van de eerste versie van dit besluit, die een controle van 30 getekende kaarten
+   vooraf vroeg). Het model gaat meteen aan: `HESPULSE_MODEL_ENABLED` staat standaard op true (een `false` in `.env` zet hem uit), gelabeld
+   ongetest. Poort 3 (§10) wordt een controle achteraf: `scripts/model_kaarten.py` laat het model over de laatste 14 dagen op alle
+   `config.FIXED_COINS` lopen (alleen gesloten candles, stap voor stap zonder toekomst) en tekent de eerste 30 gevonden scenario's als één
+   HTML-bestand. Fouten in de code worden hersteld; regels niet.
+2. **Alleen het model meldt.** Structuur, Zone-radar, Zone-sweep en POC-radar lopen stil mee: ze blijven kaarten en signalen maken (meting,
+   Bewijs), maar zonder enige push, ook geen stille, en zonder eigen tab op Kansen. Een open trade van zo'n soort blijft onder Open staan tot hij
+   klaar is. Eén instelling, `MODEL_ONLY_ALERTS` (standaard aan zodra het model aan staat), draait dit terug. Bewijs blijft alle soorten tonen.
+3. **De luide melding is moment B** (entry beschikbaar: zet de order), binnen het gedeelde dagmaximum (8) en de bundeling per cyclus. Moment A
+   (scenario ontdekt) staat alleen in de app, zonder push. De vulling is stil (een rij op `/meldingen`).
+4. **Geen minimale R:R.** De kaart toont de R:R en de CEO kiest. Daarmee vervalt de R:R-eis van 4.7, 4.12 en V1 (§6): het doel blijft de
+   dichtste kandidaat, maar een entry valt niet meer af op "R:R onder 2". De R:R wordt bewaard en getoond, nooit als filter of volgorde.
+5. **Iedereen ziet het model** (niet eerst alleen de CEO), gelabeld ongetest. De vergelijkingen (V1, V2, V3) blijven alleen voor de CEO op
+   Bewijs.
+
+Trade_type in de code: `hespulse_model` (§9 stelde `hp_model` voor).
+
+Status: **goedgekeurd door de CEO op 2026-11-02, bevroren**, met de besluiten hierboven. Oorspronkelijk: Er wordt niets gebouwd voordat de CEO dit document en de open beslissingen
 onderaan heeft goedgekeurd. Na goedkeuring is dit document bevroren: wijzigingen komen alleen als gedateerd "Aanvullend besluit" onderaan,
 met reden, en nooit op grond van uitkomsten.
 
@@ -234,8 +256,8 @@ zwaarste bak. Alleen periodes die volledig in de data zitten, binnen 14 dagen.
 
 **Definitie doel (long).** Kandidaten op moment B: de **bovenrand H** van de 4u-dealing range (externe liquiditeit), plus **elke naakte dag-
 of week-POC boven de limiet**, herkend vóór moment B en dan nog naakt. **Het doel is de kandidaat die het dichtst boven de limiet ligt.**
-Nooit een verdere kandidaat om een mooiere R:R te krijgen (zoals `zone_radar.obstacles`): haalt het dichtste doel de R:R-eis (4.12) niet, dan
-komt er geen entry ("R:R onder 2").
+Nooit een verdere kandidaat om een mooiere R:R te krijgen (zoals `zone_radar.obstacles`). **Besluit CEO 2026-11-02: geen R:R-eis**;
+de R:R van het dichtste doel staat op de kaart.
 - Op de kaart bij "scenario ontdekt" staan H en de naakte POC's tussen de koers en H als kandidaten. Bij "entry beschikbaar" wordt het doel
   **bevroren**. Een latere POC of een hogere H verandert het doel van een geplaatste entry niet.
 - **Onaangeraakt:** H is per definitie de hoogste high sinds *s*; een POC telt alleen als hij naakt is. Raakt de koers vóór de vulling het
@@ -351,8 +373,7 @@ Stop: "just beyond the sweep extreme [...] a little beyond the wick, to allow fo
 - **Ruwe stop** = X − 0,25·ATR(15m) op candle *c*. **Stop** = `smc_eval.floor_stop(long, limiet, ruwe stop, min_pct=0,4)`: minstens 0,4% onder
   de limiet (verbreed, nooit geweigerd; CLAUDE.md).
 - **Doel** = het bevroren doel uit 4.7 (H of een dichter gelegen naakte POC).
-- **R:R-eis** = (doel − limiet) / (limiet − stop) ≥ 2. Haalt de entry dat niet, dan komt hij niet beschikbaar ("R:R onder 2") en wordt hij
-  als zodanig geteld.
+- **R:R** = (doel − limiet) / (limiet − stop), bewaard en getoond. **Besluit CEO 2026-11-02: geen minimum** (eerder: ≥ 2); de CEO kiest.
 - **Discount-eis** = limiet ≤ EQ (4.5); anders "in premium".
 
 > **Ontwerpkeuze: agressieve entry op de bovenrand, buffer 0,25 ATR, R:R minstens 2.** Reden: met de eerste aanraking (boek: "aggressive
@@ -374,8 +395,8 @@ Stop: "just beyond the sweep extreme [...] a little beyond the wick, to allow fo
 - **Toestanden:** `wacht_sweep` → `wacht_shift` → `entry` → afgerond. Een mislukte sweep of shift zet het scenario terug op `wacht_sweep`
   (de pool is opgebruikt).
 
-**Entry beschikbaar (moment B).** Na een sweep (4.8), een shift (4.9) en displacement met een FVG (4.10, 4.11), en als discount en R:R
-kloppen (4.12).
+**Entry beschikbaar (moment B).** Na een sweep (4.8), een shift (4.9) en displacement met een FVG (4.10, 4.11), en als de discount-eis klopt (4.12;
+geen R:R-eis, besluit CEO 2026-11-02).
 - **Herkenbaar op:** het sluiten van de laatste candle die nodig was (de latere van *c*, *m* en de derde FVG-candle).
 - **Gepubliceerd op:** het moment dat kaart B in de app staat (`detected_at`). Dat is los van een push, die door het dagmaximum of de
   bundeling (§9) later of stil kan zijn. Uitvoerbaarheid en vertraging (§8) rekenen vanaf dit moment. Het tijdstip van een eventuele luide push
@@ -431,7 +452,7 @@ leerlingen.
 | Arm | Wat | Stop en doel |
 |---|---|---|
 | **H** (hoofdmodel) | §4 | §4.12 |
-| **V1: vroege limiet** | Op moment A een limiet op het niveau van de dichtstbijzijnde pool P0, zonder sweep, shift of FVG. Geldig zolang het scenario leeft. Eén per scenario. | Stop P0 − 1,0·ATR(1u), dan `floor_stop` 0,4%. Doel volgens 4.7, maar vanaf de V1-limiet P0 en met de kandidaten van moment A (bevroren). R:R ≥ 2 op moment A, anders geen order (geteld). |
+| **V1: vroege limiet** | Op moment A een limiet op het niveau van de dichtstbijzijnde pool P0, zonder sweep, shift of FVG. Geldig zolang het scenario leeft. Eén per scenario. | Stop P0 − 1,0·ATR(1u), dan `floor_stop` 0,4%. Doel volgens 4.7, maar vanaf de V1-limiet P0 en met de kandidaten van moment A (bevroren). Geen R:R-eis (besluit CEO 2026-11-02). |
 | **V2: Zone-sweep (referentie)** | De live Zone-sweep (ZS_1H, ZS_2H, ZS_4H), ongewijzigd, zoals Bewijs hem meet, over dezelfde periode en coins; zonder eigen tab en zonder meldingen. | Zoals live: met doel via `level_check`, zonder doel via de referentie-uitgang (apart gelabeld). |
 | **V3: POC-radar (referentie)** | De live POC-radar, ongewijzigd, zoals Bewijs hem meet, over dezelfde periode en coins; zonder eigen tab en zonder meldingen (besluit CEO). | Zoals live: met doel via `level_check`, zonder doel via de referentie-uitgang (apart gelabeld). |
 
