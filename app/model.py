@@ -53,6 +53,7 @@ WARMUP_15M = 30
 # Toestanden (4.13) en eindstanden. Ze staan ook in app/end_reason.py (tests/test_basis_afsluiten.py eist een tekst).
 WAIT_STATES = ("wacht_sweep", "prik", "wacht_shift", "wacht_fvg")
 SCENARIO_ENDS = ("context_weg", "geen_pool", "afgerond")
+ALT_CODES = ("B", "B0")                     # aanvullend besluit 2026-11-03: B meldt niet, B0 staat nergens; beide alleen gemeten en (B) getoond
 ENTRY_ENDS = ("vervallen", "weggelopen", "context_weg", "niet_vulbaar", "btc_tegen")
 FAIL_REASONS = {
     "run": "De koers liep door de pool zonder terug te sluiten (een run, geen sweep).",
@@ -62,6 +63,7 @@ FAIL_REASONS = {
     "geen_displacement": "De breuk kwam zonder displacement en fair value gap.",
     "terugtest_al_geweest": "De koers was al terug in de gap voordat de entry bekend was.",
     "premium": "De limiet lag boven het evenwicht van de range (premium).",
+    "geen_doel": "Er lag geen doel voorbij de limiet.",
 }
 
 
@@ -359,6 +361,8 @@ class _Active:
     shift: Optional[dict] = None
     end: Optional[tuple[str, int]] = None
     entry: Optional[dict] = None
+    p: Optional[dict] = None                                    # P: POC-limiet bij moment A (aanvullend besluit 2026-11-03)
+    alts: dict = field(default_factory=dict)                    # B en B0: lagere top (hogere bodem in het long-frame), naast A
 
 
 def _ts(ns: int) -> pd.Timestamp:
@@ -414,8 +418,11 @@ class _Run:
                 p0 = max(near, key=lambda p: p.level)
                 act = _Active(ctx, T, p0, self._cands(ctx, T, f.c[t], ctx.H),
                               self._v1(ctx, T, p0, self._cands(ctx, T, p0.level, float("inf"))))
+                act.p = self._p(ctx, T, float(f.c[t]))
                 act.steps.append({"stap": "ontdekt", "at": T})
                 continue
+            for code in ALT_CODES:
+                self._alt(act, t, ctx, code)
             self._step(act, t, ctx)
             if act.entry is not None or act.end is not None:
                 if act.end is None:
@@ -434,6 +441,121 @@ class _Run:
         tgt = _target(cands, p0.level)
         rr = (tgt[2] - p0.level) / (p0.level - stop) if tgt and p0.level > stop else None
         return {"limit": p0.level, "stop": stop, "take": tgt[2] if tgt else None, "target_kind": tgt[0] if tgt else None, "rr": rr}
+
+    def _p(self, ctx: Context, T: int, close: float) -> Optional[dict]:
+        """P (aanvullend besluit 2026-11-03): limiet op de dichtste naakte POC onder het slot (long-frame), tussen L en EQ en binnen 6%,
+        stop 1,0 ATR(1u) eronder met de vloer, doel de dichtste kandidaat erboven. Zonder POC-data of zonder zo'n POC: None."""
+        if self.pocs is None:
+            return None
+        near = [p for p in _naked(self.pocs, T) if ctx.L <= p.price <= ctx.eq and p.price < close
+                and (close - p.price) / abs(close) * 100 <= MAX_DISTANCE_PCT]
+        if not near:
+            return None
+        poc = max(near, key=lambda p: p.price)
+        atr1 = float(self.f1.atr[self.f1.last_closed(T)])
+        if not np.isfinite(atr1):
+            return None
+        stop = _floor(poc.price, poc.price - V1_STOP_ATR * atr1)
+        tgt = _target(self._cands(ctx, T, poc.price, float("inf")), poc.price)
+        rr = (tgt[2] - poc.price) / (poc.price - stop) if tgt else None
+        return {"known": T, "limit": poc.price, "stop": stop, "take": tgt[2] if tgt else None, "target_kind": tgt[0] if tgt else None,
+                "target_label": tgt[1] if tgt else None, "rr": rr, "label": poc.label}
+
+    def _higher_low(self, t: int, ctx: Context, discount_only: bool, used: set) -> Optional[tuple[int, float, int]]:
+        """B: een 1u-swing low die op het sluiten van 15m-candle t bekend werd, hoger dan de vorige bekende swing low sinds de swing van de
+        range, tussen L en EQ (B) of L en H (B0), binnen 6% van het slot en nog zonder slot eronder. (j15, X, p) of None."""
+        f, f1 = self.f15, self.f1
+        q, qp = f1.last_closed(int(f.ct[t])), f1.last_closed(int(f.ct[t - 1]))
+        start_ns = int(self.f4.ts[ctx.s].value)
+        for c1 in range(qp + 1, q + 1):
+            p = c1 - K_1H
+            if p < 0 or p in used or not self.pools.flags[p] or int(f1.ts[p].value) < start_ns:
+                continue
+            prev = [r for r in range(p - 1, -1, -1) if self.pools.flags[r] and int(f1.ts[r].value) >= start_ns][:1]
+            low = float(f1.l[p])
+            if not prev or low <= f1.l[prev[0]] or low < ctx.L or low > (ctx.eq if discount_only else ctx.H):
+                continue
+            if (f.c[t] - low) / abs(f.c[t]) * 100 > MAX_DISTANCE_PCT:
+                continue
+            lo = int(np.searchsorted(f.ts.asi8, f1.ts[p].value, side="left"))
+            hi = int(np.searchsorted(f.ts.asi8, (f1.ts[p] + TF["1h"]).value, side="left"))
+            if hi <= lo:
+                continue
+            j = lo + int(np.argmin(f.l[lo:hi]))
+            if (f.c[j:t + 1] < low).any():
+                continue
+            return j, low, p
+        return None
+
+    def _alt(self, a: _Active, t: int, ctx: Context, code: str) -> None:
+        """Eén B- of B0-entry per scenario, naast A; eindigt het scenario, dan stopt dit ook. Alleen candles tot en met t."""
+        tr = a.alts.setdefault(code, {"phase": "zoek", "used": set(), "entry": None})
+        if tr["entry"] is not None:
+            return
+        f = self.f15
+        T = int(f.ct[t])
+        if tr["phase"] == "zoek":
+            hit = self._higher_low(t, ctx, code == "B", tr["used"])
+            if hit is None:
+                return
+            j, X, p = hit
+            tr["used"].add(p)
+            tops = [q for q in range(0, j - K_15M + 1) if self.hi15[q]]
+            if not tops:
+                return
+            bp = tops[-1]
+            tr.update(phase="wacht_shift", j=j, X=X, B=float(f.h[bp]), top_at=int(f.ts[bp].value), low_at=int(f.ts[j].value), found=T,
+                      checked=j)
+        if tr["phase"] == "wacht_shift":
+            for u in range(tr["checked"] + 1, t + 1):
+                tr["checked"] = u
+                if f.c[u] < tr["X"] or u >= tr["j"] + SHIFT_BARS:
+                    tr["phase"] = "zoek"
+                    return
+                if f.c[u] > tr["B"]:
+                    tr["c"], tr["phase"] = u, "wacht_fvg"
+                    break
+            else:
+                return
+        if tr["phase"] == "wacht_fvg":
+            what, m, k, fvgs = displacement(f, tr["j"], tr["c"], t)
+            if what == "wacht":
+                return
+            if what == "geen":
+                tr["phase"] = "zoek"
+                return
+            reason, e = self._plan(t, ctx, k, fvgs, tr["X"], tr["c"], premium_check=(code == "B"))
+            if e is None:
+                tr["phase"] = "zoek"
+                return
+            tr["entry"] = {**e, "extreme": tr["X"], "low_at": tr["low_at"], "top": tr["B"], "top_at": tr["top_at"],
+                           "shift_at": int(f.ct[tr["c"]])}
+
+    def _plan(self, t: int, ctx: Context, k: int, fvgs: list, X: float, c: int, premium_check: bool = True) -> tuple[Optional[str], Optional[dict]]:
+        """De limiet, stop en doel van 4.11 en 4.12 voor elke entry met een gap (A, B, B0). (reden, None) als er geen entry komt."""
+        f = self.f15
+        T = int(f.ct[t])
+        unfilled = [g for g in fvgs if not (f.l[g[0] + 1:t + 1] <= g[2]).any()]
+        if not unfilled:
+            return "terugtest_al_geweest", None
+        i, g_lo, g_hi = min(unfilled, key=lambda g: (g[1], g[0]))
+        ob_lo, ob_hi = float(f.l[k]), float(f.h[k])
+        lo, hi = max(g_lo, ob_lo), min(g_hi, ob_hi)
+        overlap = hi > lo
+        z_lo, z_hi = (lo, hi) if overlap else (g_lo, g_hi)
+        limit = z_hi
+        if premium_check and limit > ctx.eq:
+            return "premium", None
+        stop = _floor(limit, X - STOP_ATR * f.atr[c])
+        tgt = _target(self._cands(ctx, T, limit, float("inf")), limit)
+        if tgt is None or limit <= stop:
+            return "geen_doel", None
+        naked = _naked(self.pocs, T)
+        samenval = None if self.pocs is None else any(z_lo <= p.price <= z_hi or ob_lo <= p.price <= ob_hi for p in naked)
+        return None, {"known": T, "limit": limit, "stop": stop, "take": tgt[2], "target_kind": tgt[0], "target_label": tgt[1],
+                      "rr": (tgt[2] - limit) / (limit - stop), "zone": (z_lo, z_hi), "fvg": (g_lo, g_hi), "fvg_at": int(f.ts[i - 1].value),
+                      "ob": (ob_lo, ob_hi), "ob_at": int(f.ts[k].value), "ob_overlap": overlap, "poc_samenval": samenval,
+                      "shift_label": self.b15.get(c), "eq": ctx.eq, "range": (ctx.L, ctx.H)}
 
     def _fail(self, a: _Active, reason: str, T: int, ctx: Context) -> None:
         a.attempts.append({"reden": reason, "at": T, "pool": a.prik["pool"].level if a.prik else None,
@@ -508,30 +630,11 @@ class _Run:
         self._entry(a, t, ctx, m, k, fvgs)
 
     def _entry(self, a: _Active, t: int, ctx: Context, m: int, k: int, fvgs: list) -> None:
-        f = self.f15
-        T = int(f.ct[t])
-        unfilled = [g for g in fvgs if not (f.l[g[0] + 1:t + 1] <= g[2]).any()]
-        if not unfilled:
-            return self._fail(a, "terugtest_al_geweest", T, ctx)
-        i, g_lo, g_hi = min(unfilled, key=lambda g: (g[1], g[0]))
-        ob_lo, ob_hi = float(f.l[k]), float(f.h[k])
-        lo, hi = max(g_lo, ob_lo), min(g_hi, ob_hi)
-        overlap = hi > lo
-        z_lo, z_hi = (lo, hi) if overlap else (g_lo, g_hi)
-        limit = z_hi
-        if limit > ctx.eq:
-            return self._fail(a, "premium", T, ctx)
-        c = a.shift["c"]
-        stop = _floor(limit, a.prik["X"] - STOP_ATR * f.atr[c])
-        cands = self._cands(ctx, T, limit, float("inf"))
-        tgt = _target(cands, limit)
-        naked = _naked(self.pocs, T)
-        samenval = None if self.pocs is None else any(z_lo <= p.price <= z_hi or ob_lo <= p.price <= ob_hi for p in naked)
-        a.entry = {"known": T, "limit": limit, "stop": stop, "take": tgt[2], "target_kind": tgt[0], "target_label": tgt[1],
-                   "rr": (tgt[2] - limit) / (limit - stop), "zone": (z_lo, z_hi), "fvg": (g_lo, g_hi), "fvg_at": int(f.ts[i - 1].value),
-                   "ob": (ob_lo, ob_hi), "ob_at": int(f.ts[k].value), "ob_overlap": overlap, "poc_samenval": samenval,
-                   "shift_label": self.b15.get(c), "extreme": a.prik["X"], "pool": a.prik["pool"].level, "eq": ctx.eq,
-                   "range": (ctx.L, ctx.H)}
+        T = int(self.f15.ct[t])
+        reason, e = self._plan(t, ctx, k, fvgs, a.prik["X"], a.shift["c"])
+        if e is None:
+            return self._fail(a, reason, T, ctx)
+        a.entry = {**e, "extreme": a.prik["X"], "pool": a.prik["pool"].level}
         a.phase = "entry"
         a.steps.append({"stap": "entry", "at": T})
 
@@ -551,7 +654,19 @@ class _Run:
                                           "steps": [self._step_out(s) for s in x["steps"]]} for x in a.attempts],
             "v1": {k: (self.px(v) if k in ("limit", "stop", "take") else v) for k, v in a.v1.items()},
             "entry": None,
+            "p": None if a.p is None else {"known_at": _ts(a.p["known"]), "limit": self.px(a.p["limit"]), "stop": self.px(a.p["stop"]),
+                                           "take": self.px(a.p["take"]), "rr": a.p["rr"], "target_kind": a.p["target_kind"],
+                                           "target_label": a.p["target_label"], "label": a.p["label"]},
         }
+        for code in ALT_CODES:
+            e = (a.alts.get(code) or {}).get("entry")
+            out[code.lower()] = None if e is None else {
+                "known_at": _ts(e["known"]), "limit": self.px(e["limit"]), "stop": self.px(e["stop"]), "take": self.px(e["take"]),
+                "rr": float(e["rr"]), "target_kind": e["target_kind"], "target_label": e["target_label"],
+                "zone_low": self.span(*e["zone"])[0], "zone_high": self.span(*e["zone"])[1], "ob_overlap": bool(e["ob_overlap"]),
+                "extreme": self.px(e["extreme"]), "low_at": _ts(e["low_at"]), "top": self.px(e["top"]), "top_at": _ts(e["top_at"]),
+                "shift_at": _ts(e["shift_at"]), "expires_at": _ts(e["known"]) + ENTRY_BARS * TF["15m"],
+                "range_low": self.span(*e["range"])[0], "range_high": self.span(*e["range"])[1], "eq": self.px(e["eq"])}
         if a.entry:
             e = a.entry
             out["entry"] = {

@@ -287,6 +287,12 @@ class NoLookaheadTest(unittest.TestCase):
                 self.assertEqual([(a["reden"], a["at"]) for a in p["attempts"]], [(a["reden"], a["at"]) for a in w["attempts"] if a["at"] <= cut])
                 if p["entry"]:
                     self.assertEqual(p["entry"], w["entry"])
+                # Aanvullend besluit 2026-11-03: P, B en B0 volgen dezelfde eis. Wat op het snijmoment bekend was, is gelijk; niets eerder.
+                for key in ("p", "b", "b0"):
+                    if w[key] is not None and w[key]["known_at"] <= cut:
+                        self.assertEqual(p[key], w[key], f"{key} {w['range_id']} op {cut}")
+                    else:
+                        self.assertIsNone(p[key], f"{key} {w['range_id']} op {cut} te vroeg")
 
     def test_more_candles_never_change_an_earlier_step(self):
         fr = S.frames(base_rows())
@@ -300,6 +306,55 @@ class NoLookaheadTest(unittest.TestCase):
             found += len(M.scenarios(fr, end_of(fr)))
             self.assert_prefix(fr, [ts.iloc[k] + pd.Timedelta(minutes=15) for k in range(900, len(ts), 173)])
         self.assertGreater(found, 0, "de willekeurige reeksen moeten scenario's opleveren, anders toetst dit niets")
+
+
+class AltEntryTest(unittest.TestCase):
+    """B en B0 (lagere top, hier long-frame: hogere bodem) en P (POC-limiet): aanvullend besluit 2026-11-03."""
+
+    def all_scs(self, seeds=(1, 3, 5, 10, 11)):
+        out = []
+        for seed in seeds:
+            fr = S.frames(random_rows(seed))
+            out += M.scenarios(fr, end_of(fr))
+        return out
+
+    def test_b_is_a_subset_rule_of_b0_and_lies_in_discount(self):
+        scs = self.all_scs()
+        bs = [s for s in scs if s["b"]]
+        self.assertTrue(bs and len([s for s in scs if s["b0"]]) >= len(bs), "de reeksen moeten B en B0 opleveren")
+        for s in scs:
+            for key in ("b", "b0"):
+                e = s[key]
+                if not e:
+                    continue
+                sign = 1 if s["direction"] == "long" else -1
+                self.assertGreater((e["take"] - e["limit"]) * sign, 0)
+                self.assertGreater((e["limit"] - e["stop"]) * sign, 0)
+                self.assertLess(e["low_at"], e["shift_at"])
+                self.assertLessEqual(e["shift_at"], e["known_at"])
+                self.assertTrue(e["range_low"] <= e["extreme"] <= e["range_high"])       # de range van het moment zelf (H groeit mee)
+                if key == "b":
+                    # discount (long) of premium (short): de bodem/top aan de goede kant van het evenwicht
+                    self.assertLessEqual((e["extreme"] - e["eq"]) * sign, 1e-9)
+
+    def test_p_on_a_naked_poc_in_discount(self):
+        lvl = poc.PocLevel("day", pd.Timestamp("2026-10-02", tz="UTC"), 106.0, None)
+        (sc,) = longs(run(base_rows(), pocs=[lvl]))
+        self.assertIsNotNone(sc["p"])
+        self.assertAlmostEqual(sc["p"]["limit"], 106.0)
+        self.assertLess(sc["p"]["stop"], 106.0)
+        self.assertGreater(sc["p"]["take"], 106.0)
+
+    def test_tegenvoorbeeld_p_niet_in_premium_of_zonder_data(self):
+        lvl = poc.PocLevel("day", pd.Timestamp("2026-10-02", tz="UTC"), 109.0, None)        # boven EQ 107,7
+        (sc,) = longs(run(base_rows(), pocs=[lvl]))
+        self.assertIsNone(sc["p"])
+        (sc,) = longs(run(base_rows()))
+        self.assertIsNone(sc["p"])
+
+    def test_a_is_unchanged_by_the_new_entries(self):
+        (sc,) = longs(run(base_rows()))
+        self.assertAlmostEqual(sc["entry"]["limit"], 108.8)
 
 
 class FillTest(unittest.TestCase):
