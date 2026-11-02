@@ -58,7 +58,8 @@ def close_time(df: pd.DataFrame, i: int, tf: str) -> pd.Timestamp:
 
 def cut_frames(fr: dict, now: pd.Timestamp) -> dict:
     """Alle timeframes zoals ze op `now` bekend waren: alleen candles die dan gesloten zijn."""
-    delta = {"15m": pd.Timedelta(minutes=15), "1h": pd.Timedelta(hours=1), "4h": pd.Timedelta(hours=4), "5m": pd.Timedelta(minutes=5)}
+    delta = {"15m": pd.Timedelta(minutes=15), "1h": pd.Timedelta(hours=1), "4h": pd.Timedelta(hours=4), "5m": pd.Timedelta(minutes=5),
+             "1d": pd.Timedelta(days=1)}
     return {k: v[v["timestamp"] + delta[k] <= now].reset_index(drop=True) for k, v in fr.items()}
 
 

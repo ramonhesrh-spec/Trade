@@ -127,7 +127,10 @@ voedt `kansen.page(..., ended=)` (rijen onder "Uitgevallen, gemist of vervallen"
 "Niet meer actief" en de Structuur-geschiedenis tonen dezelfde tekst.
 
 **HesPulse-model (CEO, 2026-11-02; bindende spec `docs/onderzoek/hespulse-model/preregistratie.md` met "Besluiten CEO 2026-11-02" en het
-aanvullend besluit over kenmerken).** Het enige model dat meldt. `app/model.py` (zuiver): context 4u (`Context4h`, bias uit de laatste breuk,
+aanvullend besluit over kenmerken).** Het enige model dat meldt. Sinds 2026-11-03 top-down (aanvullend besluit, live, ongetest): de richting komt van de laatste dagbreuk
+(`model.DailyBias`, gesloten dagcandles, `frames["1d"]`, live `model_live.DAY_LIMIT`; dag wijst de andere kant op of nog geen breuk: geen
+scenario, een lopend scenario eindigt `context_weg`) en de 4u-range volgt dan alleen de laatste 4u-breuk in die richting (`Context4h(topdown=True)`,
+een tegenbreuk zoals een herstel binnen een daling telt niet); zonder dagcandles (tests, oude scripts) de oude 4u-regel. `app/model.py` (zuiver): context 4u (`Context4h`, bias uit de laatste breuk,
 60 candles, range L/H/EQ), pools 1u (`Pools`, onaangeraakt ook op 15m, gelijke lows binnen 0,1 ATR één pool), sweep/shift/displacement/FVG op
 15m, limiet op de zone (laagste ongevulde FVG of de overlap met het OB), stop met de 0,4%-vloer (`_floor`, gelijk aan `smc_eval.floor_stop`),
 doel de dichtste van de range-rand en een naakte POC, geen R:R-eis; short = long op gespiegelde candles. Alle constanten vooraf vast; nooit

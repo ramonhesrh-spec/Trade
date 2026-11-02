@@ -23,7 +23,7 @@ class KaartenTest(unittest.TestCase):
         self.pocs = [poc.PocLevel("day", pd.Timestamp("2026-10-02", tz="UTC"), 112.0, None)]
 
     def collect(self):
-        return kaarten.collect(["BTC"], self.now, 14, 30, fetcher=lambda coin, tf, n: self.fr[tf], pocs_of=lambda coin, now: self.pocs)
+        return kaarten.collect(["BTC"], self.now, 14, 30, fetcher=lambda coin, tf, n: self.fr.get(tf), pocs_of=lambda coin, now: self.pocs)
 
     def test_svg_has_every_part(self):
         (sc,) = [s for s in self.collect() if s["direction"] == "long"]

@@ -742,3 +742,25 @@ zou het aantal meldingen weer verveelvoudigen (B-2026-11-02-04). Dat is een keuz
 
 **Meting.** Elk instappunt is een eigen arm met dezelfde vul- en uitkomstregels (§4.14) en dezelfde maten (§8). De keuze van de gebruiker
 verandert niets aan de meting: elk punt wordt gevolgd, ook als niemand hem neemt. B0 meldt nooit en staat niet op de kaart.
+
+---
+
+## Aanvullend besluit CEO 2026-11-03: richting top-down van de dag, live (herziet 4.3 voor de richting)
+
+**Aanleiding.** PUMP 1–2 november (`docs/onderzoek/cases/2026-11-02-pump-1u-1815.md`). De 4u-bias "laatste breuk" sloeg door een herstel om naar
+long terwijl de dag en BTC daalden. Het model zocht toen alleen longs en zag de short bovenin niet. De CEO: "ja meteen live op jouw voorstel".
+
+**Regel (vooraf vast).**
+1. *Richting:* de laatste breuk op de dag, met dezelfde breukregel als 4.2. Pivots met 2 candles zoals op 4u, alleen gesloten
+   dagcandles, herkenbaar op het sluiten van de breukcandle.
+   - Breuk omhoog: alleen long-scenario's.
+   - Breuk omlaag: alleen short-scenario's.
+   - Geen breuk in de data: geen scenario.
+   Wisselt de dagrichting, dan eindigt een lopend scenario als `context_weg`.
+2. *Range (4u):* de laatste 4u-breuk **in de richting van de dag**. Een tussenliggende 4u-breuk de andere kant op telt niet meer. L, H,
+   EQ, de 60 candles en het vervallen bij een slot voorbij de range blijven zoals 4.3 en 4.4.
+3. *Entry:* ongewijzigd: pools 1u, sweep, shift, displacement en gap op 15m, en de instappunten A, B, V1 en P.
+4. *BTC-poort:* blijft (B-2026-11-02-10).
+5. Zonder dagcandles (alleen in tests en oude scripts) geldt de oude 4u-regel.
+
+**Meting.** Ongetest. Bewijs en de nachtexport tellen vanaf de deploy. De oude 4u-regel loopt niet stil mee, op besluit van de CEO.

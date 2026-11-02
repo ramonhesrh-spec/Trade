@@ -2,6 +2,25 @@
 
 Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
 
+## Ronde 8 (2026-11-03): uitkomst van de PUMP-controle, richting top-down en Groot per tijdframe
+
+**Gecontroleerd op de VPS.** `model_kaarten.py --coins PUMP --dagen 3 --tekst`:
+- Geen afwijkingen zonder latere candles: de code volgt de regels.
+- Short-scenario: "run" door de pool, daarna "context_weg".
+- Long-scenario: sweep zonder shift, geen entry.
+- De HesPulse-long kwam dus niet van het model.
+
+**Oorzaak van de gemiste short.** De 4u-bias "laatste breuk" sloeg om naar long door het herstel van 1 november.
+
+**Gebouwd, live op besluit van de CEO.**
+- *Richting top-down.* De dag bepaalt de richting en de 4u-range volgt de breuk in die richting. Tests: dag omlaag houdt een long tegen;
+  tegenvoorbeeld dag omhoog laat hem staan; zonder dagcandles de oude regel; prefix-vast met dagcandles.
+- *Groot per tijdframe (15m, 1u, 4u, D).* Structuur zoals een analist, met een trendregel bovenin.
+
+**Grenzen.**
+- Ongetest. Er loopt geen stille vergelijking met de oude 4u-regel; daarvoor koos de CEO niet.
+- Of het model de PUMP-short nu wel had gegeven, is onbekend tot `model_kaarten.py` opnieuw op de VPS draait.
+
 ## Ronde 7 (2026-11-03): alle instappunten op één kaart
 
 **Gebouwd.**

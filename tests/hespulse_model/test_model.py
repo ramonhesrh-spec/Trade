@@ -390,3 +390,52 @@ class FillTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+def daily_trend(up: bool, end: pd.Timestamp = S.START, n_legs: int = 16) -> pd.DataFrame:
+    """Dagcandles die eindigen op `end` met een duidelijke trap omhoog of omlaag: de laatste dagbreuk ligt dan in die richting."""
+    legs, p = [], 100.0
+    for i in range(n_legs):
+        p = p + (6 if i % 2 == 0 else -3) * (1 if up else -1)
+        legs.append((3, p))
+    rows = S.path(legs, wick=0.3)
+    return S.frame(rows, tf="1D", start=end - pd.Timedelta(days=len(rows)))
+
+
+class TopDownTest(unittest.TestCase):
+    """Aanvullend besluit 2026-11-03: de dag bepaalt de richting; de 4u-range volgt de laatste 4u-breuk in die richting."""
+
+    def run_with_day(self, up: bool):
+        fr = S.frames(base_rows())
+        fr["1d"] = daily_trend(up)
+        return M.scenarios(fr, end_of(fr))
+
+    def test_dag_omlaag_houdt_het_long_scenario_tegen(self):
+        self.assertEqual(longs(self.run_with_day(False)), [])
+
+    def test_tegenvoorbeeld_dag_omhoog_laat_het_long_scenario_staan(self):
+        (sc,) = longs(self.run_with_day(True))
+        self.assertAlmostEqual(sc["entry"]["limit"], 108.8)
+        self.assertEqual([s for s in self.run_with_day(True) if s["direction"] == "short"], [])
+
+    def test_zonder_dagcandles_de_oude_regel(self):
+        (sc,) = longs(run(base_rows()))
+        self.assertIsNotNone(sc["entry"])
+
+    def test_dagbias_zonder_vooruitkijken(self):
+        day = daily_trend(False)
+        bias = M.DailyBias(day, S.START)
+        later = M.DailyBias(pd.concat([day, daily_trend(True, end=S.START + pd.Timedelta(days=60))]), S.START + pd.Timedelta(days=60))
+        t = int((S.START - pd.Timedelta(hours=1)).value)
+        self.assertEqual(bias.at(t), "short")
+        self.assertEqual(later.at(t), "short")          # latere dagen veranderen een eerder moment niet
+
+    def test_random_walks_met_dag_blijven_prefix_vast(self):
+        nt = NoLookaheadTest()
+        for seed in (1, 3, 5):
+            fr = S.frames(random_rows(seed))
+            b15 = fr["15m"]
+            fr["1d"] = b15.set_index("timestamp").resample("1D").agg({"open": "first", "high": "max", "low": "min", "close": "last",
+                                                                      "volume": "sum"}).dropna().reset_index()
+            ts = b15["timestamp"]
+            nt.assert_prefix(fr, [ts.iloc[k] + pd.Timedelta(minutes=15) for k in range(900, len(ts), 211)])

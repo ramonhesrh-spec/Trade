@@ -26,6 +26,7 @@ TRADE_TYPE = model.TRADE_TYPE
 LIMIT = rsl.FETCH_LIMIT              # 1000 candles per timeframe: 15m is ruim 10 dagen, de langste levensduur van een range (60 candles van 4u)
 FILL_LIMIT = 300                     # 5m: 25 uur; elke cyclus kijkt opnieuw, dus alleen wat sinds de vorige cyclus kwam moet erin zitten
 TFS = ("4h", "1h", "15m")
+DAY_LIMIT = 400                      # dagcandles voor de richting (aanvullend besluit 2026-11-03): ruim een jaar
 
 
 def viewers() -> list[int]:
@@ -45,6 +46,9 @@ async def _frames(coin: str, now: pd.Timestamp) -> dict:
     out = {}
     for tf in TFS:
         out[tf] = rsl._upto(await asyncio.to_thread(rsl.fetch_bars, coin, tf, LIMIT), now)
+    day = await asyncio.to_thread(rsl.fetch_bars, coin, "1d", DAY_LIMIT)
+    if day is not None:                  # de beurs geeft altijd candles of een fout; alleen de testnaad kan None geven
+        out["1d"] = rsl._upto(day, now)
     return out
 
 

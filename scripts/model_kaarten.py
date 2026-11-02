@@ -25,7 +25,7 @@ from app import config, model, model_chart  # noqa: E402
 
 DEFAULT_OUT = Path(__file__).resolve().parent.parent / "data" / "model_kaarten.html"
 # Ruim boven 14 dagen: de 4u-bias kijkt 60 candles terug, pools 120 candles van 1u, en de 15m-ATR moet warm zijn.
-LIMITS = {"4h": 400, "1h": 1000, "15m": 1500}
+LIMITS = {"1d": 400, "4h": 400, "1h": 1000, "15m": 1500}      # 1d: de richting top-down, zoals live (aanvullend besluit 2026-11-03)
 logger = logging.getLogger("model_kaarten")
 
 
@@ -65,7 +65,7 @@ def collect(coins: list[str], now: pd.Timestamp, days: int, limit: int, fetcher:
     found = []
     for coin in coins:
         try:
-            frames = {tf: fetcher(coin, tf, n) for tf, n in LIMITS.items()}
+            frames = {tf: f for tf, n in LIMITS.items() if (f := fetcher(coin, tf, n)) is not None}
         except Exception:
             logger.exception("Candles voor %s niet op te halen", coin)
             continue

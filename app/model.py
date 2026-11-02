@@ -188,9 +188,11 @@ class Context:
 
 
 class Context4h:
-    def __init__(self, fr: Frame, direction: str):
+    def __init__(self, fr: Frame, direction: str, topdown: bool = False):
+        """topdown (aanvullend besluit 2026-11-03): de richting komt van de dag (DailyBias); hier telt dan alleen de laatste 4u-breuk in die
+        richting voor de range. Een tussenliggende tegenbreuk (een herstel binnen de daling) gooit de range niet weg."""
         self.fr, self.direction = fr, direction
-        self.events = breaks(fr, K_4H)
+        self.events = [e for e in breaks(fr, K_4H) if e.up] if topdown else breaks(fr, K_4H)
         self.known = np.array([e.known for e in self.events], np.int64)
         self._cache: dict[int, Optional[Context]] = {}
 
@@ -211,6 +213,21 @@ class Context4h:
                     ctx = Context(f"{self.direction}:{self.fr.ts[b].isoformat()}", b, s, L, H, int(self.fr.ct[b]))
         self._cache[q] = ctx
         return ctx
+
+
+class DailyBias:
+    """De richting van de dag (aanvullend besluit 2026-11-03): de laatste breuk op gesloten dagcandles, dezelfde breukregel als 4.2 met
+    pivots van 2 candles. 'long', 'short' of None (nog geen breuk in de data), op elk moment alleen met wat toen gesloten was."""
+
+    def __init__(self, df1d: pd.DataFrame, now: pd.Timestamp):
+        fr = _frame(closed(df1d, now, "1d"), "1d", False)
+        ev = breaks(fr, K_4H) if fr.n else []
+        self.known = np.array([e.known for e in ev], np.int64)
+        self.up = [e.up for e in ev]
+
+    def at(self, t_ns: int) -> Optional[str]:
+        n = int(np.searchsorted(self.known, t_ns, side="right"))
+        return None if n == 0 else ("long" if self.up[n - 1] else "short")
 
 
 # ---------------------------------------------------------------------------------------------------------------------------------------
@@ -372,9 +389,9 @@ def _ts(ns: int) -> pd.Timestamp:
 class _Run:
     """Het scenario per richting op één (mogelijk gespiegeld) stel frames."""
 
-    def __init__(self, direction: str, f4: Frame, f1: Frame, f15: Frame, pocs: Optional[list[Poc]]):
-        self.direction, self.f4, self.f1, self.f15, self.pocs = direction, f4, f1, f15, pocs
-        self.ctx = Context4h(f4, direction)
+    def __init__(self, direction: str, f4: Frame, f1: Frame, f15: Frame, pocs: Optional[list[Poc]], daily: Optional[DailyBias] = None):
+        self.direction, self.f4, self.f1, self.f15, self.pocs, self.daily = direction, f4, f1, f15, pocs, daily
+        self.ctx = Context4h(f4, direction, topdown=daily is not None)
         self.pools = Pools(f1, f15)
         self.hi15 = swing_highs(f15, K_15M)
         self.b15 = {b.i: b.label for b in breaks(f15, K_15M) if b.up}
@@ -402,6 +419,8 @@ class _Run:
         for t in range(start, f.n):
             T = int(f.ct[t])
             ctx = self.ctx.at(T)
+            if self.daily is not None and self.daily.at(T) != self.direction:
+                ctx = None                                      # de dag wijst de andere kant op (of nog geen breuk): geen scenario
             if act is not None and (ctx is None or ctx.range_id != act.ctx.range_id):
                 act.end = ("context_weg", T)
                 done.append(act)
@@ -702,12 +721,14 @@ def scenarios(frames: dict, now: pd.Timestamp, pocs: Optional[Iterable] = None) 
     now = now.tz_localize("UTC") if now.tzinfo is None else now.tz_convert("UTC")
     dfs = {tf: closed(frames[tf], now, tf) for tf in ("4h", "1h", "15m")}
     pocs = list(pocs) if pocs is not None else None
+    # Aanvullend besluit 2026-11-03: met dagcandles bepaalt de dag de richting (top-down). Zonder (tests, oude scripts) de oude 4u-regel.
+    daily = DailyBias(frames["1d"], now) if frames.get("1d") is not None and len(frames["1d"]) else None
     found = []
     for direction, mirror in (("long", False), ("short", True)):
         fr = {tf: _frame(df, tf, mirror) for tf, df in dfs.items()}
         if not all(f.n for f in fr.values()):
             continue
-        found += _Run(direction, fr["4h"], fr["1h"], fr["15m"], _pocs(pocs, mirror)).run()
+        found += _Run(direction, fr["4h"], fr["1h"], fr["15m"], _pocs(pocs, mirror), daily).run()
     return sorted(found, key=lambda s: (s["discovered_at"], s["direction"]))
 
 

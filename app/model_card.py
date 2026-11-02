@@ -142,7 +142,7 @@ def status_word(row: dict) -> str:
 
 def context_lines(row: dict) -> list[str]:
     """Drie dingen apart (aanvulling CEO 2026-11-02): de context (4u-richting van de coin en van BTC, gemeten), het entrytype (het model gaat
-    altijd met de 4u-structuur mee) en de stand. De BTC-context is die van moment B als die er is, anders van moment A."""
+    altijd met de dagtrend en de 4u-range mee, aanvullend besluit 2026-11-03) en de stand. De BTC-context is die van moment B als die er is, anders van moment A."""
     ctx = btc_of(row)
     btc = ctx.get("b") or ctx.get("a")
     coin_bias = "bullish" if row["direction"] == "long" else "bearish"
@@ -150,14 +150,14 @@ def context_lines(row: dict) -> list[str]:
     rel = btc_context.rel_text(btc)
     if rel:
         lines.append(rel)
-    lines += [f"Entrytype: met de 4u-structuur mee ({row['direction']})", f"Status: {status_word(row)}"]
+    lines += [f"Entrytype: met de dagtrend en de 4u-range mee ({row['direction']})", f"Status: {status_word(row)}"]
     return lines
 
 
 def face_line(row: dict) -> str:
     """De korte regel op de kaart zelf: stand, entrytype en BTC 4u."""
     btc = (btc_of(row).get("b") or btc_of(row).get("a") or {}).get("btc_4h") or "onbekend"
-    return f"{status_word(row).capitalize()} · met de 4u-structuur mee · BTC 4u {btc}"
+    return f"{status_word(row).capitalize()} · met de dagtrend mee · BTC 4u {btc}"
 
 
 def detail(row: dict) -> dict:

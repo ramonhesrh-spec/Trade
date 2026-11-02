@@ -40,7 +40,7 @@ class Case(DbCase):
         self.sent = []
         for p in (mock.patch.object(config, "HESPULSE_MODEL_ENABLED", True), mock.patch.object(config, "MODEL_ONLY_ALERTS", True),
                   mock.patch.object(repo, "list_coins", return_value=[{"symbol": "BTC"}]),
-                  mock.patch.object(rsl, "fetch_bars", lambda coin, tf, limit: self.fr[tf]),
+                  mock.patch.object(rsl, "fetch_bars", lambda coin, tf, limit: self.fr.get(tf)),
                   mock.patch.object(push_notify, "is_quiet_now", return_value=False),
                   mock.patch.object(push_notify, "send_push", self.fake_push)):
             p.start()
