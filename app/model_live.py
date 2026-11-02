@@ -78,9 +78,39 @@ async def _announce_entry(row: dict, stamp: pd.Timestamp) -> None:
 
 
 ENTRY_CODES = {"b": "B", "b0": "B0", "p": "P", "r": "R"}
+# Aanvullend besluit 2026-11-03 (ONDO 2 november: B0 had de daling, stil): B, B0 en R melden luid zoals A, met dezelfde poorten.
+LOUD_CODES = ("B", "B0", "R")
 
 
-def store_entries(scenario_id: int, coin: str, sc: dict, stamp: pd.Timestamp) -> int:
+async def _announce_alt(scenario_id: int, coin: str, direction: str, e: dict, stamp: pd.Timestamp, price: Optional[float],
+                        btc: Optional[Callable[[], dict]]) -> bool:
+    """Eén luide melding voor een nieuw instappunt B, B0 of R, met de regels van A: niet als de koers al door de limiet stond, niet als het
+    plan omgekeerd is en niet tegen BTC 4u (MODEL_BTC_GATE). Het punt zelf wordt altijd stil gevolgd (track_entry)."""
+    sign = 1 if direction == "long" else -1
+    if e["take_profit"] is None or not ((e["take_profit"] - e["limit_price"]) * sign > 0 > (e["stop_loss"] - e["limit_price"]) * sign):
+        return False
+    if price is not None and (price - e["limit_price"]) * sign <= 0:
+        return False
+    if config.MODEL_BTC_GATE and btc is not None:
+        b = btc() or {}
+        if (direction, b.get("btc_4h")) in (("long", "bearish"), ("short", "bullish")):
+            return False
+    row = {"coin": coin, "direction": direction}
+    timing = latency.timing(TRADE_TYPE, "entry", pd.Timestamp(e["known_at"]), stamp)
+    for uid in viewers():
+        user = repo.get_user(uid) or {}
+        quiet = push_notify.is_quiet_now(user.get("quiet_hours_start"), user.get("quiet_hours_end"))
+        try:
+            await push_notify.send_kans_push(uid, coin, direction, mc.entry_title(row, e["code"]),
+                                             mc.levels_line(e["limit_price"], e["stop_loss"], e["take_profit"]), mc.card_url(scenario_id),
+                                             silent=quiet, tag=f"{mc.tag(scenario_id)}-{e['code'].lower()}", timing=timing, kind="entry")
+        except Exception as exc:
+            logger.exception("Instappunt %s van scenario %s naar gebruiker %s is mislukt", e["code"], scenario_id, uid)
+            push_notify.record_failure(uid, "kans", mc.card_url(scenario_id), exc)
+    return True
+
+
+def store_entries(scenario_id: int, coin: str, sc: dict, stamp: pd.Timestamp, new: Optional[list] = None) -> int:
     """Legt de instappunten B, B0 en P vast zodra model.scenarios ze vindt (aanvullend besluit 2026-11-03). Een punt dat al verlopen was
     voordat de motor hem zag, komt er niet in: hij was nooit live. Geeft het aantal nieuwe punten."""
     n = 0
@@ -93,10 +123,13 @@ def store_entries(scenario_id: int, coin: str, sc: dict, stamp: pd.Timestamp) ->
             continue
         basis = {k: (_iso(v) if isinstance(v, pd.Timestamp) else v) for k, v in e.items()
                  if k not in ("limit", "stop", "take", "rr", "known_at", "expires_at")}
-        n += repo.insert_model_entry(scenario_id, {
-            "code": code, "coin": coin, "direction": sc["direction"], "known_at": _iso(e["known_at"]), "detected_at": stamp.isoformat(),
-            "limit_price": e["limit"], "stop_loss": e["stop"], "take_profit": e.get("take"), "rr": e.get("rr"),
-            "expires_at": _iso(expires) if expires is not None else None, "basis": json.dumps(basis)})
+        entry = {"code": code, "coin": coin, "direction": sc["direction"], "known_at": _iso(e["known_at"]), "detected_at": stamp.isoformat(),
+                 "limit_price": e["limit"], "stop_loss": e["stop"], "take_profit": e.get("take"), "rr": e.get("rr"),
+                 "expires_at": _iso(expires) if expires is not None else None, "basis": json.dumps(basis)}
+        if repo.insert_model_entry(scenario_id, entry):
+            n += 1
+            if new is not None:
+                new.append(entry)
     return n
 
 
@@ -149,7 +182,11 @@ async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[
                                        "take_profit": v1["take"], "rr": v1["rr"], "placed_at": stamp.isoformat(),
                                        "state": "wacht" if v1["take"] is not None else "geen_doel"})
             stored = repo.get_model_scenario(sid)
-        store_entries(stored["id"], coin, sc, stamp)
+        fresh_points: list = []
+        store_entries(stored["id"], coin, sc, stamp, fresh_points)
+        for e in fresh_points:
+            if e["code"] in LOUD_CODES and await _announce_alt(stored["id"], coin, sc["direction"], e, stamp, price, btc):
+                counts["entry"] += 1
         if stored["status"] in repo.MODEL_FINAL:
             continue
         publish = None

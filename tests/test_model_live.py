@@ -88,7 +88,8 @@ class MomentTest(Case):
         self.assertEqual(row["vulbaar"], 1)
         loud = [s for s in self.sent if not s["silent"]]
         self.assertEqual(sorted(s["user"] for s in loud), sorted([self.uid, self.b]))      # iedereen ziet het model
-        self.assertIn("HesPulse · entry", loud[0]["title"])
+        self.assertIn("HesPulse A", loud[0]["title"])
+        self.assertNotIn("\n", loud[0]["body"])                # kort: alleen limiet, stop en doel
         self.assertEqual(loud[0]["url"], f"/smc#radar-model-{row['id']}")
         self.assertEqual(push_policy.used(repo.list_recent_pushes(self.uid, "2000-01-01")), 1)
         self.cycle(at(TAIL_FROM + 5))
@@ -308,3 +309,49 @@ class EntryPointsTest(Case):
         (e,) = repo.list_model_entries()
         model_live.track_entry(e, self.b5([[101, 101.2, 100.8, 101]] * 3, t0), [], t0 + pd.Timedelta(hours=7))
         self.assertEqual(repo.list_model_entries()[0]["state"], "vervallen")
+
+
+class AltAlertTest(Case):
+    """B-2026-11-03-06 (ONDO 2 november): een nieuw B-, B0- of R-punt geeft één korte, luide melding met de poorten van A; P en V1 niet."""
+
+    def point(self, code, limit=107.0, stop=106.0, take=111.0):
+        t = S.at(self.fr, TAIL_FROM - 6)
+        return {"known_at": t, "limit": limit, "stop": stop, "take": take, "rr": 4.0, "expires_at": t + pd.Timedelta(hours=6)}
+
+    def run_with(self, key, point, btc=None):
+        real = model.scenarios
+
+        def fake(frames, now, pocs=None):
+            return [{**s, key: point} if s["direction"] == "long" else s for s in real(frames, now, pocs)]
+        patches = [mock.patch.object(model, "scenarios", fake)]
+        if btc is not None:
+            patches.append(mock.patch.object(model_live.btc_context, "measure", return_value={"btc_4h": btc}))
+        for p in patches:
+            p.start()
+            self.addCleanup(p.stop)
+        self.cycle(at(TAIL_FROM - 5))
+        self.cycle(at(TAIL_FROM - 4))
+        return [s for s in self.sent if not s["silent"]]
+
+    def test_b0_geeft_een_korte_luide_melding_een_keer(self):
+        loud = self.run_with("b0", self.point("B0"))
+        self.assertEqual(sorted(s["user"] for s in loud), sorted([self.uid, self.b]))
+        self.assertIn("HesPulse B0", loud[0]["title"])
+        self.assertEqual(loud[0]["body"], "Limiet 107.00 · Stop 106.00 · Doel 111.00")
+        self.assertEqual(len(loud), 2)                         # een keer per gebruiker, niet opnieuw in de volgende cyclus
+        self.assertEqual(loud[0]["url"], f"/smc#radar-model-{self.scenario()['id']}")
+
+    def test_r_meldt_ook(self):
+        self.assertIn("HesPulse R", self.run_with("r", self.point("R"))[0]["title"])
+
+    def test_tegenvoorbeeld_p_meldt_niet(self):
+        self.assertEqual(self.run_with("p", self.point("P")), [])
+
+    def test_tegenvoorbeeld_koers_al_door_de_limiet_meldt_niet(self):
+        self.assertEqual(self.run_with("b", self.point("B", limit=200.0, stop=199.0, take=210.0)), [])
+
+    def test_tegenvoorbeeld_tegen_btc_meldt_niet(self):
+        with mock.patch.object(config, "MODEL_BTC_GATE", True):
+            self.assertEqual(self.run_with("b0", self.point("B0"), btc="bearish"), [])
+        (e,) = repo.list_model_entries()
+        self.assertEqual(e["state"], "wacht")                   # wel stil gevolgd

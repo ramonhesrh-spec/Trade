@@ -191,7 +191,7 @@ class Context4h:
     def __init__(self, fr: Frame, direction: str, topdown: bool = False):
         """topdown (aanvullend besluit 2026-11-03): de richting komt van de dag (DailyBias); hier telt dan alleen de laatste 4u-breuk in die
         richting voor de range. Een tussenliggende tegenbreuk (een herstel binnen de daling) gooit de range niet weg."""
-        self.fr, self.direction = fr, direction
+        self.fr, self.direction, self.topdown = fr, direction, topdown
         self.events = [e for e in breaks(fr, K_4H) if e.up] if topdown else breaks(fr, K_4H)
         self.known = np.array([e.known for e in self.events], np.int64)
         self._cache: dict[int, Optional[Context]] = {}
@@ -208,9 +208,17 @@ class Context4h:
             b, s = ev.i, ev.swing
             if ev.up and q - b <= BIAS_MAX_BARS:
                 L = float(self.fr.l[s + 1:b + 1].min())
-                if not (self.fr.c[b + 1:q + 1] < L).any():
-                    H = float(self.fr.h[s:q + 1].max())
-                    ctx = Context(f"{self.direction}:{self.fr.ts[b].isoformat()}", b, s, L, H, int(self.fr.ct[b]))
+                through = np.flatnonzero(self.fr.c[b + 1:q + 1] < L)
+                H = float(self.fr.h[s:q + 1].max())
+                rid = f"{self.direction}:{self.fr.ts[b].isoformat()}"
+                if not len(through):
+                    ctx = Context(rid, b, s, L, H, int(self.fr.ct[b]))
+                elif self.topdown:
+                    # Doorbraak tegen de dag in (aanvullend besluit 2026-11-03, ZEC 2 november): een 4u-slot voorbij de range-rand terwijl de
+                    # dag de richting houdt. De range rekt op naar het nieuwe uiterste; een nieuw scenario mag erin beginnen. Bekend op het
+                    # slot van die candle; het uiterste groeit alleen met gesloten candles.
+                    x = b + 1 + int(through[0])
+                    ctx = Context(f"{rid}:door:{self.fr.ts[x].isoformat()}", b, s, float(self.fr.l[x:q + 1].min()), H, int(self.fr.ct[x]))
         self._cache[q] = ctx
         return ctx
 

@@ -444,6 +444,47 @@ class TopDownTest(unittest.TestCase):
         self.assertEqual(bias.at(t), "short")
         self.assertEqual(later.at(t), "short")          # latere dagen veranderen een eerder moment niet
 
+    # Aanvullend besluit 2026-11-03 (ZEC 2 november): een 4u-slot door de range-rand tegen de dag in rekt de range op en een nieuw scenario
+    # mag erin beginnen. Pad: range 104,95-114, val tot 103 met een 4u-slot eronder, hogere bodem 104,45, sweep daarvan, shift en gap.
+    DOOR_LEGS = [(64, 100.0), (64, 110.0), (48, 105.0), (80, 114.0), (48, 103.0), (24, 106.0), (24, 104.5), (24, 107.0), (24, 105.0)]
+
+    def door_frames(self, drop=103.0, day=True):
+        legs = [l if l[1] != 103.0 else (l[0], drop) for l in self.DOOR_LEGS]
+        rows = S.path(legs) + [[v - 3 for v in c] for c in (SWEEP, RED, DISP, FVG3, SHIFT)]
+        rows += S.path([(16, 108.0)], start_price=rows[-1][3])
+        fr = S.frames(rows)
+        if day is not None:
+            fr["1d"] = daily_trend(day)
+        return fr
+
+    def test_doorbraak_tegen_de_dag_geeft_een_nieuw_scenario_met_entry(self):
+        fr = self.door_frames()
+        (sc,) = [s for s in longs(M.scenarios(fr, end_of(fr))) if ":door:" in s["range_id"]]
+        self.assertEqual(sc["status"], "afgerond")
+        self.assertAlmostEqual(sc["range_low"], 102.95)           # de range rekt op naar het nieuwe uiterste
+        self.assertAlmostEqual(sc["entry"]["limit"], 105.8)
+
+    def test_tegenvoorbeeld_zonder_slot_door_de_rand_rekt_niets_op(self):
+        # Gemeten na de opleving tot 106 (candle 328): met een val tot 103 is er een opgerekte range, met een val tot 105,2 (boven de rand
+        # 104,95) niet.
+        cut = at(327)
+        door = lambda drop: [s for s in M.scenarios(S.cut_frames(self.door_frames(drop), cut), cut) if ":door:" in s["range_id"]]
+        self.assertTrue(door(103.0))
+        self.assertEqual(door(105.2), [])
+
+    def test_tegenvoorbeeld_dag_omlaag_geen_long(self):
+        fr = self.door_frames(day=False)
+        self.assertEqual(longs(M.scenarios(fr, end_of(fr))), [])
+
+    def test_tegenvoorbeeld_zonder_dagcandles_de_oude_regel(self):
+        fr = self.door_frames(day=None)
+        self.assertEqual([s for s in longs(M.scenarios(fr, end_of(fr))) if s["entry"]], [])
+
+    def test_doorbraak_is_prefix_vast(self):
+        fr = self.door_frames()
+        ts = fr["15m"]["timestamp"]
+        NoLookaheadTest().assert_prefix(fr, [ts.iloc[k] + pd.Timedelta(minutes=15) for k in range(330, len(ts), 17)])
+
     def test_random_walks_met_dag_blijven_prefix_vast(self):
         nt = NoLookaheadTest()
         for seed in (1, 3, 5):

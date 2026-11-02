@@ -170,7 +170,7 @@ def v1_trades(rows: list[dict], cost_pct: float) -> list[dict]:
     return out
 
 
-ENTRY_NAMES = {"B": "B lagere top", "B0": "B0 zonder premium-eis (alleen gemeten)", "R": "R breuk en terugtest", "P": "P POC-limiet"}
+ENTRY_NAMES = {"B": "B lagere top", "B0": "B0 zonder premium-eis", "R": "R breuk en terugtest", "P": "P POC-limiet"}
 
 
 def entry_trades(entries: list[dict], code: str, cost_pct: float) -> list[dict]:
@@ -186,7 +186,7 @@ def entry_trades(entries: list[dict], code: str, cost_pct: float) -> list[dict]:
 
 
 def entry_arms(entries: list[dict], cost_pct: float) -> list[dict]:
-    """Per instappunt: hoeveel gevonden, gevuld en afgerond, en de arm met dezelfde maten als H (§8). B0 staat alleen hier."""
+    """Per instappunt: hoeveel gevonden, gevuld en afgerond, en de arm met dezelfde maten als H (§8). """
     out = []
     for code, name in ENTRY_NAMES.items():
         mine = [e for e in entries if e.get("code") == code]

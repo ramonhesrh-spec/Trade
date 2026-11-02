@@ -785,3 +785,30 @@ maar zonder displacement (4.10) kwam er geen gap en dus geen entry. De CEO: "de 
    letter, stil gemeten.
 
 **Nooit.** Afstellen op PUMP. De constanten zijn die van B.
+
+---
+
+## Aanvullend besluit CEO 2026-11-03: de range rekt op na een doorbraak tegen de dag in, live (vooraf vast)
+
+**Aanleiding.** ZEC 2 november (`model_kaarten.py --coins ZEC --tekst` op de VPS). Het short-scenario in de range 1.214-1.255 eindigde als
+`geen_pool`. Daarna steeg de koers tot 1.291, boven de range high, terwijl de dag omlaag bleef wijzen. Een nieuwe range kwam pas bij een
+nieuwe 4u-breuk omlaag, en die kwam niet. De sweep van de top van 1.284,80 en de breuk omlaag lagen dus buiten het model. De CEO: "live en
+niet stil", voor alle coins.
+
+**Regel (long; short gespiegeld). Alleen met dagcandles (top-down).**
+1. Een 4u-candle sluit onder de range low L van de laatste 4u-breuk in de richting van de dag. De dag houdt de richting.
+2. De range blijft bestaan, maar L wordt het laagste low vanaf die candle tot de laatste gesloten 4u-candle. H blijft zoals 4.4. EQ volgt
+   uit L en H.
+3. Dit is een nieuwe range (eigen `range_id`, achtervoegsel `:door:<tijd van die candle>`). Er mag een nieuw scenario in beginnen. Een
+   lopend scenario in de oude range eindigt met `context_weg`.
+4. De range is herkenbaar op het sluiten van die candle. Hij eindigt zoals elke range: een nieuwe 4u-breuk in de richting van de dag, 60
+   candles van 4u na de oorspronkelijke breuk, of een dag die omslaat.
+5. Daarna gelden alle regels van het model ongewijzigd: pools, sweep, shift, displacement, alle instappunten, stop en doel.
+
+**Zonder dagcandles** geldt de oude regel: een slot onder L beëindigt de range.
+
+**Tests.** `tests/hespulse_model/test_model.py` (TopDownTest): het opgerekte scenario geeft een entry. Tegenvoorbeelden: geen slot door de
+rand geeft geen opgerekte range; met de dag omlaag geen long; zonder dagcandles de oude regel. Daarnaast is gecontroleerd dat latere candles
+niets veranderen aan wat eerder vaststond.
+
+**Nooit.** Afstellen op ZEC. Er is geen nieuwe constante.

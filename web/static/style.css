@@ -3362,3 +3362,14 @@ details.mrow-wrap.is-focus .mrow-body .proof-number { font-size: 44px; }
 .kd-entry-state { margin-left: auto; font-size: 12px; color: var(--tx2); }
 .kd-entry-basis, .kd-entry-levels { font: 13px var(--sans); color: var(--tx2); margin: 4px 0 0; }
 .kd-entry-levels { font-family: var(--mono); }
+
+/* Wachtende scenario's als korte regel (B-2026-11-03-07): alleen de kop met de afstand; "Grafiek" klapt de volle kaart uit (kaarten.js). */
+.kc.is-compact { padding-bottom: 0; }
+.kc.is-compact .kc-when, .kc.is-compact .kc-svg { display: none; }
+.kc.is-compact .kc-head { min-height: 44px; }
+.kc-unfold { display: none; }
+.kc.is-compact .kc-unfold { display: inline-block; margin: -4px 0 10px; padding: 4px 10px; border: 1px solid var(--bd); border-radius: 999px;
+  background: none; color: var(--tx2); font: 500 12px / 1.2 var(--sans); cursor: pointer; }
+.kc-dist { color: var(--tx); }
+/* De ongetest-pil staat in het blad en onder de lijst; in de korte regel houdt hij de rij twee regels hoog. */
+.kc.is-compact .kc-tags .pill { display: none; }

@@ -767,7 +767,9 @@ async def _kansen_page(user: dict, skipped=()) -> dict:
     model_rows = repo.list_model_scenarios(statuses=model.WAIT_STATES) + repo.list_model_scenarios(statuses=("afgerond",), entry_states=("wacht",))
     # Alle instappunten per scenario op één kaart (aanvullend besluit CEO 2026-11-03): A, V1, B en P met hun basis en stand.
     extra = repo.list_model_entries(scenario_ids=[r["id"] for r in model_rows])
-    model_rows = [{**r, "entry_points": model_card.entry_points(r, repo.get_model_v1(r["id"]), [e for e in extra if e["scenario_id"] == r["id"]])}
+    mprices = await _cached_prices({r["coin"] for r in model_rows}) if model_rows else {}
+    model_rows = [{**r, "price": mprices.get(r["coin"]),
+                   "entry_points": model_card.entry_points(r, repo.get_model_v1(r["id"]), [e for e in extra if e["scenario_id"] == r["id"]])}
                   for r in model_rows]
     return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped, repo.list_hidden_kansen(user["id"]), ended, model_rows=model_rows,
                        default_tab=model.TRADE_TYPE if focus.model_on() else None)

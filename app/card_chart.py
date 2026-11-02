@@ -279,7 +279,7 @@ def model_svg(row: dict, candles: list[list], price: Optional[float] = None, big
     # Rechts: de niveaus over de breedte (range en evenwicht) en de order (limiet, stop, doel met prijs).
     levels = [(Hi, "mc-level", "4u range high"), (L, "mc-level", "4u range low"), (eq, "mc-level is-eq", "evenwicht")]
     # Aanvullend besluit 2026-11-03: alle instappunten op één grafiek. A is de limiet van het plan; de andere (V1, B, P) staan erbij met
-    # hun letter, en het detailblad zegt per letter waarop hij gebaseerd is. B0 wordt alleen gemeten en staat er nooit.
+    # hun letter, en het detailblad zegt per letter waarop hij gebaseerd is.
     alts = [a for a in row.get("alt_entries") or [] if a.get("limit") is not None]
     alt_from: dict[str, Optional[float]] = {}
     if plan:

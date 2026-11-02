@@ -2,6 +2,23 @@
 
 Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
 
+## Ronde 9 (2026-11-03): ONDO en ZEC nagelopen, de range rekt op, meer meldingen, kortere lijst
+
+**Gecontroleerd op de VPS.**
+- ONDO: V1 (0,4063) vulde niet, stand `weggelopen`. B viel af op `niet_in_premium` (top 0,4063 onder EQ 0,40705). B0 gaf om 05:15 een plan:
+  limiet 0,4016, stop 0,40687, doel 0,3984. B0 was stil. Of hij vulde, staat in `model_entries` (nog niet gezien).
+- ZEC: het short-scenario eindigde `geen_pool`. De top van 1.291 lag boven de range high van 1.255, buiten het model.
+- ONDO scenario 2: begonnen volgens de regel om 08:00, opgeslagen om 12:30 UTC. Oorzaak nog niet vastgesteld.
+
+**Gebouwd, live op besluit van de CEO.**
+- De range rekt op na een 4u-slot door de rand tegen de dag in (B-2026-11-03-05). Test plus drie tegenvoorbeelden en de prefix-toets.
+- Luide melding voor B, B0 en R; B0 op de kaart; korte meldtekst (B-2026-11-03-06). Tests: B0 en R melden één keer; P meldt niet; al
+  door de limiet of tegen BTC meldt niet maar wordt wel gevolgd.
+- Kansen: wachtende scenario's als korte regel op afstand (B-2026-11-03-07). Playwright op 375px: korte regels, uitklappen werkt.
+- De instaplijn op Groot begint op het moment dat de app hem zag.
+
+**Grenzen.** Ongetest. Meer luide meldingen (B, B0, R): het dagbudget van 8 vangt de rest op als stille melding.
+
 ## Ronde 8 (2026-11-03): uitkomst van de PUMP-controle, richting top-down en Groot per tijdframe
 
 **Gecontroleerd op de VPS.** `model_kaarten.py --coins PUMP --dagen 3 --tekst`:

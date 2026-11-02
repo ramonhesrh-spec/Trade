@@ -43,6 +43,8 @@
 
   document.addEventListener("click", function (e) {
     if (hideClick(e)) return;
+    var unfold = e.target.closest && e.target.closest("[data-kc-unfold]");
+    if (unfold) { var kc = unfold.closest("[data-kc]"); if (kc) kc.classList.remove("is-compact"); unfold.remove(); return; }
     var head = e.target.closest && e.target.closest("[data-kc-open]");
     if (head) { openSheet(head.getAttribute("data-kc-open"), head); return; }
     var card = e.target.closest && e.target.closest("[data-kc]");

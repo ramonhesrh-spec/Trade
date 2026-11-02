@@ -130,7 +130,7 @@ voedt `kansen.page(..., ended=)` (rijen onder "Uitgevallen, gemist of vervallen"
 aanvullend besluit over kenmerken).** Het enige model dat meldt. Sinds 2026-11-03 top-down (aanvullend besluit, live, ongetest): de richting komt van de laatste dagbreuk
 (`model.DailyBias`, gesloten dagcandles, `frames["1d"]`, live `model_live.DAY_LIMIT`; dag wijst de andere kant op of nog geen breuk: geen
 scenario, een lopend scenario eindigt `context_weg`) en de 4u-range volgt dan alleen de laatste 4u-breuk in die richting (`Context4h(topdown=True)`,
-een tegenbreuk zoals een herstel binnen een daling telt niet); zonder dagcandles (tests, oude scripts) de oude 4u-regel. `app/model.py` (zuiver): context 4u (`Context4h`, bias uit de laatste breuk,
+een tegenbreuk zoals een herstel binnen een daling telt niet; een 4u-slot door de range-rand tegen de dag in rekt de range op naar het nieuwe uiterste, met een eigen `range_id` `...:door:<tijd>` waarin een nieuw scenario mag beginnen, aanvullend besluit 2026-11-03, ZEC); zonder dagcandles (tests, oude scripts) de oude 4u-regel. `app/model.py` (zuiver): context 4u (`Context4h`, bias uit de laatste breuk,
 60 candles, range L/H/EQ), pools 1u (`Pools`, onaangeraakt ook op 15m, gelijke lows binnen 0,1 ATR één pool), sweep/shift/displacement/FVG op
 15m, limiet op de zone (laagste ongevulde FVG of de overlap met het OB), stop met de 0,4%-vloer (`_floor`, gelijk aan `smc_eval.floor_stop`),
 doel de dichtste van de range-rand en een naakte POC, geen R:R-eis; short = long op gespiegelde candles. Alle constanten vooraf vast; nooit
@@ -151,11 +151,11 @@ boven en onder en het order block, als lichtpaarse vlakken en dunne lijnen met d
 zonder overlap); van het model alleen de andere instappunten en de sweep (`card_chart.model_marks`, `marks`); bovenin één regel trend per tijdframe
 D/4u/1u/15m (`/api/trend/<coin>`, richting van de laatste breuk; zonder candles "onbekend"). Alleen weergave: geen motor leest dit. Alle instappunten op één kaart
 (aanvullend besluit CEO 2026-11-03, preregistratie): A (na sweep, het plan), V1 (`model_v1`), B (lagere top; long: hogere bodem in discount,
-`model._Run._alt`/`_higher_low`, naast A, eindigt het scenario niet), B0 (B zonder premium-eis, alleen gemeten, nergens getoond), R (breuk en terugtest: dezelfde lagere top als B, na de 15m-breuk een limiet op
+`model._Run._alt`/`_higher_low`, naast A, eindigt het scenario niet), B0 (B zonder premium-eis, sinds B-2026-11-03-06 ook op de kaart), R (breuk en terugtest: dezelfde lagere top als B, na de 15m-breuk een limiet op
 het gebroken niveau zonder displacement of gap, `_retest`; aanleiding PUMP 2 november, waar B op de displacement-eis afviel) en P (POC-limiet
 op de dichtste naakte POC bij moment A, `_p`); B, B0 en P staan in `model_entries` (`model_live.store_entries`, stil gevolgd met `track_entry`
 met de regels van H), op de kaartgrafiek als gestippelde lijn met hun letter (`alt_entries`, `.sc-alt`) en in het detailblad onder
-"Instappunten" met basis, niveaus en stand (`model_card.entry_points`); alleen A meldt luid; meting per punt `model_measure.entry_arms`. Iedereen ziet
+"Instappunten" met basis, niveaus en stand (`model_card.entry_points`); A meldt luid, en sinds B-2026-11-03-06 ook B, B0 en R (`model_live.LOUD_CODES`, `_announce_alt` bij het eerste vastleggen, met de poorten van A: niet al door de limiet, plan in de goede volgorde, BTC-poort); P en V1 niet; meldtekst kort (`model_card.levels_line`: alleen limiet, stop en doel); meting per punt `model_measure.entry_arms`. Op Kansen is een wachtend scenario zonder B-, B0- of R-plan een korte regel (`scenario_item` `compact`, `is-compact`, knop "Grafiek" klapt uit in `kaarten.js`), gesorteerd: eerst met plan, dan op afstand tot het dichtste wachtende instappunt (`model_card.nearest_point`, koers uit `_cached_prices`). De instaplijnen op "Groot" beginnen op het moment dat de app ze zag (`card_chart.model_marks` `time`). Iedereen ziet
 het. Meting: `app/model_measure.py` (vulbaar, vertraging, trechter, N_eff, verliesreeks, drawdown met herschikking, zonder beste 5%, 98,75%
 per week; V1/V2/V3 alleen CEO) op Bewijs en in de nachtexport (`model`). Controle achteraf: `scripts/model_kaarten.py` (14 dagen, eerste 30,
 `app/model_chart.full_svg`, per stap herberekend zonder latere candles). `HESPULSE_MODEL_ENABLED` (standaard true) en `MODEL_ONLY_ALERTS`

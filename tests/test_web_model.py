@@ -154,7 +154,7 @@ class ModelProof(ModelTab):
 
 
 class EntryPointsOnTheCard(ModelTab):
-    """Aanvullend besluit CEO 2026-11-03: alle instappunten op één kaart; tik op een punt voor de basis. B0 staat er nooit."""
+    """Aanvullend besluit CEO 2026-11-03: alle instappunten op één kaart; tik op een punt voor de basis. Sinds B-2026-11-03-06 ook B0 (ONDO)."""
 
     def setUp(self):
         super().setUp()
@@ -167,9 +167,8 @@ class EntryPointsOnTheCard(ModelTab):
     def test_detailblad_noemt_elk_punt_met_zijn_basis(self):
         html = self.html()
         self.assertIn("Instappunten", html)
-        for name in ("Na sweep", "Lagere top", "POC-limiet"):
+        for name in ("Na sweep", "Lagere top", "POC-limiet", "Lagere top, ook buiten premium"):
             self.assertIn(name, html)
-        self.assertNotIn("B0", html)
 
     def test_grafiek_tekent_de_letters(self):
         start = int((NOW - pd.Timedelta(hours=30)).timestamp())
@@ -179,4 +178,43 @@ class EntryPointsOnTheCard(ModelTab):
         self.assertIn(">A Limiet", svg)
         self.assertIn(">B 100,50<", svg)
         self.assertIn(">P 98,50<", svg)
-        self.assertNotIn(">B0 ", svg)
+        self.assertIn(">B0 100,70<", svg)
+
+
+class CompactScenarioList(ModelTab):
+    """B-2026-11-03-07 ("28 open en moet je heel lang scrollen"): wachtende scenario's zijn korte regels op afstand, dichtstbij bovenaan;
+    met een wachtend B-, B0- of R-plan blijft het een volle kaart en staat het bovenaan."""
+
+    def setUp(self):
+        super().setUp()
+        self.far = scenario("XRP")
+        self.near = scenario("DOT")
+        self.ready = scenario("LINK")
+        known = (NOW - pd.Timedelta(minutes=30)).isoformat()
+        repo.insert_model_entry(self.ready, {"code": "B0", "coin": "LINK", "direction": "long", "known_at": known, "detected_at": known,
+                                             "limit_price": 99.0, "stop_loss": 97.5, "take_profit": 110.0, "rr": 7.0,
+                                             "expires_at": (NOW + pd.Timedelta(hours=5)).isoformat(), "basis": "{}"})
+        prices = {"SOL": 104.0, "XRP": 110.0, "DOT": 98.5, "LINK": 120.0, "ADA": 100.0}
+        p = mock.patch.object(main, "_cached_prices", mock.AsyncMock(side_effect=lambda coins: {c: prices[c] for c in coins if c in prices}))
+        p.start()
+        self.addCleanup(p.stop)
+
+    def order(self, html):
+        ids = [f'id="radar-model-{i}"' for i in (self.ready, self.near, self.sc, self.far)]
+        return [html.index(i) for i in ids]
+
+    def test_plan_eerst_daarna_op_afstand(self):
+        pos = self.order(self.html())
+        self.assertEqual(pos, sorted(pos))
+
+    def test_korte_regel_met_afstand_en_uitklapknop(self):
+        html = self.html()
+        card = html[html.index(f'id="radar-model-{self.near}"') - 200:]
+        self.assertIn("is-compact", card[:400])
+        self.assertIn("0,5% tot pool", html)                      # DOT 98,5 tegen de pool 98
+        self.assertIn("data-kc-unfold", html)
+
+    def test_tegenvoorbeeld_met_plan_geen_korte_regel(self):
+        html = self.html()
+        start = html.rindex("<article", 0, html.index(f'id="radar-model-{self.ready}"'))
+        self.assertNotIn("is-compact", html[start:html.index(">", start)])

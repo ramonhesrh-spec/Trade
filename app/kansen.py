@@ -295,7 +295,9 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
         hid_plans = sorted(dedupe([p for p in tab_plans if p["key"] in hidden], "limit"), key=_sort_key)
         hid_trades = sorted(dedupe([t for t in tab_trades if t["key"] in hidden], "entry"), key=lambda t: t["created_at"], reverse=True)
         tab_sc = [s for s in scenarios if s["tab"] == k and k in wanted]
-        sc_shown = sorted([s for s in tab_sc if s["key"] not in hidden], key=lambda s: s.get("created_at") or "", reverse=True)
+        # B-2026-11-03-07: eerst wat een plan heeft (B, B0 of R), dan op afstand tot het dichtste instappunt; zonder koers achteraan.
+        sc_shown = sorted(sorted([s for s in tab_sc if s["key"] not in hidden], key=lambda s: s.get("created_at") or "", reverse=True),
+                          key=lambda s: (not s.get("ready"), s.get("dist_pct") is None, s.get("dist_pct") or 0.0))
         sc_hidden = [s for s in tab_sc if s["key"] in hidden]
         zone = sum(1 for p in mine if p["state"] == "in_zone")
         moot = [{"title": f"{c['coin']} {c['direction']}", "label": c["state_label"], "reason": end_reason.text(k, c["state"]),

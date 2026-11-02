@@ -91,10 +91,11 @@ def btc_of(row: dict) -> dict:
         return {}
 
 
-# Aanvullend besluit CEO 2026-11-03: alle instappunten op één kaart; de gebruiker kiest. B0 wordt alleen gemeten en staat hier nooit.
+# Aanvullend besluit CEO 2026-11-03: alle instappunten op één kaart; de gebruiker kiest. Sinds B-2026-11-03-06 staat B0 er ook (ONDO).
 ENTRY_INFO = {
     "A": ("Na sweep", "Sweep van een liquiditeitspool, daarna een breuk op 15m met displacement; limiet op de gap."),
     "B": ("Lagere top", "Een lagere 1u-top in premium (long: hogere bodem in discount), daarna een breuk op 15m met displacement; limiet op de gap."),
+    "B0": ("Lagere top, ook buiten premium", "Als B, maar de lagere top mag ook onder het evenwicht van de range liggen (long: boven); limiet op de gap."),
     "V1": ("Vroege limiet op de pool", "Limiet op de liquiditeitspool zelf, zonder op de sweep te wachten; stop 1 ATR (1u) erachter."),
     "R": ("Breuk en terugtest", "Een lagere 1u-top in premium (long: hogere bodem in discount), daarna een slot voorbij het laatste 15m-dal; limiet op dat gebroken niveau, zonder displacement of gap."),
     "P": ("POC-limiet", "Limiet op de dichtste naakte dag- of week-POC aan de goede kant van het evenwicht; stop 1 ATR (1u) erachter."),
@@ -235,11 +236,35 @@ def scenario_rows(row: dict) -> list[dict]:
     return [{**r, "text": price_text.nl(r["value"]), "copy": price_text.plain(r["value"])} for r in rows]
 
 
+READY_CODES = ("B", "B0", "R")
+
+
+def nearest_point(row: dict) -> tuple[Optional[str], Optional[float]]:
+    """Het dichtste wachtende instappunt bij de koers van nu (row['price'], gezet door de route), als (letter, afstand in %). Zonder punt de
+    pool. Zonder koers (None, None). Alleen voor de volgorde en de korte regel van de lijst (B-2026-11-03-07), nooit voor een melding."""
+    price = row.get("price")
+    if not price:
+        return None, None
+    levels = [(p["code"], p["limit"]) for p in row.get("entry_points") or [] if p.get("state") == "wacht" and p.get("limit") is not None]
+    if not levels and row.get("pool_level") is not None:
+        levels = [("pool", row["pool_level"])]
+    if not levels:
+        return None, None
+    code, level = min(levels, key=lambda x: abs(price - x[1]))
+    return code, abs(price - level) / price * 100
+
+
 def scenario_item(row: dict, now: Optional[datetime] = None) -> dict:
-    """Moment A als item voor kansen.page: geen order, wel de stappen en de zin waarop we wachten."""
+    """Moment A als item voor kansen.page: geen order, wel de stappen en de zin waarop we wachten. Met een wachtend B-, B0- of R-plan is hij
+    `ready` en blijft hij een volle kaart; anders een korte regel (`compact`) met de afstand tot het dichtste instappunt (CEO 2026-11-03:
+    "28 open en moet je heel lang scrollen")."""
     sid = row["id"]
-    return {"kind": "scenario", "key": key(sid), "dom_id": dom_id(sid), "coin": row["coin"], "direction": row["direction"],
-            "title": f"{row['coin']} {row['direction']}", "state": "scenario", "state_short": STATE_SHORT.get(row["status"], "Scenario"),
+    ready = any(p["code"] in READY_CODES and p.get("state") == "wacht" for p in row.get("entry_points") or [])
+    code, dist = nearest_point(row)
+    ready_codes = [p["code"] for p in row.get("entry_points") or [] if p["code"] in READY_CODES and p.get("state") == "wacht"]
+    dist_text = "" if dist is None else f"{dist:.1f}".replace(".", ",") + f"% tot {code}"
+    return {"ready": ready, "compact": not ready, "dist_pct": dist, "dist_text": dist_text,"kind": "scenario", "key": key(sid), "dom_id": dom_id(sid), "coin": row["coin"], "direction": row["direction"],
+            "title": f"{row['coin']} {row['direction']}", "state": "scenario", "state_short": f"Plan {'/'.join(ready_codes)} klaar" if ready else STATE_SHORT.get(row["status"], "Scenario"),
             "group": "scenarios", "tab": TRADE_TYPE, "trade_type": TRADE_TYPE, "untested": True, "rr_text": "",
             "svg_src": f"/api/kaart_svg/{key(sid)}", "chart": scenario_chart(row), "say": waiting_text(row), "steps_done": step_lines(row, now),
             "candidates_text": candidate_text(row), "rows": scenario_rows(row), "created_at": row.get("detected_at"),
@@ -284,17 +309,18 @@ def target_word(row: dict) -> str:
     return "rand van de range" if row.get("target_kind") == "range" else (row.get("target_text") or "naakte POC")
 
 
-def entry_title(row: dict) -> str:
+def entry_title(row: dict, code: str = "A") -> str:
     from app import push_notify
-    return push_notify.alert_title(row["coin"], row["direction"], "HesPulse · entry")
+    return push_notify.alert_title(row["coin"], row["direction"], f"HesPulse {code}")
+
+
+def levels_line(limit: float, stop: float, take: Optional[float]) -> str:
+    """Kort en bondig (CEO 2026-11-03: "nu is het zo'n lange tekst"): alleen de drie niveaus. De uitleg staat op de kaart."""
+    return f"Limiet {fp(limit)} · Stop {fp(stop)}" + (f" · Doel {fp(take)}" if take is not None else "")
 
 
 def entry_body(row: dict) -> str:
-    """De ene luide melding (besluit CEO 3): zet de order nu."""
-    from app import push_notify
-    return "\n".join([f"Limiet {fp(row['limit_price'])}" + (f" · R:R {row['rr']:.1f}" if row.get("rr") else ""),
-                      f"Stop {fp(row['stop_loss'])} · Doel {fp(row['take_profit'])} ({target_word(row)})",
-                      "Sweep, shift en gap zijn er: zet je limietorder als je hem wilt. 6 uur geldig. Ongetest.", push_notify.OPEN_PLAN_LINE])
+    return levels_line(row["limit_price"], row["stop_loss"], row.get("take_profit"))
 
 
 def fill_title(row: dict) -> str:
@@ -303,9 +329,7 @@ def fill_title(row: dict) -> str:
 
 
 def fill_body(row: dict) -> str:
-    from app import push_notify
-    return "\n".join([f"Limiet geraakt op {fp(row['limit_price'])}, stop {fp(row['stop_loss'])}, doel {fp(row['take_profit'])}",
-                      "Stond jouw limiet er, dan is die nu gevuld. Het systeem plaatst zelf nooit een order. Ongetest.", push_notify.OPEN_PLAN_LINE])
+    return f"Gevuld op {fp(row['limit_price'])} · Stop {fp(row['stop_loss'])} · Doel {fp(row['take_profit'])}"
 
 
 def signal_row(row: dict) -> dict:
