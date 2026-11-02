@@ -480,7 +480,7 @@ class _Run:
         return {"known": T, "limit": poc.price, "stop": stop, "take": tgt[2] if tgt else None, "target_kind": tgt[0] if tgt else None,
                 "target_label": tgt[1] if tgt else None, "rr": rr, "label": poc.label}
 
-    def _higher_low(self, t: int, ctx: Context, discount_only: bool, used: set) -> Optional[tuple[int, float, int]]:
+    def _higher_low(self, t: int, ctx: Context, discount_only: bool, used: set, log: Optional[list] = None) -> Optional[tuple[int, float, int]]:
         """B: een 1u-swing low die op het sluiten van 15m-candle t bekend werd, hoger dan de vorige bekende swing low sinds de swing van de
         range, tussen L en EQ (B) of L en H (B0), binnen 6% van het slot en nog zonder slot eronder. (j15, X, p) of None."""
         f, f1 = self.f15, self.f1
@@ -492,9 +492,13 @@ class _Run:
                 continue
             prev = [r for r in range(p - 1, -1, -1) if self.pools.flags[r] and int(f1.ts[r].value) >= start_ns][:1]
             low = float(f1.l[p])
-            if not prev or low <= f1.l[prev[0]] or low < ctx.L or low > (ctx.eq if discount_only else ctx.H):
-                continue
-            if (f.c[t] - low) / abs(f.c[t]) * 100 > MAX_DISTANCE_PCT:
+            why = ("geen_vorige_swing" if not prev else "niet_lager_dan_vorige" if low <= f1.l[prev[0]] else "buiten_de_range" if low < ctx.L
+                   else "niet_in_premium" if low > (ctx.eq if discount_only else ctx.H) else None)
+            if why is None and (f.c[t] - low) / abs(f.c[t]) * 100 > MAX_DISTANCE_PCT:
+                why = "te_ver_van_de_koers"
+            if why:
+                if log is not None:
+                    log.append({"at": int(f.ct[t]), "wat": why, "niveau": low})
                 continue
             lo = int(np.searchsorted(f.ts.asi8, f1.ts[p].value, side="left"))
             hi = int(np.searchsorted(f.ts.asi8, (f1.ts[p] + TF["1h"]).value, side="left"))
@@ -508,28 +512,31 @@ class _Run:
 
     def _alt(self, a: _Active, t: int, ctx: Context, code: str) -> None:
         """Eén B- of B0-entry per scenario, naast A; eindigt het scenario, dan stopt dit ook. Alleen candles tot en met t."""
-        tr = a.alts.setdefault(code, {"phase": "zoek", "used": set(), "entry": None})
+        tr = a.alts.setdefault(code, {"phase": "zoek", "used": set(), "entry": None, "log": []})
         if tr["entry"] is not None:
             return
         f = self.f15
         T = int(f.ct[t])
         if tr["phase"] == "zoek":
-            hit = self._higher_low(t, ctx, code == "B", tr["used"])
+            hit = self._higher_low(t, ctx, code == "B", tr["used"], tr["log"])
             if hit is None:
                 return
             j, X, p = hit
             tr["used"].add(p)
             tops = [q for q in range(0, j - K_15M + 1) if self.hi15[q]]
             if not tops:
+                tr["log"].append({"at": T, "wat": "geen_top", "niveau": X})
                 return
             bp = tops[-1]
             tr.update(phase="wacht_shift", j=j, X=X, B=float(f.h[bp]), top_at=int(f.ts[bp].value), low_at=int(f.ts[j].value), found=T,
                       checked=j)
+            tr["log"].append({"at": T, "wat": "gevonden", "niveau": X})
         if tr["phase"] == "wacht_shift":
             for u in range(tr["checked"] + 1, t + 1):
                 tr["checked"] = u
                 if f.c[u] < tr["X"] or u >= tr["j"] + SHIFT_BARS:
                     tr["phase"] = "zoek"
+                    tr["log"].append({"at": int(f.ct[u]), "wat": "geen_shift", "niveau": tr["X"]})
                     return
                 if f.c[u] > tr["B"]:
                     tr["c"], tr["phase"] = u, "wacht_fvg"
@@ -542,10 +549,12 @@ class _Run:
                 return
             if what == "geen":
                 tr["phase"] = "zoek"
+                tr["log"].append({"at": T, "wat": "geen_displacement", "niveau": tr["X"]})
                 return
             reason, e = self._plan(t, ctx, k, fvgs, tr["X"], tr["c"], premium_check=(code == "B"))
             if e is None:
                 tr["phase"] = "zoek"
+                tr["log"].append({"at": T, "wat": reason, "niveau": tr["X"]})
                 return
             tr["entry"] = {**e, "extreme": tr["X"], "low_at": tr["low_at"], "top": tr["B"], "top_at": tr["top_at"],
                            "shift_at": int(f.ct[tr["c"]])}
@@ -678,6 +687,9 @@ class _Run:
                                            "target_label": a.p["target_label"], "label": a.p["label"]},
         }
         for code in ALT_CODES:
+            # Alleen voor de controle achteraf (scripts/model_kaarten.py --tekst): waar een lagere top afviel. Geen stap, geen kaart.
+            out[code.lower() + "_log"] = [{"at": _ts(x["at"]), "wat": x["wat"], "niveau": self.px(x["niveau"])}
+                                          for x in (a.alts.get(code) or {}).get("log", [])]
             e = (a.alts.get(code) or {}).get("entry")
             out[code.lower()] = None if e is None else {
                 "known_at": _ts(e["known"]), "limit": self.px(e["limit"]), "stop": self.px(e["stop"]), "take": self.px(e["take"]),
