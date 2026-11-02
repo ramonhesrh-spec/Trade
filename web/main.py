@@ -186,8 +186,9 @@ THEME_BG = {"dark": "#0a0e0f", "light": "#f4f6f6"}
 
 
 def theme_of(request: Optional[Request]) -> str:
-    value = request.cookies.get(THEME_COOKIE) if request is not None else None
-    return value if value in THEMES else "dark"
+    """Altijd licht (CEO 2026-11-03: "alleen een witte versie"). Een oude cookie of de donkere stand van het toestel verandert niets meer;
+    eerder werd de site 's avonds via "systeem" ineens zwart."""
+    return "light"
 
 
 templates.env.globals["theme_of"] = theme_of

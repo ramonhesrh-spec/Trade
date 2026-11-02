@@ -69,7 +69,7 @@ class TokenTests(unittest.TestCase):
         # TH uit docs/design/hespulse_v3.dc.html. Bijtekst is een tint donkerder (licht) of lichter (donker) dan het ontwerp, zodat hij
         # de 6,9:1 haalt die het ontwerp zelf eist; --bg en --s1 blijven de bestaande, een stap ervan af en niet te zien.
         for name, dark, light in (("--s2", "#1c2427", "#e7ecec"), ("--bd", "#263235", "#d3dbdb"), ("--tx", "#eef3f3", "#0d1415"),
-                                  ("--aci", "#3fd3ce", "#05706c"), ("--win", "#3dd68c", "#0b7a47"), ("--loss", "#ff6b6b", "#c42f2c"),
+                                  ("--aci", "#3fd3ce", "#1b2324"), ("--win", "#3dd68c", "#0b7a47"), ("--loss", "#ff6b6b", "#c42f2c"),
                                   ("--cu", "#8f9b9e", "#a9b3b5"), ("--cdn", "#55625f", "#6b7779")):
             self.assertEqual(resolve(DARK, name).lower(), dark, name)
             self.assertEqual(resolve(LIGHT, name).lower(), light, name)
@@ -130,11 +130,17 @@ class ThemeChoiceTests(unittest.TestCase):
         self.patch.stop()
         self.tmp.cleanup()
 
-    def test_zonder_keuze_donker(self):
-        html = self.client.get("/account").text
-        self.assertIn('<html lang="nl" data-theme="dark"', html)
-        self.assertIn('<meta name="color-scheme" content="dark">', html)
-        self.assertIn('<meta name="theme-color" content="#0a0e0f" media="(prefers-color-scheme: light)">', html)
+    def test_altijd_licht_wat_de_cookie_ook_zegt(self):
+        # CEO 2026-11-03: "alleen een witte versie". Ook een oude keuze, "systeem" of een rare cookie geeft licht.
+        for value in (None, "dark", "system", '"><script>'):
+            if value is None:
+                self.client.cookies.clear()
+            else:
+                self.client.cookies.set(main.THEME_COOKIE, value)
+            html = self.client.get("/vandaag").text
+            self.assertIn('<html lang="nl" data-theme="light"', html, value)
+            self.assertIn('<meta name="color-scheme" content="light">', html, value)
+            self.assertNotIn("<script>\"", html)
 
     def test_gekozen_licht_komt_van_de_server_zonder_flits(self):
         self.client.cookies.set(main.THEME_COOKIE, "light")
@@ -144,32 +150,10 @@ class ThemeChoiceTests(unittest.TestCase):
         self.assertIn("html{background:#f4f6f6}", html)
         self.assertEqual(html.count('content="#f4f6f6"'), 2)          # beide theme-color-varianten
 
-    def test_systeem_volgt_het_toestel(self):
-        self.client.cookies.set(main.THEME_COOKIE, "system")
-        html = self.client.get("/vandaag").text
-        self.assertIn('data-theme="system"', html)
-        self.assertIn('<meta name="color-scheme" content="dark light">', html)
-        self.assertIn('<meta name="theme-color" content="#0a0e0f" media="(prefers-color-scheme: dark)">', html)
-        self.assertIn('<meta name="theme-color" content="#f4f6f6" media="(prefers-color-scheme: light)">', html)
-        self.assertIn("@media (prefers-color-scheme: light){html{background:#f4f6f6}}", html)
-
-    def test_een_onbekende_cookie_is_donker(self):
-        self.client.cookies.set(main.THEME_COOKIE, '"><script>')
-        html = self.client.get("/vandaag").text
-        self.assertIn('data-theme="dark"', html)
-        self.assertNotIn("<script>\"", html)
-
-    def test_account_toont_de_keuze_met_de_huidige_aangevinkt(self):
-        self.client.cookies.set(main.THEME_COOKIE, "light")
+    def test_account_heeft_geen_themakeuze_meer(self):
         html = self.client.get("/account").text
-        sec = html[html.index('id="weergave"'):]
-        sec = sec[:sec.index("</form>")]
-        for value, label in (("system", "Systeem"), ("dark", "Donker"), ("light", "Licht")):
-            self.assertIn(f'value="{value}"', sec)
-            self.assertIn(label, sec)
-        self.assertRegex(sec, r'value="light" checked')
-        self.assertNotRegex(sec, r'value="dark" checked')
-        self.assertIn('action="/instellingen/thema"', sec)
+        self.assertNotIn('id="weergave"', html)
+        self.assertNotIn("data-theme-pick", html)
 
     def test_zonder_js_bewaart_het_formulier_de_keuze(self):
         r = self.client.post("/instellingen/thema", data={"thema": "light"}, follow_redirects=False)
@@ -179,15 +163,11 @@ class ThemeChoiceTests(unittest.TestCase):
         r = self.client.post("/instellingen/thema", data={"thema": "paars"}, follow_redirects=False)
         self.assertIn(f"{main.THEME_COOKIE}=dark", r.headers["set-cookie"])
 
-    def test_themascript_in_try_catch_en_haak_voor_de_statusbalk(self):
-        src = (main.BASE_DIR / "static" / "theme.js").read_text(encoding="utf-8")
-        self.assertIn("try", src)
-        self.assertIn("localStorage", src)
-        self.assertIn("HP.applyThemeColor", src)
-        self.assertIn("hp_theme", src)
+    def test_een_oude_keuze_op_het_toestel_wordt_gewist(self):
         html = self.client.get("/vandaag").text
         head = html[:html.index("</head>")]
-        self.assertRegex(head, r"try \{[^}]*localStorage\.getItem\(\"hp_theme\"\)")
+        self.assertRegex(head, r"try \{[^}]*localStorage\.removeItem\(\"hp_theme\"\)")
+        self.assertNotIn('localStorage.getItem("hp_theme")', head)
 
 
 if __name__ == "__main__":

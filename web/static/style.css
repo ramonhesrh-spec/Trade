@@ -127,15 +127,15 @@
   --bg: #f4f6f6; --bg-elevated: #ffffff; --panel: #ffffff; --panel-hover: #eef2f2; --border: #dce2e3; --border-strong: #c3cccd;
   --border-interactive: #7b8b8d; --text: #0d1415; --text-dim: #3e4a4c; --muted: #4a5759;
   --green: #0f7a45; --green-bg: rgba(15, 122, 69, 0.12); --red: #c42f3d; --red-bg: rgba(196, 47, 61, 0.11); --amber: #8a5300;
-  --accent: #067a76; --accent-dark: #045c59; --accent-bg: rgba(10, 186, 181, 0.13); --on-accent: #ffffff;
-  --candle-up: #0a9a95; --candle-down: #3e4a4c;
+  --accent: #1b2324; --accent-dark: #0d1415; --accent-bg: rgba(13, 20, 21, 0.06); --on-accent: #ffffff;
+  --candle-up: #8a9698; --candle-down: #1b2324;
   --shadow-sm: 0 1px 2px rgba(13, 20, 21, 0.08); --shadow-md: 0 4px 16px -4px rgba(13, 20, 21, 0.14), 0 1px 2px rgba(13, 20, 21, 0.06);
   --glow-top-peak: transparent; --glow-top-shoulder: transparent; --glow-top-mid: transparent; --glow-top-tail: transparent;
   --glow-edge: #f4f6f6; --glow-tab: none;
-  --s2: #e7ecec; --bd: #d3dbdb; --tx: #0d1415; --tx2: #4a5759; --ac: #0ABAB5; --aci: #05706c; --onac: #03201f; --actint: rgba(10, 186, 181, 0.13);
-  --win: #0b7a47; --loss: #c42f2c; --zone: rgba(10, 186, 181, 0.16); --zone-in: rgba(10, 186, 181, 0.26); --cu: #a9b3b5; --cdn: #6b7779;
+  --s2: #e7ecec; --bd: #d3dbdb; --tx: #0d1415; --tx2: #4a5759; --ac: #1b2324; --aci: #1b2324; --onac: #ffffff; --actint: rgba(13, 20, 21, 0.06);
+  --win: #0b7a47; --loss: #c42f2c; --zone: rgba(13, 20, 21, 0.07); --zone-in: rgba(13, 20, 21, 0.13); --cu: #a9b3b5; --cdn: #6b7779;
   --glass: rgba(255, 255, 255, 0.9); --press: rgba(13, 20, 21, 0.05); --chart-grid: rgba(13, 20, 21, 0.06);
-  --mc-ink: #1b2324; --mc-paper: #ffffff; --mc-line: #8a9698; --mz: rgba(124, 92, 214, 0.13); --mz-edge: rgba(124, 92, 214, 0.40); --mz-tx: #4f35a8;
+  --mc-ink: #1b2324; --mc-paper: #ffffff; --mc-line: #8a9698; --mz: rgba(13, 20, 21, 0.07); --mz-edge: rgba(13, 20, 21, 0.30); --mz-tx: #1b2324;
 }
 @media (prefers-color-scheme: light) {
   :root[data-theme="system"] {
@@ -143,15 +143,15 @@
   --bg: #f4f6f6; --bg-elevated: #ffffff; --panel: #ffffff; --panel-hover: #eef2f2; --border: #dce2e3; --border-strong: #c3cccd;
   --border-interactive: #7b8b8d; --text: #0d1415; --text-dim: #3e4a4c; --muted: #4a5759;
   --green: #0f7a45; --green-bg: rgba(15, 122, 69, 0.12); --red: #c42f3d; --red-bg: rgba(196, 47, 61, 0.11); --amber: #8a5300;
-  --accent: #067a76; --accent-dark: #045c59; --accent-bg: rgba(10, 186, 181, 0.13); --on-accent: #ffffff;
-  --candle-up: #0a9a95; --candle-down: #3e4a4c;
+  --accent: #1b2324; --accent-dark: #0d1415; --accent-bg: rgba(13, 20, 21, 0.06); --on-accent: #ffffff;
+  --candle-up: #8a9698; --candle-down: #1b2324;
   --shadow-sm: 0 1px 2px rgba(13, 20, 21, 0.08); --shadow-md: 0 4px 16px -4px rgba(13, 20, 21, 0.14), 0 1px 2px rgba(13, 20, 21, 0.06);
   --glow-top-peak: transparent; --glow-top-shoulder: transparent; --glow-top-mid: transparent; --glow-top-tail: transparent;
   --glow-edge: #f4f6f6; --glow-tab: none;
-  --s2: #e7ecec; --bd: #d3dbdb; --tx: #0d1415; --tx2: #4a5759; --ac: #0ABAB5; --aci: #05706c; --onac: #03201f; --actint: rgba(10, 186, 181, 0.13);
-  --win: #0b7a47; --loss: #c42f2c; --zone: rgba(10, 186, 181, 0.16); --zone-in: rgba(10, 186, 181, 0.26); --cu: #a9b3b5; --cdn: #6b7779;
+  --s2: #e7ecec; --bd: #d3dbdb; --tx: #0d1415; --tx2: #4a5759; --ac: #1b2324; --aci: #1b2324; --onac: #ffffff; --actint: rgba(13, 20, 21, 0.06);
+  --win: #0b7a47; --loss: #c42f2c; --zone: rgba(13, 20, 21, 0.07); --zone-in: rgba(13, 20, 21, 0.13); --cu: #a9b3b5; --cdn: #6b7779;
   --glass: rgba(255, 255, 255, 0.9); --press: rgba(13, 20, 21, 0.05); --chart-grid: rgba(13, 20, 21, 0.06);
-  --mc-ink: #1b2324; --mc-paper: #ffffff; --mc-line: #8a9698; --mz: rgba(124, 92, 214, 0.13); --mz-edge: rgba(124, 92, 214, 0.40); --mz-tx: #4f35a8;
+  --mc-ink: #1b2324; --mc-paper: #ffffff; --mc-line: #8a9698; --mz: rgba(13, 20, 21, 0.07); --mz-edge: rgba(13, 20, 21, 0.30); --mz-tx: #1b2324;
   }
 }
 
@@ -1218,7 +1218,7 @@ main + .footer { border-top: 1px solid var(--border); }
 .button-primary {
   display: inline-block; background: var(--accent); color: var(--on-accent); text-decoration: none;
   padding: var(--space-6) var(--space-10); border-radius: var(--radius-sm); font-weight: 700; font-size: var(--text-md);
-  box-shadow: 0 4px 20px -4px rgba(10, 186, 181, 0.35);
+  box-shadow: 0 4px 20px -4px rgba(13, 20, 21, 0.35);
   transition: background .15s, transform .1s;
 }
 .button-primary:hover { background: var(--accent-dark); transform: translateY(-1px); }
@@ -1373,7 +1373,7 @@ main + .footer { border-top: 1px solid var(--border); }
 .chart-tool-btn {
   position: absolute; top: 10px; right: 10px; z-index: 3;
   display: flex; align-items: center; gap: var(--space-3);
-  background: rgba(10, 14, 15, 0.75); color: var(--text-dim); border: 1px solid var(--border-strong);
+  background: rgba(255, 255, 255, 0.92); color: var(--text-dim); border: 1px solid var(--border-strong);
   border-radius: var(--radius-sm); padding: var(--space-3) var(--space-5); font-size: var(--text-sm); font-weight: 600;
 }
 .chart-tool-btn svg { width: 14px; height: 14px; }
@@ -1381,7 +1381,7 @@ main + .footer { border-top: 1px solid var(--border); }
 .chart-tool-btn.is-active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .chart-draw-hint {
   position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 3;
-  background: rgba(10, 14, 15, 0.92); color: var(--accent); border: 1px solid var(--accent);
+  background: rgba(255, 255, 255, 0.92); color: var(--accent); border: 1px solid var(--accent);
   border-radius: 999px; padding: var(--space-3) var(--space-7); font-size: var(--text-base); font-weight: 600;
   white-space: nowrap; pointer-events: none;
 }
@@ -1441,7 +1441,7 @@ main + .footer { border-top: 1px solid var(--border); }
    plaats van een lege, mogelijk "kapot ogende" grafiek. */
 .chart-loading {
   position: absolute; inset: 0; z-index: 2; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: var(--space-6); background: #131a1b;
+  align-items: center; justify-content: center; gap: var(--space-6); background: var(--panel);
 }
 .chart-loading-bars { display: flex; align-items: flex-end; gap: var(--space-3); height: 40px; }
 .chart-loading-bars span {
@@ -1487,8 +1487,8 @@ main + .footer { border-top: 1px solid var(--border); }
 /* Coin grafiek: zone-blok voor gegroepeerde niveaus (bijvoorbeeld een box) */
 .chart-zone {
   position: absolute; left: 0; right: 60px; pointer-events: none; min-height: 6px;
-  background: rgba(10, 186, 181, 0.10); border-top: 1px dashed rgba(10, 186, 181, 0.5);
-  border-bottom: 1px dashed rgba(10, 186, 181, 0.5);
+  background: rgba(13, 20, 21, 0.10); border-top: 1px dashed rgba(13, 20, 21, 0.5);
+  border-bottom: 1px dashed rgba(13, 20, 21, 0.5);
 }
 /* right, niet left: lightweight-charts tekent de titel van een
    createPriceLine() (entry/stop loss/take profit) altijd links in het
@@ -1498,7 +1498,7 @@ main + .footer { border-top: 1px solid var(--border); }
    vallen. Rechts, vlak voor de prijsas, blijft altijd vrij. */
 .chart-zone span {
   position: absolute; top: 2px; right: 8px; font-size: var(--text-xs); font-weight: 600;
-  color: var(--accent); background: rgba(10, 14, 15, 0.85); padding: 1px var(--space-3);
+  color: var(--accent); background: rgba(255, 255, 255, 0.92); padding: 1px var(--space-3);
   border-radius: 3px; white-space: nowrap; border: 1px solid var(--border-strong);
 }
 
@@ -1530,7 +1530,7 @@ main + .footer { border-top: 1px solid var(--border); }
 .chart-zone-sr span {
   position: absolute; top: 2px; right: 8px; font-size: var(--text-xs); font-weight: 600;
   z-index: 1;
-  color: #a78bfa; background: rgba(10, 14, 15, 0.85); padding: 1px var(--space-3);
+  color: var(--tx); background: rgba(255, 255, 255, 0.92); padding: 1px var(--space-3);
   border-radius: 3px; white-space: nowrap; border: 1px solid var(--border-strong);
 }
 
@@ -1643,7 +1643,7 @@ main + .footer { border-top: 1px solid var(--border); }
   margin-top: var(--space-7); padding: var(--space-9) var(--space-10); border-radius: var(--radius);
   border: 1px solid var(--border-strong);
   background:
-    radial-gradient(120% 140% at 0% 0%, rgba(10, 186, 181, 0.14), transparent 55%),
+    radial-gradient(120% 140% at 0% 0%, rgba(13, 20, 21, 0.14), transparent 55%),
     radial-gradient(90% 120% at 100% 100%, rgba(51, 214, 159, 0.08), transparent 60%),
     var(--panel);
   box-shadow: var(--shadow-md);
@@ -1809,7 +1809,7 @@ h2 {
 .page-intro { max-width: 62ch; color: var(--text-dim); line-height: 1.55; }
 
 /* Kop: woordmerk, tabbladen met een turquoise onderstreping op de pagina waar je bent. */
-.topbar { background: rgba(10, 14, 15, 0.92); backdrop-filter: blur(10px); }
+.topbar { background: var(--glass); backdrop-filter: blur(10px); }
 .topbar .brand span { font-family: var(--display); font-weight: 800; font-size: 22px; letter-spacing: 0.16em; text-transform: uppercase; }
 .nav-links { overflow-x: auto; scrollbar-width: none; flex: 1; gap: var(--space-9); }
 .nav-links::-webkit-scrollbar { display: none; }
@@ -1936,7 +1936,7 @@ html.reveal-done main > * { animation: none; opacity: 1; transform: none; }
 .setup-weak strong { color: #f2b24c; }
 
 /* Stap 1 pulseert zodra de koers dicht bij de voorwaarde is (0,5% of minder). De puls hangt aan de live afstand, niet aan de klok. */
-@keyframes step-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(10, 186, 181, 0.55); } 50% { box-shadow: 0 0 0 8px rgba(10, 186, 181, 0); } }
+@keyframes step-pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(13, 20, 21, 0.55); } 50% { box-shadow: 0 0 0 8px rgba(13, 20, 21, 0); } }
 .vd-step.is-now.is-near .vd-step-n { animation: step-pulse 1.6s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .vd-step.is-now.is-near .vd-step-n { animation: none; } }
 
@@ -2642,7 +2642,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .filter-row .filter-chips { flex: 1; min-width: 0; margin: 0; gap: var(--space-3);
   -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent); mask-image: linear-gradient(90deg, #000 calc(100% - 20px), transparent); }
 .filter-chips .chip { padding: 5px 12px; border: 1px solid var(--border-strong); color: var(--text-dim); font-size: var(--text-sm); line-height: 1.4; }
-.filter-chips .chip.is-active { background: var(--accent-bg); border-color: rgba(10, 186, 181, 0.45); color: var(--accent); }
+.filter-chips .chip.is-active { background: var(--accent-bg); border-color: rgba(13, 20, 21, 0.45); color: var(--accent); }
 .stack-toggle, .stack-icon, .stack-act { font: inherit; font-weight: 500; cursor: pointer; }
 .stack-toggle { flex: none; padding: 5px 2px; background: none; border: 0; color: var(--accent); font-size: var(--text-sm); }
 .stack-toggle:hover, .stack-toggle:active { background: none; color: var(--accent); }
@@ -2661,7 +2661,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .stack-act + .stack-act { border-left: 1px solid var(--border-strong); }
 .stack-act:hover { background: var(--panel-hover); color: var(--text); }
 .stack-act.is-keep { background: var(--accent-bg); color: var(--accent); }
-.stack-act.is-keep:hover { background: rgba(10, 186, 181, 0.22); color: var(--accent); }
+.stack-act.is-keep:hover { background: rgba(13, 20, 21, 0.22); color: var(--accent); }
 .stack-act:disabled { opacity: 0.4; cursor: default; }
 .stack-toggle:focus-visible, .stack-icon:focus-visible, .stack-act:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 
@@ -2716,7 +2716,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .state-pill { display: inline-flex; align-items: center; gap: var(--space-3); min-height: 26px; padding: 0 var(--space-5); border: 1px solid var(--border-strong);
   border-radius: var(--radius-pill); color: var(--text-dim); font-size: var(--text-sm); font-weight: 600; white-space: nowrap; }
 .state-pill::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
-.state-pill.is-in_zone, .state-pill.is-open, .state-pill.is-fired { color: var(--accent); background: var(--accent-bg); border-color: rgba(10, 186, 181, 0.45); }
+.state-pill.is-in_zone, .state-pill.is-open, .state-pill.is-fired { color: var(--accent); background: var(--accent-bg); border-color: rgba(13, 20, 21, 0.45); }
 .state-pill.is-ongeldig { color: var(--red); border-color: rgba(242, 104, 92, 0.45); }
 .state-pill.is-door_zone, .state-pill.is-doel_geraakt, .state-pill.is-laden, .state-pill.is-expired, .state-pill.is-missed { color: var(--muted); }
 .kind-tag { display: inline-flex; align-items: center; min-height: 26px; padding: 0 var(--space-4); border-radius: var(--radius-pill); background: var(--panel);
@@ -2742,7 +2742,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .lc-key.is-line-stop::before { background: var(--red); }
 .lc-key.is-line-take::before { background: var(--green); }
 .lc-key.is-line-now::before { background: var(--text-dim); }
-.lc-key.is-zone::before { background: rgba(10, 186, 181, 0.45); }
+.lc-key.is-zone::before { background: rgba(13, 20, 21, 0.45); }
 .lc-expand { flex: none; display: inline-flex; align-items: center; gap: var(--space-3); min-width: 44px; min-height: 44px; padding: 0 var(--space-2) 0 var(--space-4);
   background: none; border: 0; color: var(--accent); font: inherit; font-size: var(--text-sm); font-weight: 500; cursor: pointer; }
 .lc-expand:hover, .lc-expand:active { background: none; color: var(--accent); }
@@ -2774,7 +2774,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .lc-full-note { margin: 0; color: var(--text); font-size: var(--text-md); line-height: 1.45; text-wrap: pretty; max-width: 68ch; }
 .lc-full-legend { margin: 0; display: flex; flex-wrap: wrap; gap: var(--space-1) var(--space-6); color: var(--text-dim); font-size: var(--text-xs); line-height: 1.5; }
 .lc-key.is-zone::before, .lc-key.is-target::before { width: 12px; height: 8px; border-radius: 1px; }
-.lc-full .lc-key.is-zone::before { background: rgba(10, 186, 181, 0.12); box-shadow: inset 0 0 0 1px rgba(10, 186, 181, 0.6); }
+.lc-full .lc-key.is-zone::before { background: rgba(13, 20, 21, 0.12); box-shadow: inset 0 0 0 1px rgba(13, 20, 21, 0.6); }
 .lc-key.is-target::before { background: rgba(51, 214, 159, 0.07); box-shadow: inset 0 0 0 1px rgba(51, 214, 159, 0.45); }
 @media (orientation: landscape) and (max-height: 500px) {
   .lc-full-head { padding-top: 0; padding-bottom: 0; }
@@ -2821,7 +2821,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 
 /* Deelknop op een kaart: rustig, het blok erboven is waar je kijkt. */
 .radar-card > .share-btn, .vd-scenario > .share-btn { align-self: flex-start; justify-self: start; min-height: 44px; padding: 0 var(--space-8);
-  background: none; border: 1px solid rgba(10, 186, 181, 0.45); border-radius: var(--radius-pill); color: var(--accent); }
+  background: none; border: 1px solid rgba(13, 20, 21, 0.45); border-radius: var(--radius-pill); color: var(--accent); }
 .radar-card > .share-btn:hover, .vd-scenario > .share-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
 .radar-card .setup-why .setup-reason { line-height: 1.55; }
 
@@ -2835,7 +2835,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .kans-card > * { margin-top: 0; margin-bottom: 0; }
 .kans-head { display: grid; gap: var(--space-4); }
 .kans-head > .mrow { min-height: 0; padding: 0; }
-.kans-card > .share-btn { align-self: flex-start; min-height: 44px; padding: 0 var(--space-8); background: none; border: 1px solid rgba(10, 186, 181, 0.45);
+.kans-card > .share-btn { align-self: flex-start; min-height: 44px; padding: 0 var(--space-8); background: none; border: 1px solid rgba(13, 20, 21, 0.45);
   border-radius: var(--radius-pill); color: var(--accent); }
 .kans-card > .share-btn:hover { background: var(--accent-bg); color: var(--accent); border-color: var(--accent); }
 .kans-card > .vd-section-title { margin-top: var(--space-6); }

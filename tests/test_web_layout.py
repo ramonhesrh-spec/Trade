@@ -181,7 +181,8 @@ class BaseShellTests(unittest.TestCase):
     def test_randkleur_element_voor_statusbalk(self):
         html = self.client.get("/vandaag").text
         self.assertIn('class="glow-edge-tint"', html)
-        self.assertIn('content="#0a0e0f"', html)
+        self.assertIn('content="#f4f6f6"', html)
+        self.assertNotIn('content="#0a0e0f"', html)
         css = open(os.path.join(os.path.dirname(main.__file__), "static", "style.css"), encoding="utf-8").read()
         blok = css[css.index(".glow-edge-tint {"):]
         blok = blok[:blok.index("}")]

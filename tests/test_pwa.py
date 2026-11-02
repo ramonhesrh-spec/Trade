@@ -151,7 +151,8 @@ class WebPwaTest(unittest.TestCase):
     def test_head_has_theme_color_per_scheme_and_splash_links(self):
         from web import splash
         html = self.client().get("/login").text
-        self.assertIn('<meta name="theme-color" content="#0a0e0f" media="(prefers-color-scheme: dark)">', html)
+        # Alleen licht (CEO 2026-11-03): ook een toestel in donkere stand krijgt een lichte statusbalk.
+        self.assertIn('<meta name="theme-color" content="#f4f6f6" media="(prefers-color-scheme: dark)">', html)
         self.assertRegex(html, r'<meta name="theme-color" content="#[0-9a-fA-F]{6}" media="\(prefers-color-scheme: light\)">')
         links = re.findall(r'<link rel="apple-touch-startup-image" href="([^"]+)" media="([^"]+)">', html)
         self.assertEqual(len(links), len(splash.SCREENS))

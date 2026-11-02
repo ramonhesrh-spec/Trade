@@ -77,7 +77,7 @@ async def _announce_entry(row: dict, stamp: pd.Timestamp) -> None:
             push_notify.record_failure(uid, "kans", mc.card_url(row["id"]), exc)
 
 
-ENTRY_CODES = {"b": "B", "b0": "B0", "p": "P"}
+ENTRY_CODES = {"b": "B", "b0": "B0", "p": "P", "r": "R"}
 
 
 def store_entries(scenario_id: int, coin: str, sc: dict, stamp: pd.Timestamp) -> int:

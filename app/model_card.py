@@ -16,7 +16,8 @@ LABEL = model.LABEL
 TAB_LABEL = "HesPulse"            # past op 375px naast de andere tabnamen
 LOCAL_TZ = ZoneInfo("Europe/Amsterdam")
 
-STATE_SHORT = {"wacht_sweep": "Wacht op sweep", "prik": "Sweep bezig", "wacht_shift": "Wacht op shift", "wacht_fvg": "Wacht op gap"}
+# Geen "Wacht op sweep" (CEO 2026-11-03): een sweep is alleen nodig voor A; B, R, V1 en P komen zonder sweep.
+STATE_SHORT = {"wacht_sweep": "Wacht op entry", "prik": "Sweep bezig", "wacht_shift": "Wacht op shift", "wacht_fvg": "Wacht op gap"}
 STEP_NAMES = {"ontdekt": "Scenario ontdekt", "sweep": "Sweep", "shift": "Shift", "displacement": "Displacement met gap", "entry": "Entry beschikbaar"}
 
 
@@ -95,6 +96,7 @@ ENTRY_INFO = {
     "A": ("Na sweep", "Sweep van een liquiditeitspool, daarna een breuk op 15m met displacement; limiet op de gap."),
     "B": ("Lagere top", "Een lagere 1u-top in premium (long: hogere bodem in discount), daarna een breuk op 15m met displacement; limiet op de gap."),
     "V1": ("Vroege limiet op de pool", "Limiet op de liquiditeitspool zelf, zonder op de sweep te wachten; stop 1 ATR (1u) erachter."),
+    "R": ("Breuk en terugtest", "Een lagere 1u-top in premium (long: hogere bodem in discount), daarna een slot voorbij het laatste 15m-dal; limiet op dat gebroken niveau, zonder displacement of gap."),
     "P": ("POC-limiet", "Limiet op de dichtste naakte dag- of week-POC aan de goede kant van het evenwicht; stop 1 ATR (1u) erachter."),
 }
 ENTRY_STATE_WORDS = {"wacht": "wacht op vulling", "gevuld": "gevuld", "klaar": "afgerond", "vervallen": "vervallen", "weggelopen": "weggelopen",
@@ -180,15 +182,15 @@ def _side(direction: str) -> tuple[str, str]:
 def waiting_text(row: dict) -> str:
     """De zin op de kaart bij moment A (4.13): waarop we wachten, zonder getallen te herhalen die er al staan."""
     below, above = _side(row["direction"])
-    half = "discount" if row["direction"] == "long" else "premium"
     status = row["status"]
     if status in ("wacht_shift", "wacht_fvg"):
         return (f"De sweep is gebeurd. Wacht op een 15m-slot {above} de top van vóór de sweep, met displacement en een fair value gap. "
                 f"Dan komt de limiet op de gap.")
     if status == "prik":
         return f"De koers prikt {below} de pool. Wacht op een slot terug {above} de pool binnen 6 candles van 15m."
-    return (f"Wacht op een sweep van de pool {below} de koers (of een verdere pool in {half}), dan een 15m-slot {above} de top ervoor met "
-            f"displacement, dan een limiet op de gap.")
+    turn = "hogere bodem in discount" if row["direction"] == "long" else "lagere top in premium"
+    return (f"Wacht op een entry; een sweep is niet nodig. A: sweep van de pool {below} de koers, dan een 15m-breuk met een gap. "
+            f"B en R: een {turn} met een 15m-breuk, zonder sweep. V1 en P: een limiet op de pool of de POC.")
 
 
 def step_lines(row: dict, now: Optional[datetime] = None) -> list[dict]:

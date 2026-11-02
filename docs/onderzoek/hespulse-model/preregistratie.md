@@ -764,3 +764,24 @@ long terwijl de dag en BTC daalden. Het model zocht toen alleen longs en zag de 
 5. Zonder dagcandles (alleen in tests en oude scripts) geldt de oude 4u-regel.
 
 **Meting.** Ongetest. Bewijs en de nachtexport tellen vanaf de deploy. De oude 4u-regel loopt niet stil mee, op besluit van de CEO.
+
+---
+
+## Aanvullend besluit CEO 2026-11-03: instappunt R, "breuk en terugtest" (vooraf vast)
+
+**Aanleiding.** PUMP 2 november (`docs/onderzoek/cases/2026-11-02-pump-1u-1815.md`, derde run). De lagere top en de breuk omlaag werden gezien,
+maar zonder displacement (4.10) kwam er geen gap en dus geen entry. De CEO: "de r toevoegen ja".
+
+**Regel (short; long gespiegeld).**
+1. *Trigger:* dezelfde lagere top als B, met dezelfde vier eisen (aanvullend besluit 2026-11-03, B), dus in premium.
+2. *Breuk:* binnen 24 candles van 15m na de top een 15m-slot voorbij het laatste 15m-dal vóór de top. Een slot boven de top maakt de
+   poging ongeldig. Dit is dezelfde shift als bij B. **Geen displacement en geen gap nodig.**
+3. *Limiet:* op het gebroken niveau, de terugtest. Herkenbaar op het sluiten van de breukcandle.
+4. *Stop:* 0,25·ATR(15m van de breukcandle) voorbij de top, met de vloer van 0,4%.
+5. *Doel:* zoals 4.7, de dichtste kandidaat voorbij de limiet. Zonder doel geen R.
+6. *Geen premium-eis op de limiet.* Het gebroken niveau ligt per definitie onder de top en kan onder EQ liggen. De premium-eis geldt
+   voor de top.
+7. Geldigheid, vulling en uitkomst zoals B (6 uur, 4.13, 4.14). Hoogstens één R per scenario. Geen luide melding: op de kaart met zijn
+   letter, stil gemeten.
+
+**Nooit.** Afstellen op PUMP. De constanten zijn die van B.

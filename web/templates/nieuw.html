@@ -12,7 +12,7 @@
 <style>html{background:{{ theme_bg['light' if _theme == 'light' else 'dark'] }}}{% if _theme == 'system' %}@media (prefers-color-scheme: light){html{background:{{ theme_bg.light }}}}{% endif %}</style>
 <script>
   (function () {
-    try { var t = localStorage.getItem("hp_theme"); if (t === "system" || t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+    try { localStorage.removeItem("hp_theme"); } catch (e) {}
   })();
 </script>
 <title>{{ og_title }}</title>

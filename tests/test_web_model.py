@@ -52,8 +52,10 @@ class ModelTab(Base):
         self.assertIn('id="tab-hespulse_model-tab"', html)
         self.assertIn(f'id="radar-model-{self.sc}"', html)
         self.assertIn(f'id="radar-model-{self.entry}"', html)
-        self.assertIn("Wacht op sweep", html)                     # moment A: de stand
-        self.assertIn("Wacht op een sweep van de pool onder de koers", html)
+        self.assertIn("Wacht op entry", html)
+        self.assertNotIn("Wacht op sweep", html)                     # moment A: de stand
+        self.assertIn("een sweep is niet nodig", html)
+        self.assertIn("hogere bodem in discount", html)
         self.assertIn("Nog geen order", html)
         self.assertIn(f'href="/nu/order/model:{self.entry}"', html)  # moment B: de order-checklist
         self.assertIn('data-kc-svg="/api/kaart_svg/model:', html)

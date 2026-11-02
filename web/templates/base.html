@@ -13,7 +13,8 @@
 <script>
   // Een bewaarde pagina (service worker) kan een oudere keuze dragen dan dit toestel nu heeft; localStorage wint, vóór de eerste verf.
   (function () {
-    try { var t = localStorage.getItem("hp_theme"); if (t === "system" || t === "dark" || t === "light") document.documentElement.setAttribute("data-theme", t); } catch (e) {}
+    // Alleen licht (CEO 2026-11-03): een oude keuze op dit toestel telt niet meer.
+    try { localStorage.removeItem("hp_theme"); } catch (e) {}
   })();
 </script>
 <script>

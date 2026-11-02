@@ -288,7 +288,7 @@ class NoLookaheadTest(unittest.TestCase):
                 if p["entry"]:
                     self.assertEqual(p["entry"], w["entry"])
                 # Aanvullend besluit 2026-11-03: P, B en B0 volgen dezelfde eis. Wat op het snijmoment bekend was, is gelijk; niets eerder.
-                for key in ("p", "b", "b0"):
+                for key in ("p", "b", "b0", "r"):
                     if w[key] is not None and w[key]["known_at"] <= cut:
                         self.assertEqual(p[key], w[key], f"{key} {w['range_id']} op {cut}")
                     else:
@@ -336,6 +336,20 @@ class AltEntryTest(unittest.TestCase):
                 if key == "b":
                     # discount (long) of premium (short): de bodem/top aan de goede kant van het evenwicht
                     self.assertLessEqual((e["extreme"] - e["eq"]) * sign, 1e-9)
+
+    def test_r_ligt_op_het_gebroken_niveau_zonder_displacement(self):
+        scs = self.all_scs()
+        rs = [s for s in scs if s["r"]]
+        self.assertTrue(rs, "de reeksen moeten R opleveren")
+        for s in rs:
+            e, sign = s["r"], (1 if s["direction"] == "long" else -1)
+            self.assertAlmostEqual(e["limit"], e["top"])                  # het gebroken niveau zelf
+            self.assertGreater((e["take"] - e["limit"]) * sign, 0)
+            self.assertGreater((e["limit"] - e["stop"]) * sign, 0)
+            self.assertEqual(e["known_at"], e["shift_at"])                 # bekend op het sluiten van de breukcandle
+            self.assertLessEqual((e["extreme"] - e["eq"]) * sign, 1e-9)    # de top/bodem zelf in premium/discount
+        # R volgt de breuk ook waar B op displacement afviel: er zijn er minstens zoveel als B
+        self.assertGreaterEqual(len(rs), len([s for s in scs if s["b"]]))
 
     def test_p_on_a_naked_poc_in_discount(self):
         lvl = poc.PocLevel("day", pd.Timestamp("2026-10-02", tz="UTC"), 106.0, None)

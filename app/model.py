@@ -53,7 +53,7 @@ WARMUP_15M = 30
 # Toestanden (4.13) en eindstanden. Ze staan ook in app/end_reason.py (tests/test_basis_afsluiten.py eist een tekst).
 WAIT_STATES = ("wacht_sweep", "prik", "wacht_shift", "wacht_fvg")
 SCENARIO_ENDS = ("context_weg", "geen_pool", "afgerond")
-ALT_CODES = ("B", "B0")                     # aanvullend besluit 2026-11-03: B meldt niet, B0 staat nergens; beide alleen gemeten en (B) getoond
+ALT_CODES = ("B", "B0", "R")                     # aanvullend besluit 2026-11-03: B meldt niet, B0 staat nergens; beide alleen gemeten en (B) getoond
 ENTRY_ENDS = ("vervallen", "weggelopen", "context_weg", "niet_vulbaar", "btc_tegen")
 FAIL_REASONS = {
     "run": "De koers liep door de pool zonder terug te sluiten (een run, geen sweep).",
@@ -518,7 +518,7 @@ class _Run:
         f = self.f15
         T = int(f.ct[t])
         if tr["phase"] == "zoek":
-            hit = self._higher_low(t, ctx, code == "B", tr["used"], tr["log"])
+            hit = self._higher_low(t, ctx, code in ("B", "R"), tr["used"], tr["log"])
             if hit is None:
                 return
             j, X, p = hit
@@ -543,6 +543,8 @@ class _Run:
                     break
             else:
                 return
+        if code == "R" and tr["phase"] == "wacht_fvg":
+            return self._retest(tr, ctx)
         if tr["phase"] == "wacht_fvg":
             what, m, k, fvgs = displacement(f, tr["j"], tr["c"], t)
             if what == "wacht":
@@ -558,6 +560,24 @@ class _Run:
                 return
             tr["entry"] = {**e, "extreme": tr["X"], "low_at": tr["low_at"], "top": tr["B"], "top_at": tr["top_at"],
                            "shift_at": int(f.ct[tr["c"]])}
+
+    def _retest(self, tr: dict, ctx: Context) -> None:
+        """R (aanvullend besluit 2026-11-03): limiet op het gebroken niveau zelf, zonder displacement of gap; stop 0,25 ATR voorbij het
+        uiterste met de vloer; doel zoals 4.7. Bekend op het sluiten van de breukcandle. Geen premium-eis op de limiet."""
+        f = self.f15
+        c = tr["c"]
+        T = int(f.ct[c])
+        limit = tr["B"]
+        stop = _floor(limit, tr["X"] - STOP_ATR * f.atr[c])
+        tgt = _target(self._cands(ctx, T, limit, float("inf")), limit)
+        if tgt is None or not np.isfinite(stop) or limit <= stop:
+            tr["phase"] = "zoek"
+            tr["log"].append({"at": T, "wat": "geen_doel", "niveau": tr["X"]})
+            return
+        tr["entry"] = {"known": T, "limit": limit, "stop": stop, "take": tgt[2], "target_kind": tgt[0], "target_label": tgt[1],
+                       "rr": (tgt[2] - limit) / (limit - stop), "zone": (limit, limit), "ob_overlap": False, "eq": ctx.eq,
+                       "range": (ctx.L, ctx.H), "extreme": tr["X"], "low_at": tr["low_at"], "top": tr["B"], "top_at": tr["top_at"],
+                       "shift_at": T}
 
     def _plan(self, t: int, ctx: Context, k: int, fvgs: list, X: float, c: int, premium_check: bool = True) -> tuple[Optional[str], Optional[dict]]:
         """De limiet, stop en doel van 4.11 en 4.12 voor elke entry met een gap (A, B, B0). (reden, None) als er geen entry komt."""

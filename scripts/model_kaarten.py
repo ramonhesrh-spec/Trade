@@ -147,8 +147,9 @@ def text_report(chosen: list[dict]) -> str:
         lines.append(f"   B  lagere top:    {_lvl(s.get('b'))}")
         lines.append(f"   B0 zonder premium:{_lvl(s.get('b0'))}")
         lines.append(f"   V1 vroege limiet: {_lvl(s.get('v1'))}")
+        lines.append(f"   R  breuk+terugtest:{_lvl(s.get('r'))}")
         lines.append(f"   P  POC-limiet:    {_lvl(s.get('p'))}")
-        for code in ("b", "b0"):
+        for code in ("b", "b0", "r"):
             for x in s.get(code + "_log") or []:
                 lines.append(f"   {code.upper():<2} {_t(x['at'])}: {x['wat']} (swingpunt {x['niveau']:.6g})")
         for prob in s.get("problems") or []:

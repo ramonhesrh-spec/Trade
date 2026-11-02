@@ -170,7 +170,7 @@ def v1_trades(rows: list[dict], cost_pct: float) -> list[dict]:
     return out
 
 
-ENTRY_NAMES = {"B": "B lagere top", "B0": "B0 zonder premium-eis (alleen gemeten)", "P": "P POC-limiet"}
+ENTRY_NAMES = {"B": "B lagere top", "B0": "B0 zonder premium-eis (alleen gemeten)", "R": "R breuk en terugtest", "P": "P POC-limiet"}
 
 
 def entry_trades(entries: list[dict], code: str, cost_pct: float) -> list[dict]:
