@@ -7,7 +7,7 @@ from typing import Optional
 from app import chance_steps, trade_plan as tp
 
 
-KEY_PREFIX = {"zone_radar": "zone", "zone_sweep": "zsweep", "poc_radar": "poc"}
+KEY_PREFIX = {"zone_radar": "zone", "zone_sweep": "zsweep", "poc_radar": "poc", "hespulse_model": "model"}
 
 
 def setup_key(setup: dict) -> str:

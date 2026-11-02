@@ -9,19 +9,20 @@ from datetime import datetime, timezone
 from typing import Iterable, Optional
 from zoneinfo import ZoneInfo
 
-from app import candle_source, end_reason, nu, radar, setup_chart, trade_plan as tp
+from app import candle_source, end_reason, model_card, nu, radar, setup_chart, trade_plan as tp
 from app import zone_radar as zr
 from app.price_text import nl
 
-LABELS = {"structuur": "Structuur", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar", "smc": "SMC"}
-ORDER = ("structuur", "zone_radar", "zone_sweep", "poc_radar", "smc")
+LABELS = {"hespulse_model": model_card.TAB_LABEL, "structuur": "Structuur", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep",
+          "poc_radar": "POC-radar", "smc": "SMC"}
+ORDER = ("hespulse_model", "structuur", "zone_radar", "zone_sweep", "poc_radar", "smc")
 # Naar buiten is elke structuurkans Structuur (CLAUDE.md, Structuur zonder oordeel): structuur_c staat in dezelfde tab.
 TAB_OF = {"structuur": "structuur", "structuur_c": "structuur", "zone_radar": "zone_radar", "zone_sweep": "zone_sweep", "poc_radar": "poc_radar",
-          "smc": "smc"}
+          "smc": "smc", "hespulse_model": "hespulse_model"}
 DEFAULT_TAB = "structuur"
 # Soorten met een eigen getekende kaartgrafiek die de pagina lazy ophaalt (/api/kaart_svg, app/card_chart.py): de zone op zijn eigen tijdframe.
 # Structuur draagt zijn momentopname al in `svg`; SMC houdt de generieke kaartgrafiek.
-SVG_TYPES = ("zone_radar", "zone_sweep", "poc_radar")
+SVG_TYPES = ("zone_radar", "zone_sweep", "poc_radar", "hespulse_model")
 
 
 def _svg_src(item: dict) -> Optional[str]:
@@ -179,7 +180,7 @@ def dedupe(items: list[dict], price_key: str) -> list[dict]:
 
 # Verbergen (tabel kans_hidden): een weergavekeuze per gebruiker. Dezelfde sleutels als de kaarten en het overslaan (nu.SKIP_KEY); MAX_HIDE per
 # verzoek is ruim boven wat één tab ooit toont en houdt een verzoek klein.
-HIDE_KEY = re.compile(r"^(zone|zsweep|poc|setup|signal|structuur):\d+$")
+HIDE_KEY = re.compile(r"^(zone|zsweep|poc|model|setup|signal|structuur):\d+$")
 MAX_HIDE = 200
 
 
@@ -202,9 +203,14 @@ def hidden_label(n: int) -> str:
     return f"Verborgen ({n})" if n else ""
 
 
-def _hidden_rows(plans: list[dict], trades: list[dict]) -> list[dict]:
-    return [{"key": it["key"], "keys": it["keys"], "title": it["title"], "state": it["state"], "state_short": it["state_short"], "group": group,
-             "dom_id": it["dom_id"]} for group, items in (("plans", plans), ("trades", trades)) for it in items]
+def _hidden_rows(plans: list[dict], trades: list[dict], scenarios: list[dict] = ()) -> list[dict]:
+    return [{"key": it["key"], "keys": it.get("keys") or [it["key"]], "title": it["title"], "state": it["state"], "state_short": it["state_short"],
+             "group": group, "dom_id": it["dom_id"]} for group, items in (("plans", plans), ("trades", trades), ("scenarios", scenarios)) for it in items]
+
+
+def scenarios_label(n: int) -> str:
+    """De kop boven de kaarten van moment A (HesPulse-model): nog geen order, alleen wat er nog moet gebeuren."""
+    return "Scenario, wacht op bevestiging" if n == 1 else f"{n} scenario's, wachten op bevestiging"
 
 
 def _sort_key(item: dict):
@@ -225,7 +231,7 @@ def summary(n: int, in_zone: int, trades: int) -> str:
 
 
 # Sleutel en anker van een kaart per soort, zoals radar.setup_card ze maakt (radar-zone-N en zo): een geëindigde kaart houdt zo zijn anker.
-ENDED_PREFIX = {"zone_radar": "zone", "zone_sweep": "zsweep", "poc_radar": "poc"}
+ENDED_PREFIX = {"zone_radar": "zone", "zone_sweep": "zsweep", "poc_radar": "poc", "hespulse_model": "model"}
 
 
 def ended_rows(ended: Iterable[dict], kind: str, hidden=frozenset()) -> list[dict]:
@@ -239,11 +245,15 @@ def ended_rows(ended: Iterable[dict], kind: str, hidden=frozenset()) -> list[dic
 
 
 def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float], Optional[str]]], structure_trades: list[dict],
-         kinds: Iterable[str], skipped: Iterable[str] = (), hidden: Iterable[str] = (), ended: Iterable[dict] = ()) -> dict:
+         kinds: Iterable[str], skipped: Iterable[str] = (), hidden: Iterable[str] = (), ended: Iterable[dict] = (), model_rows: Iterable[dict] = (),
+         default_tab: Optional[str] = None) -> dict:
     """`kinds`: de soorten die een tab krijgen (focus.FOCUS_TYPES met de kijkrechten van de route). Een kaart van een andere soort valt weg.
     `skipped`: plannen die je oversloeg (cookie en plan_skips, een dag); die blijven staan, achteraan en gemarkeerd.
     `hidden`: kaarten die deze gebruiker verborg (kans_hidden). Die staan niet in de lijst en tellen nergens mee (tab, badge, totaal, ook niet
-    als 'vergelijkbaar'), maar wel onderaan hun tab als `hidden` (rijen) en `hidden_cards` (de kaart zelf, voor Toon weer zonder herladen)."""
+    als 'vergelijkbaar'), maar wel onderaan hun tab als `hidden` (rijen) en `hidden_cards` (de kaart zelf, voor Toon weer zonder herladen).
+    `model_rows`: rijen uit model_scenarios. Moment A (scenario ontdekt) wordt een eigen groep `scenarios` in de tab van het model, zonder order;
+    moment B is al een gewone Radar-kaart (model_card.radar_setup) en krijgt hier de stappen met hun tijdstip. `default_tab`: de tab die opengaat
+    als er niets in de zone staat (met MODEL_ONLY_ALERTS het model)."""
     wanted = set(kinds)
     plans = [{**structure_item(card, price, state), "created_at": card.get("created_at"), "source_text": source_text(card)}
              for card, price, state in structure]
@@ -251,6 +261,12 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
                "obstacle_lines": obstacle_lines((c.get("setup") or {}).get("obstacles")), "source_text": source_text(c.get("setup"))}
               for c in radar.waiting_cards(radar_cards)]
     skipped, hidden, ended = set(skipped), set(hidden), list(ended)
+    model_rows = list(model_rows)
+    steps_of = {model_card.key(r["id"]): model_card.step_lines(r) for r in model_rows}
+    for p in plans:
+        if p["key"] in steps_of:
+            p["steps_done"] = steps_of[p["key"]]
+    scenarios = [model_card.scenario_item(r) for r in model_rows if r["status"] in model_card.model.WAIT_STATES]
     for p in plans:
         p["skipped"] = p["key"] in skipped
         p["shared_text"] = _shared(p, "Gedeeld")
@@ -272,6 +288,9 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
         open_ = sorted(dedupe([t for t in tab_trades if t["key"] not in hidden], "entry"), key=lambda t: t["created_at"], reverse=True)
         hid_plans = sorted(dedupe([p for p in tab_plans if p["key"] in hidden], "limit"), key=_sort_key)
         hid_trades = sorted(dedupe([t for t in tab_trades if t["key"] in hidden], "entry"), key=lambda t: t["created_at"], reverse=True)
+        tab_sc = [s for s in scenarios if s["tab"] == k and k in wanted]
+        sc_shown = sorted([s for s in tab_sc if s["key"] not in hidden], key=lambda s: s.get("created_at") or "", reverse=True)
+        sc_hidden = [s for s in tab_sc if s["key"] in hidden]
         zone = sum(1 for p in mine if p["state"] == "in_zone")
         moot = [{"title": f"{c['coin']} {c['direction']}", "label": c["state_label"], "reason": end_reason.text(k, c["state"]),
                  "dom_id": "radar-" + c["key"].replace(":", "-")}
@@ -280,9 +299,11 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
         tabs.append({"key": k, "label": LABELS[k], "href": f"#tab-{k}", "plans": mine, "trades": open_, "n": len(mine), "in_zone": zone,
                      "num": len(mine), "badge": zone or None, "count": None, "summary": summary(len(mine), zone, len(open_)), "moot": moot,
                      "ended": ended_rows(ended, k, hidden) if k in wanted else [],
-                     "hidden": _hidden_rows(hid_plans, hid_trades), "hidden_cards": hid_plans + hid_trades,
-                     "hidden_label": hidden_label(len(hid_plans) + len(hid_trades))})
+                     "hidden": _hidden_rows(hid_plans, hid_trades, sc_hidden), "hidden_cards": hid_plans + hid_trades + sc_hidden,
+                     "hidden_label": hidden_label(len(hid_plans) + len(hid_trades) + len(sc_hidden)),
+                     "scenarios": sc_shown, "scenarios_label": scenarios_label(len(sc_shown))})
     best = max(tabs, key=lambda t: t["in_zone"], default=None)
-    active = best["key"] if best and best["in_zone"] else (DEFAULT_TAB if DEFAULT_TAB in kinds else (kinds[0] if kinds else DEFAULT_TAB))
+    default = default_tab if default_tab in kinds else DEFAULT_TAB
+    active = best["key"] if best and best["in_zone"] else (default if default in kinds else (kinds[0] if kinds else DEFAULT_TAB))
     n, zone, open_n = sum(t["n"] for t in tabs), sum(t["in_zone"] for t in tabs), sum(len(t["trades"]) for t in tabs)
     return {"tabs": tabs, "active": active, "in_zone": zone, "total": {"n": n, "in_zone": zone, "open": open_n, "text": summary(n, zone, open_n)}}

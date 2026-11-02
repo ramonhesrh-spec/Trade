@@ -697,7 +697,7 @@
   <figure class="lc kc-svg is-zone" data-kc-svg="{{ it.svg_src }}">
     <div class="kc-svg-box" role="img" aria-label="{{ it.chart.label if it.chart else it.title }}"><span class="kc-svg-wait">Grafiek laden…</span></div>
     {% if it.chart %}<div class="level-chart" data-levelchart='{{ it.chart|tojson }}' data-coin="{{ it.coin }}" data-tf="15m" aria-label="{{ it.chart.label }}" hidden></div>{% endif %}
-    <figcaption class="lc-foot"><span class="lc-cap">{{ "POC op 1u of 4u" if it.trade_type == "poc_radar" else "Zone op zijn eigen tijdframe" }} · jouw tijd</span>
+    <figcaption class="lc-foot"><span class="lc-cap">{{ "POC op 1u of 4u" if it.trade_type == "poc_radar" else "15 min per candle" if it.trade_type == "hespulse_model" else "Zone op zijn eigen tijdframe" }} · jouw tijd</span>
       {% if it.chart %}<button type="button" class="lc-expand" data-lc-expand aria-label="Grafiek van {{ it.coin }} groot openen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><span>Groot</span></button>{% endif %}
     </figcaption>
   </figure>
@@ -712,7 +712,7 @@
 {# Het detail van één kans in het blad: de opgeschoonde ladder, de getallen één keer (houd vast om te kopiëren), de herkomst in één regel,
    de gemeten context en vast onderaan de knop. `ctx` is market_context.coin_lines van deze coin. #}
 {% macro kans_detail(it, ctx=[]) %}
-{% set kinds = {"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar", "smc": "SMC", "structuur": "Structuur", "structuur_c": "Structuur"} %}
+{% set kinds = {"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar", "smc": "SMC", "structuur": "Structuur", "structuur_c": "Structuur", "hespulse_model": "HesPulse-model"} %}
 <section class="kd-item" data-kd-item="{{ it.key }}" aria-labelledby="kd-t-{{ it.dom_id }}" hidden>
   <div class="kd-head">
     <h3 class="kd-title" id="kd-t-{{ it.dom_id }}" tabindex="-1">{{ it.title }}</h3>
@@ -720,7 +720,11 @@
   </div>
   <p class="kd-kind"><span class="state-pill is-{{ it.state or 'laden' }}">{{ it.state_short }}</span><span class="kd-type">{{ kinds.get(it.trade_type, it.trade_type) }}</span>{{ kans_label(it) }}{% if it.shared_text %}<span class="kd-type">· {{ it.shared_text }}</span>{% endif %}</p>
   {% if it.say %}<p class="kd-say">{{ it.say }}</p>{% endif %}
-  {% if it.kind == "trade" %}
+  {% if it.kind == "scenario" %}
+  {# HesPulse-model, moment A: nog geen order. De stappen met het moment waarop ze herkenbaar waren (app/model_card.step_lines). #}
+  {{ model_steps(it.steps_done) }}
+  {% if it.candidates_text %}<p class="kd-origin kd-wrap">{{ it.candidates_text }}</p>{% endif %}
+  {% elif it.kind == "trade" %}
   {{ ladder(it.ladder, "trade", coin=it.coin, num_text=it.num_text, num_label=it.num_label, num_hook="live_r",
        stop=it.rows|selectattr('tone', 'equalto', 'loss')|map(attribute='value')|first,
        num_class=("pos" if (it.live_r or 0) > 0 else "neg" if (it.live_r or 0) < 0 else "")) }}
@@ -736,7 +740,8 @@
     {% endfor %}
   </ul>
   <p class="kd-hint">Houd een getal vast om te kopiëren. De bel zet een prijsalarm.</p>
-  <p class="kd-origin">{{ it.origin or kinds.get(it.trade_type, it.trade_type) }} · {{ "open trade" if it.kind == "trade" else "limietplan" }}</p>
+  {% if it.steps_done and it.kind != "scenario" %}{{ model_steps(it.steps_done) }}{% endif %}
+  <p class="kd-origin">{{ it.origin or kinds.get(it.trade_type, it.trade_type) }} · {{ "open trade" if it.kind == "trade" else "scenario, nog geen order" if it.kind == "scenario" else "limietplan" }}</p>
   {# Obstakels vanaf de instap (kansen.obstacle_lines): alleen op kaarten die ze bewaarden; het eerste is het doel. #}
   {% for line in it.obstacle_lines or [] %}<p class="kd-origin kd-obstacle">{{ line }}</p>{% endfor %}
   {# Dubbele kaarten (zelfde soort, coin, richting en instap, app/kansen.dedupe) staan één keer op Kansen; hier het gemeten aantal dat wegviel. #}
@@ -753,13 +758,21 @@
   {# Twee rustige acties onder de hoofdknop. Sla over voor vandaag (plan_skips, hp_skip) houdt het plan in de lijst, een dag achteraan; Verberg
      (kans_hidden) haalt de kaart weg tot je hem terugzet. Zonder JavaScript gaat Verberg als formulier naar dezelfde route. #}
   <div class="kd-foot">
-    {% if it.kind == "trade" %}<a class="kd-cta is-quiet" href="{{ it.url }}">Bekijk de trade</a>{% else %}<a class="kd-cta" href="{{ it.checklist_url }}">Zet de order, stap voor stap</a>{% endif %}
+    {% if it.kind == "trade" %}<a class="kd-cta is-quiet" href="{{ it.url }}">Bekijk de trade</a>{% elif it.kind == "scenario" %}<p class="kd-cta is-quiet" aria-disabled="true">Nog geen order: wacht op de entry</p>{% else %}<a class="kd-cta" href="{{ it.checklist_url }}">Zet de order, stap voor stap</a>{% endif %}
     <div class="kd-alt">
       {# Deel (web/static/share.js): een afbeelding van de kaart voor een groepschat, met de grafiek van de kaart en de getallen die je zelf ziet. #}
       <div class="kd-skip-form"><button type="button" class="kd-skip kd-share" data-share-for="{{ it.key }}" data-share-card='{{ {"title": it.title, "lines": it.share_lines, "plain": true}|tojson }}'>Deel</button></div>
-      {% if it.kind != "trade" %}<form method="post" action="/nu/overslaan" class="kd-skip-form"><input type="hidden" name="key" value="{{ it.key }}"><button type="submit" class="kd-skip">Sla over voor vandaag</button></form>{% endif %}
+      {% if it.kind == "plan" %}<form method="post" action="/nu/overslaan" class="kd-skip-form"><input type="hidden" name="key" value="{{ it.key }}"><button type="submit" class="kd-skip">Sla over voor vandaag</button></form>{% endif %}
       <form method="post" action="/api/kans/verberg" class="kd-skip-form"><input type="hidden" name="key" value="{{ it.key }}"><button type="submit" class="kd-skip" data-kd-hide="{{ it.key }}">Verberg</button></form>
     </div>
   </div>
 </section>
+{% endmacro %}
+
+{# De stappen van een HesPulse-scenario (app/model_card.step_lines): gedaan met het tijdstip waarop ze herkenbaar waren, open zonder tijd,
+   mislukte pogingen met hun reden. #}
+{% macro model_steps(lines) %}
+<ol class="ms-steps" aria-label="Stappen van het scenario">
+  {% for l in lines %}<li class="ms-step{% if l.done %} is-done{% elif l.when %} is-failed{% endif %}"><span class="ms-name">{{ l.name }}</span>{% if l.when %}<span class="ms-when">{{ l.when }}</span>{% else %}<span class="ms-when">nog niet</span>{% endif %}{% if l.note %}<span class="ms-note">{{ l.note }}</span>{% endif %}</li>{% endfor %}
+</ol>
 {% endmacro %}

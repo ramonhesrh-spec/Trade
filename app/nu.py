@@ -9,9 +9,10 @@ from app import ladder, price_text, radar
 TRADE_TYPE_ZONE = "zone_radar"          # zelfde waarde als zone_radar.TRADE_TYPE; niet importeren houdt dit bestand los van pandas
 TRADE_TYPE_SWEEP = "zone_sweep"         # zelfde waarde als zone_sweep.TRADE_TYPE
 TRADE_TYPE_POC = "poc_radar"            # zelfde waarde als poc_radar.TRADE_TYPE
-UNTESTED_SOURCES = (TRADE_TYPE_ZONE, TRADE_TYPE_SWEEP, TRADE_TYPE_POC)
+TRADE_TYPE_MODEL = "hespulse_model"     # zelfde waarde als model.TRADE_TYPE
+UNTESTED_SOURCES = (TRADE_TYPE_ZONE, TRADE_TYPE_SWEEP, TRADE_TYPE_POC, TRADE_TYPE_MODEL)
 MAX_SKIP = 20
-SKIP_KEY = re.compile(r"^(zone|zsweep|poc|setup|signal|structuur):\d+$")
+SKIP_KEY = re.compile(r"^(zone|zsweep|poc|model|setup|signal|structuur):\d+$")
 DIR_WORD = {"long": "Long", "short": "Short"}
 
 

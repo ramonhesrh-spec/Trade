@@ -34,6 +34,7 @@ from app import patterns as chart_patterns
 from app import candle_source, config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, shadow, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
+from app import model, model_card
 from app import announce, card_chart, ceo, chance_checks, daycap, end_reason, excursion, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep, poc_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
@@ -594,13 +595,18 @@ def _forming_setups(user: Optional[dict] = None) -> list[dict]:
     """Wat de Radar als wachtende kaart toont: bouwende SMC-setups, wachtende zone-radar-kaarten en, als de kijker hem mag zien, wachtende
     zone-sweep-kaarten, in de vorm die radar.setup_card leest.
     Met focus geen SMC-setups: die motor zoekt niets nieuws en maakt er geen signaal meer van. Hier gefilterd, zodat Radar, Nu, het dok en het appicoon gelijk tellen."""
+    # Moment B van het HesPulse-model (entry beschikbaar) is een gewoon limietplan; ook als het model uit staat, loopt een open limiet af.
+    model_rows = [model_card.radar_setup(r) for r in repo.list_model_scenarios(statuses=("afgerond",), entry_states=("wacht",))]
+    if focus.model_only():
+        # Alleen het model heeft een tab (MODEL_ONLY_ALERTS): de wachtende kaarten van de andere soorten tellen nergens mee (dok, appicoon).
+        return model_rows
     smc = [_with_preview(s) for s in repo.list_forming_smc_setups()] if focus.engine_on("smc") else []
     rows = smc + [zone_radar.radar_setup(r) for r in repo.list_zone_radar_setups()]
     if _sees_zone_sweep(user):
         rows += [zone_sweep.radar_setup(r) for r in repo.list_zone_sweep_setups()]
     if _sees_poc(user):
         rows += [poc_radar.radar_setup(r) for r in repo.list_poc_radar_setups()]
-    return rows
+    return rows + model_rows
 
 
 def _context_lines(coins) -> dict[str, list[dict]]:
@@ -613,7 +619,7 @@ def _context_lines(coins) -> dict[str, list[dict]]:
 
 async def _radar_cards(user: Optional[dict] = None) -> list[dict]:
     forming = _forming_setups(user)
-    types = (("smc", zone_radar.TRADE_TYPE) + ((zone_sweep.TRADE_TYPE,) if _sees_zone_sweep(user) else ())
+    types = (("smc", zone_radar.TRADE_TYPE, model.TRADE_TYPE) + ((zone_sweep.TRADE_TYPE,) if _sees_zone_sweep(user) else ())
              + ((poc_radar.TRADE_TYPE,) if _sees_poc(user) else ()))
     open_signals = repo.list_open_smc_signals(types=types)
     prices = await _cached_prices([s["coin"] for s in forming] + [s["coin"] for s in open_signals])
@@ -734,8 +740,11 @@ async def galerij_file(kind: str, user: dict = Depends(require_login)):
 
 
 def _kansen_kinds(user: dict) -> list[str]:
-    """De soorten met een tab op Kansen: de focus-soorten (focus.FOCUS_TYPES), de zone-sweep alleen voor wie hem mag zien, en zonder focus ook SMC."""
-    kinds = ["structuur", "zone_radar"] + (["zone_sweep"] if _sees_zone_sweep(user) and focus.engine_on(zone_sweep.TRADE_TYPE) else [])
+    """De soorten met een tab op Kansen: de focus-soorten (focus.FOCUS_TYPES), de zone-sweep alleen voor wie hem mag zien, en zonder focus ook SMC.
+    Met MODEL_ONLY_ALERTS alleen het HesPulse-model; een open trade van een andere soort houdt zijn tab (kansen.page)."""
+    if focus.model_only():
+        return [model.TRADE_TYPE]
+    kinds = ([model.TRADE_TYPE] if focus.model_on() else []) + ["structuur", "zone_radar"] + (["zone_sweep"] if _sees_zone_sweep(user) and focus.engine_on(zone_sweep.TRADE_TYPE) else [])
     kinds += ["poc_radar"] if _sees_poc(user) and focus.engine_on(poc_radar.TRADE_TYPE) else []
     return kinds + ([] if focus.active() else ["smc"])
 
@@ -752,8 +761,11 @@ async def _kansen_page(user: dict, skipped=()) -> dict:
     open_struct = repo.list_open_smc_signals(types=("structuur", "structuur_c"))
     sprices = await _cached_prices({s["coin"] for s in open_struct}) if open_struct else {}
     trades = [{**c, "svg": _structure_trade_svg(s, sprices.get(s["coin"]))} for s in open_struct if (c := radar.signal_card(s, sprices.get(s["coin"])))]
-    ended = repo.list_ended_cards((now - timedelta(days=ENDED_DAYS)).isoformat(), include_zone_sweep=_sees_zone_sweep(user), include_poc=_sees_poc(user))
-    return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped, repo.list_hidden_kansen(user["id"]), ended)
+    since = (now - timedelta(days=ENDED_DAYS)).isoformat()
+    ended = repo.list_ended_cards(since, include_zone_sweep=_sees_zone_sweep(user), include_poc=_sees_poc(user)) + repo.list_ended_model(since)
+    model_rows = repo.list_model_scenarios(statuses=model.WAIT_STATES) + repo.list_model_scenarios(statuses=("afgerond",), entry_states=("wacht",))
+    return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped, repo.list_hidden_kansen(user["id"]), ended, model_rows=model_rows,
+                       default_tab=model.TRADE_TYPE if focus.model_on() else None)
 
 
 def _structure_trade_svg(signal: dict, price: Optional[float]) -> Markup:
@@ -772,7 +784,7 @@ async def smc_page(request: Request, tab: str = "", user: dict = Depends(require
     if tab in {t["key"] for t in page["tabs"]}:
         page["active"] = tab
     # Ook de verborgen kaarten krijgen hun detailblad: Toon weer zet de kaart terug zonder te herladen (kaarten.js).
-    items = [it for t in page["tabs"] for it in t["plans"] + t["trades"] + t["hidden_cards"]]
+    items = [it for t in page["tabs"] for it in t["plans"] + t["scenarios"] + t["trades"] + t["hidden_cards"]]
     return templates.TemplateResponse(request, "smc.html", {
         "user": user, "page": page, "items": items, "context": _context_lines({it["coin"] for it in items}),
         **await _structure_extras(user)}, headers=_viewer_header(user))
@@ -1099,17 +1111,18 @@ async def api_radar_candles(coin: str, tf: str = "15m", limit: int = 96, user: d
 def _card_setup(key: str, user: dict) -> Optional[tuple[str, dict]]:
     """(soort, rij) achter een kaartsleutel van Kansen, of None: alleen zone:N, zsweep:N en een signal:N van die twee soorten, met dezelfde
     kijkrechten als de kaart zelf (de zone-sweep is CEO-only zolang ZONE_SWEEP_PUBLIC uit staat)."""
-    m = re.fullmatch(r"(zone|zsweep|poc|signal):(\d{1,9})", key)
+    m = re.fullmatch(r"(zone|zsweep|poc|model|signal):(\d{1,9})", key)
     if not m:
         return None
     kind, ident = m.group(1), int(m.group(2))
-    by_signal = {"zone": repo.get_zone_radar_setup_by_signal, "zsweep": repo.get_zone_sweep_setup_by_signal, "poc": repo.get_poc_radar_setup_by_signal}
-    by_id = {"zone": repo.get_zone_radar_setup, "zsweep": repo.get_zone_sweep_setup, "poc": repo.get_poc_radar_setup}
+    by_signal = {"zone": repo.get_zone_radar_setup_by_signal, "zsweep": repo.get_zone_sweep_setup_by_signal, "poc": repo.get_poc_radar_setup_by_signal,
+                 "model": repo.get_model_scenario_by_signal}
+    by_id = {"zone": repo.get_zone_radar_setup, "zsweep": repo.get_zone_sweep_setup, "poc": repo.get_poc_radar_setup, "model": repo.get_model_scenario}
     if kind == "signal":
         sig = repo.get_signal(ident)
         if not sig or sig["is_practice"]:
             return None
-        kind = {zone_radar.TRADE_TYPE: "zone", zone_sweep.TRADE_TYPE: "zsweep", poc_radar.TRADE_TYPE: "poc"}.get(sig["trade_type"])
+        kind = {zone_radar.TRADE_TYPE: "zone", zone_sweep.TRADE_TYPE: "zsweep", poc_radar.TRADE_TYPE: "poc", model.TRADE_TYPE: "model"}.get(sig["trade_type"])
         row = by_signal[kind](ident) if kind else None
     else:
         row = by_id[kind](ident)
@@ -1128,6 +1141,8 @@ async def api_kaart_svg(key: str, user: dict = Depends(require_login)):
     kind, row = found
     if kind == "poc":
         tf = card_chart.poc_tf(row["period"])
+    elif kind == "model":
+        tf = "15m"
     else:
         origin = zone_radar.zone_origin(row.get("zone_key", ""), ("1h", "2h", "4h"))
         tf = card_chart.candle_tf(origin[0] if origin else row["tf"])
@@ -1135,7 +1150,8 @@ async def api_kaart_svg(key: str, user: dict = Depends(require_login)):
     if not rows:
         return HTMLResponse("", status_code=503)
     price = (await _cached_prices({row["coin"]})).get(row["coin"])
-    svg = {"zone": card_chart.zone_radar_svg, "zsweep": card_chart.zone_sweep_svg, "poc": card_chart.poc_radar_svg}[kind](row, rows, price)
+    svg = {"zone": card_chart.zone_radar_svg, "zsweep": card_chart.zone_sweep_svg, "poc": card_chart.poc_radar_svg,
+           "model": card_chart.model_svg}[kind](row, rows, price)
     return HTMLResponse(svg, headers={"Cache-Control": "no-store"})
 
 

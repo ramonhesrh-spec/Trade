@@ -3044,6 +3044,15 @@ html.kd-lock { overflow: hidden; }
 .hold.is-failed .hold-lab { color: var(--loss); }
 .kd-hint { margin: 8px 0 0; font-size: 13px; color: var(--tx2); }
 .kd-origin { margin: 16px 0 0; overflow: hidden; font-size: 13px; color: var(--tx2); white-space: nowrap; text-overflow: ellipsis; }
+.kd-origin.kd-wrap { white-space: normal; }
+/* HesPulse-model: de stappen van een scenario met het tijdstip waarop ze herkenbaar waren (macro model_steps). */
+.ms-steps { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; }
+.ms-step { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 8px 10px; border-radius: 10px; background: var(--s1); font-size: 13px; color: var(--tx2); }
+.ms-step.is-done { color: var(--tx); }
+.ms-step.is-done .ms-name::before { content: "\2713\00a0"; color: var(--ac); }
+.ms-step.is-failed .ms-name::before { content: "\2715\00a0"; }
+.ms-when { font-variant-numeric: tabular-nums; color: var(--tx2); }
+.ms-note { grid-column: 1 / -1; font-size: 12px; color: var(--tx2); }
 /* Een obstakelregel draagt prijs, R en tijd: afkappen zou juist die weglaten, dus hij loopt door op een tweede regel. */
 .kd-obstacle { margin-top: 6px; white-space: normal; overflow: visible; }
 .kd-ctx { margin: 12px 0 0; }

@@ -8,6 +8,7 @@
    (kaarten.js), een tik op de grafiek opent hem groot (levelchart.js). De ankers van de meldingen (/smc#radar-zone-N, /smc#radar-zsweep-N,
    /structuur#structuur-N) wijzen naar het id van de kaart: utabs.js opent dan de juiste tab en scrolt erheen. #}
 {% set empty = {
+  "hespulse_model": ("Geen scenario", "Een kaart verschijnt als de 4u-structuur een richting heeft en er een onaangeraakte pool in discount of premium binnen 6% ligt. Je krijgt pas een melding als de entry er is."),
   "structuur": ("Geen plan klaar", "Zodra een lijn of range breekt en het plan genoeg ruimte heeft, krijg je een melding en staat hier de kaart. De motor kijkt elke 5 minuten."),
   "zone_radar": ("Geen zone binnen bereik", "Een kaart verschijnt als de dichtstbijzijnde vraag- of aanbodzone op 1u of 4u binnen 6% van de koers ligt."),
   "zone_sweep": ("Geen sweep", "Een kaart verschijnt als de koers door een zone prikt en binnen een paar candles terug sluit."),
@@ -28,7 +29,12 @@
     <div class="kt-subrow is-first"><h3 class="kt-sub">Wachtend</h3><button type="button" class="kt-hide-all" data-kt-hide-all{% if t.plans|length < 2 %} hidden{% endif %}>Verberg alles</button></div>
     <div class="kc-list" data-kt-plans>{% for it in t.plans %}{{ macros.kans_card(it) }}{% endfor %}</div>
   </div>
-  {% if not t.plans and not (t.hidden|selectattr("group", "equalto", "plans")|list) and t.key in empty %}
+  {# HesPulse-model, moment A (app/model_card.scenario_item): nog geen order, dus buiten [data-kt-plans] en buiten de tellers. #}
+  <div class="kt-group" data-kt-group="scenarios"{% if not t.scenarios %} hidden{% endif %}>
+    <div class="kt-subrow{% if not t.plans %} is-first{% endif %}"><h3 class="kt-sub">{{ t.scenarios_label }}</h3><button type="button" class="kt-hide-all" data-kt-hide-all{% if t.scenarios|length < 2 %} hidden{% endif %}>Verberg alles</button></div>
+    <div class="kc-list" data-kt-scenarios>{% for it in t.scenarios %}{{ macros.kans_card(it) }}{% endfor %}</div>
+  </div>
+  {% if not t.plans and not t.scenarios and not (t.hidden|selectattr("group", "in", ["plans", "scenarios"])|list) and t.key in empty %}
   {{ macros.empty_state(empty[t.key][0], empty[t.key][1]) }}
   {% endif %}
   <div class="kt-group" data-kt-group="trades"{% if not t.trades %} hidden{% endif %}>
@@ -95,6 +101,7 @@
   {% endif %}
   {% if t.key in ("zone_radar", "zone_sweep") %}<p class="kt-meta"><a href="/zone-radar">Zone-radar en zone-sweep: zo werkt het</a></p>{% endif %}
   {% if t.key == "poc_radar" %}<p class="kt-meta"><a href="/zone-radar#poc">POC-radar: zo werkt het</a></p>{% endif %}
+  {% if t.key == "hespulse_model" %}<p class="kt-meta">Ongetest. Context op 4u, pools op 1u, sweep, shift en gap op 15m. Eén melding per entry; Bewijs toont de score.</p>{% endif %}
 </section>
 {% endfor %}
 </div>

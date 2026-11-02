@@ -119,3 +119,38 @@ def poc_radar_svg(row: dict, candles: list[list], price: Optional[float]) -> str
     name = poc.period_text(row["period"], row["period_start"])
     points = [(c[0], row["level"], name[0].upper() + name[1:])] if c is not None and c[0] >= shown[0][0] else []
     return setup_chart.zone_svg(shown, row["coin"], row["direction"], None, lines, points, _target_zone(row), price, limit)
+
+
+def model_svg(row: dict, candles: list[list], price: Optional[float]) -> str:
+    """Een rij uit model_scenarios op 15m. Moment A (scenario ontdekt): discount (long) of premium (short) als vlak vanaf de range, de pool,
+    het evenwicht en de rand van de range als lijnen. Moment B en later: de zone (gap, of de overlap met het order block) als vlak, limiet, stop
+    en doel. Daarbij de sweep op zijn uiterste en de shift-candle zodra ze er zijn."""
+    import json
+    if not candles:
+        return ""
+    try:
+        d = json.loads(row.get("steps") or "{}")
+    except ValueError:
+        d = {}
+    steps = {s["stap"]: s for s in d.get("steps") or []}
+    sweep, shift = steps.get("sweep"), steps.get("shift")
+    origin = _ts((sweep or {}).get("prik_at")) or _ts(row.get("discovered_at"))
+    shown = candles[window(candles, origin):]
+    long = row["direction"] == "long"
+    points = []
+    if sweep:
+        points.append((_ts(sweep["prik_at"]), sweep["extreme"], "Sweep"))
+    if shift:
+        points.append((_ts(shift["at"]) - 900, shift["top"], "Shift"))
+    points = [p for p in points if p[0] is not None and p[0] >= shown[0][0]]
+    if row.get("limit_price") is not None:
+        e = d.get("entry") or {}
+        zone = {"low": row["zone_low"], "high": row["zone_high"], "from": _ts(e.get("fvg_at")) or origin,
+                "label": "Gap + OB 15m" if row.get("ob_overlap") else "Gap 15m"}
+        lines = _lines(row["direction"], row["limit_price"], row["stop_loss"], row["take_profit"])
+        return setup_chart.zone_svg(shown, row["coin"], row["direction"], zone, lines, points, None, price, row["limit_price"])
+    half = {"low": row["range_low"], "high": row["eq"]} if long else {"low": row["eq"], "high": row["range_high"]}
+    zone = {**half, "from": _ts(d.get("range_at")), "label": "Discount 4u" if long else "Premium 4u"}
+    edge = row["range_high"] if long else row["range_low"]
+    lines = [(row["pool_level"], "sc-limit", f"Pool {price_text.nl(row['pool_level'])}"), (edge, "sc-target", f"Rand {price_text.nl(edge)}")]
+    return setup_chart.zone_svg(shown, row["coin"], row["direction"], zone, lines, points, None, price, None)
