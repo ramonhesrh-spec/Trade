@@ -119,6 +119,40 @@ Controle achteraf (besluit CEO 2026-11-02): het model is live; fouten in de code
 """
 
 
+def _t(v) -> str:
+    return "-" if v is None else pd.Timestamp(v).strftime("%d-%m %H:%M")
+
+
+def _lvl(e: Optional[dict]) -> str:
+    if not e:
+        return "geen"
+    take = e.get("take")
+    return (f"limiet {e['limit']:.6g}, stop {e['stop']:.6g}, doel {take:.6g}" if take is not None else
+            f"limiet {e['limit']:.6g}, stop {e['stop']:.6g}, geen doel") + (f", bekend {_t(e.get('known_at'))}" if e.get("known_at") else "")
+
+
+def text_report(chosen: list[dict]) -> str:
+    """Hetzelfde als de HTML, als tekst voor de terminal: elke stap met het moment waarop hij herkenbaar was (UTC), de mislukte pogingen met
+    hun reden, en alle instappunten (A, B, B0, V1, P). Zo kan iemand zonder browser op de VPS het resultaat doorsturen."""
+    lines = []
+    for s in chosen:
+        lines.append(f"== {s['coin']} {s['direction']} · ontdekt {_t(s['discovered_at'])} · stand {s['status']} · range "
+                     f"{s['range_low']:.6g}-{s['range_high']:.6g} (EQ {s['eq']:.6g})")
+        for st in s.get("steps") or []:
+            extra = ", ".join(f"{k} {v:.6g}" for k, v in st.items() if k in ("pool", "extreme", "top") and v is not None)
+            lines.append(f"   stap {st['stap']:<13} {_t(st.get('at'))}" + (f"  ({extra})" if extra else ""))
+        for a in s.get("attempts") or []:
+            lines.append(f"   ✕ poging {_t(a['at'])}: {a['reden']}" + (f" (pool {a['pool']:.6g})" if a.get("pool") is not None else ""))
+        lines.append(f"   A  na sweep:      {_lvl(s.get('entry'))}")
+        lines.append(f"   B  lagere top:    {_lvl(s.get('b'))}")
+        lines.append(f"   B0 zonder premium:{_lvl(s.get('b0'))}")
+        lines.append(f"   V1 vroege limiet: {_lvl(s.get('v1'))}")
+        lines.append(f"   P  POC-limiet:    {_lvl(s.get('p'))}")
+        for prob in s.get("problems") or []:
+            lines.append(f"   !! afwijking zonder latere candles: {prob}")
+    return "\n".join(lines) if lines else "Geen scenario gevonden."
+
+
 def main(argv: Optional[list[str]] = None) -> Path:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--dagen", type=int, default=14)
@@ -126,6 +160,7 @@ def main(argv: Optional[list[str]] = None) -> Path:
     ap.add_argument("--coins", default="", help="kommagescheiden; standaard config.FIXED_COINS")
     ap.add_argument("--uit", default=str(DEFAULT_OUT))
     ap.add_argument("--zonder-controle", action="store_true", help="sla de herberekening zonder latere candles over (sneller)")
+    ap.add_argument("--tekst", action="store_true", help="druk elk scenario ook als tekst af (stappen, pogingen, alle instappunten)")
     args = ap.parse_args(argv)
     logging.basicConfig(level=logging.WARNING)
     now = pd.Timestamp(datetime.now(timezone.utc))
@@ -136,6 +171,8 @@ def main(argv: Optional[list[str]] = None) -> Path:
     out.write_text(build_html(chosen, now, args.dagen), encoding="utf-8")
     bad = sum(1 for s in chosen if s.get("problems"))
     print(f"{len(chosen)} scenario's getekend in {out}" + (f"; {bad} met een afwijking zonder latere candles" if bad else ""))
+    if args.tekst:
+        print(text_report(chosen))
     return out
 
 
