@@ -63,6 +63,14 @@ class CorrelationTest(unittest.TestCase):
         self.assertEqual(t, "BTC 4u: bearish · correlatie 0,82 (24u) / 0,74 (7d)")
 
 
+    def test_bekende_btc_richting_zonder_correlatie_blijft_zichtbaar(self):
+        # PUMP-rapport v3 §8: met een bekende BTC-richting en zonder correlatie "BTC 4u: bearish; correlatie onbekend", nooit "BTC-context onbekend".
+        t = bc.text({"btc_4h": "bearish", "corr_96": None, "corr_672": None, "rel_24h": None})
+        self.assertTrue(t.startswith("BTC 4u: bearish"), t)
+        self.assertNotIn("BTC-context onbekend", t)
+        self.assertIn("onvoldoende data", t)
+
+
 class BiasTest(unittest.TestCase):
     def test_btc_bias_uses_the_model_rule(self):
         fr = S.frames(base_rows())

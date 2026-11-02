@@ -2,6 +2,27 @@
 
 Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
 
+## Ronde 2 (2026-11-02)
+
+**Aanleiding.** De CEO vroeg of het HesPulse-rapport gelezen was.
+
+**Eerlijk antwoord.**
+- Het goudrapport had ik in ronde 1 helemaal gelezen.
+- Van het PUMP-rapport had ik ongeveer driekwart gelezen. §8 (beoordeling van de HesPulse-long) en de bijlagen ontbraken.
+- De beelden in beide rapporten had ik niet bekeken.
+
+**Nu gedaan.**
+- Alle tekst gelezen.
+- De acht beelden uit de rapporten gehaald.
+- De SHA-256 van de drie goudbeelden komt overeen met de waarden in het rapport.
+- De PUMP-grafieken A en E en goud A bekeken.
+
+**Nieuw.**
+- Op de externe bron lag de PUMP-koers om 12:11 al onder de HesPulse-limiet. Een vulling op Binance is daarmee niet aangetoond (`cases/2026-11-02-pump.md`).
+- De eis "BTC bearish, correlatie onbekend" werkte al. Hij heeft nu een regressietest.
+
+**Herzien.** Geen eerdere conclusie.
+
 ## Ronde 1 (2026-11-02)
 
 **Inventaris.**
