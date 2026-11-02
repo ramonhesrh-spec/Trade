@@ -148,8 +148,9 @@ class LiveTest(DbCase):
         self.assertEqual(len(kept), 1)
         self.assertIn("al voorbij", kept[0]["reason"])
 
-    def test_every_grade_is_announced_the_same_loud_way(self):
-        # Het oordeel is alleen nog een meting: A, B en C krijgen bij het ontstaan dezelfde luide melding zonder letter of woord.
+    def test_every_grade_is_announced_the_same_silent_way(self):
+        # Het oordeel is alleen nog een meting: A, B en C krijgen bij het ontstaan dezelfde melding zonder letter of woord. Sinds 2026-11-02 (CEO,
+        # te veel meldingen) is die stil en staat hij op de meldingenpagina; alleen de vulling is luid.
         from app import push_notify
         for grade in ("A", "B", "C"):
             with self.subTest(grade=grade):
@@ -158,7 +159,8 @@ class LiveTest(DbCase):
                 self.assertEqual(len(self.pushed), 1)
                 title, body, url, silent = self.pushed[0]
                 self.assertEqual(title, push_notify.alert_title("BTC", "short", "Structuur wacht"))
-                self.assertFalse(silent)
+                self.assertTrue(silent)
+                self.assertEqual(len(repo.list_notifications(repo.list_users()[0]["id"])), 1)
                 self.assertNotIn("Schone range", body)                     # de toelichting van het oordeel staat er niet in
                 self.assertTrue(url.startswith("/structuur#structuur-"))
                 self.assertEqual(repo.list_structure_setups(("waiting",))[0]["grade"], grade)     # het oordeel blijft als meting
@@ -176,21 +178,16 @@ class LiveTest(DbCase):
         self.assertNotIn("CEO", full["reason"])
         self.assertEqual(full["confidence"], "Structuur")
 
-    def test_grade_c_respects_budget_and_conflict_rule(self):
+    def test_new_card_is_silent_and_outside_budget_and_conflict_rule(self):
         user_id = repo.list_users()[0]["id"]
         now = datetime.now(timezone.utc).isoformat()
         repo.record_push(user_id, "BTC", "long", now)           # tegenstrijdig met de short van de kans
+        for coin in ("ETH", "SOL", "XRP", "ADA", "DOGE", "LINK", "BNB", "AVAX"):
+            repo.record_push(user_id, coin, "long", now)       # dagbudget op
         self.run_live(BREAK_BAR + 4, grade="C")
-        self.assertEqual(self.pushed, [])
-        self.assertTrue(any("Tegenstrijdig" in n["body"] for n in repo.list_notifications(user_id)))
-
-    def test_grade_c_respects_daily_budget(self):
-        user_id = repo.list_users()[0]["id"]
-        now = datetime.now(timezone.utc).isoformat()
-        for coin in ("ETH", "SOL", "XRP", "ADA", "DOGE", "LINK", "BNB", "AVAX", "SUI", "DOT", "LTC", "BCH", "NEAR", "ATOM", "UNI"):
-            repo.record_push(user_id, coin, "long", now)
-        self.run_live(BREAK_BAR + 4, grade="C")
-        self.assertEqual(self.pushed, [])
+        self.assertEqual([p[3] for p in self.pushed], [True])
+        self.assertFalse(any("Tegenstrijdig" in n["body"] or "Dagbudget" in n["body"] for n in repo.list_notifications(user_id)))
+        self.assertEqual(len(repo.list_recent_pushes(user_id, "2000-01-01T00:00:00+00:00")), 9)     # telt niet mee
 
     def test_grade_c_respects_daily_structure_cap(self):
         with mock.patch.object(config, "STRUCTURE_MAX_ALERTS_PER_DAY", 0):

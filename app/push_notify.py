@@ -6,6 +6,7 @@ de payload zelf."""
 import asyncio
 import json
 import logging
+from contextvars import ContextVar
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
@@ -113,11 +114,70 @@ def record_failure(user_id: int, kind: str, ref: str, error) -> None:
         logger.exception("Kon mislukte push voor gebruiker %s niet vastleggen", user_id)
 
 
+KANSEN_URL = "/smc"
+BUNDLE_TAG = "kansen-gevuld"
+# Luide kanspushes van één scancyclus, per gebruiker; None = niet bundelen, meteen versturen. Een ContextVar zodat alleen de cyclus die hem
+# opende (market_scanner.scan_smc_fast) bundelt en een andere aanroeper (bot, tests) gewoon direct verstuurt.
+_bundle: ContextVar[Optional[dict]] = ContextVar("kans_bundle", default=None)
+
+
+def open_bundle() -> None:
+    """Vanaf nu verzamelt send_kans_push de luide pushes per gebruiker tot close_bundle: vullen er in één cyclus meer, dan komt er één push."""
+    _bundle.set({})
+
+
+async def close_bundle() -> None:
+    """Verstuurt wat open_bundle verzamelde: per gebruiker één push. Mag vaker aangeroepen worden; zonder open bundel doet hij niets."""
+    pending = _bundle.get()
+    if pending is None:
+        return
+    _bundle.set(None)
+    for user_id, items in pending.items():
+        try:
+            await _deliver(user_id, items)
+        except Exception as exc:
+            logger.exception("Gebundelde kansmelding naar gebruiker %s is mislukt", user_id)
+            for item in items:
+                record_failure(user_id, "kans", item["url"], exc)
+                repo.create_notification(user_id, "kans", item["title"], f"{item['body']}\nDe push kwam niet aan, daarom staat hij hier.", item["url"])
+
+
+async def send_new_card(user_id: int, coin: str, direction: str, title: str, body: str, url: str, tag: Optional[str] = None,
+                        timing: Optional[dict] = None) -> None:
+    """Een nieuwe kaart (Structuur, zone-radar, zone-sweep, POC-radar): altijd op de meldingenpagina en hoogstens een stille push, buiten het
+    dagbudget en de conflictregel. Sinds 2026-11-02 op verzoek van de CEO (veel te veel meldingen, ~560 nieuwe kaarten in een week): alleen de
+    vulling is nog luid. Pauze en volg-set houden ook de stille push tegen."""
+    now = datetime.now(timezone.utc)
+    user = repo.get_user(user_id) or {}
+    if push_policy.pause_minutes_left(user.get("push_paused_until"), now):
+        repo.create_notification(user_id, "kans", title, f"{body}\nMeldingen stonden op pauze, daarom geen push.", url)
+        return
+    if not push_policy.in_follow_set(repo.follow_set_coins(user_id), coin):
+        name = next((s["name"] for s in repo.list_follow_sets() if s["id"] == user.get("follow_set_id")), "")
+        repo.create_notification(user_id, "kans", title, f"{body}\n{coin} staat niet in je volg-set {name}, daarom geen push.", url)
+        return
+    repo.create_notification(user_id, "kans", title, body, url)
+    error = await send_push(user_id, title, body, url, silent=True, **({"tag": tag} if tag else {}))
+    _record_timing(user_id, url, not error, timing, coin)
+    if error:
+        record_failure(user_id, "kans", url, error)
+
+
+def _record_timing(user_id: int, url: str, ok: bool, timing: Optional[dict], coin: str) -> None:
+    if not timing:
+        return
+    try:
+        repo.record_alert_timing(user_id, url, ok, timing, datetime.now(timezone.utc).isoformat())
+    except Exception:
+        logger.exception("Vertraging van de melding voor %s niet vastgelegd", coin)
+
+
 async def send_kans_push(user_id: int, coin: str, direction: str, title: str, body: str, url: str, silent: bool = False,
                          tag: Optional[str] = None, badge: Optional[int] = None, timing: Optional[dict] = None) -> bool:
-    """Push voor een nieuwe kans, met de regels van app/push_policy.py: geen tegenstrijdige richting kort na elkaar op dezelfde coin en een dagbudget per
-    gebruiker. Een geweerde kans wordt een rustige melding op de meldingenpagina, dus niets verdwijnt. Geeft True als er een push is gestuurd.
-    Updates van een lopende trade, stop en doel en de agenda gaan rechtstreeks via send_push en komen altijd.
+    """Luide push voor een kans (een vulling), met de regels van app/push_policy.py: geen tegenstrijdige richting kort na elkaar op dezelfde coin
+    en een dagbudget per gebruiker waarin elke luide push telt. Een geweerde kans wordt een rustige melding op de meldingenpagina, boven het
+    budget ook een stille push, dus niets verdwijnt. Binnen een open bundel (open_bundle) wacht hij op close_bundle. Geeft True als hij als
+    luide push gaat (of in de bundel staat). Updates van een lopende trade, stop en doel en de agenda gaan rechtstreeks via send_push.
     timing (app/latency.timing): candle- en detectiemoment van de kans; met het moment van verzenden komt het in alert_timing."""
     now = datetime.now(timezone.utc)
     user = repo.get_user(user_id) or {}
@@ -130,21 +190,49 @@ async def send_kans_push(user_id: int, coin: str, direction: str, title: str, bo
         name = next((s["name"] for s in repo.list_follow_sets() if s["id"] == user.get("follow_set_id")), "")
         repo.create_notification(user_id, "kans", title, f"{body}\n{coin} staat niet in je volg-set {name}, daarom geen push.", url)
         return False
-    allowed, reason = push_policy.decide(repo.list_recent_pushes(user_id, (now - timedelta(hours=24)).isoformat()), coin, direction, user.get("push_budget"), now)
-    if not allowed:
+    pending = _bundle.get()
+    queued = [] if pending is None else pending.get(user_id, [])
+    recent = repo.list_recent_pushes(user_id, (now - timedelta(hours=24)).isoformat())
+    reason = push_policy.conflict(recent + [{"coin": q["coin"], "direction": q["direction"], "at": now.isoformat()} for q in queued], coin, direction, now)
+    if reason:
         repo.create_notification(user_id, "kans", title, f"{body}\n{reason}", url)
         return False
-    repo.record_push(user_id, coin, direction, now.isoformat())
-    error = await send_push(user_id, title, body, url, silent=silent, **({"tag": tag} if tag else {}), **({"badge": badge} if badge is not None else {}))
-    if timing:
-        try:
-            repo.record_alert_timing(user_id, url, not error, timing, datetime.now(timezone.utc).isoformat())
-        except Exception:
-            logger.exception("Vertraging van de melding voor %s niet vastgelegd", coin)
+    item = {"coin": coin, "direction": direction, "title": title, "body": body, "url": url, "silent": silent, "tag": tag, "badge": badge,
+            "timing": timing}
+    if pending is not None:
+        pending.setdefault(user_id, []).append(item)
+        return True
+    return await _deliver(user_id, [item])
+
+
+async def _deliver(user_id: int, items: list[dict]) -> bool:
+    """Eén push voor deze kansen: één kans met zijn eigen tekst en link, meer als '3 kansen gevuld' met een link naar Kansen. Telt één keer in
+    het dagbudget. Is het budget op, dan een stille push en elke kans apart op de meldingenpagina."""
+    now = datetime.now(timezone.utc)
+    user = repo.get_user(user_id) or {}
+    if len(items) == 1:
+        one = items[0]
+        title, body, url, tag, badge = one["title"], one["body"], one["url"], one["tag"], one["badge"]
+    else:
+        title, body = push_policy.bundle_text([(i["coin"], i["direction"]) for i in items])
+        url, tag, badge = KANSEN_URL, BUNDLE_TAG, None
+    extra = {**({"tag": tag} if tag else {}), **({"badge": badge} if badge is not None else {})}
+    full = push_policy.over_budget(repo.list_recent_pushes(user_id, (now - timedelta(hours=24)).isoformat()), user.get("push_budget"))
+    if full:
+        for i in items:
+            repo.create_notification(user_id, "kans", i["title"], f"{i['body']}\n{full}", i["url"])
+        await send_push(user_id, title, body, url, silent=True, **extra)
+        return False
+    for n, i in enumerate(items):
+        repo.record_push(user_id, i["coin"], i["direction"], now.isoformat(), counts=1 if n == 0 else 0)
+    error = await send_push(user_id, title, body, url, silent=all(i["silent"] for i in items), **extra)
+    for i in items:
+        _record_timing(user_id, i["url"], not error, i["timing"], i["coin"])
     if error:
         # De kaart is al geclaimd (alert_sent), dus geen nieuwe poging: de kans komt dan op de meldingenpagina in plaats van stil te verdwijnen.
         record_failure(user_id, "kans", url, error)
-        repo.create_notification(user_id, "kans", title, f"{body}\nDe push kwam niet aan, daarom staat hij hier.", url)
+        for i in items:
+            repo.create_notification(user_id, "kans", i["title"], f"{i['body']}\nDe push kwam niet aan, daarom staat hij hier.", i["url"])
     return True
 
 

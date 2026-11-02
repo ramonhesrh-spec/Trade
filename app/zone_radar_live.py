@@ -5,7 +5,7 @@ Per cyclus eerst volgen, dan opruimen, dan ontdekken:
      en uitkomst via level_check. Haalde de koers eerst het doel, dan vervalt de kaart stil.
   2. Opruimen: een kaart waarvan de zone niet meer actief is (doorbroken of te oud) vervalt stil.
   3. Ontdekken: per coin en richting hooguit één wachtende kaart, met één melding 'zet je limietorder klaar'. Dagcap op nieuwe kaarten.
-Elke melding gaat via push_notify.send_kans_push (dagbudget, conflictregel, stille uren). Ongetest: Bewijs toont de score."""
+Een nieuwe kaart is een stille melding (push_notify.send_new_card), de vulling de luide via send_kans_push (dagbudget, conflictregel, stille uren). Ongetest: Bewijs toont de score."""
 import asyncio
 import logging
 from datetime import datetime, timezone
@@ -43,10 +43,10 @@ async def _push_new_card(card: dict, detected=None) -> None:
     title = push_notify.alert_title(card["coin"], card["direction"], f"{zr.LABEL} · ongetest")
     body = new_card_body(card)
     for user in repo.list_users():
-        quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            await push_notify.send_kans_push(user["id"], card["coin"], card["direction"], title, body, card_url(card["id"]), silent=quiet,
-                                             tag=f"zone-radar-{card['id']}", timing=timing)
+            # Stil en buiten het budget: alleen de vulling is luid (CEO, 2026-11-02).
+            await push_notify.send_new_card(user["id"], card["coin"], card["direction"], title, body, card_url(card["id"]),
+                                            tag=f"zone-radar-{card['id']}", timing=timing)
         except Exception as exc:
             logger.exception("Zone-radar-melding voor %s naar gebruiker %s is mislukt", card["coin"], user["username"])
             push_notify.record_failure(user["id"], "kans", card_url(card["id"]), exc)

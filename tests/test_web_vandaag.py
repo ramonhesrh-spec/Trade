@@ -43,8 +43,8 @@ class WebVandaagTests(unittest.TestCase):
         repo.record_push(uid, "BTC", "long", now.isoformat())
         repo.record_push(uid, "ETH", "long", (now - timedelta(hours=30)).isoformat())     # buiten het venster
         r = self.client.get("/vandaag")
-        self.assertIn("1 van 15 meldingen in 24 uur", r.text)
-        self.assertIn('stroke-dashoffset="93.3"', r.text)
+        self.assertIn("1 van 8 luide meldingen in 24 uur", r.text)
+        self.assertIn('stroke-dashoffset="87.5"', r.text)
 
     def test_setups_page_shows_waiting_structure_setup_with_chart(self):
         import json
@@ -338,7 +338,10 @@ class WebVandaagTests(unittest.TestCase):
         self.assertIsNone(repo.get_user(me)["push_budget"])                    # ongeldig: terug naar de standaard
         self.client.post("/settings/meldingen", data={"budget": "0"}, follow_redirects=False)
         self.assertEqual(repo.get_user(me)["push_budget"], 0)                  # 0 zet het budget uit
-        self.assertIn("Maximaal aantal pushes per dag", self.client.get("/account").text)
+        page = self.client.get("/account").text
+        self.assertIn("Maximaal aantal luide pushes per dag", page)
+        self.assertIn('placeholder="standaard 8"', page)
+        self.assertIn("Een nieuwe kaart komt stil", page)
 
     def test_static_files_are_cached_by_version_and_pages_are_compressed(self):
         page = self.client.get("/vandaag", headers={"Accept-Encoding": "gzip"})

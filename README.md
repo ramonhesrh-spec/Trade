@@ -47,8 +47,26 @@ Uitzetten is geen weggooien: code en data blijven, en `ENGINE_FOCUS=false` in `.
   een uitgezette soort blijft staan onder zijn eigen naam (een eigen tab op Kansen, of Verder open op Markt). Het markt-script verdwijnt van Markt.
 - **Bewijs:** de focus-soorten staan bovenaan en open, de andere onder "Uitgezet, ter verbetering" met hun eindcijfers (n, doel, stop,
   netto R). Niets verdwijnt.
-- **Pushbudget:** de regels van `push_policy` zijn niet veranderd; omdat alleen de focus-soorten nog iets nieuws melden, gaat het dagbudget
-  in de praktijk alleen naar hen.
+- **Pushbudget:** omdat alleen de focus-soorten nog iets nieuws melden, gaat het dagbudget in de praktijk alleen naar hun vullingen (zie
+  hieronder).
+
+## Meldingen: wat luid is en wat stil
+
+Sinds 2026-11-02, op verzoek van de CEO (in een week ~560 nieuwe kaarten en ~255 vullingen, veel te veel meldingen):
+
+- **Nieuwe kaart = stil.** Een nieuwe kaart van Structuur, zone-radar, zone-sweep of POC-radar staat op Kansen en op `/meldingen` en komt
+  hoogstens als stille push (geen geluid, geen trilling). Hij telt niet mee in het dagbudget en valt niet onder de conflictregel
+  (`push_notify.send_new_card`).
+- **Vulling = luid**, met een dagmaximum per gebruiker: `push_policy.DEFAULT_BUDGET` (8) luide pushes per 24 uur, in te stellen bij Account
+  (`users.push_budget`, leeg = standaard, 0 = geen maximum). Elke luide push telt, ook een tweede op dezelfde coin en richting. Boven het
+  maximum komt de vulling als stille push en staat hij op `/meldingen`: een kans krijgt altijd een melding zodra de limiet vult.
+- **Bundelen:** vullen er in één snelcyclus (`scan_smc_fast`) meer kansen voor dezelfde gebruiker, dan komt er één push "3 kansen gevuld:
+  SOL long, ETH short, ADA long" met een link naar Kansen, en die telt één keer (`push_notify.open_bundle`/`close_bundle`, `push_log.counts`).
+- **Uitkomst** (doel of stop uit `level_check`, updates van een lopende trade) komt zoals altijd, één keer per trade, en telt niet mee.
+- **Pauze en volg-set** werken voor alles: tijdens een pauze of voor een coin buiten je volg-set gaat er geen push uit, de melding staat
+  wel op `/meldingen`. Een vulling de andere kant op dan een push van de laatste 6 uur op dezelfde coin komt alleen op `/meldingen`.
+- De ring "Meldingen, 24 uur" op Markt telt de luide pushes tegen het budget. `scripts/push_diag.py` laat per gebruiker zien waarom iets
+  wel of geen push werd.
 
 ## Onderdelen
 
@@ -475,7 +493,7 @@ sudo systemctl start crypto-news.service crypto-script.service
 - `app/structure_live.py`: breuk van een lijn of range op 30m, of van de laatste top na een hogere bodem (CHOCH, gespiegeld voor short; live
   sinds 2026-10-28 zonder labrun, ongetest) (detectoren `find_breaks` en `find_choch` uit `app/replay/breakretest.py`, alleen gesloten candles).
   Claude geeft een oordeel A, B of C, maar dat is alleen nog een meting: het filtert niets en staat op geen scherm. De code berekent niveau, stop
-  en doelen. Elke breuk met een plan krijgt dezelfde luide melding; bij een volle dagcap gaat de kans die het dichtst bij zijn limiet ligt voor.
+  en doelen. Elke breuk met een plan krijgt dezelfde stille melding (luid is alleen de vulling, zie "Meldingen"); bij een volle dagcap gaat de kans die het dichtst bij zijn limiet ligt voor.
   Bewijs houdt de vullingen met oordeel C apart als `structuur_c`, naar buiten heten beide Structuur. Het plan staat in de melding en op de pagina Setups (`/structuur#structuur-<id>`), vóórdat de limiet vult. Raakt de koers het niveau,
   dan volgt een signaal met `trade_type = 'structuur'` (label ongetest, score op Bewijs). Max `STRUCTURE_MAX_ALERTS_PER_DAY` (30)
   per dag. Gaat vanzelf uit na `STRUCTURE_MAX_NEGATIVE` (30) afgeronde signalen die samen negatief zijn. `STRUCTURE_ENABLED=false`
@@ -491,14 +509,14 @@ sudo systemctl start crypto-news.service crypto-script.service
   op 1u en 4u (binnen 6%), als limietplan op de Radar (`/smc`): limiet op de binnenrand, stop een kwart ATR voorbij de buitenrand (minstens
   `SMC_MIN_STOP_PCT`), doel de rand van de eerste tegenovergestelde zone vanaf de limiet (ook als die tussen limiet en koers ligt), zonder minimale
   R:R (de kaart op Kansen toont de geplande R:R vanaf de limiet als klein label, "2,4 R"; het blad zegt "gepland" bij Doel). De kaart bewaart tot 5 obstakels voorbij de limiet met R en het moment waarop ze bekend werden (`obstacles`); het
-  detailblad toont het eerste en er hoogstens twee daarna. Melding bij een nieuwe kaart en bij de vulling;
+  detailblad toont het eerste en er hoogstens twee daarna. Stille melding bij een nieuwe kaart, luide bij de vulling;
   gevuld wordt het een signaal met `trade_type = 'zone_radar'` (ongetest, apart op Bewijs). Max `ZONE_RADAR_MAX_PER_DAY` (40, de kaarten dichtst bij de koers gaan voor) nieuwe kaarten
   per dag, `ZONE_RADAR_ENABLED=false` zet het uit. Handmatig draaien: `python3 -m app.zone_radar_live`.
 - `app/zone_sweep_live.py` (kaart in `app/zone_sweep.py`, detector `app/replay/zonesweep.py`): de koers prikt door een actieve vraagzone (long) of
   aanbodzone (short) en sluit binnen 6 candles op 1u terug. Live vóór de labrun, op verzoek van de gebruiker, altijd ongetest (zie
   `docs/onderzoek/zone-sweep/preregistratie.md`, "Aanvullende besluiten"). Varianten ZS_1H, ZS_2H en ZS_4H, limiet op de binnenrand, stop een
   kwart ATR voorbij de prik, doel de rand van de eerstvolgende tegenovergestelde zone bij minstens 2R, anders geen doel (dan telt Bewijs de R bij de
-  referentie-uitgang, zoals bij de range sweep). Kaart op de Radar, melding bij een nieuwe kaart en bij de vulling, gevuld een signaal met
+  referentie-uitgang, zoals bij de range sweep). Kaart op de Radar, stille melding bij een nieuwe kaart en luide bij de vulling, gevuld een signaal met
   `trade_type = 'zone_sweep'` buiten de `/keten`. `ZONE_SWEEP_ENABLED` (standaard `true`), `ZONE_SWEEP_PUBLIC` (standaard `true`; `false` is
   alleen de CEO), `ZONE_SWEEP_MAX_PER_DAY` (10 gemelde kaarten per 24 uur, de rest staat stil op de Radar). Draait in de snelle SMC-check, geen
   eigen unit. Handmatig: `python3 -m app.zone_sweep_live`.

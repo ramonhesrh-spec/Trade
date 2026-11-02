@@ -37,6 +37,10 @@ class PushDiagTest(unittest.TestCase):
         self.assertIn("uit door focus", line)
         self.assertIn("ENGINE_FOCUS: uit", pd.focus_line(False))
 
+    def test_had_push_names_a_silent_notification(self):
+        self.assertEqual(pd.had_push("plan\nDagbudget van 8 pushes bereikt, daarom een stille melding."), "stil (budget op)")
+        self.assertEqual(pd.had_push("plan\nMeldingen stonden op pauze, daarom geen push."), "nee (geen push)")
+
 
 if __name__ == "__main__":
     unittest.main()

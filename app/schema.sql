@@ -683,7 +683,8 @@ CREATE TABLE IF NOT EXISTS push_log (
     user_id INTEGER NOT NULL,
     at TEXT NOT NULL,
     coin TEXT NOT NULL,
-    direction TEXT NOT NULL
+    direction TEXT NOT NULL,
+    counts INTEGER NOT NULL DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_push_log_user_at ON push_log(user_id, at);
 

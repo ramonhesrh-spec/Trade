@@ -336,12 +336,12 @@ def fmt_price(value: float) -> str:
 
 
 def budget_ring(sent: int, budget: Optional[int], default: int = push_policy.DEFAULT_BUDGET) -> dict:
-    """Pushes voor nieuwe kansen in de laatste 24 uur tegenover het dagbudget. Zelfde venster en zelfde telling als push_policy.decide,
-    zodat de ring vol is precies wanneer nieuwe kansen alleen nog op de meldingenpagina komen. budget None = standaard, 0 = geen budget."""
+    """Luide pushes (vullingen, een bundel telt één keer) in de laatste 24 uur tegenover het dagbudget. Zelfde venster en zelfde telling als
+    push_policy.decide, zodat de ring vol is precies wanneer een vulling een stille melding wordt. budget None = standaard, 0 = geen budget."""
     limit = default if budget is None else budget
     noun = "melding" if sent == 1 else "meldingen"
     if limit <= 0:
-        return {"sent": sent, "limit": 0, "off": True, "offset": 100.0, "full": False, "label": f"{sent} {noun} in 24 uur, geen budget"}
+        return {"sent": sent, "limit": 0, "off": True, "offset": 100.0, "full": False, "label": f"{sent} luide {noun} in 24 uur, geen budget"}
     share = min(1.0, sent / limit)
     return {"sent": sent, "limit": limit, "off": False, "offset": round(100 - share * 100, 1), "full": sent >= limit,
-            "label": f"{sent} van {limit} meldingen in 24 uur"}
+            "label": f"{sent} van {limit} luide meldingen in 24 uur"}

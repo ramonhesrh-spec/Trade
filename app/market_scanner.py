@@ -1223,9 +1223,15 @@ def seconds_after_slot(moment: datetime) -> float:
 
 async def scan_smc_fast() -> None:
     started, t0 = datetime.now(timezone.utc), time.monotonic()
+    # Vullen er in deze cyclus meer kansen voor dezelfde gebruiker, dan krijgt hij één push (CEO, 2026-11-02, te veel meldingen).
+    push_notify.open_bundle()
     try:
         await _scan_smc_fast()
     finally:
+        try:
+            await push_notify.close_bundle()
+        except Exception:
+            logger.exception("Gebundelde kansmeldingen zijn mislukt")
         try:
             repo.beat(FAST_CYCLE_BEAT, f"start {seconds_after_slot(started):.0f} s na het 5m-slot, duur {time.monotonic() - t0:.0f} s")
         except Exception:
@@ -1327,6 +1333,11 @@ async def _scan_smc_fast() -> None:
         await poc_radar_live.run()       # zoekt in de eerste cyclus na het uurslot, als de zone-sweep zijn 1u- en 4u-candles al in de cache zette
     except Exception:
         logger.exception("POC-radar is mislukt")
+    try:
+        # Alle vullingen van deze cyclus zijn er: niet nog op de schaduwmeting wachten met de push.
+        await push_notify.close_bundle()
+    except Exception:
+        logger.exception("Gebundelde kansmeldingen zijn mislukt")
     try:
         # Na de motoren: hun schaduwplannen van deze cyclus staan er dan al. Alleen meting, geen melding (app/shadow_live.py).
         await asyncio.to_thread(shadow_live.track)
