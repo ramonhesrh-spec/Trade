@@ -1237,7 +1237,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     # HesPulse-model (app/model_measure.py): de meting voor de eerste evaluatie voor iedereen, de vergelijkingen V1-V3 alleen voor de CEO.
     scenarios = repo.list_model_scenarios()
     model_report = model_measure.report(scenarios, repo.list_model_v1() if is_ceo(user) else [], rows, config.TRACK_RECORD_COST_PCT,
-                                        ceo=is_ceo(user)) if scenarios else None
+                                        ceo=is_ceo(user), entries=repo.list_model_entries()) if scenarios else None
     return templates.TemplateResponse(request, "bewijs.html", {
         "shadow_lines": shadow_lines, "model_report": model_report, "r_text": model_measure.r_text, "ci_text": model_measure.ci_text,
         "my_week": _week_review(user, datetime.now(timezone.utc)),

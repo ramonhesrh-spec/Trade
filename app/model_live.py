@@ -73,6 +73,55 @@ async def _announce_entry(row: dict, stamp: pd.Timestamp) -> None:
             push_notify.record_failure(uid, "kans", mc.card_url(row["id"]), exc)
 
 
+ENTRY_CODES = {"b": "B", "b0": "B0", "p": "P"}
+
+
+def store_entries(scenario_id: int, coin: str, sc: dict, stamp: pd.Timestamp) -> int:
+    """Legt de instappunten B, B0 en P vast zodra model.scenarios ze vindt (aanvullend besluit 2026-11-03). Een punt dat al verlopen was
+    voordat de motor hem zag, komt er niet in: hij was nooit live. Geeft het aantal nieuwe punten."""
+    n = 0
+    for key, code in ENTRY_CODES.items():
+        e = sc.get(key)
+        if not e:
+            continue
+        expires = e.get("expires_at")
+        if expires is not None and pd.Timestamp(expires) <= stamp:
+            continue
+        basis = {k: (_iso(v) if isinstance(v, pd.Timestamp) else v) for k, v in e.items()
+                 if k not in ("limit", "stop", "take", "rr", "known_at", "expires_at")}
+        n += repo.insert_model_entry(scenario_id, {
+            "code": code, "coin": coin, "direction": sc["direction"], "known_at": _iso(e["known_at"]), "detected_at": stamp.isoformat(),
+            "limit_price": e["limit"], "stop_loss": e["stop"], "take_profit": e.get("take"), "rr": e.get("rr"),
+            "expires_at": _iso(expires) if expires is not None else None, "basis": json.dumps(basis)})
+    return n
+
+
+def track_entry(e: dict, b5: pd.DataFrame, breaks: list, stamp: pd.Timestamp) -> None:
+    """B, B0 en P stil, met de regels van H: vulling vanaf het vastleggen (model.walk_fill), uitkomst vanaf de vulcandle (model.outcome).
+    B vervalt na zijn 6 uur; P leeft zolang het scenario, net als V1."""
+    if e["state"] == "wacht":
+        if e["expires_at"]:
+            expires = pd.Timestamp(e["expires_at"])
+        else:
+            ended = e.get("scenario_ended_at") if e.get("scenario_status") in repo.MODEL_FINAL else None
+            expires = pd.Timestamp(ended) if ended else None
+        res = model.walk_fill(e["direction"], e["limit_price"], e["take_profit"], pd.Timestamp(e["detected_at"]), expires, b5, breaks_at=breaks)
+        if res["state"] == "gevuld":
+            repo.update_model_entry(e["id"], state="gevuld", filled_at=_iso(res["at"]))
+            e = {**e, "state": "gevuld", "filled_at": _iso(res["at"])}
+        elif res["state"]:
+            repo.update_model_entry(e["id"], state=res["state"], ended_at=_iso(res["at"]))
+            return
+        elif expires is not None and stamp >= expires:
+            repo.update_model_entry(e["id"], state="vervallen", ended_at=_iso(expires))
+            return
+    if e["state"] == "gevuld":
+        out = model.outcome(e["direction"], e["limit_price"], e["stop_loss"], e["take_profit"], pd.Timestamp(e["filled_at"]), b5)
+        if out["state"]:
+            repo.update_model_entry(e["id"], state="klaar", outcome=out["state"], outcome_at=_iso(out["at"]), r_gross=out["r"],
+                                    ambiguous=int(out["ambiguous"]), ended_at=_iso(out["at"]))
+
+
 async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[float], btc: Optional[Callable[[], dict]] = None) -> dict:
     """btc: geeft de BTC-context van dit moment (btc_context.measure): kenmerk op de kaart en bij moment B de BTC-poort (MODEL_BTC_GATE). Bewaart wat model.scenarios vond. Een scenario dat al voorbij was voordat de motor het zag (bij de eerste start, of na een storing), komt
     niet in de app: het was nooit live. Geeft tellers terug voor de hartslag."""
@@ -96,6 +145,7 @@ async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[
                                        "take_profit": v1["take"], "rr": v1["rr"], "placed_at": stamp.isoformat(),
                                        "state": "wacht" if v1["take"] is not None else "geen_doel"})
             stored = repo.get_model_scenario(sid)
+        store_entries(stored["id"], coin, sc, stamp)
         if stored["status"] in repo.MODEL_FINAL:
             continue
         publish = None
@@ -180,7 +230,9 @@ async def track(now: Optional[datetime] = None) -> None:
     v1 = repo.list_model_v1(("wacht", "gevuld"))
     trades = repo.list_open_model_trades()
     held = [r for r in repo.list_model_scenarios(entry_states=("btc_tegen",)) if r.get("cf_state") in ("wacht", "gevuld")]
-    for coin in sorted({r["coin"] for r in waiting} | {r["coin"] for r in v1} | {t["coin"] for t in trades} | {r["coin"] for r in held}):
+    alts = repo.list_model_entries(("wacht", "gevuld"))
+    for coin in sorted({r["coin"] for r in waiting} | {r["coin"] for r in v1} | {t["coin"] for t in trades} | {r["coin"] for r in held}
+                       | {e["coin"] for e in alts}):
         try:
             b5 = rsl._upto(await asyncio.to_thread(rsl.fetch_bars, coin, "5m", FILL_LIMIT), stamp)
             breaks = model.break_times(rsl._upto(await asyncio.to_thread(rsl.fetch_bars, coin, "4h", LIMIT), stamp), stamp)
@@ -204,6 +256,11 @@ async def track(now: Optional[datetime] = None) -> None:
                 track_v1(v, b5, breaks, stamp)
             except Exception:
                 logger.exception("V1 van scenario %s is niet verwerkt", v["scenario_id"])
+        for e in (x for x in alts if x["coin"] == coin):
+            try:
+                track_entry(e, b5, breaks, stamp)
+            except Exception:
+                logger.exception("Instappunt %s %s van scenario %s is niet verwerkt", e["code"], e["id"], e["scenario_id"])
         for r in (x for x in held if x["coin"] == coin):
             try:
                 track_cf(r, b5, breaks, stamp)

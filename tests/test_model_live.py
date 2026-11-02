@@ -269,3 +269,42 @@ class BtcGateTest(Case):
     def test_de_reden_staat_in_gewone_taal(self):
         from app import end_reason
         self.assertIn("BTC", end_reason.text("hespulse_model", "btc_tegen"))
+
+
+class EntryPointsTest(Case):
+    """Aanvullend besluit 2026-11-03: B, B0 en P worden vastgelegd en stil gevolgd met de regels van H; een punt dat al verlopen was, nooit."""
+
+    def scenario_id(self):
+        self.cycle(at(TAIL_FROM - 5))
+        return self.scenario()["id"]
+
+    def b5(self, rows, start):
+        return S.frame(rows, "5min", start)
+
+    def test_vastleggen_vullen_en_uitkomst(self):
+        sid = self.scenario_id()
+        t0 = pd.Timestamp("2026-10-10T00:00Z")
+        sc = {"direction": "long", "b": {"known_at": t0, "limit": 100.0, "stop": 99.0, "take": 103.0, "rr": 3.0, "expires_at": t0 + pd.Timedelta(hours=6),
+                                         "extreme": 99.5}, "b0": None, "p": None}
+        self.assertEqual(model_live.store_entries(sid, "BTC", sc, t0), 1)
+        self.assertEqual(model_live.store_entries(sid, "BTC", sc, t0), 0)            # één keer
+        (e,) = repo.list_model_entries()
+        b5 = self.b5([[100.5, 100.6, 100.4, 100.5], [100.5, 100.5, 99.9, 100.1], [100.1, 103.2, 100.0, 103.0]], t0)
+        model_live.track_entry(e, b5, [], t0 + pd.Timedelta(minutes=20))
+        (e,) = repo.list_model_entries()
+        self.assertEqual((e["state"], e["outcome"], e["r_gross"]), ("klaar", "take_profit", 3.0))
+        self.assertEqual(pd.Timestamp(e["filled_at"]), t0 + pd.Timedelta(minutes=5))
+        with db.session() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM signals").fetchone()[0], 0)    # geen signaal, geen journaal, geen melding
+        self.assertEqual(self.sent, [])
+
+    def test_tegenvoorbeeld_al_verlopen_punt_komt_er_niet_in_en_een_wachtend_punt_vervalt(self):
+        sid = self.scenario_id()
+        t0 = pd.Timestamp("2026-10-10T00:00Z")
+        old = {"direction": "long", "b": {"known_at": t0, "limit": 100.0, "stop": 99.0, "take": 103.0, "rr": 3.0,
+                                          "expires_at": t0 + pd.Timedelta(hours=6)}}
+        self.assertEqual(model_live.store_entries(sid, "BTC", old, t0 + pd.Timedelta(hours=7)), 0)
+        model_live.store_entries(sid, "BTC", old, t0)
+        (e,) = repo.list_model_entries()
+        model_live.track_entry(e, self.b5([[101, 101.2, 100.8, 101]] * 3, t0), [], t0 + pd.Timedelta(hours=7))
+        self.assertEqual(repo.list_model_entries()[0]["state"], "vervallen")

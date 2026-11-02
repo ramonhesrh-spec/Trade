@@ -135,7 +135,8 @@ def build_export(now: datetime, stop_fetch: Callable = _stop_fetch, fetch_4h: Ca
         "schaduw": shadow.export_rows(),
         # HesPulse-model (preregistratie §8): uitvoerbaarheid, trechter, N_eff, drawdown, zonder de beste 5% en de vergelijkingen V1-V3.
         "model": model_measure.jsonable(model_measure.report(repo.list_model_scenarios(), repo.list_model_v1(),
-                                                             repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT, ceo=True)),
+                                                             repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT, ceo=True,
+                                                             entries=repo.list_model_entries())),
     }
 
 
@@ -183,6 +184,9 @@ def markdown(data: dict) -> str:
                   f"{ex['terugtest_al_geweest']}; vertraging entry mediaan {ex['delay_b_median'] if ex['delay_b_median'] is not None else '-'} min",
                   f"- H: {h['n']} afgerond, N_eff {h['n_eff']}, netto {_r(h['mean'])} per trade, zonder beste 5% {_r(h['mean_wo_best'])}, "
                   f"verliesreeks {h['streak']}, daling {_r(-h['max_dd'] if h['n'] else None)}"]
+        for x in m.get("instappunten") or []:
+            lines.append(f"- Instappunt {x['label']}: {x['gevonden']} gevonden, {x['gevuld']} gevuld, {x['arm']['n']} afgerond, "
+                         f"netto {_r(x['arm']['mean'])} per trade")
         g = m.get("btc_poort")
         if g:
             lines.append(f"- BTC-poort: {g['tegengehouden']} entries tegengehouden, {g['gevuld']} hadden gevuld; afgerond {g['arm']['n']}, "

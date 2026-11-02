@@ -4212,6 +4212,42 @@ def list_model_v1(states: Optional[tuple[str, ...]] = None) -> list[dict]:
                                               "JOIN model_scenarios m ON m.id = v.scenario_id ORDER BY v.scenario_id").fetchall()]
 
 
+def insert_model_entry(scenario_id: int, row: dict) -> bool:
+    """Eén instappunt (B, B0 of P) per scenario, één keer (UNIQUE): een punt verandert nooit meer nadat hij is vastgelegd."""
+    with db.session() as conn:
+        return conn.execute("""INSERT OR IGNORE INTO model_entries (scenario_id, code, coin, direction, known_at, detected_at, limit_price,
+                               stop_loss, take_profit, rr, expires_at, basis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (scenario_id, row["code"], row["coin"], row["direction"], row["known_at"], row["detected_at"], row["limit_price"],
+                             row["stop_loss"], row.get("take_profit"), row.get("rr"), row.get("expires_at"), row.get("basis"))).rowcount == 1
+
+
+_MODEL_ENTRY_FIELDS = {"state", "filled_at", "outcome", "outcome_at", "r_gross", "ambiguous", "ended_at"}
+
+
+def update_model_entry(entry_id: int, **fields) -> None:
+    unknown = set(fields) - _MODEL_ENTRY_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor model_entries: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE model_entries SET {', '.join(f + ' = ?' for f in fields)} WHERE id = ?", (*fields.values(), entry_id))
+
+
+def list_model_entries(states: Optional[tuple[str, ...]] = None, scenario_ids: Optional[list[int]] = None) -> list[dict]:
+    where, args = [], []
+    if states:
+        where.append(f"e.state IN ({', '.join('?' for _ in states)})")
+        args += list(states)
+    if scenario_ids is not None:
+        if not scenario_ids:
+            return []
+        where.append(f"e.scenario_id IN ({', '.join('?' for _ in scenario_ids)})")
+        args += list(scenario_ids)
+    q = ("SELECT e.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at FROM model_entries e JOIN model_scenarios m ON m.id = e.scenario_id"
+         + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY e.scenario_id, e.code")
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(q, args).fetchall()]
+
+
 def list_ended_model(since_iso: str) -> list[dict]:
     """Scenario's en limieten die eindigden zonder vulling, voor 'Uitgevallen, gemist of vervallen' op Kansen. state is de eindstand die
     end_reason vertaalt: de stand van de limiet als er een was, anders die van het scenario."""

@@ -170,6 +170,31 @@ def v1_trades(rows: list[dict], cost_pct: float) -> list[dict]:
     return out
 
 
+ENTRY_NAMES = {"B": "B lagere top", "B0": "B0 zonder premium-eis (alleen gemeten)", "P": "P POC-limiet"}
+
+
+def entry_trades(entries: list[dict], code: str, cost_pct: float) -> list[dict]:
+    """Eén instappunt uit model_entries (aanvullend besluit 2026-11-03): netto R zoals V1, zonder funding (geen signaal)."""
+    out = []
+    for e in entries:
+        if e.get("code") != code or e.get("outcome") not in ("take_profit", "stop_loss") or e.get("r_gross") is None:
+            continue
+        stop_pct = abs(e["limit_price"] - e["stop_loss"]) / e["limit_price"] * 100
+        out.append({"net": e["r_gross"] - (cost_pct / stop_pct if stop_pct else 0.0), "direction": e["direction"],
+                    "start": _dt(e["filled_at"]), "end": _dt(e["outcome_at"])})
+    return out
+
+
+def entry_arms(entries: list[dict], cost_pct: float) -> list[dict]:
+    """Per instappunt: hoeveel gevonden, gevuld en afgerond, en de arm met dezelfde maten als H (§8). B0 staat alleen hier."""
+    out = []
+    for code, name in ENTRY_NAMES.items():
+        mine = [e for e in entries if e.get("code") == code]
+        t = entry_trades(entries, code, cost_pct)
+        out.append({"code": code, "label": name, "gevonden": len(mine), "gevuld": sum(1 for e in mine if e.get("filled_at")), "arm": arm(t)})
+    return out
+
+
 def gate_trades(scenarios: list[dict], cost_pct: float) -> list[dict]:
     """De entries die de BTC-poort tegenhield (entry_state 'btc_tegen'), stil gevolgd (cf_*): netto R zoals V1, zonder funding."""
     out = []
@@ -229,13 +254,15 @@ def funnel(scenarios: list[dict], outcomes: dict) -> dict:
             "uitkomst": sum(1 for s in scenarios if outcomes.get(s.get("signal_id")) in ("take_profit", "stop_loss"))}
 
 
-def report(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], cost_pct: float, ceo: bool = False) -> dict:
+def report(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], cost_pct: float, ceo: bool = False,
+           entries: Optional[list[dict]] = None) -> dict:
     """Alles voor Bewijs en de nachtexport. De vergelijkingen (V1, V2, V3) alleen met ceo=True."""
     h = signal_trades(signal_rows, "hespulse_model", cost_pct)
     costs = [t["cost_r"] for t in h if t["cost_r"] is not None]
     out = {"execution": execution(scenarios), "funnel": funnel(scenarios, {r["id"]: r.get("auto_outcome") for r in signal_rows if r.get("id")}),
            "h": arm(h), "cost_median_r": median(costs) if costs else None, "funding_unknown": sum(1 for t in h if t["funding_unknown"]),
            "level": LEVEL, "first_eval_ready": len(h) >= FIRST_EVAL_TRADES, "btc_poort": gate(scenarios, cost_pct),
+           "instappunten": entry_arms(entries or [], cost_pct),
            "decision_ready": len(h) >= DECISION_TRADES and arm(h)["weeks"] >= DECISION_WEEKS and n_eff(h) >= DECISION_NEFF}
     if ceo:
         v1t = v1_trades(v1, cost_pct)

@@ -1268,6 +1268,32 @@ CREATE TABLE IF NOT EXISTS model_scenarios (
     UNIQUE (coin, range_id)
 );
 CREATE INDEX IF NOT EXISTS idx_model_scenarios_status ON model_scenarios(status, entry_state);
+-- De andere instappunten van een scenario (aanvullend besluit CEO 2026-11-03): B (lagere top), B0 (zonder premium-eis, nergens getoond) en P
+-- (POC-limiet). Elk punt wordt gevolgd met de regels van H (model.walk_fill, model.outcome), ook als niemand hem neemt. Geen melding.
+-- state: wacht, gevuld, klaar, of een eindstand zonder vulling (vervallen, weggelopen, context_weg, niet_vulbaar).
+CREATE TABLE IF NOT EXISTS model_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scenario_id INTEGER NOT NULL REFERENCES model_scenarios(id),
+    code TEXT NOT NULL,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    known_at TEXT NOT NULL,
+    detected_at TEXT NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    rr REAL,
+    expires_at TEXT,
+    basis TEXT,
+    state TEXT NOT NULL DEFAULT 'wacht',
+    filled_at TEXT,
+    outcome TEXT,
+    outcome_at TEXT,
+    r_gross REAL,
+    ambiguous INTEGER NOT NULL DEFAULT 0,
+    ended_at TEXT,
+    UNIQUE (scenario_id, code)
+);
 -- V1 (§6): de vroege limiet op de pool op moment A, stil gemeten. Geen melding, geen journaal, geen signals-rij. state: wacht, gevuld,
 -- vervallen (het scenario eindigde zonder vulling), weggelopen, context_weg, niet_vulbaar of geen_doel; outcome na de vulling op 5m.
 CREATE TABLE IF NOT EXISTS model_v1 (
