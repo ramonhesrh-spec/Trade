@@ -143,10 +143,10 @@ class OpenChancesTest(unittest.TestCase):
 
 
 class BudgetRingTest(unittest.TestCase):
-    def test_default_budget_is_fifteen(self):
+    def test_default_budget_is_eight(self):
         ring = today.budget_ring(3, None)
-        self.assertEqual((ring["limit"], ring["offset"], ring["full"], ring["off"]), (15, 80.0, False, False))
-        self.assertEqual(ring["label"], "3 van 15 meldingen in 24 uur")
+        self.assertEqual((ring["limit"], ring["offset"], ring["full"], ring["off"]), (8, 62.5, False, False))
+        self.assertEqual(ring["label"], "3 van 8 luide meldingen in 24 uur")
 
     def test_full_and_over_budget_stays_a_full_ring(self):
         ring = today.budget_ring(8, 6)
@@ -155,7 +155,7 @@ class BudgetRingTest(unittest.TestCase):
     def test_zero_switches_the_budget_off(self):
         ring = today.budget_ring(1, 0)
         self.assertTrue(ring["off"])
-        self.assertEqual(ring["label"], "1 melding in 24 uur, geen budget")
+        self.assertEqual(ring["label"], "1 luide melding in 24 uur, geen budget")
 
 
 class AgoTextTest(unittest.TestCase):

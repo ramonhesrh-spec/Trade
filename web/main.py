@@ -174,6 +174,7 @@ templates.env.globals["live_market"] = candle_source.configured
 templates.env.globals["live_symbols"] = candle_source.stream_map
 templates.env.globals["pause_minutes_left"] = lambda u: push_policy.pause_minutes_left((u or {}).get("push_paused_until"), datetime.now(timezone.utc))
 templates.env.globals["pause_text"] = push_policy.pause_text
+templates.env.globals["push_budget_default"] = push_policy.DEFAULT_BUDGET
 templates.env.globals["stale_after_s"] = freshness.STALE_AFTER_S
 
 # Thema per toestel: de cookie laat de server meteen het juiste data-theme en de juiste achtergrond schrijven, zodat er geen flits van
@@ -1927,7 +1928,7 @@ async def update_risk_per_trade(risk_eur: str = Form(""), user: dict = Depends(r
 
 @app.post("/settings/meldingen")
 async def update_push_budget(budget: str = Form(""), user: dict = Depends(require_login)):
-    """Maximaal aantal pushes voor nieuwe kansen per 24 uur (app/push_policy.py). Leeg is de standaard, 0 zet het budget uit."""
+    """Maximaal aantal luide pushes (vullingen) per 24 uur (app/push_policy.py). Leeg is de standaard, 0 zet het budget uit."""
     try:
         value = int(budget.strip()) if budget.strip() else None
     except ValueError:

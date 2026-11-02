@@ -204,7 +204,7 @@ class EngineAnnounceRecordsFailureTest(DbCase):
                 "take_profit": 104.0, "rr": 4.0, "target_tf": "1h"}
         with mock.patch.object(repo, "mark_zone_radar_alert_sent", lambda i: True), \
                 mock.patch.object(zone_radar_live, "new_card_body", lambda c: "x"), \
-                mock.patch("app.push_notify.send_kans_push", self._boom):
+                mock.patch("app.push_notify.send_new_card", self._boom):
             asyncio.run(zone_radar_live._push_new_card(card))
         attempts = repo.list_push_attempts("kans", zone_radar_live.card_url(7))
         self.assertEqual(len(attempts), 1)

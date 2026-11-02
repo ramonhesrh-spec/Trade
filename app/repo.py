@@ -1817,9 +1817,10 @@ def list_unresolved_signals_with_levels() -> list[dict]:
         return [dict(row) for row in rows]
 
 
-def record_push(user_id: int, coin: str, direction: str, at: str) -> None:
+def record_push(user_id: int, coin: str, direction: str, at: str, counts: int = 1) -> None:
+    """counts 0: een coin die meeging in een bundel; de bundel telde al één keer in het dagbudget (push_policy.used)."""
     with db.session() as conn:
-        conn.execute("INSERT INTO push_log (user_id, at, coin, direction) VALUES (?, ?, ?, ?)", (user_id, at, coin, direction))
+        conn.execute("INSERT INTO push_log (user_id, at, coin, direction, counts) VALUES (?, ?, ?, ?, ?)", (user_id, at, coin, direction, counts))
         conn.execute("DELETE FROM push_log WHERE at < ?", ((datetime.fromisoformat(at) - timedelta(days=3)).isoformat(),))
 
 
@@ -1853,7 +1854,7 @@ def count_failed_push_attempts(kind: str, ref: str) -> int:
 
 def list_recent_pushes(user_id: int, since: str) -> list[dict]:
     with db.session() as conn:
-        return [dict(r) for r in conn.execute("SELECT coin, direction, at FROM push_log WHERE user_id = ? AND at >= ? ORDER BY at", (user_id, since)).fetchall()]
+        return [dict(r) for r in conn.execute("SELECT coin, direction, at, counts FROM push_log WHERE user_id = ? AND at >= ? ORDER BY at", (user_id, since)).fetchall()]
 
 
 def set_push_budget(user_id: int, budget: Optional[int]) -> None:

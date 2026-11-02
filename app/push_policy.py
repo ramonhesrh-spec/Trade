@@ -1,34 +1,50 @@
-"""Wanneer een kans als push bij een gebruiker aankomt. Pure beslisfunctie, geen database.
-Twee regels, beide per gebruiker:
+"""Wanneer een kans als luide push bij een gebruiker aankomt. Pure beslisfunctie, geen database.
+Sinds 2026-11-02 (CEO: veel te veel meldingen, ~560 nieuwe kaarten en ~255 vullingen in een week) is alleen een vulling luid. Een nieuwe kaart
+is een stille melding buiten het budget (push_notify.send_new_card). Voor de luide push gelden twee regels, beide per gebruiker:
   1. Geen tegenstrijdige richting: ging er in de afgelopen CONFLICT_HOURS een push over dezelfde coin de andere kant op, dan komt de nieuwe niet als push.
      Long en short door elkaar op één coin is ruis die niemand kan opvolgen.
-  2. Dagbudget: na `budget` pushes in 24 uur komt de rest niet als push. Een herhaling op dezelfde coin en richting telt één keer: twee
-     pushes over DOGE long vraagt niet twee plekken van het budget.
-Wat geen push wordt, blijft op de meldingenpagina staan: niets verdwijnt, alleen het scherm blijft rustig.
-Alleen kansen met een coin en richting vallen hieronder. Updates van een lopende trade, stop- en doelmeldingen en de agenda blijven altijd komen."""
+  2. Dagbudget: na `budget` luide pushes in 24 uur wordt de rest een stille melding. Elke luide push telt, ook een herhaling op dezelfde coin
+     en richting (de oude uitzondering daarvoor is op verzoek van de CEO teruggedraaid). Een bundel (meer vullingen in één scancyclus, één push)
+     telt één keer: push_log heeft dan een rij per coin voor de conflictregel, maar alleen de eerste heeft counts = 1.
+Wat geen luide push wordt, blijft op de meldingenpagina staan: niets verdwijnt, alleen het scherm blijft rustig.
+Updates van een lopende trade, stop- en doelmeldingen en de agenda blijven altijd komen en tellen niet mee."""
 import math
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-DEFAULT_BUDGET = 15
+DEFAULT_BUDGET = 8
 CONFLICT_HOURS = 6
 
 
 def used(recent: list[dict]) -> int:
-    """Plekken van het dagbudget die in `recent` gebruikt zijn: een coin en richting telt één keer."""
-    return len({(r["coin"], r["direction"]) for r in recent})
+    """Plekken van het dagbudget die in `recent` gebruikt zijn: elke luide push één, een bundel één (counts)."""
+    return sum(1 if r.get("counts") is None else int(r["counts"]) for r in recent)
 
 
-def decide(recent: list[dict], coin: str, direction: str, budget: Optional[int], now: datetime) -> tuple[bool, str]:
-    """(mag als push, reden als niet). recent: pushes van de laatste 24 uur [{coin, direction, at}]."""
-    limit = DEFAULT_BUDGET if budget is None else budget
+def conflict(recent: list[dict], coin: str, direction: str, now: datetime) -> Optional[str]:
     cut = now - timedelta(hours=CONFLICT_HOURS)
     for r in recent:
         if r["coin"] == coin and r["direction"] != direction and datetime.fromisoformat(r["at"]) >= cut:
-            return False, f"Tegenstrijdig met een eerdere melding op {coin} ({r['direction']}), daarom geen push."
-    if limit and used(recent) >= limit and (coin, direction) not in {(r["coin"], r["direction"]) for r in recent}:
-        return False, f"Dagbudget van {limit} pushes bereikt, daarom geen push."
-    return True, ""
+            return f"Tegenstrijdig met een eerdere melding op {coin} ({r['direction']}), daarom geen push."
+    return None
+
+
+def over_budget(recent: list[dict], budget: Optional[int]) -> Optional[str]:
+    limit = DEFAULT_BUDGET if budget is None else budget
+    if limit and used(recent) >= limit:
+        return f"Dagbudget van {limit} pushes bereikt, daarom een stille melding."
+    return None
+
+
+def decide(recent: list[dict], coin: str, direction: str, budget: Optional[int], now: datetime) -> tuple[bool, str]:
+    """(mag als luide push, reden als niet). recent: pushes van de laatste 24 uur [{coin, direction, at, counts}]."""
+    reason = conflict(recent, coin, direction, now) or over_budget(recent, budget)
+    return (False, reason) if reason else (True, "")
+
+
+def bundle_text(items: list[tuple[str, str]]) -> tuple[str, str]:
+    """Titel en tekst van één push voor meer vullingen in dezelfde scancyclus, bijvoorbeeld '3 kansen gevuld' en 'SOL long, ETH short'."""
+    return f"{len(items)} kansen gevuld", ", ".join(f"{coin} {direction}" for coin, direction in items) + "\nTik voor Kansen."
 
 
 def in_follow_set(coins: Optional[set], coin: str) -> bool:

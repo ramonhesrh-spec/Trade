@@ -193,6 +193,9 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN push_budget INTEGER")
     if "push_paused_until" not in existing_users:
         conn.execute("ALTER TABLE users ADD COLUMN push_paused_until TEXT")
+    # Een bundel vullingen (één push) telt één keer in het dagbudget: alleen zijn eerste rij heeft counts = 1 (CEO, 2026-11-02).
+    if "counts" not in {row["name"] for row in conn.execute("PRAGMA table_info(push_log)")}:
+        conn.execute("ALTER TABLE push_log ADD COLUMN counts INTEGER NOT NULL DEFAULT 1")
     if "confirm_threshold_pct" not in existing_users:
         conn.execute(
             "ALTER TABLE users ADD COLUMN confirm_threshold_pct REAL NOT NULL DEFAULT 60.0"

@@ -89,18 +89,25 @@ class SendKansPushRecordsTimingTest(DbCase):
 
 
 class EnginesPassTimingTest(DbCase):
-    """Elke focus-motor geeft zijn momenten mee aan send_kans_push, bij een nieuwe kaart en bij de vulling."""
+    """Elke focus-motor geeft zijn momenten mee: een nieuwe kaart via send_new_card (stil, buiten het budget, CEO 2026-11-02), de vulling via
+    send_kans_push."""
 
     def setUp(self):
         super().setUp()
-        self.calls = []
+        self.calls, self.loud = [], []
 
-        async def fake(uid, coin, direction, title, body, url, **kw):
+        async def fake_new(uid, coin, direction, title, body, url, **kw):
             self.calls.append(kw.get("timing"))
+
+        async def fake_loud(uid, coin, direction, title, body, url, **kw):
+            self.loud.append(kw.get("timing"))
             return True
-        p = mock.patch.object(push_notify, "send_kans_push", fake)
-        p.start()
-        self.addCleanup(p.stop)
+        for p in (mock.patch.object(push_notify, "send_new_card", fake_new), mock.patch.object(push_notify, "send_kans_push", fake_loud)):
+            p.start()
+            self.addCleanup(p.stop)
+
+    def tearDown(self):
+        self.assertEqual(self.loud, [])              # een nieuwe kaart is nooit een luide push
 
     def test_zone_radar_new_card(self):
         from app import zone_radar_live
@@ -132,7 +139,7 @@ class EnginesPassTimingTest(DbCase):
     def test_structure_push_all_passes_timing(self):
         from app import structure_live
         t = latency.timing("structuur", "nieuw", T, T + timedelta(seconds=40))
-        asyncio.run(structure_live._push_all("t", "b", "/x", "tag", True, coin="BTC", direction="long", timing=t))
+        asyncio.run(structure_live._push_all("t", "b", "/x", "tag", True, coin="BTC", direction="long", timing=t, new_card=True))
         self.assertEqual(self.calls[0], t)
 
 

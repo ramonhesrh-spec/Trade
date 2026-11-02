@@ -74,11 +74,9 @@ async def _announce(card: dict, detected=None) -> None:
     title = push_notify.alert_title(card["coin"], card["direction"], f"{zsw.LABEL} · ongetest")
     body = zsw.new_card_body(card)
     for uid in viewers():
-        user = repo.get_user(uid) or {}
-        quiet = push_notify.is_quiet_now(user.get("quiet_hours_start"), user.get("quiet_hours_end"))
         try:
-            await push_notify.send_kans_push(uid, card["coin"], card["direction"], title, body, card_url(card["id"]), silent=quiet, tag=_tag(card["id"]),
-                                             timing=timing)
+            # Stil en buiten het budget: alleen de vulling is luid (CEO, 2026-11-02).
+            await push_notify.send_new_card(uid, card["coin"], card["direction"], title, body, card_url(card["id"]), tag=_tag(card["id"]), timing=timing)
         except Exception as exc:
             logger.exception("Zone-sweep-melding %s naar gebruiker %s is mislukt", card["id"], uid)
             push_notify.record_failure(uid, "kans", card_url(card["id"]), exc)

@@ -271,10 +271,11 @@ class LiveTests(unittest.TestCase):
         self.run_once()
         cards = repo.list_zone_radar_setups()
         self.assertEqual({c["direction"] for c in cards}, {"long", "short"})
-        self.assertEqual(sum("Zone-radar · ongetest" in t for t in self.titles()), 1)     # long en short: de conflictregel laat er één door
+        # long en short: een nieuwe kaart is stil en valt sinds 2026-11-02 niet onder de conflictregel, dus elk één melding
+        self.assertEqual(sum("Zone-radar · ongetest" in t for t in self.titles()), 2)
         self.run_once()
         self.assertEqual(len(repo.list_zone_radar_setups(("waiting", "filled", "doel_geraakt", "zone_weg"))), 2)
-        self.assertEqual(sum("Zone-radar · ongetest" in t for t in self.titles()), 1)     # geen tweede melding voor dezelfde kaart
+        self.assertEqual(sum("Zone-radar · ongetest" in t for t in self.titles()), 2)     # geen tweede melding voor dezelfde kaart
 
         long = next(c for c in cards if c["direction"] == "long")
         later = self.now + pd.Timedelta(hours=1)

@@ -113,7 +113,8 @@ class ScanTest(EngineCase):
         self.run_(minutes_later=60)
         self.assertEqual(len(self.calls_5m), first + 1)                # nieuw uur: alleen de nieuwe candles, één aanroep
         self.assertEqual(len(self.cards()), 2)
-        self.assertEqual(len(self.titles("POC-radar · ongetest")), len(set(p["user"] for p in self.pushed)))
+        # per kaart en kijker één stille melding; een nieuwe kaart valt sinds 2026-11-02 niet meer onder de conflictregel
+        self.assertEqual(len(self.titles("POC-radar · ongetest")), 2 * len(set(p["user"] for p in self.pushed)))
 
     def test_dagcap(self):
         with mock.patch.object(config, "POC_RADAR_MAX_PER_DAY", 1):

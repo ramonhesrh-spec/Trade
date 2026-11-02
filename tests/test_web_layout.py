@@ -747,7 +747,7 @@ class RestLayoutTests(BaseShellTests):
     def test_account(self):
         html = self.client.get("/account").text
         for needle in ['class="ph"', ">Account<", 'class="hl-num"', 'class="kl"',
-                       "Nieuwe kansen", "Drempel", "Maximaal aantal pushes per dag"]:
+                       "Nieuwe kansen", "Drempel", "Maximaal aantal luide pushes per dag"]:
             self.assertIn(needle, html, needle)
         self.assertNotIn("summary-strip", html)
 

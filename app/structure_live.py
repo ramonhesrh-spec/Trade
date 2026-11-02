@@ -4,7 +4,8 @@ hogere bodem (CHOCH, gespiegeld voor short; breakretest.find_choch, live zonder 
 Drie stappen, elke 5 minuten in de SMC-snelcyclus:
   1. Ontdekken: de detector uit app/replay/breakretest.py (zelfde code als de toets, alleen gesloten candles) vindt een verse
      breuk. Claude geeft een oordeel A, B of C op de kwaliteit. Claude verzint geen prijzen: niveau, stop en doelen komen uit code.
-  2. Melden: elke breuk met een plan staat op de pagina en in de dagbrief en krijgt dezelfde luide melding met limietniveau, stop en doelen. Het
+  2. Melden: elke breuk met een plan staat op de pagina en in de dagbrief en krijgt dezelfde stille melding met limietniveau, stop en doelen
+     (sinds 2026-11-02, CEO: te veel meldingen; alleen de vulling is luid). Het
      oordeel van Claude (A, B of C) wordt alleen nog bewaard als meting: het filtert niets, ordent niets en bepaalt het volume niet (besluit van
      de CEO, oktober 2026: C won live het meest). Bij een volle dagcap gaat de kans die het dichtst bij zijn limiet ligt voor.
   3. Volgen: raakt de koers het niveau, dan wordt het een gewoon signaal (trade_type 'structuur'), zodat journaal, uitkomst en Bewijs
@@ -217,14 +218,16 @@ def choose(candidates: list[dict], room: int) -> tuple[list[dict], list[dict]]:
 
 
 async def _push_all(title: str, body: str, url: str, tag: str, loud: bool, coin: Optional[str] = None, direction: Optional[str] = None,
-                    timing: Optional[dict] = None) -> None:
-    """Met coin en richting is het een nieuwe kans en gelden de pushregels (geen tegenstrijdige richting, dagbudget). Zonder is het een update van een
-    lopende trade en komt de push altijd."""
+                    timing: Optional[dict] = None, new_card: bool = False) -> None:
+    """Met coin en richting is het een kans en gelden de pushregels (geen tegenstrijdige richting, dagbudget). new_card: een nieuw plan, stil en
+    buiten het budget (CEO, 2026-11-02, te veel meldingen). Zonder coin is het een update van een lopende trade en komt de push altijd."""
     from app import push_notify
     for user in repo.list_users():
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            if coin and direction:
+            if coin and direction and new_card:
+                await push_notify.send_new_card(user["id"], coin, direction, title, body, url, tag=tag, **({"timing": timing} if timing else {}))
+            elif coin and direction:
                 await push_notify.send_kans_push(user["id"], coin, direction, title, body, url, silent=quiet or not loud, tag=tag,
                                                  **({"timing": timing} if timing else {}))
             else:
@@ -322,8 +325,8 @@ async def _announce(found: list[dict], now: datetime) -> None:
         repo.update_structure_judgement(c["id"], grade, reason, "waiting")
         logger.info("Structuur %s %s %s: gemeld, oordeel %s als meting", coin, ev.direction, ev.kind, grade)
         await _push_all(push_notify.alert_title(coin, ev.direction, "Structuur wacht"), alert_body({**c["row"], "id": c["id"]}, plan),
-                        f"/structuur#structuur-{c['id']}", f"structuur-{coin}", loud=True, coin=coin, direction=ev.direction,
-                        timing=latency.timing("structuur", "nieuw", pd.Timestamp(c["row"]["break_at"]), now))
+                        f"/structuur#structuur-{c['id']}", f"structuur-{coin}", loud=False, coin=coin, direction=ev.direction,
+                        timing=latency.timing("structuur", "nieuw", pd.Timestamp(c["row"]["break_at"]), now), new_card=True)
 
 
 async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: pd.Timestamp) -> None:
