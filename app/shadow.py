@@ -64,7 +64,14 @@ def defaults(trade_type: str) -> dict:
 # Het register in code: de wekelijkse verbetersessie (docs/verbeterlus.md) zet hier een variant bij, vooraf vastgelegd met reden. De nacht
 # (scripts/schaduw.py --auto) legt elke nieuwe variant vast zodra zijn soort geen actieve schaduw heeft; een besloten variant komt nooit terug.
 # Vorm: {"id", "trade_type", "description", "reason", "params"}.
-SEEDS: tuple = ()
+SEEDS: tuple = (
+    {"id": "structuur-stop-0.5", "trade_type": "structuur", "description": "Stop een halve ATR achter de terugkeer in plaats van een kwart.",
+     "reason": "Nachtexport 2026-11-02, 30 dagen: 43 van 81 Structuur-stops haalden binnen 24 uur toch het doel; de stop lijkt binnen de ruis te staan.",
+     "params": {"stop_atr": 0.5}},
+    {"id": "zone-radar-stop-0.5", "trade_type": "zone_radar", "description": "Stop een halve ATR voorbij de buitenrand in plaats van een kwart.",
+     "reason": "Nachtexport 2026-11-02, 30 dagen: zone-radar netto -0,52R per trade over 111 trades, en 22 van 82 stops haalden binnen 24 uur toch het doel.",
+     "params": {"stop_atr": 0.5}},
+)
 
 
 def validate(trade_type: str, params: dict) -> None:

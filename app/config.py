@@ -214,6 +214,7 @@ ZONE_SWEEP_MAX_PER_DAY = int(_get("ZONE_SWEEP_MAX_PER_DAY", "10"))
 # CEO (2026-10-28) zonder labrun, altijd ongetest; Bewijs toont de score (trade_type 'poc_radar'). false bij PUBLIC: alleen de CEO (rule_live.CEO_ONLY_TYPES).
 POC_RADAR_ENABLED = _get("POC_RADAR_ENABLED", "true").lower() == "true"
 POC_RADAR_PUBLIC = _get("POC_RADAR_PUBLIC", "true").lower() == "true"
-POC_RADAR_MAX_PER_DAY = int(_get("POC_RADAR_MAX_PER_DAY", "10"))
+# 30 sinds 2026-11-02: de eerste nachtexport telde in 7 dagen 57 POC-kansen die de cap van 10 tegenhield, tegen 15 vullingen.
+POC_RADAR_MAX_PER_DAY = int(_get("POC_RADAR_MAX_PER_DAY", "30"))
 # Marktcontext (app/market_context_live.py): funding, OI, Fear and Greed en stablecoins van publieke bronnen naast Binance. Alleen weergave en opslag.
 MARKET_CONTEXT_ENABLED = _get("MARKET_CONTEXT_ENABLED", "true").lower() == "true"

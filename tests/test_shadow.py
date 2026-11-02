@@ -245,7 +245,8 @@ class PromoteTest(DbCase):
         shadow.register("poc-stop-040", "poc_radar", "Stop 0,4 ATR", "reden vooraf", {"stop_atr": 0.4}, START)
         for r in results("variant", alternating(50, 0.2)) + results("hoofd", alternating(50, 2.0)):
             put("poc-stop-040", r)
-        done = schaduw.auto(NOW)
+        with mock.patch.object(shadow, "SEEDS", ()):                      # alleen de varianten van deze test, niet het echte register
+            done = schaduw.auto(NOW)
         self.assertEqual(done, {"zr-stop-040": "promoveren", "poc-stop-040": "afvallen"})
         self.assertEqual(repo.get_shadow_variant("poc-stop-040")["status"], "afgevallen")
         self.assertEqual(shadow.live_params("poc_radar")["stop_atr"], 0.25)

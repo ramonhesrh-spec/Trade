@@ -509,7 +509,7 @@ sudo systemctl start crypto-news.service crypto-script.service
   (referentie-uitgang zoals de zone-sweep). Live op verzoek van de eigenaar zonder labrun, altijd ongetest. De niveaus worden één keer per uur per
   coin bijgewerkt met alleen de nieuwe candles en bewaard (`poc_levels`, `poc_scans`); kaarten in `poc_radar_setups`, gevuld een signaal met
   `trade_type = 'poc_radar'` buiten de `/keten`. Een kaart die niet vult vervalt na 3 dagen. `POC_RADAR_ENABLED` (standaard `true`),
-  `POC_RADAR_PUBLIC` (standaard `true`; `false` is alleen de CEO), `POC_RADAR_MAX_PER_DAY` (10). Kaarten van de zone-radar en de zone-sweep
+  `POC_RADAR_PUBLIC` (standaard `true`; `false` is alleen de CEO), `POC_RADAR_MAX_PER_DAY` (30). Kaarten van de zone-radar en de zone-sweep
   krijgen het kenmerk POC-samenval (limiet binnen 0,3% van een naakte POC), alleen als meting; Bewijs toont of het samengaat. Draait in de
   snelle SMC-check, geen eigen unit. Handmatig: `python3 -m app.poc_radar_live`.
 - `app/calendar_alerts.py`: herinnering 30 minuten vóór de opening van de VS-beurs (stil) en vóór een macro-uitslag uit

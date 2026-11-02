@@ -26,7 +26,7 @@ class DefaultsTest(unittest.TestCase):
                     os.environ.pop(n, None)
                 with mock.patch("dotenv.load_dotenv"):
                     importlib.reload(config)
-                    self.assertEqual([getattr(config, n) for n in names], [40, 30, 10, 10])
+                    self.assertEqual([getattr(config, n) for n in names], [40, 30, 10, 30])
         finally:
             importlib.reload(config)
 
