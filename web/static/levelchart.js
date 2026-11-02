@@ -126,7 +126,7 @@
   }
 
   function syncAreas(lc) {
-    var s = spec(lc.el), wanted = {};
+    var s = lc.full ? null : spec(lc.el), wanted = {};       // schermvullend geen winst/risico-vlakken: zoals de kaart, rustig
     (s ? areas(s) : []).forEach(function (a) { wanted[a.key] = a; });
     ["risk", "reward"].forEach(function (k) {
       var a = wanted[k], series = lc.areas[k];
@@ -206,21 +206,22 @@
     var mz = css("--mz", "rgba(167,139,250,0.16)"), mzEdge = css("--mz-edge", "rgba(167,139,250,0.42)"), mzTx = css("--mz-tx", "#cdbdff");
     var red = css("--red", "#f2685c"), clear = "rgba(0,0,0,0)";
     var st = lc.struct || { lines: [], zones: [] };
-    var hl = st.lines.map(function (l) { return { value: l.value, time: originBar(times, l.time, lc.tf), label: l.label, color: mzTx, dash: l.kind === "eq50" }; });
+    // Zoals de kaart (CEO 2026-11-03: "zet een kleine afkorting op het punt zelf, niet alles naar rechts", "alle kleuren hetzelfde"): grijze
+    // lijnen vanaf hun punt met een korte naam daar (SH, SL, BOS, FVG, OB, EQ), grijze vlakken, geen paars, geen premium/discount-kleur.
+    var lineC = css("--mc-line", "#8a9698"), inkC = css("--mc-ink", "#1b2324");
+    var hl = st.lines.map(function (l) { return { value: l.value, time: originBar(times, l.time, lc.tf), label: l.short || l.label, color: lineC,
+                                                  text: inkC, dash: l.kind === "eq50" }; });
     st.zones.forEach(function (sz) {
-      var pd = sz.kind === "premium" || sz.kind === "discount";
-      var t = pd ? null : originBar(times, sz.time, lc.tf);
-      boxes.unshift({ low: sz.low, high: sz.high, time: t, label: null, plate: plate, text: mzTx,
-                      fill: pd ? rgba(sz.kind === "premium" ? red : green, 0.05, "rgba(127,127,127,0.05)") : mz, edge: pd ? clear : mzEdge });
-      // De naam van een vlak gaat mee in dezelfde rij labels rechts als de lijnen: zo staan ze nooit over elkaar.
-      hl.push({ value: pd ? (sz.kind === "premium" ? sz.high : sz.low) : sz.high, time: null, label: sz.label, noLine: true,
-                color: pd ? css("--text-dim", "#b7c4c2") : mzTx });
+      if (sz.kind === "premium" || sz.kind === "discount") return;
+      var t = originBar(times, sz.time, lc.tf);
+      boxes.unshift({ low: sz.low, high: sz.high, time: t, label: null, plate: plate, text: inkC,
+                      fill: rgba(lineC, 0.12, "rgba(127,127,127,0.12)"), edge: rgba(lineC, 0.45, "rgba(127,127,127,0.45)") });
+      hl.push({ value: sz.high, time: t, label: sz.short || sz.label, noLine: true, color: lineC, text: inkC });
     });
-    // Van het model alleen wat bij deze setup hoort: de andere instappunten en de sweep. Range, pool en breuk geeft de structuur van het
-    // gekozen tijdframe al; dubbel maakte de grafiek onleesbaar.
+    // Van het model alleen wat bij deze setup hoort: de andere instappunten en de sweep, rechts met hun letter.
     (s && s.marks || []).forEach(function (m) {
       if (m.kind !== "alt" && m.kind !== "sweep") return;
-      hl.push({ value: m.value, time: null, label: m.label, color: accent, dash: true });
+      hl.push({ value: m.value, time: null, label: m.label, color: accent, text: accent, dash: true, right: true });
     });
     lc.hlines = hl;
     lc.boxes = boxes;
@@ -267,39 +268,48 @@
       target.useBitmapCoordinateSpace(function (scope) {
         var ctx = scope.context, hr = scope.horizontalPixelRatio, vr = scope.verticalPixelRatio, W = scope.bitmapSize.width;
         var Hb = scope.bitmapSize.height, ts = lc.chart.timeScale(), lh = Math.round(14 * vr);
-        // Alleen wat in beeld is, en de labels verdeeld over de hoogte: eerst omlaag schuiven bij overlap, dan van onder terug omhoog als
-        // ze onderaan uit beeld zouden lopen.
+        // Alleen wat in beeld is. Een label staat op zijn punt (het begin van de lijn), net boven de lijn; botst hij met een eerder label,
+        // dan eronder. Alleen de instappunten van het model (zonder eigen punt) staan rechts, onder elkaar.
         var items = hl.map(function (l) { return { l: l, y: lc.series.priceToCoordinate(l.value) }; })
           .filter(function (p) { return p.y !== null && p.y * vr >= 0 && p.y * vr <= Hb; })
           .sort(function (a, b) { return a.y - b.y; });
-        items.forEach(function (p, i) {
-          p.ly = Math.round(p.y * vr) - lh - Math.round(1 * vr);
-          if (i && p.ly < items[i - 1].ly + lh) p.ly = items[i - 1].ly + lh;
-        });
-        for (var j = items.length - 1; j >= 0; j--) {
-          var max = j === items.length - 1 ? Hb - lh : items[j + 1].ly - lh;
-          if (items[j].ly > max) items[j].ly = max;
-        }
+        var taken = [], rightY = -1e9;
+        // Eerst de instappunten rechts (die moeten er altijd staan), daarna de structuur, die ze dan ontwijkt.
+        if (labels) items = items.filter(function (p) { return p.l.right; }).concat(items.filter(function (p) { return !p.l.right; }));
         items.forEach(function (p) {
-            var y = Math.round(p.y * vr), x = p.l.time !== null ? ts.timeToCoordinate(p.l.time) : null;
-            var left = x === null ? 0 : Math.max(0, Math.round(x * hr));
-            if (!labels) {
-              if (p.l.noLine) return;
-              ctx.fillStyle = p.l.color;
-              var lw = Math.max(1, Math.round(hr));
-              if (p.l.dash) { for (var dx = left; dx < W; dx += Math.round(8 * hr)) ctx.fillRect(dx, y, Math.round(4 * hr), lw); }
-              else ctx.fillRect(left, y, W - left, lw);
-              return;
-            }
-            ctx.font = "600 " + Math.round(11 * vr) + "px " + font;
-            var tw = ctx.measureText(p.l.label).width, pad = Math.round(3 * hr), ly = Math.max(0, p.ly);
-            var lx = W - tw - Math.round(6 * hr);
-            ctx.fillStyle = plateColor;
-            ctx.fillRect(lx - pad, ly, tw + 2 * pad, lh);
+          var y = Math.round(p.y * vr), x = p.l.time !== null ? ts.timeToCoordinate(p.l.time) : null;
+          var left = x === null ? 0 : Math.max(0, Math.round(x * hr));
+          if (!labels) {
+            if (p.l.noLine) return;
             ctx.fillStyle = p.l.color;
-            ctx.textBaseline = "middle";
-            ctx.fillText(p.l.label, lx, ly + lh / 2);
-          });
+            var lw = Math.max(1, Math.round(hr));
+            if (p.l.dash) { for (var dx = left; dx < W; dx += Math.round(8 * hr)) ctx.fillRect(dx, y, Math.round(4 * hr), lw); }
+            else ctx.fillRect(left, y, W - left, lw);
+            return;
+          }
+          ctx.font = "600 " + Math.round(10 * vr) + "px " + font;
+          var tw = ctx.measureText(p.l.label).width, pad = Math.round(2 * hr), lx, ly;
+          if (p.l.right) {
+            lx = W - tw - Math.round(6 * hr);
+            ly = Math.max(y - lh, rightY + lh);
+            rightY = ly;
+            taken.push([lx - pad, ly, lx + tw + pad, ly + lh]);
+          } else {
+            lx = Math.min(left + Math.round(4 * hr), W - tw - pad);
+            ly = y - lh;
+            var box = function (yy) { return [lx - pad, yy, lx + tw + pad, yy + lh]; };
+            var hit = function (r) { return taken.some(function (t) { return r[0] < t[2] && t[0] < r[2] && r[1] < t[3] && t[1] < r[3]; }); };
+            if (hit(box(ly))) ly = y + Math.round(1 * vr);
+            if (hit(box(ly))) return;                      // geen plek: liever geen label dan een stapel over elkaar
+            taken.push(box(ly));
+          }
+          ly = Math.max(0, Math.min(ly, Hb - lh));
+          ctx.fillStyle = plateColor;
+          ctx.fillRect(lx - pad, ly, tw + 2 * pad, lh);
+          ctx.fillStyle = p.l.text || p.l.color;
+          ctx.textBaseline = "middle";
+          ctx.fillText(p.l.label, lx, ly + lh / 2);
+        });
       });
     }
     var plateColor = rgba(css("--panel", "#131a1b"), 0.85, "rgba(19,26,27,0.85)");
@@ -416,7 +426,10 @@
       lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, priceFormat: pf,
       autoscaleInfoProvider: function () { return null; },
     });
-    lc.series = chart.addCandlestickSeries({
+    // Schermvullend dezelfde rustige candles als de kaarttekening (CEO 2026-11-03, "alle kleuren hetzelfde als foto 1"): wit met rand omhoog,
+    // gevuld omlaag, in de inktkleur van de kaart.
+    var ink = css("--mc-ink", "#1b2324"), paper = css("--mc-paper", "#ffffff");
+    var seriesOpts = {
       upColor: up, downColor: down, borderVisible: false, wickUpColor: up, wickDownColor: down,
       priceLineVisible: false, lastValueVisible: false,
       priceFormat: pf,
@@ -431,7 +444,10 @@
         if (r && r.priceRange) { lo = Math.min(lo, r.priceRange.minValue); hi = Math.max(hi, r.priceRange.maxValue); }
         return { priceRange: { minValue: lo, maxValue: hi }, margins: r ? r.margins : undefined };
       },
-    });
+    };
+    if (full) Object.assign(seriesOpts, { upColor: paper, downColor: ink, borderVisible: true, borderUpColor: ink, borderDownColor: ink,
+                                          wickUpColor: ink, wickDownColor: ink });
+    lc.series = chart.addCandlestickSeries(seriesOpts);
     if (full) lc.series.attachPrimitive(zonePrimitive(lc));
     el._lc = lc;
     if (!temp) live.add(el);
@@ -564,8 +580,9 @@
     // Een plan zonder doel (zone-sweep) heeft geen doellijn en geen winstvlak: dan ook niet in de legenda.
     if (num(s.take)) legend.appendChild(legendItem("is-line-take", "Doel"));
     legend.appendChild(legendItem("is-line-now", "Nu"));
-    if (num(s.stop)) legend.appendChild(legendItem("is-risk", "Risico"));
-    if (num(s.take)) legend.appendChild(legendItem("is-reward", "Winst"));
+    // De afkortingen op de grafiek (app/structure_levels.py) in gewone woorden, één keer.
+    legend.appendChild(node("span", "lc-full-abbr", "RH/RL range · SH/SL swing · EQ evenwicht · EQH/EQL gelijke toppen/bodems · BOS/CHoCH breuk"));
+
     foot.appendChild(note);
     foot.appendChild(legend);
     dlg.appendChild(head);

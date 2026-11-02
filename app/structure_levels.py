@@ -54,7 +54,7 @@ def levels(rows: list[list], tf: str, now_s: float) -> dict:
         b = brk[-1]
         out["trend"] = "bullish" if b.up else "bearish"
         name = {"CHOCH": "CHoCH", "BOS": "BOS"}.get(b.label, "MSB")
-        out["lines"].append({"value": b.level, "time": _t(fr, b.swing), "label": f"{word} {name}", "kind": "msb"})
+        out["lines"].append({"value": b.level, "time": _t(fr, b.swing), "label": f"{word} {name}", "short": name, "kind": "msb"})
         # De dealing range zoals model.Context4h: bij een breuk omhoog de laagste low tussen de gebroken top en de breuk, en de hoogste high
         # sinds die top; omlaag gespiegeld. Zo is het de hele poot die brak, niet alleen het stuk na de breuk.
         if b.up:
@@ -63,14 +63,14 @@ def levels(rows: list[list], tf: str, now_s: float) -> dict:
         else:
             hi_i = b.swing + 1 + int(np.argmax(fr.h[b.swing + 1:b.i + 1]))
             lo_i = b.swing + int(np.argmin(fr.l[b.swing:last + 1]))
-        out["lines"].append({"value": float(fr.h[hi_i]), "time": _t(fr, hi_i), "label": f"{word} range high", "kind": "range"})
-        out["lines"].append({"value": float(fr.l[lo_i]), "time": _t(fr, lo_i), "label": f"{word} range low", "kind": "range"})
+        out["lines"].append({"value": float(fr.h[hi_i]), "time": _t(fr, hi_i), "label": f"{word} range high", "short": "RH", "kind": "range"})
+        out["lines"].append({"value": float(fr.l[lo_i]), "time": _t(fr, lo_i), "label": f"{word} range low", "short": "RL", "kind": "range"})
         # Premium en discount (CEO 2026-11-03: "wel premium en discount, ik bedoelde dat wij dat niet hebben"): de helften van de range
         # boven en onder het evenwicht, zoals het model ze gebruikt (shorts in premium, longs in discount).
         H, L = float(fr.h[hi_i]), float(fr.l[lo_i])
         eq = (H + L) / 2
         t0 = _t(fr, min(lo_i, hi_i))
-        out["lines"].append({"value": eq, "time": t0, "label": f"{word} evenwicht 0,5", "kind": "eq50"})
+        out["lines"].append({"value": eq, "time": t0, "label": f"{word} evenwicht 0,5", "short": "EQ", "kind": "eq50"})
         out["zones"].append({"low": eq, "high": H, "time": t0, "label": "premium", "kind": "premium"})
         out["zones"].append({"low": L, "high": eq, "time": t0, "label": "discount", "kind": "discount"})
         # Order block: de laatste candle tegen de richting vóór de beweging die brak, zolang de koers er niet doorheen sloot.
@@ -81,7 +81,7 @@ def levels(rows: list[list], tf: str, now_s: float) -> dict:
             lo, hi = float(fr.l[j]), float(fr.h[j])
             broken = (fr.c[j + 1:last + 1] < lo).any() if b.up else (fr.c[j + 1:last + 1] > hi).any()
             if not broken:
-                out["zones"].append({"low": lo, "high": hi, "time": _t(fr, j), "label": f"{word} {'bullish' if b.up else 'bearish'} OB",
+                out["zones"].append({"low": lo, "high": hi, "time": _t(fr, j), "label": f"{word} {'bullish' if b.up else 'bearish'} OB", "short": "OB",
                                      "kind": "ob"})
 
     # De laatste swing high en low, of EQH/EQL als de twee laatste binnen 0,1 ATR liggen.
@@ -92,9 +92,9 @@ def levels(rows: list[list], tf: str, now_s: float) -> dict:
         if len(pts) >= 2 and atr and abs(arr[pts[-1]] - arr[pts[-2]]) <= EQUAL_ATR * atr:
             q = pts[-2]
             v = max(arr[p], arr[q]) if up else min(arr[p], arr[q])
-            out["lines"].append({"value": float(v), "time": _t(fr, q), "label": f"{word} {'EQH' if up else 'EQL'}", "kind": "eq"})
+            out["lines"].append({"value": float(v), "time": _t(fr, q), "label": f"{word} {'EQH' if up else 'EQL'}", "short": "EQH" if up else "EQL", "kind": "eq"})
         else:
-            out["lines"].append({"value": float(arr[p]), "time": _t(fr, p), "label": f"{word} swing {'high' if up else 'low'}", "kind": "swing"})
+            out["lines"].append({"value": float(arr[p]), "time": _t(fr, p), "label": f"{word} swing {'high' if up else 'low'}", "short": "SH" if up else "SL", "kind": "swing"})
 
     # De dichtste nog open fair value gap boven en onder de koers. Een latere lont in de gap maakt hem kleiner; helemaal gevuld valt hij weg.
     below, above = [], []
@@ -105,14 +105,14 @@ def levels(rows: list[list], tf: str, now_s: float) -> dict:
             if len(later):
                 hi = min(hi, float(later.min()))
             if hi > lo and hi < close:
-                below.append({"low": lo, "high": hi, "time": _t(fr, i - 1), "label": f"{word} FVG", "kind": "fvg"})
+                below.append({"low": lo, "high": hi, "time": _t(fr, i - 1), "label": f"{word} FVG", "short": "FVG", "kind": "fvg"})
         if fr.l[i - 2] > fr.h[i]:                       # gap omlaag
             lo, hi = float(fr.h[i]), float(fr.l[i - 2])
             later = fr.h[i + 1:last + 1]
             if len(later):
                 lo = max(lo, float(later.max()))
             if hi > lo and lo > close:
-                above.append({"low": lo, "high": hi, "time": _t(fr, i - 1), "label": f"{word} FVG", "kind": "fvg"})
+                above.append({"low": lo, "high": hi, "time": _t(fr, i - 1), "label": f"{word} FVG", "short": "FVG", "kind": "fvg"})
     if below:
         out["zones"].append(max(below, key=lambda z: z["high"]))
     if above:
