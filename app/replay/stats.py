@@ -9,8 +9,17 @@ def week_key(ts) -> str:
     return f"{iso[0]}-W{iso[1]:02d}"
 
 
-def cluster_bootstrap_mean(values: list[float], clusters: list, seed: int = 7, n_boot: int = 2000) -> tuple[float, float]:
-    """95%-interval van het gemiddelde per trade, herbemonsterd per cluster; vaste seed zodat twee runs hetzelfde zeggen."""
+def _tails(level: float) -> tuple[float, float]:
+    """De staartfracties van een tweezijdig interval. 0,95 houdt de oude constanten (0,025 en 0,975) exact, zodat lab en schaduw niets
+    verschuiven; het HesPulse-model vraagt 0,9875 (95% met Bonferroni voor vier toetsen, preregistratie §8)."""
+    if level == 0.95:
+        return 0.025, 0.975
+    tail = (1 - level) / 2
+    return tail, 1 - tail
+
+
+def cluster_bootstrap_mean(values: list[float], clusters: list, seed: int = 7, n_boot: int = 2000, level: float = 0.95) -> tuple[float, float]:
+    """Interval (standaard 95%) van het gemiddelde per trade, herbemonsterd per cluster; vaste seed zodat twee runs hetzelfde zeggen."""
     if not values:
         return 0.0, 0.0
     groups: dict = defaultdict(list)
@@ -30,7 +39,8 @@ def cluster_bootstrap_mean(values: list[float], clusters: list, seed: int = 7, n
             count += len(g)
         means.append(total / count)
     means.sort()
-    return means[int(0.025 * n_boot)], means[int(0.975 * n_boot) - 1]
+    lo, hi = _tails(level)
+    return means[int(lo * n_boot)], means[int(hi * n_boot) - 1]
 
 
 def cluster_t(values: list[float], clusters: list) -> float:
@@ -48,8 +58,8 @@ def cluster_t(values: list[float], clusters: list) -> float:
 
 
 def cluster_bootstrap_diff(a: list[float], a_clusters: list, b: list[float], b_clusters: list, seed: int = 7,
-                           n_boot: int = 2000) -> tuple[float, float]:
-    """95%-interval van gemiddelde(a) min gemiddelde(b), herbemonsterd per gedeelde cluster (week): een week die terugkomt, brengt zijn trades van
+                           n_boot: int = 2000, level: float = 0.95) -> tuple[float, float]:
+    """Interval (standaard 95%) van gemiddelde(a) min gemiddelde(b), herbemonsterd per gedeelde cluster (week): een week die terugkomt, brengt zijn trades van
     beide reeksen mee. Voor de schaduwvarianten (app/shadow.py): variant en hoofdversie lopen in dezelfde weken, dus ze delen de samenhang."""
     if not a or not b:
         return 0.0, 0.0
@@ -77,4 +87,5 @@ def cluster_bootstrap_diff(a: list[float], a_clusters: list, b: list[float], b_c
         return point, point
     diffs.sort()
     n = len(diffs)
-    return diffs[int(0.025 * n)], diffs[max(int(0.975 * n) - 1, 0)]
+    lo, hi = _tails(level)
+    return diffs[int(lo * n)], diffs[max(int(hi * n) - 1, 0)]

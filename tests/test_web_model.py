@@ -119,3 +119,16 @@ class ModelChecklist(ModelTab):
     def test_entry_has_the_order_checklist_and_a_scenario_has_none(self):
         self.assertEqual(self.client.get(f"/nu/order/model:{self.entry}").status_code, 200)
         self.assertEqual(self.client.get(f"/nu/order/model:{self.sc}").status_code, 404)
+
+
+class ModelProof(ModelTab):
+    def test_bewijs_shows_the_measurement_and_comparisons_only_for_the_ceo(self):
+        with mock.patch.object(config, "CEO_USERNAME", "ceo"):
+            main._ceo_cache.update(at=0.0)
+            html = self.client.get("/bewijs").text
+            self.assertIn("HesPulse-model, meting", html)
+            self.assertIn("V1 vroege limiet op de pool", html)
+            self.as_student()
+            html = self.client.get("/bewijs").text
+        self.assertIn("HesPulse-model, meting", html)
+        self.assertNotIn("V1 vroege limiet op de pool", html)

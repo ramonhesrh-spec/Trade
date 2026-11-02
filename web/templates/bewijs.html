@@ -90,6 +90,36 @@
   {% endfor %}
 </div>
 
+{% if model_report %}{% set m = model_report %}{% set ex = m.execution %}{% set h = m.h %}
+{# HesPulse-model (app/model_measure.py, preregistratie §8): meting, geen oordeel. Een besluit pas bij 150 trades, 12 weken en N_eff 60. #}
+<div class="flat model-proof" id="hespulse-model">
+  <h3>HesPulse-model, meting</h3>
+  <p class="proof-footnote muted">Ongetest. Na 50 afgeronde trades volgt een technische controle; een besluit pas bij 150 trades, 12 weken en 60 onafhankelijke trades.</p>
+  <dl class="proof-facts">
+    <div><dt>Scenario's ontdekt</dt><dd>{{ m.funnel.ontdekt }}</dd></div>
+    <div><dt>Sweep · shift</dt><dd>{{ m.funnel.sweep }} · {{ m.funnel.shift }}</dd></div>
+    <div><dt>Entries gemeld</dt><dd>{{ m.funnel.entry }}</dd></div>
+    <div><dt>Vulbaar bij melding</dt><dd>{% if ex.vulbaar_pct is not none %}{{ "%.0f"|format(ex.vulbaar_pct) }}%{% else %}-{% endif %}</dd></div>
+    <div><dt>Gevuld · uitkomst</dt><dd>{{ m.funnel.gevuld }} · {{ m.funnel.uitkomst }}</dd></div>
+    <div><dt>Vertraging entry (mediaan)</dt><dd>{% if ex.delay_b_median is not none %}{{ "%.0f"|format(ex.delay_b_median) }} min{% else %}-{% endif %}</dd></div>
+    <div><dt>Afgerond · N_eff</dt><dd>{{ h.n }} · {{ h.n_eff }}</dd></div>
+    <div><dt>Netto per trade</dt><dd>{{ r_text(h.mean) }}</dd></div>
+    <div><dt>Interval 98,75% (per week)</dt><dd>{{ ci_text(h.ci) }}</dd></div>
+    <div><dt>Zonder beste 5%</dt><dd>{{ r_text(h.mean_wo_best) }}</dd></div>
+    <div><dt>Langste verliesreeks</dt><dd>{{ h.streak }}</dd></div>
+    <div><dt>Grootste daling</dt><dd>{{ r_text(-h.max_dd) if h.n else "-" }}</dd></div>
+  </dl>
+  {% if h.dd_flag %}<p class="proof-footnote muted">De grootste daling is groter dan bij 95% van 2000 willekeurige volgordes van dezelfde trades.</p>{% endif %}
+  <p class="proof-footnote muted">{{ ex.niet_vulbaar }} entries stonden bij de melding al door de limiet, {{ ex.terugtest_al_geweest }} keer was de terugtest al geweest voordat de entry bekend was.{% if m.cost_median_r is not none %} Kosten per trade, mediaan: {{ "%.2f"|format(m.cost_median_r)|replace(".", ",") }}R.{% endif %}{% if m.funding_unknown %} {{ m.funding_unknown }} trades met onbekende funding.{% endif %}</p>
+  {% if m.compare %}
+  <table class="ctx-table" aria-label="Vergelijkingen met het model, alleen voor de CEO">
+    <thead><tr><th scope="col">Arm</th><th scope="col">n</th><th scope="col">Netto</th><th scope="col">Min model, 98,75%</th></tr></thead>
+    <tbody>{% for c in m.compare %}<tr><td>{{ c.label }}{% if c.note %} ({{ c.note }}){% endif %}</td><td>{{ c.arm.n }}</td><td>{{ r_text(c.arm.mean) }}</td><td>{{ ci_text(c.diff) }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+
 {% if off_types %}
 <div class="flat focus-off" id="uitgezet">
   <h3>Uitgezet, ter verbetering</h3>

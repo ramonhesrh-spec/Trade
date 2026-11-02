@@ -24,7 +24,7 @@ from typing import Callable, Optional
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
-from app import auto_misser as am, config, db, excursion, focus, leaks, repo, shadow, track_record  # noqa: E402
+from app import auto_misser as am, config, db, excursion, focus, leaks, model_measure, repo, shadow, track_record  # noqa: E402
 
 EXPORT_DIR = ROOT / "data" / "export"
 GIT_DIR = ROOT / "data" / "export-git"
@@ -90,6 +90,9 @@ def build_export(now: datetime, stop_fetch: Callable = _stop_fetch) -> dict:
                                              "reasons")} for m in inputs["missers"]],
         "signalen": [_signal_row(s) for s in signals],
         "schaduw": shadow.export_rows(),
+        # HesPulse-model (preregistratie §8): uitvoerbaarheid, trechter, N_eff, drawdown, zonder de beste 5% en de vergelijkingen V1-V3.
+        "model": model_measure.jsonable(model_measure.report(repo.list_model_scenarios(), repo.list_model_v1(),
+                                                             repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT, ceo=True)),
     }
 
 
@@ -118,6 +121,20 @@ def markdown(data: dict) -> str:
     lines.append("")
     lines.append("## Schaduw")
     lines += [f"- {s['trade_type']} {s['id']} ({s['status']}): {s['verdict']['tekst']}" for s in data["schaduw"]] or ["- geen"]
+    m = data.get("model")
+    if m:
+        f, ex, h = m["funnel"], m["execution"], m["h"]
+        lines += ["", "## HesPulse-model (ongetest)",
+                  f"- Trechter: {f['ontdekt']} ontdekt, {f['sweep']} sweep, {f['shift']} shift, {f['entry']} entry, {f['gevuld']} gevuld, "
+                  f"{f['uitkomst']} uitkomst",
+                  f"- Vulbaar bij melding: {ex['vulbaar']} van {ex['published']}; niet vulbaar {ex['niet_vulbaar']}; terugtest al geweest "
+                  f"{ex['terugtest_al_geweest']}; vertraging entry mediaan {ex['delay_b_median'] if ex['delay_b_median'] is not None else '-'} min",
+                  f"- H: {h['n']} afgerond, N_eff {h['n_eff']}, netto {_r(h['mean'])} per trade, zonder beste 5% {_r(h['mean_wo_best'])}, "
+                  f"verliesreeks {h['streak']}, daling {_r(-h['max_dd'] if h['n'] else None)}"]
+        for c in m.get("compare") or []:
+            d = c["diff"]
+            lines.append(f"- {c['label']}: {c['arm']['n']} afgerond, netto {_r(c['arm']['mean'])}; min model "
+                         + (f"{_r(d[0])} tot {_r(d[1])}" if d else "-"))
     return "\n".join(lines) + "\n"
 
 

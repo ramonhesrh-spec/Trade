@@ -34,7 +34,7 @@ from app import patterns as chart_patterns
 from app import candle_source, config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, shadow, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
-from app import model, model_card
+from app import model, model_card, model_measure
 from app import announce, card_chart, ceo, chance_checks, daycap, end_reason, excursion, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep, poc_radar
 from app import chain as chain_mod
 from app.market_scanner import floor_stop, smc_stop_take_margins
@@ -1232,8 +1232,12 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
         c["svg"] = Markup(track_record.equity_svg(c["cumulative"], c["drawdown"]))
     # Schaduwvarianten (app/shadow.py) zijn een meting voor de CEO: leerlingen zien ze niet.
     shadow_lines = shadow.bewijs_lines() if is_ceo(user) else {}
+    # HesPulse-model (app/model_measure.py): de meting voor de eerste evaluatie voor iedereen, de vergelijkingen V1-V3 alleen voor de CEO.
+    scenarios = repo.list_model_scenarios()
+    model_report = model_measure.report(scenarios, repo.list_model_v1() if is_ceo(user) else [], rows, config.TRACK_RECORD_COST_PCT,
+                                        ceo=is_ceo(user)) if scenarios else None
     return templates.TemplateResponse(request, "bewijs.html", {
-        "shadow_lines": shadow_lines,
+        "shadow_lines": shadow_lines, "model_report": model_report, "r_text": model_measure.r_text, "ci_text": model_measure.ci_text,
         "my_week": _week_review(user, datetime.now(timezone.utc)),
         "curves": curves, "total": total, "per_type": per_type, "off_types": off_types, "funding_split": track_record.funding_split(rows, config.TRACK_RECORD_COST_PCT),
         "hours": track_record.hour_grid(rows, config.TRACK_RECORD_COST_PCT),

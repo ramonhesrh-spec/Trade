@@ -62,6 +62,15 @@ class ExportTest(DbCase):
         self.assertEqual([(s["id"], s["status"], s["verdict"]["verdict"]) for s in data["schaduw"]], [("zr-stop-040", "schaduw", "wachten")])
         self.assertIn("zr-stop-040", nacht.markdown(data))
 
+    def test_model_staat_erin(self):
+        from tests.test_web_model import scenario
+        scenario("ADA", entry=True)
+        data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None)
+        self.assertEqual(data["model"]["funnel"]["entry"], 1)
+        self.assertEqual([c["key"] for c in data["model"]["compare"]], ["V1", "V2", "V3"])
+        self.assertIn("## HesPulse-model (ongetest)", nacht.markdown(data))
+        self.assertFalse(keys_of(data["model"]) & set(PERSONAL_KEYS))
+
     def test_schrijft_json_en_markdown_met_datum(self):
         data = nacht.build_export(NOW, stop_fetch=lambda *a, **k: None)
         paths = nacht.write_files(data, Path(self.out.name), NOW)
