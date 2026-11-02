@@ -652,3 +652,33 @@ kansen wegdrukt.
 | 3 | Welk moment krijgt de ene luide melding: entry beschikbaar (B) of de vulling? | **B (entry beschikbaar)**; de vulling stil | Bij B moet je iets doen (de limiet zetten); bij de vulling staat de order er al. Een luide melding na de vulling komt te laat om nog te handelen. |
 | 4 | R:R minstens 2 (boek, hfdst. 26) of geen minimum (zoals de Zone-radar sinds 29 oktober)? | **Minstens 2** | Het boek noemt het als filter, en zonder minimum telt het model entries mee die het boek zelf overslaat. |
 | 5 | Leerlingen meteen, of eerst alleen de CEO? | **Eerst alleen de CEO** tot de eerste evaluatie (50 trades), daarna publiek als ongetest | De eerste evaluatie controleert de code en de vulbaarheid; fouten horen niet bij leerlingen te landen. |
+
+---
+
+## Aanvullend besluit CEO 2026-11-02 (avond): instaptype B, "lagere top" (vastgelegd, nog niet gebouwd)
+
+**Aanleiding.** De CEO: "Je hoeft niet per se een sweep, kijk nu was de entry bovenin toch perfect" (PUMP 4u, 18:26) en een ZEC-short op 15m
+(3 november, 01:26). Beide zijn shorts vanaf een lagere top in een dalende structuur, zonder sweep van een eerdere top. Beide voorbeelden
+zijn uitgekozen winnaars. Ze verklaren waarom de regel bestaat, niet dat hij werkt (`docs/onderzoek/cases/`).
+
+**Regel (short; long gespiegeld als "hogere bodem").** Alleen de trigger verandert. De rest is §4 ongewijzigd.
+1. *Context:* dezelfde 4u-bias en range L/H/EQ (4.3, 4.4), en de BTC-poort (B-2026-11-02-10).
+2. *Trigger in plaats van de sweep (4.8):* een bevestigde 1u-swing high (4.1, K = 3, herkenbaar op het sluiten van de derde candle
+   rechts) die
+   - lager ligt dan de vorige bevestigde 1u-swing high binnen dezelfde range;
+   - boven EQ ligt (premium);
+   - niet boven H kwam.
+
+   Het uiterste X is die top.
+3. *Daarna gelijk aan type A:* shift (4.9), displacement (4.10), FVG of OB-overlap (4.11), limiet, stop X + 0,25·ATR met de vloer van 0,4%,
+   doel de dichtste van range-rand en naakte POC (4.12, 4.7), geldigheid en annuleren (4.13), vulling en uitkomst vanaf de vulcandle met 7
+   dagen tijdslimiet (4.14).
+4. *Eén entry per range* (4.13): A en B delen de range. De eerste die moment B haalt, telt; de andere vervalt. Het entrytype staat op de
+   kaart: "na sweep" of "lagere top".
+
+**Meting.** B is een eigen arm in `model_measure` met dezelfde maten en beslisregel als §8. B wordt niet opgeteld bij het hoofdgetal van A
+voordat B op zichzelf een eerste beoordeling heeft.
+
+**Nog door de CEO te kiezen.** Krijgt B meteen luide meldingen, net als A, of loopt hij eerst stil tot de eerste beoordeling?
+
+**Nooit.** Constanten afstellen op deze twee voorbeelden. K, de premiumgrens EQ en de 0,25 ATR liggen hierboven vast.
