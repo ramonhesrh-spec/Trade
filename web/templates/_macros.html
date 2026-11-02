@@ -695,11 +695,14 @@
   {% elif it.svg_src %}
   {# Zone-radar en Zone-sweep: hun eigen tekening (app/card_chart.py) komt lazy van /api/kaart_svg zodra de kaart in beeld komt (kaarten.js).
      De verborgen level-chart is alleen de bron voor "Groot" (levelchart.js tekent een verborgen grafiek nooit). #}
-  <figure class="lc kc-svg is-zone" data-kc-svg="{{ it.svg_src }}">
+  {% set is_model = it.trade_type == "hespulse_model" %}
+  <figure class="lc kc-svg is-zone{% if is_model %} is-model{% endif %}" data-kc-svg="{{ it.svg_src }}">
     <div class="kc-svg-box" role="img" aria-label="{{ it.chart.label if it.chart else it.title }}"><span class="kc-svg-wait">Grafiek laden…</span></div>
     {% if it.chart %}<div class="level-chart" data-levelchart='{{ it.chart|tojson }}' data-coin="{{ it.coin }}" data-tf="15m" aria-label="{{ it.chart.label }}" hidden></div>{% endif %}
-    <figcaption class="lc-foot"><span class="lc-cap">{{ "POC op 1u of 4u" if it.trade_type == "poc_radar" else "15 min per candle" if it.trade_type == "hespulse_model" else "Zone op zijn eigen tijdframe" }} · jouw tijd</span>
-      {% if it.chart %}<button type="button" class="lc-expand" data-lc-expand aria-label="Grafiek van {{ it.coin }} groot openen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><span>Groot</span></button>{% endif %}
+    <figcaption class="lc-foot"><span class="lc-cap">{{ "POC op 1u of 4u" if it.trade_type == "poc_radar" else "Range 4u, entry 15m" if is_model else "Zone op zijn eigen tijdframe" }} · jouw tijd</span>
+      {# Het model opent "Groot" in dezelfde tekenstijl (kaarten.js haalt de hoge versie op), niet de canvasgrafiek. #}
+      {% if is_model %}<button type="button" class="lc-expand" data-kc-big="{{ it.svg_src }}?groot=1" data-kc-big-title="{{ it.title }}" aria-label="Grafiek van {{ it.coin }} groot openen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><span>Groot</span></button>
+      {% elif it.chart %}<button type="button" class="lc-expand" data-lc-expand aria-label="Grafiek van {{ it.coin }} groot openen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><span>Groot</span></button>{% endif %}
     </figcaption>
   </figure>
   {% elif it.chart %}{{ level_chart(it.coin, it.chart, legend=false) }}{% endif %}

@@ -1132,7 +1132,7 @@ def _card_setup(key: str, user: dict) -> Optional[tuple[str, dict]]:
 
 
 @app.get("/api/kaart_svg/{key}")
-async def api_kaart_svg(key: str, user: dict = Depends(require_login)):
+async def api_kaart_svg(key: str, groot: int = 0, user: dict = Depends(require_login)):
     """De eigen kaartgrafiek van een Zone-radar- of Zone-sweep-kaart op Kansen (app/card_chart.py), als SVG-fragment voor kaarten.js. Lazy per
     kaart in beeld; de candles komen uit dezelfde minuutcache als de grafieken (_cached_candles), dus geen beursaanroep per kijker."""
     found = _card_setup(key, user)
@@ -1142,7 +1142,7 @@ async def api_kaart_svg(key: str, user: dict = Depends(require_login)):
     if kind == "poc":
         tf = card_chart.poc_tf(row["period"])
     elif kind == "model":
-        tf = "15m"
+        tf = card_chart.model_tf(row)          # range vanaf zijn swing en de entry samen in beeld
     else:
         origin = zone_radar.zone_origin(row.get("zone_key", ""), ("1h", "2h", "4h"))
         tf = card_chart.candle_tf(origin[0] if origin else row["tf"])
@@ -1150,8 +1150,10 @@ async def api_kaart_svg(key: str, user: dict = Depends(require_login)):
     if not rows:
         return HTMLResponse("", status_code=503)
     price = (await _cached_prices({row["coin"]})).get(row["coin"])
-    svg = {"zone": card_chart.zone_radar_svg, "zsweep": card_chart.zone_sweep_svg, "poc": card_chart.poc_radar_svg,
-           "model": card_chart.model_svg}[kind](row, rows, price)
+    if kind == "model":
+        svg = card_chart.model_svg(row, rows, price, big=bool(groot))
+    else:
+        svg = {"zone": card_chart.zone_radar_svg, "zsweep": card_chart.zone_sweep_svg, "poc": card_chart.poc_radar_svg}[kind](row, rows, price)
     return HTMLResponse(svg, headers={"Cache-Control": "no-store"})
 
 

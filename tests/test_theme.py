@@ -90,6 +90,18 @@ class TokenTests(unittest.TestCase):
                 ratio = contrast(resolve(theme, fg), resolve(theme, bg))
                 self.assertGreaterEqual(ratio, 4.5, f"{theme_name}: {fg} op {bg} = {ratio:.2f}")
 
+    def test_modelkaart_zonenaam_haalt_4_5_op_het_vlak(self):
+        """card_chart.model_svg: de naam van een zone staat in het lichtpaarse vlak; tekst en labels rechts op de achtergrond."""
+        for theme in (DARK, LIGHT):
+            bg = resolve(theme, "--bg")
+            r, g, b_, a = (float(v) for v in re.search(r"rgba\(([\d.]+), ([\d.]+), ([\d.]+), ([\d.]+)\)", theme["--mz"]).groups())
+            base = [int(bg.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+            mixed = "#" + "".join(f"{round(c * a + o * (1 - a)):02x}" for c, o in zip((r, g, b_), base))
+            self.assertGreaterEqual(contrast(resolve(theme, "--mz-tx"), mixed), 4.5)
+            for name in ("--tx", "--tx2"):
+                self.assertGreaterEqual(contrast(resolve(theme, name), bg), 4.5, name)
+            self.assertGreaterEqual(contrast(resolve(theme, "--mc-ink"), resolve(theme, "--mc-paper")), 4.5)
+
     def test_velden_halen_3_tegen_het_paneel(self):
         for theme in (DARK, LIGHT):
             self.assertGreaterEqual(contrast(resolve(theme, "--border-interactive"), resolve(theme, "--panel")), 3.0)

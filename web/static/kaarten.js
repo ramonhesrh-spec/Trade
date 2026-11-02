@@ -151,6 +151,50 @@
     pump();
   }
 
+  // ===== "Groot" van de modelkaart: dezelfde analistentekening, hoger (/api/kaart_svg/model:N?groot=1) =====
+  // Hetzelfde schermvullende venster als levelchart.js (klassen lc-full), maar met de server-SVG in plaats van de canvasgrafiek.
+  document.addEventListener("click", function (e) {
+    var btn = e.target.closest && e.target.closest("[data-kc-big]");
+    if (!btn) return;
+    var dlg = document.createElement("dialog");
+    dlg.className = "lc-full";
+    dlg.setAttribute("aria-label", "Grafiek " + btn.getAttribute("data-kc-big-title"));
+    var head = document.createElement("div");
+    head.className = "lc-full-head";
+    var title = document.createElement("p");
+    title.className = "lc-full-title";
+    title.textContent = btn.getAttribute("data-kc-big-title");
+    var close = document.createElement("button");
+    close.type = "button";
+    close.className = "lc-full-close";
+    close.setAttribute("aria-label", "Grafiek sluiten");
+    close.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+    head.appendChild(title);
+    head.appendChild(close);
+    var body = document.createElement("div");
+    body.className = "mc-full-body";
+    body.innerHTML = '<span class="kc-svg-wait">Grafiek laden…</span>';
+    dlg.appendChild(head);
+    dlg.appendChild(body);
+    document.body.appendChild(dlg);
+    document.documentElement.classList.add("lc-lock");
+    function done() {
+      dlg.remove();
+      document.documentElement.classList.remove("lc-lock");
+      btn.focus();
+    }
+    close.addEventListener("click", function () { if (dlg.close) dlg.close(); else done(); });
+    dlg.addEventListener("close", done);
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+    fetch(btn.getAttribute("data-kc-big"), { cache: "no-store", credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.text() : ""; })
+      .then(function (svg) {
+        if (svg && svg.indexOf("<svg") === 0) body.innerHTML = svg;
+        else body.querySelector(".kc-svg-wait").textContent = "Grafiek nu niet beschikbaar";
+      })
+      .catch(function () { body.querySelector(".kc-svg-wait").textContent = "Grafiek nu niet beschikbaar"; });
+  });
+
   // ===== Tellers boven de kansen =====
   // De server zet de getallen (app/kansen.py, tabs[].n en in_zone); hier alleen opnieuw tellen wat er op de pagina staat zodra radar.js een
   // kaart van stand laat wisselen. Dezelfde woorden als kansen.summary (tests/test_static_js.py).

@@ -221,6 +221,7 @@ class Pool:
     key: str                # tijd van het punt met de laagste low
     known: int              # sluiten van p + 3 (1u) van het laatste punt
     touched: int            # eerste moment (ns) waarop een aanraking bekend was; int64-max = nooit
+    n: int = 1              # aantal swing lows in de pool: 2 of meer is gelijke lows (EQL op de kaartgrafiek)
 
 
 NEVER = np.iinfo(np.int64).max
@@ -264,7 +265,7 @@ class Pools:
                     level = float(self.f1.l[first])
                     known_idx = last + K_1H
                     known = int(self.f1.ct[known_idx])
-                    out.append(Pool(level, self.f1.ts[first].isoformat(), known, self._touch(level, known_idx, known)))
+                    out.append(Pool(level, self.f1.ts[first].isoformat(), known, self._touch(level, known_idx, known), len(group)))
                 group = [p] if p is not None else []
         self._cache[q1] = out
         return out
@@ -466,7 +467,7 @@ class _Run:
             if f.c[t] > pk["pool"].level:
                 j = pk["j"]
                 a.steps.append({"stap": "sweep", "at": T, "pool": pk["pool"].level, "extreme": pk["X"], "prik_at": int(f.ts[j].value),
-                                "terug_at": int(f.ts[t].value)})
+                                "terug_at": int(f.ts[t].value), "pool_at": int(pd.Timestamp(pk["pool"].key).value), "pool_n": pk["pool"].n})
                 tops = [p for p in range(0, j - K_15M + 1) if self.hi15[p]]
                 if not tops:
                     return self._fail(a, "geen_top", T, ctx)
@@ -543,7 +544,7 @@ class _Run:
             "range_known_at": _ts(ctx.known), "swing_at": _ts(self.f4.ts[ctx.s].value),
             "range_low": lo, "range_high": hi, "eq": self.px(ctx.eq), "target_edge": self.px(ctx.H),
             "discovered_at": _ts(a.discovered),
-            "pool0": {"level": self.px(a.pool0.level), "key": a.pool0.key, "known_at": _ts(a.pool0.known)},
+            "pool0": {"level": self.px(a.pool0.level), "key": a.pool0.key, "known_at": _ts(a.pool0.known), "n": a.pool0.n},
             "candidates": [{"kind": k, "label": lbl, "price": self.px(p)} for k, lbl, p in a.cands],
             "status": a.end[0] if a.end else a.phase, "ended_at": _ts(a.end[1]) if a.end else None,
             "steps": steps, "attempts": [{"reden": x["reden"], "at": _ts(x["at"]), "pool": self.px(x["pool"]),
@@ -561,6 +562,7 @@ class _Run:
                 "ob_low": self.span(*e["ob"])[0], "ob_high": self.span(*e["ob"])[1], "ob_at": _ts(e["ob_at"]),
                 "ob_overlap": bool(e["ob_overlap"]), "poc_samenval": e["poc_samenval"], "shift_label": e["shift_label"],
                 "extreme": self.px(e["extreme"]), "pool": self.px(e["pool"]), "eq": self.px(e["eq"]),
+                "range_low": self.span(*e["range"])[0], "range_high": self.span(*e["range"])[1],
                 "expires_at": _ts(e["known"]) + ENTRY_BARS * TF["15m"],
             }
         return out
@@ -568,7 +570,7 @@ class _Run:
     def _step_out(self, s: dict) -> dict:
         out = {}
         for k, v in s.items():
-            if k == "stap" or k == "label":
+            if k in ("stap", "label", "pool_n"):
                 out[k] = v
             elif k.endswith("at"):
                 out[k] = _ts(v)

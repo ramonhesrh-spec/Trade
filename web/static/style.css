@@ -114,6 +114,10 @@
   --glass: rgba(19, 26, 27, 0.86);         /* dok en zoekveld: half doorzichtig boven de inhoud */
   --press: rgba(234, 241, 240, 0.04);
   --chart-grid: rgba(255, 255, 255, 0.04);
+  /* De modelkaart zoals een analist hem tekent (card_chart.model_svg): candles zonder kleur, zones lichtpaars. --mz-tx haalt 4,5:1 op het
+     vlak (tests/test_theme.py). */
+  --mc-ink: #9aa6a6; --mc-paper: #0a0e0f; --mc-line: #74827f;
+  --mz: rgba(167, 139, 250, 0.16); --mz-edge: rgba(167, 139, 250, 0.42); --mz-tx: #cdbdff;
 }
 
 /* Licht thema (TH.light uit het ontwerp). Twee keer dezelfde regels: gekozen in Account (data-theme="light"), of Systeem met een licht
@@ -131,6 +135,7 @@
   --s2: #e7ecec; --bd: #d3dbdb; --tx: #0d1415; --tx2: #4a5759; --ac: #0ABAB5; --aci: #05706c; --onac: #03201f; --actint: rgba(10, 186, 181, 0.13);
   --win: #0b7a47; --loss: #c42f2c; --zone: rgba(10, 186, 181, 0.16); --zone-in: rgba(10, 186, 181, 0.26); --cu: #a9b3b5; --cdn: #6b7779;
   --glass: rgba(255, 255, 255, 0.9); --press: rgba(13, 20, 21, 0.05); --chart-grid: rgba(13, 20, 21, 0.06);
+  --mc-ink: #1b2324; --mc-paper: #ffffff; --mc-line: #8a9698; --mz: rgba(124, 92, 214, 0.13); --mz-edge: rgba(124, 92, 214, 0.40); --mz-tx: #4f35a8;
 }
 @media (prefers-color-scheme: light) {
   :root[data-theme="system"] {
@@ -146,6 +151,7 @@
   --s2: #e7ecec; --bd: #d3dbdb; --tx: #0d1415; --tx2: #4a5759; --ac: #0ABAB5; --aci: #05706c; --onac: #03201f; --actint: rgba(10, 186, 181, 0.13);
   --win: #0b7a47; --loss: #c42f2c; --zone: rgba(10, 186, 181, 0.16); --zone-in: rgba(10, 186, 181, 0.26); --cu: #a9b3b5; --cdn: #6b7779;
   --glass: rgba(255, 255, 255, 0.9); --press: rgba(13, 20, 21, 0.05); --chart-grid: rgba(13, 20, 21, 0.06);
+  --mc-ink: #1b2324; --mc-paper: #ffffff; --mc-line: #8a9698; --mz: rgba(124, 92, 214, 0.13); --mz-edge: rgba(124, 92, 214, 0.40); --mz-tx: #4f35a8;
   }
 }
 
@@ -2955,6 +2961,29 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .sc-zone.is-target { fill: var(--win); fill-opacity: .10; stroke: var(--win); stroke-opacity: .5; stroke-dasharray: 3 3; }
 .sc-mark { fill: var(--tx); stroke: var(--s1); stroke-width: 2; }
 .sc-mark-label { font: 600 11px var(--sans); fill: var(--tx); stroke: var(--s1); stroke-width: 3px; paint-order: stroke; }
+.kc-svg.is-model .kc-svg-box { aspect-ratio: 316 / 236; }
+/* HesPulse-model (card_chart.model_svg): rustige candles, de range als dunne lijn, zones als licht paars vlak met de naam erin. Alles 11px in
+   een viewBox van 316 breed, dus op een telefoon nooit kleiner. */
+.sc.mc .mc-w { stroke: var(--mc-ink); stroke-width: 1; }
+.sc.mc .mc-c { stroke: var(--mc-ink); stroke-width: .8; }
+.sc.mc .mc-c.is-up { fill: var(--mc-paper); }
+.sc.mc .mc-c.is-dn { fill: var(--mc-ink); }
+.sc.mc .mc-zone { fill: var(--mz); stroke: var(--mz-edge); stroke-width: .8; }
+.sc.mc .mc-zone-label { font: 600 11px var(--sans); fill: var(--mz-tx); }
+.sc.mc .mc-zone-label.is-out { stroke: var(--bg); stroke-width: 3px; paint-order: stroke; }
+.sc.mc .mc-level, .sc.mc .mc-tick { stroke: var(--mc-line); stroke-width: .8; }
+.sc.mc .mc-level.is-eq { stroke-dasharray: 2 3; }
+.sc.mc .mc-label { font: 11px var(--sans); fill: var(--tx2); }
+.sc.mc .sc-label { font-size: 11px; }
+.sc.mc .sc-line { stroke-width: 1; }
+.sc.mc .mc-pool, .sc.mc .mc-bos { stroke: var(--tx); stroke-width: 1.2; }
+.sc.mc .mc-bos { stroke-dasharray: 4 2; }
+.sc.mc .mc-sweep { fill: none; stroke: var(--tx); stroke-width: 1.5; }
+.sc.mc .mc-tag { font: 500 11px var(--sans); fill: var(--tx); stroke: var(--bg); stroke-width: 3px; paint-order: stroke; }
+.sc.mc .mc-meta { font: 500 11px var(--sans); fill: var(--tx2); }
+/* "Groot" van de modelkaart: dezelfde tekening, zo groot als het scherm toelaat (kaarten.js). */
+.mc-full-body { flex: 1; min-height: 0; display: grid; place-items: start center; padding: var(--space-2) var(--gutter); overflow: auto; }
+.mc-full-body svg.sc { width: 100%; height: auto; max-width: 680px; }
 .lc-bare .lc-foot { margin-top: 0; justify-content: space-between; align-items: center; }
 .lc-bare .level-chart::before { display: none; }
 .lc-cap { font-size: 12px; color: var(--tx2); }

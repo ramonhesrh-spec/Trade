@@ -136,6 +136,7 @@ class PoolTest(unittest.TestCase):
         pools, _ = self.pools(rows, len(rows) - 1)
         near = [p for p in pools if 107 < p.level < 108]
         self.assertEqual(len(near), 1)
+        self.assertEqual(near[0].n, 2)
 
 
 class ScenarioTest(unittest.TestCase):
@@ -158,6 +159,21 @@ class ScenarioTest(unittest.TestCase):
         self.assertLess(e["stop"], 107.0)
         self.assertAlmostEqual(e["rr"], (e["take"] - e["limit"]) / (e["limit"] - e["stop"]))
         self.assertEqual(e["expires_at"], st["entry"]["at"] + pd.Timedelta(hours=6))
+
+    def test_sweep_names_the_pool_point_and_its_size(self):
+        """De kaartgrafiek tekent de gesweepte pool vanaf zijn punt en noemt gelijke lows EQL: dat staat in de stap, niet herberekend."""
+        (sc,) = longs(run(base_rows()))
+        sw = steps(sc)["sweep"]
+        self.assertAlmostEqual(sw["pool"], 107.45, places=6)
+        self.assertLess(sw["pool_at"], sw["prik_at"])
+        self.assertEqual(sw["pool_n"], 1)
+        self.assertEqual(sc["pool0"]["n"], 1)
+        e = sc["entry"]                     # de range zoals hij bij de entry was (de top groeit mee tot dan), met het doel op zijn rand
+        self.assertAlmostEqual(e["range_high"], e["take"], places=6)
+        self.assertAlmostEqual((e["range_low"] + e["range_high"]) / 2, e["eq"], places=6)
+        self.assertAlmostEqual(e["range_low"], sc["range_low"], places=6)
+        (sh,) = [s for s in run(S.mirror_rows(base_rows())) if s["direction"] == "short"]
+        self.assertEqual((steps(sh)["sweep"]["pool_at"], steps(sh)["sweep"]["pool_n"]), (sw["pool_at"], 1))
 
     def test_run_is_no_sweep(self):
         tail = [[108.0, 108.05, 106.2, 107.6], RED, DISP, FVG3, SHIFT]     # 1,25 onder de pool: meer dan 2,5 ATR

@@ -107,15 +107,24 @@ class ModelChart(Base):
         with mock.patch.object(main, "_cached_candles", mock.AsyncMock(return_value=rows)):
             a = self.client.get(f"/api/kaart_svg/model:{sc}")
             b = self.client.get(f"/api/kaart_svg/model:{en}")
-        self.assertEqual((a.status_code, b.status_code), (200, 200))
-        self.assertIn("Discount 4u", a.text)
-        self.assertIn("Pool", a.text)
-        self.assertIn("Limiet", b.text)
-        self.assertIn("Oorsprong zone: gap 15m", b.text)
+            big = self.client.get(f"/api/kaart_svg/model:{en}?groot=1")
+        self.assertEqual((a.status_code, b.status_code, big.status_code), (200, 200, 200))
+        self.assertIn(">4u range high<", a.text)
+        self.assertIn(">evenwicht<", a.text)
+        self.assertIn(">1u swing low<", a.text)
+        self.assertNotIn(">Limiet", a.text)
+        self.assertIn(">Limiet", b.text)
+        self.assertIn(">15m FVG<", b.text)
+        self.assertIn(">15m CHoCH<", b.text)
+        self.assertIn('viewBox="0 0 340 600"', big.text)            # "Groot" in dezelfde stijl
+        self.assertIn('viewBox="0 0 316 236"', b.text)
         self.assertEqual(self.client.get("/api/kaart_svg/model:999").status_code, 404)
 
 
 class ModelChecklist(ModelTab):
+    def test_groot_button_opens_the_same_drawing(self):
+        self.assertIn(f'data-kc-big="/api/kaart_svg/model:{self.entry}?groot=1"', self.html())
+
     def test_entry_has_the_order_checklist_and_a_scenario_has_none(self):
         self.assertEqual(self.client.get(f"/nu/order/model:{self.entry}").status_code, 200)
         self.assertEqual(self.client.get(f"/nu/order/model:{self.sc}").status_code, 404)
