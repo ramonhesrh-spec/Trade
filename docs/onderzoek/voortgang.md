@@ -2,6 +2,23 @@
 
 Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
 
+## Ronde 3 (2026-11-02)
+
+**Aanleiding.** Het goudrapport kwam opnieuw binnen.
+
+**Gecontroleerd.**
+- Het rapport is byte-gelijk aan het eerste.
+- Beelden B en C nu zelf bekeken; in ronde 1 alleen A.
+
+**Nieuw.**
+- De tijdlijn: de herstelcandle vormde zich waarschijnlijk tussen 14:32 en 14:45. Dat is een afleiding.
+- De maker tekende zelf al eerst een herstel.
+- De spread op TVC was ongeveer 0,005%.
+
+Alles staat in `cases/2026-11-02-goud.md`.
+
+**Herzien.** Niets. Mijn eerdere oordeel over goud blijft staan.
+
 ## Ronde 2 (2026-11-02)
 
 **Aanleiding.** De CEO vroeg of het HesPulse-rapport gelezen was.
