@@ -54,6 +54,11 @@ dan pas verder meten. Geen drempel voor winst; die komt uit de preregistratie §
 
 ## Geparkeerd
 
+- **H3. Vroege limiet op een naakte POC/vPOC bij een lagere top, met 4u- en BTC-context mee** (`cases/2026-11-btc-1u-vpoc.md`). Eerst
+  vastleggen van welke periode het volumeniveau komt. Een niveau uit een periode die de beweging zelf bevat, is vooruitkijken. Pas
+  toetsen als B een eerste beoordeling heeft. De POC-niveaus worden nog bijgewerkt (`poc_radar_live.refresh_levels`), dus de data
+  is er.
+
 - **Bevestigde entry tegen vroege limiet (DOGE).** Wordt al gemeten als V1 (vroege limiet) tegen H in `model_measure`. Geen nieuwe
   variant nodig; eerst de bestaande meting laten lopen.
 - **Goud als instrument.** Niet in `FIXED_COINS`. Of Binance USDⓈ-M een goudcontract heeft, kon ik vanuit deze container niet controleren
