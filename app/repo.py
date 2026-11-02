@@ -4063,11 +4063,12 @@ def revert_shadow(variant_id: str, at_iso: str, note: str) -> int:
 # ---------------------------------------------------------------------------
 
 _MODEL_NEW_COLS = ("coin", "direction", "range_id", "status", "range_low", "range_high", "eq", "pool_level", "candidates", "steps",
-                   "discovered_at", "detected_at", "sweep_at", "shift_at", "updated_at", "candle_market")
+                   "discovered_at", "detected_at", "sweep_at", "shift_at", "updated_at", "candle_market", "btc_context")
 # Wat een nieuwe berekening van een lopend scenario mag bijwerken. Wat het moment van vastleggen draagt (detected_at, entry_detected_at),
 # de vulling en de meldvlag schrijft alleen de motor zelf, één keer.
 _MODEL_SYNC_COLS = ("status", "steps", "sweep_at", "shift_at", "entry_at", "ended_at", "limit_price", "stop_loss", "take_profit", "rr",
-                    "zone_low", "zone_high", "target_kind", "target_text", "ob_overlap", "poc_samenval", "shift_label", "extreme", "expires_at")
+                    "zone_low", "zone_high", "target_kind", "target_text", "ob_overlap", "poc_samenval", "shift_label", "extreme", "expires_at",
+                    "btc_context")
 MODEL_FINAL = ("afgerond", "context_weg", "geen_pool")
 
 

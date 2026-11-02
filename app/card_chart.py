@@ -146,7 +146,7 @@ def model_svg(row: dict, candles: list[list], price: Optional[float]) -> str:
     if row.get("limit_price") is not None:
         e = d.get("entry") or {}
         zone = {"low": row["zone_low"], "high": row["zone_high"], "from": _ts(e.get("fvg_at")) or origin,
-                "label": "Gap + OB 15m" if row.get("ob_overlap") else "Gap 15m"}
+                "label": "Oorsprong zone: gap + OB 15m" if row.get("ob_overlap") else "Oorsprong zone: gap 15m"}
         lines = _lines(row["direction"], row["limit_price"], row["stop_loss"], row["take_profit"])
         return setup_chart.zone_svg(shown, row["coin"], row["direction"], zone, lines, points, None, price, row["limit_price"])
     half = {"low": row["range_low"], "high": row["eq"]} if long else {"low": row["eq"], "high": row["range_high"]}

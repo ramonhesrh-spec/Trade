@@ -1255,6 +1255,7 @@ CREATE TABLE IF NOT EXISTS model_scenarios (
     vulbaar INTEGER,
     filled_at TEXT,
     door_limiet INTEGER,
+    btc_context TEXT,                    -- app/btc_context.measure bij moment A ("a") en B ("b"), JSON; alleen kenmerk, nooit een filter
     alert_sent INTEGER NOT NULL DEFAULT 0,
     signal_id INTEGER REFERENCES signals(id),
     updated_at TEXT,

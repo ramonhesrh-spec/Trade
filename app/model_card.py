@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from zoneinfo import ZoneInfo
 
-from app import model, price_text
+from app import btc_context, model, price_text
 
 TRADE_TYPE = model.TRADE_TYPE
 LABEL = model.LABEL
@@ -73,6 +73,51 @@ def row_of(coin: str, sc: dict) -> dict:
                     "ob_overlap": int(e["ob_overlap"]), "poc_samenval": None if e["poc_samenval"] is None else int(e["poc_samenval"]),
                     "shift_label": e["shift_label"], "extreme": e["extreme"], "expires_at": _iso(e["expires_at"])})
     return row
+
+
+def plan_ok(row: dict) -> bool:
+    """Long: stop < limiet < doel; short: doel < limiet < stop. Titel, push, kaart, grafiek en signaal lezen allemaal deze ene rij."""
+    stop, limit, take = row.get("stop_loss"), row.get("limit_price"), row.get("take_profit")
+    if None in (stop, limit, take):
+        return False
+    return stop < limit < take if row["direction"] == "long" else take < limit < stop
+
+
+def btc_of(row: dict) -> dict:
+    try:
+        return json.loads(row.get("btc_context") or "{}") or {}
+    except ValueError:
+        return {}
+
+
+STATUS_WORDS = {"wacht_sweep": "scenario ontdekt", "prik": "scenario ontdekt", "wacht_shift": "scenario ontdekt", "wacht_fvg": "scenario ontdekt",
+                "afgerond": "entry beschikbaar", "gevuld": "gevuld"}
+
+
+def status_word(row: dict) -> str:
+    if row.get("entry_state") == "gevuld":
+        return "gevuld"
+    return STATUS_WORDS.get(row["status"], row["status"])
+
+
+def context_lines(row: dict) -> list[str]:
+    """Drie dingen apart (aanvulling CEO 2026-11-02): de context (4u-richting van de coin en van BTC, gemeten), het entrytype (het model gaat
+    altijd met de 4u-structuur mee) en de stand. De BTC-context is die van moment B als die er is, anders van moment A."""
+    ctx = btc_of(row)
+    btc = ctx.get("b") or ctx.get("a")
+    coin_bias = "bullish" if row["direction"] == "long" else "bearish"
+    lines = [f"Context: {row['coin']} 4u {coin_bias} · {btc_context.text(btc)}"]
+    rel = btc_context.rel_text(btc)
+    if rel:
+        lines.append(rel)
+    lines += [f"Entrytype: met de 4u-structuur mee ({row['direction']})", f"Status: {status_word(row)}"]
+    return lines
+
+
+def face_line(row: dict) -> str:
+    """De korte regel op de kaart zelf: stand, entrytype en BTC 4u."""
+    btc = (btc_of(row).get("b") or btc_of(row).get("a") or {}).get("btc_4h") or "onbekend"
+    return f"{status_word(row).capitalize()} · met de 4u-structuur mee · BTC 4u {btc}"
 
 
 def detail(row: dict) -> dict:
@@ -157,7 +202,8 @@ def scenario_item(row: dict, now: Optional[datetime] = None) -> dict:
             "svg_src": f"/api/kaart_svg/{key(sid)}", "chart": None, "say": waiting_text(row), "steps_done": step_lines(row, now),
             "candidates_text": candidate_text(row), "rows": scenario_rows(row), "created_at": row.get("detected_at"),
             "shared_text": f"Ontdekt {when(row.get('discovered_at'), now)}", "origin": f"{LABEL} · context 4u, pools 1u, sweep en shift op 15m",
-            "num_text": "", "num_label": "", "num_hook": "distance", "share_lines": []}
+            "num_text": "", "num_label": "", "num_hook": "distance", "share_lines": [], "model_lines": context_lines(row),
+            "model_face": face_line(row)}
 
 
 def radar_setup(row: dict) -> dict:

@@ -22,6 +22,21 @@ paragraaf erdoor verandert, staat dat erbij.
 
 Trade_type in de code: `hespulse_model` (§9 stelde `hp_model` voor).
 
+**Aanvullend besluit CEO 2026-11-02 (kenmerken, geen filter).** Uit een extern uitvoeringsplan (PUMP en BTC), vastgelegd vóór er uitkomsten zijn:
+
+6. **BTC-context** op elke modelkaart, gemeten op moment A en opnieuw op moment B (`app/btc_context.py`): de 4u-structuurrichting van BTC
+   volgens dezelfde regel als het model (4.3: bullish, bearish, neutraal zonder geldige breuk, onbekend zonder data), de Pearson-correlatie van
+   coin en BTC op log-rendementen van gesloten, op UTC uitgelijnde 15m-candles uit dezelfde futuresbron over 96 en 672 rendementen
+   (ontbrekende paren niet opvullen; minder dan 90% van de slots met een paar, ontwerpkeuze, of nulvariantie is "onvoldoende data"), en het
+   24u-rendement van de coin min dat van BTC (relatieve sterkte, geen alpha). Tekst: "BTC 4u: bearish · correlatie 0,82 (24u) / 0,74 (7d)",
+   of "BTC-context onbekend" als data ontbreekt (nooit stil neutraal). **Alleen een kenmerk:** geen motor, filter, volgorde of melding leest
+   het; het is geen extra toets in §6 of §8.
+7. **De kaart scheidt in tekst** de context (4u-richting van de coin en BTC), het entrytype (het model gaat altijd met de 4u-structuur mee) en
+   de status (scenario ontdekt, entry beschikbaar, gevuld). De zone op de grafiek heet "oorsprong zone", nooit entry.
+8. **Eén planrij:** titel, richting, instap, stop, doel, de getekende box, de uitleg en de melding komen uit dezelfde opgeslagen rij in
+   `model_scenarios`. Een short heeft altijd doel < instap < stop, een long stop < instap < doel; een rij die dat niet haalt wordt niet
+   gepubliceerd (`model_card.plan_ok`), en de kaartgrafiek wordt nooit bewaard (`Cache-Control: no-store`).
+
 Status: **goedgekeurd door de CEO op 2026-11-02, bevroren**, met de besluiten hierboven. Oorspronkelijk: Er wordt niets gebouwd voordat de CEO dit document en de open beslissingen
 onderaan heeft goedgekeurd. Na goedkeuring is dit document bevroren: wijzigingen komen alleen als gedateerd "Aanvullend besluit" onderaan,
 met reden, en nooit op grond van uitkomsten.

@@ -11,13 +11,14 @@ Live direct op besluit van de CEO (2026-11-02), ongetest, voor iedereen. Het sys
          stille melding via send_new_card); level_check beslist doel en stop. Vervallen na 6 uur, weggelopen, of context_weg bij een nieuwe
          4u-breuk. V1 (de vroege limiet op moment A, §6) wordt hier stil gevolgd in model_v1: geen melding, geen journaal, geen signaal."""
 import asyncio
+import json
 import logging
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Callable, Optional
 
 import pandas as pd
 
-from app import config, latency, model, model_card as mc, push_notify, range_sweep_live as rsl, repo
+from app import btc_context, config, latency, model, model_card as mc, push_notify, range_sweep_live as rsl, repo
 
 logger = logging.getLogger("model_live")
 
@@ -72,8 +73,8 @@ async def _announce_entry(row: dict, stamp: pd.Timestamp) -> None:
             push_notify.record_failure(uid, "kans", mc.card_url(row["id"]), exc)
 
 
-async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[float]) -> dict:
-    """Bewaart wat model.scenarios vond. Een scenario dat al voorbij was voordat de motor het zag (bij de eerste start, of na een storing), komt
+async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[float], btc: Optional[Callable[[], dict]] = None) -> dict:
+    """btc: geeft de BTC-context van dit moment (btc_context.measure), alleen als kenmerk op de kaart. Bewaart wat model.scenarios vond. Een scenario dat al voorbij was voordat de motor het zag (bij de eerste start, of na een storing), komt
     niet in de app: het was nooit live. Geeft tellers terug voor de hartslag."""
     counts = {"nieuw": 0, "entry": 0}
     seen = set()
@@ -85,7 +86,8 @@ async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[
             e = sc.get("entry")
             if sc["status"] in ("context_weg", "geen_pool") or (e and e["expires_at"] <= stamp):
                 continue
-            sid = repo.insert_model_scenario({**row, "status": "wacht_sweep", "detected_at": stamp.isoformat(), "updated_at": stamp.isoformat()})
+            sid = repo.insert_model_scenario({**row, "status": "wacht_sweep", "detected_at": stamp.isoformat(), "updated_at": stamp.isoformat(),
+                                              "btc_context": json.dumps({"a": btc() if btc else None})})
             if sid is None:
                 continue
             counts["nieuw"] += 1
@@ -98,9 +100,15 @@ async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[
             continue
         publish = None
         if row["status"] == "afgerond" and sc.get("entry"):
+            if not mc.plan_ok(row):
+                # Nooit een kaart of melding met een omgekeerd plan (stop, instap en doel in de verkeerde volgorde voor de richting).
+                logger.error("HesPulse-model %s %s: plan in de verkeerde volgorde, niet gepubliceerd: %s", coin, sc["direction"], row)
+                continue
             sign = 1 if sc["direction"] == "long" else -1
             vulbaar = None if price is None else bool((price - row["limit_price"]) * sign > 0)
             row.update({"price_at_publish": price, "vulbaar": None if vulbaar is None else int(vulbaar)})
+            if not stored.get("entry_detected_at"):
+                row["btc_context"] = json.dumps({**mc.btc_of(stored), "b": btc() if btc else None})
             publish = stamp.isoformat()
         if repo.sync_model_scenario(stored["id"], row, entry_detected_at=publish):
             fresh = repo.get_model_scenario(stored["id"])
@@ -125,11 +133,18 @@ async def scan(now: Optional[datetime] = None) -> None:
     stamp = rsl._utc(now)
     coins = [c["symbol"] for c in repo.list_coins()]
     checked, failed, new, entries = 0, 0, 0, 0
+    try:
+        btc15 = rsl._upto(await asyncio.to_thread(rsl.fetch_bars, "BTC", "15m", LIMIT), stamp)
+        btc4 = rsl._upto(await asyncio.to_thread(rsl.fetch_bars, "BTC", "4h", LIMIT), stamp)
+    except Exception:
+        logger.exception("BTC-candles voor de context niet op te halen; de kaart zegt dan 'BTC-context onbekend'")
+        btc15 = btc4 = None
     for coin in coins:
         try:
             frames = await _frames(coin, stamp)
             scs = await asyncio.to_thread(model.scenarios, frames, stamp, _pocs(coin, stamp))
-            counts = await sync(coin, scs, stamp, await _price(coin, stamp))
+            coin15 = frames["15m"]
+            counts = await sync(coin, scs, stamp, await _price(coin, stamp), btc=lambda: btc_context.measure(coin15, btc15, btc4, stamp))
             new, entries, checked = new + counts["nieuw"], entries + counts["entry"], checked + 1
         except Exception:
             failed += 1

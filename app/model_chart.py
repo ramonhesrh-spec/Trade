@@ -76,7 +76,7 @@ def full_svg(sc: dict, b15: pd.DataFrame) -> str:
             labels.append((c["price"], "#b58900", f"{c['label']} {price_text.nl(c['price'])}", "1 3"))
     # FVG en order block als vlak vanaf hun candle.
     if e:
-        for lo_, hi_, at, color, name in ((e["ob_low"], e["ob_high"], e["ob_at"], "#8e6cd9", "OB"), (e["fvg_low"], e["fvg_high"], e["fvg_at"], "#4b8bf5", "FVG")):
+        for lo_, hi_, at, color, name in ((e["ob_low"], e["ob_high"], e["ob_at"], "#8e6cd9", "Oorsprong zone: OB"), (e["fvg_low"], e["fvg_high"], e["fvg_at"], "#4b8bf5", "Oorsprong zone: FVG")):
             fx = x(at)
             out.append(f'<rect x="{fx:.1f}" y="{y(hi_):.1f}" width="{right - fx:.1f}" height="{max(y(lo_) - y(hi_), 1):.1f}" fill="{color}" opacity="0.18"/>')
             out.append(f'<text x="{fx + 3:.1f}" y="{y(hi_) - 3:.1f}" fill="{color}">{name}</text>')

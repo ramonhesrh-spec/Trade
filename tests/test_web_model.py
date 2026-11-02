@@ -111,7 +111,7 @@ class ModelChart(Base):
         self.assertIn("Discount 4u", a.text)
         self.assertIn("Pool", a.text)
         self.assertIn("Limiet", b.text)
-        self.assertIn("Gap 15m", b.text)
+        self.assertIn("Oorsprong zone: gap 15m", b.text)
         self.assertEqual(self.client.get("/api/kaart_svg/model:999").status_code, 404)
 
 
