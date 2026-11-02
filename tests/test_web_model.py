@@ -146,3 +146,32 @@ class ModelProof(ModelTab):
             html = self.client.get("/bewijs").text
         self.assertIn("HesPulse-model, meting", html)
         self.assertNotIn("V1 vroege limiet op de pool", html)
+
+
+class EntryPointsOnTheCard(ModelTab):
+    """Aanvullend besluit CEO 2026-11-03: alle instappunten op één kaart; tik op een punt voor de basis. B0 staat er nooit."""
+
+    def setUp(self):
+        super().setUp()
+        known = (NOW - pd.Timedelta(minutes=30)).isoformat()
+        for code, limit in (("B", 100.5), ("B0", 100.7), ("P", 98.5)):
+            repo.insert_model_entry(self.entry, {"code": code, "coin": "ADA", "direction": "long", "known_at": known, "detected_at": known,
+                                                 "limit_price": limit, "stop_loss": 97.5, "take_profit": 110.0, "rr": 3.0,
+                                                 "expires_at": (NOW + pd.Timedelta(hours=5)).isoformat(), "basis": "{}"})
+
+    def test_detailblad_noemt_elk_punt_met_zijn_basis(self):
+        html = self.html()
+        self.assertIn("Instappunten", html)
+        for name in ("Na sweep", "Lagere top", "POC-limiet"):
+            self.assertIn(name, html)
+        self.assertNotIn("B0", html)
+
+    def test_grafiek_tekent_de_letters(self):
+        start = int((NOW - pd.Timedelta(hours=30)).timestamp())
+        rows = [[start + 900 * i, 100.0, 100.5, 99.5, 100.0] for i in range(120)]
+        with mock.patch.object(main, "_cached_candles", mock.AsyncMock(return_value=rows)):
+            svg = self.client.get(f"/api/kaart_svg/model:{self.entry}").text
+        self.assertIn(">A Limiet", svg)
+        self.assertIn(">B 100,50<", svg)
+        self.assertIn(">P 98,50<", svg)
+        self.assertNotIn(">B0 ", svg)

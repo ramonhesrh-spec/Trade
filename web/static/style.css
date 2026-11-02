@@ -2976,6 +2976,9 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .sc.mc .mc-label { font: 11px var(--sans); fill: var(--tx2); }
 .sc.mc .sc-label { font-size: 11px; }
 .sc.mc .sc-line { stroke-width: 1; }
+/* De andere instappunten (V1, B, P) naast A: gestippeld in de bijtekstkleur, zodat de order van A het sterkst blijft. */
+.sc.mc line.sc-alt { stroke: var(--tx2); stroke-dasharray: 2 3; }
+.sc.mc text.sc-alt { fill: var(--tx2); stroke: none; }
 .sc.mc .mc-pool, .sc.mc .mc-bos { stroke: var(--tx); stroke-width: 1.2; }
 .sc.mc .mc-bos { stroke-dasharray: 4 2; }
 .sc.mc .mc-sweep { fill: none; stroke: var(--tx); stroke-width: 1.5; }
@@ -3347,3 +3350,13 @@ details.mrow-wrap.is-focus .mrow-body .proof-number { font-size: 44px; }
 .off-table td.neg { color: var(--red); }
 .off-sub { display: block; font-size: 12px; color: var(--tx2); margin-top: 2px; }
 .setup-kind { font-size: var(--text-sm); margin-right: var(--space-3); }
+
+/* Instappunten in het detailblad (model_card.entry_points): één regel per punt, tik voor de basis en de niveaus. */
+.kd-entries { margin: var(--space-2) 0; }
+.kd-entries-h { font: 600 13px var(--sans); color: var(--tx2); margin: 0 0 4px; }
+.kd-entry { border-top: 1px solid var(--bd); padding: 6px 0; }
+.kd-entry summary { cursor: pointer; font: 14px var(--sans); color: var(--tx); display: flex; gap: 6px; align-items: baseline; }
+.kd-entry-code { font-family: var(--mono); min-width: 2ch; }
+.kd-entry-state { margin-left: auto; font-size: 12px; color: var(--tx2); }
+.kd-entry-basis, .kd-entry-levels { font: 13px var(--sans); color: var(--tx2); margin: 4px 0 0; }
+.kd-entry-levels { font-family: var(--mono); }

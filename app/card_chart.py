@@ -238,11 +238,19 @@ def model_svg(row: dict, candles: list[list], price: Optional[float] = None, big
 
     # Rechts: de niveaus over de breedte (range en evenwicht) en de order (limiet, stop, doel met prijs).
     levels = [(Hi, "mc-level", "4u range high"), (L, "mc-level", "4u range low"), (eq, "mc-level is-eq", "evenwicht")]
+    # Aanvullend besluit 2026-11-03: alle instappunten op één grafiek. A is de limiet van het plan; de andere (V1, B, P) staan erbij met
+    # hun letter, en het detailblad zegt per letter waarop hij gebaseerd is. B0 wordt alleen gemeten en staat er nooit.
+    alts = [a for a in row.get("alt_entries") or [] if a.get("limit") is not None]
+    alt_from: dict[str, Optional[float]] = {}
     if plan:
-        levels += [(row["limit_price"], "sc-limit", f"Limiet {price_text.nl(row['limit_price'])}"),
+        levels += [(row["limit_price"], "sc-limit", f"{'A ' if alts else ''}Limiet {price_text.nl(row['limit_price'])}"),
                    (row["stop_loss"], "sc-stop", f"Stop {price_text.nl(row['stop_loss'])}")]
         if row.get("take_profit") is not None:
             levels.append((row["take_profit"], "sc-target", f"Doel {price_text.nl(row['take_profit'])}"))
+    for a in alts:
+        text = f"{a['code']} {price_text.nl(a['limit'])}"
+        levels.append((a["limit"], "sc-alt", text))
+        alt_from[text] = _ts(a.get("known_at"))
     col_w = max(len(t) for _, _, t in levels) * MODEL_CHAR_W + 10
     plot_r = W - col_w
     left = float(MODEL_PAD_L)
@@ -394,7 +402,11 @@ def model_svg(row: dict, candles: list[list], price: Optional[float] = None, big
     ys = spread([y(v) for v, _, _ in levels], MODEL_GAP, top=plot_t, bottom=H - 6)
     lines_out = []
     for (v, c, text), ly in zip(levels, ys):
-        if c.startswith("sc-"):
+        if c == "sc-alt":
+            ax = x_at(alt_from.get(text)) if alt_from.get(text) is not None else left
+            line = f'<line class="sc-line {c}" x1="{ax:.1f}" x2="{plot_r:.1f}" y1="{y(v):.1f}" y2="{y(v):.1f}"/>'
+            label = f'<text class="sc-label {c} mc-price" x="{plot_r + 5:.1f}" y="{ly + 4:.1f}">{escape(text)}</text>'
+        elif c.startswith("sc-"):
             line = f'<line class="sc-line {c}" x1="{ex:.1f}" x2="{plot_r:.1f}" y1="{y(v):.1f}" y2="{y(v):.1f}"/>'
             label = f'<text class="sc-label {c} mc-price" x="{plot_r + 5:.1f}" y="{ly + 4:.1f}">{escape(text)}</text>'
         else:

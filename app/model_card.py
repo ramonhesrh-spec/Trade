@@ -90,6 +90,40 @@ def btc_of(row: dict) -> dict:
         return {}
 
 
+# Aanvullend besluit CEO 2026-11-03: alle instappunten op één kaart; de gebruiker kiest. B0 wordt alleen gemeten en staat hier nooit.
+ENTRY_INFO = {
+    "A": ("Na sweep", "Sweep van een liquiditeitspool, daarna een breuk op 15m met displacement; limiet op de gap."),
+    "B": ("Lagere top", "Een lagere 1u-top in premium (long: hogere bodem in discount), daarna een breuk op 15m met displacement; limiet op de gap."),
+    "V1": ("Vroege limiet op de pool", "Limiet op de liquiditeitspool zelf, zonder op de sweep te wachten; stop 1 ATR (1u) erachter."),
+    "P": ("POC-limiet", "Limiet op de dichtste naakte dag- of week-POC aan de goede kant van het evenwicht; stop 1 ATR (1u) erachter."),
+}
+ENTRY_STATE_WORDS = {"wacht": "wacht op vulling", "gevuld": "gevuld", "klaar": "afgerond", "vervallen": "vervallen", "weggelopen": "weggelopen",
+                     "context_weg": "context weg", "niet_vulbaar": "niet vulbaar", "geen_doel": "geen doel", "btc_tegen": "tegen BTC, niet gemeld"}
+
+
+def entry_points(row: dict, v1: Optional[dict], extra: list[dict]) -> list[dict]:
+    """Alle instappunten van één scenario, voor de grafiek (letter en limiet) en het detailblad (basis, niveaus, R:R, stand). A alleen als
+    moment B er is; V1 uit model_v1; B en P uit model_entries."""
+    out = []
+    if row.get("limit_price") is not None:
+        out.append({"code": "A", "limit": row["limit_price"], "stop": row["stop_loss"], "take": row.get("take_profit"), "rr": row.get("rr"),
+                    "known_at": row.get("entry_at"), "state": row.get("entry_state") or "wacht"})
+    if v1 and v1.get("limit_price") is not None and v1.get("state") != "geen_doel":
+        out.append({"code": "V1", "limit": v1["limit_price"], "stop": v1["stop_loss"], "take": v1.get("take_profit"), "rr": v1.get("rr"),
+                    "known_at": v1.get("placed_at"), "state": v1.get("state")})
+    for e in sorted(extra, key=lambda e: e["code"]):
+        if e["code"] in ENTRY_INFO:
+            out.append({"code": e["code"], "limit": e["limit_price"], "stop": e["stop_loss"], "take": e.get("take_profit"), "rr": e.get("rr"),
+                        "known_at": e.get("known_at"), "state": e.get("state")})
+    for p in out:
+        name, basis = ENTRY_INFO[p["code"]]
+        p.update(name=name, basis=basis, state_text=ENTRY_STATE_WORDS.get(p["state"], p["state"] or ""),
+                 rr_text="" if p["rr"] is None else f"{p['rr']:.1f}".replace(".", ",") + " R:R",
+                 levels=f"Limiet {price_text.nl(p['limit'])} · Stop {price_text.nl(p['stop'])}"
+                        + (f" · Doel {price_text.nl(p['take'])}" if p["take"] is not None else ""))
+    return out
+
+
 def btc_against(row: dict) -> bool:
     """De BTC-poort (config.MODEL_BTC_GATE): BTC 4u bij moment B wijst de andere kant op. Onbekend of neutraal houdt niets tegen."""
     b = btc_of(row).get("b") or {}
@@ -209,7 +243,7 @@ def scenario_item(row: dict, now: Optional[datetime] = None) -> dict:
             "candidates_text": candidate_text(row), "rows": scenario_rows(row), "created_at": row.get("detected_at"),
             "shared_text": f"Ontdekt {when(row.get('discovered_at'), now)}", "origin": f"{LABEL} · context 4u, pools 1u, sweep en shift op 15m",
             "num_text": "", "num_label": "", "num_hook": "distance", "share_lines": [], "model_lines": context_lines(row),
-            "model_face": face_line(row)}
+            "model_face": face_line(row), "entry_points": row.get("entry_points") or []}
 
 
 def chart_zone(row: dict) -> dict:

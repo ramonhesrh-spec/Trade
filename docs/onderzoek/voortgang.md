@@ -2,6 +2,28 @@
 
 Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
 
+## Ronde 7 (2026-11-03): alle instappunten op één kaart
+
+**Gebouwd.**
+- Model: B, B0 en P naast A. A is ongewijzigd: de gedeelde `_plan` en de bestaande tests zijn groen.
+- De prefix-toets dekt nu ook P, B en B0.
+- Opslag en stille meting per punt (`model_entries`).
+- Grafiek met letters (A, B, P, V1) en een detailblad "Instappunten" met de basis per punt.
+- Meting per punt op Bewijs en in de nachtexport.
+
+**Gecontroleerd.**
+- Playwright op 375px met synthetische candles: drie punten in het blad, letters op de grafiek, geen JS-fouten.
+- Fout gevonden en opgelost: de stippelstijl streepte de labels door.
+
+**Grenzen.**
+- Nog niet op echte candles gedraaid (geen Binance vanuit de container).
+- "Zet de order" en de luide melding horen bij A.
+- "Groot" toont alleen A.
+
+**Volgende.**
+- Eerste echte kaarten bekijken.
+- Op de VPS `model_kaarten.py --coins PUMP --dagen 3`.
+
 ## Ronde 6 (2026-11-02): BTC-poort en alleen het model
 
 **CEO-besluiten.**

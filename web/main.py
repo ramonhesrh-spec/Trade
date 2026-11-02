@@ -764,6 +764,10 @@ async def _kansen_page(user: dict, skipped=()) -> dict:
     since = (now - timedelta(days=ENDED_DAYS)).isoformat()
     ended = repo.list_ended_cards(since, include_zone_sweep=_sees_zone_sweep(user), include_poc=_sees_poc(user)) + repo.list_ended_model(since)
     model_rows = repo.list_model_scenarios(statuses=model.WAIT_STATES) + repo.list_model_scenarios(statuses=("afgerond",), entry_states=("wacht",))
+    # Alle instappunten per scenario op één kaart (aanvullend besluit CEO 2026-11-03): A, V1, B en P met hun basis en stand.
+    extra = repo.list_model_entries(scenario_ids=[r["id"] for r in model_rows])
+    model_rows = [{**r, "entry_points": model_card.entry_points(r, repo.get_model_v1(r["id"]), [e for e in extra if e["scenario_id"] == r["id"]])}
+                  for r in model_rows]
     return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped, repo.list_hidden_kansen(user["id"]), ended, model_rows=model_rows,
                        default_tab=model.TRADE_TYPE if focus.model_on() else None)
 
@@ -1151,7 +1155,9 @@ async def api_kaart_svg(key: str, groot: int = 0, user: dict = Depends(require_l
         return HTMLResponse("", status_code=503)
     price = (await _cached_prices({row["coin"]})).get(row["coin"])
     if kind == "model":
-        svg = card_chart.model_svg(row, rows, price, big=bool(groot))
+        points = model_card.entry_points(row, repo.get_model_v1(row["id"]), repo.list_model_entries(scenario_ids=[row["id"]]))
+        alts = [p for p in points if p["code"] != "A"]
+        svg = card_chart.model_svg({**row, "alt_entries": alts}, rows, price, big=bool(groot))
     else:
         svg = {"zone": card_chart.zone_radar_svg, "zsweep": card_chart.zone_sweep_svg, "poc": card_chart.poc_radar_svg}[kind](row, rows, price)
     return HTMLResponse(svg, headers={"Cache-Control": "no-store"})

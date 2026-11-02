@@ -747,6 +747,20 @@
   <p class="kd-origin">{{ it.origin or kinds.get(it.trade_type, it.trade_type) }} · {{ "open trade" if it.kind == "trade" else "scenario, nog geen order" if it.kind == "scenario" else "limietplan" }}</p>
   {# HesPulse-model: context, entrytype en stand apart (model_card.context_lines); de BTC-context is gemeten, geen filter. #}
   {% for line in it.model_lines or [] %}<p class="kd-origin kd-wrap kd-model">{{ line }}</p>{% endfor %}
+  {# Alle instappunten van het scenario (model_card.entry_points): de letter staat ook op de grafiek. De gebruiker kiest; elk punt wordt
+     gemeten, ook als niemand hem neemt. #}
+  {% if it.entry_points and it.entry_points|length > 1 or (it.entry_points and it.kind == "scenario") %}
+  <section class="kd-entries" aria-label="Instappunten">
+    <h3 class="kd-entries-h">Instappunten</h3>
+    {% for p in it.entry_points %}
+    <details class="kd-entry">
+      <summary><b class="kd-entry-code">{{ p.code }}</b> {{ p.name }}<span class="kd-entry-state">{{ p.state_text }}</span></summary>
+      <p class="kd-entry-basis">{{ p.basis }}</p>
+      <p class="kd-entry-levels">{{ p.levels }}{% if p.rr_text %} · {{ p.rr_text }}{% endif %}</p>
+    </details>
+    {% endfor %}
+  </section>
+  {% endif %}
   {# Obstakels vanaf de instap (kansen.obstacle_lines): alleen op kaarten die ze bewaarden; het eerste is het doel. #}
   {% for line in it.obstacle_lines or [] %}<p class="kd-origin kd-obstacle">{{ line }}</p>{% endfor %}
   {# Dubbele kaarten (zelfde soort, coin, richting en instap, app/kansen.dedupe) staan één keer op Kansen; hier het gemeten aantal dat wegviel. #}
