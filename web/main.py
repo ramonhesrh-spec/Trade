@@ -31,7 +31,7 @@ from markupsafe import Markup
 
 from app import advice as advice_module
 from app import patterns as chart_patterns
-from app import candle_source, config, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, shadow, today, track_record
+from app import candle_source, config, structure_levels, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, shadow, today, track_record
 from app.replay import rangesweep_lab, stopquality
 from app import gallery_job
 from app import model, model_card, model_measure
@@ -1073,7 +1073,7 @@ async def api_radar(user: dict = Depends(require_login)):
     return JSONResponse(radar.live_payload(cards), headers=_age_header({c["coin"] for c in cards}))
 
 
-RADAR_TIMEFRAMES = ("5m", "15m", "1h", "4h")
+RADAR_TIMEFRAMES = ("5m", "15m", "1h", "4h", "1d")
 RADAR_CANDLE_TTL_SECONDS = 60
 RADAR_CANDLE_FETCH = 500            # altijd evenveel ophalen, zodat elke `limit` uit dezelfde cache-regel komt
 _candle_cache: dict[tuple[str, str], tuple[float, list]] = {}
@@ -1110,6 +1110,39 @@ async def api_radar_candles(coin: str, tf: str = "15m", limit: int = 96, user: d
     if rows is None:
         raise HTTPException(status_code=503, detail="candles niet beschikbaar")
     return {"coin": coin, "tf": tf, "candles": rows[-limit:]}
+
+
+@app.get("/api/structuur/{coin}")
+async def api_structuur(coin: str, tf: str = "1h", user: dict = Depends(require_login)):
+    """De structuur van één tijdframe als benoemde niveaus voor "Groot" (app/structure_levels.py): range high/low met evenwicht, premium en
+    discount, MSB, swing high/low of EQH/EQL, de dichtste open FVG boven en onder de koers en het order block. Uit dezelfde minuutcache als
+    de candles, alleen gesloten candles."""
+    coin = coin.upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,12}", coin) or tf not in structure_levels.K:
+        raise HTTPException(status_code=422)
+    if coin not in {c["symbol"] for c in repo.list_coins()}:
+        raise HTTPException(status_code=404)
+    rows = await _cached_candles(coin, tf)
+    if rows is None:
+        raise HTTPException(status_code=503, detail="candles niet beschikbaar")
+    return structure_levels.levels(rows, tf, time.time())
+
+
+@app.get("/api/trend/{coin}")
+async def api_trend(coin: str, user: dict = Depends(require_login)):
+    """De trend per tijdframe (dag, 4u, 1u, 15m) voor de kop van "Groot": de richting van de laatste structuurbreuk op gesloten candles
+    (structure_levels.levels). Een tijdframe zonder candles is 'onbekend', nooit neutraal."""
+    coin = coin.upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,12}", coin):
+        raise HTTPException(status_code=422)
+    if coin not in {c["symbol"] for c in repo.list_coins()}:
+        raise HTTPException(status_code=404)
+    out = []
+    for tf in structure_levels.TREND_TFS:
+        rows = await _cached_candles(coin, tf)
+        trend = structure_levels.levels(rows, tf, time.time())["trend"] if rows else None
+        out.append({"tf": tf, "word": structure_levels.TF_TEXT[tf], "trend": trend if rows else "onbekend"})
+    return {"coin": coin, "trend": out}
 
 
 def _card_setup(key: str, user: dict) -> Optional[tuple[str, dict]]:

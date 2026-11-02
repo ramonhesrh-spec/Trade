@@ -268,6 +268,10 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
             r = by_key[p["key"]]
             p.update(steps_done=model_card.step_lines(r), model_lines=model_card.context_lines(r), model_face=model_card.face_line(r),
                      entry_points=r.get("entry_points") or [])
+            if p.get("chart"):
+                # "Groot" toont dezelfde niveaus als de kaarttekening (card_chart.model_marks), niet alleen limiet, stop en doel.
+                from app import card_chart
+                p["chart"] = {**p["chart"], "marks": card_chart.model_marks(r, r.get("entry_points"))}
     scenarios = [model_card.scenario_item(r) for r in model_rows if r["status"] in model_card.model.WAIT_STATES]
     for p in plans:
         p["skipped"] = p["key"] in skipped

@@ -255,11 +255,13 @@ def chart_zone(row: dict) -> dict:
 
 
 def scenario_chart(row: dict) -> dict:
-    """Moment A heeft nog geen order: "Groot" toont de 4u-range als vlak op een schuifbare grafiek (4u eerst), zonder limiet, stop of doel."""
+    """Moment A heeft nog geen order: "Groot" toont de schuifbare grafiek op 1u met de benoemde niveaus (card_chart.model_marks: 4u range high
+    en low, evenwicht, de 1u-pool en de andere instappunten), zonder limiet, stop of doel. Eerder stond hier alleen een vlak "4u range", en
+    dat zei niets (CEO 2026-11-03)."""
+    from app import card_chart
     return {"direction": row["direction"], "stop": None, "take": None, "limit": None, "entry": None, "price": None,
-            "zone_low": row["range_low"], "zone_high": row["range_high"],
-            "zone": {"tf": "4h", "kind": "bull" if row["direction"] == "long" else "bear", "label": "4u range", "origin": None,
-                     "note": None, "note_other_tf": None, "note_outside": None, "target_low": None, "target_high": None, "target_label": None},
+            "zone_low": None, "zone_high": None, "zone": None, "tf": "1h",
+            "marks": card_chart.model_marks(row, row.get("entry_points")),
             "label": f"Scenario {row['direction']}: 4u range {price_text.nl(row['range_low'])} tot {price_text.nl(row['range_high'])}"}
 
 

@@ -199,6 +199,33 @@ def _model_zones(row: dict, e: dict, steps: dict) -> list[dict]:
     return out
 
 
+def model_marks(row: dict, points: Optional[list[dict]] = None) -> list[dict]:
+    """Dezelfde niveaus als de kaarttekening, als benoemde lijnen voor de schuifbare grafiek ("Groot", levelchart.js `marks`): de 4u-range met
+    evenwicht, de 1u-pool (swing of EQH/EQL), de sweep, de 15m-breuk en de andere instappunten. CEO 2026-11-03: "als je op de grafiek klikt zie
+    je niks, geen 4h high of 1h high". Alleen uit de opgeslagen rij; A zelf staat er al als limiet, stop en doel."""
+    d = _model_detail(row)
+    steps = {s["stap"]: s for s in d.get("steps") or []}
+    L, H, eq = _model_range(row, d.get("entry") or {})
+    long = row["direction"] == "long"
+    marks = [{"value": H, "label": "4u range high", "kind": "range"}, {"value": L, "label": "4u range low", "kind": "range"},
+             {"value": eq, "label": "evenwicht", "kind": "eq"}]
+    sweep, shift = steps.get("sweep"), steps.get("shift")
+    p0 = d.get("pool0") or {}
+    pool = sweep["pool"] if sweep and sweep.get("pool") is not None else row.get("pool_level")
+    if pool is not None:
+        count = (sweep or {}).get("pool_n") if sweep else p0.get("n")
+        name = ("EQL" if long else "EQH") if (count or 1) >= 2 else f"1u swing {'low' if long else 'high'}"
+        marks.append({"value": pool, "label": name, "kind": "pool"})
+    if sweep and sweep.get("extreme") is not None:
+        marks.append({"value": sweep["extreme"], "label": "sweep", "kind": "sweep"})
+    if shift and shift.get("top") is not None:
+        marks.append({"value": shift["top"], "label": f"15m {SHIFT_WORDS.get(shift.get('label'), 'MSB')}", "kind": "shift"})
+    for p in points or []:
+        if p["code"] != "A" and p.get("limit") is not None:
+            marks.append({"value": p["limit"], "label": f"{p['code']} limiet", "kind": "alt"})
+    return [m for m in marks if m["value"] is not None]
+
+
 def _target_tag(row: dict) -> Optional[str]:
     """'dag-POC' of 'week-POC' als een naakte POC het doel is (model_card.target_word komt uit dezelfde rij)."""
     if row.get("target_kind") != "poc":

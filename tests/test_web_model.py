@@ -127,8 +127,11 @@ class ModelChecklist(ModelTab):
         html = self.html()
         self.assertNotIn("data-kc-big", html)
         self.assertGreaterEqual(html.count("data-lc-expand"), 2)                # scenario en entry
-        self.assertIn('"label": "4u range"', html.replace("&#34;", '"'))
-        self.assertIn('"label": "15m FVG"', html.replace("&#34;", '"'))
+        plain = html.replace("&#34;", '"')
+        self.assertIn('"label": "15m FVG"', plain)
+        # CEO 2026-11-03: "geen 4h high of 1h high". Beide momenten dragen de benoemde niveaus van de kaarttekening.
+        for name in ("4u range high", "4u range low", "evenwicht", "1u swing low", "15m CHoCH"):
+            self.assertIn(f'"label": "{name}"', plain)
 
     def test_entry_has_the_order_checklist_and_a_scenario_has_none(self):
         self.assertEqual(self.client.get(f"/nu/order/model:{self.entry}").status_code, 200)

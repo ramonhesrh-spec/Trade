@@ -2754,6 +2754,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 .lc-full[open] { display: flex; flex-direction: column; }
 .lc-full::backdrop { background: var(--bg); }
 .lc-full-head { display: flex; align-items: center; gap: var(--space-4); padding: var(--space-2) var(--space-2) var(--space-2) var(--gutter); border-bottom: 1px solid var(--border); }
+.lc-full-trend { margin: 0; padding: 6px var(--gutter); font: 600 13px var(--mono); color: var(--tx2); border-bottom: 1px solid var(--border); }
 .lc-full-title { flex: 1; min-width: 0; margin: 0; font-weight: 600; font-size: var(--text-md); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lc-full-dir { margin-left: var(--space-2); color: var(--text-dim); font-weight: 400; }
 .lc-full-close { flex: none; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; background: none; border: 0; border-radius: var(--radius);

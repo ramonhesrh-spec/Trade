@@ -28,7 +28,7 @@ TRADE_TYPE = "hespulse_model"
 LABEL = "HesPulse-model"
 KEY_PREFIX = "model"
 
-TF = {"4h": pd.Timedelta(hours=4), "1h": pd.Timedelta(hours=1), "15m": pd.Timedelta(minutes=15), "5m": pd.Timedelta(minutes=5)}
+TF = {"1d": pd.Timedelta(days=1), "4h": pd.Timedelta(hours=4), "1h": pd.Timedelta(hours=1), "15m": pd.Timedelta(minutes=15), "5m": pd.Timedelta(minutes=5)}
 
 # Alles vooraf vastgelegd in de preregistratie (§4); nooit afstellen. Een ander getal vraagt een gedateerd aanvullend besluit.
 K_4H, K_1H, K_15M = 2, 3, 2                 # 4.1
