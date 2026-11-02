@@ -16,3 +16,6 @@ scratchpad/
 .claude/worktrees/
 data/export/
 data/export-git/
+
+# Deploy key van de nachtelijke export op de VPS (README, Automatische verbeterlus); nooit committen.
+.ssh/
