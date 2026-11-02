@@ -2,6 +2,11 @@
 
 Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
 
+## Ronde 10 (2026-11-03, nacht): kritische terugblik
+
+Alle beschikbare voorbeelden opnieuw bekeken (16 beelden, 9 cases). Uitkomst en voorstel in `plan-van-aanpak-2026-11-04.md`. Correctie:
+mijn bewering dat V1 bij ZEC gevuld en gestopt zou zijn, was niet nagerekend.
+
 ## Ronde 9 (2026-11-03): ONDO en ZEC nagelopen, de range rekt op, meer meldingen, kortere lijst
 
 **Gecontroleerd op de VPS.**
