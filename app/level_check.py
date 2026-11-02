@@ -113,6 +113,9 @@ def _both_levels_at(direction: str, stop_loss: Optional[float], take_profit: Opt
     return candle["high"] >= stop_loss and candle["low"] <= take_profit
 
 
+MODEL_TRADE_TYPE = "hespulse_model"          # gelijk aan model.TRADE_TYPE; hier als tekst om de modelimport uit level_check te houden
+
+
 def _self_measured(row: dict) -> bool:
     """Soorten die hun uitkomst zelf zetten: de proefmotor (meelopende stop), de range sweep en een zone-sweep of POC-radar zonder doel (referentie-uitgang).
     Een zone-sweep met doel blijft hier, die beslist op doel en stop zoals elk plan."""
@@ -213,7 +216,9 @@ async def check_signal_outcomes() -> None:
     markeerde — dit is precies waarom het trackrecord niet meer van een
     handmatige actie afhangt."""
     # Geen vast doel en een meelopende stop: rule_live zet de uitkomst en de echte R zelf. Geen vast doel en een eigen meting: range_sweep_live idem.
-    signals = [s for s in repo.list_unresolved_signals_with_levels() if not _self_measured(s)]
+    # Het HesPulse-model zet zijn uitkomst zelf vanaf de vulcandle, met een tijdslimiet van 7 dagen (preregistratie §4.14,
+    # model_live.track_trade). De stop- en doelmelding aan de gebruiker (check_open_trades) blijft hier.
+    signals = [s for s in repo.list_unresolved_signals_with_levels() if not _self_measured(s) and s["trade_type"] != MODEL_TRADE_TYPE]
     logger.info("%d signalen zonder vastgestelde uitkomst om te checken", len(signals))
 
     # Per coin candles vanaf het oudste openstaande signaal, niet alleen de laatste 30 minuten: een doel of stop dat geraakt werd terwijl deze taak

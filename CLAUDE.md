@@ -138,7 +138,7 @@ entry_detected_at zijn de momenten van vastleggen). Een scenario dat al voorbij 
 (scenario ontdekt): geen push. Moment B (entry beschikbaar): de ene luide melding (`send_kans_push(kind="entry")`, budget, conflictregel,
 bundel "N entries klaar"), niet als de koers al door de limiet stond (`niet_vulbaar`) of het plan omgekeerd is (`model_card.plan_ok`).
 `track` vult op 5m na de publicatie (`model.walk_fill`): gevuld een signaal `hespulse_model` (journaal, `chain_it=False`, stil via
-`send_new_card`), `level_check` beslist doel/stop; verder `vervallen` (6 uur), `weggelopen`, `context_weg` (`end_reason`). V1 stil in
+`send_new_card`); de uitkomst zet `model_live.track_trade` zelf met `model.outcome` vanaf de vulcandle (stop/doel, ambigu, na 7 dagen `tijd` met R in `trade_results`, niet in winrate of hoofd-R), niet `level_check` (die mat vanaf `created_at` = opslaan en liet na een dag vervallen; de stop/doel-melding aan de gebruiker blijft in `check_open_trades`); verder `vervallen` (6 uur), `weggelopen`, `context_weg` (`end_reason`). V1 stil in
 `model_v1` (`track_v1`). Kaart: `model_card` (moment A `scenario_item` in groep `scenarios` zonder order en buiten de tellers, moment B
 `radar_setup` met sleutel `model:N`, anker `radar-model-N`), context/entrytype/status apart (`context_lines`, `face_line`), BTC-context
 (`app/btc_context.py`: BTC 4u, Pearson 96/672 op uitgelijnde 15m-log-rendementen, relatieve sterkte 24u; kolom `btc_context` "a"/"b"; alleen

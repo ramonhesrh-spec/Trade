@@ -4162,6 +4162,16 @@ def fill_model_entry(scenario_id: int, signal: dict, user_ids: list[int], filled
         return signal_id
 
 
+def list_open_model_trades() -> list[dict]:
+    """Gevulde modeltrades zonder uitkomst: model_live meet ze zelf vanaf de vulcandle (preregistratie §4.14), niet level_check."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT m.id AS scenario_id, m.filled_at, s.id, s.coin, s.direction, s.price, s.stop_loss, s.take_profit, s.trade_type, s.created_at
+               FROM model_scenarios m JOIN signals s ON s.id = m.signal_id
+               WHERE s.auto_outcome IS NULL AND m.filled_at IS NOT NULL AND s.is_practice = 0""").fetchall()
+        return [dict(r) for r in rows]
+
+
 def insert_model_v1(scenario_id: int, row: dict) -> bool:
     with db.session() as conn:
         return conn.execute("""INSERT OR IGNORE INTO model_v1 (scenario_id, coin, direction, limit_price, stop_loss, take_profit, rr, placed_at, state)

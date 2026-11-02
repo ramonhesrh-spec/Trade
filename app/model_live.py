@@ -18,7 +18,7 @@ from typing import Callable, Optional
 
 import pandas as pd
 
-from app import btc_context, config, latency, model, model_card as mc, push_notify, range_sweep_live as rsl, repo
+from app import btc_context, config, excursion, latency, model, model_card as mc, outcome_measure, push_notify, range_sweep_live as rsl, repo
 
 logger = logging.getLogger("model_live")
 
@@ -175,7 +175,8 @@ async def track(now: Optional[datetime] = None) -> None:
     stamp = rsl._utc(now)
     waiting = repo.list_model_scenarios(entry_states=("wacht",))
     v1 = repo.list_model_v1(("wacht", "gevuld"))
-    for coin in sorted({r["coin"] for r in waiting} | {r["coin"] for r in v1}):
+    trades = repo.list_open_model_trades()
+    for coin in sorted({r["coin"] for r in waiting} | {r["coin"] for r in v1} | {t["coin"] for t in trades}):
         try:
             b5 = rsl._upto(await asyncio.to_thread(rsl.fetch_bars, coin, "5m", FILL_LIMIT), stamp)
             breaks = model.break_times(rsl._upto(await asyncio.to_thread(rsl.fetch_bars, coin, "4h", LIMIT), stamp), stamp)
@@ -199,6 +200,37 @@ async def track(now: Optional[datetime] = None) -> None:
                 track_v1(v, b5, breaks, stamp)
             except Exception:
                 logger.exception("V1 van scenario %s is niet verwerkt", v["scenario_id"])
+        for t in (x for x in trades if x["coin"] == coin):
+            try:
+                await asyncio.to_thread(track_trade, t, b5)
+            except Exception:
+                logger.exception("Modeltrade %s is niet verwerkt", t["id"])
+
+
+def track_trade(t: dict, b5: pd.DataFrame) -> Optional[str]:
+    """H na de vulling (§4.14), met dezelfde regel als V1 (model.outcome): candles vanaf de vulcandle, niet vanaf het opslaan van het signaal.
+    Eerder besliste level_check dit vanaf signals.created_at (het moment van opslaan, een of twee 5m-candles na de vulling) en liet het na
+    een dag vervallen: een stop vlak na de vulling viel weg en een doel op dag drie telde niet. 'tijd' (7 dagen open) krijgt zijn R in
+    trade_results; Bewijs telt die niet in winrate en hoofd-R (track_record.signal_r leest de override alleen bij doel of stop)."""
+    from app.level_check import AMBIGUOUS_NOTE
+    filled_at = pd.Timestamp(t["filled_at"])
+    out = model.outcome(t["direction"], t["price"], t["stop_loss"], t["take_profit"], filled_at, b5)
+    if not out["state"]:
+        return None
+    at = pd.Timestamp(out["at"])
+    repo.mark_signal_auto_outcome(t["id"], out["state"], _iso(at), AMBIGUOUS_NOTE if out["ambiguous"] else None)
+    if out["state"] == "tijd":
+        repo.set_trade_result(t["id"], out["r"], _iso(at))
+    end = at + model.TF["5m"]
+    try:
+        seen = b5[(b5["timestamp"] > filled_at) & (b5["timestamp"] <= at)]
+        x = excursion.measure(t["direction"], t["price"], t["stop_loss"], t["take_profit"], seen)
+        if x:
+            repo.set_trade_excursion(t["id"], x["mae_r"], x["mfe_r"], "5m")
+    except Exception:
+        logger.exception("MAE/MFE van modeltrade %s niet vastgelegd", t["id"])
+    outcome_measure.record_funding(t, filled_at, end)
+    return out["state"]
 
 
 def track_v1(v: dict, b5: pd.DataFrame, breaks: list, stamp: pd.Timestamp) -> None:

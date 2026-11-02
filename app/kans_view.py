@@ -7,7 +7,8 @@ from typing import Optional
 from app import ceo, setup_chart, today
 from app.track_record import TYPE_LABELS
 
-OUTCOME_TEXT = {"take_profit": "Doel geraakt", "stop_loss": "Stop geraakt", "vervallen": "Vervallen zonder uitkomst"}
+OUTCOME_TEXT = {"take_profit": "Doel geraakt", "stop_loss": "Stop geraakt", "vervallen": "Vervallen zonder uitkomst",
+                "tijd": "Na 7 dagen gesloten (tijdslimiet)"}
 
 
 def _parse(value: str) -> datetime:

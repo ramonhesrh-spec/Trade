@@ -162,3 +162,70 @@ class EndReasonTest(DbCase):
             self.assertNotEqual(text, "Niet meer actief.", state)
             self.assertTrue(text.endswith("."))
         self.assertEqual(end_reason.text("hespulse_model", "vervallen"), "Na 6 uur niet gevuld.")
+
+
+class OutcomeFromFillTest(Case):
+    """Preregistratie §4.14: de uitkomst van H telt vanaf de vulcandle, niet vanaf het opslaan van het signaal, en sluit na 7 dagen ('tijd').
+    Eerder deed level_check dit vanaf signals.created_at en liet het na een dag vervallen."""
+
+    def filled(self):
+        self.cycle(at(TAIL_FROM - 5))
+        self.cycle(at(TAIL_FROM + 4))
+        self.cycle(at(TAIL_FROM + 12))
+        row = self.scenario()
+        self.assertEqual(row["entry_state"], "gevuld")
+        return row, pd.Timestamp(row["filled_at"])
+
+    def extend(self, filled_at, candles):
+        """Vervangt alles na de vulcandle door eigen 5m-candles (o, h, l, c)."""
+        b5 = self.fr["5m"][self.fr["5m"]["timestamp"] <= filled_at]
+        ts = [filled_at + pd.Timedelta(minutes=5) * (k + 1) for k in range(len(candles))]
+        extra = pd.DataFrame([[t, *c, 1.0] for t, c in zip(ts, candles)], columns=["timestamp", "open", "high", "low", "close", "volume"])
+        self.fr["5m"] = pd.concat([b5, extra]).reset_index(drop=True)
+        return ts
+
+    def test_stop_in_de_eerste_candle_na_de_vulling_telt_ook_als_het_doel_later_komt(self):
+        row, filled_at = self.filled()
+        e, sl, tp = row["limit_price"], row["stop_loss"], row["take_profit"]
+        mid = (e + tp) / 2
+        ts = self.extend(filled_at, [[e, e + 0.01, sl - 0.01, e]] + [[e, mid, e, mid]] * 3 + [[mid, tp + 0.01, mid, tp]])
+        self.cycle(ts[-1] + pd.Timedelta(minutes=6))
+        sig = repo.get_signal(row["signal_id"])
+        self.assertEqual((sig["auto_outcome"], pd.Timestamp(sig["auto_outcome_at"])), ("stop_loss", ts[0]))
+
+    def test_tegenvoorbeeld_zonder_stop_telt_het_doel(self):
+        row, filled_at = self.filled()
+        e, sl, tp = row["limit_price"], row["stop_loss"], row["take_profit"]
+        ts = self.extend(filled_at, [[e, e + 0.01, e - (e - sl) / 2, e]] + [[e, tp + 0.01, e, tp]])
+        self.cycle(ts[-1] + pd.Timedelta(minutes=6))
+        self.assertEqual(repo.get_signal(row["signal_id"])["auto_outcome"], "take_profit")
+
+    def test_doel_op_dag_drie_telt_nog(self):
+        row, filled_at = self.filled()
+        e, tp = row["limit_price"], row["take_profit"]
+        flat = [[e, e + 0.01, e - 0.01, e]] * (3 * 288)
+        ts = self.extend(filled_at, flat + [[e, tp + 0.01, e, tp]])
+        self.cycle(ts[-1] + pd.Timedelta(minutes=6))
+        self.assertEqual(repo.get_signal(row["signal_id"])["auto_outcome"], "take_profit")
+
+    def test_na_zeven_dagen_tijd_met_r_apart_en_niet_in_de_hoofd_r(self):
+        from app import track_record
+        row, filled_at = self.filled()
+        e, sl = row["limit_price"], row["stop_loss"]
+        up = e + (e - sl) * 0.5
+        ts = self.extend(filled_at, [[up, up + 0.01, up - 0.01, up]] * (7 * 288 + 2))
+        self.cycle(ts[-1] + pd.Timedelta(minutes=6))
+        sig = repo.get_signal(row["signal_id"])
+        self.assertEqual(sig["auto_outcome"], "tijd")
+        self.assertEqual(pd.Timestamp(sig["auto_outcome_at"]), filled_at + model.TIME_LIMIT)
+        with db.session() as conn:
+            r = conn.execute("SELECT r_value FROM trade_results WHERE signal_id = ?", (sig["id"],)).fetchone()[0]
+        self.assertAlmostEqual(r, 0.5)
+        self.assertIsNone(track_record.signal_r({**sig, "r_override": r}))
+
+    def test_level_check_laat_de_uitkomst_van_het_model_met_rust(self):
+        from app import level_check
+        row, filled_at = self.filled()
+        with mock.patch.object(level_check, "_fetch_since") as fetch:
+            asyncio.run(level_check.check_signal_outcomes())
+        fetch.assert_not_called()
