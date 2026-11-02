@@ -6,7 +6,7 @@ from app import config, focus
 
 class FocusTypesTest(unittest.TestCase):
     def test_focus_types_are_the_three_live_kinds(self):
-        self.assertEqual(focus.FOCUS_TYPES, ("structuur", "structuur_c", "zone_radar", "zone_sweep", "poc_radar"))
+        self.assertEqual(focus.FOCUS_TYPES, ("structuur", "structuur_c", "zone_radar", "zone_sweep", "poc_radar", "hespulse_model"))
 
     def test_is_focus(self):
         for t in ("structuur", "structuur_c", "zone_radar", "zone_sweep", "poc_radar"):

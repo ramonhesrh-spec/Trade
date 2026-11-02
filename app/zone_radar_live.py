@@ -13,7 +13,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import chance_checks, config, daycap, latency, market_context, poc_radar_live, repo, shadow, shadow_live
+from app import chance_checks, config, daycap, focus, latency, market_context, poc_radar_live, repo, shadow, shadow_live
 from app import zone_radar as zr
 
 logger = logging.getLogger("zone_radar_live")
@@ -37,6 +37,9 @@ def new_card_body(card: dict) -> str:
 async def _push_new_card(card: dict, detected=None) -> None:
     from app import push_notify
     if not repo.mark_zone_radar_alert_sent(card["id"]):
+        return
+    if not focus.alerts_on(zr.TRADE_TYPE):
+        # Alleen het HesPulse-model meldt (MODEL_ONLY_ALERTS, besluit CEO 2026-11-02): deze soort meet stil mee, zonder push of meldingsrij.
         return
     # De kaart komt uit de zones en de koers van deze cyclus: het candlemoment is het laatste 5m-slot vóór de detectie.
     timing = latency.timing(zr.TRADE_TYPE, "nieuw", None, detected or datetime.now(timezone.utc))
@@ -82,7 +85,7 @@ async def _fill(card: dict, filled_at=None) -> None:
         signal_id, card["coin"], direction, entry, card["stop_loss"], card["take_profit"], entry,
         title=push_notify.alert_title(card["coin"], direction, f"{zr.LABEL} gevuld"),
         make_body=lambda sl, tp_, _capped: push_notify.trade_body("Entry", entry, sl, tp_, card["rr"], "De koers is in de zone, je limiet is geraakt.", "Ongetest."),
-        reason="", signal_type=zr.TRADE_TYPE, tag=trade_tag(signal_id),
+        reason="", signal_type=zr.TRADE_TYPE, tag=trade_tag(signal_id), skip_push=not focus.alerts_on(zr.TRADE_TYPE),
         timing=latency.timing(zr.TRADE_TYPE, "vulling", None if filled_at is None else pd.Timestamp(filled_at) + pd.Timedelta(FILL_TF),
                               datetime.now(timezone.utc)),
     )

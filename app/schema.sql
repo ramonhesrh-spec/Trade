@@ -1211,3 +1211,72 @@ CREATE TABLE IF NOT EXISTS engine_overrides (
     set_at TEXT NOT NULL,
     PRIMARY KEY (trade_type, param)
 );
+
+-- HesPulse-model (app/model.py, app/model_live.py; docs/onderzoek/hespulse-model/preregistratie.md). Eén rij per coin en 4u-range (range_id,
+-- UNIQUE): één scenario per range, hooguit één entry. status: wacht_sweep, prik, wacht_shift, wacht_fvg (moment A, de kaart zegt waarop we wachten),
+-- afgerond (moment B: entry beschikbaar), context_weg of geen_pool. Elke stap met het moment van herkenbaarheid (*_at, uit de candles) en het
+-- moment dat de motor het vastlegde (detected_at voor A, entry_detected_at voor B). steps: alle stappen en mislukte pogingen als JSON.
+-- entry_state na moment B: wacht, gevuld (signal_id, trade_type 'hespulse_model'), vervallen, weggelopen, context_weg of niet_vulbaar.
+CREATE TABLE IF NOT EXISTS model_scenarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    candle_market TEXT,
+    direction TEXT NOT NULL,
+    range_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    range_low REAL NOT NULL,
+    range_high REAL NOT NULL,
+    eq REAL NOT NULL,
+    pool_level REAL NOT NULL,
+    candidates TEXT,
+    steps TEXT,
+    discovered_at TEXT NOT NULL,
+    detected_at TEXT NOT NULL,
+    sweep_at TEXT,
+    shift_at TEXT,
+    entry_at TEXT,
+    entry_detected_at TEXT,
+    ended_at TEXT,
+    limit_price REAL,
+    stop_loss REAL,
+    take_profit REAL,
+    rr REAL,
+    zone_low REAL,
+    zone_high REAL,
+    target_kind TEXT,
+    target_text TEXT,
+    ob_overlap INTEGER,
+    poc_samenval INTEGER,
+    shift_label TEXT,
+    extreme REAL,
+    expires_at TEXT,
+    entry_state TEXT,
+    price_at_publish REAL,
+    vulbaar INTEGER,
+    filled_at TEXT,
+    door_limiet INTEGER,
+    alert_sent INTEGER NOT NULL DEFAULT 0,
+    signal_id INTEGER REFERENCES signals(id),
+    updated_at TEXT,
+    UNIQUE (coin, range_id)
+);
+CREATE INDEX IF NOT EXISTS idx_model_scenarios_status ON model_scenarios(status, entry_state);
+-- V1 (§6): de vroege limiet op de pool op moment A, stil gemeten. Geen melding, geen journaal, geen signals-rij. state: wacht, gevuld,
+-- vervallen (het scenario eindigde zonder vulling), weggelopen, context_weg, niet_vulbaar of geen_doel; outcome na de vulling op 5m.
+CREATE TABLE IF NOT EXISTS model_v1 (
+    scenario_id INTEGER PRIMARY KEY REFERENCES model_scenarios(id),
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    rr REAL,
+    placed_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'wacht',
+    filled_at TEXT,
+    outcome TEXT,
+    outcome_at TEXT,
+    r_gross REAL,
+    ambiguous INTEGER NOT NULL DEFAULT 0,
+    ended_at TEXT
+);

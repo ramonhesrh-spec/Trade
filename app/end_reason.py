@@ -1,11 +1,11 @@
 """Waarom een kaart eindigde zonder vulling, in gewone woorden. Eén zuivere vertaling voor elke stand van Zone-radar, Zone-sweep, POC-radar en
 Structuur, zodat Kansen, het anker van een melding en het Logboek hetzelfde zeggen. tests/test_basis_afsluiten.py leest elke stand uit de code en
 eist hier een tekst. De termijnen komen uit de motoren zelf, geen tweede kopie."""
-from app import poc_radar, zone_sweep
+from app import model, poc_radar, zone_sweep
 from app.replay import breakretest
 
-KINDS = ("structuur", "zone_radar", "zone_sweep", "poc_radar")
-LABELS = {"structuur": "Structuur", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar"}
+KINDS = ("structuur", "zone_radar", "zone_sweep", "poc_radar", "hespulse_model")
+LABELS = {"structuur": "Structuur", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar", "hespulse_model": "HesPulse"}
 
 
 def _hours(td) -> int:
@@ -46,6 +46,14 @@ _TEXTS = {
     },
     "poc_radar": {
         "verlopen": f"Na {_span(poc_radar.TTL)} niet gevuld.",
+    },
+    # Eindstanden van het scenario (status) en van de limiet na moment B (entry_state), preregistratie 4.13.
+    "hespulse_model": {
+        "context_weg": "De 4u-structuur veranderde: een nieuwe breuk of de range viel weg.",
+        "geen_pool": "Er bleef geen onaangeraakte pool in discount over.",
+        "vervallen": f"Na {_span(model.ENTRY_BARS * model.TF['15m'])} niet gevuld.",
+        "weggelopen": "De koers haalde het doel voordat je limiet vulde.",
+        "niet_vulbaar": "De koers stond bij de melding al door de limiet; een marktorder hoort niet bij het plan.",
     },
 }
 

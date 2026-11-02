@@ -25,7 +25,7 @@ from typing import Optional
 import numpy as np
 import pandas as pd
 
-from app import chance_checks, config, daycap, latency, repo, setup_chart, shadow, shadow_live, smc_eval
+from app import chance_checks, config, daycap, focus, latency, repo, setup_chart, shadow, shadow_live, smc_eval
 from app import trade_plan as tp
 from app.replay import breakretest as br
 from app.replay.lab import add_indicators
@@ -222,6 +222,10 @@ async def _push_all(title: str, body: str, url: str, tag: str, loud: bool, coin:
     """Met coin en richting is het een kans en gelden de pushregels (geen tegenstrijdige richting, dagbudget). new_card: een nieuw plan, stil en
     buiten het budget (CEO, 2026-11-02, te veel meldingen). Zonder coin is het een update van een lopende trade en komt de push altijd."""
     from app import push_notify
+    if not focus.alerts_on("structuur"):
+        # Alleen het HesPulse-model meldt (MODEL_ONLY_ALERTS, besluit CEO 2026-11-02): Structuur meet stil mee, zonder push of meldingsrij.
+        # De uitkomst van een trade die je zelf nam, blijft level_check melden.
+        return
     for user in repo.list_users():
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
@@ -358,7 +362,7 @@ async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: p
         title=push_notify.alert_title(coin, direction, "Structuur gevuld"),
         make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, f"Doelen {targets}", "Limiet geraakt, de trade loopt."),
         reason=reason, signal_type="structuur_c" if setup["grade"] == "C" else "structuur",
-        tag=trade_tag(signal_id),
+        tag=trade_tag(signal_id), skip_push=not focus.alerts_on("structuur"),
         timing=latency.timing("structuur_c" if setup["grade"] == "C" else "structuur", "vulling", filled_at + pd.Timedelta(minutes=5),
                               datetime.now(timezone.utc)),
     )

@@ -143,6 +143,9 @@ async def _scan_coin(coin: str, now: pd.Timestamp, waiting: list[dict], params: 
 async def _announce(card: dict, detected=None) -> None:
     if not repo.mark_poc_radar_alert_sent(card["id"]):
         return
+    if not focus.alerts_on(TRADE_TYPE):
+        # Alleen het HesPulse-model meldt (MODEL_ONLY_ALERTS, besluit CEO 2026-11-02): deze soort meet stil mee, zonder push of meldingsrij.
+        return
     # De kaart komt uit de koers van deze cyclus: het candlemoment is het laatste 5m-slot vóór de detectie.
     timing = latency.timing(TRADE_TYPE, "nieuw", None, detected or datetime.now(timezone.utc))
     title = push_notify.alert_title(card["coin"], card["direction"], f"{pr.LABEL} · ongetest")
@@ -209,7 +212,7 @@ async def _fill(card: dict, filled_at: pd.Timestamp) -> None:
     title = push_notify.alert_title(card["coin"], card["direction"], f"{pr.LABEL} gevuld")
     body = pr.fill_body(card, entry)
     timing = latency.timing(TRADE_TYPE, "vulling", filled_at + pd.Timedelta(minutes=5), datetime.now(timezone.utc))
-    for uid in uids:
+    for uid in uids if focus.alerts_on(TRADE_TYPE) else ():         # MODEL_ONLY_ALERTS: signaal en journaal wel, geen push
         user = repo.get_user(uid) or {}
         quiet = push_notify.is_quiet_now(user.get("quiet_hours_start"), user.get("quiet_hours_end"))
         try:

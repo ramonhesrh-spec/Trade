@@ -4056,3 +4056,146 @@ def revert_shadow(variant_id: str, at_iso: str, note: str) -> int:
         n = conn.execute("DELETE FROM engine_overrides WHERE variant_id = ?", (variant_id,)).rowcount
         conn.execute("UPDATE shadow_variants SET status = 'afgevallen', decided_at = ?, decision_note = ? WHERE id = ?", (at_iso, note, variant_id))
         return n
+
+
+# ---------------------------------------------------------------------------
+# HesPulse-model (app/model_live.py): de scenario's met hun stappen, de entry na moment B en V1 (stil).
+# ---------------------------------------------------------------------------
+
+_MODEL_NEW_COLS = ("coin", "direction", "range_id", "status", "range_low", "range_high", "eq", "pool_level", "candidates", "steps",
+                   "discovered_at", "detected_at", "sweep_at", "shift_at", "updated_at", "candle_market")
+# Wat een nieuwe berekening van een lopend scenario mag bijwerken. Wat het moment van vastleggen draagt (detected_at, entry_detected_at),
+# de vulling en de meldvlag schrijft alleen de motor zelf, één keer.
+_MODEL_SYNC_COLS = ("status", "steps", "sweep_at", "shift_at", "entry_at", "ended_at", "limit_price", "stop_loss", "take_profit", "rr",
+                    "zone_low", "zone_high", "target_kind", "target_text", "ob_overlap", "poc_samenval", "shift_label", "extreme", "expires_at")
+MODEL_FINAL = ("afgerond", "context_weg", "geen_pool")
+
+
+def get_model_scenario_by_range(coin: str, range_id: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM model_scenarios WHERE coin = ? AND range_id = ?", (coin, range_id)).fetchone()
+        return dict(row) if row else None
+
+
+def insert_model_scenario(row: dict) -> Optional[int]:
+    """None als deze range voor deze coin al een scenario had (UNIQUE coin, range_id): één scenario per range."""
+    with db.session() as conn:
+        cur = conn.execute(f"INSERT OR IGNORE INTO model_scenarios ({', '.join(_MODEL_NEW_COLS)}) VALUES ({', '.join('?' for _ in _MODEL_NEW_COLS)})",
+                           tuple(_candle_market(row) if c == "candle_market" else row.get(c) for c in _MODEL_NEW_COLS))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def sync_model_scenario(scenario_id: int, fields: dict, entry_detected_at: Optional[str] = None) -> bool:
+    """Werkt een lopend scenario bij met de nieuwe berekening. Een afgerond scenario verandert nooit meer. Met entry_detected_at (de eerste
+    keer dat moment B gezien is) gaat de limiet open: entry_state 'wacht'. True als dit de overgang naar moment B was."""
+    cols = [c for c in _MODEL_SYNC_COLS if c in fields]
+    with db.session() as conn:
+        n = conn.execute(f"UPDATE model_scenarios SET {', '.join(c + ' = ?' for c in cols)}, updated_at = ? "
+                         f"WHERE id = ? AND status NOT IN ({', '.join('?' for _ in MODEL_FINAL)})",
+                         (*(fields[c] for c in cols), db.now_iso(), scenario_id, *MODEL_FINAL)).rowcount
+        if n and entry_detected_at and fields.get("status") == "afgerond" and fields.get("limit_price") is not None:
+            return conn.execute("UPDATE model_scenarios SET entry_detected_at = ?, entry_state = 'wacht', price_at_publish = ?, vulbaar = ? "
+                                "WHERE id = ? AND entry_detected_at IS NULL",
+                                (entry_detected_at, fields.get("price_at_publish"), fields.get("vulbaar"), scenario_id)).rowcount == 1
+        return False
+
+
+def list_model_scenarios(statuses: Optional[tuple[str, ...]] = None, entry_states: Optional[tuple[str, ...]] = None) -> list[dict]:
+    """Zonder filter: alles. statuses filtert op het scenario, entry_states op de limiet na moment B."""
+    where, args = [], []
+    if statuses:
+        where.append(f"status IN ({', '.join('?' for _ in statuses)})")
+        args += list(statuses)
+    if entry_states:
+        where.append(f"entry_state IN ({', '.join('?' for _ in entry_states)})")
+        args += list(entry_states)
+    with db.session() as conn:
+        q = "SELECT * FROM model_scenarios" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY id"
+        return [dict(r) for r in conn.execute(q, args).fetchall()]
+
+
+def get_model_scenario(scenario_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM model_scenarios WHERE id = ?", (scenario_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_model_scenario_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM model_scenarios WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def mark_model_alert_sent(scenario_id: int) -> bool:
+    """True als deze aanroep de vlag zette: alleen die mag de melding 'entry beschikbaar' sturen."""
+    with db.session() as conn:
+        return conn.execute("UPDATE model_scenarios SET alert_sent = 1 WHERE id = ? AND alert_sent = 0", (scenario_id,)).rowcount == 1
+
+
+def end_model_scenario(scenario_id: int, status: str, ended_at: str) -> bool:
+    """Een scenario dat eindigde zonder dat de nieuwe berekening het nog ziet (de range viel buiten het candlevenster)."""
+    with db.session() as conn:
+        return conn.execute(f"UPDATE model_scenarios SET status = ?, ended_at = ?, updated_at = ? WHERE id = ? "
+                            f"AND status NOT IN ({', '.join('?' for _ in MODEL_FINAL)})",
+                            (status, ended_at, db.now_iso(), scenario_id, *MODEL_FINAL)).rowcount == 1
+
+
+def end_model_entry(scenario_id: int, state: str, at: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("UPDATE model_scenarios SET entry_state = ?, ended_at = COALESCE(ended_at, ?), updated_at = ? "
+                            "WHERE id = ? AND entry_state = 'wacht'", (state, at, db.now_iso(), scenario_id)).rowcount == 1
+
+
+def fill_model_entry(scenario_id: int, signal: dict, user_ids: list[int], filled_at: str, door_limiet: Optional[bool]) -> Optional[int]:
+    """Zoals fill_poc_radar_setup: stand, signaal buiten de ketting en journaal van de kijkers in één transactie. None als hij al gevuld of
+    vervallen was."""
+    with db.session() as conn:
+        if conn.execute("UPDATE model_scenarios SET entry_state = 'gevuld', filled_at = ?, door_limiet = ?, updated_at = ? "
+                        "WHERE id = ? AND entry_state = 'wacht'",
+                        (filled_at, None if door_limiet is None else int(door_limiet), db.now_iso(), scenario_id)).rowcount != 1:
+            return None
+        signal_id = _insert_signal(conn, signal, False)
+        conn.execute("UPDATE model_scenarios SET signal_id = ? WHERE id = ?", (signal_id, scenario_id))
+        for uid in user_ids:
+            _journal_in(conn, signal_id, uid)
+        return signal_id
+
+
+def insert_model_v1(scenario_id: int, row: dict) -> bool:
+    with db.session() as conn:
+        return conn.execute("""INSERT OR IGNORE INTO model_v1 (scenario_id, coin, direction, limit_price, stop_loss, take_profit, rr, placed_at, state)
+                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (scenario_id, row["coin"], row["direction"], row["limit_price"], row["stop_loss"], row.get("take_profit"),
+                             row.get("rr"), row["placed_at"], row.get("state", "wacht"))).rowcount == 1
+
+
+_MODEL_V1_FIELDS = {"state", "filled_at", "outcome", "outcome_at", "r_gross", "ambiguous", "ended_at"}
+
+
+def update_model_v1(scenario_id: int, **fields) -> None:
+    unknown = set(fields) - _MODEL_V1_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor model_v1: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE model_v1 SET {', '.join(f + ' = ?' for f in fields)} WHERE scenario_id = ?", (*fields.values(), scenario_id))
+
+
+def list_model_v1(states: Optional[tuple[str, ...]] = None) -> list[dict]:
+    with db.session() as conn:
+        if states:
+            q = f"SELECT v.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at FROM model_v1 v JOIN model_scenarios m ON m.id = v.scenario_id WHERE v.state IN ({', '.join('?' for _ in states)}) ORDER BY v.scenario_id"
+            return [dict(r) for r in conn.execute(q, states).fetchall()]
+        return [dict(r) for r in conn.execute("SELECT v.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at FROM model_v1 v "
+                                              "JOIN model_scenarios m ON m.id = v.scenario_id ORDER BY v.scenario_id").fetchall()]
+
+
+def list_ended_model(since_iso: str) -> list[dict]:
+    """Scenario's en limieten die eindigden zonder vulling, voor 'Uitgevallen, gemist of vervallen' op Kansen. state is de eindstand die
+    end_reason vertaalt: de stand van de limiet als er een was, anders die van het scenario."""
+    with db.session() as conn:
+        rows = conn.execute("""SELECT id, coin, direction, ended_at, COALESCE(CASE WHEN entry_state != 'wacht' AND entry_state != 'gevuld'
+                                      THEN entry_state END, status) AS state
+                               FROM model_scenarios WHERE ended_at >= ? AND (status IN ('context_weg', 'geen_pool')
+                                     OR entry_state IN ('vervallen', 'weggelopen', 'context_weg', 'niet_vulbaar'))
+                               ORDER BY ended_at DESC""", (since_iso,)).fetchall()
+        return [{**dict(r), "kind": "hespulse_model"} for r in rows]

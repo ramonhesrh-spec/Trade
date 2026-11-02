@@ -173,7 +173,7 @@ def _record_timing(user_id: int, url: str, ok: bool, timing: Optional[dict], coi
 
 
 async def send_kans_push(user_id: int, coin: str, direction: str, title: str, body: str, url: str, silent: bool = False,
-                         tag: Optional[str] = None, badge: Optional[int] = None, timing: Optional[dict] = None) -> bool:
+                         tag: Optional[str] = None, badge: Optional[int] = None, timing: Optional[dict] = None, kind: str = "vulling") -> bool:
     """Luide push voor een kans (een vulling), met de regels van app/push_policy.py: geen tegenstrijdige richting kort na elkaar op dezelfde coin
     en een dagbudget per gebruiker waarin elke luide push telt. Een geweerde kans wordt een rustige melding op de meldingenpagina, boven het
     budget ook een stille push, dus niets verdwijnt. Binnen een open bundel (open_bundle) wacht hij op close_bundle. Geeft True als hij als
@@ -198,7 +198,7 @@ async def send_kans_push(user_id: int, coin: str, direction: str, title: str, bo
         repo.create_notification(user_id, "kans", title, f"{body}\n{reason}", url)
         return False
     item = {"coin": coin, "direction": direction, "title": title, "body": body, "url": url, "silent": silent, "tag": tag, "badge": badge,
-            "timing": timing}
+            "timing": timing, "kind": kind}
     if pending is not None:
         pending.setdefault(user_id, []).append(item)
         return True
@@ -214,7 +214,7 @@ async def _deliver(user_id: int, items: list[dict]) -> bool:
         one = items[0]
         title, body, url, tag, badge = one["title"], one["body"], one["url"], one["tag"], one["badge"]
     else:
-        title, body = push_policy.bundle_text([(i["coin"], i["direction"]) for i in items])
+        title, body = push_policy.bundle_text([(i["coin"], i["direction"]) for i in items], [i.get("kind", "vulling") for i in items])
         url, tag, badge = KANSEN_URL, BUNDLE_TAG, None
     extra = {**({"tag": tag} if tag else {}), **({"badge": badge} if badge is not None else {})}
     full = push_policy.over_budget(repo.list_recent_pushes(user_id, (now - timedelta(hours=24)).isoformat()), user.get("push_budget"))

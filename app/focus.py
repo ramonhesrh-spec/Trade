@@ -8,8 +8,10 @@ from typing import Iterable, Optional
 
 from app import config
 
-FOCUS_TYPES = ("structuur", "structuur_c", "zone_radar", "zone_sweep", "poc_radar")
-LABELS = {"structuur": "Structuur A/B", "structuur_c": "Structuur C", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar"}
+MODEL = "hespulse_model"                # zelfde waarde als model.TRADE_TYPE; niet importeren houdt dit bestand los van pandas
+FOCUS_TYPES = ("structuur", "structuur_c", "zone_radar", "zone_sweep", "poc_radar", MODEL)
+LABELS = {"structuur": "Structuur A/B", "structuur_c": "Structuur C", "zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar",
+          MODEL: "HesPulse-model"}
 # Wat een uitgezette motor in zijn hartslag zet (engine_heartbeat, scripts/push_diag.py) en in het log.
 OFF_DETAIL = "uit door focus"
 
@@ -25,6 +27,21 @@ def is_focus(trade_type: Optional[str]) -> bool:
 def engine_on(trade_type: str, enabled: bool = True, focus_on: Optional[bool] = None) -> bool:
     """Mag de motor van deze soort nieuwe kansen zoeken? Zijn eigen vlag (TREND_ENABLED enz.) gaat altijd voor; focus zet alleen verder uit."""
     return bool(enabled) and (not active(focus_on) or is_focus(trade_type))
+
+
+def model_on(enabled: Optional[bool] = None) -> bool:
+    return config.HESPULSE_MODEL_ENABLED if enabled is None else enabled
+
+
+def model_only(enabled: Optional[bool] = None, only: Optional[bool] = None) -> bool:
+    """Meldt alleen het HesPulse-model (besluit CEO 2026-11-02)? Alleen als het model aan staat: zonder model blijft alles zoals het was."""
+    return model_on(enabled) and (config.MODEL_ONLY_ALERTS if only is None else only)
+
+
+def alerts_on(trade_type: str) -> bool:
+    """Mag deze soort een melding sturen (luid of stil, of een rij op /meldingen)? Met model_only alleen het model; de andere soorten blijven
+    kaarten en signalen maken voor de meting en Bewijs, maar sturen niets."""
+    return trade_type == MODEL or not model_only()
 
 
 def label(trade_type: str) -> str:

@@ -18,7 +18,7 @@ from typing import Optional
 
 import pandas as pd
 
-from app import config, daycap, latency, poc_radar_live, push_notify, range_sweep_live as rsl, repo, shadow, shadow_live
+from app import config, daycap, focus, latency, poc_radar_live, push_notify, range_sweep_live as rsl, repo, shadow, shadow_live
 from app import zone_sweep as zsw
 from app.replay import rangesweep as rs, stopquality as sq, trendlab as tl, zonesweep as zs, zonesweep_lab as zl
 
@@ -67,6 +67,9 @@ async def _frames(coin: str, now: pd.Timestamp) -> tuple[dict, Optional[float]]:
 
 async def _announce(card: dict, detected=None) -> None:
     if not repo.mark_zone_sweep_alert_sent(card["id"]):
+        return
+    if not focus.alerts_on(TRADE_TYPE):
+        # Alleen het HesPulse-model meldt (MODEL_ONLY_ALERTS, besluit CEO 2026-11-02): deze soort meet stil mee, zonder push of meldingsrij.
         return
     # placed_at is het slot van de candle die de setup liet zien (gesloten candles, fresh_setups).
     timing = latency.timing(TRADE_TYPE, "nieuw", pd.Timestamp(card["placed_at"]) if card.get("placed_at") else None,
@@ -149,7 +152,7 @@ async def _fill(card: dict, entry: float, filled_at: pd.Timestamp) -> None:
     title = push_notify.alert_title(card["coin"], card["direction"], f"{zsw.LABEL} gevuld")
     body = zsw.fill_body(card, entry)
     timing = latency.timing(TRADE_TYPE, "vulling", filled_at + M15, datetime.now(timezone.utc))
-    for uid in uids:
+    for uid in uids if focus.alerts_on(TRADE_TYPE) else ():         # MODEL_ONLY_ALERTS: signaal en journaal wel, geen push
         user = repo.get_user(uid) or {}
         quiet = push_notify.is_quiet_now(user.get("quiet_hours_start"), user.get("quiet_hours_end"))
         try:

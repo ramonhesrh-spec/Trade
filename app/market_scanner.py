@@ -19,6 +19,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
+from app import model_live
 from app import announce_live, calendar_alerts, chance_checks, config, exchange, focus, indicators, market_context_live, market_script, trend_live, rejection_live, patterns, push_notify, range_sweep_live, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan, zone_radar_live, zone_sweep_live, poc_radar_live, shadow_live
 from app.anthropic_interpret import Interpretation
 from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
@@ -1333,6 +1334,11 @@ async def _scan_smc_fast() -> None:
         await poc_radar_live.run()       # zoekt in de eerste cyclus na het uurslot, als de zone-sweep zijn 1u- en 4u-candles al in de cache zette
     except Exception:
         logger.exception("POC-radar is mislukt")
+    try:
+        # Na de POC-radar: zijn niveaus van deze cyclus staan dan in poc_levels, en de 1u- en 4u-candles in de cache van fetch_bars.
+        await model_live.run()
+    except Exception:
+        logger.exception("HesPulse-model is mislukt")
     try:
         # Alle vullingen van deze cyclus zijn er: niet nog op de schaduwmeting wachten met de push.
         await push_notify.close_bundle()

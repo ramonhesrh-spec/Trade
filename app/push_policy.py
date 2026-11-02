@@ -42,9 +42,15 @@ def decide(recent: list[dict], coin: str, direction: str, budget: Optional[int],
     return (False, reason) if reason else (True, "")
 
 
-def bundle_text(items: list[tuple[str, str]]) -> tuple[str, str]:
-    """Titel en tekst van één push voor meer vullingen in dezelfde scancyclus, bijvoorbeeld '3 kansen gevuld' en 'SOL long, ETH short'."""
-    return f"{len(items)} kansen gevuld", ", ".join(f"{coin} {direction}" for coin, direction in items) + "\nTik voor Kansen."
+def bundle_text(items: list[tuple[str, str]], kinds: Optional[list[str]] = None) -> tuple[str, str]:
+    """Titel en tekst van één push voor meer luide kansen in dezelfde scancyclus, bijvoorbeeld '3 kansen gevuld' en 'SOL long, ETH short'.
+    kinds: per item 'vulling' of 'entry' (HesPulse-model, entry beschikbaar); zijn het allemaal entries, dan '3 entries klaar'."""
+    names = ", ".join(f"{coin} {direction}" for coin, direction in items)
+    if kinds and all(k == "entry" for k in kinds):
+        return f"{len(items)} entries klaar", names + "\nZet je limietorders. Tik voor Kansen."
+    if kinds and any(k == "entry" for k in kinds):
+        return f"{len(items)} kansen", names + "\nTik voor Kansen."
+    return f"{len(items)} kansen gevuld", names + "\nTik voor Kansen."
 
 
 def in_follow_set(coins: Optional[set], coin: str) -> bool:

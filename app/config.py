@@ -216,5 +216,11 @@ POC_RADAR_ENABLED = _get("POC_RADAR_ENABLED", "true").lower() == "true"
 POC_RADAR_PUBLIC = _get("POC_RADAR_PUBLIC", "true").lower() == "true"
 # 30 sinds 2026-11-02: de eerste nachtexport telde in 7 dagen 57 POC-kansen die de cap van 10 tegenhield, tegen 15 vullingen.
 POC_RADAR_MAX_PER_DAY = int(_get("POC_RADAR_MAX_PER_DAY", "30"))
+# HesPulse-model (app/model.py, app/model_live.py; docs/onderzoek/hespulse-model/preregistratie.md): het hoofdmodel uit hoofdstuk 25 van het
+# boek, ongetest, voor iedereen. Besluit CEO 2026-11-02: live direct (de getekende kaarten van scripts/model_kaarten.py zijn een controle achteraf).
+HESPULSE_MODEL_ENABLED = _get("HESPULSE_MODEL_ENABLED", "true").strip().lower() == "true"
+# Alleen het model meldt (besluit CEO 2026-11-02): Structuur, Zone-radar, Zone-sweep en POC-radar maken nog kaarten en signalen voor de meting,
+# maar sturen geen push meer (ook geen stille) en hebben geen tab op Kansen. Standaard aan zodra het model aan staat; false zet het terug.
+MODEL_ONLY_ALERTS = _get("MODEL_ONLY_ALERTS", "true" if HESPULSE_MODEL_ENABLED else "false").strip().lower() == "true"
 # Marktcontext (app/market_context_live.py): funding, OI, Fear and Greed en stablecoins van publieke bronnen naast Binance. Alleen weergave en opslag.
 MARKET_CONTEXT_ENABLED = _get("MARKET_CONTEXT_ENABLED", "true").lower() == "true"
