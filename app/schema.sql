@@ -1255,7 +1255,13 @@ CREATE TABLE IF NOT EXISTS model_scenarios (
     vulbaar INTEGER,
     filled_at TEXT,
     door_limiet INTEGER,
-    btc_context TEXT,                    -- app/btc_context.measure bij moment A ("a") en B ("b"), JSON; alleen kenmerk, nooit een filter
+    btc_context TEXT,                    -- app/btc_context.measure bij moment A ("a") en B ("b"), JSON; btc_4h van "b" is de BTC-poort (MODEL_BTC_GATE)
+    cf_state TEXT,                       -- entry_state 'btc_tegen': stil gevolgd. wacht, gevuld, klaar, of een eindstand zonder vulling
+    cf_filled_at TEXT,
+    cf_outcome TEXT,                     -- take_profit, stop_loss of tijd (model.outcome)
+    cf_r REAL,                           -- bruto R, zonder kosten
+    cf_ambiguous INTEGER,
+    cf_at TEXT,
     alert_sent INTEGER NOT NULL DEFAULT 0,
     signal_id INTEGER REFERENCES signals(id),
     updated_at TEXT,

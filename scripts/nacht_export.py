@@ -183,6 +183,10 @@ def markdown(data: dict) -> str:
                   f"{ex['terugtest_al_geweest']}; vertraging entry mediaan {ex['delay_b_median'] if ex['delay_b_median'] is not None else '-'} min",
                   f"- H: {h['n']} afgerond, N_eff {h['n_eff']}, netto {_r(h['mean'])} per trade, zonder beste 5% {_r(h['mean_wo_best'])}, "
                   f"verliesreeks {h['streak']}, daling {_r(-h['max_dd'] if h['n'] else None)}"]
+        g = m.get("btc_poort")
+        if g:
+            lines.append(f"- BTC-poort: {g['tegengehouden']} entries tegengehouden, {g['gevuld']} hadden gevuld; afgerond {g['arm']['n']}, "
+                         f"netto {_r(g['arm']['mean'])} per trade (positief = de poort kost winst)")
         for c in m.get("compare") or []:
             d = c["diff"]
             lines.append(f"- {c['label']}: {c['arm']['n']} afgerond, netto {_r(c['arm']['mean'])}; min model "

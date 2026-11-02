@@ -90,6 +90,12 @@ def btc_of(row: dict) -> dict:
         return {}
 
 
+def btc_against(row: dict) -> bool:
+    """De BTC-poort (config.MODEL_BTC_GATE): BTC 4u bij moment B wijst de andere kant op. Onbekend of neutraal houdt niets tegen."""
+    b = btc_of(row).get("b") or {}
+    return (row["direction"], b.get("btc_4h")) in (("long", "bearish"), ("short", "bullish"))
+
+
 STATUS_WORDS = {"wacht_sweep": "scenario ontdekt", "prik": "scenario ontdekt", "wacht_shift": "scenario ontdekt", "wacht_fvg": "scenario ontdekt",
                 "afgerond": "entry beschikbaar", "gevuld": "gevuld"}
 

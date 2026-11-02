@@ -221,6 +221,9 @@ POC_RADAR_MAX_PER_DAY = int(_get("POC_RADAR_MAX_PER_DAY", "30"))
 HESPULSE_MODEL_ENABLED = _get("HESPULSE_MODEL_ENABLED", "true").strip().lower() == "true"
 # Alleen het model meldt (besluit CEO 2026-11-02): Structuur, Zone-radar, Zone-sweep en POC-radar maken nog kaarten en signalen voor de meting,
 # maar sturen geen push meer (ook geen stille) en hebben geen tab op Kansen. Standaard aan zodra het model aan staat; false zet het terug.
+# Besluit CEO 2026-11-02 ("de short is gebaseerd op het BTC-verhaal"): een model-entry tegen de BTC-richting op 4u (btc_context.bias) wordt
+# niet gemeld en komt niet als uitvoerbare kaart; model_live volgt hem stil (cf_*) zodat te meten blijft of de poort winnaars kost.
+MODEL_BTC_GATE = _get("MODEL_BTC_GATE", "true").strip().lower() == "true"
 MODEL_ONLY_ALERTS = _get("MODEL_ONLY_ALERTS", "true" if HESPULSE_MODEL_ENABLED else "false").strip().lower() == "true"
 # Marktcontext (app/market_context_live.py): funding, OI, Fear and Greed en stablecoins van publieke bronnen naast Binance. Alleen weergave en opslag.
 MARKET_CONTEXT_ENABLED = _get("MARKET_CONTEXT_ENABLED", "true").lower() == "true"

@@ -229,3 +229,43 @@ class OutcomeFromFillTest(Case):
         with mock.patch.object(level_check, "_fetch_since") as fetch:
             asyncio.run(level_check.check_signal_outcomes())
         fetch.assert_not_called()
+
+
+class BtcGateTest(Case):
+    """Besluit CEO 2026-11-02: een model-entry tegen de BTC-richting op 4u wordt niet gemeld; stil gevolgd met dezelfde regels."""
+
+    def run_with_btc(self, word, gate=True):
+        from app import btc_context
+        meas = {"btc_4h": word, "corr_96": None, "corr_672": None, "rel_24h": None}
+        with mock.patch.object(btc_context, "measure", return_value=meas), mock.patch.object(config, "MODEL_BTC_GATE", gate):
+            self.cycle(at(TAIL_FROM - 5))
+            self.cycle(at(TAIL_FROM + 4))
+            self.cycle(at(TAIL_FROM + 12))
+        return self.scenario()
+
+    def test_long_tegen_bearish_btc_geeft_geen_melding_en_wordt_stil_gevolgd(self):
+        row = self.run_with_btc("bearish")
+        self.assertEqual(row["entry_state"], "btc_tegen")
+        self.assertEqual([s for s in self.sent if not s["silent"]], [])
+        self.assertIsNone(row["signal_id"])
+        self.assertEqual(row["cf_state"], "gevuld")          # dezelfde vulling als H zonder poort (test_fill_is_silent_signal_with_journal)
+        with db.session() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM signals").fetchone()[0], 0)
+
+    def test_tegenvoorbeeld_bullish_of_onbekend_btc_houdt_niets_tegen(self):
+        for word in ("bullish", "onbekend"):
+            with self.subTest(word):
+                with db.session() as conn:
+                    conn.execute("DELETE FROM model_v1"); conn.execute("DELETE FROM model_scenarios")
+                self.sent.clear()
+                row = self.run_with_btc(word)
+                self.assertEqual(row["entry_state"], "gevuld")
+                self.assertTrue(any(not s["silent"] for s in self.sent))
+
+    def test_poort_uit_meldt_zoals_eerst(self):
+        row = self.run_with_btc("bearish", gate=False)
+        self.assertEqual(row["entry_state"], "gevuld")
+
+    def test_de_reden_staat_in_gewone_taal(self):
+        from app import end_reason
+        self.assertIn("BTC", end_reason.text("hespulse_model", "btc_tegen"))

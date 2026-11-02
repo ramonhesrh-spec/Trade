@@ -53,7 +53,7 @@ WARMUP_15M = 30
 # Toestanden (4.13) en eindstanden. Ze staan ook in app/end_reason.py (tests/test_basis_afsluiten.py eist een tekst).
 WAIT_STATES = ("wacht_sweep", "prik", "wacht_shift", "wacht_fvg")
 SCENARIO_ENDS = ("context_weg", "geen_pool", "afgerond")
-ENTRY_ENDS = ("vervallen", "weggelopen", "context_weg", "niet_vulbaar")
+ENTRY_ENDS = ("vervallen", "weggelopen", "context_weg", "niet_vulbaar", "btc_tegen")
 FAIL_REASONS = {
     "run": "De koers liep door de pool zonder terug te sluiten (een run, geen sweep).",
     "geen_herstel": f"Geen slot terug boven de pool binnen {HERSTEL_BARS} candles van 15m.",

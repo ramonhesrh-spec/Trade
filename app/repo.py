@@ -4141,6 +4141,18 @@ def end_model_scenario(scenario_id: int, status: str, ended_at: str) -> bool:
                             (status, ended_at, db.now_iso(), scenario_id, *MODEL_FINAL)).rowcount == 1
 
 
+_MODEL_CF_FIELDS = {"cf_state", "cf_filled_at", "cf_outcome", "cf_r", "cf_ambiguous", "cf_at"}
+
+
+def update_model_cf(scenario_id: int, **fields) -> None:
+    """De stille meting van een entry die de BTC-poort tegenhield (model_live.track_cf)."""
+    unknown = set(fields) - _MODEL_CF_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor de BTC-poort: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE model_scenarios SET {', '.join(f + ' = ?' for f in fields)} WHERE id = ?", (*fields.values(), scenario_id))
+
+
 def end_model_entry(scenario_id: int, state: str, at: str) -> bool:
     with db.session() as conn:
         return conn.execute("UPDATE model_scenarios SET entry_state = ?, ended_at = COALESCE(ended_at, ?), updated_at = ? "
@@ -4207,6 +4219,6 @@ def list_ended_model(since_iso: str) -> list[dict]:
         rows = conn.execute("""SELECT id, coin, direction, ended_at, COALESCE(CASE WHEN entry_state != 'wacht' AND entry_state != 'gevuld'
                                       THEN entry_state END, status) AS state
                                FROM model_scenarios WHERE ended_at >= ? AND (status IN ('context_weg', 'geen_pool')
-                                     OR entry_state IN ('vervallen', 'weggelopen', 'context_weg', 'niet_vulbaar'))
+                                     OR entry_state IN ('vervallen', 'weggelopen', 'context_weg', 'niet_vulbaar', 'btc_tegen'))
                                ORDER BY ended_at DESC""", (since_iso,)).fetchall()
         return [{**dict(r), "kind": "hespulse_model"} for r in rows]

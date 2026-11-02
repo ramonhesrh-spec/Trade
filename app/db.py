@@ -324,6 +324,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
         cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
         if cols and "candle_market" not in cols:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN candle_market TEXT")
+    # De BTC-poort van het model (config.MODEL_BTC_GATE): wat een tegengehouden entry stil had gedaan. Leeg op oude rijen.
+    model_cols = {row["name"] for row in conn.execute("PRAGMA table_info(model_scenarios)")}
+    for col, kind in (("cf_state", "TEXT"), ("cf_filled_at", "TEXT"), ("cf_outcome", "TEXT"), ("cf_r", "REAL"), ("cf_ambiguous", "INTEGER"),
+                      ("cf_at", "TEXT")):
+        if model_cols and col not in model_cols:
+            conn.execute(f"ALTER TABLE model_scenarios ADD COLUMN {col} {kind}")
     # trade_excursions had mae_r en mfe_r NOT NULL; 'onbekend' (outcome_measure.record_excursion) slaat ze leeg op. SQLite kan NOT NULL niet
     # weghalen, dus de tabel wordt één keer herbouwd met dezelfde rijen.
     if any(r["name"] == "mae_r" and r["notnull"] for r in conn.execute("PRAGMA table_info(trade_excursions)")):

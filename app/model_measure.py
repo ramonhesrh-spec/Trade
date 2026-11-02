@@ -170,6 +170,25 @@ def v1_trades(rows: list[dict], cost_pct: float) -> list[dict]:
     return out
 
 
+def gate_trades(scenarios: list[dict], cost_pct: float) -> list[dict]:
+    """De entries die de BTC-poort tegenhield (entry_state 'btc_tegen'), stil gevolgd (cf_*): netto R zoals V1, zonder funding."""
+    out = []
+    for s in scenarios:
+        if s.get("entry_state") != "btc_tegen" or s.get("cf_outcome") not in ("take_profit", "stop_loss") or s.get("cf_r") is None:
+            continue
+        stop_pct = abs(s["limit_price"] - s["stop_loss"]) / s["limit_price"] * 100
+        out.append({"net": s["cf_r"] - (cost_pct / stop_pct if stop_pct else 0.0), "direction": s["direction"], "start": _dt(s["cf_filled_at"]),
+                    "end": _dt(s["cf_at"])})
+    return out
+
+
+def gate(scenarios: list[dict], cost_pct: float) -> dict:
+    """Wat de BTC-poort tegenhield en wat die entries stil deden. Een positief gemiddelde hier betekent dat de poort winst kost."""
+    held = [s for s in scenarios if s.get("entry_state") == "btc_tegen"]
+    trades = gate_trades(scenarios, cost_pct)
+    return {"tegengehouden": len(held), "gevuld": sum(1 for s in held if s.get("cf_filled_at")), "arm": arm(trades)}
+
+
 def _minutes(a, b) -> Optional[float]:
     a, b = _dt(a), _dt(b)
     return (b - a).total_seconds() / 60 if a and b else None
@@ -216,7 +235,7 @@ def report(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], cost_
     costs = [t["cost_r"] for t in h if t["cost_r"] is not None]
     out = {"execution": execution(scenarios), "funnel": funnel(scenarios, {r["id"]: r.get("auto_outcome") for r in signal_rows if r.get("id")}),
            "h": arm(h), "cost_median_r": median(costs) if costs else None, "funding_unknown": sum(1 for t in h if t["funding_unknown"]),
-           "level": LEVEL, "first_eval_ready": len(h) >= FIRST_EVAL_TRADES,
+           "level": LEVEL, "first_eval_ready": len(h) >= FIRST_EVAL_TRADES, "btc_poort": gate(scenarios, cost_pct),
            "decision_ready": len(h) >= DECISION_TRADES and arm(h)["weeks"] >= DECISION_WEEKS and n_eff(h) >= DECISION_NEFF}
     if ceo:
         v1t = v1_trades(v1, cost_pct)

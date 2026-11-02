@@ -17,4 +17,5 @@ preregistraties; hier staat het overzicht.
 | B-2026-11-02-06 | 2026-11-02 | V | De richting van een externe analist overnemen | PUMP: een andere visie is geen bewijs. `cases/2026-11-02-pump.md` |
 | B-2026-11-02-07 | 2026-11-02 | V | Automatisch long bij historische steun | Goud: de les is beide richtingen onderzoeken, niet een vaste long. `cases/2026-11-02-goud.md` |
 | B-2026-11-02-08 | 2026-11-02 | A | "Groot" op de modelkaart is weer de schuifbare grafiek met keuze 15m/1u/4u; de analistentekening blijft op de kaart | CEO-melding, E2 |
+| B-2026-11-02-10 | 2026-11-02 | A | BTC-poort op het model: geen entry tegen de BTC 4u-richting; tegengehouden entries stil gevolgd. Herziet B-2026-11-02-05 | CEO: "de short is gebaseerd op het BTC-verhaal", meermaals gestuurd. Meetbaar via `model_measure.gate`; staat de stille arm na 50 trades duidelijk boven 0, dan kost de poort winst en leg ik dat voor |
 | B-2026-11-02-09 | 2026-11-02 | A | De nachtexport meet per signaal de 4u-context van coin en BTC (H1), alleen meting | `hypotheses.md` H1 |

@@ -74,7 +74,7 @@ async def _announce_entry(row: dict, stamp: pd.Timestamp) -> None:
 
 
 async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[float], btc: Optional[Callable[[], dict]] = None) -> dict:
-    """btc: geeft de BTC-context van dit moment (btc_context.measure), alleen als kenmerk op de kaart. Bewaart wat model.scenarios vond. Een scenario dat al voorbij was voordat de motor het zag (bij de eerste start, of na een storing), komt
+    """btc: geeft de BTC-context van dit moment (btc_context.measure): kenmerk op de kaart en bij moment B de BTC-poort (MODEL_BTC_GATE). Bewaart wat model.scenarios vond. Een scenario dat al voorbij was voordat de motor het zag (bij de eerste start, of na een storing), komt
     niet in de app: het was nooit live. Geeft tellers terug voor de hartslag."""
     counts = {"nieuw": 0, "entry": 0}
     seen = set()
@@ -116,6 +116,9 @@ async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[
                 repo.end_model_entry(fresh["id"], "vervallen", fresh["expires_at"])
             elif fresh["vulbaar"] == 0:
                 repo.end_model_entry(fresh["id"], "niet_vulbaar", stamp.isoformat())
+            elif config.MODEL_BTC_GATE and mc.btc_against(fresh):
+                if repo.end_model_entry(fresh["id"], "btc_tegen", stamp.isoformat()):
+                    repo.update_model_cf(fresh["id"], cf_state="wacht")
             else:
                 counts["entry"] += 1
                 await _announce_entry(fresh, stamp)
@@ -176,7 +179,8 @@ async def track(now: Optional[datetime] = None) -> None:
     waiting = repo.list_model_scenarios(entry_states=("wacht",))
     v1 = repo.list_model_v1(("wacht", "gevuld"))
     trades = repo.list_open_model_trades()
-    for coin in sorted({r["coin"] for r in waiting} | {r["coin"] for r in v1} | {t["coin"] for t in trades}):
+    held = [r for r in repo.list_model_scenarios(entry_states=("btc_tegen",)) if r.get("cf_state") in ("wacht", "gevuld")]
+    for coin in sorted({r["coin"] for r in waiting} | {r["coin"] for r in v1} | {t["coin"] for t in trades} | {r["coin"] for r in held}):
         try:
             b5 = rsl._upto(await asyncio.to_thread(rsl.fetch_bars, coin, "5m", FILL_LIMIT), stamp)
             breaks = model.break_times(rsl._upto(await asyncio.to_thread(rsl.fetch_bars, coin, "4h", LIMIT), stamp), stamp)
@@ -200,11 +204,38 @@ async def track(now: Optional[datetime] = None) -> None:
                 track_v1(v, b5, breaks, stamp)
             except Exception:
                 logger.exception("V1 van scenario %s is niet verwerkt", v["scenario_id"])
+        for r in (x for x in held if x["coin"] == coin):
+            try:
+                track_cf(r, b5, breaks, stamp)
+            except Exception:
+                logger.exception("BTC-poort van scenario %s is niet verwerkt", r["id"])
         for t in (x for x in trades if x["coin"] == coin):
             try:
                 await asyncio.to_thread(track_trade, t, b5)
             except Exception:
                 logger.exception("Modeltrade %s is niet verwerkt", t["id"])
+
+
+def track_cf(r: dict, b5: pd.DataFrame, breaks: list, stamp: pd.Timestamp) -> None:
+    """Een entry die de BTC-poort tegenhield, stil gevolgd met precies de regels van H: vulling vanaf de publicatie (model.walk_fill) en
+    de uitkomst vanaf de vulcandle (model.outcome). Geen melding, signaal of journaal. Zo zegt de meting of de poort winnaars kost."""
+    if r["cf_state"] == "wacht":
+        res = model.walk_fill(r["direction"], r["limit_price"], r["take_profit"], pd.Timestamp(r["entry_detected_at"]),
+                              pd.Timestamp(r["expires_at"]), b5, breaks_at=breaks)
+        if res["state"] == "gevuld":
+            repo.update_model_cf(r["id"], cf_state="gevuld", cf_filled_at=_iso(res["at"]))
+            r = {**r, "cf_state": "gevuld", "cf_filled_at": _iso(res["at"])}
+        elif res["state"]:
+            repo.update_model_cf(r["id"], cf_state=res["state"], cf_at=_iso(res["at"]))
+            return
+        elif stamp >= pd.Timestamp(r["expires_at"]):
+            repo.update_model_cf(r["id"], cf_state="vervallen", cf_at=r["expires_at"])
+            return
+    if r["cf_state"] == "gevuld":
+        out = model.outcome(r["direction"], r["limit_price"], r["stop_loss"], r["take_profit"], pd.Timestamp(r["cf_filled_at"]), b5)
+        if out["state"]:
+            repo.update_model_cf(r["id"], cf_state="klaar", cf_outcome=out["state"], cf_r=out["r"], cf_ambiguous=int(out["ambiguous"]),
+                                 cf_at=_iso(out["at"]))
 
 
 def track_trade(t: dict, b5: pd.DataFrame) -> Optional[str]:

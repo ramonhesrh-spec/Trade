@@ -54,6 +54,7 @@ _TEXTS = {
         "vervallen": f"Na {_span(model.ENTRY_BARS * model.TF['15m'])} niet gevuld.",
         "weggelopen": "De koers haalde het doel voordat je limiet vulde.",
         "niet_vulbaar": "De koers stond bij de melding al door de limiet; een marktorder hoort niet bij het plan.",
+        "btc_tegen": "BTC liep op 4u de andere kant op, dus geen entry. HesPulse volgt stil wat hij had gedaan.",
     },
 }
 
