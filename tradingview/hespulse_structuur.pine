@@ -8,7 +8,7 @@
 //   - BOS en CHoCH en de dichtste open fair value gap boven en onder de koers, op het tijdframe van de grafiek.
 // Het is een benadering: de app blijft de bron. De plannen van het model (limiet, stop, doel) komen er niet vanzelf in; plak ze bij
 // "Plan uit HesPulse" in de instellingen, dan tekent het script het positievak. Alleen gesloten candles tellen, net als in de app.
-//@version=5
+//@version=6
 indicator("HesPulse structuur (benadering)", shorttitle = "HesPulse", overlay = true, max_lines_count = 200, max_boxes_count = 60, max_labels_count = 200, max_bars_back = 500)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
@@ -18,8 +18,7 @@ showRange  = input.bool(true, "4u range, evenwicht, premium en discount", group 
 showTrend  = input.bool(true, "Trend per tijdframe", group = "Lagen")
 showBreaks = input.bool(true, "BOS en CHoCH op dit tijdframe", group = "Lagen")
 showFvg    = input.bool(true, "Dichtstbijzijnde open FVG op dit tijdframe", group = "Lagen")
-kChart     = input.int(2, "Swing-candles links en rechts op dit tijdframe", minval = 1, maxval = 5, group = "Lagen",
-                 tooltip = "Het model gebruikt 2 op 15m en 4u, 3 op 1u.")
+kChart     = input.int(2, "Swing-candles links en rechts op dit tijdframe", minval = 1, maxval = 5, group = "Lagen", tooltip = "Het model gebruikt 2 op 15m en 4u, 3 op 1u.")
 maxBreaks  = input.int(12, "Hoeveel breuken tonen", minval = 1, maxval = 50, group = "Lagen")
 
 planLimit  = input.float(0.0, "Limiet", group = "Plan uit HesPulse", tooltip = "0 = geen positievak")
@@ -257,8 +256,7 @@ var label[] brLabels = array.new_label()
 if showBreaks and cEvt != 0 and barstate.isconfirmed
     string word = cLbl == 2 ? "CHoCH" : "BOS"
     array.push(brLines, line.new(cSwT, cLvl, time, cLvl, xloc = xloc.bar_time, color = GREY, width = 1))
-    array.push(brLabels, label.new(time, cLvl, word, xloc = xloc.bar_time, style = cEvt == 1 ? label.style_label_down : label.style_label_up,
-                                   color = color.new(color.white, 100), textcolor = INK, size = size.tiny))
+    array.push(brLabels, label.new(time, cLvl, word, xloc = xloc.bar_time, style = cEvt == 1 ? label.style_label_down : label.style_label_up, color = color.new(color.white, 100), textcolor = INK, size = size.tiny))
     if array.size(brLines) > maxBreaks
         line.delete(array.shift(brLines))
         label.delete(array.shift(brLabels))
@@ -306,11 +304,9 @@ if barstate.islast
             maxLater := na(maxLater) ? high[o] : math.max(maxLater, high[o])
         int x1 = time + 10 * (time - time[1])
         if not na(bestUpLo)
-            fvUp := box.new(bestUpT, bestUpHi, x1, bestUpLo, xloc = xloc.bar_time, bgcolor = color.new(GREY, 85), border_color = color.new(GREY, 55),
-                            text = "FVG", text_color = INK, text_size = size.tiny, text_halign = text.align_right)
+            fvUp := box.new(bestUpT, bestUpHi, x1, bestUpLo, xloc = xloc.bar_time, bgcolor = color.new(GREY, 85), border_color = color.new(GREY, 55), text = "FVG", text_color = INK, text_size = size.tiny, text_halign = text.align_right)
         if not na(bestDnLo)
-            fvDn := box.new(bestDnT, bestDnHi, x1, bestDnLo, xloc = xloc.bar_time, bgcolor = color.new(GREY, 85), border_color = color.new(GREY, 55),
-                            text = "FVG", text_color = INK, text_size = size.tiny, text_halign = text.align_right)
+            fvDn := box.new(bestDnT, bestDnHi, x1, bestDnLo, xloc = xloc.bar_time, bgcolor = color.new(GREY, 85), border_color = color.new(GREY, 55), text = "FVG", text_color = INK, text_size = size.tiny, text_halign = text.align_right)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // Het positievak, zoals op de kaart: donkergrijs van limiet tot stop (risico), lichtgrijs van limiet tot doel (winst).
@@ -325,11 +321,9 @@ if barstate.islast
     if planLimit > 0 and planStop > 0
         int x0 = bar_index - 3
         int x1 = bar_index + 30
-        pvRisk := box.new(x0, math.max(planLimit, planStop), x1, math.min(planLimit, planStop), bgcolor = color.new(INK, 80), border_color = color.new(INK, 100),
-                          text = "risico", text_color = INK, text_size = size.tiny, text_halign = text.align_left)
+        pvRisk := box.new(x0, math.max(planLimit, planStop), x1, math.min(planLimit, planStop), bgcolor = color.new(INK, 80), border_color = color.new(INK, 100), text = "risico", text_color = INK, text_size = size.tiny, text_halign = text.align_left)
         pvLines0 := line.new(x0, planLimit, x1, planLimit, color = INK, width = 1)
         pvLines1 := line.new(x0, planStop, x1, planStop, color = RED, width = 1)
         if planTake > 0
-            pvWin := box.new(x0, math.max(planLimit, planTake), x1, math.min(planLimit, planTake), bgcolor = color.new(INK, 93), border_color = color.new(INK, 100),
-                             text = "doel", text_color = INK, text_size = size.tiny, text_halign = text.align_left)
+            pvWin := box.new(x0, math.max(planLimit, planTake), x1, math.min(planLimit, planTake), bgcolor = color.new(INK, 93), border_color = color.new(INK, 100), text = "doel", text_color = INK, text_size = size.tiny, text_halign = text.align_left)
             pvLines2 := line.new(x0, planTake, x1, planTake, color = GREEN, width = 1)
