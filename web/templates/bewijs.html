@@ -95,6 +95,7 @@
 <div class="flat model-proof" id="hespulse-model">
   <h3>HesPulse-model, meting</h3>
   <p class="proof-footnote muted">Ongetest. Na 50 afgeronde trades volgt een technische controle; een besluit pas bij 150 trades, 12 weken en 60 onafhankelijke trades.</p>
+  {% if m.freeze_at %}<p class="proof-footnote muted">Instapregels bevroren sinds {{ m.freeze_at.strftime("%d-%m-%Y %H:%M") }} UTC. Alleen wat daarna ontstond telt hieronder. Apart: {{ m.apart.scenarios }} scenario's van vóór de bevriezing of met terugwerkende kracht gevonden ({{ m.apart.h.n }} afgeronde trades, netto {{ r_text(m.apart.h.mean) }}; V1 {{ m.apart.v1.n }}, netto {{ r_text(m.apart.v1.mean) }}; overige punten {{ m.apart.punten.n }}, netto {{ r_text(m.apart.punten.mean) }}).</p>{% endif %}
   <dl class="proof-facts">
     <div><dt>Scenario's ontdekt</dt><dd>{{ m.funnel.ontdekt }}</dd></div>
     <div><dt>Sweep · shift</dt><dd>{{ m.funnel.sweep }} · {{ m.funnel.shift }}</dd></div>
@@ -117,6 +118,13 @@
     <thead><tr><th scope="col">Instappunt</th><th scope="col">Afgerond</th><th scope="col">Netto</th><th scope="col">Stand</th></tr></thead>
     <tbody>{% for x in m.instappunten %}<tr><td>{{ x.label }}</td><td>{{ x.arm.n }}</td><td>{{ r_text(x.arm.mean) }}</td><td>{{ x.verdict_text }}</td></tr>{% endfor %}</tbody>
   </table>
+  {% if m.hogere_tf %}
+  {# Hogere tijdframes (app/htf_zones.py): alleen meting, beschrijft; onbekend telt apart. #}
+  <table class="ctx-table" aria-label="Plannen met en zonder een kenmerk op 12u of dag">
+    <thead><tr><th scope="col">Kenmerk</th><th scope="col">Met</th><th scope="col">Zonder</th></tr></thead>
+    <tbody>{% for x in m.hogere_tf %}<tr><td>{{ x.label }}</td><td>{{ x.met.n }} · {{ r_text(x.met.mean) }}</td><td>{{ x.zonder.n }} · {{ r_text(x.zonder.mean) }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
   <p class="proof-footnote muted">Per instappunt: na 30 afgeronde trades een eerste blik; na 50 stopt de melding als de netto R per week duidelijk onder 0 ligt. Meten gaat altijd door.</p>
   {% endif %}
   {% if m.compare %}

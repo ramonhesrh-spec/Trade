@@ -834,3 +834,31 @@ De stille meting loopt altijd door. De regel wordt elke cyclus opnieuw berekend;
 terugkomen als het interval later niet meer helemaal onder 0 ligt. A valt onder §8, niet onder deze regel.
 
 **Nooit.** De drempels 30 en 50 of het niveau achteraf aanpassen.
+
+---
+
+## Aanvullend besluit CEO 2026-11-03 (ochtend): bevriezen, V1 en P van de kaart, Groot gelijk aan het model, hogere tijdframes meten
+
+**Aanleiding.** Plan van aanpak (`docs/onderzoek/plan-van-aanpak-2026-11-04.md`) en de eerste cijfers van de VPS: A gaf in 54 scenario's
+nog geen entry, V1 verloor 6 van 6 in twee gebeurtenissen, en scenario's van 30 en 31 oktober werden bij een update opgeslagen. De CEO:
+"Ga door".
+
+**Bevriezing.** Drie weken geen nieuwe of gewijzigde instapregel (A, B, B0, R, V1, P, de opgerekte range, de poorten). Het moment staat in
+`settings` (`model_freeze_at`), gezet bij de eerste cyclus met deze code. De hoofdcijfers op Bewijs en in de nachtexport tellen alleen wat
+daarna ontstond en niet met terugwerkende kracht: een scenario of punt dat meer dan 30 minuten na het herkenbare moment werd vastgelegd,
+staat apart. De stopregel per punt telt op dezelfde manier. Weergave en meting mogen wel veranderen.
+
+**V1 en P van de kaart.** Ze staan niet meer op de kaart, in Groot of in het blad. Ze worden stil gemeten zoals eerst.
+
+**Groot gelijk aan het model.** Met de richting van de dag volgen range, evenwicht, MSB en order block op 15m, 1u en 4u alleen de breuken in
+die richting, opgerekt na een slot door de rand. De trendregel zegt "herstel" als de laatste breuk tegen de dag in ging. Alleen weergave.
+
+**Hogere tijdframes als kenmerk.** Per plan (A bij moment B, B, B0, R, P en V1 bij het vastleggen), met alleen gesloten 12u- en dagcandles:
+1. `zone`: de limiet ligt in een open FVG of het order block van de laatste breuk in de richting van het plan, op 12u of dag;
+2. `premium_dag`: short boven het evenwicht van de dagrange, long eronder;
+3. `open`: de limiet ligt binnen 0,3% van de open van de lopende UTC-dag of ISO-week.
+
+Onbekend is nooit "nee". Bewijs toont per kenmerk de afgeronde plannen die melden (A, B, B0, R) met en zonder. Pas na 50 afgeronde trades
+per groep zeggen de cijfers iets; ook dan is het een kenmerk, geen filter, tot er een nieuwe preregistratie ligt.
+
+**Nooit.** De 0,3% of de 30 minuten achteraf aanpassen. Tijdens de bevriezing een instapregel veranderen.

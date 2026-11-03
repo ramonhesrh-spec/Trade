@@ -1145,7 +1145,10 @@ async def api_structuur(coin: str, tf: str = "1h", user: dict = Depends(require_
     rows = await _cached_candles(coin, tf)
     if rows is None:
         raise HTTPException(status_code=503, detail="candles niet beschikbaar")
-    return structure_levels.levels(rows, tf, time.time())
+    now = time.time()
+    # Top-down zoals het model: de dag geeft de richting, de lagere tijdframes volgen alleen de breuken in die richting.
+    bias = structure_levels.day_bias(await _cached_candles(coin, "1d"), now) if tf != "1d" else None
+    return structure_levels.levels(rows, tf, now, bias=bias)
 
 
 @app.get("/api/trend/{coin}")
@@ -1157,11 +1160,12 @@ async def api_trend(coin: str, user: dict = Depends(require_login)):
         raise HTTPException(status_code=422)
     if coin not in {c["symbol"] for c in repo.list_coins()}:
         raise HTTPException(status_code=404)
-    out = []
+    out, now = [], time.time()
+    bias = structure_levels.day_bias(await _cached_candles(coin, "1d"), now)
     for tf in structure_levels.TREND_TFS:
         rows = await _cached_candles(coin, tf)
-        trend = structure_levels.levels(rows, tf, time.time())["trend"] if rows else None
-        out.append({"tf": tf, "word": structure_levels.TF_TEXT[tf], "trend": trend if rows else "onbekend"})
+        lv = structure_levels.levels(rows, tf, now, bias=bias if tf != "1d" else None) if rows else {"trend": None, "herstel": False}
+        out.append({"tf": tf, "word": structure_levels.TF_TEXT[tf], "trend": lv["trend"] if rows else "onbekend", "herstel": lv["herstel"]})
     return {"coin": coin, "trend": out}
 
 
@@ -1296,7 +1300,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     # HesPulse-model (app/model_measure.py): de meting voor de eerste evaluatie voor iedereen, de vergelijkingen V1-V3 alleen voor de CEO.
     scenarios = repo.list_model_scenarios()
     model_report = model_measure.report(scenarios, repo.list_model_v1() if is_ceo(user) else [], rows, config.TRACK_RECORD_COST_PCT,
-                                        ceo=is_ceo(user), entries=repo.list_model_entries()) if scenarios else None
+                                        ceo=is_ceo(user), entries=repo.list_model_entries(), freeze_at=repo.model_freeze_at()) if scenarios else None
     return templates.TemplateResponse(request, "bewijs.html", {
         "shadow_lines": shadow_lines, "model_report": model_report, "r_text": model_measure.r_text, "ci_text": model_measure.ci_text,
         "my_week": _week_review(user, datetime.now(timezone.utc)),

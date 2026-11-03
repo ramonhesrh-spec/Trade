@@ -57,6 +57,37 @@ async def _price(coin: str, now: pd.Timestamp) -> Optional[float]:
     return float(b5["close"].iloc[-1]) if len(b5) else None
 
 
+HTF_LIMIT = 300                      # 12u-candles voor de meting van hogere tijdframes: ruim vijf maanden
+
+
+def _rows(df: Optional[pd.DataFrame]) -> Optional[list[list]]:
+    if df is None or not len(df):
+        return None
+    return [[int(t.timestamp()), float(o), float(h), float(l), float(c)]
+            for t, o, h, l, c in zip(df["timestamp"], df["open"], df["high"], df["low"], df["close"])]
+
+
+async def _htf_measure(coin: str, day: Optional[pd.DataFrame], stamp: pd.Timestamp) -> Callable[[str, float], Optional[str]]:
+    """De meting van hogere tijdframes per plan (app/htf_zones.py). Alleen meting: mislukt hij, dan blijft het kenmerk leeg en loopt de
+    motor gewoon door."""
+    from app import htf_zones
+    try:
+        b12 = await asyncio.to_thread(rsl.fetch_bars, coin, "12h", HTF_LIMIT)
+        r12 = _rows(rsl._upto(b12, stamp)) if b12 is not None else None       # None geeft alleen de testnaad
+    except Exception:
+        logger.exception("12u-candles voor %s niet op te halen; kenmerk hogere tijdframes onbekend", coin)
+        r12 = None
+    r1d, now_s = _rows(day), stamp.timestamp()
+
+    def measure(direction: str, limit: float) -> Optional[str]:
+        try:
+            return json.dumps(htf_zones.features(direction, float(limit), r12, r1d, now_s))
+        except Exception:
+            logger.exception("Kenmerk hogere tijdframes voor %s mislukt", coin)
+            return None
+    return measure
+
+
 def _iso(ts) -> str:
     return pd.Timestamp(ts).isoformat()
 
@@ -87,7 +118,8 @@ async def _announce_alt(scenario_id: int, coin: str, direction: str, e: dict, st
     """Eén luide melding voor een nieuw instappunt B, B0 of R, met de regels van A: niet als de koers al door de limiet stond, niet als het
     plan omgekeerd is en niet tegen BTC 4u (MODEL_BTC_GATE). Het punt zelf wordt altijd stil gevolgd (track_entry)."""
     sign = 1 if direction == "long" else -1
-    if model_measure.point_verdict(repo.list_model_entries(("klaar",)), e["code"], config.TRACK_RECORD_COST_PCT) == "stop":
+    counted = model_measure.counted_entries(repo.list_model_entries(("klaar",)), repo.model_freeze_at())
+    if model_measure.point_verdict(counted, e["code"], config.TRACK_RECORD_COST_PCT) == "stop":
         return False                    # stopregel B-2026-11-03-08: na 50 trades netto duidelijk onder 0, alleen nog stil gemeten
     if e["take_profit"] is None or not ((e["take_profit"] - e["limit_price"]) * sign > 0 > (e["stop_loss"] - e["limit_price"]) * sign):
         return False
@@ -112,7 +144,8 @@ async def _announce_alt(scenario_id: int, coin: str, direction: str, e: dict, st
     return True
 
 
-def store_entries(scenario_id: int, coin: str, sc: dict, stamp: pd.Timestamp, new: Optional[list] = None) -> int:
+def store_entries(scenario_id: int, coin: str, sc: dict, stamp: pd.Timestamp, new: Optional[list] = None,
+                  htf: Optional[Callable[[str, float], Optional[str]]] = None) -> int:
     """Legt de instappunten B, B0 en P vast zodra model.scenarios ze vindt (aanvullend besluit 2026-11-03). Een punt dat al verlopen was
     voordat de motor hem zag, komt er niet in: hij was nooit live. Geeft het aantal nieuwe punten."""
     n = 0
@@ -127,7 +160,8 @@ def store_entries(scenario_id: int, coin: str, sc: dict, stamp: pd.Timestamp, ne
                  if k not in ("limit", "stop", "take", "rr", "known_at", "expires_at")}
         entry = {"code": code, "coin": coin, "direction": sc["direction"], "known_at": _iso(e["known_at"]), "detected_at": stamp.isoformat(),
                  "limit_price": e["limit"], "stop_loss": e["stop"], "take_profit": e.get("take"), "rr": e.get("rr"),
-                 "expires_at": _iso(expires) if expires is not None else None, "basis": json.dumps(basis)}
+                 "expires_at": _iso(expires) if expires is not None else None, "basis": json.dumps(basis),
+                 "htf": htf(sc["direction"], e["limit"]) if htf else None}
         if repo.insert_model_entry(scenario_id, entry):
             n += 1
             if new is not None:
@@ -161,7 +195,8 @@ def track_entry(e: dict, b5: pd.DataFrame, breaks: list, stamp: pd.Timestamp) ->
                                     ambiguous=int(out["ambiguous"]), ended_at=_iso(out["at"]))
 
 
-async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[float], btc: Optional[Callable[[], dict]] = None) -> dict:
+async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[float], btc: Optional[Callable[[], dict]] = None,
+               htf: Optional[Callable[[str, float], Optional[str]]] = None) -> dict:
     """btc: geeft de BTC-context van dit moment (btc_context.measure): kenmerk op de kaart en bij moment B de BTC-poort (MODEL_BTC_GATE). Bewaart wat model.scenarios vond. Een scenario dat al voorbij was voordat de motor het zag (bij de eerste start, of na een storing), komt
     niet in de app: het was nooit live. Geeft tellers terug voor de hartslag."""
     counts = {"nieuw": 0, "entry": 0}
@@ -182,10 +217,11 @@ async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[
             v1 = sc["v1"]
             repo.insert_model_v1(sid, {"coin": coin, "direction": sc["direction"], "limit_price": v1["limit"], "stop_loss": v1["stop"],
                                        "take_profit": v1["take"], "rr": v1["rr"], "placed_at": stamp.isoformat(),
-                                       "state": "wacht" if v1["take"] is not None else "geen_doel"})
+                                       "state": "wacht" if v1["take"] is not None else "geen_doel",
+                                       "htf": htf(sc["direction"], v1["limit"]) if htf else None})
             stored = repo.get_model_scenario(sid)
         fresh_points: list = []
-        store_entries(stored["id"], coin, sc, stamp, fresh_points)
+        store_entries(stored["id"], coin, sc, stamp, fresh_points, htf)
         for e in fresh_points:
             if e["code"] in LOUD_CODES and await _announce_alt(stored["id"], coin, sc["direction"], e, stamp, price, btc):
                 counts["entry"] += 1
@@ -202,6 +238,8 @@ async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[
             row.update({"price_at_publish": price, "vulbaar": None if vulbaar is None else int(vulbaar)})
             if not stored.get("entry_detected_at"):
                 row["btc_context"] = json.dumps({**mc.btc_of(stored), "b": btc() if btc else None})
+                if htf:
+                    repo.set_model_htf(stored["id"], htf(sc["direction"], row["limit_price"]))
             publish = stamp.isoformat()
         if repo.sync_model_scenario(stored["id"], row, entry_detected_at=publish):
             fresh = repo.get_model_scenario(stored["id"])
@@ -227,6 +265,7 @@ async def scan(now: Optional[datetime] = None) -> None:
         repo.beat("hespulse_model", "uit")
         return
     stamp = rsl._utc(now)
+    repo.claim_flag(repo.MODEL_FREEZE_KEY)       # B-2026-11-03-09: de eerste cyclus met deze code legt het bevriezingsmoment één keer vast
     coins = [c["symbol"] for c in repo.list_coins()]
     checked, failed, new, entries = 0, 0, 0, 0
     try:
@@ -240,7 +279,8 @@ async def scan(now: Optional[datetime] = None) -> None:
             frames = await _frames(coin, stamp)
             scs = await asyncio.to_thread(model.scenarios, frames, stamp, _pocs(coin, stamp))
             coin15 = frames["15m"]
-            counts = await sync(coin, scs, stamp, await _price(coin, stamp), btc=lambda: btc_context.measure(coin15, btc15, btc4, stamp))
+            htf = await _htf_measure(coin, frames.get("1d"), stamp)
+            counts = await sync(coin, scs, stamp, await _price(coin, stamp), btc=lambda: btc_context.measure(coin15, btc15, btc4, stamp), htf=htf)
             new, entries, checked = new + counts["nieuw"], entries + counts["entry"], checked + 1
         except Exception:
             failed += 1

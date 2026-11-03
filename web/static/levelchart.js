@@ -560,9 +560,10 @@
       .then(function (d) {
         if (!d) { trend.textContent = "Trend nu niet beschikbaar"; return; }
         var sign = { bullish: "↑", bearish: "↓" };
-        trend.textContent = "Trend " + d.trend.map(function (t) { return t.word + " " + (sign[t.trend] || (t.trend === "onbekend" ? "?" : "–")); }).join(" · ");
+        // "herstel": de laatste breuk ging tegen de dag in; het model en de range op deze grafiek volgen dan de dag (top-down).
+        trend.textContent = "Trend " + d.trend.map(function (t) { return t.word + " " + (sign[t.trend] || (t.trend === "onbekend" ? "?" : "–")) + (t.herstel ? " herstel" : ""); }).join(" · ");
         trend.setAttribute("aria-label", "Trend per tijdframe: " + d.trend.map(function (t) {
-          return t.word + " " + ({ bullish: "omhoog", bearish: "omlaag", onbekend: "onbekend" }[t.trend] || "geen breuk"); }).join(", "));
+          return t.word + " " + ({ bullish: "omhoog", bearish: "omlaag", onbekend: "onbekend" }[t.trend] || "geen breuk") + (t.herstel ? ", herstel tegen de dag in" : ""); }).join(", "));
       })
       .catch(function () { trend.textContent = "Trend nu niet beschikbaar"; });
     var el = node("div", "level-chart");

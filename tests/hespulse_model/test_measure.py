@@ -80,3 +80,36 @@ class ExecutionTest(unittest.TestCase):
         self.assertNotIn("compare", rep)
         self.assertEqual([c["key"] for c in mm.report(self.rows(), [], [], 0.06, ceo=True)["compare"]], ["V1", "V2", "V3"])
         json.dumps(mm.jsonable(rep))
+
+
+class FreezeSplitTest(unittest.TestCase):
+    """B-2026-11-03-09: alleen wat na de bevriezing en niet met terugwerkende kracht ontstond telt; de rest staat apart."""
+    F = datetime(2026, 11, 3, 8, 0, tzinfo=timezone.utc)
+
+    def sc(self, i, discovered, detected, signal_id=None):
+        return {"id": i, "discovered_at": discovered, "detected_at": detected, "signal_id": signal_id}
+
+    def test_na_de_bevriezing_telt_ervoor_en_terugwerkend_apart(self):
+        scs = [self.sc(1, "2026-11-03T09:00:00+00:00", "2026-11-03T09:00:50+00:00", 11),     # telt
+               self.sc(2, "2026-11-02T20:00:00+00:00", "2026-11-02T20:00:50+00:00", 12),     # vóór de bevriezing
+               self.sc(3, "2026-10-31T20:00:00+00:00", "2026-11-03T09:05:00+00:00", 13)]     # na een update, terugwerkend
+        v1 = [{"scenario_id": i} for i in (1, 2, 3)]
+        sigs = [{"id": 11}, {"id": 12}, {"id": 13}, {"id": 99, "trade_type": "zone_sweep"}]
+        ents = [{"known_at": "2026-11-03T09:10:00+00:00", "detected_at": "2026-11-03T09:10:40+00:00"},
+                {"known_at": "2026-11-03T02:00:00+00:00", "detected_at": "2026-11-03T09:05:00+00:00"}]
+        keep, rest = mm.split(scs, v1, sigs, ents, self.F)
+        self.assertEqual([s["id"] for s in keep["scenarios"]], [1])
+        self.assertEqual([v["scenario_id"] for v in keep["v1"]], [1])
+        self.assertEqual([r["id"] for r in keep["signals"]], [11, 99])                 # een andere soort valt buiten de bevriezing
+        self.assertEqual(len(keep["entries"]), 1)
+        self.assertEqual(len(rest["scenarios"]), 2)
+
+    def test_tegenvoorbeeld_zonder_bevriezingsmoment_telt_alles(self):
+        keep, rest = mm.split([self.sc(2, "2026-10-31T20:00:00+00:00", "2026-11-03T09:05:00+00:00")], [], [], [], None)
+        self.assertEqual(len(keep["scenarios"]), 1)
+        self.assertEqual(rest["scenarios"], [])
+
+    def test_report_zet_de_rest_apart(self):
+        rep = mm.report([self.sc(2, "2026-11-02T20:00:00+00:00", "2026-11-02T20:00:50+00:00")], [], [], 0.06, freeze_at=self.F)
+        self.assertEqual(rep["apart"]["scenarios"], 1)
+        self.assertEqual(rep["funnel"]["ontdekt"], 0)

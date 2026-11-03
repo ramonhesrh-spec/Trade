@@ -136,7 +136,7 @@ def build_export(now: datetime, stop_fetch: Callable = _stop_fetch, fetch_4h: Ca
         # HesPulse-model (preregistratie §8): uitvoerbaarheid, trechter, N_eff, drawdown, zonder de beste 5% en de vergelijkingen V1-V3.
         "model": model_measure.jsonable(model_measure.report(repo.list_model_scenarios(), repo.list_model_v1(),
                                                              repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT, ceo=True,
-                                                             entries=repo.list_model_entries())),
+                                                             entries=repo.list_model_entries(), freeze_at=repo.model_freeze_at())),
     }
 
 
@@ -184,9 +184,17 @@ def markdown(data: dict) -> str:
                   f"{ex['terugtest_al_geweest']}; vertraging entry mediaan {ex['delay_b_median'] if ex['delay_b_median'] is not None else '-'} min",
                   f"- H: {h['n']} afgerond, N_eff {h['n_eff']}, netto {_r(h['mean'])} per trade, zonder beste 5% {_r(h['mean_wo_best'])}, "
                   f"verliesreeks {h['streak']}, daling {_r(-h['max_dd'] if h['n'] else None)}"]
+        ap = m.get("apart") or {}
+        if m.get("freeze_at"):
+            lines.append(f"- Bevroren sinds {m['freeze_at']}; hierboven alleen wat daarna ontstond. Apart: {ap.get('scenarios', 0)} scenario's "
+                         f"({ap.get('terugwerkend', 0)} met terugwerkende kracht), H {ap['h']['n']} afgerond netto {_r(ap['h']['mean'])}, "
+                         f"V1 {ap['v1']['n']} netto {_r(ap['v1']['mean'])}, overige punten {ap['punten']['n']} netto {_r(ap['punten']['mean'])}")
         for x in m.get("instappunten") or []:
             lines.append(f"- Instappunt {x['label']}: {x['gevonden']} gevonden, {x['gevuld']} gevuld, {x['arm']['n']} afgerond, "
                          f"netto {_r(x['arm']['mean'])} per trade, stand: {x.get('verdict_text', '-')}")
+        for x in m.get("hogere_tf") or []:
+            lines.append(f"- {x['label']}: met {x['met']['n']} netto {_r(x['met']['mean'])}, zonder {x['zonder']['n']} netto "
+                         f"{_r(x['zonder']['mean'])}, onbekend {x['onbekend']}")
         g = m.get("btc_poort")
         if g:
             lines.append(f"- BTC-poort: {g['tegengehouden']} entries tegengehouden, {g['gevuld']} hadden gevuld; afgerond {g['arm']['n']}, "

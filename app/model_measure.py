@@ -204,6 +204,31 @@ def point_verdict(entries: list[dict], code: str, cost_pct: float) -> str:
     return verdict(arm(entry_trades(entries, code, cost_pct)))
 
 
+LOUD_CODES = ("B", "B0", "R")
+
+
+def _htf(raw) -> dict:
+    try:
+        return json.loads(raw) if raw else {}
+    except ValueError:
+        return {}
+
+
+def htf_split(scenarios: list[dict], signal_rows: list[dict], entries: list[dict], cost_pct: float) -> list[dict]:
+    """Hogere tijdframes als kenmerk (app/htf_zones.py, B-2026-11-03-09): per kenmerk de afgeronde plannen die melden (A, B, B0, R) met en
+    zonder, netto zoals hierboven. Onbekend telt apart, nooit als 'zonder'. Beschrijft, voorspelt niets tot er genoeg trades zijn."""
+    from app import htf_zones
+    by_signal = {s.get("signal_id"): _htf(s.get("htf")) for s in scenarios if s.get("signal_id")}
+    pool = [(t, by_signal.get(r.get("id"), {})) for r in signal_rows for t in signal_trades([r], "hespulse_model", cost_pct)]
+    pool += [(t, _htf(e.get("htf"))) for e in entries if e.get("code") in LOUD_CODES for t in entry_trades([e], e["code"], cost_pct)]
+    out = []
+    for key, label in htf_zones.NAMES.items():
+        met = [t for t, f in pool if f.get(key) is True]
+        zonder = [t for t, f in pool if f.get(key) is False]
+        out.append({"key": key, "label": label, "met": arm(met), "zonder": arm(zonder), "onbekend": sum(1 for _, f in pool if f.get(key) is None)})
+    return out
+
+
 def entry_arms(entries: list[dict], cost_pct: float) -> list[dict]:
     """Per instappunt: hoeveel gevonden, gevuld en afgerond, de arm met dezelfde maten als H (§8) en de stand van de stopregel."""
     out = []
@@ -275,15 +300,67 @@ def funnel(scenarios: list[dict], outcomes: dict) -> dict:
             "uitkomst": sum(1 for s in scenarios if outcomes.get(s.get("signal_id")) in ("take_profit", "stop_loss"))}
 
 
+# Bevriezing (B-2026-11-03-09): de instapregels liggen drie weken vast. Alleen wat na het bevriezingsmoment (settings model_freeze_at, gezet
+# bij de eerste start van de motor met deze code) en niet met terugwerkende kracht ontstond, telt in de hoofdcijfers. Terugwerkend: de app
+# legde het meer dan RETRO_MIN minuten na het herkenbare moment vast. Dat gebeurt bij een update (VPS 2 november: scenario's van 30 en 31
+# oktober opgeslagen om 19:35, FIL en UNI binnen vijf minuten gevuld en gestopt).
+RETRO_MIN = 30
+
+
+def _late(known, detected) -> bool:
+    k, d = _dt(known), _dt(detected)
+    return bool(k and d and (d - k).total_seconds() > RETRO_MIN * 60)
+
+
+def split(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], entries: list[dict], freeze_at: Optional[datetime]) -> tuple[dict, dict]:
+    """(telt, apart): dezelfde vier lijsten, gesplitst. Zonder bevriezingsmoment telt alles (oude databases, tests)."""
+    if freeze_at is None:
+        return ({"scenarios": scenarios, "v1": v1, "signals": signal_rows, "entries": entries},
+                {"scenarios": [], "v1": [], "signals": [], "entries": []})
+    ok_sc = {s["id"] for s in scenarios if (_dt(s.get("detected_at")) or freeze_at) >= freeze_at
+             and not _late(s.get("discovered_at"), s.get("detected_at"))}
+    ok_sig = {s.get("signal_id") for s in scenarios if s["id"] in ok_sc and s.get("signal_id")}
+    model_sig = {s.get("signal_id") for s in scenarios if s.get("signal_id")}
+    keep = {
+        "scenarios": [s for s in scenarios if s["id"] in ok_sc],
+        "v1": [v for v in v1 if v.get("scenario_id") in ok_sc],
+        # Een signaal van een andere soort (V2, V3) valt buiten de bevriezing en telt altijd.
+        "signals": [r for r in signal_rows if r.get("id") not in model_sig or r.get("id") in ok_sig],
+        "entries": [e for e in entries if (_dt(e.get("detected_at")) or freeze_at) >= freeze_at and not _late(e.get("known_at"), e.get("detected_at"))],
+    }
+    apart = {k: [x for x in v if x not in keep[k]] for k, v in
+             {"scenarios": scenarios, "v1": v1, "signals": signal_rows, "entries": entries}.items()}
+    return keep, apart
+
+
+def counted_entries(entries: list[dict], freeze_at: Optional[datetime]) -> list[dict]:
+    """De instappunten die meetellen voor de stopregel per punt: dezelfde scheiding als de hoofdcijfers."""
+    return split([], [], [], entries, freeze_at)[0]["entries"]
+
+
 def report(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], cost_pct: float, ceo: bool = False,
-           entries: Optional[list[dict]] = None) -> dict:
-    """Alles voor Bewijs en de nachtexport. De vergelijkingen (V1, V2, V3) alleen met ceo=True."""
+           entries: Optional[list[dict]] = None, freeze_at: Optional[datetime] = None) -> dict:
+    """Alles voor Bewijs en de nachtexport, alleen over wat na de bevriezing ontstond; de rest staat samengevat onder `apart`. De
+    vergelijkingen (V1, V2, V3) alleen met ceo=True."""
+    keep, rest = split(scenarios, v1, signal_rows, entries or [], freeze_at)
+    out = _report(keep["scenarios"], keep["v1"], keep["signals"], cost_pct, ceo, keep["entries"])
+    out["freeze_at"] = freeze_at
+    rh = signal_trades(rest["signals"], "hespulse_model", cost_pct)
+    rv = v1_trades(rest["v1"], cost_pct)
+    re_ = [t for code in ENTRY_NAMES for t in entry_trades(rest["entries"], code, cost_pct)]
+    out["apart"] = {"scenarios": len(rest["scenarios"]), "h": arm(rh), "v1": arm(rv), "punten": arm(re_),
+                    "terugwerkend": sum(1 for s in scenarios if _late(s.get("discovered_at"), s.get("detected_at")))}
+    return out
+
+
+def _report(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], cost_pct: float, ceo: bool = False,
+            entries: Optional[list[dict]] = None) -> dict:
     h = signal_trades(signal_rows, "hespulse_model", cost_pct)
     costs = [t["cost_r"] for t in h if t["cost_r"] is not None]
     out = {"execution": execution(scenarios), "funnel": funnel(scenarios, {r["id"]: r.get("auto_outcome") for r in signal_rows if r.get("id")}),
            "h": arm(h), "cost_median_r": median(costs) if costs else None, "funding_unknown": sum(1 for t in h if t["funding_unknown"]),
            "level": LEVEL, "first_eval_ready": len(h) >= FIRST_EVAL_TRADES, "btc_poort": gate(scenarios, cost_pct),
-           "instappunten": entry_arms(entries or [], cost_pct),
+           "instappunten": entry_arms(entries or [], cost_pct), "hogere_tf": htf_split(scenarios, signal_rows, entries or [], cost_pct),
            "decision_ready": len(h) >= DECISION_TRADES and arm(h)["weeks"] >= DECISION_WEEKS and n_eff(h) >= DECISION_NEFF}
     if ceo:
         v1t = v1_trades(v1, cost_pct)

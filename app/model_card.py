@@ -104,6 +104,9 @@ ENTRY_STATE_WORDS = {"wacht": "wacht op vulling", "gevuld": "gevuld", "klaar": "
                      "context_weg": "context weg", "niet_vulbaar": "niet vulbaar", "geen_doel": "geen doel", "btc_tegen": "tegen BTC, niet gemeld"}
 
 
+HIDDEN_CODES = ("V1", "P")
+
+
 def entry_points(row: dict, v1: Optional[dict], extra: list[dict]) -> list[dict]:
     """Alle instappunten van één scenario, voor de grafiek (letter en limiet) en het detailblad (basis, niveaus, R:R, stand). A alleen als
     moment B er is; V1 uit model_v1; B en P uit model_entries."""
@@ -111,11 +114,11 @@ def entry_points(row: dict, v1: Optional[dict], extra: list[dict]) -> list[dict]
     if row.get("limit_price") is not None:
         out.append({"code": "A", "limit": row["limit_price"], "stop": row["stop_loss"], "take": row.get("take_profit"), "rr": row.get("rr"),
                     "known_at": row.get("entry_at"), "state": row.get("entry_state") or "wacht"})
-    if v1 and v1.get("limit_price") is not None and v1.get("state") != "geen_doel":
-        out.append({"code": "V1", "limit": v1["limit_price"], "stop": v1["stop_loss"], "take": v1.get("take_profit"), "rr": v1.get("rr"),
-                    "known_at": v1.get("placed_at"), "state": v1.get("state")})
+    # V1 en P staan sinds B-2026-11-03-09 niet meer op de kaart, in Groot of in het blad: V1 lag bijna altijd op het evenwicht en verloor
+    # 6 van 6 (twee gebeurtenissen), P kwam zelden en zonder uitleg. Beide worden stil gemeten (model_v1, model_entries); `v1` blijft als
+    # argument zodat de aanroepers niet veranderen.
     for e in sorted(extra, key=lambda e: e["code"]):
-        if e["code"] in ENTRY_INFO:
+        if e["code"] in ENTRY_INFO and e["code"] not in HIDDEN_CODES:
             out.append({"code": e["code"], "limit": e["limit_price"], "stop": e["stop_loss"], "take": e.get("take_profit"), "rr": e.get("rr"),
                         "known_at": e.get("known_at"), "state": e.get("state"), "id": e.get("id"), "expires_at": e.get("expires_at")})
     for p in out:

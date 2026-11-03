@@ -167,8 +167,10 @@ class EntryPointsOnTheCard(ModelTab):
     def test_detailblad_noemt_elk_punt_met_zijn_basis(self):
         html = self.html()
         self.assertIn("Instappunten", html)
-        for name in ("Na sweep", "Lagere top", "POC-limiet", "Lagere top, ook buiten premium"):
+        for name in ("Na sweep", "Lagere top", "Lagere top, ook buiten premium"):
             self.assertIn(name, html)
+        self.assertNotIn("POC-limiet", html)                         # B-2026-11-03-09: P en V1 niet meer op de kaart
+        self.assertNotIn("Vroege limiet op de pool", html)
 
     def test_grafiek_tekent_de_letters(self):
         start = int((NOW - pd.Timedelta(hours=30)).timestamp())
@@ -177,7 +179,7 @@ class EntryPointsOnTheCard(ModelTab):
             svg = self.client.get(f"/api/kaart_svg/model:{self.entry}").text
         self.assertIn(">A Limiet", svg)
         self.assertIn(">B 100,50<", svg)
-        self.assertIn(">P 98,50<", svg)
+        self.assertNotIn(">P 98,50<", svg)
         self.assertIn(">B0 100,70<", svg)
 
 
@@ -268,3 +270,14 @@ class OnePlanOnTheCard(ModelTab):
         p = self.point("P", 99.0)
         self.assertNotIn("/nu/order/mpoint", self.card(self.html()))
         self.assertEqual(self.client.get(f"/nu/order/mpoint:{p}").status_code, 404)
+
+
+class FreezeOnBewijs(ModelTab):
+    def test_bewijs_noemt_de_bevriezing_en_zet_oude_scenarios_apart(self):
+        repo.claim_flag(repo.MODEL_FREEZE_KEY)
+        html = self.client.get("/bewijs").text
+        self.assertIn("Instapregels bevroren sinds", html)
+        self.assertIn("2 scenario's van vóór de bevriezing", html)
+
+    def test_tegenvoorbeeld_zonder_bevriezing_geen_regel(self):
+        self.assertNotIn("Instapregels bevroren sinds", self.client.get("/bewijs").text)

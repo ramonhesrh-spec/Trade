@@ -1265,6 +1265,7 @@ CREATE TABLE IF NOT EXISTS model_scenarios (
     alert_sent INTEGER NOT NULL DEFAULT 0,
     signal_id INTEGER REFERENCES signals(id),
     updated_at TEXT,
+    htf TEXT,
     UNIQUE (coin, range_id)
 );
 CREATE INDEX IF NOT EXISTS idx_model_scenarios_status ON model_scenarios(status, entry_state);
@@ -1292,6 +1293,7 @@ CREATE TABLE IF NOT EXISTS model_entries (
     r_gross REAL,
     ambiguous INTEGER NOT NULL DEFAULT 0,
     ended_at TEXT,
+    htf TEXT,
     UNIQUE (scenario_id, code)
 );
 -- V1 (§6): de vroege limiet op de pool op moment A, stil gemeten. Geen melding, geen journaal, geen signals-rij. state: wacht, gevuld,
@@ -1311,5 +1313,6 @@ CREATE TABLE IF NOT EXISTS model_v1 (
     outcome_at TEXT,
     r_gross REAL,
     ambiguous INTEGER NOT NULL DEFAULT 0,
-    ended_at TEXT
+    ended_at TEXT,
+    htf TEXT
 );

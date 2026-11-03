@@ -12,9 +12,9 @@ import pandas as pd
 from app import model
 
 # De dag erbij (CEO 2026-11-03: "en ook op dag checken"): dezelfde regels, pivots met 2 candles zoals op 4u.
-K = {"15m": model.K_15M, "1h": model.K_1H, "4h": model.K_4H, "1d": model.K_4H}
-TF_TEXT = {"15m": "15m", "1h": "1u", "4h": "4u", "1d": "D"}
-SECONDS = {"15m": 900, "1h": 3600, "4h": 14400, "1d": 86400}
+K = {"15m": model.K_15M, "1h": model.K_1H, "4h": model.K_4H, "12h": model.K_4H, "1d": model.K_4H}
+TF_TEXT = {"15m": "15m", "1h": "1u", "4h": "4u", "12h": "12u", "1d": "D"}
+SECONDS = {"15m": 900, "1h": 3600, "4h": 14400, "12h": 43200, "1d": 86400}
 TREND_TFS = ("1d", "4h", "1h", "15m")
 EQUAL_ATR = model.POOL_EQUAL_ATR          # gelijke toppen of bodems binnen 0,1 ATR: EQH/EQL, dezelfde maat als de pools van het model
 FVG_LOOKBACK = 150                        # zoveel candles terug zoeken naar een nog open gap
@@ -33,10 +33,44 @@ def _t(fr: model.Frame, i: int) -> int:
     return int(fr.ts[i].value // 10**9)
 
 
-def levels(rows: list[list], tf: str, now_s: float) -> dict:
+def open_fvgs(fr: model.Frame) -> list[dict]:
+    """Alle nog open fair value gaps in de laatste FVG_LOOKBACK gesloten candles: {low, high, time, up_gap}. Een latere lont in de gap maakt
+    hem kleiner; helemaal gevuld valt hij weg. Gedeeld door Groot (levels) en de meting van hogere tijdframes (app/htf_zones.py)."""
+    last, out = fr.n - 1, []
+    for i in range(max(2, last - FVG_LOOKBACK), last + 1):
+        if fr.h[i - 2] < fr.l[i]:                       # gap omhoog
+            lo, hi = float(fr.h[i - 2]), float(fr.l[i])
+            later = fr.l[i + 1:last + 1]
+            if len(later):
+                hi = min(hi, float(later.min()))
+            if hi > lo:
+                out.append({"low": lo, "high": hi, "time": _t(fr, i - 1), "up_gap": True})
+        if fr.l[i - 2] > fr.h[i]:                       # gap omlaag
+            lo, hi = float(fr.h[i]), float(fr.l[i - 2])
+            later = fr.h[i + 1:last + 1]
+            if len(later):
+                lo = max(lo, float(later.max()))
+            if hi > lo:
+                out.append({"low": lo, "high": hi, "time": _t(fr, i - 1), "up_gap": False})
+    return out
+
+
+def day_bias(rows: Optional[list[list]], now_s: float) -> Optional[str]:
+    """De richting van de dag zoals model.DailyBias: de laatste breuk op gesloten dagcandles, 'long', 'short' of None."""
+    if not rows:
+        return None
+    t = levels(rows, "1d", now_s)["trend"]
+    return {"bullish": "long", "bearish": "short"}.get(t)
+
+
+def levels(rows: list[list], tf: str, now_s: float, bias: Optional[str] = None) -> dict:
     """{"lines": [{value, time, label, kind}], "zones": [{low, high, time, label, kind}], "trend": "bullish" | "bearish" | None}; leeg als er
-    te weinig gesloten candles zijn. De trend is de richting van de laatste structuurbreuk, dezelfde regel als de bias van het model."""
-    out: dict = {"lines": [], "zones": [], "trend": None}
+    te weinig gesloten candles zijn. De trend is de richting van de laatste structuurbreuk, dezelfde regel als de bias van het model.
+
+    bias ('long'/'short', de richting van de dag): dan volgen range, evenwicht, MSB en order block alleen de laatste breuk in die richting en
+    rekt de range op na een slot door de rand, net als het model top-down (B-2026-11-03-09: "Groot spreekt de kaart tegen"). `herstel` zegt
+    dan of de laatste breuk tegen de dag in ging."""
+    out: dict = {"lines": [], "zones": [], "trend": None, "herstel": False}
     if tf not in K:
         return out
     fr = _frame(rows, tf, now_s)
@@ -51,8 +85,12 @@ def levels(rows: list[list], tf: str, now_s: float) -> dict:
     # Range en de laatste structuurbreuk (MSB): dezelfde breuken als de bias van het model.
     brk = model.breaks(fr, k)
     if brk:
+        out["trend"] = "bullish" if brk[-1].up else "bearish"
+        out["herstel"] = bias is not None and brk[-1].up != (bias == "long")
+    if bias is not None:
+        brk = [b for b in brk if b.up == (bias == "long")]
+    if brk:
         b = brk[-1]
-        out["trend"] = "bullish" if b.up else "bearish"
         name = {"CHOCH": "CHoCH", "BOS": "BOS"}.get(b.label, "MSB")
         out["lines"].append({"value": b.level, "time": _t(fr, b.swing), "label": f"{word} {name}", "short": name, "kind": "msb"})
         # De dealing range zoals model.Context4h: bij een breuk omhoog de laagste low tussen de gebroken top en de breuk, en de hoogste high
@@ -63,6 +101,18 @@ def levels(rows: list[list], tf: str, now_s: float) -> dict:
         else:
             hi_i = b.swing + 1 + int(np.argmax(fr.h[b.swing + 1:b.i + 1]))
             lo_i = b.swing + int(np.argmin(fr.l[b.swing:last + 1]))
+        if bias is not None:
+            # Opgerekte range zoals model.Context4h top-down: een slot door de verre rand verschuift die rand naar het nieuwe uiterste.
+            if b.up:
+                through = np.flatnonzero(fr.c[b.i + 1:last + 1] < fr.l[lo_i])
+                if len(through):
+                    x = b.i + 1 + int(through[0])
+                    lo_i = x + int(np.argmin(fr.l[x:last + 1]))
+            else:
+                through = np.flatnonzero(fr.c[b.i + 1:last + 1] > fr.h[hi_i])
+                if len(through):
+                    x = b.i + 1 + int(through[0])
+                    hi_i = x + int(np.argmax(fr.h[x:last + 1]))
         out["lines"].append({"value": float(fr.h[hi_i]), "time": _t(fr, hi_i), "label": f"{word} range high", "short": "RH", "kind": "range"})
         out["lines"].append({"value": float(fr.l[lo_i]), "time": _t(fr, lo_i), "label": f"{word} range low", "short": "RL", "kind": "range"})
         # Premium en discount (CEO 2026-11-03: "wel premium en discount, ik bedoelde dat wij dat niet hebben"): de helften van de range
@@ -96,23 +146,12 @@ def levels(rows: list[list], tf: str, now_s: float) -> dict:
         else:
             out["lines"].append({"value": float(arr[p]), "time": _t(fr, p), "label": f"{word} swing {'high' if up else 'low'}", "short": "SH" if up else "SL", "kind": "swing"})
 
-    # De dichtste nog open fair value gap boven en onder de koers. Een latere lont in de gap maakt hem kleiner; helemaal gevuld valt hij weg.
-    below, above = [], []
-    for i in range(max(2, last - FVG_LOOKBACK), last + 1):
-        if fr.h[i - 2] < fr.l[i]:                       # gap omhoog
-            lo, hi = float(fr.h[i - 2]), float(fr.l[i])
-            later = fr.l[i + 1:last + 1]
-            if len(later):
-                hi = min(hi, float(later.min()))
-            if hi > lo and hi < close:
-                below.append({"low": lo, "high": hi, "time": _t(fr, i - 1), "label": f"{word} FVG", "short": "FVG", "kind": "fvg"})
-        if fr.l[i - 2] > fr.h[i]:                       # gap omlaag
-            lo, hi = float(fr.h[i]), float(fr.l[i - 2])
-            later = fr.h[i + 1:last + 1]
-            if len(later):
-                lo = max(lo, float(later.max()))
-            if hi > lo and lo > close:
-                above.append({"low": lo, "high": hi, "time": _t(fr, i - 1), "label": f"{word} FVG", "short": "FVG", "kind": "fvg"})
+    # De dichtste nog open fair value gap boven en onder de koers.
+    gaps = open_fvgs(fr)
+    below = [{**g, "label": f"{word} FVG", "short": "FVG", "kind": "fvg"} for g in gaps if g["up_gap"] and g["high"] < close]
+    above = [{**g, "label": f"{word} FVG", "short": "FVG", "kind": "fvg"} for g in gaps if g["up_gap"] is False and g["low"] > close]
+    for z in below + above:
+        z.pop("up_gap")
     if below:
         out["zones"].append(max(below, key=lambda z: z["high"]))
     if above:

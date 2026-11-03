@@ -3884,6 +3884,19 @@ def clear_announcement_at() -> None:
     db.set_setting(ANNOUNCEMENT_SETTING_KEY, "")
 
 
+MODEL_FREEZE_KEY = "model_freeze_at"
+
+
+def model_freeze_at() -> Optional[datetime]:
+    """Het moment waarop de instapregels van het model bevroren werden (B-2026-11-03-09), of None als de motor nog niet met die code draaide."""
+    with db.session() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (MODEL_FREEZE_KEY,)).fetchone()
+    if not row or not row[0]:
+        return None
+    d = datetime.fromisoformat(row[0])
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
 def claim_flag(key: str) -> bool:
     """True voor precies één aanroeper, ook als twee processen tegelijk claimen: de INSERT slaagt maar één keer (settings.key is uniek)."""
     with db.session() as conn:
@@ -4186,10 +4199,16 @@ def list_open_model_trades() -> list[dict]:
 
 def insert_model_v1(scenario_id: int, row: dict) -> bool:
     with db.session() as conn:
-        return conn.execute("""INSERT OR IGNORE INTO model_v1 (scenario_id, coin, direction, limit_price, stop_loss, take_profit, rr, placed_at, state)
-                               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        return conn.execute("""INSERT OR IGNORE INTO model_v1 (scenario_id, coin, direction, limit_price, stop_loss, take_profit, rr, placed_at, state,
+                               htf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                             (scenario_id, row["coin"], row["direction"], row["limit_price"], row["stop_loss"], row.get("take_profit"),
-                             row.get("rr"), row["placed_at"], row.get("state", "wacht"))).rowcount == 1
+                             row.get("rr"), row["placed_at"], row.get("state", "wacht"), row.get("htf"))).rowcount == 1
+
+
+def set_model_htf(scenario_id: int, htf: str) -> None:
+    """De hogere-tijdframezones van entry A, één keer bij moment B (alleen meting)."""
+    with db.session() as conn:
+        conn.execute("UPDATE model_scenarios SET htf = ? WHERE id = ? AND htf IS NULL", (htf, scenario_id))
 
 
 _MODEL_V1_FIELDS = {"state", "filled_at", "outcome", "outcome_at", "r_gross", "ambiguous", "ended_at"}
@@ -4216,9 +4235,10 @@ def insert_model_entry(scenario_id: int, row: dict) -> bool:
     """Eén instappunt (B, B0 of P) per scenario, één keer (UNIQUE): een punt verandert nooit meer nadat hij is vastgelegd."""
     with db.session() as conn:
         return conn.execute("""INSERT OR IGNORE INTO model_entries (scenario_id, code, coin, direction, known_at, detected_at, limit_price,
-                               stop_loss, take_profit, rr, expires_at, basis) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                               stop_loss, take_profit, rr, expires_at, basis, htf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                             (scenario_id, row["code"], row["coin"], row["direction"], row["known_at"], row["detected_at"], row["limit_price"],
-                             row["stop_loss"], row.get("take_profit"), row.get("rr"), row.get("expires_at"), row.get("basis"))).rowcount == 1
+                             row["stop_loss"], row.get("take_profit"), row.get("rr"), row.get("expires_at"), row.get("basis"),
+                             row.get("htf"))).rowcount == 1
 
 
 _MODEL_ENTRY_FIELDS = {"state", "filled_at", "outcome", "outcome_at", "r_gross", "ambiguous", "ended_at"}

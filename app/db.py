@@ -330,6 +330,11 @@ def _migrate(conn: sqlite3.Connection) -> None:
                       ("cf_at", "TEXT")):
         if model_cols and col not in model_cols:
             conn.execute(f"ALTER TABLE model_scenarios ADD COLUMN {col} {kind}")
+    # Hogere-tijdframezones per plan (app/htf_zones.py, B-2026-11-03-09): alleen meting, leeg op oude rijen.
+    for table in ("model_scenarios", "model_entries", "model_v1"):
+        cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if cols and "htf" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN htf TEXT")
     # trade_excursions had mae_r en mfe_r NOT NULL; 'onbekend' (outcome_measure.record_excursion) slaat ze leeg op. SQLite kan NOT NULL niet
     # weghalen, dus de tabel wordt één keer herbouwd met dezelfde rijen.
     if any(r["name"] == "mae_r" and r["notnull"] for r in conn.execute("PRAGMA table_info(trade_excursions)")):

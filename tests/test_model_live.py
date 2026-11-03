@@ -2,6 +2,7 @@
 moment B één luide melding binnen het dagbudget, de vulling stil met signaal en journaal, geen tweede melding in een volgende cyclus, en de
 oude soorten zonder enige melding als MODEL_ONLY_ALERTS aan staat."""
 import asyncio
+import json
 from unittest import mock
 
 import pandas as pd
@@ -388,3 +389,25 @@ class PointStopRuleTest(Case):
 def model_measure_verdict(rows, code):
     from app import model_measure
     return model_measure.point_verdict(rows, code, 0.06)
+
+
+class FreezeMomentTest(Case):
+    """B-2026-11-03-09: de eerste cyclus met deze code legt het bevriezingsmoment vast, een latere cyclus verandert het niet."""
+
+    def test_een_keer_vastgelegd(self):
+        self.assertIsNone(repo.model_freeze_at())
+        self.cycle(at(TAIL_FROM - 5))
+        first = repo.model_freeze_at()
+        self.assertIsNotNone(first)
+        self.cycle(at(TAIL_FROM - 4))
+        self.assertEqual(repo.model_freeze_at(), first)
+
+
+class HtfStoredTest(Case):
+    """B-2026-11-03-09: elk vastgelegd plan krijgt het kenmerk hogere tijdframes mee; zonder 12u- of dagcandles is het onbekend."""
+
+    def test_v1_en_instappunt_krijgen_het_kenmerk(self):
+        AltAlertTest.run_with(self, "b0", AltAlertTest.point(self, "B0"))
+        (e,) = repo.list_model_entries()
+        self.assertEqual(json.loads(e["htf"])["zone"], None)
+        self.assertEqual(set(json.loads(repo.get_model_v1(self.scenario()["id"])["htf"])), {"zone_12u", "zone_dag", "zone", "premium_dag", "open"})
