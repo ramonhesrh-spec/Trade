@@ -1,7 +1,8 @@
 # HesPulse in TradingView
 
-`hespulse_structuur.pine` tekent de structuur van het HesPulse-model op je eigen TradingView-grafiek. Het is een benadering: dezelfde vaste
-regels, opnieuw geschreven in Pine. De app blijft de bron; wijkt iets af, dan geldt wat de app zegt.
+`hespulse_structuur.pine` tekent op je TradingView-grafiek wat "Groot" in de app tekent, op het tijdframe van je grafiek: dezelfde laatste 499
+gesloten candles, dezelfde regels. `tests/test_tradingview_port.py` toetst een Python-versie in precies de stappen van het script tegen de
+echte code van Groot.
 
 ## Zo zet je hem erop
 
@@ -13,9 +14,11 @@ regels, opnieuw geschreven in Pine. De app blijft de bron; wijkt iets af, dan ge
 ## Wat hij tekent
 
 - De richting van de dag, en welke kant het model zoekt.
-- De 4u-range top-down: range high, range low, evenwicht 0,5, premium en discount.
-- De trend per tijdframe: D, 4u, 1u en 15m, met "herstel" als de 4u tegen de dag in brak.
-- BOS en CHoCH, en de dichtste open FVG boven en onder de koers, op het tijdframe van je grafiek.
+- Per tijdframe zoals Groot: de laatste breuk in de richting van de dag (BOS, CHoCH of MSB), range high (RH), range low (RL), evenwicht
+  (EQ), de laatste swing high en low (SH, SL) of gelijke toppen en bodems (EQH, EQL), het order block (OB) en de dichtste open FVG boven en
+  onder de koers.
+- De trend per tijdframe: D, 4u, 1u en 15m, met "herstel" als een breuk tegen de dag in ging. Een tijdframe onder dat van je grafiek krijgt
+  een streepje.
 - Het positievak: plak limiet, stop en doel uit de melding bij "Plan uit HesPulse".
 
 ## Wat hij niet doet
@@ -26,3 +29,11 @@ regels, opnieuw geschreven in Pine. De app blijft de bron; wijkt iets af, dan ge
 
 Regels: `app/model.py` (swings, breuken, `Context4h` top-down, `DailyBias`) en `app/structure_levels.py` (FVG). Verandert daar een regel, dan
 moet dit script mee.
+
+## De kleuren van de app instellen
+
+Rechtsklik op de grafiek, kies Settings.
+- Symbol: Body omhoog #FFFFFF, omlaag #1B2324; Borders en Wick allebei #1B2324.
+- Canvas: Background Solid #FFFFFF; Vert grid lines uit; Horz grid lines #0D1415 op 6% dekking; Scales text #3E4A4C.
+- Onderaan: Template, Save as, "HesPulse".
+Stop is #C42F3D, doel #0F7A45, lijnen #8A9698.
