@@ -248,6 +248,7 @@ class OnePlanOnTheCard(ModelTab):
         self.assertIn("Plan B: Limiet 100,00 · Stop 97,50 · Doel 110,00", card)
         self.assertNotIn("Plan B0", card)
         self.assertIn(f'href="/nu/order/mpoint:{b}"', card)
+        self.assertIn("\"pos\": {", card)                                # het positievak voor Groot, pas nu er een plan is
         self.assertIn("geldig tot ", card)
         self.assertIn("6 uur na de breuk", card)
 

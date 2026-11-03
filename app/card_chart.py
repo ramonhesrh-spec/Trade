@@ -439,6 +439,17 @@ def model_svg(row: dict, candles: list[list], price: Optional[float] = None, big
 
     # De order: van de entry (moment B) tot de rand, en alle labels rechts uit elkaar zoals de ladder.
     ex = x_at(_ts(row.get("entry_at"))) if plan else plot_r
+    # Het positievak zoals op TradingView (CEO 2026-11-03), pas vanaf het moment dat het plan bekend was: risico donker, beloning licht.
+    # Voor A het plan zelf; voor een scenario het ene klare plan (B, R, K of B0) dat de route meegeeft als pos_plan.
+    pp = {"limit": row.get("limit_price"), "stop": row.get("stop_loss"), "take": row.get("take_profit"), "from": ex} if plan else None
+    if pp is None and row.get("pos_plan"):
+        q = row["pos_plan"]
+        pp = {"limit": q.get("limit"), "stop": q.get("stop"), "take": q.get("take"), "from": x_at(_ts(q.get("known_at"))) if q.get("known_at") else None}
+    if pp and pp["limit"] is not None and pp["stop"] is not None:
+        px = max(left, min(pp["from"] if pp["from"] is not None else left, plot_r))
+        boxes = [("mc-pos-risk", pp["limit"], pp["stop"])] + ([("mc-pos-win", pp["limit"], pp["take"])] if pp["take"] is not None else [])
+        out.insert(1, "".join(f'<rect class="{c}" x="{px:.1f}" y="{min(y(a), y(b)):.1f}" width="{max(1.0, plot_r - px):.1f}" '
+                              f'height="{max(1.0, abs(y(a) - y(b))):.1f}"/>' for c, a, b in boxes))
     ys = spread([y(v) for v, _, _ in levels], MODEL_GAP, top=plot_t, bottom=H - 6)
     lines_out = []
     for (v, c, text), ly in zip(levels, ys):

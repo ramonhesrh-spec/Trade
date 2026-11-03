@@ -84,6 +84,7 @@ class LongChart(Base):
             self.assertIn(f">{name}", svg, name)
         self.assertIn(">15m CHoCH<", svg) if self.row["shift_label"] == "CHOCH" else self.assertRegex(svg, r">15m (BOS|MSB)<")
         self.assertEqual(svg.count('class="mc-zone"'), 1)                 # geen overlap met het OB: alleen de gap
+        self.assertEqual((svg.count('class="mc-pos-risk"'), svg.count('class="mc-pos-win"')), (1, 1))   # het positievak van A
         self.assertIn(">SOL · 1u · long<", svg)
         self.assertNotIn("Nu ", svg)
 
@@ -132,7 +133,15 @@ class LongChart(Base):
             self.assertIn(f">{name}", svg)
         for name in ("Limiet", "Stop", "Doel", "15m FVG"):
             self.assertNotIn(f">{name}", svg)
+        self.assertNotIn("mc-pos-", svg)                                   # geen plan, dus geen positievak
         self.check_inside_and_no_overlap(svg)
+        # CEO 2026-11-03: het positievak komt pas als het plan bekend is; hier een klaar B-plan van de route.
+        plan = {"limit": self.row["limit_price"], "stop": self.row["stop_loss"], "take": self.row["take_profit"],
+                "known_at": json.loads(self.row["steps"])["entry"]["known_at"] if json.loads(self.row["steps"]).get("entry") else None}
+        with_plan = card_chart.model_svg({**row, "pos_plan": plan}, self.c1, None)
+        self.assertIn('class="mc-pos-risk"', with_plan)
+        self.assertIn('class="mc-pos-win"', with_plan)
+        self.check_inside_and_no_overlap(with_plan)
 
     def test_big_view_is_the_same_drawing_larger(self):
         big = card_chart.model_svg(self.row, self.c1, None, big=True)

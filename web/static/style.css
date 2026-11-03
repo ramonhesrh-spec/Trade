@@ -3338,3 +3338,6 @@ details.mrow-wrap.is-focus .mrow-body .proof-number { font-size: 44px; }
   font: 600 12px / 1 var(--sans); cursor: pointer; }
 .lc-layer[aria-pressed="true"] { background: var(--ac); border-color: var(--ac); color: var(--s1); }
 .lc-layer:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }
+/* Het positievak op de kaartgrafiek (card_chart.model_svg): risico donker, beloning licht, in inkt zoals de rest. */
+.mc-pos-risk { fill: rgba(27, 35, 36, 0.2); }
+.mc-pos-win { fill: rgba(27, 35, 36, 0.07); }

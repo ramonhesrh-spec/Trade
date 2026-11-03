@@ -291,12 +291,31 @@ def nearest_point(row: dict) -> tuple[Optional[str], Optional[float]]:
     return code, abs(price - level) / price * 100
 
 
+def _unix(stamp) -> Optional[int]:
+    if not stamp:
+        return None
+    try:
+        return int(datetime.fromisoformat(str(stamp)).timestamp())
+    except ValueError:
+        return None
+
+
+def position(limit, stop, take, seen, until) -> dict:
+    """Het positievak voor "Groot" (levelchart.js `pos`, CEO 2026-11-03): pas vanaf het moment dat het plan bekend was, tot de vervaltijd."""
+    return {"limit": limit, "stop": stop, "take": take, "from": _unix(seen), "until": _unix(until)}
+
+
 def scenario_item(row: dict, now: Optional[datetime] = None) -> dict:
     """Moment A als item voor kansen.page: geen order, wel de stappen en de zin waarop we wachten. Met een wachtend B-, B0- of R-plan is hij
     `ready` en blijft hij een volle kaart; anders een korte regel (`compact`) met de afstand tot het dichtste instappunt (CEO 2026-11-03:
     "28 open en moet je heel lang scrollen")."""
     sid = row["id"]
     plan = ready_plan(row, now)
+    chart = scenario_chart(row)
+    if plan:
+        seen = max((s for s in (plan.get("known_at"), row.get("detected_at")) if s), default=None)
+        chart = {**chart, "limit": plan["limit"], "stop": plan["stop"], "take": plan["take"],
+                 "pos": position(plan["limit"], plan["stop"], plan["take"], seen, plan.get("expires_at"))}
     ready = plan is not None
     code, dist = nearest_point(row)
     dist_text = "" if dist is None else f"{dist:.1f}".replace(".", ",") + f"% tot {code}"
@@ -304,7 +323,7 @@ def scenario_item(row: dict, now: Optional[datetime] = None) -> dict:
             "title": f"{row['coin']} {row['direction']}", "state": "scenario", "state_short": f"Plan {plan['code']} klaar" if ready else STATE_SHORT.get(row["status"], "Scenario"), "plan": plan,
             "group": "tegen" if is_counter(row) else "scenarios", "tab": TRADE_TYPE, "trade_type": TRADE_TYPE, "untested": True, "rr_text": "",
             "counter": is_counter(row),
-            "svg_src": f"/api/kaart_svg/{key(sid)}", "chart": scenario_chart(row), "say": waiting_text(row), "steps_done": step_lines(row, now),
+            "svg_src": f"/api/kaart_svg/{key(sid)}", "chart": chart, "say": waiting_text(row), "steps_done": step_lines(row, now),
             "candidates_text": candidate_text(row), "rows": scenario_rows(row), "created_at": row.get("detected_at"),
             "shared_text": f"Ontdekt {when(row.get('discovered_at'), now)}", "origin": f"{LABEL} · context 4u, pools 1u, sweep en shift op 15m",
             "num_text": "", "num_label": "", "num_hook": "distance", "share_lines": [], "model_lines": context_lines(row),

@@ -271,7 +271,9 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
             if p.get("chart"):
                 # "Groot" toont dezelfde niveaus als de kaarttekening (card_chart.model_marks), niet alleen limiet, stop en doel.
                 from app import card_chart
-                p["chart"] = {**p["chart"], "marks": card_chart.model_marks(r, r.get("entry_points"))}
+                p["chart"] = {**p["chart"], "marks": card_chart.model_marks(r, r.get("entry_points")),
+                              "pos": model_card.position(r.get("limit_price"), r.get("stop_loss"), r.get("take_profit"),
+                                                         r.get("entry_detected_at") or r.get("entry_at"), r.get("expires_at"))}
     scenarios = [model_card.scenario_item(r) for r in model_rows if r["status"] in model_card.model.WAIT_STATES]
     # Tegen de dagtrend (B-2026-11-03-11): een eigen groep achter een schakelaar, buiten elke teller, op afstand gesorteerd.
     tegen = sorted((model_card.scenario_item(r) for r in counter_rows), key=lambda s: (s.get("dist_pct") is None, s.get("dist_pct") or 0.0))

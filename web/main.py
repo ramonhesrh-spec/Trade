@@ -1238,7 +1238,8 @@ async def api_kaart_svg(key: str, groot: int = 0, user: dict = Depends(require_l
     if kind == "model":
         points = model_card.entry_points(row, repo.get_model_v1(row["id"]), repo.list_model_entries(scenario_ids=[row["id"]]))
         alts = [p for p in points if p["code"] != "A"]
-        svg = card_chart.model_svg({**row, "alt_entries": alts}, rows, price, big=bool(groot))
+        pos_plan = None if row.get("limit_price") is not None and row.get("entry_detected_at") else model_card.ready_plan({**row, "entry_points": points})
+        svg = card_chart.model_svg({**row, "alt_entries": alts, "pos_plan": pos_plan}, rows, price, big=bool(groot))
     else:
         svg = {"zone": card_chart.zone_radar_svg, "zsweep": card_chart.zone_sweep_svg, "poc": card_chart.poc_radar_svg}[kind](row, rows, price)
     return HTMLResponse(svg, headers={"Cache-Control": "no-store"})

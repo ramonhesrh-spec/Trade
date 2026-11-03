@@ -179,3 +179,13 @@ class LiveStreamsTest(unittest.TestCase):
         self.assertEqual(out["spot"], [{"url": "wss://stream.binance.com:9443/stream?streams=btcusdt@miniTicker/pepeusdt@miniTicker",
                                         "symbols": {"BTCUSDT": ["BTC", 1], "PEPEUSDT": ["PEPE", 1]}}])
         self.assertEqual(len(out["onlyPerp"]), 1)                        # geen lege spotverbinding
+
+
+class PositionBoxEndTest(unittest.TestCase):
+    """Het positievak op Groot eindigt bij de vervaltijd, na de laatste candle. logicalToCoordinate gaf daar een x bij 0, waardoor het vak
+    wegviel (rechts kleiner dan links). Het einde rekent vanaf de laatste candle met de candlebreedte."""
+
+    def test_end_from_last_candle(self):
+        src = (ROOT / "web" / "static" / "levelchart.js").read_text(encoding="utf-8")
+        self.assertIn("xl + (b.end - lastT) / step * (ts.options().barSpacing || 6)", src)
+        self.assertNotIn("ts.logicalToCoordinate(", src)

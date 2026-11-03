@@ -205,6 +205,17 @@
       boxes.push({ low: z.target_low, high: z.target_high, time: null, label: z.target_label, text: green, plate: plate,
                    fill: rgba(green, 0.07, "rgba(51,214,159,0.07)"), edge: rgba(green, 0.45, "rgba(51,214,159,0.45)") });
     }
+    // Het positievak zoals op TradingView (CEO 2026-11-03): pas als het plan bekend is, vanaf dat moment tot de vervaltijd. Risico (instap tot
+    // stop) donkergrijs, beloning (instap tot doel) lichtgrijs; de lijnen met hun prijs tekent setLine al.
+    if (s && s.pos && num(s.pos.limit) && num(s.pos.stop)) {
+      var from = num(s.pos.from) ? originBar(times, s.pos.from, lc.tf) : null;
+      if (num(s.pos.from) && from === null && times.length && s.pos.from >= times[times.length - 1]) from = times[times.length - 1];
+      var ink = css("--mc-ink", "#1b2324");
+      boxes.push({ low: Math.min(s.pos.limit, s.pos.stop), high: Math.max(s.pos.limit, s.pos.stop), time: from, end: s.pos.until, label: null,
+                   fill: rgba(ink, 0.2, "rgba(27,35,36,0.2)"), edge: null });
+      if (num(s.pos.take)) boxes.push({ low: Math.min(s.pos.limit, s.pos.take), high: Math.max(s.pos.limit, s.pos.take), time: from, end: s.pos.until,
+                                        label: null, fill: rgba(ink, 0.07, "rgba(27,35,36,0.07)"), edge: null });
+    }
     // De structuur van dit tijdframe (/api/structuur, app/structure_levels.py) en de niveaus van het model (card_chart.model_marks), zoals een
     // analist ze tekent: lichtpaarse vlakken en dunne lijnen met de naam rechts (CEO 2026-11-03). Premium en discount heel licht eronder.
     var mz = css("--mz", "rgba(167,139,250,0.16)"), mzEdge = css("--mz-edge", "rgba(167,139,250,0.42)"), mzTx = css("--mz-tx", "#cdbdff");
@@ -264,13 +275,26 @@
           var left = x === null ? 0 : Math.max(0, Math.round((x - half) * hr));
           var top = Math.round(Math.min(y1, y2) * vr), h = Math.max(Math.round(Math.abs(y2 - y1) * vr), Math.round(2 * vr));
           var line = Math.max(1, Math.round(hr));
-          if (labels) { drawLabel(ctx, b, left, top, h, W, hr, vr); return; }
+          // Een vak met een einde (het positievak: tot de vervaltijd van het plan) stopt daar, ook als dat na de laatste candle ligt.
+          var right = W;
+          if (num(b.end) && lc.candles.length) {
+            var lastT = lc.candles[lc.candles.length - 1].time, step = TF_SEC[lc.tf] || 900;
+            // Na de laatste candle telt de candlebreedte vanaf die candle; logicalToCoordinate gaf daar een waarde bij 0 en het vak viel weg.
+            var xl = ts.timeToCoordinate(lastT);
+            var xe = b.end <= lastT ? ts.timeToCoordinate(originBar(lc.candles.map(function (c) { return c.time; }), b.end, lc.tf))
+              : xl === null ? null : xl + (b.end - lastT) / step * (ts.options().barSpacing || 6);
+            if (xe !== null) right = Math.min(W, Math.round((xe + half) * hr));
+          }
+          if (right <= left) return;
+          if (labels) { drawLabel(ctx, b, left, top, h, right, hr, vr); return; }
           ctx.fillStyle = b.fill;
-          ctx.fillRect(left, top, W - left, h);
-          ctx.fillStyle = b.edge;
-          ctx.fillRect(left, top, W - left, line);
-          ctx.fillRect(left, top + h - line, W - left, line);
-          if (x !== null) ctx.fillRect(left, top, line, h);
+          ctx.fillRect(left, top, right - left, h);
+          if (b.edge) {
+            ctx.fillStyle = b.edge;
+            ctx.fillRect(left, top, right - left, line);
+            ctx.fillRect(left, top + h - line, right - left, line);
+            if (x !== null) ctx.fillRect(left, top, line, h);
+          }
         });
       });
     }
