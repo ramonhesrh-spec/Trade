@@ -2,6 +2,28 @@
 
 Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
 
+## Ronde 12 (2026-11-03, laat): ordertype achteraf, TradingView-script, case goud
+
+**Gebouwd.**
+- B-2026-11-03-13: `app/entry_compare.py` en `scripts/instap_vergelijking.py --dagen 30`. Per plan drie instappen (limiet, market, stop-order)
+  met dezelfde stop en hetzelfde doel. Uitvoer: netto R per instappunt en het verschil met de limiet met weekinterval. Alleen meting achteraf,
+  geen motor leest het. Test: `tests/test_entry_compare.py`.
+- `tradingview/hespulse_structuur.pine` (Pine v6) met `tradingview/README.md`: dag-richting, 4u-range top-down, trend per tijdframe,
+  BOS/CHoCH, open FVG en positievak uit ingeplakte niveaus. Daarna in zes stappen bijgewerkt: leesbaar op donker, vast aan de prijsschaal,
+  candlenummers in plaats van tijden, kopie van Groot in de kleuren van de app, prijs en afkortingen in elk label, dichte labels op één regel.
+  Het script is een benadering; de app blijft de bron. Verandert een swing-, breuk- of rangeregel, dan moet het script mee.
+- Fout hersteld: de placebo-meting liep vast (`KeyError`) op een instappunt zonder id en blokkeerde de modelmeting op Bewijs.
+
+**Onderzocht.**
+- Case goud 15m long tegen de dag in (`cases/2026-11-03-goud-15m-long.md`). Niveaus van de 1u-schermafdruk gaven 2,2R; de eerste aflezing is
+  verbeterd. Hypothese H4 staat geparkeerd in `hypotheses.md`.
+
+**Niet aangetoond.** Of limiet, market of stop-order beter is: het script moet nog op de VPS draaien.
+
+**Volgende stap.**
+- CEO op de VPS: `scripts/instap_vergelijking.py --dagen 30` draaien en de uitvoer delen.
+- Na de eerste 30 trades per punt de drie tabellen onder "Controle op de cijfers" op Bewijs lezen (ronde 11).
+
 ## Ronde 11 (2026-11-03, avond): vier controles op de cijfers, alleen meting
 
 **Gebouwd (B-2026-11-03-12, preregistratie laatste aanvulling).** Strenge vulling (doortik) naast de gewone; MAE/MFE over de hele looptijd en
