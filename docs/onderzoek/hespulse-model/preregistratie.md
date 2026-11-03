@@ -890,3 +890,30 @@ Nu is het bekend-moment de candle waarop de motor het punt vaststelt. Regressiet
 
 **Bevriezing opnieuw.** De bevriezing van B-2026-11-03-09 begint opnieuw bij de eerste cyclus met deze code (`settings`
 `model_freeze_at_v2`). Weer drie weken.
+
+---
+
+## Aanvullend besluit CEO 2026-11-03 (middag): stille arm "tegen de dagtrend" en afwijsredenen (vooraf vast)
+
+**Aanleiding.** Onafhankelijke audit (CEO, 3 november): de top-down regel sluit een omkeer tegen de dag uit, ook als de lagere tijdframes
+een duidelijke omkeer tonen (BTC rond 76.600 en 77.100, de PUMP-long van Leo). Dat is nu nergens gemeten. De CEO koos optie 2: zichtbaar,
+zonder melding.
+
+**Regel "tegen de dagtrend" (stil).**
+1. Alleen met dagcandles. De dag wijst een richting (laatste dagbreuk).
+2. De 4u-range is die van de laatste 4u-breuk in welke richting ook (de oude regel), maar alleen als die breuk tegen de dag in gaat. Een
+   long tegen een dalende dag, een short tegen een stijgende.
+3. Daarna gelden alle regels van het model ongewijzigd: pools, A, B, B0, R, K, V1 en P, stop, doel, geldigheid, vulling en uitkomst.
+4. Herkenbaar aan `range_id` die begint met `tegen:`. Geen melding, geen moment B, geen signaal of journaal. Ook A wordt een stil punt in
+   `model_entries`.
+5. Op Kansen achter een schakelaar "Tegen de dagtrend", met het label "tegen de dag · ongetest · geen melding" en zonder orderknop. Op
+   Groot als laag "Tegen de trend".
+6. De meting staat apart op Bewijs en in de nachtexport. Ze telt nergens mee in de hoofdcijfers of in de stopregel per punt.
+
+**Beslisregel.** Na de bevriezing: per instappunt dezelfde maten als de gewone arm. Als de netto R van de tegen-arm na 50 afgeronde
+trades per punt een weekinterval boven 0 heeft, leg ik voor om dat punt zichtbaar met melding toe te voegen. Anders blijft het stil.
+
+**Afwijsredenen.** Per scenario worden de logs van B, B0, R en K bewaard (`alt_log`), naast de mislukte pogingen van A. Bewijs telt per
+instappunt waarom een poging géén plan werd. Alleen meting.
+
+**Geen wijziging van de gewone regels.** De bevriezing (`model_freeze_at_v2`) loopt door.

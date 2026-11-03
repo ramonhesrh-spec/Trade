@@ -145,11 +145,12 @@ async def _announce_alt(scenario_id: int, coin: str, direction: str, e: dict, st
 
 
 def store_entries(scenario_id: int, coin: str, sc: dict, stamp: pd.Timestamp, new: Optional[list] = None,
-                  htf: Optional[Callable[[str, float], Optional[str]]] = None) -> int:
+                  htf: Optional[Callable[[str, float], Optional[str]]] = None, counter: bool = False) -> int:
     """Legt de instappunten B, B0 en P vast zodra model.scenarios ze vindt (aanvullend besluit 2026-11-03). Een punt dat al verlopen was
     voordat de motor hem zag, komt er niet in: hij was nooit live. Geeft het aantal nieuwe punten."""
     n = 0
-    for key, code in ENTRY_CODES.items():
+    # Tegen de dagtrend (B-2026-11-03-11) wordt ook A een stil punt: geen kaart met order, geen signaal, geen melding.
+    for key, code in ({**ENTRY_CODES, "entry": "A"} if counter else ENTRY_CODES).items():
         e = sc.get(key)
         if not e:
             continue
@@ -196,7 +197,7 @@ def track_entry(e: dict, b5: pd.DataFrame, breaks: list, stamp: pd.Timestamp) ->
 
 
 async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[float], btc: Optional[Callable[[], dict]] = None,
-               htf: Optional[Callable[[str, float], Optional[str]]] = None) -> dict:
+               htf: Optional[Callable[[str, float], Optional[str]]] = None, counter: bool = False) -> dict:
     """btc: geeft de BTC-context van dit moment (btc_context.measure): kenmerk op de kaart en bij moment B de BTC-poort (MODEL_BTC_GATE). Bewaart wat model.scenarios vond. Een scenario dat al voorbij was voordat de motor het zag (bij de eerste start, of na een storing), komt
     niet in de app: het was nooit live. Geeft tellers terug voor de hartslag."""
     counts = {"nieuw": 0, "entry": 0}
@@ -221,7 +222,12 @@ async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[
                                        "htf": htf(sc["direction"], v1["limit"]) if htf else None})
             stored = repo.get_model_scenario(sid)
         fresh_points: list = []
-        store_entries(stored["id"], coin, sc, stamp, fresh_points, htf)
+        store_entries(stored["id"], coin, sc, stamp, fresh_points, htf, counter)
+        if counter:
+            # Alleen bijwerken en stil meten: nooit moment B, nooit een melding (B-2026-11-03-11).
+            if stored["status"] not in repo.MODEL_FINAL:
+                repo.sync_model_scenario(stored["id"], row)
+            continue
         for e in fresh_points:
             if e["code"] in LOUD_CODES and await _announce_alt(stored["id"], coin, sc["direction"], e, stamp, price, btc):
                 counts["entry"] += 1
@@ -254,7 +260,7 @@ async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[
                 counts["entry"] += 1
                 await _announce_entry(fresh, stamp)
     # Een lopend scenario dat de berekening niet meer ziet: zijn range viel uit het candlevenster (ouder dan 10 dagen), dus de bias is weg.
-    for r in repo.list_model_scenarios(statuses=model.WAIT_STATES):
+    for r in repo.list_model_scenarios(statuses=model.WAIT_STATES, counter=counter):
         if r["coin"] == coin and r["range_id"] not in seen:
             repo.end_model_scenario(r["id"], "context_weg", stamp.isoformat())
     return counts
@@ -280,7 +286,11 @@ async def scan(now: Optional[datetime] = None) -> None:
             scs = await asyncio.to_thread(model.scenarios, frames, stamp, _pocs(coin, stamp))
             coin15 = frames["15m"]
             htf = await _htf_measure(coin, frames.get("1d"), stamp)
-            counts = await sync(coin, scs, stamp, await _price(coin, stamp), btc=lambda: btc_context.measure(coin15, btc15, btc4, stamp), htf=htf)
+            price = await _price(coin, stamp)
+            counts = await sync(coin, scs, stamp, price, btc=lambda: btc_context.measure(coin15, btc15, btc4, stamp), htf=htf)
+            # De stille arm tegen de dagtrend: dezelfde candles, geen meldingen (B-2026-11-03-11).
+            scs_tegen = await asyncio.to_thread(model.scenarios, frames, stamp, _pocs(coin, stamp), True)
+            await sync(coin, scs_tegen, stamp, price, btc=lambda: btc_context.measure(coin15, btc15, btc4, stamp), htf=htf, counter=True)
             new, entries, checked = new + counts["nieuw"], entries + counts["entry"], checked + 1
         except Exception:
             failed += 1

@@ -113,3 +113,35 @@ class FreezeSplitTest(unittest.TestCase):
         rep = mm.report([self.sc(2, "2026-11-02T20:00:00+00:00", "2026-11-02T20:00:50+00:00")], [], [], 0.06, freeze_at=self.F)
         self.assertEqual(rep["apart"]["scenarios"], 1)
         self.assertEqual(rep["funnel"]["ontdekt"], 0)
+
+
+class CounterSeparateTest(unittest.TestCase):
+    """B-2026-11-03-11: de arm tegen de dagtrend telt nergens mee in de hoofdcijfers en de stopregel, en staat apart."""
+
+    def entry(self, code, rid, r):
+        return {"code": code, "scenario_range_id": rid, "outcome": "take_profit" if r > 0 else "stop_loss", "r_gross": r, "limit_price": 100.0,
+                "stop_loss": 99.0, "direction": "long", "filled_at": "2026-11-04T10:00:00+00:00", "outcome_at": "2026-11-04T12:00:00+00:00",
+                "known_at": "2026-11-04T09:00:00+00:00", "detected_at": "2026-11-04T09:00:30+00:00"}
+
+    def test_tegen_apart_en_niet_in_de_stopregel(self):
+        scs = [{"id": 1, "range_id": "long:x", "discovered_at": "2026-11-04T08:00:00+00:00", "detected_at": "2026-11-04T08:00:30+00:00"},
+               {"id": 2, "range_id": "tegen:long:y", "discovered_at": "2026-11-04T08:00:00+00:00", "detected_at": "2026-11-04T08:00:30+00:00"}]
+        ents = [self.entry("B", "long:x", 2.0), self.entry("B", "tegen:long:y", -1.0), self.entry("A", "tegen:long:y", 3.0)]
+        rep = mm.report(scs, [], [], 0.0, entries=ents)
+        (b,) = [x for x in rep["instappunten"] if x["code"] == "B"]
+        self.assertEqual((b["arm"]["n"], b["arm"]["mean"]), (1, 2.0))               # alleen de gewone B
+        self.assertEqual(rep["funnel"]["ontdekt"], 1)
+        self.assertEqual(rep["tegen"]["scenarios"], 1)
+        tegen = {x["code"]: x["arm"]["n"] for x in rep["tegen"]["punten"]}
+        self.assertEqual((tegen["A"], tegen["B"]), (1, 1))
+        self.assertEqual(len(mm.counted_entries(ents, None)), 1)                     # de stopregel ziet alleen de gewone
+
+
+class ReasonsTest(unittest.TestCase):
+    """Audit 2026-11-03: per instappunt waarom een poging géén plan werd; 'gevonden' telt niet als afwijzing."""
+
+    def test_telt_redenen_per_punt(self):
+        sc = {"steps": json.dumps({"attempts": [{"reden": "geen_shift"}, {"reden": "geen_shift"}, {"reden": "run"}]}),
+              "alt_log": json.dumps({"B": [{"wat": "gevonden"}, {"wat": "niet_in_premium"}], "K": [{"wat": "geen_shift"}]})}
+        got = {(x["code"], x["reden"]): x["n"] for x in mm.reasons([sc, {"steps": None, "alt_log": None}])}
+        self.assertEqual(got, {("A", "geen_shift"): 2, ("A", "run"): 1, ("B", "niet_in_premium"): 1, ("K", "geen_shift"): 1})

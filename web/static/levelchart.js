@@ -15,6 +15,10 @@
   var MAX_LIVE = 8;
   var CANDLE_LIMIT = 60;            // 60 candles: op een telefoon blijft elke candle zichtbaar breed genoeg
   var REFRESH_MS = 60000;
+  // Lagen op "Groot" (CEO 2026-11-03: "het moet wel overzichtelijk blijven op de grafiek"): structuur, de instappunten van het model en de
+  // stille arm tegen de dagtrend, elk aan of uit. Alleen weergave; de keuze blijft op dit toestel.
+  var LAYERS = { struct: true, punten: true, tegen: false };
+  try { var savedLayers = JSON.parse(localStorage.getItem("hp_lagen") || "null"); if (savedLayers) Object.assign(LAYERS, savedLayers); } catch (e) { /* standaard */ }
   var AREA_ALPHA = 0.07;            // risico- en winstvlak: zacht, de candles en zones moeten erdoor leesbaar blijven
   var FULL_TFS = ["15m", "1h", "4h", "1d"];
   var TF_TEXT = { "15m": "15m", "1h": "1u", "4h": "4u", "1d": "D" };
@@ -205,7 +209,7 @@
     // analist ze tekent: lichtpaarse vlakken en dunne lijnen met de naam rechts (CEO 2026-11-03). Premium en discount heel licht eronder.
     var mz = css("--mz", "rgba(167,139,250,0.16)"), mzEdge = css("--mz-edge", "rgba(167,139,250,0.42)"), mzTx = css("--mz-tx", "#cdbdff");
     var red = css("--red", "#f2685c"), clear = "rgba(0,0,0,0)";
-    var st = lc.struct || { lines: [], zones: [] };
+    var st = LAYERS.struct && lc.struct ? lc.struct : { lines: [], zones: [] };
     // Zoals de kaart (CEO 2026-11-03: "zet een kleine afkorting op het punt zelf, niet alles naar rechts", "alle kleuren hetzelfde"): grijze
     // lijnen vanaf hun punt met een korte naam daar (SH, SL, BOS, FVG, OB, EQ), grijze vlakken, geen paars, geen premium/discount-kleur.
     var lineC = css("--mc-line", "#8a9698"), inkC = css("--mc-ink", "#1b2324");
@@ -219,12 +223,17 @@
       hl.push({ value: sz.high, time: t, label: sz.short || sz.label, noLine: true, color: lineC, text: inkC });
     });
     // Van het model alleen wat bij deze setup hoort: de andere instappunten en de sweep, rechts met hun letter.
-    (s && s.marks || []).forEach(function (m) {
+    (s && LAYERS.punten && s.marks || []).forEach(function (m) {
       if (m.kind !== "alt" && m.kind !== "sweep") return;
       // Een instappunt begint op het moment dat de app hem zag; vóór die tijd stond hij er niet.
       hl.push({ value: m.value, time: !num(m.time) || !times.length ? null : m.time >= times[times.length - 1] ? times[times.length - 1]
                 : originBar(times, m.time, lc.tf), label: m.label, color: accent, text: accent,
                 dash: true, right: true });
+    });
+    // Tegen de dagtrend: alleen de limieten, grijs gestippeld, met "tegen" voor de letter, vanaf het moment dat de app ze zag.
+    if (LAYERS.tegen) (lc.tegen || []).forEach(function (t) {
+      hl.push({ value: t.limit, time: !num(t.time) || !times.length ? null : t.time >= times[times.length - 1] ? times[times.length - 1]
+                : originBar(times, t.time, lc.tf), label: "tegen " + t.code, color: lineC, text: lineC, dash: true, right: true });
     });
     lc.hlines = hl;
     lc.boxes = boxes;
@@ -382,8 +391,17 @@
       } else lc.chart.timeScale().fitContent();
       syncBand(lc);
       syncAreas(lc);
-      if (lc.full) { syncZones(lc); loadStruct(lc); }
+      if (lc.full) { syncZones(lc); loadStruct(lc); loadTegen(lc); }
     });
+  }
+
+  function loadTegen(lc) {
+    var coin = lc.el.getAttribute("data-coin");
+    if (!coin || !LAYERS.tegen) return;
+    fetch("/api/tegen/" + encodeURIComponent(coin), { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (lc.dead || !d) return; lc.tegen = d.points || []; syncZones(lc); })
+      .catch(function () {});
   }
 
   // Per tijdframe opnieuw: wisselen naar 15m, 1u of 4u maakt de grafiek opnieuw (show), en dan komt de structuur van dat tijdframe.
@@ -566,6 +584,24 @@
           return t.word + " " + ({ bullish: "omhoog", bearish: "omlaag", onbekend: "onbekend" }[t.trend] || "geen breuk") + (t.herstel ? ", herstel tegen de dag in" : ""); }).join(", "));
       })
       .catch(function () { trend.textContent = "Trend nu niet beschikbaar"; });
+    var layers = node("div", "lc-layers");
+    layers.setAttribute("role", "group");
+    layers.setAttribute("aria-label", "Lagen op de grafiek");
+    [["struct", "Structuur"], ["punten", "Instappunten"], ["tegen", "Tegen de trend"]].forEach(function (l) {
+      var b = node("button", "lc-layer", l[1]);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(!!LAYERS[l[0]]));
+      b.addEventListener("click", function () {
+        LAYERS[l[0]] = !LAYERS[l[0]];
+        b.setAttribute("aria-pressed", String(LAYERS[l[0]]));
+        try { localStorage.setItem("hp_lagen", JSON.stringify(LAYERS)); } catch (e) { /* alleen nu */ }
+        var lcx = full && full.el._lc;
+        if (!lcx) return;
+        if (l[0] === "tegen" && LAYERS.tegen && !lcx.tegen) loadTegen(lcx);
+        syncZones(lcx);
+      });
+      layers.appendChild(b);
+    });
     var el = node("div", "level-chart");
     ["data-coin", "role", "aria-label"].forEach(function (a) { if (src.hasAttribute(a)) el.setAttribute(a, src.getAttribute(a)); });
     el._spec = s;
@@ -591,6 +627,7 @@
     foot.appendChild(legend);
     dlg.appendChild(head);
     dlg.appendChild(trend);
+    dlg.appendChild(layers);
     dlg.appendChild(el);
     dlg.appendChild(foot);
     document.body.appendChild(dlg);

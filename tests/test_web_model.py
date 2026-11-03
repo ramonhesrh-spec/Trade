@@ -281,3 +281,43 @@ class FreezeOnBewijs(ModelTab):
 
     def test_tegenvoorbeeld_zonder_bevriezing_geen_regel(self):
         self.assertNotIn("Instapregels bevroren sinds", self.client.get("/bewijs").text)
+
+
+class CounterOnKansen(ModelTab):
+    """B-2026-11-03-11: de arm tegen de dagtrend staat achter een schakelaar, met label, zonder orderknop en buiten de tellers."""
+
+    def setUp(self):
+        super().setUp()
+        steps = {"steps": [{"stap": "ontdekt", "at": (NOW - pd.Timedelta(hours=2)).isoformat()}], "attempts": []}
+        self.counter = repo.insert_model_scenario({"coin": "DOT", "direction": "long", "range_id": "tegen:long:DOT", "status": "wacht_sweep",
+                                                   "range_low": 95.0, "range_high": 110.0, "eq": 102.5, "pool_level": 98.0, "candidates": "[]",
+                                                   "steps": json.dumps(steps), "discovered_at": (NOW - pd.Timedelta(hours=2)).isoformat(),
+                                                   "detected_at": (NOW - pd.Timedelta(hours=2)).isoformat(), "updated_at": NOW.isoformat()})
+        known = (NOW - pd.Timedelta(minutes=20)).isoformat()
+        repo.insert_model_entry(self.counter, {"code": "A", "coin": "DOT", "direction": "long", "known_at": known, "detected_at": known,
+                                               "limit_price": 99.0, "stop_loss": 97.5, "take_profit": 110.0, "rr": 7.0,
+                                               "expires_at": (NOW + pd.Timedelta(hours=5)).isoformat(), "basis": "{}"})
+
+    def test_schakelaar_label_geen_orderknop(self):
+        html = self.html()
+        self.assertIn("data-tegen-toggle", html)
+        self.assertIn("Tegen de dagtrend", html)
+        start = html.rindex("<article", 0, html.index(f'id="radar-model-{self.counter}"'))
+        card = html[start:html.index("</article>", start)]
+        self.assertIn("Tegen de dagtrend · ongetest · geen melding", card)
+        self.assertIn("Plan A klaar", card)
+        self.assertIn("tegen de dagtrend in", card)
+        self.assertNotIn("met de dagtrend mee", card)
+        self.assertNotIn("/nu/order/", card)
+        self.assertIn("Scenario, wacht op bevestiging", html)            # alleen SOL; de tegen-arm telt niet mee
+
+    def test_tegenvoorbeeld_zonder_tegen_scenario_geen_schakelaar(self):
+        repo.update_model_entry(repo.list_model_entries()[0]["id"], state="vervallen")
+        with db.session() as conn:
+            conn.execute("UPDATE model_scenarios SET status = 'context_weg' WHERE id = ?", (self.counter,))
+        self.assertNotIn("data-tegen-toggle", self.html())
+
+    def test_api_geeft_de_punten_voor_groot(self):
+        pts = self.client.get("/api/tegen/DOT").json()["points"]
+        self.assertEqual([(p["code"], p["limit"]) for p in pts], [("A", 99.0)])
+        self.assertEqual(self.client.get("/api/tegen/SOL").json()["points"], [])

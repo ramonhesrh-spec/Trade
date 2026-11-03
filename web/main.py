@@ -771,8 +771,16 @@ async def _kansen_page(user: dict, skipped=()) -> dict:
     model_rows = [{**r, "price": mprices.get(r["coin"]),
                    "entry_points": model_card.entry_points(r, repo.get_model_v1(r["id"]), [e for e in extra if e["scenario_id"] == r["id"]])}
                   for r in model_rows]
+    # Tegen de dagtrend: lopende scenario's, en afgeronde met een punt dat nog wacht (A is daar een stil punt).
+    counter = repo.list_model_scenarios(counter=True)
+    c_extra = repo.list_model_entries(("wacht",), scenario_ids=[r["id"] for r in counter])
+    waiting_ids = {e["scenario_id"] for e in c_extra}
+    counter = [r for r in counter if r["status"] in model.WAIT_STATES or r["id"] in waiting_ids]
+    cprices = await _cached_prices({r["coin"] for r in counter}) if counter else {}
+    counter_rows = [{**r, "price": cprices.get(r["coin"]), "entry_points": model_card.entry_points(r, None, [e for e in c_extra if e["scenario_id"] == r["id"]])}
+                    for r in counter]
     return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped, repo.list_hidden_kansen(user["id"]), ended, model_rows=model_rows,
-                       default_tab=model.TRADE_TYPE if focus.model_on() else None)
+                       default_tab=model.TRADE_TYPE if focus.model_on() else None, counter_rows=counter_rows)
 
 
 def _structure_trade_svg(signal: dict, price: Optional[float]) -> Markup:
@@ -791,7 +799,7 @@ async def smc_page(request: Request, tab: str = "", user: dict = Depends(require
     if tab in {t["key"] for t in page["tabs"]}:
         page["active"] = tab
     # Ook de verborgen kaarten krijgen hun detailblad: Toon weer zet de kaart terug zonder te herladen (kaarten.js).
-    items = [it for t in page["tabs"] for it in t["plans"] + t["scenarios"] + t["trades"] + t["hidden_cards"]]
+    items = [it for t in page["tabs"] for it in t["plans"] + t["scenarios"] + t.get("tegen", []) + t["trades"] + t["hidden_cards"]]
     return templates.TemplateResponse(request, "smc.html", {
         "user": user, "page": page, "items": items, "context": _context_lines({it["coin"] for it in items}),
         **await _structure_extras(user)}, headers=_viewer_header(user))
@@ -1151,6 +1159,22 @@ async def api_structuur(coin: str, tf: str = "1h", user: dict = Depends(require_
     return structure_levels.levels(rows, tf, now, bias=bias)
 
 
+@app.get("/api/tegen/{coin}")
+async def api_tegen(coin: str, user: dict = Depends(require_login)):
+    """De wachtende punten van de stille arm tegen de dagtrend voor één coin (B-2026-11-03-11), voor de laag "Tegen de trend" op Groot.
+    Alleen weergave; nooit een melding."""
+    coin = coin.upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,12}", coin):
+        raise HTTPException(status_code=422)
+    pts = [e for e in repo.list_model_entries(("wacht",)) if e["coin"] == coin and str(e.get("scenario_range_id") or "").startswith(model.COUNTER_PREFIX)]
+    out = []
+    for e in pts:
+        seen = max(datetime.fromisoformat(e["known_at"]), datetime.fromisoformat(e["detected_at"]))
+        out.append({"code": e["code"], "direction": e["direction"], "limit": e["limit_price"], "stop": e["stop_loss"], "take": e["take_profit"],
+                    "time": int(seen.timestamp())})
+    return {"coin": coin, "points": out}
+
+
 @app.get("/api/trend/{coin}")
 async def api_trend(coin: str, user: dict = Depends(require_login)):
     """De trend per tijdframe (dag, 4u, 1u, 15m) voor de kop van "Groot": de richting van de laatste structuurbreuk op gesloten candles
@@ -1298,7 +1322,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
     # Schaduwvarianten (app/shadow.py) zijn een meting voor de CEO: leerlingen zien ze niet.
     shadow_lines = shadow.bewijs_lines() if is_ceo(user) else {}
     # HesPulse-model (app/model_measure.py): de meting voor de eerste evaluatie voor iedereen, de vergelijkingen V1-V3 alleen voor de CEO.
-    scenarios = repo.list_model_scenarios()
+    scenarios = repo.list_model_scenarios(counter=None)
     model_report = model_measure.report(scenarios, repo.list_model_v1() if is_ceo(user) else [], rows, config.TRACK_RECORD_COST_PCT,
                                         ceo=is_ceo(user), entries=repo.list_model_entries(), freeze_at=repo.model_freeze_at()) if scenarios else None
     return templates.TemplateResponse(request, "bewijs.html", {

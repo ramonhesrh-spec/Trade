@@ -4077,12 +4077,12 @@ def revert_shadow(variant_id: str, at_iso: str, note: str) -> int:
 # ---------------------------------------------------------------------------
 
 _MODEL_NEW_COLS = ("coin", "direction", "range_id", "status", "range_low", "range_high", "eq", "pool_level", "candidates", "steps",
-                   "discovered_at", "detected_at", "sweep_at", "shift_at", "updated_at", "candle_market", "btc_context")
+                   "discovered_at", "detected_at", "sweep_at", "shift_at", "updated_at", "candle_market", "btc_context", "alt_log")
 # Wat een nieuwe berekening van een lopend scenario mag bijwerken. Wat het moment van vastleggen draagt (detected_at, entry_detected_at),
 # de vulling en de meldvlag schrijft alleen de motor zelf, één keer.
 _MODEL_SYNC_COLS = ("status", "steps", "sweep_at", "shift_at", "entry_at", "ended_at", "limit_price", "stop_loss", "take_profit", "rr",
                     "zone_low", "zone_high", "target_kind", "target_text", "ob_overlap", "poc_samenval", "shift_label", "extreme", "expires_at",
-                    "btc_context")
+                    "btc_context", "alt_log")
 MODEL_FINAL = ("afgerond", "context_weg", "geen_pool")
 
 
@@ -4115,9 +4115,17 @@ def sync_model_scenario(scenario_id: int, fields: dict, entry_detected_at: Optio
         return False
 
 
-def list_model_scenarios(statuses: Optional[tuple[str, ...]] = None, entry_states: Optional[tuple[str, ...]] = None) -> list[dict]:
-    """Zonder filter: alles. statuses filtert op het scenario, entry_states op de limiet na moment B."""
+COUNTER_LIKE = "tegen:%"          # model.COUNTER_PREFIX: de stille arm tegen de dagtrend (B-2026-11-03-11)
+
+
+def list_model_scenarios(statuses: Optional[tuple[str, ...]] = None, entry_states: Optional[tuple[str, ...]] = None,
+                         counter: Optional[bool] = False) -> list[dict]:
+    """statuses filtert op het scenario, entry_states op de limiet na moment B. counter: False (standaard) alleen de gewone scenario's,
+    True alleen die tegen de dagtrend, None allebei. De standaard houdt de tegen-arm uit elke weergave en telling die er niet om vraagt."""
     where, args = [], []
+    if counter is not None:
+        where.append("range_id NOT LIKE ?" if not counter else "range_id LIKE ?")
+        args.append(COUNTER_LIKE)
     if statuses:
         where.append(f"status IN ({', '.join('?' for _ in statuses)})")
         args += list(statuses)
@@ -4226,9 +4234,9 @@ def update_model_v1(scenario_id: int, **fields) -> None:
 def list_model_v1(states: Optional[tuple[str, ...]] = None) -> list[dict]:
     with db.session() as conn:
         if states:
-            q = f"SELECT v.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at FROM model_v1 v JOIN model_scenarios m ON m.id = v.scenario_id WHERE v.state IN ({', '.join('?' for _ in states)}) ORDER BY v.scenario_id"
+            q = f"SELECT v.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at, m.range_id AS scenario_range_id FROM model_v1 v JOIN model_scenarios m ON m.id = v.scenario_id WHERE v.state IN ({', '.join('?' for _ in states)}) ORDER BY v.scenario_id"
             return [dict(r) for r in conn.execute(q, states).fetchall()]
-        return [dict(r) for r in conn.execute("SELECT v.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at FROM model_v1 v "
+        return [dict(r) for r in conn.execute("SELECT v.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at, m.range_id AS scenario_range_id FROM model_v1 v "
                                               "JOIN model_scenarios m ON m.id = v.scenario_id ORDER BY v.scenario_id").fetchall()]
 
 
@@ -4263,7 +4271,8 @@ def list_model_entries(states: Optional[tuple[str, ...]] = None, scenario_ids: O
             return []
         where.append(f"e.scenario_id IN ({', '.join('?' for _ in scenario_ids)})")
         args += list(scenario_ids)
-    q = ("SELECT e.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at FROM model_entries e JOIN model_scenarios m ON m.id = e.scenario_id"
+    q = ("SELECT e.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at, m.range_id AS scenario_range_id FROM model_entries e "
+         "JOIN model_scenarios m ON m.id = e.scenario_id"
          + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY e.scenario_id, e.code")
     with db.session() as conn:
         return [dict(r) for r in conn.execute(q, args).fetchall()]
@@ -4287,7 +4296,7 @@ def list_ended_model(since_iso: str) -> list[dict]:
     with db.session() as conn:
         rows = conn.execute("""SELECT id, coin, direction, ended_at, COALESCE(CASE WHEN entry_state != 'wacht' AND entry_state != 'gevuld'
                                       THEN entry_state END, status) AS state
-                               FROM model_scenarios WHERE ended_at >= ? AND (status IN ('context_weg', 'geen_pool')
+                               FROM model_scenarios WHERE ended_at >= ? AND range_id NOT LIKE 'tegen:%' AND (status IN ('context_weg', 'geen_pool')
                                      OR entry_state IN ('vervallen', 'weggelopen', 'context_weg', 'niet_vulbaar', 'btc_tegen'))
                                ORDER BY ended_at DESC""", (since_iso,)).fetchall()
         return [{**dict(r), "kind": "hespulse_model"} for r in rows]

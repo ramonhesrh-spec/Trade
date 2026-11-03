@@ -513,6 +513,37 @@ class TopDownTest(unittest.TestCase):
         ts = fr["15m"]["timestamp"]
         NoLookaheadTest().assert_prefix(fr, [ts.iloc[k] + pd.Timedelta(minutes=15) for k in range(330, len(ts), 17)])
 
+    # B-2026-11-03-11: de stille arm "tegen de dagtrend". Dezelfde regels op de 4u-range van een breuk tegen de dag in.
+    def test_tegen_de_dag_geeft_de_long_die_top_down_tegenhoudt(self):
+        fr = S.frames(base_rows())
+        fr["1d"] = daily_trend(False)                                     # dag omlaag: top-down geen long
+        self.assertEqual(longs(M.scenarios(fr, end_of(fr))), [])
+        (sc,) = longs(M.scenarios(fr, end_of(fr), counter=True))
+        self.assertTrue(sc["range_id"].startswith(M.COUNTER_PREFIX))
+        (old,) = longs(run(base_rows()))                                  # zelfde regels als zonder dag
+        self.assertAlmostEqual(sc["entry"]["limit"], old["entry"]["limit"])
+
+    def test_tegenvoorbeelden_tegen_de_dag(self):
+        fr = S.frames(base_rows())
+        fr["1d"] = daily_trend(True)                                      # dag omhoog: de long is gewoon, niet tegen de dag
+        self.assertEqual(longs(M.scenarios(fr, end_of(fr), counter=True)), [])
+        self.assertEqual(M.scenarios(S.frames(base_rows()), end_of(S.frames(base_rows())), counter=True), [])   # zonder dag niets
+
+    def test_tegen_de_dag_is_prefix_vast(self):
+        fr = S.frames(random_rows(3))
+        b15 = fr["15m"]
+        fr["1d"] = b15.set_index("timestamp").resample("1D").agg({"open": "first", "high": "max", "low": "min", "close": "last",
+                                                                  "volume": "sum"}).dropna().reset_index()
+        ts = b15["timestamp"]
+        full = M.scenarios(fr, end_of(fr), counter=True)
+        self.assertTrue(full, "de reeks moet scenario's tegen de dag opleveren, anders toetst dit niets")
+        for cut in [ts.iloc[k] + pd.Timedelta(minutes=15) for k in range(900, len(ts), 307)]:
+            part = M.scenarios(S.cut_frames(fr, cut), cut, counter=True)
+            want = [s for s in full if s["discovered_at"] <= cut]
+            self.assertEqual([s["range_id"] for s in part], [s["range_id"] for s in want])
+            for p, w in zip(part, want):
+                self.assertEqual(M.known_until(p, cut), M.known_until(w, cut))
+
     def test_random_walks_met_dag_blijven_prefix_vast(self):
         nt = NoLookaheadTest()
         for seed in (1, 3, 5):

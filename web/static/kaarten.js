@@ -388,3 +388,25 @@
   revealHashed();
   window.addEventListener("hashchange", revealHashed);
 })();
+
+// Tegen de dagtrend (B-2026-11-03-11): standaard dicht; de schakelaar onthoudt de keuze op dit toestel. Alleen weergave.
+(function () {
+  if (!document.querySelector("[data-tegen-toggle]")) return;      // alleen op Kansen met een groep tegen de dagtrend
+  var KEY = "hp_tegen", on = false;
+  try { on = localStorage.getItem(KEY) === "1"; } catch (e) { /* privévenster: dicht */ }
+  function apply() {
+    document.querySelectorAll("[data-tegen-toggle]").forEach(function (b) {
+      b.setAttribute("aria-checked", on ? "true" : "false");
+      var list = b.closest("[data-kt-group]").querySelector("[data-kt-tegen]");
+      if (list) list.hidden = !on;
+    });
+  }
+  document.addEventListener("click", function (e) {
+    var b = e.target.closest && e.target.closest("[data-tegen-toggle]");
+    if (!b) return;
+    on = !on;
+    try { localStorage.setItem(KEY, on ? "1" : "0"); } catch (err) { /* geen opslag: alleen nu */ }
+    apply();
+  });
+  apply();
+})();

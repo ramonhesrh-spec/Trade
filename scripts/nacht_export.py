@@ -134,7 +134,7 @@ def build_export(now: datetime, stop_fetch: Callable = _stop_fetch, fetch_4h: Ca
         "context_4u": context_table(rows),
         "schaduw": shadow.export_rows(),
         # HesPulse-model (preregistratie §8): uitvoerbaarheid, trechter, N_eff, drawdown, zonder de beste 5% en de vergelijkingen V1-V3.
-        "model": model_measure.jsonable(model_measure.report(repo.list_model_scenarios(), repo.list_model_v1(),
+        "model": model_measure.jsonable(model_measure.report(repo.list_model_scenarios(counter=None), repo.list_model_v1(),
                                                              repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT, ceo=True,
                                                              entries=repo.list_model_entries(), freeze_at=repo.model_freeze_at())),
     }
@@ -195,6 +195,12 @@ def markdown(data: dict) -> str:
         for x in m.get("hogere_tf") or []:
             lines.append(f"- {x['label']}: met {x['met']['n']} netto {_r(x['met']['mean'])}, zonder {x['zonder']['n']} netto "
                          f"{_r(x['zonder']['mean'])}, onbekend {x['onbekend']}")
+        if m.get("redenen"):
+            lines.append("- Waarom geen plan: " + "; ".join(f"{x['code']} {x['tekst']} {x['n']}" for x in m["redenen"][:12]))
+        tg = m.get("tegen") or {}
+        if tg.get("scenarios"):
+            lines.append(f"- Tegen de dagtrend (stil): {tg['scenarios']} scenario's; " + ", ".join(
+                f"{x['code']} {x['arm']['n']} afgerond netto {_r(x['arm']['mean'])}" for x in tg.get("punten") or [] if x.get("gevonden")))
         g = m.get("btc_poort")
         if g:
             lines.append(f"- BTC-poort: {g['tegengehouden']} entries tegengehouden, {g['gevuld']} hadden gevuld; afgerond {g['arm']['n']}, "

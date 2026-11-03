@@ -3316,3 +3316,25 @@ details.mrow-wrap.is-focus .mrow-body .proof-number { font-size: 44px; }
 
 /* De kop van de week: een gewone zin uit app/ceo.week_headline. */
 .week-headline { margin: 0 0 var(--space-5); font-size: var(--text-lg); font-weight: 700; }
+.proof-sub { margin: var(--space-7) 0 var(--space-3); font-size: var(--text-base); font-weight: 700; }
+
+/* Tegen de dagtrend (B-2026-11-03-11): een schakelaar, een korte uitleg en een rustig label op de kaart. */
+.kt-switch { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 2px; border: 0; background: none; color: var(--tx2);
+  font: 600 13px / 1 var(--sans); cursor: pointer; }
+.kt-switch-track { position: relative; width: 38px; height: 22px; border-radius: 999px; background: var(--bd); transition: background-color .18s ease; }
+.kt-switch-track i { position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 2px rgba(27, 35, 36, .25); transition: transform .18s ease; }
+.kt-switch[aria-checked="true"] { color: var(--tx); }
+.kt-switch[aria-checked="true"] .kt-switch-track { background: var(--ac); }
+.kt-switch[aria-checked="true"] .kt-switch-track i { transform: translateX(16px); }
+.kt-switch:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; border-radius: 8px; }
+.kt-note { margin: -4px 0 10px; font-size: 12.5px; color: var(--tx2); }
+.kc-counter { margin: -4px 0 10px; font-size: 12px; color: var(--tx2); letter-spacing: .01em; }
+@media (prefers-reduced-motion: reduce) { .kt-switch-track, .kt-switch-track i { transition: none; } }
+
+/* Lagen op Groot: drie knoppen, aan is inkt, uit is een lijn (levelchart.js LAYERS). */
+.lc-layers { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 8px var(--gutter); border-bottom: 1px solid var(--border); }
+.lc-layer { min-height: 32px; padding: 0 12px; border: 1px solid var(--bd); border-radius: 999px; background: none; color: var(--tx2);
+  font: 600 12px / 1 var(--sans); cursor: pointer; }
+.lc-layer[aria-pressed="true"] { background: var(--ac); border-color: var(--ac); color: var(--s1); }
+.lc-layer:focus-visible { outline: 2px solid var(--ac); outline-offset: 2px; }

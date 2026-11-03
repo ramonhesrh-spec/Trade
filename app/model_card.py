@@ -67,6 +67,7 @@ def row_of(coin: str, sc: dict) -> dict:
                                     "swing_at": sc["swing_at"], "v1": sc["v1"], "entry": e or None})),
         "discovered_at": _iso(sc["discovered_at"]), "sweep_at": _iso(steps.get("sweep", {}).get("at")),
         "shift_at": _iso(steps.get("shift", {}).get("at")), "entry_at": _iso(e.get("known_at")), "ended_at": _iso(sc["ended_at"]),
+        "alt_log": json.dumps(_plain({code: sc.get(code.lower() + "_log") or [] for code in model.ALT_CODES})),
     }
     if e:
         row.update({"limit_price": e["limit"], "stop_loss": e["stop"], "take_profit": e["take"], "rr": e["rr"], "zone_low": e["zone_low"],
@@ -157,14 +158,15 @@ def context_lines(row: dict) -> list[str]:
     rel = btc_context.rel_text(btc)
     if rel:
         lines.append(rel)
-    lines += [f"Entrytype: met de dagtrend en de 4u-range mee ({row['direction']})", f"Status: {status_word(row)}"]
+    kind = "tegen de dagtrend in, met de 4u-omkeer mee" if is_counter(row) else "met de dagtrend en de 4u-range mee"
+    lines += [f"Entrytype: {kind} ({row['direction']})", f"Status: {status_word(row)}"]
     return lines
 
 
 def face_line(row: dict) -> str:
     """De korte regel op de kaart zelf: stand, entrytype en BTC 4u."""
     btc = (btc_of(row).get("b") or btc_of(row).get("a") or {}).get("btc_4h") or "onbekend"
-    return f"{status_word(row).capitalize()} · met de dagtrend mee · BTC 4u {btc}"
+    return f"{status_word(row).capitalize()} · {'tegen de dagtrend in' if is_counter(row) else 'met de dagtrend mee'} · BTC 4u {btc}"
 
 
 def detail(row: dict) -> dict:
@@ -249,21 +251,28 @@ def point_key(entry_id: int) -> str:
     return f"{POINT_KEY}:{entry_id}"
 
 
+def is_counter(row: dict) -> bool:
+    """De stille arm tegen de dagtrend (B-2026-11-03-11): herkenbaar aan het begin van de range_id (model.COUNTER_PREFIX)."""
+    return str(row.get("range_id") or "").startswith(model.COUNTER_PREFIX)
+
+
 def ready_plan(row: dict, now: Optional[datetime] = None) -> Optional[dict]:
     """Het ene plan dat de kaart toont (CEO 2026-11-03: "het moet wel duidelijk blijven"): het eerste wachtende B-, R- of B0-punt met doel
     dat nog geldig is. Liggen B en B0 op hetzelfde niveau, dan staat er dus één. De andere punten blijven in het blad onder Instappunten."""
     now = now or datetime.now(timezone.utc)
-    live = [p for p in row.get("entry_points") or [] if p["code"] in READY_CODES and p.get("state") == "wacht" and p.get("take") is not None
+    codes = ("A",) + READY_CODES if is_counter(row) else READY_CODES
+    live = [p for p in row.get("entry_points") or [] if p["code"] in codes and p.get("state") == "wacht" and p.get("take") is not None
             and p.get("id") is not None and (not p.get("expires_at") or datetime.fromisoformat(p["expires_at"]) > now)]
     if not live:
         return None
-    p = min(live, key=lambda p: READY_CODES.index(p["code"]))
+    p = min(live, key=lambda p: codes.index(p["code"]))
     left = None
     if p.get("expires_at"):
         # "nog 12 min geldig" zei niet waarom (CEO 2026-11-03, ETH): een plan geldt 6 uur na de breuk (preregistratie 4.13).
         until = datetime.fromisoformat(p["expires_at"]).astimezone(LOCAL_TZ).strftime("%H:%M")
         left = f"geldig tot {until}, 6 uur na de breuk"
-    return {**p, "valid_text": left, "url": f"/nu/order/{point_key(p['id'])}",
+    # Tegen de dagtrend: wel de getallen, geen orderknop. Het is een meting, geen kans die HesPulse aanraadt.
+    return {**p, "valid_text": left, "url": None if is_counter(row) else f"/nu/order/{point_key(p['id'])}",
             "line": f"Plan {p['code']}: Limiet {price_text.nl(p['limit'])} · Stop {price_text.nl(p['stop'])} · Doel {price_text.nl(p['take'])}"}
 
 
@@ -293,7 +302,8 @@ def scenario_item(row: dict, now: Optional[datetime] = None) -> dict:
     dist_text = "" if dist is None else f"{dist:.1f}".replace(".", ",") + f"% tot {code}"
     return {"ready": ready, "compact": not ready, "dist_pct": dist, "dist_text": dist_text,"kind": "scenario", "key": key(sid), "dom_id": dom_id(sid), "coin": row["coin"], "direction": row["direction"],
             "title": f"{row['coin']} {row['direction']}", "state": "scenario", "state_short": f"Plan {plan['code']} klaar" if ready else STATE_SHORT.get(row["status"], "Scenario"), "plan": plan,
-            "group": "scenarios", "tab": TRADE_TYPE, "trade_type": TRADE_TYPE, "untested": True, "rr_text": "",
+            "group": "tegen" if is_counter(row) else "scenarios", "tab": TRADE_TYPE, "trade_type": TRADE_TYPE, "untested": True, "rr_text": "",
+            "counter": is_counter(row),
             "svg_src": f"/api/kaart_svg/{key(sid)}", "chart": scenario_chart(row), "say": waiting_text(row), "steps_done": step_lines(row, now),
             "candidates_text": candidate_text(row), "rows": scenario_rows(row), "created_at": row.get("detected_at"),
             "shared_text": f"Ontdekt {when(row.get('discovered_at'), now)}", "origin": f"{LABEL} · context 4u, pools 1u, sweep en shift op 15m",

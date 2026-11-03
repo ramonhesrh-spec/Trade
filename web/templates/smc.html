@@ -34,6 +34,15 @@
     <div class="kt-subrow{% if not t.plans %} is-first{% endif %}"><h3 class="kt-sub">{{ t.scenarios_label }}</h3><button type="button" class="kt-hide-all" data-kt-hide-all{% if t.scenarios|length < 2 %} hidden{% endif %}>Verberg alles</button></div>
     <div class="kc-list" data-kt-scenarios>{% for it in t.scenarios %}{{ macros.kans_card(it) }}{% endfor %}</div>
   </div>
+  {# Tegen de dagtrend (B-2026-11-03-11): standaard dicht achter een schakelaar; kaarten.js onthoudt de keuze op dit toestel. #}
+  {% if t.tegen %}
+  <div class="kt-group kt-tegen" data-kt-group="tegen">
+    <div class="kt-subrow"><h3 class="kt-sub">Tegen de dagtrend</h3>
+      <button type="button" class="kt-switch" role="switch" aria-checked="false" data-tegen-toggle><span class="kt-switch-track" aria-hidden="true"><i></i></span><span>{{ t.tegen|length }}</span></button></div>
+    <p class="kt-note">Omkeer tegen de richting van de dag. Stil gemeten, ongetest, nooit een melding.</p>
+    <div class="kc-list" data-kt-tegen hidden>{% for it in t.tegen %}{{ macros.kans_card(it) }}{% endfor %}</div>
+  </div>
+  {% endif %}
   {% if not t.plans and not t.scenarios and not (t.hidden|selectattr("group", "in", ["plans", "scenarios"])|list) and t.key in empty %}
   {{ macros.empty_state(empty[t.key][0], empty[t.key][1]) }}
   {% endif %}

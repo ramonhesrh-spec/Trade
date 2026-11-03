@@ -189,10 +189,10 @@ class Context:
 
 
 class Context4h:
-    def __init__(self, fr: Frame, direction: str, topdown: bool = False):
+    def __init__(self, fr: Frame, direction: str, topdown: bool = False, prefix: str = ""):
         """topdown (aanvullend besluit 2026-11-03): de richting komt van de dag (DailyBias); hier telt dan alleen de laatste 4u-breuk in die
         richting voor de range. Een tussenliggende tegenbreuk (een herstel binnen de daling) gooit de range niet weg."""
-        self.fr, self.direction, self.topdown = fr, direction, topdown
+        self.fr, self.direction, self.topdown, self.prefix = fr, direction, topdown, prefix
         self.events = [e for e in breaks(fr, K_4H) if e.up] if topdown else breaks(fr, K_4H)
         self.known = np.array([e.known for e in self.events], np.int64)
         self._cache: dict[int, Optional[Context]] = {}
@@ -211,7 +211,7 @@ class Context4h:
                 L = float(self.fr.l[s + 1:b + 1].min())
                 through = np.flatnonzero(self.fr.c[b + 1:q + 1] < L)
                 H = float(self.fr.h[s:q + 1].max())
-                rid = f"{self.direction}:{self.fr.ts[b].isoformat()}"
+                rid = f"{self.prefix}{self.direction}:{self.fr.ts[b].isoformat()}"
                 if not len(through):
                     ctx = Context(rid, b, s, L, H, int(self.fr.ct[b]))
                 elif self.topdown:
@@ -398,9 +398,11 @@ def _ts(ns: int) -> pd.Timestamp:
 class _Run:
     """Het scenario per richting op één (mogelijk gespiegeld) stel frames."""
 
-    def __init__(self, direction: str, f4: Frame, f1: Frame, f15: Frame, pocs: Optional[list[Poc]], daily: Optional[DailyBias] = None):
-        self.direction, self.f4, self.f1, self.f15, self.pocs, self.daily = direction, f4, f1, f15, pocs, daily
-        self.ctx = Context4h(f4, direction, topdown=daily is not None)
+    def __init__(self, direction: str, f4: Frame, f1: Frame, f15: Frame, pocs: Optional[list[Poc]], daily: Optional[DailyBias] = None,
+                 counter: bool = False):
+        self.direction, self.f4, self.f1, self.f15, self.pocs, self.daily, self.counter = direction, f4, f1, f15, pocs, daily, counter
+        # counter (B-2026-11-03-11): de 4u-range van de laatste breuk in welke richting ook, maar alleen als de dag de andere kant op wijst.
+        self.ctx = Context4h(f4, direction, topdown=daily is not None and not counter, prefix=COUNTER_PREFIX if counter else "")
         self.pools = Pools(f1, f15)
         self.hi15 = swing_highs(f15, K_15M)
         self.b15 = {b.i: b.label for b in breaks(f15, K_15M) if b.up}
@@ -428,7 +430,10 @@ class _Run:
         for t in range(start, f.n):
             T = int(f.ct[t])
             ctx = self.ctx.at(T)
-            if self.daily is not None and self.daily.at(T) != self.direction:
+            if self.counter:
+                if self.daily is None or self.daily.at(T) in (None, self.direction):
+                    ctx = None                                  # tegen de dag: alleen als de dag echt de andere kant op wijst
+            elif self.daily is not None and self.daily.at(T) != self.direction:
                 ctx = None                                      # de dag wijst de andere kant op (of nog geen breuk): geen scenario
             if act is not None and (ctx is None or ctx.range_id != act.ctx.range_id):
                 act.end = ("context_weg", T)
@@ -772,22 +777,30 @@ class _Run:
         return out
 
 
-def scenarios(frames: dict, now: pd.Timestamp, pocs: Optional[Iterable] = None) -> list[dict]:
+COUNTER_PREFIX = "tegen:"
+
+
+def scenarios(frames: dict, now: pd.Timestamp, pocs: Optional[Iterable] = None, counter: bool = False) -> list[dict]:
     """Alle scenario's in deze candles, oudste eerst, voor beide richtingen. frames: {'4h', '1h', '15m'} met kolommen timestamp (open, UTC),
     open, high, low, close; alleen candles die op `now` gesloten zijn tellen. pocs: poc.PocLevel's (met touched_at), of None als er voor de
-    coin geen POC-data is (dan is POC-samenval 'niet gemeten')."""
+    coin geen POC-data is (dan is POC-samenval 'niet gemeten').
+
+    counter (B-2026-11-03-11, de stille arm "tegen de dagtrend"): dezelfde regels, maar op de 4u-range van de laatste 4u-breuk tegen de
+    dag in (een herstel of omkeer), alleen met dagcandles. range_id begint dan met COUNTER_PREFIX. Zonder dagcandles: geen scenario's."""
     now = pd.Timestamp(now)
     now = now.tz_localize("UTC") if now.tzinfo is None else now.tz_convert("UTC")
     dfs = {tf: closed(frames[tf], now, tf) for tf in ("4h", "1h", "15m")}
     pocs = list(pocs) if pocs is not None else None
     # Aanvullend besluit 2026-11-03: met dagcandles bepaalt de dag de richting (top-down). Zonder (tests, oude scripts) de oude 4u-regel.
     daily = DailyBias(frames["1d"], now) if frames.get("1d") is not None and len(frames["1d"]) else None
+    if counter and daily is None:
+        return []
     found = []
     for direction, mirror in (("long", False), ("short", True)):
         fr = {tf: _frame(df, tf, mirror) for tf, df in dfs.items()}
         if not all(f.n for f in fr.values()):
             continue
-        found += _Run(direction, fr["4h"], fr["1h"], fr["15m"], _pocs(pocs, mirror), daily).run()
+        found += _Run(direction, fr["4h"], fr["1h"], fr["15m"], _pocs(pocs, mirror), daily, counter).run()
     return sorted(found, key=lambda s: (s["discovered_at"], s["direction"]))
 
 

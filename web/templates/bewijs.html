@@ -126,6 +126,25 @@
   {% endif %}
   <p class="proof-footnote muted">Per instappunt: na 30 afgeronde trades een eerste blik; na 50 stopt de melding als de netto R per week duidelijk onder 0 ligt. Meten gaat altijd door.</p>
   {% endif %}
+  {% if m.redenen %}
+  {# Waarom een poging géén plan werd (model_measure.reasons): per instappunt de redenen, meeste bovenaan. #}
+  <details class="kt-more">
+    <summary>Waarom geen plan <span class="kt-n">{{ m.redenen|sum(attribute="n") }}</span></summary>
+    <table class="ctx-table" aria-label="Redenen per instappunt">
+      <thead><tr><th scope="col">Punt</th><th scope="col">Reden</th><th scope="col">Aantal</th></tr></thead>
+      <tbody>{% for x in m.redenen %}<tr><td>{{ x.code }}</td><td>{{ x.tekst }}</td><td>{{ x.n }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </details>
+  {% endif %}
+  {% if m.tegen and m.tegen.scenarios %}
+  {# De stille arm tegen de dagtrend (B-2026-11-03-11): telt nergens mee in de cijfers hierboven, en meldt niets. #}
+  <h4 class="proof-sub">Tegen de dagtrend (stil gemeten)</h4>
+  <table class="ctx-table" aria-label="Instappunten tegen de dagtrend">
+    <thead><tr><th scope="col">Instappunt</th><th scope="col">Afgerond</th><th scope="col">Netto</th></tr></thead>
+    <tbody>{% for x in m.tegen.punten if x.gevonden %}<tr><td>{{ x.label }}</td><td>{{ x.arm.n }}</td><td>{{ r_text(x.arm.mean) }}</td></tr>{% endfor %}</tbody>
+  </table>
+  <p class="proof-footnote muted">{{ m.tegen.scenarios }} scenario's tegen de dagtrend sinds de bevriezing. Zichtbaar op Kansen met de schakelaar, nooit een melding. Ongetest.</p>
+  {% endif %}
   {% if m.compare %}
   <table class="ctx-table" aria-label="Vergelijkingen met het model, alleen voor de CEO">
     <thead><tr><th scope="col">Arm</th><th scope="col">n</th><th scope="col">Netto</th><th scope="col">Min model, 98,75%</th></tr></thead>

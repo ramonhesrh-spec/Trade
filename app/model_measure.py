@@ -229,10 +229,34 @@ def htf_split(scenarios: list[dict], signal_rows: list[dict], entries: list[dict
     return out
 
 
-def entry_arms(entries: list[dict], cost_pct: float) -> list[dict]:
+REASON_TEXT = {"run": "door de pool, geen sweep", "geen_herstel": "geen slot terug binnen 6 candles", "geen_top": "geen top om te breken",
+               "geen_shift": "geen breuk op tijd", "geen_displacement": "breuk zonder kracht of gap", "terugtest_al_geweest": "terugtest al geweest",
+               "premium": "limiet niet in premium/discount", "geen_doel": "geen doel voorbij de limiet",
+               "niet_in_premium": "top niet in premium (long: bodem niet in discount)", "niet_lager_dan_vorige": "geen lagere top (long: hogere bodem)",
+               "buiten_de_range": "buiten de range", "te_ver_van_de_koers": "te ver van de koers", "geen_vorige_swing": "geen vorige top om mee te vergelijken"}
+
+
+def reasons(scenarios: list[dict]) -> list[dict]:
+    """Waarom een poging géén plan werd, per instappunt en reden (audit 2026-11-03). A uit de mislukte pogingen, B, B0, R en K uit alt_log;
+    'gevonden' is geen afwijzing en telt niet. Alleen meting, oudste scenario's zonder alt_log tellen voor B/B0/R/K niet mee."""
+    counts: dict = {}
+    for s in scenarios:
+        for a in _htf(s.get("steps")).get("attempts") or []:
+            counts.setdefault(("A", a.get("reden")), 0)
+            counts[("A", a.get("reden"))] += 1
+        for code, log in _htf(s.get("alt_log")).items():
+            for x in log or []:
+                if x.get("wat") != "gevonden":
+                    counts[(code, x.get("wat"))] = counts.get((code, x.get("wat")), 0) + 1
+    order = ("A", "B", "B0", "R", "K")
+    return [{"code": c, "reden": r, "tekst": REASON_TEXT.get(r, r), "n": n}
+            for (c, r), n in sorted(counts.items(), key=lambda kv: (order.index(kv[0][0]) if kv[0][0] in order else 9, -kv[1]))]
+
+
+def entry_arms(entries: list[dict], cost_pct: float, names: Optional[dict] = None) -> list[dict]:
     """Per instappunt: hoeveel gevonden, gevuld en afgerond, de arm met dezelfde maten als H (§8) en de stand van de stopregel."""
     out = []
-    for code, name in ENTRY_NAMES.items():
+    for code, name in (names or ENTRY_NAMES).items():
         mine = [e for e in entries if e.get("code") == code]
         a = arm(entry_trades(entries, code, cost_pct))
         v = verdict(a)
@@ -334,20 +358,40 @@ def split(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], entrie
 
 
 def counted_entries(entries: list[dict], freeze_at: Optional[datetime]) -> list[dict]:
-    """De instappunten die meetellen voor de stopregel per punt: dezelfde scheiding als de hoofdcijfers."""
-    return split([], [], [], entries, freeze_at)[0]["entries"]
+    """De instappunten die meetellen voor de stopregel per punt: dezelfde scheiding als de hoofdcijfers, zonder de arm tegen de dagtrend."""
+    return split([], [], [], [e for e in entries if not str(e.get("scenario_range_id") or "").startswith("tegen:")], freeze_at)[0]["entries"]
+
+
+COUNTER_PREFIX = "tegen:"           # model.COUNTER_PREFIX
+COUNTER_NAMES = {"A": "A na sweep", **ENTRY_NAMES}
+
+
+def _is_counter(range_id) -> bool:
+    return bool(range_id) and str(range_id).startswith(COUNTER_PREFIX)
 
 
 def report(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], cost_pct: float, ceo: bool = False,
            entries: Optional[list[dict]] = None, freeze_at: Optional[datetime] = None) -> dict:
     """Alles voor Bewijs en de nachtexport, alleen over wat na de bevriezing ontstond; de rest staat samengevat onder `apart`. De
-    vergelijkingen (V1, V2, V3) alleen met ceo=True."""
-    keep, rest = split(scenarios, v1, signal_rows, entries or [], freeze_at)
+    vergelijkingen (V1, V2, V3) alleen met ceo=True. De stille arm tegen de dagtrend (B-2026-11-03-11) telt nergens mee in de hoofdcijfers en
+    staat apart onder `tegen`, met dezelfde scheiding rond de bevriezing."""
+    entries = entries or []
+    c_sc = [x for x in scenarios if _is_counter(x.get("range_id"))]
+    c_v1 = [x for x in v1 if _is_counter(x.get("scenario_range_id"))]
+    c_en = [x for x in entries if _is_counter(x.get("scenario_range_id"))]
+    scenarios = [x for x in scenarios if not _is_counter(x.get("range_id"))]
+    v1 = [x for x in v1 if not _is_counter(x.get("scenario_range_id"))]
+    entries = [x for x in entries if not _is_counter(x.get("scenario_range_id"))]
+    ck, _ = split(c_sc, c_v1, [], c_en, freeze_at)
+    tegen = {"scenarios": len(ck["scenarios"]), "punten": entry_arms(ck["entries"], cost_pct, COUNTER_NAMES),
+             "v1": arm(v1_trades(ck["v1"], cost_pct))}
+    keep, rest = split(scenarios, v1, signal_rows, entries, freeze_at)
     out = _report(keep["scenarios"], keep["v1"], keep["signals"], cost_pct, ceo, keep["entries"])
     out["freeze_at"] = freeze_at
     rh = signal_trades(rest["signals"], "hespulse_model", cost_pct)
     rv = v1_trades(rest["v1"], cost_pct)
     re_ = [t for code in ENTRY_NAMES for t in entry_trades(rest["entries"], code, cost_pct)]
+    out["tegen"] = tegen
     out["apart"] = {"scenarios": len(rest["scenarios"]), "h": arm(rh), "v1": arm(rv), "punten": arm(re_),
                     "terugwerkend": sum(1 for s in scenarios if _late(s.get("discovered_at"), s.get("detected_at")))}
     return out
@@ -361,6 +405,7 @@ def _report(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], cost
            "h": arm(h), "cost_median_r": median(costs) if costs else None, "funding_unknown": sum(1 for t in h if t["funding_unknown"]),
            "level": LEVEL, "first_eval_ready": len(h) >= FIRST_EVAL_TRADES, "btc_poort": gate(scenarios, cost_pct),
            "instappunten": entry_arms(entries or [], cost_pct), "hogere_tf": htf_split(scenarios, signal_rows, entries or [], cost_pct),
+           "redenen": reasons(scenarios),
            "decision_ready": len(h) >= DECISION_TRADES and arm(h)["weeks"] >= DECISION_WEEKS and n_eff(h) >= DECISION_NEFF}
     if ceo:
         v1t = v1_trades(v1, cost_pct)

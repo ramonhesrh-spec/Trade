@@ -246,7 +246,7 @@ def ended_rows(ended: Iterable[dict], kind: str, hidden=frozenset()) -> list[dic
 
 def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float], Optional[str]]], structure_trades: list[dict],
          kinds: Iterable[str], skipped: Iterable[str] = (), hidden: Iterable[str] = (), ended: Iterable[dict] = (), model_rows: Iterable[dict] = (),
-         default_tab: Optional[str] = None) -> dict:
+         default_tab: Optional[str] = None, counter_rows: Iterable[dict] = ()) -> dict:
     """`kinds`: de soorten die een tab krijgen (focus.FOCUS_TYPES met de kijkrechten van de route). Een kaart van een andere soort valt weg.
     `skipped`: plannen die je oversloeg (cookie en plan_skips, een dag); die blijven staan, achteraan en gemarkeerd.
     `hidden`: kaarten die deze gebruiker verborg (kans_hidden). Die staan niet in de lijst en tellen nergens mee (tab, badge, totaal, ook niet
@@ -273,6 +273,8 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
                 from app import card_chart
                 p["chart"] = {**p["chart"], "marks": card_chart.model_marks(r, r.get("entry_points"))}
     scenarios = [model_card.scenario_item(r) for r in model_rows if r["status"] in model_card.model.WAIT_STATES]
+    # Tegen de dagtrend (B-2026-11-03-11): een eigen groep achter een schakelaar, buiten elke teller, op afstand gesorteerd.
+    tegen = sorted((model_card.scenario_item(r) for r in counter_rows), key=lambda s: (s.get("dist_pct") is None, s.get("dist_pct") or 0.0))
     for p in plans:
         p["skipped"] = p["key"] in skipped
         p["shared_text"] = _shared(p, "Gedeeld")
@@ -309,7 +311,8 @@ def page(radar_cards: list[dict], structure: Iterable[tuple[dict, Optional[float
                      "ended": ended_rows(ended, k, hidden) if k in wanted else [],
                      "hidden": _hidden_rows(hid_plans, hid_trades, sc_hidden), "hidden_cards": hid_plans + hid_trades + sc_hidden,
                      "hidden_label": hidden_label(len(hid_plans) + len(hid_trades) + len(sc_hidden)),
-                     "scenarios": sc_shown, "scenarios_label": scenarios_label(len(sc_shown))})
+                     "scenarios": sc_shown, "scenarios_label": scenarios_label(len(sc_shown)),
+                     "tegen": [s for s in tegen if s["tab"] == k and k in wanted and s["key"] not in hidden]})
     best = max(tabs, key=lambda t: t["in_zone"], default=None)
     default = default_tab if default_tab in kinds else DEFAULT_TAB
     active = best["key"] if best and best["in_zone"] else (default if default in kinds else (kinds[0] if kinds else DEFAULT_TAB))

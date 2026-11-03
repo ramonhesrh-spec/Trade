@@ -322,8 +322,8 @@ class AltAlertTest(Case):
     def run_with(self, key, point, btc=None):
         real = model.scenarios
 
-        def fake(frames, now, pocs=None):
-            return [{**s, key: point} if s["direction"] == "long" else s for s in real(frames, now, pocs)]
+        def fake(frames, now, pocs=None, counter=False):
+            return [{**s, key: point} if s["direction"] == "long" else s for s in real(frames, now, pocs, counter)]
         patches = [mock.patch.object(model, "scenarios", fake)]
         if btc is not None:
             patches.append(mock.patch.object(model_live.btc_context, "measure", return_value={"btc_4h": btc}))
@@ -414,3 +414,34 @@ class HtfStoredTest(Case):
         (e,) = repo.list_model_entries()
         self.assertEqual(json.loads(e["htf"])["zone"], None)
         self.assertEqual(set(json.loads(repo.get_model_v1(self.scenario()["id"])["htf"])), {"zone_12u", "zone_dag", "zone", "premium_dag", "open"})
+
+
+class CounterArmTest(Case):
+    """B-2026-11-03-11: met de dag omlaag geeft het model geen long; de stille arm tegen de dagtrend legt hem wel vast, ook A als stil
+    punt, zonder melding, kaart met order of signaal."""
+
+    def setUp(self):
+        super().setUp()
+        from tests.hespulse_model.test_model import daily_trend
+        self.fr["1d"] = daily_trend(False)
+
+    def test_tegen_de_dag_stil_vastgelegd_met_a_als_punt(self):
+        self.cycle(at(TAIL_FROM - 5))
+        self.cycle(at(TAIL_FROM + 4))
+        self.assertEqual(repo.list_model_scenarios(), [])                       # gewoon: niets, de dag wijst omlaag
+        (row,) = repo.list_model_scenarios(counter=True)
+        self.assertTrue(row["range_id"].startswith("tegen:"))
+        self.assertIsNone(row["entry_state"])                                    # nooit moment B
+        codes = {e["code"] for e in repo.list_model_entries()}
+        self.assertIn("A", codes)
+        self.assertEqual([s for s in self.sent if not s["silent"]], [])          # geen luide melding
+        self.assertEqual(self.sent, [])
+        with db.session() as conn:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM signals").fetchone()[0], 0)
+
+    def test_tegenvoorbeeld_dag_omhoog_geeft_de_gewone_long_en_geen_tegen(self):
+        from tests.hespulse_model.test_model import daily_trend
+        self.fr["1d"] = daily_trend(True)
+        self.cycle(at(TAIL_FROM - 5))
+        self.assertEqual(len(repo.list_model_scenarios()), 1)
+        self.assertEqual(repo.list_model_scenarios(counter=True), [])

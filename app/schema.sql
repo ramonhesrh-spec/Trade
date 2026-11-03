@@ -1266,6 +1266,7 @@ CREATE TABLE IF NOT EXISTS model_scenarios (
     signal_id INTEGER REFERENCES signals(id),
     updated_at TEXT,
     htf TEXT,
+    alt_log TEXT,
     UNIQUE (coin, range_id)
 );
 CREATE INDEX IF NOT EXISTS idx_model_scenarios_status ON model_scenarios(status, entry_state);
