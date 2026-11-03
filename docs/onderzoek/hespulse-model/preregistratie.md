@@ -960,3 +960,24 @@ leest deze uitkomsten. De bevriezing (`model_freeze_at_v2`) loopt door.
 2. Niet gezien: het model rekent opnieuw op de candles tot 12 uur na het begin en geeft de reden: de dag wees de andere kant op, geen
    scenario in die richting, of de stap waarop het scenario afviel.
 3. Alleen meting. Een gemiste beweging wordt hoogstens een case, nooit direct een regel.
+
+---
+
+## Aanvulling 2026-11-03 (nacht): limiet, market of stop-order (vooraf vast)
+
+**Aanleiding.** CEO: "vraag hem om uit te rekenen wat het beste werkt, limit instappen, market of buy of sell stop". Aanleiding was een
+trader die met een limiet precies de swing low pakte (ETH en BTC, 3 november). Alleen meting achteraf; de bevriezing loopt door.
+
+**Regel (`app/entry_compare.py`, `scripts/instap_vergelijking.py`).**
+1. De plannen A, B, B0, R en K die het model vindt op de laatste N dagen (standaard 30), alleen gesloten candles, prefix-vast. De arm tegen
+   de dagtrend niet.
+2. Per plan drie instappen met dezelfde stop, hetzelfde doel en dezelfde vervaltijd: limiet (de regel van het model), market (de open van
+   de eerste 5m-candle vanaf het moment dat het plan bekend was) en stop-order (het uiterste van de 15m-candle die het plan bekend maakte;
+   gevuld als een latere 5m-candle er strikt doorheen gaat, op het niveau of op de open; raakt de koers eerst de stop, dan vervalt de order).
+3. Uitkomst met `model.outcome` vanaf de candle na de vulcandle, voor alle drie gelijk. Een instap buiten stop en doel telt niet.
+4. Netto met dezelfde kosten per rondreis voor alle drie. Dat bevoordeelt market en stop: die betalen in werkelijkheid meer.
+5. Maat: netto R per plan (geen vulling telt als 0) en het verschil met de limiet per plan, met het weekinterval op 98,75%.
+
+**Beslisregel.** Een ordertype is pas beter dan de limiet als het hele interval van het verschil per plan boven 0 ligt. Drie typen en zes
+rijen zijn veel vergelijkingen; één interval net boven 0 is geen bewijs. Na de bevriezing beslist de CEO of een ander ordertype een stille
+arm wordt. Geen wijziging van de instapregels tijdens de bevriezing.
