@@ -26,7 +26,7 @@ MAX_MOVE_HOURS = 24
 SEEN_WINDOW = timedelta(hours=12)
 LOOKBACK_HOURS = 24
 # De motoren die de misser-controle per beweging langsloopt: de focus-soorten. structuur_c is dezelfde motor als structuur.
-ENGINES = ("structuur", "zone_radar", "zone_sweep", "poc_radar")
+ENGINES = ("structuur", "zone_radar", "zone_sweep", "poc_radar", "hespulse_model")
 # Zone-radar en POC-radar hebben geen diagnose in scripts/misser_check.py; hier alleen de vraag of hun niveau bij het beginpunt lag.
 ZONE_NEAR_ATR = 0.25          # dezelfde buffer als de stop van de zone-radar (zone_radar.STOP_ATR): een prik net door de rand telt nog als in de zone
 
@@ -124,6 +124,29 @@ def poc_reason(direction: str, levels, begin_price: float, begin_at) -> str:
     if any(abs(begin_price - lv.price) / lv.price * 100 <= poc.NEAR_PCT for lv in known):
         return "poc_radar: naakte POC bij het beginpunt, maar geen kaart (dagcap, al een kaart voor dat niveau of verder dan 6% bij de scan)"
     return "poc_radar: geen naakte POC bij het beginpunt"
+
+
+STATUS_WORDS = {"wacht_sweep": "wachtte op een sweep van de pool", "prik": "zag een prik maar nog geen slot terug", "wacht_shift": "wachtte op de breuk",
+                "wacht_fvg": "wachtte op displacement met een gap", "context_weg": "verloor zijn 4u-context", "geen_pool": "had geen pool meer",
+                "afgerond": "had een plan"}
+
+
+def model_reason(direction: str, day: Optional[str], scs: list[dict], counter: list[dict], begin_at) -> str:
+    """M4 (B-2026-11-03-12): waarom het HesPulse-model een beweging niet zag, uit een herberekening op de candles tot SEEN_WINDOW na het begin.
+    day: de dagrichting bij het begin (model.DailyBias). scs/counter: model.scenarios zonder en met counter=True."""
+    begin = _ts(begin_at)
+    near = lambda rows: [s for s in rows if s["direction"] == direction and abs(_ts(s["discovered_at"]) - begin) <= SEEN_WINDOW]
+    own, tegen = near(scs), near(counter)
+    if any(s.get("entry") for s in own):
+        return "hespulse_model: de herberekening vindt een plan, live kwam er geen (te laat opgeslagen of een storing)"
+    if own:
+        return f"hespulse_model: scenario in deze richting, maar het {STATUS_WORDS.get(own[-1]['status'], own[-1]['status'])}"
+    if day is None:
+        return "hespulse_model: nog geen dagbreuk, dus geen richting"
+    if day != direction:
+        word = "alleen in de stille arm tegen de dagtrend" if tegen else "ook niet in de stille arm tegen de dagtrend"
+        return f"hespulse_model: de dag wees {day}; het model zocht {direction} {word}"
+    return "hespulse_model: geen 4u-range met een onaangeraakte pool binnen 6% in deze richting"
 
 
 def unseen(rows: list[dict]) -> list[dict]:

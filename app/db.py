@@ -339,6 +339,12 @@ def _migrate(conn: sqlite3.Connection) -> None:
     cols = {row["name"] for row in conn.execute("PRAGMA table_info(model_scenarios)")}
     if cols and "alt_log" not in cols:
         conn.execute("ALTER TABLE model_scenarios ADD COLUMN alt_log TEXT")
+    # MAE, MFE en stopslip per modeltrade (M2, aanvulling 2026-11-03 avond). Leeg: niet gemeten of 'onbekend'.
+    for table in ("model_scenarios", "model_entries"):
+        cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for col in ("mae_r", "mfe_r", "slip_r"):
+            if cols and col not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} REAL")
     # trade_excursions had mae_r en mfe_r NOT NULL; 'onbekend' (outcome_measure.record_excursion) slaat ze leeg op. SQLite kan NOT NULL niet
     # weghalen, dus de tabel wordt één keer herbouwd met dezelfde rijen.
     if any(r["name"] == "mae_r" and r["notnull"] for r in conn.execute("PRAGMA table_info(trade_excursions)")):

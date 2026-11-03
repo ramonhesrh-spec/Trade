@@ -3948,6 +3948,11 @@ def auto_misser_seen_rows(coin: str, lo_iso: str, hi_iso: str) -> list[dict]:
     with db.session() as conn:
         for source, sql in parts:
             out += [{"source": source, "direction": r["direction"], "at": r["created_at"]} for r in conn.execute(sql, (coin, lo_iso, hi_iso))]
+        # M4: een scenario van het model telt als gezien vanaf het vastleggen; de arm tegen de dagtrend apart.
+        out += [{"source": "hespulse_model_tegen" if str(r["range_id"]).startswith("tegen:") else "hespulse_model", "direction": r["direction"],
+                 "at": r["detected_at"]}
+                for r in conn.execute("SELECT range_id, direction, detected_at FROM model_scenarios WHERE coin = ? AND detected_at BETWEEN ? AND ?",
+                                      (coin, lo_iso, hi_iso))]
         out += [{"source": f"signaal:{r['trade_type']}", "direction": r["direction"], "at": r["created_at"]}
                 for r in conn.execute("SELECT trade_type, direction, created_at FROM signals WHERE coin = ? AND is_practice = 0 AND created_at BETWEEN ? AND ?",
                                       (coin, lo_iso, hi_iso))]
@@ -4250,7 +4255,7 @@ def insert_model_entry(scenario_id: int, row: dict) -> bool:
                              row.get("htf"))).rowcount == 1
 
 
-_MODEL_ENTRY_FIELDS = {"state", "filled_at", "outcome", "outcome_at", "r_gross", "ambiguous", "ended_at"}
+_MODEL_ENTRY_FIELDS = {"state", "filled_at", "outcome", "outcome_at", "r_gross", "ambiguous", "ended_at", "mae_r", "mfe_r", "slip_r"}
 
 
 def update_model_entry(entry_id: int, **fields) -> None:
@@ -4282,6 +4287,108 @@ def get_model_entry(entry_id: int) -> Optional[dict]:
     with db.session() as conn:
         r = conn.execute("SELECT * FROM model_entries WHERE id = ?", (entry_id,)).fetchone()
         return dict(r) if r else None
+
+
+def set_model_excursion(scenario_id: int, mae_r: Optional[float], mfe_r: Optional[float], slip_r: Optional[float]) -> None:
+    """M2: MAE, MFE en stopslip van de A-trade van dit scenario (leeg = niet gemeten)."""
+    with db.session() as conn:
+        conn.execute("UPDATE model_scenarios SET mae_r = ?, mfe_r = ?, slip_r = ? WHERE id = ?", (mae_r, mfe_r, slip_r, scenario_id))
+
+
+MODEL_STRICT_KEY = "model_strict_from"
+_STRICT_CODES = ("A", "B", "B0", "R", "K")
+_STRICT_FIELDS = {"state", "filled_at", "outcome", "outcome_at", "r_gross", "ambiguous", "ended_at"}
+
+
+def flag_at(key: str) -> Optional[datetime]:
+    """Het moment waarop claim_flag deze sleutel vastlegde, of None."""
+    with db.session() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    if not row or not row[0]:
+        return None
+    d = datetime.fromisoformat(row[0])
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def seed_model_strict(since_iso: str) -> int:
+    """M1: elk plan dat na since ontstond krijgt één rij in de strenge arm, met dezelfde niveaus, start en vervaltijd als de gewone arm. A
+    alleen als hij gepubliceerd werd (niet al door de limiet, niet door de BTC-poort tegengehouden), net als de gewone A."""
+    with db.session() as conn:
+        n = conn.execute("""INSERT OR IGNORE INTO model_strict (kind, ref_id, code, counter, coin, direction, limit_price, stop_loss, take_profit,
+                                                                 start_at, expires_at)
+                            SELECT 'A', id, 'A', 0, coin, direction, limit_price, stop_loss, take_profit, entry_detected_at, expires_at
+                            FROM model_scenarios WHERE entry_detected_at >= ? AND limit_price IS NOT NULL AND expires_at IS NOT NULL
+                              AND COALESCE(entry_state, '') NOT IN ('niet_vulbaar', 'btc_tegen') AND range_id NOT LIKE 'tegen:%'""",
+                         (since_iso,)).rowcount
+        n += conn.execute(f"""INSERT OR IGNORE INTO model_strict (kind, ref_id, code, counter, coin, direction, limit_price, stop_loss,
+                                                                  take_profit, start_at, expires_at)
+                              SELECT 'E', e.id, e.code, CASE WHEN m.range_id LIKE 'tegen:%' THEN 1 ELSE 0 END, e.coin, e.direction,
+                                     e.limit_price, e.stop_loss, e.take_profit, e.detected_at, e.expires_at
+                              FROM model_entries e JOIN model_scenarios m ON m.id = e.scenario_id
+                              WHERE e.detected_at >= ? AND e.expires_at IS NOT NULL
+                                AND e.code IN ({', '.join('?' for _ in _STRICT_CODES)})""", (since_iso, *_STRICT_CODES)).rowcount
+    return n
+
+
+def list_model_strict(states: Optional[tuple[str, ...]] = None) -> list[dict]:
+    q, args = "SELECT * FROM model_strict", []
+    if states:
+        q += f" WHERE state IN ({', '.join('?' for _ in states)})"
+        args = list(states)
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(q + " ORDER BY id", args).fetchall()]
+
+
+def update_model_strict(strict_id: int, **fields) -> None:
+    unknown = set(fields) - _STRICT_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor model_strict: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE model_strict SET {', '.join(f + ' = ?' for f in fields)} WHERE id = ?", (*fields.values(), strict_id))
+
+
+def list_model_strict_compare() -> list[dict]:
+    """M1 naast de gewone arm: elke strenge rij met de vulling en uitkomst van hetzelfde plan onder de gewone regel (n_filled_at, n_outcome),
+    plus de momenten voor de scheiding rond de bevriezing (known, detected)."""
+    with db.session() as conn:
+        a = conn.execute("""SELECT t.*, m.filled_at AS n_filled_at, s.auto_outcome AS n_outcome, s.auto_outcome_at AS n_outcome_at,
+                                   m.discovered_at AS known, m.detected_at AS detected
+                            FROM model_strict t JOIN model_scenarios m ON m.id = t.ref_id LEFT JOIN signals s ON s.id = m.signal_id
+                            WHERE t.kind = 'A'""").fetchall()
+        e = conn.execute("""SELECT t.*, e.filled_at AS n_filled_at, e.outcome AS n_outcome, e.outcome_at AS n_outcome_at,
+                                   e.known_at AS known, e.detected_at AS detected
+                            FROM model_strict t JOIN model_entries e ON e.id = t.ref_id WHERE t.kind = 'E'""").fetchall()
+    return [dict(r) for r in a] + [dict(r) for r in e]
+
+
+def model_placebo_due() -> list[dict]:
+    """M3: afgeronde modeltrades (stop of doel) zonder placebo, met wat de placebo nodig heeft. A: het signaal; E: het instappunt. De arm
+    tegen de dagtrend niet: die telt nergens mee."""
+    with db.session() as conn:
+        a = conn.execute("""SELECT 'A' AS kind, m.id AS ref_id, 'A' AS code, m.coin, m.direction, s.price AS entry, s.stop_loss, s.take_profit,
+                                   m.filled_at AS start_at
+                            FROM model_scenarios m JOIN signals s ON s.id = m.signal_id
+                            LEFT JOIN model_placebo p ON p.kind = 'A' AND p.ref_id = m.id
+                            WHERE p.ref_id IS NULL AND s.auto_outcome IN ('take_profit', 'stop_loss') AND s.is_practice = 0
+                              AND m.range_id NOT LIKE 'tegen:%'""").fetchall()
+        e = conn.execute("""SELECT 'E' AS kind, e.id AS ref_id, e.code, e.coin, e.direction, e.limit_price AS entry, e.stop_loss, e.take_profit,
+                                   e.filled_at AS start_at
+                            FROM model_entries e JOIN model_scenarios m ON m.id = e.scenario_id
+                            LEFT JOIN model_placebo p ON p.kind = 'E' AND p.ref_id = e.id
+                            WHERE p.ref_id IS NULL AND e.outcome IN ('take_profit', 'stop_loss') AND m.range_id NOT LIKE 'tegen:%'""").fetchall()
+    return [dict(r) for r in a] + [dict(r) for r in e]
+
+
+def save_model_placebo(kind: str, ref_id: int, rs: list[float]) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT OR REPLACE INTO model_placebo (kind, ref_id, rs, made_at) VALUES (?, ?, ?, ?)",
+                     (kind, ref_id, json.dumps(rs), db.now_iso()))
+
+
+def list_model_placebo() -> dict:
+    """{(kind, ref_id): [bruto R, ...]}"""
+    with db.session() as conn:
+        return {(r["kind"], r["ref_id"]): json.loads(r["rs"]) for r in conn.execute("SELECT kind, ref_id, rs FROM model_placebo")}
 
 
 def get_model_v1(scenario_id: int) -> Optional[dict]:

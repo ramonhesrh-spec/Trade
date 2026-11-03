@@ -322,3 +322,21 @@ class CounterOnKansen(ModelTab):
         pts = self.client.get("/api/tegen/DOT").json()["points"]
         self.assertEqual([(p["code"], p["limit"]) for p in pts], [("A", 99.0)])
         self.assertEqual(self.client.get("/api/tegen/SOL").json()["points"], [])
+
+
+class ControlsOnBewijs(ModelTab):
+    """B-2026-11-03-12: de strenge vulling staat op Bewijs naast de gewone, onder "Controle op de cijfers"."""
+
+    def test_strenge_arm_op_bewijs(self):
+        sid = repo.list_model_scenarios()[0]["id"]
+        t = (NOW - pd.Timedelta(hours=1)).isoformat()
+        repo.insert_model_entry(sid, {"code": "B", "coin": "BTC", "direction": "long", "known_at": t, "detected_at": t, "limit_price": 99.0,
+                                      "stop_loss": 97.5, "take_profit": 110.0, "rr": 7.0, "expires_at": (NOW + pd.Timedelta(hours=5)).isoformat(),
+                                      "basis": "{}"})
+        repo.seed_model_strict((NOW - pd.Timedelta(days=1)).isoformat())
+        html = self.client.get("/bewijs").text
+        self.assertIn("Controle op de cijfers", html)
+        self.assertIn("Strenge vulling", html)
+
+    def test_tegenvoorbeeld_zonder_metingen_geen_blok(self):
+        self.assertNotIn("Controle op de cijfers", self.client.get("/bewijs").text)

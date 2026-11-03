@@ -817,11 +817,12 @@ def known_until(sc: dict, cut: pd.Timestamp) -> list[tuple[str, pd.Timestamp]]:
 
 
 def walk_fill(direction: str, limit: float, take: Optional[float], published_at: pd.Timestamp, expires_at: Optional[pd.Timestamp],
-              b5: pd.DataFrame, price_at_publish: Optional[float] = None, breaks_at: Iterable[pd.Timestamp] = ()) -> dict:
+              b5: pd.DataFrame, price_at_publish: Optional[float] = None, breaks_at: Iterable[pd.Timestamp] = (), strict: bool = False) -> dict:
     """Wat er na publicatie met een limiet gebeurde, op 5m-candles die ná de publicatie openden. Eindstanden: 'gevuld', 'vervallen' (na
     expires_at), 'weggelopen' (het doel kwam eerst), 'context_weg' (een nieuwe 4u-breuk), 'niet_vulbaar' (de koers stond bij publicatie al door
     de limiet; geen marktorder). Raakt één candle limiet en doel, dan telt de vulling. `door_limiet`: de koers kwam strikt door de limiet.
-    `vulbaar`: de limiet lag bij publicatie aan de goede kant van de koers (None zonder koers)."""
+    `vulbaar`: de limiet lag bij publicatie aan de goede kant van de koers (None zonder koers). strict: alleen de meting M1 (aanvulling
+    2026-11-03 avond): vullen pas als de koers strikt door de limiet ging; aanraken telt dan niet."""
     sign = 1 if direction == "long" else -1
     vulbaar = None if price_at_publish is None else bool((price_at_publish - limit) * sign > 0)
     base = {"state": None, "at": None, "door_limiet": None, "vulbaar": vulbaar}
@@ -836,7 +837,7 @@ def walk_fill(direction: str, limit: float, take: Optional[float], published_at:
             return {**base, "state": "context_weg", "at": brk[0]}
         low, high = (row.low, row.high) if sign > 0 else (-row.high, -row.low)
         lim = limit * sign
-        if low <= lim:
+        if low < lim or (low == lim and not strict):
             return {**base, "state": "gevuld", "at": ts, "door_limiet": bool(low < lim)}
         if take is not None and high >= take * sign:
             return {**base, "state": "weggelopen", "at": ts}
@@ -846,17 +847,27 @@ def walk_fill(direction: str, limit: float, take: Optional[float], published_at:
 def outcome(direction: str, entry: float, stop: float, take: Optional[float], filled_at: pd.Timestamp, b5: pd.DataFrame,
             now: Optional[pd.Timestamp] = None) -> dict:
     """Stop of doel op 5m-candles die na de vulcandle openden, zoals level_check; beide in één candle telt als stop (ambigu). Na TIME_LIMIT
-    sluit de meting op het slot ('tijd'). Zonder uitkomst: state None. R bruto, zonder kosten."""
+    sluit de meting op het slot ('tijd'). Zonder uitkomst: state None. R bruto, zonder kosten. exit_open: de open van de uitgangscandle, voor
+    de schatting van de stopslip (slip_r)."""
     sign = 1 if direction == "long" else -1
     risk = (entry - stop) * sign
     after = b5[b5["timestamp"] > filled_at]
     for row in after.itertuples():
         if row.timestamp >= filled_at + TIME_LIMIT:
-            return {"state": "tijd", "at": row.timestamp, "r": (row.open - entry) * sign / risk, "ambiguous": False}
+            return {"state": "tijd", "at": row.timestamp, "r": (row.open - entry) * sign / risk, "ambiguous": False, "exit_open": row.open}
         hit_stop = (row.low <= stop) if sign > 0 else (row.high >= stop)
         hit_take = take is not None and ((row.high >= take) if sign > 0 else (row.low <= take))
         if hit_stop:
-            return {"state": "stop_loss", "at": row.timestamp, "r": -1.0, "ambiguous": bool(hit_take)}
+            return {"state": "stop_loss", "at": row.timestamp, "r": -1.0, "ambiguous": bool(hit_take), "exit_open": row.open}
         if hit_take:
-            return {"state": "take_profit", "at": row.timestamp, "r": (take - entry) * sign / risk, "ambiguous": False}
-    return {"state": None, "at": None, "r": None, "ambiguous": False}
+            return {"state": "take_profit", "at": row.timestamp, "r": (take - entry) * sign / risk, "ambiguous": False, "exit_open": row.open}
+    return {"state": None, "at": None, "r": None, "ambiguous": False, "exit_open": None}
+
+
+def slip_r(direction: str, entry: float, stop: float, state: Optional[str], exit_open: Optional[float]) -> Optional[float]:
+    """M2 (aanvulling 2026-11-03 avond): de stopslip als ondergrens. Opent de stopcandle al voorbij de stop, dan vult een stopmarktorder op
+    zijn best op die open; de afstand tot de stop in R. Anders 0. Slip binnen een candle zien 5m-candles niet. Geen stop: None."""
+    if state != "stop_loss" or exit_open is None or entry == stop:
+        return None
+    sign = 1 if direction == "long" else -1
+    return max(0.0, (stop - exit_open) * sign / abs(entry - stop))

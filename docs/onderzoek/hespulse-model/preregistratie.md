@@ -917,3 +917,46 @@ trades per punt een weekinterval boven 0 heeft, leg ik voor om dat punt zichtbaa
 instappunt waarom een poging géén plan werd. Alleen meting.
 
 **Geen wijziging van de gewone regels.** De bevriezing (`model_freeze_at_v2`) loopt door.
+
+---
+
+## Aanvulling 2026-11-03 (avond): vier metingen tijdens de bevriezing (vooraf vast)
+
+**Aanleiding.** Plan van aanpak, punt "volgende meetronde" uit de audit. CEO: "jo". Alleen meting: geen regel, melding, kaart of stopregel
+leest deze uitkomsten. De bevriezing (`model_freeze_at_v2`) loopt door.
+
+**M1. Strenge vulling (doortik).**
+1. Een limiet telt in deze arm pas als gevuld als een 5m-candle strikt door de limiet ging: long low < limiet, short high > limiet.
+   Aanraken (low = limiet) telt niet.
+2. Verder gelijk aan de gewone arm: hetzelfde startmoment (publicatie voor A, vastleggen voor B, B0, R en K), dezelfde vervaltijd, dezelfde
+   4u-breuk als `context_weg`, het doel eerst is `weggelopen`. De uitkomst met `model.outcome` vanaf de strenge vulcandle.
+3. Alleen voor plannen die ontstaan na de eerste cyclus met deze code (`settings` `model_strict_from`). Ook voor de arm tegen de dagtrend,
+   apart gehouden.
+4. Bewijs toont per punt de gewone en de strenge arm naast elkaar: gevuld, afgerond, netto R. Geen beslisregel: het verschil zegt hoe
+   optimistisch de aanraakregel is.
+
+**M2. MAE, MFE en stopslip.**
+1. Per gevulde modeltrade (A als signaal, B, B0, R, K als instappunt) MAE en MFE met `excursion.measure` over alle 5m-candles van na de
+   vulcandle tot en met de uitgangscandle. Liggen die buiten het venster van de cyclus, dan worden ze apart opgehaald; lukt dat niet, dan
+   'onbekend', nooit een gedeeltelijke meting.
+2. Stopslip (schatting): bij een stop opent de uitgangscandle al voorbij de stop? Dan is de slip de afstand van die open tot de stop in R,
+   anders 0. Dit is een ondergrens: slip binnen een candle zien 5m-candles niet.
+3. Bewijs toont per punt de mediaan en het 90e percentiel van MAE bij winnaars, het aandeel verliezers dat eerst +1R haalde, en de
+   gemiddelde stopslip.
+
+**M3. Placebo (willekeurig instappen).**
+1. Per afgeronde (stop of doel) modeltrade, met dezelfde scheiding rond de bevriezing als de hoofdcijfers: 10 willekeurige 5m-candles,
+   vast zaad uit soort en id, gelijk verdeeld tussen 7 dagen en 1 uur vóór het startmoment van de trade.
+2. Instap op de open van die candle, stop en doel op hetzelfde percentage van de instap als het plan, dezelfde richting en coin.
+   Uitkomst met `model.outcome` (7 dagen). 'tijd' en zonder uitkomst vallen weg, net als in de hoofdcijfers. Netto met dezelfde kosten per R.
+3. Per trade het verschil: netto R van de trade min het gemiddelde van zijn placebo's. Bewijs toont het gemiddelde verschil met het
+   weekinterval op `LEVEL` (98,75%).
+4. Beslisregel: pas als het interval van het verschil boven 0 ligt, voegt de timing van het model iets toe boven willekeurig instappen in
+   dezelfde richting. Ligt het rond 0, dan komt de winst (of het verlies) uit de richting, niet uit het instappunt.
+
+**M4. Auto-misser voor het model.**
+1. De nachtelijke auto-misser (minstens 3 ATR op 1u binnen 24 uur, ongewijzigd) telt een scenario van het model als gezien: bron
+   `hespulse_model`, of `hespulse_model_tegen` voor de arm tegen de dagtrend, met `detected_at` binnen 12 uur van het begin.
+2. Niet gezien: het model rekent opnieuw op de candles tot 12 uur na het begin en geeft de reden: de dag wees de andere kant op, geen
+   scenario in die richting, of de stap waarop het scenario afviel.
+3. Alleen meting. Een gemiste beweging wordt hoogstens een case, nooit direct een regel.

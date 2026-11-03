@@ -66,7 +66,18 @@ def poc_radar_reason(coin: str, move: dict) -> str:
     return am.poc_reason(move["direction"], levels, move["begin_price"], at)
 
 
-REASONS = {"structuur": structure_reason, "zone_radar": zone_radar_reason, "zone_sweep": zone_sweep_reason, "poc_radar": poc_radar_reason}
+def model_reason(coin: str, move: dict) -> str:
+    from app import model, model_live, range_sweep_live as rsl
+    begin = pd.Timestamp(move["begin_at"])
+    cut = begin + am.SEEN_WINDOW
+    frames = {tf: rsl._upto(rsl.fetch_bars(coin, tf, model_live.LIMIT), cut) for tf in model_live.TFS}
+    frames["1d"] = rsl._upto(rsl.fetch_bars(coin, "1d", model_live.DAY_LIMIT), cut)
+    day = model.DailyBias(frames["1d"], begin).at(begin.value)
+    return am.model_reason(move["direction"], day, model.scenarios(frames, cut), model.scenarios(frames, cut, counter=True), begin)
+
+
+REASONS = {"structuur": structure_reason, "zone_radar": zone_radar_reason, "zone_sweep": zone_sweep_reason, "poc_radar": poc_radar_reason,
+           "hespulse_model": model_reason}
 
 
 def reasons_for(coin: str, move: dict, reasons: Optional[dict] = None) -> dict:

@@ -371,7 +371,8 @@ def _is_counter(range_id) -> bool:
 
 
 def report(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], cost_pct: float, ceo: bool = False,
-           entries: Optional[list[dict]] = None, freeze_at: Optional[datetime] = None) -> dict:
+           entries: Optional[list[dict]] = None, freeze_at: Optional[datetime] = None, strict: Optional[list[dict]] = None,
+           placebo_rs: Optional[dict] = None) -> dict:
     """Alles voor Bewijs en de nachtexport, alleen over wat na de bevriezing ontstond; de rest staat samengevat onder `apart`. De
     vergelijkingen (V1, V2, V3) alleen met ceo=True. De stille arm tegen de dagtrend (B-2026-11-03-11) telt nergens mee in de hoofdcijfers en
     staat apart onder `tegen`, met dezelfde scheiding rond de bevriezing."""
@@ -392,6 +393,10 @@ def report(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], cost_
     rv = v1_trades(rest["v1"], cost_pct)
     re_ = [t for code in ENTRY_NAMES for t in entry_trades(rest["entries"], code, cost_pct)]
     out["tegen"] = tegen
+    # De vier metingen tijdens de bevriezing (B-2026-11-03-12), op dezelfde getelde trades als de hoofdcijfers.
+    out["strikt"] = strict_compare(strict or [], cost_pct)
+    out["excursie"] = excursions(keep["scenarios"], keep["entries"], {r["id"]: r.get("auto_outcome") for r in keep["signals"] if r.get("id")})
+    out["placebo"] = placebo(placebo_pairs(keep["scenarios"], keep["signals"], keep["entries"], placebo_rs or {}, cost_pct))
     out["apart"] = {"scenarios": len(rest["scenarios"]), "h": arm(rh), "v1": arm(rv), "punten": arm(re_),
                     "terugwerkend": sum(1 for s in scenarios if _late(s.get("discovered_at"), s.get("detected_at")))}
     return out
@@ -414,6 +419,115 @@ def _report(scenarios: list[dict], v1: list[dict], signal_rows: list[dict], cost
                           {"key": "V2", "label": "V2 Zone-sweep (referentie)", "arm": arm(v2), "diff": diff(v2, h), "note": ""},
                           {"key": "V3", "label": "V3 POC-radar (referentie)", "arm": arm(v3), "diff": diff(v3, h), "note": ""}]
     return out
+
+
+# ---------------------------------------------------------------------------------------------------------------------------------------
+# De vier metingen tijdens de bevriezing (aanvulling preregistratie 2026-11-03 avond, B-2026-11-03-12). Alleen meting.
+
+STRICT_CODES = ("A", "B", "B0", "R", "K")
+DONE = ("take_profit", "stop_loss")
+
+
+def _gross(outcome: Optional[str], limit: float, stop: float, take: Optional[float]) -> Optional[float]:
+    """Bruto R van een afgeronde trade uit zijn niveaus: stop −1, doel de afstand tot het doel in R. Gewone en strenge arm delen de niveaus."""
+    if outcome == "stop_loss":
+        return -1.0
+    if outcome == "take_profit" and take is not None and limit != stop:
+        return abs(take - limit) / abs(limit - stop)
+    return None
+
+
+def _cost_r(limit: float, stop: float, cost_pct: float) -> float:
+    stop_pct = abs(limit - stop) / limit * 100 if limit else 0.0
+    return cost_pct / stop_pct if stop_pct else 0.0
+
+
+def strict_compare(rows: list[dict], cost_pct: float) -> dict:
+    """M1: per instappunt de gewone arm (aanraken vult) naast de strenge (strikt door de limiet), op precies dezelfde plannen. rows: uit
+    repo.list_model_strict_compare. Een plan dat pas ruim na het herkenbare moment werd vastgelegd (_late) telt niet, net als in de
+    hoofdcijfers. De arm tegen de dagtrend staat apart."""
+    out = {"main": [], "tegen": []}
+    for counter, key in ((0, "main"), (1, "tegen")):
+        for code in STRICT_CODES:
+            rs = [r for r in rows if r["code"] == code and int(r.get("counter") or 0) == counter and not _late(r.get("known"), r.get("detected"))]
+            if not rs:
+                continue
+            net_n, net_s = [], []
+            for r in rs:
+                c = _cost_r(r["limit_price"], r["stop_loss"], cost_pct)
+                g = _gross(r.get("n_outcome"), r["limit_price"], r["stop_loss"], r["take_profit"])
+                if g is not None:
+                    net_n.append(g - c)
+                g = _gross(r.get("outcome"), r["limit_price"], r["stop_loss"], r["take_profit"])
+                if g is not None:
+                    net_s.append(g - c)
+            out[key].append({"code": code, "name": COUNTER_NAMES.get(code, code), "plans": len(rs),
+                             "fill_n": sum(1 for r in rs if r.get("n_filled_at")), "fill_s": sum(1 for r in rs if r.get("filled_at")),
+                             "done_n": len(net_n), "done_s": len(net_s), "mean_n": _mean(net_n), "mean_s": _mean(net_s)})
+    return out
+
+
+def excursions(scenarios: list[dict], entries: list[dict], outcomes: dict) -> list[dict]:
+    """M2: per instappunt de MAE bij winnaars (mediaan en 90e percentiel), het aandeel verliezers dat eerst +1R haalde, en de gemiddelde
+    stopslip (ondergrens). outcomes: {signal_id: auto_outcome} voor A. Zonder meting (leeg) telt een trade als onbekend."""
+    rows = [{"code": "A", "outcome": outcomes.get(s.get("signal_id")), "mae_r": s.get("mae_r"), "mfe_r": s.get("mfe_r"), "slip_r": s.get("slip_r")}
+            for s in scenarios if s.get("signal_id")]
+    rows += [{"code": e["code"], "outcome": e.get("outcome"), "mae_r": e.get("mae_r"), "mfe_r": e.get("mfe_r"), "slip_r": e.get("slip_r")}
+             for e in entries]
+    out = []
+    for code in STRICT_CODES:
+        done = [r for r in rows if r["code"] == code and r["outcome"] in DONE]
+        if not done:
+            continue
+        known = [r for r in done if r["mae_r"] is not None]
+        wins = [r["mae_r"] for r in known if r["outcome"] == "take_profit"]
+        losses = [r for r in known if r["outcome"] == "stop_loss"]
+        slips = [r["slip_r"] for r in done if r["outcome"] == "stop_loss" and r["slip_r"] is not None]
+        out.append({"code": code, "name": COUNTER_NAMES.get(code, code), "n": len(done), "unknown": len(done) - len(known),
+                    "mae_win_med": median(wins) if wins else None, "mae_win_p90": _q(wins, 0.9),
+                    "loss_1r": sum(1 for r in losses if (r["mfe_r"] or 0) >= 1.0) / len(losses) if losses else None, "losses": len(losses),
+                    "slip_mean": _mean(slips), "slip_n": len(slips)})
+    return out
+
+
+def placebo(pairs: list[dict]) -> dict:
+    """M3: per afgeronde trade zijn netto R min het gemiddelde netto R van zijn willekeurige instappen (zelfde coin, richting en geometrie).
+    pairs: {net, end, cost_r, rs (bruto R van de placebo's)}. Het interval per ISO-week op LEVEL. Boven 0: de timing voegt iets toe."""
+    diffs, weeks, models, placebos = [], [], [], []
+    for p in pairs:
+        if not p.get("rs"):
+            continue
+        pm = _mean([g - p["cost_r"] for g in p["rs"]])
+        diffs.append(p["net"] - pm)
+        weeks.append(stats.week_key(p["end"]))
+        models.append(p["net"])
+        placebos.append(pm)
+    out = {"n": len(diffs), "mean_model": _mean(models), "mean_placebo": _mean(placebos), "diff": _mean(diffs), "ci": None,
+           "missing": sum(1 for p in pairs if not p.get("rs"))}
+    if diffs:
+        out["ci"] = stats.cluster_bootstrap_mean(diffs, weeks, level=LEVEL)
+    return out
+
+
+def placebo_pairs(scenarios: list[dict], signal_rows: list[dict], entries: list[dict], placebo_rs: dict, cost_pct: float) -> list[dict]:
+    """De afgeronde trades (A als signaal, B, B0, R, K als instappunt) met hun placebo's; netto zoals de hoofdcijfers."""
+    from app import track_record
+    sig = {r["id"]: r for r in signal_rows if r.get("id")}
+    out = []
+    for s in scenarios:
+        r = sig.get(s.get("signal_id"))
+        if not r or r.get("auto_outcome") not in DONE or r.get("is_practice"):
+            continue
+        net, end = track_record.net_signal_r(r, cost_pct), _dt(r.get("auto_outcome_at"))
+        if net is None or end is None:
+            continue
+        out.append({"net": net, "end": end, "cost_r": _cost_r(r["price"], r["stop_loss"], cost_pct), "rs": placebo_rs.get(("A", s["id"]))})
+    for e in entries:
+        if e.get("code") not in STRICT_CODES or e.get("outcome") not in DONE or e.get("r_gross") is None:
+            continue
+        c = _cost_r(e["limit_price"], e["stop_loss"], cost_pct)
+        out.append({"net": e["r_gross"] - c, "end": _dt(e["outcome_at"]), "cost_r": c, "rs": placebo_rs.get(("E", e["id"]))})
+    return [p for p in out if p["end"] is not None]
 
 
 def r_text(x: Optional[float]) -> str:

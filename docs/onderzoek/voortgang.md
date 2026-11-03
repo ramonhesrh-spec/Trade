@@ -2,6 +2,19 @@
 
 Nieuwste ronde bovenaan. Per ronde: onderzocht, bronnen en controles, aangetoond en niet, tegenbewijs, advies, volgende stap.
 
+## Ronde 11 (2026-11-03, avond): vier controles op de cijfers, alleen meting
+
+**Gebouwd (B-2026-11-03-12, preregistratie laatste aanvulling).** Strenge vulling (doortik) naast de gewone; MAE/MFE over de hele looptijd en
+stopslip als ondergrens; placebo met tien willekeurige instappen per trade; de auto-misser kent nu het model.
+
+**Gevonden tijdens het bouwen.** De MAE van een A-trade werd alleen gemeten over het venster van 25 uur. Een trade die langer liep, kreeg een
+te kleine MAE. Nu over de hele looptijd, en 'onbekend' als dat niet lukt.
+
+**Niet aangetoond.** Nog niets: er zijn nog geen afgeronde trades na de bevriezing. De strenge arm telt alleen plannen van na de eerste
+cyclus met deze code.
+
+**Volgende stap.** Na de eerste 30 trades per punt de drie tabellen onder "Controle op de cijfers" op Bewijs lezen, samen met de stopregel.
+
 ## Ronde 10 (2026-11-03, nacht): kritische terugblik
 
 Alle beschikbare voorbeelden opnieuw bekeken (16 beelden, 9 cases). Uitkomst en voorstel in `plan-van-aanpak-2026-11-04.md`. Correctie:

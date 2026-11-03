@@ -170,6 +170,46 @@ def store_entries(scenario_id: int, coin: str, sc: dict, stamp: pd.Timestamp, ne
     return n
 
 
+def _excursion(coin: str, direction: str, entry: float, stop: float, take: Optional[float], filled_at: pd.Timestamp, at: pd.Timestamp,
+               b5: pd.DataFrame) -> Optional[dict]:
+    """M2: MAE/MFE over alle 5m-candles van na de vulcandle tot en met de uitgangscandle. Begint het venster van de cyclus (25 uur) later dan
+    de vulling, dan worden ze apart opgehaald: een deel meten zou een te kleine MAE geven. None: niet te meten ('onbekend')."""
+    first = filled_at + model.TF["5m"]
+    if len(b5) and b5["timestamp"].iloc[0] <= first:
+        seen = b5[(b5["timestamp"] > filled_at) & (b5["timestamp"] <= at)]
+    else:
+        try:
+            seen = outcome_measure.candles_between(coin, first, at + model.TF["5m"])
+        except Exception:
+            logger.exception("Candles voor MAE/MFE van %s niet op te halen", coin)
+            return None
+        if not len(seen) or seen["timestamp"].iloc[0] > first or seen["timestamp"].iloc[-1] < at:
+            return None
+    return excursion.measure(direction, entry, stop, take, seen)
+
+
+def track_strict(t: dict, b5: pd.DataFrame, breaks: list, stamp: pd.Timestamp) -> None:
+    """M1 (aanvulling 2026-11-03 avond): hetzelfde plan met de strenge vulregel. Alleen meting."""
+    if t["state"] == "wacht":
+        expires = pd.Timestamp(t["expires_at"])
+        res = model.walk_fill(t["direction"], t["limit_price"], t["take_profit"], pd.Timestamp(t["start_at"]), expires, b5,
+                              breaks_at=breaks, strict=True)
+        if res["state"] == "gevuld":
+            repo.update_model_strict(t["id"], state="gevuld", filled_at=_iso(res["at"]))
+            t = {**t, "state": "gevuld", "filled_at": _iso(res["at"])}
+        elif res["state"]:
+            repo.update_model_strict(t["id"], state=res["state"], ended_at=_iso(res["at"]))
+            return
+        elif stamp >= expires:
+            repo.update_model_strict(t["id"], state="vervallen", ended_at=_iso(expires))
+            return
+    if t["state"] == "gevuld":
+        out = model.outcome(t["direction"], t["limit_price"], t["stop_loss"], t["take_profit"], pd.Timestamp(t["filled_at"]), b5)
+        if out["state"]:
+            repo.update_model_strict(t["id"], state="klaar", outcome=out["state"], outcome_at=_iso(out["at"]), r_gross=out["r"],
+                                     ambiguous=int(out["ambiguous"]), ended_at=_iso(out["at"]))
+
+
 def track_entry(e: dict, b5: pd.DataFrame, breaks: list, stamp: pd.Timestamp) -> None:
     """B, B0 en P stil, met de regels van H: vulling vanaf het vastleggen (model.walk_fill), uitkomst vanaf de vulcandle (model.outcome).
     B vervalt na zijn 6 uur; P leeft zolang het scenario, net als V1."""
@@ -192,8 +232,16 @@ def track_entry(e: dict, b5: pd.DataFrame, breaks: list, stamp: pd.Timestamp) ->
     if e["state"] == "gevuld":
         out = model.outcome(e["direction"], e["limit_price"], e["stop_loss"], e["take_profit"], pd.Timestamp(e["filled_at"]), b5)
         if out["state"]:
+            x = None
+            try:
+                x = _excursion(e["coin"], e["direction"], e["limit_price"], e["stop_loss"], e["take_profit"], pd.Timestamp(e["filled_at"]),
+                               pd.Timestamp(out["at"]), b5)
+            except Exception:
+                logger.exception("MAE/MFE van instappunt %s niet gemeten", e["id"])
             repo.update_model_entry(e["id"], state="klaar", outcome=out["state"], outcome_at=_iso(out["at"]), r_gross=out["r"],
-                                    ambiguous=int(out["ambiguous"]), ended_at=_iso(out["at"]))
+                                    ambiguous=int(out["ambiguous"]), ended_at=_iso(out["at"]),
+                                    mae_r=x["mae_r"] if x else None, mfe_r=x["mfe_r"] if x else None,
+                                    slip_r=model.slip_r(e["direction"], e["limit_price"], e["stop_loss"], out["state"], out.get("exit_open")))
 
 
 async def sync(coin: str, scs: list[dict], stamp: pd.Timestamp, price: Optional[float], btc: Optional[Callable[[], dict]] = None,
@@ -324,8 +372,15 @@ async def track(now: Optional[datetime] = None) -> None:
     trades = repo.list_open_model_trades()
     held = [r for r in repo.list_model_scenarios(entry_states=("btc_tegen",)) if r.get("cf_state") in ("wacht", "gevuld")]
     alts = repo.list_model_entries(("wacht", "gevuld"))
+    # M1: de eerste cyclus met deze code legt het startmoment vast; alleen plannen van daarna krijgen een strenge arm (een ouder plan valt
+    # buiten het venster van 25 uur en zou ten onrechte vervallen).
+    repo.claim_flag(repo.MODEL_STRICT_KEY)
+    since = repo.flag_at(repo.MODEL_STRICT_KEY)
+    if since:
+        repo.seed_model_strict(since.isoformat())
+    strict = repo.list_model_strict(("wacht", "gevuld"))
     for coin in sorted({r["coin"] for r in waiting} | {r["coin"] for r in v1} | {t["coin"] for t in trades} | {r["coin"] for r in held}
-                       | {e["coin"] for e in alts}):
+                       | {e["coin"] for e in alts} | {t["coin"] for t in strict}):
         try:
             b5 = rsl._upto(await asyncio.to_thread(rsl.fetch_bars, coin, "5m", FILL_LIMIT), stamp)
             breaks = model.break_times(rsl._upto(await asyncio.to_thread(rsl.fetch_bars, coin, "4h", LIMIT), stamp), stamp)
@@ -354,6 +409,11 @@ async def track(now: Optional[datetime] = None) -> None:
                 track_entry(e, b5, breaks, stamp)
             except Exception:
                 logger.exception("Instappunt %s %s van scenario %s is niet verwerkt", e["code"], e["id"], e["scenario_id"])
+        for t in (x for x in strict if x["coin"] == coin):
+            try:
+                track_strict(t, b5, breaks, stamp)
+            except Exception:
+                logger.exception("Strenge arm %s (%s %s) is niet verwerkt", t["id"], t["kind"], t["ref_id"])
         for r in (x for x in held if x["coin"] == coin):
             try:
                 track_cf(r, b5, breaks, stamp)
@@ -404,10 +464,12 @@ def track_trade(t: dict, b5: pd.DataFrame) -> Optional[str]:
         repo.set_trade_result(t["id"], out["r"], _iso(at))
     end = at + model.TF["5m"]
     try:
-        seen = b5[(b5["timestamp"] > filled_at) & (b5["timestamp"] <= at)]
-        x = excursion.measure(t["direction"], t["price"], t["stop_loss"], t["take_profit"], seen)
-        if x:
-            repo.set_trade_excursion(t["id"], x["mae_r"], x["mfe_r"], "5m")
+        # Over de hele looptijd (M2): een trade van meer dan 25 uur viel eerder half buiten het venster en kreeg een te kleine MAE.
+        x = _excursion(t["coin"], t["direction"], t["price"], t["stop_loss"], t["take_profit"], filled_at, at, b5)
+        repo.set_trade_excursion(t["id"], x["mae_r"] if x else None, x["mfe_r"] if x else None, "5m" if x else outcome_measure.UNKNOWN)
+        if t.get("scenario_id"):
+            repo.set_model_excursion(t["scenario_id"], x["mae_r"] if x else None, x["mfe_r"] if x else None,
+                                     model.slip_r(t["direction"], t["price"], t["stop_loss"], out["state"], out.get("exit_open")))
     except Exception:
         logger.exception("MAE/MFE van modeltrade %s niet vastgelegd", t["id"])
     outcome_measure.record_funding(t, filled_at, end)

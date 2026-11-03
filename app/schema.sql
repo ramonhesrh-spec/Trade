@@ -1267,6 +1267,9 @@ CREATE TABLE IF NOT EXISTS model_scenarios (
     updated_at TEXT,
     htf TEXT,
     alt_log TEXT,
+    mae_r REAL,                          -- M2: MAE, MFE en stopslip van de A-trade in R; leeg = niet gemeten
+    mfe_r REAL,
+    slip_r REAL,
     UNIQUE (coin, range_id)
 );
 CREATE INDEX IF NOT EXISTS idx_model_scenarios_status ON model_scenarios(status, entry_state);
@@ -1295,7 +1298,42 @@ CREATE TABLE IF NOT EXISTS model_entries (
     ambiguous INTEGER NOT NULL DEFAULT 0,
     ended_at TEXT,
     htf TEXT,
+    mae_r REAL,
+    mfe_r REAL,
+    slip_r REAL,
     UNIQUE (scenario_id, code)
+);
+-- M1 (aanvulling 2026-11-03 avond): dezelfde plannen met de strenge vulregel (strikt door de limiet). kind 'A': model_scenarios.id, 'E':
+-- model_entries.id. Alleen meting: geen melding, journaal of signaal. state: wacht, gevuld, klaar of een eindstand van model.walk_fill.
+CREATE TABLE IF NOT EXISTS model_strict (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    ref_id INTEGER NOT NULL,
+    code TEXT NOT NULL,
+    counter INTEGER NOT NULL DEFAULT 0,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    start_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'wacht',
+    filled_at TEXT,
+    outcome TEXT,
+    outcome_at TEXT,
+    r_gross REAL,
+    ambiguous INTEGER NOT NULL DEFAULT 0,
+    ended_at TEXT,
+    UNIQUE (kind, ref_id)
+);
+-- M3: de bruto R van de willekeurige instappen per afgeronde modeltrade (scripts/model_placebo.py), als JSON-lijst.
+CREATE TABLE IF NOT EXISTS model_placebo (
+    kind TEXT NOT NULL,
+    ref_id INTEGER NOT NULL,
+    rs TEXT NOT NULL,
+    made_at TEXT NOT NULL,
+    PRIMARY KEY (kind, ref_id)
 );
 -- V1 (§6): de vroege limiet op de pool op moment A, stil gemeten. Geen melding, geen journaal, geen signals-rij. state: wacht, gevuld,
 -- vervallen (het scenario eindigde zonder vulling), weggelopen, context_weg, niet_vulbaar of geen_doel; outcome na de vulling op 5m.

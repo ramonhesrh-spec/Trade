@@ -136,7 +136,8 @@ def build_export(now: datetime, stop_fetch: Callable = _stop_fetch, fetch_4h: Ca
         # HesPulse-model (preregistratie §8): uitvoerbaarheid, trechter, N_eff, drawdown, zonder de beste 5% en de vergelijkingen V1-V3.
         "model": model_measure.jsonable(model_measure.report(repo.list_model_scenarios(counter=None), repo.list_model_v1(),
                                                              repo.list_signals_for_quality_report(None), config.TRACK_RECORD_COST_PCT, ceo=True,
-                                                             entries=repo.list_model_entries(), freeze_at=repo.model_freeze_at())),
+                                                             entries=repo.list_model_entries(), freeze_at=repo.model_freeze_at(),
+                                                             strict=repo.list_model_strict_compare(), placebo_rs=repo.list_model_placebo())),
     }
 
 
@@ -273,6 +274,12 @@ def main() -> None:
         t0 = time.monotonic()
         rows = script.run(list(config.FIXED_COINS), now, am.LOOKBACK_HOURS)
         print(f"Auto-missers: {len(rows)} bewegingen, {len(am.unseen(rows))} niet gezien ({time.monotonic() - t0:.0f} s)")
+    # M3 (B-2026-11-03-12): placebo's voor de modeltrades die sinds gisteren afgerond zijn; een mislukking houdt de export niet tegen.
+    try:
+        import model_placebo
+        print(f"Placebo's: {model_placebo.run(now)} trades bijgewerkt")
+    except Exception as exc:
+        print(f"Placebo's mislukt: {exc}")
     files = write_files(build_export(now), Path(a.map), now)
     print("Geschreven: " + ", ".join(str(f) for f in files))
     if a.git:
