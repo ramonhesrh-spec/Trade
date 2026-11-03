@@ -170,7 +170,7 @@ def v1_trades(rows: list[dict], cost_pct: float) -> list[dict]:
     return out
 
 
-ENTRY_NAMES = {"B": "B lagere top", "B0": "B0 zonder premium-eis", "R": "R breuk en terugtest", "P": "P POC-limiet"}
+ENTRY_NAMES = {"B": "B lagere top", "B0": "B0 zonder premium-eis", "R": "R breuk en terugtest", "K": "K consolidatiebreuk", "P": "P POC-limiet"}
 
 
 def entry_trades(entries: list[dict], code: str, cost_pct: float) -> list[dict]:
@@ -204,7 +204,7 @@ def point_verdict(entries: list[dict], code: str, cost_pct: float) -> str:
     return verdict(arm(entry_trades(entries, code, cost_pct)))
 
 
-LOUD_CODES = ("B", "B0", "R")
+LOUD_CODES = ("B", "B0", "R", "K")
 
 
 def _htf(raw) -> dict:

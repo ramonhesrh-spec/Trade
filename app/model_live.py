@@ -108,9 +108,9 @@ async def _announce_entry(row: dict, stamp: pd.Timestamp) -> None:
             push_notify.record_failure(uid, "kans", mc.card_url(row["id"]), exc)
 
 
-ENTRY_CODES = {"b": "B", "b0": "B0", "p": "P", "r": "R"}
+ENTRY_CODES = {"b": "B", "b0": "B0", "p": "P", "r": "R", "k": "K"}
 # Aanvullend besluit 2026-11-03 (ONDO 2 november: B0 had de daling, stil): B, B0 en R melden luid zoals A, met dezelfde poorten.
-LOUD_CODES = ("B", "B0", "R")
+LOUD_CODES = ("B", "B0", "R", "K")
 
 
 async def _announce_alt(scenario_id: int, coin: str, direction: str, e: dict, stamp: pd.Timestamp, price: Optional[float],

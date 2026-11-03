@@ -288,7 +288,7 @@ class NoLookaheadTest(unittest.TestCase):
                 if p["entry"]:
                     self.assertEqual(p["entry"], w["entry"])
                 # Aanvullend besluit 2026-11-03: P, B en B0 volgen dezelfde eis. Wat op het snijmoment bekend was, is gelijk; niets eerder.
-                for key in ("p", "b", "b0", "r"):
+                for key in ("p", "b", "b0", "r", "k"):
                     if w[key] is not None and w[key]["known_at"] <= cut:
                         self.assertEqual(p[key], w[key], f"{key} {w['range_id']} op {cut}")
                     else:
@@ -346,10 +346,38 @@ class AltEntryTest(unittest.TestCase):
             self.assertAlmostEqual(e["limit"], e["top"])                  # het gebroken niveau zelf
             self.assertGreater((e["take"] - e["limit"]) * sign, 0)
             self.assertGreater((e["limit"] - e["stop"]) * sign, 0)
-            self.assertEqual(e["known_at"], e["shift_at"])                 # bekend op het sluiten van de breukcandle
+            self.assertLessEqual(e["shift_at"], e["known_at"])             # bekend op de breuk of later, als de top pas later herkenbaar was
             self.assertLessEqual((e["extreme"] - e["eq"]) * sign, 1e-9)    # de top/bodem zelf in premium/discount
         # R volgt de breuk ook waar B op displacement afviel: er zijn er minstens zoveel als B
         self.assertGreaterEqual(len(rs), len([s for s in scs if s["b"]]))
+
+    def test_r_en_k_zijn_bekend_op_hun_eigen_moment_niet_eerder(self):
+        """Regressie 2026-11-03: R gaf als bekend-moment de breukcandle, ook als die vóór het herkennen van de 1u-top lag (7 van 26 te vroeg).
+        Snijden op precies het bekend-moment moet hetzelfde punt geven; een minuut ervoor nog niet."""
+        checked = 0
+        for seed in (1, 2, 10):
+            fr = S.frames(random_rows(seed))
+            for s in M.scenarios(fr, end_of(fr)):
+                for key in ("r", "k"):
+                    e = s[key]
+                    if not e:
+                        continue
+                    at_ = [p for p in M.scenarios(S.cut_frames(fr, e["known_at"]), e["known_at"]) if p["range_id"] == s["range_id"]]
+                    self.assertEqual(at_[0][key], e, f"{key} {s['range_id']}")
+                    checked += 1
+        self.assertGreater(checked, 3)
+
+    def test_k_breekt_de_consolidatie_bij_de_top(self):
+        scs = self.all_scs()
+        ks = [s for s in scs if s["k"]]
+        self.assertTrue(ks, "de reeksen moeten K opleveren")
+        for s in ks:
+            e, sign = s["k"], (1 if s["direction"] == "long" else -1)
+            self.assertAlmostEqual(e["limit"], e["top"])                  # het gebroken niveau van de consolidatie
+            self.assertGreater((e["take"] - e["limit"]) * sign, 0)
+            self.assertGreater((e["limit"] - e["stop"]) * sign, 0)
+            self.assertLessEqual((e["extreme"] - e["eq"]) * sign, 1e-9)    # de top zelf in premium (short) of discount (long)
+            self.assertGreater(e["top_at"], e["low_at"])                  # de consolidatie ligt ná de top, niet ervoor zoals bij R
 
     def test_p_on_a_naked_poc_in_discount(self):
         lvl = poc.PocLevel("day", pd.Timestamp("2026-10-02", tz="UTC"), 106.0, None)

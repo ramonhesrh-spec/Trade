@@ -862,3 +862,31 @@ Onbekend is nooit "nee". Bewijs toont per kenmerk de afgeronde plannen die melde
 per groep zeggen de cijfers iets; ook dan is het een kenmerk, geen filter, tot er een nieuwe preregistratie ligt.
 
 **Nooit.** De 0,3% of de 30 minuten achteraf aanpassen. Tijdens de bevriezing een instapregel veranderen.
+
+---
+
+## Aanvullend besluit CEO 2026-11-03 (ochtend, 2): instappunt K "consolidatiebreuk", live; bevriezing opnieuw
+
+**Aanleiding.** SOL 30 oktober (`cases/2026-10-30-sol-1u.md`). Het model vond de top 98,54, maar B en R vielen af op `geen_shift`: na een
+rechte opleving lag het laatste 15m-dal vóór de top ver onder de consolidatie bij de top. De analist shortte op de breuk van die
+consolidatie. De CEO, na mijn advies om dit pas na de bevriezing te toetsen: "Wel nu bouwen".
+
+**Regel K (short; long gespiegeld).**
+1. *Trigger:* dezelfde lagere top als B, met dezelfde eisen, dus in premium.
+2. *Consolidatie:* de CONS_BARS = 8 candles van 15m (2 uur) direct na de top. Sluit een daarvan boven de top, dan vervalt de poging.
+3. *Breuk:* een 15m-slot onder het laagste punt van die 8 candles, binnen 24 candles van 15m na de top. Een slot boven de top maakt de
+   poging ongeldig.
+4. *Limiet, stop, doel:* zoals R. Limiet op het gebroken niveau, stop 0,25 ATR(15m van de breukcandle) voorbij de top met de vloer van
+   0,4%, doel zoals 4.7, geen premium-eis op de limiet.
+5. Bekend op de candle waarop de motor hem vaststelt, nooit eerder dan het herkennen van de top. Geldig 6 uur. Hoogstens één K per
+   scenario. Luid zoals B, B0 en R, met dezelfde poorten en de stopregel per punt. Voorrang op de kaart: B, R, K, B0.
+
+**Eerlijkheid.** De 8 candles komen uit één voorbeeld (SOL, ongeveer 2,5 uur consolidatie). Het getal ligt nu vast en wordt nooit
+afgesteld. Of K iets oplevert, is onbekend.
+
+**Fout gevonden en hersteld (R).** R gaf als bekend-moment de breukcandle, ook als die vóór het herkennen van de 1u-top lag. In de
+testreeksen gold dat voor 7 van 26 punten. Live gaf dat een te vroege vervaltijd, en de meting zette zulke punten als "terugwerkend" apart.
+Nu is het bekend-moment de candle waarop de motor het punt vaststelt. Regressietest: snijden op het bekend-moment geeft hetzelfde punt.
+
+**Bevriezing opnieuw.** De bevriezing van B-2026-11-03-09 begint opnieuw bij de eerste cyclus met deze code (`settings`
+`model_freeze_at_v2`). Weer drie weken.

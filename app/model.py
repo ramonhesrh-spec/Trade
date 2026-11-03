@@ -53,7 +53,8 @@ WARMUP_15M = 30
 # Toestanden (4.13) en eindstanden. Ze staan ook in app/end_reason.py (tests/test_basis_afsluiten.py eist een tekst).
 WAIT_STATES = ("wacht_sweep", "prik", "wacht_shift", "wacht_fvg")
 SCENARIO_ENDS = ("context_weg", "geen_pool", "afgerond")
-ALT_CODES = ("B", "B0", "R")                     # aanvullend besluit 2026-11-03: B meldt niet, B0 staat nergens; beide alleen gemeten en (B) getoond
+ALT_CODES = ("B", "B0", "R", "K")                # aanvullende besluiten 2026-11-03; K: consolidatiebreuk (B-2026-11-03-10)
+CONS_BARS = 8                               # K: de consolidatie bij de top is de 8 candles van 15m (2 uur) erna; vooraf vast, nooit afstellen
 ENTRY_ENDS = ("vervallen", "weggelopen", "context_weg", "niet_vulbaar", "btc_tegen")
 FAIL_REASONS = {
     "run": "De koers liep door de pool zonder terug te sluiten (een run, geen sweep).",
@@ -526,19 +527,36 @@ class _Run:
         f = self.f15
         T = int(f.ct[t])
         if tr["phase"] == "zoek":
-            hit = self._higher_low(t, ctx, code in ("B", "R"), tr["used"], tr["log"])
+            hit = self._higher_low(t, ctx, code in ("B", "R", "K"), tr["used"], tr["log"])
             if hit is None:
                 return
             j, X, p = hit
             tr["used"].add(p)
-            tops = [q for q in range(0, j - K_15M + 1) if self.hi15[q]]
-            if not tops:
-                tr["log"].append({"at": T, "wat": "geen_top", "niveau": X})
-                return
-            bp = tops[-1]
-            tr.update(phase="wacht_shift", j=j, X=X, B=float(f.h[bp]), top_at=int(f.ts[bp].value), low_at=int(f.ts[j].value), found=T,
-                      checked=j)
+            if code == "K":
+                tr.update(phase="wacht_cons", j=j, X=X, low_at=int(f.ts[j].value), found=T)
+            else:
+                tops = [q for q in range(0, j - K_15M + 1) if self.hi15[q]]
+                if not tops:
+                    tr["log"].append({"at": T, "wat": "geen_top", "niveau": X})
+                    return
+                bp = tops[-1]
+                tr.update(phase="wacht_shift", j=j, X=X, B=float(f.h[bp]), top_at=int(f.ts[bp].value), low_at=int(f.ts[j].value), found=T,
+                          checked=j)
             tr["log"].append({"at": T, "wat": "gevonden", "niveau": X})
+        if tr["phase"] == "wacht_cons":
+            # K (B-2026-11-03-10, SOL 30 oktober): na een rechte beweging ligt het laatste 15m-dal vóór de top (B en R) ver weg. K breekt
+            # in plaats daarvan de consolidatie bij de top: het uiterste van de CONS_BARS candles van 15m na de top. Sluit er in die candles
+            # een voorbij de top zelf, dan vervalt de poging.
+            j = tr["j"]
+            if t < j + CONS_BARS:
+                return
+            win = slice(j + 1, j + CONS_BARS + 1)
+            if (f.c[win] < tr["X"]).any():
+                tr["phase"] = "zoek"
+                tr["log"].append({"at": T, "wat": "geen_shift", "niveau": tr["X"]})
+                return
+            k = j + 1 + int(np.argmax(f.h[win]))
+            tr.update(phase="wacht_shift", B=float(f.h[k]), top_at=int(f.ts[k].value), checked=j + CONS_BARS)
         if tr["phase"] == "wacht_shift":
             for u in range(tr["checked"] + 1, t + 1):
                 tr["checked"] = u
@@ -551,8 +569,8 @@ class _Run:
                     break
             else:
                 return
-        if code == "R" and tr["phase"] == "wacht_fvg":
-            return self._retest(tr, ctx)
+        if code in ("R", "K") and tr["phase"] == "wacht_fvg":
+            return self._retest(tr, ctx, t)
         if tr["phase"] == "wacht_fvg":
             what, m, k, fvgs = displacement(f, tr["j"], tr["c"], t)
             if what == "wacht":
@@ -569,12 +587,13 @@ class _Run:
             tr["entry"] = {**e, "extreme": tr["X"], "low_at": tr["low_at"], "top": tr["B"], "top_at": tr["top_at"],
                            "shift_at": int(f.ct[tr["c"]])}
 
-    def _retest(self, tr: dict, ctx: Context) -> None:
-        """R (aanvullend besluit 2026-11-03): limiet op het gebroken niveau zelf, zonder displacement of gap; stop 0,25 ATR voorbij het
-        uiterste met de vloer; doel zoals 4.7. Bekend op het sluiten van de breukcandle. Geen premium-eis op de limiet."""
+    def _retest(self, tr: dict, ctx: Context, t: int) -> None:
+        """R en K (aanvullende besluiten 2026-11-03): limiet op het gebroken niveau zelf, zonder displacement of gap; stop 0,25 ATR voorbij
+        het uiterste met de vloer; doel zoals 4.7. Geen premium-eis op de limiet. Bekend op candle t, niet op de breukcandle: de breuk kan
+        vallen vóór de 1u-top herkenbaar was, en dan was het punt pas bij t bekend (gevonden 2026-11-03: 7 van 26 punten te vroeg)."""
         f = self.f15
         c = tr["c"]
-        T = int(f.ct[c])
+        T = int(f.ct[t])
         limit = tr["B"]
         stop = _floor(limit, tr["X"] - STOP_ATR * f.atr[c])
         tgt = _target(self._cands(ctx, T, limit, float("inf")), limit)
@@ -585,7 +604,7 @@ class _Run:
         tr["entry"] = {"known": T, "limit": limit, "stop": stop, "take": tgt[2], "target_kind": tgt[0], "target_label": tgt[1],
                        "rr": (tgt[2] - limit) / (limit - stop), "zone": (limit, limit), "ob_overlap": False, "eq": ctx.eq,
                        "range": (ctx.L, ctx.H), "extreme": tr["X"], "low_at": tr["low_at"], "top": tr["B"], "top_at": tr["top_at"],
-                       "shift_at": T}
+                       "shift_at": int(f.ct[c])}
 
     def _plan(self, t: int, ctx: Context, k: int, fvgs: list, X: float, c: int, premium_check: bool = True) -> tuple[Optional[str], Optional[dict]]:
         """De limiet, stop en doel van 4.11 en 4.12 voor elke entry met een gap (A, B, B0). (reden, None) als er geen entry komt."""

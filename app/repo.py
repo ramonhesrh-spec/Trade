@@ -3884,7 +3884,8 @@ def clear_announcement_at() -> None:
     db.set_setting(ANNOUNCEMENT_SETTING_KEY, "")
 
 
-MODEL_FREEZE_KEY = "model_freeze_at"
+# v2: de bevriezing begon opnieuw met instappunt K en de herstelde tijd van R (B-2026-11-03-10); v1 bleef in settings staan.
+MODEL_FREEZE_KEY = "model_freeze_at_v2"
 
 
 def model_freeze_at() -> Optional[datetime]:

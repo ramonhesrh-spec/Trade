@@ -95,6 +95,7 @@ def btc_of(row: dict) -> dict:
 ENTRY_INFO = {
     "A": ("Na sweep", "Sweep van een liquiditeitspool, daarna een breuk op 15m met displacement; limiet op de gap."),
     "B": ("Lagere top", "Een lagere 1u-top in premium (long: hogere bodem in discount), daarna een breuk op 15m met displacement; limiet op de gap."),
+    "K": ("Consolidatiebreuk", "Een lagere 1u-top in premium (long: hogere bodem in discount), daarna een slot voorbij de consolidatie van 2 uur na de top; limiet op dat gebroken niveau."),
     "B0": ("Lagere top, ook buiten premium", "Als B, maar de lagere top mag ook onder het evenwicht van de range liggen (long: boven); limiet op de gap."),
     "V1": ("Vroege limiet op de pool", "Limiet op de liquiditeitspool zelf, zonder op de sweep te wachten; stop 1 ATR (1u) erachter."),
     "R": ("Breuk en terugtest", "Een lagere 1u-top in premium (long: hogere bodem in discount), daarna een slot voorbij het laatste 15m-dal; limiet op dat gebroken niveau, zonder displacement of gap."),
@@ -239,7 +240,7 @@ def scenario_rows(row: dict) -> list[dict]:
     return [{**r, "text": price_text.nl(r["value"]), "copy": price_text.plain(r["value"])} for r in rows]
 
 
-READY_CODES = ("B", "B0", "R")            # volgorde = voorrang: B is de strengste, B0 alleen als B er niet is (B-2026-11-03-07)
+READY_CODES = ("B", "R", "K", "B0")       # volgorde = voorrang: B is de strengste, B0 alleen als de rest er niet is (B-2026-11-03-07, -10)
 POINT_KEY = "mpoint"
 
 

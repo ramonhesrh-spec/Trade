@@ -345,6 +345,9 @@ class AltAlertTest(Case):
     def test_r_meldt_ook(self):
         self.assertIn("HesPulse R", self.run_with("r", self.point("R"))[0]["title"])
 
+    def test_k_meldt_ook(self):
+        self.assertIn("HesPulse K", self.run_with("k", self.point("K"))[0]["title"])
+
     def test_tegenvoorbeeld_p_meldt_niet(self):
         self.assertEqual(self.run_with("p", self.point("P")), [])
 
