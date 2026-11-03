@@ -88,7 +88,7 @@ f_struct(int k, int maxBars) =>
     int   evt = 0
     int   lbl = 0
     float lvl = na
-    int   swT = na
+    int   swI = na
     if isPivotHigh(k)
         array.push(hiP, high[k])
         array.push(hiI, bar_index - k)
@@ -128,7 +128,7 @@ f_struct(int k, int maxBars) =>
             mx := math.max(mx, high[i])
             if i < n
                 mn := math.min(mn, low[i])
-        swT := time[n]
+        swI := bar_index - n
         uL := mn
         uH := mx
         uB := bar_index
@@ -164,7 +164,7 @@ f_struct(int k, int maxBars) =>
             mn := math.min(mn, low[i])
             if i < n
                 mx := math.max(mx, high[i])
-        swT := time[n]
+        swI := bar_index - n
         dL := mn
         dH := mx
         dB := bar_index
@@ -179,15 +179,15 @@ f_struct(int k, int maxBars) =>
             dH := high
     bool uOk = not na(uB) and bar_index - uB <= maxBars
     bool dOk = not na(dB) and bar_index - dB <= maxBars
-    [dir, evt, lbl, lvl, swT, uL, uH, uOk, uT, dL, dH, dOk, dT]
+    [dir, evt, lbl, lvl, swI, uL, uH, uOk, uT, dL, dH, dOk, dT, uB, dB]
 
 // Alleen gesloten candles van het hogere tijdframe: de vorige waarde met lookahead_on, zoals TradingView aanraadt tegen herschrijven.
 f_dir(int k) =>
-    [d, e, l, v, t, a1, a2, a3, a4, b1, b2, b3, b4] = f_struct(k, BIAS_MAX_BARS)
+    [d, e, l, v, t, a1, a2, a3, a4, b1, b2, b3, b4, q1, q2] = f_struct(k, BIAS_MAX_BARS)
     d[1]
 
 f_range4h() =>
-    [d, e, l, v, t, uL, uH, uOk, uT, dL, dH, dOk, dT] = f_struct(2, BIAS_MAX_BARS)
+    [d, e, l, v, t, uL, uH, uOk, uT, dL, dH, dOk, dT, q1, q2] = f_struct(2, BIAS_MAX_BARS)
     [d[1], uL[1], uH[1], uOk[1], uT[1], dL[1], dH[1], dOk[1], dT[1]]
 
 dayDir = request.security(syminfo.tickerid, "D", f_dir(2), lookahead = barmerge.lookahead_on)
@@ -198,17 +198,24 @@ m15Dir = request.security(syminfo.tickerid, "15", f_dir(2), lookahead = barmerge
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // De 4u-range top-down: de dag kiest welke van de twee ranges telt.
 
+// Een lager tijdframe opvragen dan de grafiek (4u op een dag-grafiek) geeft in TradingView geen betrouwbare waarden. Boven 4u rekent de
+// range daarom op de candles van de grafiek zelf, en het label zegt dat.
+[gDir, gEvt, gLbl, gLvl, gSwI, guL, guH, guOk, guT, gdL, gdH, gdOk, gdT, guB, gdB] = f_struct(2, BIAS_MAX_BARS)
+bool fromH4 = timeframe.in_seconds() <= 14400
+string rName = fromH4 ? "4u" : timeframe.period
 float rL = na
 float rH = na
-int   rT = na
-if dayDir == 1 and uOk4
-    rL := uL4
-    rH := uH4
-    rT := uT4
-else if dayDir == -1 and dOk4
-    rL := dL4
-    rH := dH4
-    rT := dT4
+int   rStart = na
+if fromH4
+    if dayDir == 1 and uOk4
+        rL := uL4, rH := uH4, rStart := uT4
+    else if dayDir == -1 and dOk4
+        rL := dL4, rH := dH4, rStart := dT4
+else
+    if dayDir == 1 and guOk
+        rL := guL, rH := guH, rStart := guT
+    else if dayDir == -1 and gdOk
+        rL := gdL, rH := gdH, rStart := gdT
 
 var line  lnH = na
 var line  lnL = na
@@ -225,14 +232,14 @@ if barstate.islast
     label.delete(lbH), label.delete(lbL), label.delete(lbE), label.delete(lbP), label.delete(lbD)
     if showRange and not na(rL) and not na(rH) and rH > rL
         float eq = (rL + rH) / 2
-        int x0 = rT
-        int x1 = time + 10 * (time - time[1])
+        int x0 = rStart
+        int x1 = time + 10 * timeframe.in_seconds() * 1000
         lnH := line.new(x0, rH, x1, rH, xloc = xloc.bar_time, color = INK, width = 2)
         lnL := line.new(x0, rL, x1, rL, xloc = xloc.bar_time, color = INK, width = 2)
         lnE := line.new(x0, eq, x1, eq, xloc = xloc.bar_time, color = GREY, width = 1, style = line.style_dashed)
         bxP := box.new(x0, rH, x1, eq, xloc = xloc.bar_time, bgcolor = color.new(chart.fg_color, 93), border_color = color.new(chart.fg_color, 100))
-        lbH := label.new(x1, rH, "4u RH", xloc = xloc.bar_time, style = label.style_label_left, color = PLATE, textcolor = INK, size = size.normal)
-        lbL := label.new(x1, rL, "4u RL", xloc = xloc.bar_time, style = label.style_label_left, color = PLATE, textcolor = INK, size = size.normal)
+        lbH := label.new(x1, rH, rName + " RH", xloc = xloc.bar_time, style = label.style_label_left, color = PLATE, textcolor = INK, size = size.normal)
+        lbL := label.new(x1, rL, rName + " RL", xloc = xloc.bar_time, style = label.style_label_left, color = PLATE, textcolor = INK, size = size.normal)
         lbE := label.new(x1, eq, "EQ 0,5", xloc = xloc.bar_time, style = label.style_label_left, color = PLATE, textcolor = INK, size = size.normal)
         lbP := label.new(x1, (rH + eq) / 2, "premium", xloc = xloc.bar_time, style = label.style_label_left, color = PLATE, textcolor = GREY, size = size.small)
         lbD := label.new(x1, (rL + eq) / 2, "discount", xloc = xloc.bar_time, style = label.style_label_left, color = PLATE, textcolor = GREY, size = size.small)
@@ -246,7 +253,12 @@ f_word(int d) =>
 var table tb = table.new(position.top_right, 1, 2, bgcolor = PLATE, border_color = GREY, border_width = 1)
 if barstate.islast and showTrend
     string herstel = dayDir != 0 and h4Dir != 0 and h4Dir != dayDir ? " herstel" : ""
-    string txt = "Trend  D " + f_word(dayDir) + " · 4u " + f_word(h4Dir) + herstel + " · 1u " + f_word(h1Dir) + " · 15m " + f_word(m15Dir)
+    // Een tijdframe onder dat van de grafiek is niet betrouwbaar op te vragen: dan een streepje.
+    int sec = timeframe.in_seconds()
+    string w4 = sec <= 14400 ? f_word(h4Dir) + herstel : "–"
+    string w1 = sec <= 3600 ? f_word(h1Dir) : "–"
+    string w15 = sec <= 900 ? f_word(m15Dir) : "–"
+    string txt = "Trend  D " + f_word(dayDir) + " · 4u " + w4 + " · 1u " + w1 + " · 15m " + w15
     table.cell(tb, 0, 0, txt, text_color = INK, text_size = size.normal)
     string zoek = dayDir == 1 ? "Model zoekt long" : dayDir == -1 ? "Model zoekt short" : "Nog geen dagbreuk"
     table.cell(tb, 0, 1, zoek + " · benadering, de app is de bron", text_color = GREY, text_size = size.small)
@@ -254,13 +266,13 @@ if barstate.islast and showTrend
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // BOS en CHoCH op het tijdframe van de grafiek: een dunne lijn van de swing tot de breuk, met het label erbij.
 
-[cDir, cEvt, cLbl, cLvl, cSwT, c1, c2, c3, c4, c5, c6, c7, c8] = f_struct(kChart, 100000)
+[cDir, cEvt, cLbl, cLvl, cSwI, c1, c2, c3, c4, c5, c6, c7, c8, c9, c10] = f_struct(kChart, 100000)
 var line[]  brLines  = array.new_line()
 var label[] brLabels = array.new_label()
 if showBreaks and cEvt != 0 and barstate.isconfirmed
     string word = cLbl == 2 ? "CHoCH" : "BOS"
-    array.push(brLines, line.new(cSwT, cLvl, time, cLvl, xloc = xloc.bar_time, color = GREY, width = 1, style = line.style_dotted))
-    array.push(brLabels, label.new(time, cLvl, word, xloc = xloc.bar_time, style = cEvt == 1 ? label.style_label_down : label.style_label_up, color = color.new(chart.bg_color, 100), textcolor = GREY, size = size.small))
+    array.push(brLines, line.new(cSwI, cLvl, bar_index, cLvl, color = GREY, width = 1, style = line.style_dotted))
+    array.push(brLabels, label.new(bar_index, cLvl, word, style = cEvt == 1 ? label.style_label_down : label.style_label_up, color = color.new(chart.bg_color, 100), textcolor = GREY, size = size.small))
     if array.size(brLines) > maxBreaks
         line.delete(array.shift(brLines))
         label.delete(array.shift(brLabels))
@@ -277,10 +289,10 @@ if barstate.islast
         float px = close[1]
         float bestUpLo = na
         float bestUpHi = na
-        int   bestUpT = na
+        int   bestUpI = na
         float bestDnLo = na
         float bestDnHi = na
-        int   bestDnT = na
+        int   bestDnI = na
         float minLater = na
         float maxLater = na
         for o = 1 to FVG_LOOKBACK
@@ -292,25 +304,25 @@ if barstate.islast
                 float hi = na(minLater) ? low[o] : math.min(low[o], minLater)
                 if hi > lo
                     if hi < px and (na(bestDnHi) or hi > bestDnHi)
-                        bestDnLo := lo, bestDnHi := hi, bestDnT := time[o + 1]
+                        bestDnLo := lo, bestDnHi := hi, bestDnI := bar_index - o - 1
                     else if lo > px and (na(bestUpLo) or lo < bestUpLo)
-                        bestUpLo := lo, bestUpHi := hi, bestUpT := time[o + 1]
+                        bestUpLo := lo, bestUpHi := hi, bestUpI := bar_index - o - 1
             // Gap omlaag: low van twee candles eerder boven de high van deze.
             if low[o + 2] > high[o]
                 float lo = na(maxLater) ? high[o] : math.max(high[o], maxLater)
                 float hi = low[o + 2]
                 if hi > lo
                     if lo > px and (na(bestUpLo) or lo < bestUpLo)
-                        bestUpLo := lo, bestUpHi := hi, bestUpT := time[o + 1]
+                        bestUpLo := lo, bestUpHi := hi, bestUpI := bar_index - o - 1
                     else if hi < px and (na(bestDnHi) or hi > bestDnHi)
-                        bestDnLo := lo, bestDnHi := hi, bestDnT := time[o + 1]
+                        bestDnLo := lo, bestDnHi := hi, bestDnI := bar_index - o - 1
             minLater := na(minLater) ? low[o] : math.min(minLater, low[o])
             maxLater := na(maxLater) ? high[o] : math.max(maxLater, high[o])
-        int x1 = time + 10 * (time - time[1])
+        int x1 = bar_index + 10
         if not na(bestUpLo)
-            fvUp := box.new(bestUpT, bestUpHi, x1, bestUpLo, xloc = xloc.bar_time, bgcolor = color.new(chart.fg_color, 88), border_color = color.new(chart.fg_color, 65), text = "FVG", text_color = INK, text_size = size.small, text_halign = text.align_right)
+            fvUp := box.new(bestUpI, bestUpHi, x1, bestUpLo, bgcolor = color.new(chart.fg_color, 88), border_color = color.new(chart.fg_color, 65), text = "FVG", text_color = INK, text_size = size.small, text_halign = text.align_right)
         if not na(bestDnLo)
-            fvDn := box.new(bestDnT, bestDnHi, x1, bestDnLo, xloc = xloc.bar_time, bgcolor = color.new(chart.fg_color, 88), border_color = color.new(chart.fg_color, 65), text = "FVG", text_color = INK, text_size = size.small, text_halign = text.align_right)
+            fvDn := box.new(bestDnI, bestDnHi, x1, bestDnLo, bgcolor = color.new(chart.fg_color, 88), border_color = color.new(chart.fg_color, 65), text = "FVG", text_color = INK, text_size = size.small, text_halign = text.align_right)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // Het positievak, zoals op de kaart: donkergrijs van limiet tot stop (risico), lichtgrijs van limiet tot doel (winst).
