@@ -107,11 +107,12 @@ f_clear() =>
 
 f_line(int x, float y, string txt, bool dashed) =>
     array.push(lines, line.new(x, y, x + 1, y, extend = extend.right, color = LINE, width = 1, style = dashed ? line.style_dashed : line.style_solid))
-    array.push(labels, label.new(x, y, txt, style = label.style_label_lower_left, color = color.new(chart.bg_color, 100), textcolor = FG, size = size.small))
+    // De prijs staat erbij: zo is elke lijn na te lezen tegen Groot, ook als TradingView hem op een andere schaal zou tekenen.
+    array.push(labels, label.new(x, y, txt + " " + str.tostring(y, format.mintick), style = label.style_label_lower_left, color = color.new(chart.bg_color, 100), textcolor = FG, size = size.small))
 
 f_box(int x, float lo, float hi, string txt) =>
     array.push(boxes, box.new(x, hi, x + 1, lo, extend = extend.right, bgcolor = ZONE, border_color = EDGE))
-    array.push(labels, label.new(x, hi, txt, style = label.style_label_lower_left, color = color.new(chart.bg_color, 100), textcolor = FG, size = size.small))
+    array.push(labels, label.new(x, hi, txt + " " + str.tostring(lo, format.mintick) + " – " + str.tostring(hi, format.mintick), style = label.style_label_lower_left, color = color.new(chart.bg_color, 100), textcolor = FG, size = size.small))
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // De structuur (app/structure_levels.levels), één keer op de laatste candle, over de laatste WINDOW gesloten candles.
