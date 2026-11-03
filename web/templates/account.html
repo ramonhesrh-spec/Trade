@@ -529,7 +529,7 @@
           datasets: [{
             label: "Cumulatief resultaat (%)",
             data: cumulativeData.map((p) => p.cumulative_pct),
-            borderColor: "#0ABAB5",
+            borderColor: "#1b2324",
             backgroundColor: "rgba(10, 186, 181, 0.14)",
             fill: true,
             tension: 0.1,
@@ -555,7 +555,7 @@
           datasets: [{
             label: "Winrate",
             data: ratioStats.map((r) => r.winrate),
-            backgroundColor: ratioStats.map((r) => r.passed / r.total >= 0.75 ? "#0ABAB5" : "#556c67"),
+            backgroundColor: ratioStats.map((r) => r.passed / r.total >= 0.75 ? "#1b2324" : "#8a9698"),
             borderRadius: 4,
             maxBarThickness: 56,
           }],

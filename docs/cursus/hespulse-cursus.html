@@ -1,36 +1,47 @@
-<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>HesPulse cursus</title><style>
-@page { size: A4; margin: 18mm 16mm 18mm 16mm; }
-body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1b2324; font-size: 10.5pt; line-height: 1.5; }
-.cover { height: 245mm; display: flex; flex-direction: column; justify-content: center; page-break-after: always; }
-.cover h1 { font-size: 34pt; margin: 0 0 6mm; letter-spacing: -0.5px; }
-.cover p { font-size: 13pt; color: #4a5658; margin: 0 0 3mm; }
-.cover .meta { margin-top: 20mm; font-size: 10pt; color: #6b7678; }
-section { page-break-before: always; }
-h2 { font-size: 18pt; margin: 0 0 4mm; border-bottom: 2px solid #1b2324; padding-bottom: 2mm; }
-h3 { font-size: 12pt; margin: 6mm 0 2mm; break-after: avoid; }
-.lead { font-size: 12pt; }
-.box { border: 1px solid #c9d0d1; background: #f4f6f6; border-radius: 6px; padding: 3mm 4mm; margin: 4mm 0; break-inside: avoid; }
-.box.warn { border-left: 4px solid #c0392b; }
-.box ol, .box ul { margin: 2mm 0 0; }
-.note { color: #5a6668; font-size: 9.5pt; }
-figure { margin: 4mm 0; break-inside: avoid; }
-figcaption { font-size: 9pt; color: #5a6668; margin-top: 1mm; }
+<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>HesPulse, het model uitgelegd</title><style>
+@page { size: A4; }
+* { box-sizing: border-box; }
+body { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; color: #1b2324; font-size: 10pt; line-height: 1.55; margin: 0; }
+.cover { height: 297mm; width: 210mm; display: flex; flex-direction: column; page-break-after: always; }
+.cover-top { flex: 1; padding: 26mm 22mm 0; }
+.cover-logo { width: 22mm; height: 22mm; }
+.cover h1 { font-family: 'Inter Display', 'Inter', sans-serif; font-size: 52pt; font-weight: 700; letter-spacing: -1.5px; margin: 18mm 0 4mm; line-height: 1; }
+.cover .sub { font-size: 16pt; color: #4a5658; margin: 0; font-weight: 400; }
+.cover-band { background: #1b2324; color: #fff; padding: 14mm 22mm 16mm; }
+.cover-band h4 { font-family: 'JetBrains Mono', monospace; font-size: 8.5pt; letter-spacing: 2px; text-transform: uppercase; color: #aeb7b8; margin: 0 0 4mm; font-weight: 500; }
+.cover-band ol { columns: 2; column-gap: 12mm; margin: 0; padding-left: 5mm; font-size: 10.5pt; line-height: 1.9; }
+.cover-band .meta { margin-top: 8mm; font-size: 8.5pt; color: #aeb7b8; }
+.cover-chart { width: 100%; height: 48mm; margin-top: 16mm; }
+section { page-break-before: always; } section.first { page-break-before: auto; }
+.kicker { font-family: 'JetBrains Mono', monospace; font-size: 8.5pt; letter-spacing: 2px; text-transform: uppercase; color: #6b7678; margin: 0 0 1.5mm; }
+h2 { font-family: 'Inter Display', 'Inter', sans-serif; font-size: 24pt; font-weight: 700; letter-spacing: -0.5px; margin: 0 0 6mm; line-height: 1.1; }
+h3 { font-size: 11.5pt; font-weight: 700; margin: 7mm 0 2mm; break-after: avoid; }
+.lead { font-size: 12pt; color: #2f3a3b; }
+.box { border-left: 3px solid #1b2324; background: #f4f6f6; border-radius: 0 6px 6px 0; padding: 3.5mm 5mm; margin: 5mm 0; break-inside: avoid; }
+.box.warn { border-left-color: #b3261e; }
+.box ol, .box ul { margin: 2mm 0 0; padding-left: 5mm; }
+.note { color: #5a6668; font-size: 9pt; }
+figure { margin: 5mm 0; break-inside: avoid; }
+figcaption { font-size: 8.8pt; color: #5a6668; margin-top: 1.5mm; }
 .dia { width: 100%; height: auto; }
-.dia .t { font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11px; fill: #1b2324; }
-.dia .s { font-size: 10px; }
-.dia .b { font-weight: 700; font-size: 13px; }
-table { border-collapse: collapse; width: 100%; margin: 3mm 0; font-size: 9.5pt; break-inside: avoid; }
-th, td { border-bottom: 1px solid #d5dbdc; text-align: left; padding: 1.5mm 2mm; vertical-align: top; }
-th { background: #eef1f1; }
-.push { border: 1px solid #c9d0d1; border-radius: 10px; padding: 3mm 4mm; width: 70%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
-dl dt { font-weight: 700; margin-top: 1.2mm; } dl dd { margin: 0; } dl { font-size: 9.8pt; line-height: 1.4; }
-.toc li { margin: 1mm 0; }
-</style></head><body>
-<div class="cover"><h1>HesPulse<br>voor beginners</h1><p>Hoe het model kansen vindt, hoe de instappunten werken en wat er wel en niet bewezen is.</p>
-<ol class="toc"><li>Voor je begint</li><li>Les 1. De richting: van groot naar klein</li><li>Les 2. De range: premium en discount</li><li>Les 3. Liquiditeit en de sweep</li><li>Les 4. De instappunten</li><li>Les 5. Van melding tot order</li><li>Les 6. Wat is bewezen?</li><li>Les 7. Goede gewoontes</li><li>Woordenlijst</li></ol><p class="meta">Stand 3 november 2026. Alle instappunten zijn ongetest. HesPulse plaatst nooit zelf een order.</p></div>
-<section><h2>Voor je begint</h2>
-<p class="lead">Deze cursus legt uit wat HesPulse doet, hoe de instappunten werken en wat er wel en niet bewezen is. Je hebt geen
-voorkennis nodig. Elk vakwoord staat in de woordenlijst achterin.</p>
+.dia .s { font-size: 9.5px; }
+.dia .b { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13px; }
+table { border-collapse: collapse; width: 100%; margin: 4mm 0; font-size: 9.3pt; break-inside: avoid; }
+th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 8pt; letter-spacing: 1px; text-transform: uppercase; color: #6b7678;
+      font-weight: 500; border-bottom: 1.5px solid #1b2324; padding: 2mm 2mm; }
+td { border-bottom: 1px solid #dfe4e4; padding: 2mm 2mm; vertical-align: top; }
+td:first-child { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+.push { display: flex; gap: 3mm; align-items: flex-start; border: 1px solid #dfe4e4; border-radius: 14px; padding: 3.5mm 4mm; width: 78%;
+        background: #fff; box-shadow: 0 2px 8px rgba(27,35,36,.08); }
+.push svg { width: 9mm; height: 9mm; flex: none; }
+.push .pt { font-weight: 700; } .push .pb { font-family: 'JetBrains Mono', monospace; font-size: 9pt; color: #2f3a3b; }
+dl { font-size: 9.5pt; line-height: 1.4; columns: 2; column-gap: 9mm; }
+dl div { break-inside: avoid; margin-bottom: 2.5mm; }
+dl dt { font-weight: 700; } dl dd { margin: 0; color: #2f3a3b; }
+ol, ul { padding-left: 5mm; } li { margin: 1mm 0; }
+</style></head><body><section class=first><p class="kicker">Inleiding</p><h2>Voor je begint</h2>
+<p class="lead">Wat HesPulse doet, hoe de instappunten werken en wat er wel en niet bewezen is. Elk vakwoord staat in de
+woordenlijst achterin.</p>
 <div class="box warn"><b>Drie dingen vooraf</b>
 <ol><li>HesPulse plaatst nooit zelf een order. Jij beslist of je een trade neemt.</li>
 <li>HesPulse zegt niets over hoe groot je positie moet zijn. Dat bepaal je zelf, op basis van wat je per trade wilt riskeren.</li>
@@ -39,7 +50,7 @@ voorkennis nodig. Elk vakwoord staat in de woordenlijst achterin.</p>
 <ol><li>Hoe HesPulse de richting kiest (top-down).</li><li>Wat een range, premium en discount zijn.</li>
 <li>Wat liquiditeit en een sweep zijn.</li><li>De instappunten A, B, B0, R en K.</li><li>Van melding tot order.</li>
 <li>Wat bewezen is en wat niet.</li><li>Goede gewoontes.</li></ol>
-</section><section><h2>Les 1. De richting: van groot naar klein</h2>
+</section><section><p class="kicker">Les 01</p><h2>De richting: van groot naar klein</h2>
 <p>HesPulse kijkt eerst naar het grootste tijdframe en werkt dan naar beneden. Dat heet top-down.</p>
 <figure><svg viewBox="0 0 520 68" xmlns="http://www.w3.org/2000/svg" class="dia"><rect x="0" y="2" width="118" height="64" rx="8" fill="#fff" stroke="#1b2324" stroke-width="1.2"/><text x="59.0" y="26" text-anchor="middle" class="t b">Dag</text><text x="59.0" y="46" text-anchor="middle" class="t s">kiest long of short</text><path d="M120 34.0 l10 0 m-5 -4 l5 4 l-5 4" stroke="#1b2324" fill="none" stroke-width="1.4"/><rect x="134" y="2" width="118" height="64" rx="8" fill="#fff" stroke="#1b2324" stroke-width="1.2"/><text x="193.0" y="26" text-anchor="middle" class="t b">4 uur</text><text x="193.0" y="46" text-anchor="middle" class="t s">geeft de range</text><path d="M254 34.0 l10 0 m-5 -4 l5 4 l-5 4" stroke="#1b2324" fill="none" stroke-width="1.4"/><rect x="268" y="2" width="118" height="64" rx="8" fill="#fff" stroke="#1b2324" stroke-width="1.2"/><text x="327.0" y="26" text-anchor="middle" class="t b">1 uur</text><text x="327.0" y="46" text-anchor="middle" class="t s">zoekt de top</text><path d="M388 34.0 l10 0 m-5 -4 l5 4 l-5 4" stroke="#1b2324" fill="none" stroke-width="1.4"/><rect x="402" y="2" width="118" height="64" rx="8" fill="#fff" stroke="#1b2324" stroke-width="1.2"/><text x="461.0" y="26" text-anchor="middle" class="t b">15 minuten</text><text x="461.0" y="46" text-anchor="middle" class="t s">geeft de instap</text></svg></figure>
 <ol><li><b>Dag.</b> De laatste breuk op de daggrafiek bepaalt de richting. Brak de koers onder een vorige bodem, dan zoekt HesPulse
@@ -52,23 +63,23 @@ blijft dan shorts zoeken. In de grafiek "Groot" staat dan bijvoorbeeld "4u ↑ h
 <div class="box"><b>Breekt de koers door de rand?</b> Sluit een 4u-candle boven de range high terwijl de dag omlaag blijft wijzen, dan schuift
 de range high mee naar de nieuwe top. Er kan dan een nieuw scenario beginnen.</div>
 <p class="note">Alles werkt hetzelfde voor longs, alleen in spiegelbeeld. In deze cursus gebruiken we steeds een short als voorbeeld.</p>
-</section><section><h2>Les 2. De range: premium en discount</h2>
+</section><section><p class="kicker">Les 02</p><h2>De range: premium en discount</h2>
 <p>Na een breuk omlaag op 4 uur tekent HesPulse een range: van de top van de beweging (range high) tot de bodem (range low). Het
 midden heet het <b>evenwicht</b>.</p>
-<figure><svg viewBox="0 0 520 250" xmlns="http://www.w3.org/2000/svg" class="dia"><rect x="14.0" y="22.6" width="356.0" height="94.2" fill="#e4e8e8" stroke="#8a9698" stroke-width="0.8"/><text x="366.0" y="34.6" text-anchor="end" class="t s">premium: hier zoeken we shorts</text><line x1="14" x2="376" y1="22.6" y2="22.6" stroke="#1b2324" stroke-width="1.2"/><text x="380" y="26.6" class="t" fill="#1b2324">4u range high</text><line x1="14" x2="376" y1="116.7" y2="116.7" stroke="#8a9698" stroke-width="1.2" stroke-dasharray="5 4"/><text x="380" y="120.7" class="t" fill="#8a9698">evenwicht (0,5)</text><line x1="14" x2="376" y1="210.9" y2="210.9" stroke="#1b2324" stroke-width="1.2"/><text x="380" y="214.9" class="t" fill="#1b2324">4u range low</text><polyline points="14.0,31.1 63.8,22.6 127.9,185.2 177.8,210.9 234.7,142.4 277.4,157.4 327.3,86.8 370.0,103.9" fill="none" stroke="#1b2324" stroke-width="2" stroke-linejoin="round"/></svg><figcaption>De 4u-range na een breuk omlaag. Boven het evenwicht is het duur (premium), eronder goedkoop (discount). Shorts zoek je in premium.</figcaption></figure>
+<figure><svg viewBox="0 0 580 250" xmlns="http://www.w3.org/2000/svg" class="dia"><rect x="14.0" y="26.4" width="370.0" height="92.4" fill="#eceff0" stroke="#8a9698" stroke-width="0.8"/><text x="380.0" y="38.4" text-anchor="end" class="t s">premium: hier zoeken we shorts</text><line x1="14" x2="390" y1="26.4" y2="26.4" stroke="#1b2324" stroke-width="1.2"/><text x="394" y="30.4" class="t" fill="#1b2324">4u range high</text><line x1="14" x2="390" y1="118.8" y2="118.8" stroke="#8a9698" stroke-width="1.2" stroke-dasharray="5 4"/><text x="394" y="122.8" class="t" fill="#8a9698">evenwicht (0,5)</text><line x1="14" x2="390" y1="211.2" y2="211.2" stroke="#1b2324" stroke-width="1.2"/><text x="394" y="215.2" class="t" fill="#1b2324">4u range low</text><polyline points="14.0,34.8 65.8,26.4 132.4,186.0 184.2,211.2 243.4,144.0 287.8,158.7 339.6,89.4 384.0,106.2" fill="none" stroke="#1b2324" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg><figcaption>De 4u-range na een breuk omlaag. Boven het evenwicht is het duur (premium), eronder goedkoop (discount). Shorts zoek je in premium.</figcaption></figure>
 <ul><li><b>Premium</b> is de bovenste helft. Daar is de prijs relatief duur. Shorts zoeken we hier.</li>
 <li><b>Discount</b> is de onderste helft. Longs zoeken we daar.</li></ul>
 <p>Waarom? Wie short in discount, verkoopt goedkoop en heeft weinig ruimte naar beneden. Wie short in premium, heeft een stop vlak
 boven en veel ruimte naar het doel.</p>
-</section><section><h2>Les 3. Liquiditeit en de sweep</h2>
+</section><section><p class="kicker">Les 03</p><h2>Liquiditeit en de sweep</h2>
 <p>Boven een oude top liggen veel stops van traders die short zitten, en kooporders van uitbraakkopers. Samen heet dat
 <b>liquiditeit</b>. HesPulse noemt zo'n plek een <b>pool</b>: een 1u-top die nog niet geraakt is. Twee toppen op bijna dezelfde hoogte
 (EQH) tellen als één pool.</p>
-<figure><svg viewBox="0 0 520 250" xmlns="http://www.w3.org/2000/svg" class="dia"><line x1="14" x2="376" y1="82.5" y2="82.5" stroke="#1b2324" stroke-width="1.2" stroke-dasharray="5 4"/><text x="380" y="86.5" class="t" fill="#1b2324">pool: oude 1u-top</text><polyline points="14.0,163.8 56.7,110.3 85.2,125.3 120.8,95.3 156.4,121.0 199.1,103.9 220.5,69.6 234.7,99.6 270.3,116.7 313.0,142.4 370.0,163.8" fill="none" stroke="#1b2324" stroke-width="2" stroke-linejoin="round"/><circle cx="220.5" cy="69.6" r="3.5" fill="#1b2324"/><text x="226.5" y="63.6" class="t s">prik erboven</text><circle cx="234.7" cy="99.6" r="3.5" fill="#1b2324"/><text x="240.7" y="93.6" class="t s">slot terug eronder</text></svg><figcaption>Een sweep: de koers prikt net boven een oude top (daar liggen stops van anderen) en sluit binnen 6 candles van 15m weer eronder.</figcaption></figure>
-<figure><svg viewBox="0 0 520 250" xmlns="http://www.w3.org/2000/svg" class="dia"><line x1="14" x2="376" y1="82.5" y2="82.5" stroke="#1b2324" stroke-width="1.2" stroke-dasharray="5 4"/><text x="380" y="86.5" class="t" fill="#1b2324">pool: oude 1u-top</text><polyline points="14.0,163.8 67.4,110.3 103.0,125.3 156.4,91.0 192.0,69.6 234.7,56.8 281.0,44.0 370.0,31.1" fill="none" stroke="#1b2324" stroke-width="2" stroke-linejoin="round"/></svg><figcaption>Geen sweep maar een run: de koers sluit boven de pool en blijft erboven. Dan geeft A niets.</figcaption></figure>
+<figure><svg viewBox="0 0 580 250" xmlns="http://www.w3.org/2000/svg" class="dia"><line x1="14" x2="390" y1="85.2" y2="85.2" stroke="#1b2324" stroke-width="1.2" stroke-dasharray="5 4"/><text x="394" y="89.2" class="t" fill="#1b2324">pool: oude 1u-top</text><polyline points="14.0,165.0 58.4,112.5 88.0,127.2 125.0,97.8 162.0,123.0 206.4,106.2 228.6,72.6 243.4,102.0 280.4,118.8 324.8,144.0 384.0,165.0" fill="none" stroke="#1b2324" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><circle cx="228.6" cy="72.6" r="3.5" fill="#1b2324"/><text x="234.6" y="66.6" class="t s">prik erboven</text><circle cx="243.4" cy="102.0" r="3.5" fill="#1b2324"/><text x="249.4" y="96.0" class="t s">slot terug eronder</text></svg><figcaption>Een sweep: de koers prikt net boven een oude top (daar liggen stops van anderen) en sluit binnen 6 candles van 15m weer eronder.</figcaption></figure>
+<figure><svg viewBox="0 0 580 250" xmlns="http://www.w3.org/2000/svg" class="dia"><line x1="14" x2="390" y1="85.2" y2="85.2" stroke="#1b2324" stroke-width="1.2" stroke-dasharray="5 4"/><text x="394" y="89.2" class="t" fill="#1b2324">pool: oude 1u-top</text><polyline points="14.0,165.0 69.5,112.5 106.5,127.2 162.0,93.6 199.0,72.6 243.4,60.0 291.5,47.4 384.0,34.8" fill="none" stroke="#1b2324" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg><figcaption>Geen sweep maar een run: de koers sluit boven de pool en blijft erboven. Dan geeft A niets.</figcaption></figure>
 <p>Een <b>sweep</b> is een korte prik door de pool, met een slot weer terug. Het idee: grote partijen halen eerst die orders op en
 draaien dan. Een <b>run</b> is geen sweep: de koers breekt echt uit.</p>
-</section><section><h2>Les 4. De instappunten</h2>
+</section><section><p class="kicker">Les 04</p><h2>De instappunten</h2>
 <p>Een scenario begint als de range klaar staat en er een pool binnen 6% van de koers ligt. Daarna wacht HesPulse op een van de
 instappunten hieronder. Elk instappunt heeft een vaste regel. Niemand past die achteraf aan.</p>
 <table><tr><th>Letter</th><th>Naam</th><th>Kort</th><th>Melding</th></tr>
@@ -79,14 +90,14 @@ instappunten hieronder. Elk instappunt heeft een vaste regel. Niemand past die a
 <tr><td>K</td><td>Consolidatiebreuk</td><td>Lagere top, breuk van de consolidatie van 2 uur erna</td><td>ja</td></tr>
 <tr><td>V1, P</td><td>Vroege limiet, POC-limiet</td><td>Alleen stil gemeten, niet op de kaart</td><td>nee</td></tr></table>
 <h3>A: na een sweep</h3>
-<figure><svg viewBox="0 0 520 250" xmlns="http://www.w3.org/2000/svg" class="dia"><rect x="249.0" y="91.0" width="121.0" height="17.1" fill="#e4e8e8" stroke="#8a9698" stroke-width="0.8"/><text x="366.0" y="103.0" text-anchor="end" class="t s">gap (FVG)</text><line x1="14" x2="376" y1="48.2" y2="48.2" stroke="#c0392b" stroke-width="1.2"/><text x="380" y="52.2" class="t" fill="#c0392b">stop: boven de sweep</text><line x1="14" x2="376" y1="78.2" y2="78.2" stroke="#8a9698" stroke-width="1.2" stroke-dasharray="5 4"/><text x="380" y="82.2" class="t" fill="#8a9698">pool</text><line x1="14" x2="376" y1="99.6" y2="99.6" stroke="#1b2324" stroke-width="1.2"/><text x="380" y="103.6" class="t" fill="#1b2324">limiet A: in de gap</text><line x1="14" x2="376" y1="202.3" y2="202.3" stroke="#1e8449" stroke-width="1.2"/><text x="380" y="206.3" class="t" fill="#1e8449">doel: range low of POC</text><polyline points="14.0,142.4 63.8,99.6 99.4,116.7 135.0,78.2 156.4,56.8 170.6,86.8 199.1,73.9 227.6,125.3 249.0,129.6 277.4,108.2 298.8,121.0 370.0,189.5" fill="none" stroke="#1b2324" stroke-width="2" stroke-linejoin="round"/><circle cx="156.4" cy="56.8" r="3.5" fill="#1b2324"/><text x="162.4" y="50.8" class="t s">sweep</text><circle cx="227.6" cy="125.3" r="3.5" fill="#1b2324"/><text x="233.6" y="119.3" class="t s">breuk</text></svg><figcaption>A: sweep van de pool, dan een harde breuk omlaag op 15m die een gap achterlaat. De limiet ligt in die gap.</figcaption></figure>
+<figure><svg viewBox="0 0 580 250" xmlns="http://www.w3.org/2000/svg" class="dia"><rect x="258.2" y="93.6" width="125.8" height="16.8" fill="#eceff0" stroke="#8a9698" stroke-width="0.8"/><text x="380.0" y="105.6" text-anchor="end" class="t s">gap (FVG)</text><line x1="14" x2="390" y1="51.6" y2="51.6" stroke="#b3261e" stroke-width="1.2"/><text x="394" y="55.6" class="t" fill="#b3261e">stop: boven de sweep</text><line x1="14" x2="390" y1="81.0" y2="81.0" stroke="#8a9698" stroke-width="1.2" stroke-dasharray="5 4"/><text x="394" y="85.0" class="t" fill="#8a9698">pool</text><line x1="14" x2="390" y1="102.0" y2="102.0" stroke="#1b2324" stroke-width="1.2"/><text x="394" y="106.0" class="t" fill="#1b2324">limiet A: in de gap</text><line x1="14" x2="390" y1="202.8" y2="202.8" stroke="#1e7a46" stroke-width="1.2"/><text x="394" y="206.8" class="t" fill="#1e7a46">doel: range low of POC</text><polyline points="14.0,144.0 65.8,102.0 102.8,118.8 139.8,81.0 162.0,60.0 176.8,89.4 206.4,76.8 236.0,127.2 258.2,131.4 287.8,110.4 310.0,123.0 384.0,190.2" fill="none" stroke="#1b2324" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><circle cx="162.0" cy="60.0" r="3.5" fill="#1b2324"/><text x="168.0" y="54.0" class="t s">sweep</text><circle cx="236.0" cy="127.2" r="3.5" fill="#1b2324"/><text x="242.0" y="121.2" class="t s">breuk</text></svg><figcaption>A: sweep van de pool, dan een harde breuk omlaag op 15m die een gap achterlaat. De limiet ligt in die gap.</figcaption></figure>
 <ol><li>De koers prikt door de pool en sluit binnen 6 candles van 15m weer terug.</li>
 <li>Binnen 24 candles van 15m sluit een candle onder het laatste dal vóór de sweep. Dat is de breuk (shift).</li>
 <li>Die breuk gaat met kracht (displacement) en laat een gat in de prijs achter: een fair value gap (FVG).</li>
 <li><b>Limiet</b> in de gap. <b>Stop</b> een kwart ATR boven de top van de sweep, minstens 0,4% van de limiet. <b>Doel</b> de dichtstbijzijnde
 van de range low en een naakte POC.</li></ol>
 <h3>B, B0 en R: de lagere top</h3>
-<figure><svg viewBox="0 0 520 250" xmlns="http://www.w3.org/2000/svg" class="dia"><line x1="14" x2="376" y1="44.0" y2="44.0" stroke="#8a9698" stroke-width="1.2" stroke-dasharray="5 4"/><text x="380" y="48.0" class="t" fill="#8a9698">eerdere top</text><line x1="14" x2="376" y1="56.8" y2="56.8" stroke="#c0392b" stroke-width="1.2"/><text x="380" y="60.8" class="t" fill="#c0392b">stop</text><line x1="14" x2="376" y1="86.8" y2="86.8" stroke="#1b2324" stroke-width="1.2"/><text x="380" y="90.8" class="t" fill="#1b2324">B: limiet in de gap</text><line x1="14" x2="376" y1="108.2" y2="108.2" stroke="#1b2324" stroke-width="1.2" stroke-dasharray="5 4"/><text x="380" y="112.2" class="t" fill="#1b2324">R: limiet op het dal</text><line x1="14" x2="376" y1="206.6" y2="206.6" stroke="#1e8449" stroke-width="1.2"/><text x="380" y="210.6" class="t" fill="#1e8449">doel</text><polyline points="14.0,163.8 63.8,44.0 106.6,108.2 156.4,65.4 184.9,95.3 206.2,86.8 234.7,133.8 263.2,121.0 291.7,129.6 370.0,198.0" fill="none" stroke="#1b2324" stroke-width="2" stroke-linejoin="round"/><circle cx="156.4" cy="65.4" r="3.5" fill="#1b2324"/><text x="162.4" y="59.4" class="t s">lagere top</text><circle cx="184.9" cy="95.3" r="3.5" fill="#1b2324"/><text x="190.9" y="89.3" class="t s">laatste dal</text><circle cx="234.7" cy="133.8" r="3.5" fill="#1b2324"/><text x="240.7" y="127.8" class="t s">breuk</text></svg><figcaption>B en R: een lagere top in premium, dan een slot onder het laatste 15m-dal vóór die top. B wil een gap, R zet de limiet op het gebroken dal. De stop staat boven de lagere top.</figcaption></figure>
+<figure><svg viewBox="0 0 580 250" xmlns="http://www.w3.org/2000/svg" class="dia"><line x1="14" x2="390" y1="47.4" y2="47.4" stroke="#8a9698" stroke-width="1.2" stroke-dasharray="5 4"/><text x="394" y="51.4" class="t" fill="#8a9698">eerdere top</text><line x1="14" x2="390" y1="60.0" y2="60.0" stroke="#b3261e" stroke-width="1.2"/><text x="394" y="64.0" class="t" fill="#b3261e">stop</text><line x1="14" x2="390" y1="89.4" y2="89.4" stroke="#1b2324" stroke-width="1.2"/><text x="394" y="93.4" class="t" fill="#1b2324">B: limiet in de gap</text><line x1="14" x2="390" y1="110.4" y2="110.4" stroke="#1b2324" stroke-width="1.2" stroke-dasharray="5 4"/><text x="394" y="114.4" class="t" fill="#1b2324">R: limiet op het dal</text><line x1="14" x2="390" y1="207.0" y2="207.0" stroke="#1e7a46" stroke-width="1.2"/><text x="394" y="211.0" class="t" fill="#1e7a46">doel</text><polyline points="14.0,165.0 65.8,47.4 110.2,110.4 162.0,68.4 191.6,97.8 213.8,89.4 243.4,135.6 273.0,123.0 302.6,131.4 384.0,198.6" fill="none" stroke="#1b2324" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><circle cx="162.0" cy="68.4" r="3.5" fill="#1b2324"/><text x="168.0" y="62.4" class="t s">lagere top</text><circle cx="191.6" cy="97.8" r="3.5" fill="#1b2324"/><text x="197.6" y="91.8" class="t s">laatste dal</text><circle cx="243.4" cy="135.6" r="3.5" fill="#1b2324"/><text x="249.4" y="129.6" class="t s">breuk</text></svg><figcaption>B en R: een lagere top in premium, dan een slot onder het laatste 15m-dal vóór die top. B wil een gap, R zet de limiet op het gebroken dal. De stop staat boven de lagere top.</figcaption></figure>
 <ol><li>De koers maakt op 1 uur een top die lager is dan de vorige. Bij B en R ligt die top in premium.</li>
 <li>Binnen 24 candles van 15m sluit een candle onder het laatste 15m-dal vóór die top.</li>
 <li><b>B</b>: daarna een harde breuk met een gap; limiet in de gap, en die limiet moet ook in premium liggen.</li>
@@ -94,15 +105,15 @@ van de range low en een naakte POC.</li></ol>
 <li><b>R</b>: geen gap nodig; de limiet ligt op het gebroken dal zelf (de terugtest).</li>
 <li>Stop boven de lagere top (een kwart ATR erboven, minstens 0,4%), doel zoals bij A.</li></ol>
 <h3>K: de consolidatiebreuk</h3>
-<figure><svg viewBox="0 0 520 250" xmlns="http://www.w3.org/2000/svg" class="dia"><rect x="149.3" y="50.4" width="99.7" height="21.4" fill="#e4e8e8" stroke="#8a9698" stroke-width="0.8"/><text x="149.3" y="45.4" text-anchor="start" class="t s">consolidatie: 8 candles van 15m</text><line x1="14" x2="376" y1="44.0" y2="44.0" stroke="#c0392b" stroke-width="1.2"/><text x="380" y="48.0" class="t" fill="#c0392b">stop: boven de top</text><line x1="14" x2="376" y1="71.8" y2="71.8" stroke="#1b2324" stroke-width="1.2"/><text x="380" y="75.8" class="t" fill="#1b2324">K: limiet op de onderkant</text><line x1="14" x2="376" y1="198.0" y2="198.0" stroke="#1e8449" stroke-width="1.2"/><text x="380" y="202.0" class="t" fill="#1e8449">doel</text><polyline points="14.0,206.6 49.6,180.9 85.2,142.4 120.8,95.3 149.3,52.5 163.5,65.4 184.9,56.8 206.2,69.6 227.6,58.9 249.0,67.5 263.2,99.6 291.7,86.8 320.2,116.7 370.0,185.2" fill="none" stroke="#1b2324" stroke-width="2" stroke-linejoin="round"/><circle cx="263.2" cy="99.6" r="3.5" fill="#1b2324"/><text x="269.2" y="93.6" class="t s">breuk</text></svg><figcaption>K: na een rechte stijging ligt het laatste dal ver weg. K neemt de 2 uur na de top als consolidatie en breekt de onderkant daarvan.</figcaption></figure>
+<figure><svg viewBox="0 0 580 250" xmlns="http://www.w3.org/2000/svg" class="dia"><rect x="154.6" y="53.7" width="103.6" height="21.0" fill="#eceff0" stroke="#8a9698" stroke-width="0.8"/><text x="154.6" y="48.7" text-anchor="start" class="t s">consolidatie: 8 candles van 15m</text><line x1="14" x2="390" y1="34.8" y2="34.8" stroke="#b3261e" stroke-width="1.2"/><text x="394" y="38.8" class="t" fill="#b3261e">stop: boven de top</text><line x1="14" x2="390" y1="74.7" y2="74.7" stroke="#1b2324" stroke-width="1.2"/><text x="394" y="78.7" class="t" fill="#1b2324">K: limiet onderkant</text><line x1="14" x2="390" y1="198.6" y2="198.6" stroke="#1e7a46" stroke-width="1.2"/><text x="394" y="202.6" class="t" fill="#1e7a46">doel</text><polyline points="14.0,207.0 51.0,181.8 88.0,144.0 125.0,97.8 154.6,55.8 169.4,68.4 191.6,60.0 213.8,72.6 236.0,62.1 258.2,70.5 273.0,102.0 302.6,89.4 332.2,118.8 384.0,186.0" fill="none" stroke="#1b2324" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><circle cx="273.0" cy="102.0" r="3.5" fill="#1b2324"/><text x="279.0" y="96.0" class="t s">breuk</text></svg><figcaption>K: na een rechte stijging ligt het laatste dal ver weg. K neemt de 2 uur na de top als consolidatie en breekt de onderkant daarvan.</figcaption></figure>
 <p>Na een rechte stijging ligt het laatste dal vóór de top ver weg, en dan breken B en R vaak niet op tijd. K kijkt daarom naar de 2 uur
 (8 candles van 15m) direct na de top. Breekt de koers onder de onderkant daarvan, binnen 6 uur na de top, dan staat K klaar. Limiet op
 die onderkant, stop boven de top, doel zoals bij A.</p>
 <div class="box"><b>Voorrang.</b> Liggen er meer plannen tegelijk klaar, dan toont de kaart er één: eerst B, dan R, dan K, dan B0. De andere
 staan in het detailblad.</div>
-</section><section><h2>Les 5. Van melding tot order</h2>
+</section><section><p class="kicker">Les 05</p><h2>Van melding tot order</h2>
 <h3>1. Je krijgt een korte melding</h3>
-<div class="push"><b>▼ SOL short · HesPulse K</b><br>Limiet 96.93 · Stop 98.68 · Doel 92.25</div>
+<div class="push"><svg viewBox="0 0 32 32" fill="none" class=""><circle cx="16" cy="16" r="15" stroke="#1b2324" stroke-width="2"/><path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#1b2324" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><div class="pt">▼ SOL short · HesPulse K</div><div class="pb">Limiet 96.93 · Stop 98.68 · Doel 92.25</div></div></div>
 <p>Meer staat er niet in. De uitleg vind je op de kaart.</p>
 <h3>2. Je opent de kaart op Kansen</h3>
 <ul><li>"Plan K klaar" met limiet, stop, doel en tot hoe laat het plan geldt.</li>
@@ -119,7 +130,7 @@ staan in het detailblad.</div>
 <ul><li>De koers stond al voorbij de limiet: een marktorder doet HesPulse nooit.</li>
 <li>De trade gaat tegen BTC op 4 uur in (de BTC-poort). Die trade wordt wel stil gevolgd.</li>
 <li>Je dagbudget van 8 luide meldingen is op: je krijgt dan een stille melding, en de kans staat op de pagina Meldingen.</li></ul>
-</section><section><h2>Les 6. Wat is bewezen?</h2>
+</section><section><p class="kicker">Les 06</p><h2>Wat is bewezen?</h2>
 <div class="box warn"><b>Kort antwoord: nog niets.</b> Geen enkel instappunt heeft genoeg afgeronde trades om iets te bewijzen.</div>
 <h3>Wat we wel weten (stand 3 november 2026)</h3>
 <ul><li>A gaf in de eerste 54 scenario's nog geen enkele entry. De volledige keten (sweep, breuk, gap) is streng.</li>
@@ -142,7 +153,7 @@ hoger tijdframe (12u- of dagzone, dagpremium, dag- of weekopen) hoe plannen met 
 voorspelt nog niets.</p>
 <div class="box"><b>Waarom één mooi voorbeeld niets zegt.</b> Op een grafiek achteraf zie je de winnaars. De trades die op dezelfde
 manier verloren, zie je niet. Alleen alle trades samen, vooraf vastgelegd, zeggen of een regel werkt.</div>
-</section><section><h2>Les 7. Goede gewoontes</h2>
+</section><section><p class="kicker">Les 07</p><h2>Goede gewoontes</h2>
 <ol><li><b>Bepaal je risico vóór de trade.</b> Bijvoorbeeld 0,5% tot 1% van je rekening per trade. Je positiegrootte volgt uit de afstand
 tot de stop.</li>
 <li><b>Verplaats je stop niet verder weg.</b> De meting gaat uit van de stop op de kaart.</li>
@@ -151,25 +162,25 @@ tot de stop.</li>
 gaan ze samen onderuit.</li>
 <li><b>Houd een logboek.</b> Het Logboek in de app laat zien wat je deed en wat de uitkomst was.</li>
 <li><b>Ongetest betekent ongetest.</b> Behandel elk plan als een experiment met klein risico, tot Bewijs iets anders laat zien.</li></ol>
-</section><section><h2>Woordenlijst</h2>
+</section><section><p class="kicker">Woordenlijst</p><h2>Woordenlijst</h2>
 <dl>
-<dt>ATR</dt><dd>De gemiddelde beweging per candle. HesPulse gebruikt hem voor de afstand van de stop.</dd>
-<dt>BOS, CHoCH, breuk</dt><dd>Een slot voorbij de vorige top of bodem. BOS gaat mee met de trend, CHoCH draait de trend.</dd>
-<dt>Candle</dt><dd>Eén staafje in de grafiek: open, hoog, laag en slot over een vaste tijd (15m, 1u, 4u, dag).</dd>
-<dt>Consolidatie</dt><dd>Een periode waarin de koers zijwaarts beweegt in een smalle band.</dd>
-<dt>Displacement</dt><dd>Een harde, snelle beweging over meerdere candles.</dd>
-<dt>Doel</dt><dd>De prijs waar je winst neemt.</dd>
-<dt>EQH, EQL</dt><dd>Twee toppen of bodems op bijna gelijke hoogte. Daar ligt vaak extra liquiditeit.</dd>
-<dt>Evenwicht</dt><dd>Het midden van de range (0,5).</dd>
-<dt>FVG (fair value gap)</dt><dd>Een gat tussen drie candles waar de prijs niet verhandeld is. Vaak komt de koers erin terug.</dd>
-<dt>Limietorder</dt><dd>Een order die pas vult als de koers jouw prijs raakt.</dd>
-<dt>Liquiditeit, pool</dt><dd>Een plek met veel stops en orders, meestal boven een top of onder een bodem.</dd>
-<dt>Order block (OB)</dt><dd>De laatste candle tegen de richting in, vlak voor een harde beweging.</dd>
-<dt>POC</dt><dd>Point of control: de prijs met het meeste volume in een dag of week. "Naakt" als de koers er sindsdien niet meer kwam.</dd>
-<dt>Premium, discount</dt><dd>De bovenste en onderste helft van de range.</dd>
-<dt>R, R:R</dt><dd>R is je risico per trade. R:R is de verhouding tussen mogelijke winst en risico.</dd>
-<dt>Range</dt><dd>De beweging tussen een top en een bodem waarbinnen HesPulse werkt.</dd>
-<dt>Stop</dt><dd>De prijs waarop je verlies neemt als het plan niet klopt.</dd>
-<dt>Sweep</dt><dd>Een korte prik door een pool met een slot weer terug.</dd>
-<dt>Top-down</dt><dd>Van het grote tijdframe naar het kleine werken.</dd></dl>
+<div><dt>ATR</dt><dd>De gemiddelde beweging per candle. HesPulse gebruikt hem voor de afstand van de stop.</dd></div>
+<div><dt>BOS, CHoCH, breuk</dt><dd>Een slot voorbij de vorige top of bodem. BOS gaat mee met de trend, CHoCH draait de trend.</dd></div>
+<div><dt>Candle</dt><dd>Eén staafje in de grafiek: open, hoog, laag en slot over een vaste tijd (15m, 1u, 4u, dag).</dd></div>
+<div><dt>Consolidatie</dt><dd>Een periode waarin de koers zijwaarts beweegt in een smalle band.</dd></div>
+<div><dt>Displacement</dt><dd>Een harde, snelle beweging over meerdere candles.</dd></div>
+<div><dt>Doel</dt><dd>De prijs waar je winst neemt.</dd></div>
+<div><dt>EQH, EQL</dt><dd>Twee toppen of bodems op bijna gelijke hoogte. Daar ligt vaak extra liquiditeit.</dd></div>
+<div><dt>Evenwicht</dt><dd>Het midden van de range (0,5).</dd></div>
+<div><dt>FVG (fair value gap)</dt><dd>Een gat tussen drie candles waar de prijs niet verhandeld is. Vaak komt de koers erin terug.</dd></div>
+<div><dt>Limietorder</dt><dd>Een order die pas vult als de koers jouw prijs raakt.</dd></div>
+<div><dt>Liquiditeit, pool</dt><dd>Een plek met veel stops en orders, meestal boven een top of onder een bodem.</dd></div>
+<div><dt>Order block (OB)</dt><dd>De laatste candle tegen de richting in, vlak voor een harde beweging.</dd></div>
+<div><dt>POC</dt><dd>Point of control: de prijs met het meeste volume in een dag of week. "Naakt" als de koers er sindsdien niet meer kwam.</dd></div>
+<div><dt>Premium, discount</dt><dd>De bovenste en onderste helft van de range.</dd></div>
+<div><dt>R, R:R</dt><dd>R is je risico per trade. R:R is de verhouding tussen mogelijke winst en risico.</dd></div>
+<div><dt>Range</dt><dd>De beweging tussen een top en een bodem waarbinnen HesPulse werkt.</dd></div>
+<div><dt>Stop</dt><dd>De prijs waarop je verlies neemt als het plan niet klopt.</dd></div>
+<div><dt>Sweep</dt><dd>Een korte prik door een pool met een slot weer terug.</dd></div>
+<div><dt>Top-down</dt><dd>Van het grote tijdframe naar het kleine werken.</dd></div></dl>
 </section></body></html>

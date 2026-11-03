@@ -50,10 +50,11 @@ class ManifestTest(unittest.TestCase):
         # Zonder id is de start_url de identiteit: de oude installaties hadden /ceo, een nieuwe start_url zou er een tweede app van maken.
         self.assertEqual(self.m["id"], "/ceo")
 
-    def test_basis_blijft_donker_en_standalone(self):
+    def test_basis_licht_en_standalone(self):
+        # Alleen licht sinds 2026-11-03 (B-2026-11-03-04): ook de statusbalk en het opstartscherm van de geïnstalleerde app.
         self.assertEqual(self.m["display"], "standalone")
-        self.assertEqual(self.m["theme_color"], "#0a0e0f")
-        self.assertEqual(self.m["background_color"], "#0a0e0f")
+        self.assertEqual(self.m["theme_color"], "#f4f6f6")
+        self.assertEqual(self.m["background_color"], "#f4f6f6")
 
     def test_shortcuts_nu_plannen_bewijs_with_existing_icons(self):
         from PIL import Image
@@ -182,7 +183,7 @@ class SplashFilesTest(unittest.TestCase):
             self.assertTrue(path.exists(), path)
             with Image.open(path) as im:
                 self.assertEqual((im.width, im.height), (s["css_w"] * s["dpr"], s["css_h"] * s["dpr"]))
-                self.assertEqual(im.getpixel((5, 5))[:3], (10, 14, 15))   # effen #0a0e0f
+                self.assertEqual(im.getpixel((5, 5))[:3], (244, 246, 246))   # effen #f4f6f6
 
 
 @unittest.skipUnless(shutil.which("node"), "node ontbreekt")

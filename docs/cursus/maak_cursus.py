@@ -4,8 +4,9 @@ import html
 import pathlib
 
 OUT = pathlib.Path(__file__).parent
-INK, GREY, RED, GREEN, ZONE = "#1b2324", "#8a9698", "#c0392b", "#1e8449", "#e4e8e8"
-W, H, PAD_L, PAD_R, PAD_T, PAD_B = 520, 250, 14, 150, 14, 22
+INK, GREY, RED, GREEN, ZONE = "#1b2324", "#8a9698", "#b3261e", "#1e7a46", "#eceff0"
+LOGO = '<svg viewBox="0 0 32 32" fill="none" class="{cls}"><circle cx="16" cy="16" r="15" stroke="{c}" stroke-width="2"/><path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="{c}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+W, H, PAD_L, PAD_R, PAD_T, PAD_B = 580, 250, 14, 196, 18, 22
 
 
 def svg(path, lines=(), boxes=(), marks=(), caption="", n=100):
@@ -29,7 +30,7 @@ def svg(path, lines=(), boxes=(), marks=(), caption="", n=100):
         out.append(f'<line x1="{PAD_L}" x2="{W - PAD_R + 6}" y1="{Y(y):.1f}" y2="{Y(y):.1f}" stroke="{color}" stroke-width="1.2"{dash}/>')
         out.append(f'<text x="{W - PAD_R + 10}" y="{Y(y) + 4:.1f}" class="t" fill="{color}">{html.escape(label)}</text>')
     pts = " ".join(f"{X(x):.1f},{Y(y):.1f}" for x, y in path)
-    out.append(f'<polyline points="{pts}" fill="none" stroke="{INK}" stroke-width="2" stroke-linejoin="round"/>')
+    out.append(f'<polyline points="{pts}" fill="none" stroke="{INK}" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/>')
     for x, y, label in marks:
         out.append(f'<circle cx="{X(x):.1f}" cy="{Y(y):.1f}" r="3.5" fill="{INK}"/>')
         out.append(f'<text x="{X(x) + 6:.1f}" y="{Y(y) - 6:.1f}" class="t s">{html.escape(label)}</text>')
@@ -83,7 +84,7 @@ D_B = svg([(0, 30), (14, 86), (26, 56), (40, 76), (48, 62), (54, 66), (62, 44), 
 
 D_K = svg([(0, 10), (10, 22), (20, 40), (30, 62), (38, 82), (42, 76), (48, 80), (54, 74), (60, 79), (66, 75), (70, 60), (78, 66),
            (86, 52), (100, 20)],
-          lines=[(86, "stop: boven de top", RED, False), (73, "K: limiet op de onderkant", INK, False), (14, "doel", GREEN, False)],
+          lines=[(92, "stop: boven de top", RED, False), (73, "K: limiet onderkant", INK, False), (14, "doel", GREEN, False)],
           boxes=[(38, 66, 73, 83, "consolidatie: 8 candles van 15m", "above")],
           marks=[(70, 60, "breuk")],
           caption="K: na een rechte stijging ligt het laatste dal ver weg. K neemt de 2 uur na de top als consolidatie en breekt de onderkant daarvan.")
@@ -96,8 +97,8 @@ def sec(title, body):
 
 
 sec("Voor je begint", f"""
-<p class="lead">Deze cursus legt uit wat HesPulse doet, hoe de instappunten werken en wat er wel en niet bewezen is. Je hebt geen
-voorkennis nodig. Elk vakwoord staat in de woordenlijst achterin.</p>
+<p class="lead">Wat HesPulse doet, hoe de instappunten werken en wat er wel en niet bewezen is. Elk vakwoord staat in de
+woordenlijst achterin.</p>
 <div class="box warn"><b>Drie dingen vooraf</b>
 <ol><li>HesPulse plaatst nooit zelf een order. Jij beslist of je een trade neemt.</li>
 <li>HesPulse zegt niets over hoe groot je positie moet zijn. Dat bepaal je zelf, op basis van wat je per trade wilt riskeren.</li>
@@ -179,7 +180,7 @@ staan in het detailblad.</div>
 
 sec("Les 5. Van melding tot order", f"""
 <h3>1. Je krijgt een korte melding</h3>
-<div class="push"><b>▼ SOL short · HesPulse K</b><br>Limiet 96.93 · Stop 98.68 · Doel 92.25</div>
+<div class="push">{LOGO.format(cls="", c=INK)}<div><div class="pt">▼ SOL short · HesPulse K</div><div class="pb">Limiet 96.93 · Stop 98.68 · Doel 92.25</div></div></div>
 <p>Meer staat er niet in. De uitleg vind je op de kaart.</p>
 <h3>2. Je opent de kaart op Kansen</h3>
 <ul><li>"Plan K klaar" met limiet, stop, doel en tot hoe laat het plan geldt.</li>
@@ -236,64 +237,90 @@ gaan ze samen onderuit.</li>
 
 sec("Woordenlijst", f"""
 <dl>
-<dt>ATR</dt><dd>De gemiddelde beweging per candle. HesPulse gebruikt hem voor de afstand van de stop.</dd>
-<dt>BOS, CHoCH, breuk</dt><dd>Een slot voorbij de vorige top of bodem. BOS gaat mee met de trend, CHoCH draait de trend.</dd>
-<dt>Candle</dt><dd>Eén staafje in de grafiek: open, hoog, laag en slot over een vaste tijd (15m, 1u, 4u, dag).</dd>
-<dt>Consolidatie</dt><dd>Een periode waarin de koers zijwaarts beweegt in een smalle band.</dd>
-<dt>Displacement</dt><dd>Een harde, snelle beweging over meerdere candles.</dd>
-<dt>Doel</dt><dd>De prijs waar je winst neemt.</dd>
-<dt>EQH, EQL</dt><dd>Twee toppen of bodems op bijna gelijke hoogte. Daar ligt vaak extra liquiditeit.</dd>
-<dt>Evenwicht</dt><dd>Het midden van de range (0,5).</dd>
-<dt>FVG (fair value gap)</dt><dd>Een gat tussen drie candles waar de prijs niet verhandeld is. Vaak komt de koers erin terug.</dd>
-<dt>Limietorder</dt><dd>Een order die pas vult als de koers jouw prijs raakt.</dd>
-<dt>Liquiditeit, pool</dt><dd>Een plek met veel stops en orders, meestal boven een top of onder een bodem.</dd>
-<dt>Order block (OB)</dt><dd>De laatste candle tegen de richting in, vlak voor een harde beweging.</dd>
-<dt>POC</dt><dd>Point of control: de prijs met het meeste volume in een dag of week. "Naakt" als de koers er sindsdien niet meer kwam.</dd>
-<dt>Premium, discount</dt><dd>De bovenste en onderste helft van de range.</dd>
-<dt>R, R:R</dt><dd>R is je risico per trade. R:R is de verhouding tussen mogelijke winst en risico.</dd>
-<dt>Range</dt><dd>De beweging tussen een top en een bodem waarbinnen HesPulse werkt.</dd>
-<dt>Stop</dt><dd>De prijs waarop je verlies neemt als het plan niet klopt.</dd>
-<dt>Sweep</dt><dd>Een korte prik door een pool met een slot weer terug.</dd>
-<dt>Top-down</dt><dd>Van het grote tijdframe naar het kleine werken.</dd></dl>
+<div><dt>ATR</dt><dd>De gemiddelde beweging per candle. HesPulse gebruikt hem voor de afstand van de stop.</dd></div>
+<div><dt>BOS, CHoCH, breuk</dt><dd>Een slot voorbij de vorige top of bodem. BOS gaat mee met de trend, CHoCH draait de trend.</dd></div>
+<div><dt>Candle</dt><dd>Eén staafje in de grafiek: open, hoog, laag en slot over een vaste tijd (15m, 1u, 4u, dag).</dd></div>
+<div><dt>Consolidatie</dt><dd>Een periode waarin de koers zijwaarts beweegt in een smalle band.</dd></div>
+<div><dt>Displacement</dt><dd>Een harde, snelle beweging over meerdere candles.</dd></div>
+<div><dt>Doel</dt><dd>De prijs waar je winst neemt.</dd></div>
+<div><dt>EQH, EQL</dt><dd>Twee toppen of bodems op bijna gelijke hoogte. Daar ligt vaak extra liquiditeit.</dd></div>
+<div><dt>Evenwicht</dt><dd>Het midden van de range (0,5).</dd></div>
+<div><dt>FVG (fair value gap)</dt><dd>Een gat tussen drie candles waar de prijs niet verhandeld is. Vaak komt de koers erin terug.</dd></div>
+<div><dt>Limietorder</dt><dd>Een order die pas vult als de koers jouw prijs raakt.</dd></div>
+<div><dt>Liquiditeit, pool</dt><dd>Een plek met veel stops en orders, meestal boven een top of onder een bodem.</dd></div>
+<div><dt>Order block (OB)</dt><dd>De laatste candle tegen de richting in, vlak voor een harde beweging.</dd></div>
+<div><dt>POC</dt><dd>Point of control: de prijs met het meeste volume in een dag of week. "Naakt" als de koers er sindsdien niet meer kwam.</dd></div>
+<div><dt>Premium, discount</dt><dd>De bovenste en onderste helft van de range.</dd></div>
+<div><dt>R, R:R</dt><dd>R is je risico per trade. R:R is de verhouding tussen mogelijke winst en risico.</dd></div>
+<div><dt>Range</dt><dd>De beweging tussen een top en een bodem waarbinnen HesPulse werkt.</dd></div>
+<div><dt>Stop</dt><dd>De prijs waarop je verlies neemt als het plan niet klopt.</dd></div>
+<div><dt>Sweep</dt><dd>Een korte prik door een pool met een slot weer terug.</dd></div>
+<div><dt>Top-down</dt><dd>Van het grote tijdframe naar het kleine werken.</dd></div></dl>
 """)
 
+
 CSS = f"""
-@page {{ size: A4; margin: 18mm 16mm 18mm 16mm; }}
-body {{ font-family: 'Helvetica Neue', Arial, sans-serif; color: {INK}; font-size: 10.5pt; line-height: 1.5; }}
-.cover {{ height: 245mm; display: flex; flex-direction: column; justify-content: center; page-break-after: always; }}
-.cover h1 {{ font-size: 34pt; margin: 0 0 6mm; letter-spacing: -0.5px; }}
-.cover p {{ font-size: 13pt; color: #4a5658; margin: 0 0 3mm; }}
-.cover .meta {{ margin-top: 20mm; font-size: 10pt; color: #6b7678; }}
-section {{ page-break-before: always; }}
-h2 {{ font-size: 18pt; margin: 0 0 4mm; border-bottom: 2px solid {INK}; padding-bottom: 2mm; }}
-h3 {{ font-size: 12pt; margin: 6mm 0 2mm; break-after: avoid; }}
-.lead {{ font-size: 12pt; }}
-.box {{ border: 1px solid #c9d0d1; background: #f4f6f6; border-radius: 6px; padding: 3mm 4mm; margin: 4mm 0; break-inside: avoid; }}
-.box.warn {{ border-left: 4px solid {RED}; }}
-.box ol, .box ul {{ margin: 2mm 0 0; }}
-.note {{ color: #5a6668; font-size: 9.5pt; }}
-figure {{ margin: 4mm 0; break-inside: avoid; }}
-figcaption {{ font-size: 9pt; color: #5a6668; margin-top: 1mm; }}
+@page {{ size: A4; }}
+* {{ box-sizing: border-box; }}
+body {{ font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; color: {INK}; font-size: 10pt; line-height: 1.55; margin: 0; }}
+.cover {{ height: 297mm; width: 210mm; display: flex; flex-direction: column; page-break-after: always; }}
+.cover-top {{ flex: 1; padding: 26mm 22mm 0; }}
+.cover-logo {{ width: 22mm; height: 22mm; }}
+.cover h1 {{ font-family: 'Inter Display', 'Inter', sans-serif; font-size: 52pt; font-weight: 700; letter-spacing: -1.5px; margin: 18mm 0 4mm; line-height: 1; }}
+.cover .sub {{ font-size: 16pt; color: #4a5658; margin: 0; font-weight: 400; }}
+.cover-band {{ background: {INK}; color: #fff; padding: 14mm 22mm 16mm; }}
+.cover-band h4 {{ font-family: 'JetBrains Mono', monospace; font-size: 8.5pt; letter-spacing: 2px; text-transform: uppercase; color: #aeb7b8; margin: 0 0 4mm; font-weight: 500; }}
+.cover-band ol {{ columns: 2; column-gap: 12mm; margin: 0; padding-left: 5mm; font-size: 10.5pt; line-height: 1.9; }}
+.cover-band .meta {{ margin-top: 8mm; font-size: 8.5pt; color: #aeb7b8; }}
+.cover-chart {{ width: 100%; height: 48mm; margin-top: 16mm; }}
+section {{ page-break-before: always; }} section.first {{ page-break-before: auto; }}
+.kicker {{ font-family: 'JetBrains Mono', monospace; font-size: 8.5pt; letter-spacing: 2px; text-transform: uppercase; color: #6b7678; margin: 0 0 1.5mm; }}
+h2 {{ font-family: 'Inter Display', 'Inter', sans-serif; font-size: 24pt; font-weight: 700; letter-spacing: -0.5px; margin: 0 0 6mm; line-height: 1.1; }}
+h3 {{ font-size: 11.5pt; font-weight: 700; margin: 7mm 0 2mm; break-after: avoid; }}
+.lead {{ font-size: 12pt; color: #2f3a3b; }}
+.box {{ border-left: 3px solid {INK}; background: #f4f6f6; border-radius: 0 6px 6px 0; padding: 3.5mm 5mm; margin: 5mm 0; break-inside: avoid; }}
+.box.warn {{ border-left-color: {RED}; }}
+.box ol, .box ul {{ margin: 2mm 0 0; padding-left: 5mm; }}
+.note {{ color: #5a6668; font-size: 9pt; }}
+figure {{ margin: 5mm 0; break-inside: avoid; }}
+figcaption {{ font-size: 8.8pt; color: #5a6668; margin-top: 1.5mm; }}
 .dia {{ width: 100%; height: auto; }}
-.dia .t {{ font-family: 'Helvetica Neue', Arial, sans-serif; font-size: 11px; fill: {INK}; }}
-.dia .s {{ font-size: 10px; }}
-.dia .b {{ font-weight: 700; font-size: 13px; }}
-table {{ border-collapse: collapse; width: 100%; margin: 3mm 0; font-size: 9.5pt; break-inside: avoid; }}
-th, td {{ border-bottom: 1px solid #d5dbdc; text-align: left; padding: 1.5mm 2mm; vertical-align: top; }}
-th {{ background: #eef1f1; }}
-.push {{ border: 1px solid #c9d0d1; border-radius: 10px; padding: 3mm 4mm; width: 70%; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.08); }}
-dl dt {{ font-weight: 700; margin-top: 1.2mm; }} dl dd {{ margin: 0; }} dl {{ font-size: 9.8pt; line-height: 1.4; }}
-.toc li {{ margin: 1mm 0; }}
+.dia .s {{ font-size: 9.5px; }}
+.dia .b {{ font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13px; }}
+table {{ border-collapse: collapse; width: 100%; margin: 4mm 0; font-size: 9.3pt; break-inside: avoid; }}
+th {{ text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 8pt; letter-spacing: 1px; text-transform: uppercase; color: #6b7678;
+      font-weight: 500; border-bottom: 1.5px solid {INK}; padding: 2mm 2mm; }}
+td {{ border-bottom: 1px solid #dfe4e4; padding: 2mm 2mm; vertical-align: top; }}
+td:first-child {{ font-family: 'JetBrains Mono', monospace; font-weight: 600; }}
+.push {{ display: flex; gap: 3mm; align-items: flex-start; border: 1px solid #dfe4e4; border-radius: 14px; padding: 3.5mm 4mm; width: 78%;
+        background: #fff; box-shadow: 0 2px 8px rgba(27,35,36,.08); }}
+.push svg {{ width: 9mm; height: 9mm; flex: none; }}
+.push .pt {{ font-weight: 700; }} .push .pb {{ font-family: 'JetBrains Mono', monospace; font-size: 9pt; color: #2f3a3b; }}
+dl {{ font-size: 9.5pt; line-height: 1.4; columns: 2; column-gap: 9mm; }}
+dl div {{ break-inside: avoid; margin-bottom: 2.5mm; }}
+dl dt {{ font-weight: 700; }} dl dd {{ margin: 0; color: #2f3a3b; }}
+ol, ul {{ padding-left: 5mm; }} li {{ margin: 1mm 0; }}
 """
+
+COVER_CHART = svg([(0, 30), (8, 52), (14, 44), (22, 70), (28, 62), (34, 88), (40, 78), (46, 82), (52, 60), (58, 66), (66, 38),
+                   (74, 46), (82, 24), (90, 30), (100, 10)], lines=[(88, "", "#c9d0d1", True), (49, "", "#c9d0d1", True), (10, "", "#c9d0d1", True)])
 
 
 def build():
     toc = "".join(f"<li>{html.escape(t)}</li>" for t, _ in SECTIONS)
-    body = "".join(f"<section><h2>{html.escape(t)}</h2>{b}</section>" for t, b in SECTIONS)
-    page = f"""<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>HesPulse cursus</title><style>{CSS}</style></head><body>
-<div class="cover"><h1>HesPulse<br>voor beginners</h1><p>Hoe het model kansen vindt, hoe de instappunten werken en wat er wel en niet bewezen is.</p>
-<ol class="toc">{toc}</ol><p class="meta">Stand 3 november 2026. Alle instappunten zijn ongetest. HesPulse plaatst nooit zelf een order.</p></div>
-{body}</body></html>"""
+    body = ""
+    for i, (t, b) in enumerate(SECTIONS):
+        kick = "Woordenlijst" if t == "Woordenlijst" else ("Inleiding" if i == 0 else f"Les {i:02d}")
+        title = t.split(". ", 1)[1] if t.startswith("Les ") else t
+        body += f'<section><p class="kicker">{kick}</p><h2>{html.escape(title)}</h2>{b}</section>'
+    head = f'<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>HesPulse, het model uitgelegd</title><style>{CSS}</style></head><body>'
+    cover = f"""{head}<div class="cover"><div class="cover-top">{LOGO.format(cls="cover-logo", c=INK)}
+<h1>HesPulse</h1><p class="sub">Het model uitgelegd: richting, instappunten en wat bewezen is.</p>
+<div class="cover-chart">{COVER_CHART}</div></div>
+<div class="cover-band"><h4>Inhoud</h4><ol>{toc}</ol>
+<p class="meta">Stand 3 november 2026 · Alle instappunten zijn ongetest · HesPulse plaatst nooit zelf een order</p></div></div></body></html>"""
+    (OUT / "omslag.html").write_text(cover, encoding="utf-8")
+    page = f"{head}{body.replace('<section>', '<section class=first>', 1)}</body></html>"
     (OUT / "hespulse-cursus.html").write_text(page, encoding="utf-8")
 
 

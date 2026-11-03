@@ -1,4 +1,4 @@
-"""Maakt de opstartbeelden voor iPhone (web/static/splash/) en de iconen van de snelkoppelingen in het manifest (web/static/shortcut-*.png).
+"""Maakt de opstartbeelden voor iPhone (web/static/splash/) de iconen van de snelkoppelingen in het manifest (web/static/shortcut-*.png) en de appiconen (icon-192/512).
 
     python3 scripts/make_splash.py
 
@@ -15,9 +15,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from web.splash import SCREENS  # noqa: E402
 
-BG = (10, 14, 15)              # #0a0e0f, de achtergrond van de app en van background_color in het manifest
-ACCENT = (10, 186, 181)        # #0ABAB5
-PANEL = (19, 26, 27)           # #131a1b, --panel
+BG = (244, 246, 246)           # #f4f6f6, de achtergrond van de app (alleen licht sinds 2026-11-03) en background_color in het manifest
+ACCENT = (27, 35, 36)          # #1b2324, inkt zoals het logo
+PANEL = (255, 255, 255)        # wit, de kaarten
 SS = 4                         # supersampling
 PULSE = [(5, 16), (9, 16), (11.5, 9), (15.5, 23), (18, 16), (27, 16)]   # het pad uit hespulse-logo.svg, viewBox 32
 
@@ -69,6 +69,16 @@ def shortcut_icon(kind: str, size: int = 96) -> Image.Image:
     return big.resize((size, size), Image.LANCZOS)
 
 
+def app_icon(size: int) -> Image.Image:
+    """Het appicoon (icon-192/512, apple-touch-icon): wit vlak met afgeronde hoeken en het logo in inkt."""
+    s = size * SS
+    big = Image.new("RGB", (s, s), BG)
+    draw = ImageDraw.Draw(big)
+    draw.rounded_rectangle([0, 0, s - 1, s - 1], radius=s * 0.22, fill=PANEL)
+    _logo(draw, s / 2, s / 2, s * 0.62)
+    return big.resize((size, size), Image.LANCZOS)
+
+
 def main() -> None:
     out = ROOT / "web" / "static" / "splash"
     out.mkdir(exist_ok=True)
@@ -78,6 +88,10 @@ def main() -> None:
     for kind in ("radar", "vandaag", "bewijs"):
         path = ROOT / "web" / "static" / f"shortcut-{kind}.png"
         shortcut_icon(kind).save(path, optimize=True)
+        print(path)
+    for size in (192, 512):
+        path = ROOT / "web" / "static" / f"icon-{size}.png"
+        app_icon(size).save(path, optimize=True)
         print(path)
 
 
