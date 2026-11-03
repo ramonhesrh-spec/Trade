@@ -9,7 +9,9 @@
 // Het is een benadering: de app blijft de bron. De plannen van het model (limiet, stop, doel) komen er niet vanzelf in; plak ze bij
 // "Plan uit HesPulse" in de instellingen, dan tekent het script het positievak. Alleen gesloten candles tellen, net als in de app.
 //@version=6
-indicator("HesPulse structuur (benadering)", shorttitle = "HesPulse", overlay = true, max_lines_count = 200, max_boxes_count = 60, max_labels_count = 200, max_bars_back = 500)
+// scale.right: dezelfde prijsschaal als de koers. Zonder dit kon TradingView het script op een eigen schaal zetten, waardoor de lijnen bij
+// verticaal schuiven of zoomen los van de candles bewogen.
+indicator("HesPulse structuur (benadering)", shorttitle = "HesPulse", overlay = true, scale = scale.right, max_lines_count = 200, max_boxes_count = 60, max_labels_count = 200, max_bars_back = 500)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // Instellingen
