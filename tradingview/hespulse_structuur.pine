@@ -1,0 +1,335 @@
+// HesPulse structuur (benadering) voor TradingView. Plak dit in de Pine Editor, kies "Add to chart".
+// Tekent met dezelfde vaste regels als het HesPulse-model (app/model.py) en Groot (app/structure_levels.py):
+//   - de richting van de dag: de laatste breuk op gesloten dagcandles (swings van 2 candles links en rechts);
+//   - de 4u-range top-down: alleen de laatste 4u-breuk in de richting van de dag, hoogstens 60 candles van 4u oud; een slot door de rand
+//     tegen de dag in rekt de range op naar het nieuwe uiterste;
+//   - het evenwicht (0,5) met premium en discount;
+//   - de trend per tijdframe (D, 4u, 1u, 15m), met "herstel" als de laatste 4u-breuk tegen de dag in ging;
+//   - BOS en CHoCH en de dichtste open fair value gap boven en onder de koers, op het tijdframe van de grafiek.
+// Het is een benadering: de app blijft de bron. De plannen van het model (limiet, stop, doel) komen er niet vanzelf in; plak ze bij
+// "Plan uit HesPulse" in de instellingen, dan tekent het script het positievak. Alleen gesloten candles tellen, net als in de app.
+//@version=5
+indicator("HesPulse structuur (benadering)", shorttitle = "HesPulse", overlay = true, max_lines_count = 200, max_boxes_count = 60, max_labels_count = 200, max_bars_back = 500)
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Instellingen
+
+showRange  = input.bool(true, "4u range, evenwicht, premium en discount", group = "Lagen")
+showTrend  = input.bool(true, "Trend per tijdframe", group = "Lagen")
+showBreaks = input.bool(true, "BOS en CHoCH op dit tijdframe", group = "Lagen")
+showFvg    = input.bool(true, "Dichtstbijzijnde open FVG op dit tijdframe", group = "Lagen")
+kChart     = input.int(2, "Swing-candles links en rechts op dit tijdframe", minval = 1, maxval = 5, group = "Lagen",
+                 tooltip = "Het model gebruikt 2 op 15m en 4u, 3 op 1u.")
+maxBreaks  = input.int(12, "Hoeveel breuken tonen", minval = 1, maxval = 50, group = "Lagen")
+
+planLimit  = input.float(0.0, "Limiet", group = "Plan uit HesPulse", tooltip = "0 = geen positievak")
+planStop   = input.float(0.0, "Stop", group = "Plan uit HesPulse")
+planTake   = input.float(0.0, "Doel", group = "Plan uit HesPulse")
+
+INK   = #1b2324
+GREY  = #8a9698
+RED   = #b3261e
+GREEN = #1e7a46
+FVG_LOOKBACK = 150
+BIAS_MAX_BARS = 60
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Swings zoals het model (trendlab._pivot_flags): strikt lager dan de k candles links, lager of gelijk aan de k candles rechts.
+// Bekend op het slot van de k-de candle erna, dus kijkt deze functie k candles terug.
+
+isPivotLow(int k) =>
+    bool ok = not na(low[2 * k])
+    float m = low[k]
+    for i = 0 to k - 1
+        if low[i] < m
+            ok := false
+    for i = k + 1 to 2 * k
+        if low[i] <= m
+            ok := false
+    ok
+
+isPivotHigh(int k) =>
+    bool ok = not na(high[2 * k])
+    float m = high[k]
+    for i = 0 to k - 1
+        if high[i] > m
+            ok := false
+    for i = k + 1 to 2 * k
+        if high[i] >= m
+            ok := false
+    ok
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Breuken zoals model.breaks: een slot voorbij de laatste nog niet gebroken swing; de breuk verbruikt elke swing die het slot passeerde.
+// Geeft per candle: de richting van de laatste breuk (1 omhoog, -1 omlaag, 0 nog geen), de breuk op deze candle (evt, lbl 1 BOS 2 CHoCH,
+// het niveau en de tijd van de swing), en de twee ranges (omhoog en omlaag) zoals Context4h(topdown=True) ze bouwt.
+
+f_struct(int k, int maxBars) =>
+    var float[] hiP = array.new_float()
+    var int[]   hiI = array.new_int()
+    var bool[]  hiB = array.new_bool()
+    var float[] loP = array.new_float()
+    var int[]   loI = array.new_int()
+    var bool[]  loB = array.new_bool()
+    var int   dir = 0
+    var float uL = na
+    var float uH = na
+    var int   uB = na
+    var int   uT = na
+    var bool  uX = false
+    var float dL = na
+    var float dH = na
+    var int   dB = na
+    var int   dT = na
+    var bool  dX = false
+    int   evt = 0
+    int   lbl = 0
+    float lvl = na
+    int   swT = na
+    if isPivotHigh(k)
+        array.push(hiP, high[k])
+        array.push(hiI, bar_index - k)
+        array.push(hiB, false)
+    if isPivotLow(k)
+        array.push(loP, low[k])
+        array.push(loI, bar_index - k)
+        array.push(loB, false)
+    if array.size(hiP) > 300
+        array.shift(hiP)
+        array.shift(hiI)
+        array.shift(hiB)
+    if array.size(loP) > 300
+        array.shift(loP)
+        array.shift(loI)
+        array.shift(loB)
+    // Omhoog: de laatste open swing high.
+    int jh = -1
+    if array.size(hiP) > 0
+        for j = array.size(hiP) - 1 to 0
+            if not array.get(hiB, j)
+                jh := j
+                break
+    if jh >= 0 and close > array.get(hiP, jh)
+        int s = array.get(hiI, jh)
+        lvl := array.get(hiP, jh)
+        for j = 0 to array.size(hiP) - 1
+            if not array.get(hiB, j) and close > array.get(hiP, j)
+                array.set(hiB, j, true)
+        lbl := dir == 0 ? 0 : dir == 1 ? 1 : 2
+        evt := 1
+        dir := 1
+        int n = math.min(bar_index - s, 400)
+        float mn = low
+        float mx = high
+        for i = 0 to n
+            mx := math.max(mx, high[i])
+            if i < n
+                mn := math.min(mn, low[i])
+        swT := time[n]
+        uL := mn
+        uH := mx
+        uB := bar_index
+        uT := time
+        uX := false
+    else if not na(uB)
+        uH := math.max(uH, high)
+        if uX
+            uL := math.min(uL, low)
+        else if close < uL
+            uX := true
+            uL := low
+    // Omlaag: gespiegeld.
+    int jl = -1
+    if array.size(loP) > 0
+        for j = array.size(loP) - 1 to 0
+            if not array.get(loB, j)
+                jl := j
+                break
+    if evt == 0 and jl >= 0 and close < array.get(loP, jl)
+        int s = array.get(loI, jl)
+        lvl := array.get(loP, jl)
+        for j = 0 to array.size(loP) - 1
+            if not array.get(loB, j) and close < array.get(loP, j)
+                array.set(loB, j, true)
+        lbl := dir == 0 ? 0 : dir == -1 ? 1 : 2
+        evt := -1
+        dir := -1
+        int n = math.min(bar_index - s, 400)
+        float mn = low
+        float mx = high
+        for i = 0 to n
+            mn := math.min(mn, low[i])
+            if i < n
+                mx := math.max(mx, high[i])
+        swT := time[n]
+        dL := mn
+        dH := mx
+        dB := bar_index
+        dT := time
+        dX := false
+    else if not na(dB)
+        dL := math.min(dL, low)
+        if dX
+            dH := math.max(dH, high)
+        else if close > dH
+            dX := true
+            dH := high
+    bool uOk = not na(uB) and bar_index - uB <= maxBars
+    bool dOk = not na(dB) and bar_index - dB <= maxBars
+    [dir, evt, lbl, lvl, swT, uL, uH, uOk, uT, dL, dH, dOk, dT]
+
+// Alleen gesloten candles van het hogere tijdframe: de vorige waarde met lookahead_on, zoals TradingView aanraadt tegen herschrijven.
+f_dir(int k) =>
+    [d, e, l, v, t, a1, a2, a3, a4, b1, b2, b3, b4] = f_struct(k, BIAS_MAX_BARS)
+    d[1]
+
+f_range4h() =>
+    [d, e, l, v, t, uL, uH, uOk, uT, dL, dH, dOk, dT] = f_struct(2, BIAS_MAX_BARS)
+    [d[1], uL[1], uH[1], uOk[1], uT[1], dL[1], dH[1], dOk[1], dT[1]]
+
+dayDir = request.security(syminfo.tickerid, "D", f_dir(2), lookahead = barmerge.lookahead_on)
+[h4Dir, uL4, uH4, uOk4, uT4, dL4, dH4, dOk4, dT4] = request.security(syminfo.tickerid, "240", f_range4h(), lookahead = barmerge.lookahead_on)
+h1Dir  = request.security(syminfo.tickerid, "60", f_dir(3), lookahead = barmerge.lookahead_on)
+m15Dir = request.security(syminfo.tickerid, "15", f_dir(2), lookahead = barmerge.lookahead_on)
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// De 4u-range top-down: de dag kiest welke van de twee ranges telt.
+
+float rL = na
+float rH = na
+int   rT = na
+if dayDir == 1 and uOk4
+    rL := uL4
+    rH := uH4
+    rT := uT4
+else if dayDir == -1 and dOk4
+    rL := dL4
+    rH := dH4
+    rT := dT4
+
+var line  lnH = na
+var line  lnL = na
+var line  lnE = na
+var box   bxP = na
+var label lbH = na
+var label lbL = na
+var label lbE = na
+var label lbP = na
+var label lbD = na
+
+if barstate.islast
+    line.delete(lnH), line.delete(lnL), line.delete(lnE), box.delete(bxP)
+    label.delete(lbH), label.delete(lbL), label.delete(lbE), label.delete(lbP), label.delete(lbD)
+    if showRange and not na(rL) and not na(rH) and rH > rL
+        float eq = (rL + rH) / 2
+        int x0 = rT
+        int x1 = time + 10 * (time - time[1])
+        lnH := line.new(x0, rH, x1, rH, xloc = xloc.bar_time, color = INK, width = 1)
+        lnL := line.new(x0, rL, x1, rL, xloc = xloc.bar_time, color = INK, width = 1)
+        lnE := line.new(x0, eq, x1, eq, xloc = xloc.bar_time, color = GREY, style = line.style_dashed)
+        bxP := box.new(x0, rH, x1, eq, xloc = xloc.bar_time, bgcolor = color.new(INK, 94), border_color = color.new(INK, 100))
+        lbH := label.new(x1, rH, "4u RH", xloc = xloc.bar_time, style = label.style_label_left, color = color.new(color.white, 100), textcolor = INK, size = size.small)
+        lbL := label.new(x1, rL, "4u RL", xloc = xloc.bar_time, style = label.style_label_left, color = color.new(color.white, 100), textcolor = INK, size = size.small)
+        lbE := label.new(x1, eq, "EQ 0,5", xloc = xloc.bar_time, style = label.style_label_left, color = color.new(color.white, 100), textcolor = GREY, size = size.small)
+        lbP := label.new(x0, (rH + eq) / 2, "premium", xloc = xloc.bar_time, style = label.style_label_left, color = color.new(color.white, 100), textcolor = GREY, size = size.tiny)
+        lbD := label.new(x0, (rL + eq) / 2, "discount", xloc = xloc.bar_time, style = label.style_label_left, color = color.new(color.white, 100), textcolor = GREY, size = size.tiny)
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Trend per tijdframe, zoals de regel bovenin Groot.
+
+f_word(int d) =>
+    d == 1 ? "↑" : d == -1 ? "↓" : "?"
+
+var table tb = table.new(position.top_right, 1, 2, bgcolor = color.new(color.white, 0), border_color = color.new(GREY, 60), border_width = 1)
+if barstate.islast and showTrend
+    string herstel = dayDir != 0 and h4Dir != 0 and h4Dir != dayDir ? " herstel" : ""
+    string txt = "Trend  D " + f_word(dayDir) + " · 4u " + f_word(h4Dir) + herstel + " · 1u " + f_word(h1Dir) + " · 15m " + f_word(m15Dir)
+    table.cell(tb, 0, 0, txt, text_color = INK, text_size = size.small)
+    string zoek = dayDir == 1 ? "Model zoekt long" : dayDir == -1 ? "Model zoekt short" : "Nog geen dagbreuk"
+    table.cell(tb, 0, 1, zoek + " · benadering, de app is de bron", text_color = GREY, text_size = size.tiny)
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// BOS en CHoCH op het tijdframe van de grafiek: een dunne lijn van de swing tot de breuk, met het label erbij.
+
+[cDir, cEvt, cLbl, cLvl, cSwT, c1, c2, c3, c4, c5, c6, c7, c8] = f_struct(kChart, 100000)
+var line[]  brLines  = array.new_line()
+var label[] brLabels = array.new_label()
+if showBreaks and cEvt != 0 and barstate.isconfirmed
+    string word = cLbl == 2 ? "CHoCH" : "BOS"
+    array.push(brLines, line.new(cSwT, cLvl, time, cLvl, xloc = xloc.bar_time, color = GREY, width = 1))
+    array.push(brLabels, label.new(time, cLvl, word, xloc = xloc.bar_time, style = cEvt == 1 ? label.style_label_down : label.style_label_up,
+                                   color = color.new(color.white, 100), textcolor = INK, size = size.tiny))
+    if array.size(brLines) > maxBreaks
+        line.delete(array.shift(brLines))
+        label.delete(array.shift(brLabels))
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// De dichtste open fair value gap boven en onder de koers (zoals structure_levels.open_fvgs): een latere lont maakt hem kleiner,
+// helemaal gevuld valt hij weg. Alleen gesloten candles.
+
+var box fvUp = na
+var box fvDn = na
+if barstate.islast
+    box.delete(fvUp), box.delete(fvDn)
+    if showFvg
+        float px = close[1]
+        float bestUpLo = na
+        float bestUpHi = na
+        int   bestUpT = na
+        float bestDnLo = na
+        float bestDnHi = na
+        int   bestDnT = na
+        float minLater = na
+        float maxLater = na
+        for o = 1 to FVG_LOOKBACK
+            if na(high[o + 2])
+                break
+            // Gap omhoog: high van twee candles eerder onder de low van deze.
+            if high[o + 2] < low[o]
+                float lo = high[o + 2]
+                float hi = na(minLater) ? low[o] : math.min(low[o], minLater)
+                if hi > lo
+                    if hi < px and (na(bestDnHi) or hi > bestDnHi)
+                        bestDnLo := lo, bestDnHi := hi, bestDnT := time[o + 1]
+                    else if lo > px and (na(bestUpLo) or lo < bestUpLo)
+                        bestUpLo := lo, bestUpHi := hi, bestUpT := time[o + 1]
+            // Gap omlaag: low van twee candles eerder boven de high van deze.
+            if low[o + 2] > high[o]
+                float lo = na(maxLater) ? high[o] : math.max(high[o], maxLater)
+                float hi = low[o + 2]
+                if hi > lo
+                    if lo > px and (na(bestUpLo) or lo < bestUpLo)
+                        bestUpLo := lo, bestUpHi := hi, bestUpT := time[o + 1]
+                    else if hi < px and (na(bestDnHi) or hi > bestDnHi)
+                        bestDnLo := lo, bestDnHi := hi, bestDnT := time[o + 1]
+            minLater := na(minLater) ? low[o] : math.min(minLater, low[o])
+            maxLater := na(maxLater) ? high[o] : math.max(maxLater, high[o])
+        int x1 = time + 10 * (time - time[1])
+        if not na(bestUpLo)
+            fvUp := box.new(bestUpT, bestUpHi, x1, bestUpLo, xloc = xloc.bar_time, bgcolor = color.new(GREY, 85), border_color = color.new(GREY, 55),
+                            text = "FVG", text_color = INK, text_size = size.tiny, text_halign = text.align_right)
+        if not na(bestDnLo)
+            fvDn := box.new(bestDnT, bestDnHi, x1, bestDnLo, xloc = xloc.bar_time, bgcolor = color.new(GREY, 85), border_color = color.new(GREY, 55),
+                            text = "FVG", text_color = INK, text_size = size.tiny, text_halign = text.align_right)
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Het positievak, zoals op de kaart: donkergrijs van limiet tot stop (risico), lichtgrijs van limiet tot doel (winst).
+
+var box   pvRisk = na
+var box   pvWin  = na
+var line  pvLines0 = na
+var line  pvLines1 = na
+var line  pvLines2 = na
+if barstate.islast
+    box.delete(pvRisk), box.delete(pvWin), line.delete(pvLines0), line.delete(pvLines1), line.delete(pvLines2)
+    if planLimit > 0 and planStop > 0
+        int x0 = bar_index - 3
+        int x1 = bar_index + 30
+        pvRisk := box.new(x0, math.max(planLimit, planStop), x1, math.min(planLimit, planStop), bgcolor = color.new(INK, 80), border_color = color.new(INK, 100),
+                          text = "risico", text_color = INK, text_size = size.tiny, text_halign = text.align_left)
+        pvLines0 := line.new(x0, planLimit, x1, planLimit, color = INK, width = 1)
+        pvLines1 := line.new(x0, planStop, x1, planStop, color = RED, width = 1)
+        if planTake > 0
+            pvWin := box.new(x0, math.max(planLimit, planTake), x1, math.min(planLimit, planTake), bgcolor = color.new(INK, 93), border_color = color.new(INK, 100),
+                             text = "doel", text_color = INK, text_size = size.tiny, text_halign = text.align_left)
+            pvLines2 := line.new(x0, planTake, x1, planTake, color = GREEN, width = 1)
