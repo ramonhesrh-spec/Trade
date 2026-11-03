@@ -521,12 +521,12 @@ def placebo_pairs(scenarios: list[dict], signal_rows: list[dict], entries: list[
         net, end = track_record.net_signal_r(r, cost_pct), _dt(r.get("auto_outcome_at"))
         if net is None or end is None:
             continue
-        out.append({"net": net, "end": end, "cost_r": _cost_r(r["price"], r["stop_loss"], cost_pct), "rs": placebo_rs.get(("A", s["id"]))})
+        out.append({"net": net, "end": end, "cost_r": _cost_r(r["price"], r["stop_loss"], cost_pct), "rs": placebo_rs.get(("A", s.get("id")))})
     for e in entries:
         if e.get("code") not in STRICT_CODES or e.get("outcome") not in DONE or e.get("r_gross") is None:
             continue
         c = _cost_r(e["limit_price"], e["stop_loss"], cost_pct)
-        out.append({"net": e["r_gross"] - c, "end": _dt(e["outcome_at"]), "cost_r": c, "rs": placebo_rs.get(("E", e["id"]))})
+        out.append({"net": e["r_gross"] - c, "end": _dt(e["outcome_at"]), "cost_r": c, "rs": placebo_rs.get(("E", e.get("id")))})
     return [p for p in out if p["end"] is not None]
 
 
