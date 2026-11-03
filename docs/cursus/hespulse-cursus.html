@@ -38,6 +38,9 @@ td:first-child { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
 dl { font-size: 9.5pt; line-height: 1.4; columns: 2; column-gap: 9mm; }
 dl div { break-inside: avoid; margin-bottom: 2.5mm; }
 dl dt { font-weight: 700; } dl dd { margin: 0; color: #2f3a3b; }
+.chips { display: flex; gap: 2.5mm; margin: 3mm 0 4mm; }
+.chip { background: #1b2324; color: #fff; border-radius: 99px; padding: 1.6mm 4mm; font-weight: 600; font-size: 9.3pt; }
+.chip.off { background: #fff; color: #1b2324; border: 1px solid #c9d0d1; }
 ol, ul { padding-left: 5mm; } li { margin: 1mm 0; }
 </style></head><body><section class=first><p class="kicker">Inleiding</p><h2>Voor je begint</h2>
 <p class="lead">Wat HesPulse doet, hoe de instappunten werken en wat er wel en niet bewezen is. Elk vakwoord staat in de
@@ -48,7 +51,7 @@ woordenlijst achterin.</p>
 <li>Alle instappunten zijn <b>ongetest</b>. Er is nog geen bewijs dat ze winst opleveren. Les 6 legt uit hoe we dat meten.</li></ol></div>
 <h3>Wat je leert</h3>
 <ol><li>Hoe HesPulse de richting kiest (top-down).</li><li>Wat een range, premium en discount zijn.</li>
-<li>Wat liquiditeit en een sweep zijn.</li><li>De instappunten A, B, B0, R en K.</li><li>Van melding tot order.</li>
+<li>Wat liquiditeit en een sweep zijn.</li><li>De instappunten A, B, B0, R en K, en de setups tegen de trend.</li><li>Van melding tot order, met de grafiek.</li>
 <li>Wat bewezen is en wat niet.</li><li>Goede gewoontes.</li></ol>
 </section><section><p class="kicker">Les 01</p><h2>De richting: van groot naar klein</h2>
 <p>HesPulse kijkt eerst naar het grootste tijdframe en werkt dan naar beneden. Dat heet top-down.</p>
@@ -111,6 +114,15 @@ van de range low en een naakte POC.</li></ol>
 die onderkant, stop boven de top, doel zoals bij A.</p>
 <div class="box"><b>Voorrang.</b> Liggen er meer plannen tegelijk klaar, dan toont de kaart er één: eerst B, dan R, dan K, dan B0. De andere
 staan in het detailblad.</div>
+<h3>Tegen de dagtrend: zichtbaar, geen melding</h3>
+<p>HesPulse zoekt dezelfde instappunten ook tegen de richting van de dag in. Wijst de dag omlaag en zet de koers op 4 uur een herstel neer,
+dan ziet HesPulse daar soms een long. Die setups zijn zichtbaar, maar je krijgt er nooit een melding van en er staat geen orderknop bij.</p>
+<figure><svg viewBox="0 0 580 250" xmlns="http://www.w3.org/2000/svg" class="dia"><line x1="14" x2="390" y1="81.0" y2="81.0" stroke="#8a9698" stroke-width="1.2" stroke-dasharray="5 4"/><text x="394" y="85.0" class="t" fill="#8a9698">tegen A: limiet</text><line x1="14" x2="390" y1="106.2" y2="106.2" stroke="#8a9698" stroke-width="1.2" stroke-dasharray="5 4"/><text x="394" y="110.2" class="t" fill="#8a9698">tegen B: limiet</text><polyline points="14.0,186.0 65.8,165.0 102.8,177.6 147.2,131.4 184.2,144.0 228.6,97.8 258.2,114.6 302.6,72.6 339.6,85.2 384.0,60.0" fill="none" stroke="#1b2324" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg><figcaption>Tegen de dagtrend: de dag wijst omlaag, maar de koers loopt omhoog. HesPulse tekent die longs grijs gestippeld, zonder melding en zonder orderknop.</figcaption></figure>
+<ul><li>Op Kansen staan ze in een eigen groep onder de schakelaar <b>Tegen de trend</b>. Standaard staat die uit.</li>
+<li>In de grafiek "Groot" staan ze als grijze stippellijn met "tegen" voor de letter, bijvoorbeeld "tegen B".</li>
+<li>HesPulse meet ze stil en apart. Ze tellen nooit mee in de cijfers van het model.</li></ul>
+<p class="note">Waarom? Zo zien we na een paar weken of trades tegen de dag in beter of slechter zijn dan trades met de dag mee. Tot die
+tijd volg je de dag.</p>
 </section><section><p class="kicker">Les 05</p><h2>Van melding tot order</h2>
 <h3>1. Je krijgt een korte melding</h3>
 <div class="push"><svg viewBox="0 0 32 32" fill="none" class=""><circle cx="16" cy="16" r="15" stroke="#1b2324" stroke-width="2"/><path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#1b2324" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg><div><div class="pt">▼ SOL short · HesPulse K</div><div class="pb">Limiet 96.93 · Stop 98.68 · Doel 92.25</div></div></div>
@@ -119,6 +131,18 @@ staan in het detailblad.</div>
 <ul><li>"Plan K klaar" met limiet, stop, doel en tot hoe laat het plan geldt.</li>
 <li>Een plan geldt <b>6 uur</b> na de breuk. Daarna vervalt het. Een vervallen plan verdwijnt van de kaart.</li>
 <li>"Groot" opent de grafiek met de range, het evenwicht en de trend per tijdframe.</li></ul>
+<h3>De grafiek "Groot"</h3>
+<p>Bovenin kies je het tijdframe: 15m, 1u, 4u of D. Daaronder staat de trend per tijdframe, bijvoorbeeld "4u ↓". Met drie knoppen zet je
+lagen aan of uit, zodat de grafiek rustig blijft:</p>
+<div class="chips"><span class="chip">Structuur</span><span class="chip">Instappunten</span><span class="chip off">Tegen de trend</span></div>
+<ul><li><b>Structuur</b>: range high en low, evenwicht, swings, breuken, FVG en order block.</li>
+<li><b>Instappunten</b>: de andere plannen van dit scenario, gestippeld met hun letter.</li>
+<li><b>Tegen de trend</b>: de setups tegen de dag in, grijs gestippeld.</li></ul>
+<p class="note">De app onthoudt je keuze op dit toestel.</p>
+<h3>Het positievak</h3>
+<figure><svg viewBox="0 0 580 250" xmlns="http://www.w3.org/2000/svg" class="dia"><rect x="243.4" y="60.0" width="111.0" height="29.4" fill="rgba(27,35,36,0.2)"/><rect x="243.4" y="89.4" width="111.0" height="117.6" fill="rgba(27,35,36,0.07)"/><line x1="14" x2="390" y1="60.0" y2="60.0" stroke="#b3261e" stroke-width="1.2"/><text x="394" y="64.0" class="t" fill="#b3261e">stop</text><line x1="14" x2="390" y1="89.4" y2="89.4" stroke="#1b2324" stroke-width="1.2"/><text x="394" y="93.4" class="t" fill="#1b2324">limiet</text><line x1="14" x2="390" y1="207.0" y2="207.0" stroke="#1e7a46" stroke-width="1.2"/><text x="394" y="211.0" class="t" fill="#1e7a46">doel</text><polyline points="14.0,165.0 65.8,47.4 110.2,110.4 162.0,68.4 191.6,97.8 213.8,89.4 243.4,135.6 273.0,123.0 295.2,93.6 324.8,106.2 384.0,181.8" fill="none" stroke="#1b2324" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/><circle cx="243.4" cy="135.6" r="3.5" fill="#1b2324"/><text x="249.4" y="129.6" class="t s">plan bekend</text></svg><figcaption>Het positievak. Het verschijnt pas als het plan bekend is en loopt tot het plan vervalt. Donkergrijs is je risico (limiet tot stop), lichtgrijs je mogelijke winst (limiet tot doel).</figcaption></figure>
+<p>Zodra een plan bekend is, tekent HesPulse een vak zoals de positietool van TradingView. Vóór dat moment staat er geen vak: een scenario
+dat nog wacht, heeft nog geen instap, stop of doel. Het vak staat op de kaart en in "Groot".</p>
 <h3>3. Je zet de order, stap voor stap</h3>
 <ol><li>Open de coin bij je beurs. Kies short (of long) en Limit.</li><li>Plak de limietprijs.</li>
 <li>Zet de stop er meteen bij, niet later.</li><li>Zet het doel.</li></ol>
@@ -151,6 +175,9 @@ week duidelijk onder nul ligt. Meten gaat altijd door.</li>
 <p>Op de pagina <b>Bewijs</b>: per instappunt het aantal afgeronde trades, de netto R en de stand van de stopregel. En per kenmerk van een
 hoger tijdframe (12u- of dagzone, dagpremium, dag- of weekopen) hoe plannen met en zonder dat kenmerk scoren. Dat beschrijft; het
 voorspelt nog niets.</p>
+<div class="box"><b>Waarom geen AI-oordeel.</b> HesPulse vraagt geen AI of een plan "sterk" of "zwak" is. Elk plan komt uit vaste regels
+in de code, met openbare koersdata van Binance. Daardoor geeft dezelfde grafiek altijd hetzelfde plan, en kunnen we de regels eerlijk
+terugtoetsen. Een AI-oordeel verschilt per keer en kost geld per vraag.</div>
 <div class="box"><b>Waarom één mooi voorbeeld niets zegt.</b> Op een grafiek achteraf zie je de winnaars. De trades die op dezelfde
 manier verloren, zie je niet. Alleen alle trades samen, vooraf vastgelegd, zeggen of een regel werkt.</div>
 </section><section><p class="kicker">Les 07</p><h2>Goede gewoontes</h2>
@@ -175,6 +202,7 @@ gaan ze samen onderuit.</li>
 <div><dt>FVG (fair value gap)</dt><dd>Een gat tussen drie candles waar de prijs niet verhandeld is. Vaak komt de koers erin terug.</dd></div>
 <div><dt>Limietorder</dt><dd>Een order die pas vult als de koers jouw prijs raakt.</dd></div>
 <div><dt>Liquiditeit, pool</dt><dd>Een plek met veel stops en orders, meestal boven een top of onder een bodem.</dd></div>
+<div><dt>Positievak</dt><dd>Het grijze vak op de grafiek: donker van limiet tot stop (risico), licht van limiet tot doel (winst).</dd></div>
 <div><dt>Order block (OB)</dt><dd>De laatste candle tegen de richting in, vlak voor een harde beweging.</dd></div>
 <div><dt>POC</dt><dd>Point of control: de prijs met het meeste volume in een dag of week. "Naakt" als de koers er sindsdien niet meer kwam.</dd></div>
 <div><dt>Premium, discount</dt><dd>De bovenste en onderste helft van de range.</dd></div>
@@ -182,5 +210,6 @@ gaan ze samen onderuit.</li>
 <div><dt>Range</dt><dd>De beweging tussen een top en een bodem waarbinnen HesPulse werkt.</dd></div>
 <div><dt>Stop</dt><dd>De prijs waarop je verlies neemt als het plan niet klopt.</dd></div>
 <div><dt>Sweep</dt><dd>Een korte prik door een pool met een slot weer terug.</dd></div>
+<div><dt>Tegen de trend</dt><dd>Een setup tegen de richting van de dag in. Zichtbaar, stil gemeten, nooit een melding.</dd></div>
 <div><dt>Top-down</dt><dd>Van het grote tijdframe naar het kleine werken.</dd></div></dl>
 </section></body></html>
