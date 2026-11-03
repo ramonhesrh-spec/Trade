@@ -2,6 +2,11 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Eén taak tegelijk
+
+Lees aan het begin van elke sessie `docs/taken/NU.md`. Werk alleen aan de actieve taak daarin. Een nieuw idee gaat naar de parkeerlijst
+in `NU.md`, niet naar werk. Werk de stand en de volgende stap bij in het taakbestand (`docs/taken/NN-onderwerp.md`) voor je afsluit.
+
 ## What this is
 
 HesPulse: a crypto day-trading alert system. A user forwards a Discord DM
