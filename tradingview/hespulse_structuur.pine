@@ -96,6 +96,10 @@ BIAS = tfSec >= 86400 ? 0 : dayDir
 var line[]  lines  = array.new_line()
 var label[] labels = array.new_label()
 var box[]   boxes  = array.new_box()
+// Labels eerst verzamelen: liggen er twee dicht bij elkaar, dan worden ze één regel ("EQ · CHoCH · SL") in plaats van over elkaar heen.
+var int[]    pendX = array.new_int()
+var float[]  pendY = array.new_float()
+var string[] pendT = array.new_string()
 
 f_clear() =>
     while array.size(lines) > 0
@@ -104,14 +108,42 @@ f_clear() =>
         label.delete(array.pop(labels))
     while array.size(boxes) > 0
         box.delete(array.pop(boxes))
+    array.clear(pendX)
+    array.clear(pendY)
+    array.clear(pendT)
+
+f_label(int x, float y, string txt) =>
+    array.push(pendX, x)
+    array.push(pendY, y)
+    array.push(pendT, txt)
+
+// Samenvoegen binnen tol (een derde ATR): gesorteerd op prijs, elke groep één label op de laatste beginplek, bij de hoogste prijs.
+f_flush(float tol) =>
+    int[] idx = array.sort_indices(pendY, order.ascending)
+    int i = 0
+    while i < array.size(idx)
+        int a = array.get(idx, i)
+        string txt = array.get(pendT, a)
+        int x = array.get(pendX, a)
+        float y = array.get(pendY, a)
+        float first = y
+        int j = i + 1
+        while j < array.size(idx) and array.get(pendY, array.get(idx, j)) - first <= tol
+            int b = array.get(idx, j)
+            txt := txt + " · " + array.get(pendT, b)
+            x := math.max(x, array.get(pendX, b))
+            y := array.get(pendY, b)
+            j += 1
+        array.push(labels, label.new(x, y, txt, style = label.style_label_lower_left, color = color.new(chart.bg_color, 100), textcolor = FG, size = size.small))
+        i := j
 
 f_line(int x, float y, string txt, bool dashed) =>
     array.push(lines, line.new(x, y, x + 1, y, extend = extend.right, color = LINE, width = 1, style = dashed ? line.style_dashed : line.style_solid))
-    array.push(labels, label.new(x, y, txt, style = label.style_label_lower_left, color = color.new(chart.bg_color, 100), textcolor = FG, size = size.small))
+    f_label(x, y, txt)
 
 f_box(int x, float lo, float hi, string txt) =>
     array.push(boxes, box.new(x, hi, x + 1, lo, extend = extend.right, bgcolor = ZONE, border_color = EDGE))
-    array.push(labels, label.new(x, hi, txt, style = label.style_label_lower_left, color = color.new(chart.bg_color, 100), textcolor = FG, size = size.small))
+    f_label(x, hi, txt)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // De structuur (app/structure_levels.levels), één keer op de laatste candle, over de laatste WINDOW gesloten candles.
@@ -335,6 +367,7 @@ if barstate.islast
             f_box(base + belI, belLo, belHi, "FVG")
         if abvI >= 0
             f_box(base + abvI, abvLo, abvHi, "FVG")
+        f_flush(atr / 3)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // Trend per tijdframe, zoals bovenin Groot. Een tijdframe onder dat van de grafiek is niet betrouwbaar op te vragen: dan een streepje.
