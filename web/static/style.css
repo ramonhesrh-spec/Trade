@@ -673,17 +673,6 @@ main h3 { font-size: var(--text-md); gap: var(--space-4); }
   .winrate-ring-fill { animation: none; stroke-dashoffset: var(--ring-offset); }
 }
 
-/* Winst-confetti: overlay die zichzelf opruimt na de val (zie base.html). */
-.confetti-burst { position: fixed; inset: 0; pointer-events: none; z-index: 999; overflow: hidden; }
-.confetti-piece {
-  position: absolute; top: -12px; width: 8px; height: 14px; border-radius: 2px;
-  animation: confetti-fall linear forwards;
-}
-@keyframes confetti-fall {
-  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(105vh) rotate(var(--rot, 360deg)); opacity: 0; }
-}
-
 /* Swipe-to-close op mobiel (zie base.html): de knop zelf vult zich van
    links naar rechts mee met de vingerpositie, geen aparte schuifbalk. Alleen
    op een grof aanwijsapparaat, op desktop blijft het gewoon een knop. */
@@ -2056,69 +2045,11 @@ html { -webkit-tap-highlight-color: transparent; }
 .r-bar-track i { display: block; height: 100%; border-radius: 4px; background: var(--green); transition: width 0.4s ease; }
 .r-bar-value { text-align: right; color: var(--text-dim); }
 
-/* ===== De CEO: bewust te gelikt. Goud op diep donker, alleen op deze pagina. ===== */
-.ceo-page { max-width: 760px; margin: 0 auto; }
-.ceo-hero { position: relative; margin: 0 calc(-1 * var(--space-6)); padding: 0 var(--space-6) var(--space-8); text-align: center; background: radial-gradient(120% 80% at 50% 0%, #1a1405 0%, #0b0a06 60%); border-bottom: 1px solid #5a4710; overflow: hidden; }
-.ceo-yacht { display: block; width: 100%; height: 220px; margin: 0 calc(-1 * var(--space-6)); width: calc(100% + 2 * var(--space-6)); }
-.ceo-portrait { position: relative; width: 168px; height: 168px; margin: -84px auto var(--space-5); border-radius: 50%; padding: 5px; background: conic-gradient(from 20deg, #fff1b8, #d4af37, #8a6d1c, #fff1b8, #d4af37, #8a6d1c, #fff1b8); box-shadow: 0 0 40px rgba(212, 175, 55, 0.45); }
-.ceo-portrait img, .ceo-silhouette { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; background: #14100a; display: grid; place-items: center; font-size: 64px; }
-.ceo-crown { position: absolute; top: -34px; left: 50%; transform: translateX(-50%) rotate(-8deg); font-style: normal; font-size: 48px; filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.6)); }
-.ceo-name { margin: 0; font-family: var(--display); font-size: clamp(2.4rem, 11vw, 4rem); letter-spacing: 0.08em; text-transform: uppercase;
-            background: linear-gradient(180deg, #fff6cf 0%, #d4af37 55%, #8a6d1c 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
-.ceo-title { margin: var(--space-2) 0 0; font-family: var(--display); font-size: var(--text-lg, 1.25rem); letter-spacing: 0.32em; text-transform: uppercase; color: #e9d8a0; }
-.ceo-company { margin: var(--space-2) 0 var(--space-5); font-size: var(--text-sm, 0.875rem); letter-spacing: 0.18em; text-transform: uppercase; color: #a8925a; }
-.ceo-badges { display: flex; flex-wrap: wrap; gap: var(--space-3); justify-content: center; margin: 0; }
-.ceo-badges span { padding: 4px 12px; border: 1px solid #8a6d1c; border-radius: 999px; background: rgba(212, 175, 55, 0.08); color: #e9d8a0; font-size: var(--text-2xs); letter-spacing: 0.1em; text-transform: uppercase; }
-.ceo-note { text-align: center; font-size: var(--text-2xs); }
-.ceo-quote { margin: var(--space-7) 0; padding: var(--space-6); text-align: center; border-top: 2px solid #d4af37; border-bottom: 2px solid #d4af37; font-family: var(--display); font-size: var(--text-xl, 1.5rem); letter-spacing: 0.03em; color: #f3e3a4; }
-.ceo-quote footer { margin-top: var(--space-3); font-family: var(--sans); font-size: var(--text-2xs); letter-spacing: 0.18em; text-transform: uppercase; color: #a8925a; }
-.ceo-students { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); }
-.ceo-students li { display: flex; justify-content: space-between; gap: var(--space-4); padding: var(--space-4); border: 1px solid var(--border-strong); border-radius: var(--radius); }
-.ceo-headline { margin: 0 0 var(--space-3); font-family: var(--display); letter-spacing: 0.06em; text-transform: uppercase; color: #e9d8a0; }
 .setup-verdict { margin: var(--space-2) 0 0; font-size: var(--text-sm, 0.875rem); color: var(--green); }
 .vd-greeting { margin: 0 0 var(--space-3); font-family: var(--display); font-size: var(--text-lg, 1.25rem); letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-dim); }
 .proof-quote { margin: 0 0 var(--space-3); font-style: italic; }
 
-/* Geldregen en confetti: vallen één keer, bij een positief weekresultaat of na vijf tikken op het logo. */
-.money-layer { position: fixed; inset: 0; z-index: 900; pointer-events: none; overflow: hidden; }
-.money-layer span { position: absolute; top: -40px; animation: money-fall linear both; }
-@keyframes money-fall { from { transform: translateY(0) rotate(0deg); opacity: 1; } to { transform: translateY(110vh) rotate(360deg); opacity: 0.9; } }
-.ceo-toast { position: fixed; left: 50%; bottom: calc(110px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 950; padding: var(--space-4) var(--space-6); border-radius: 999px; background: linear-gradient(180deg, #fff1b8, #d4af37); color: #2a1f03; font-family: var(--display); letter-spacing: 0.1em; text-transform: uppercase; }
 
-/* CEO-pagina, tweede laag: hoger beeld, grotere foto, gouden afwerking en de leerlingen als team. */
-.ceo-yacht { height: 260px; }
-.ceo-portrait { width: 196px; height: 196px; margin-top: -98px; box-shadow: 0 0 0 6px rgba(212, 175, 55, 0.12), 0 0 56px rgba(212, 175, 55, 0.5); }
-.ceo-crown { top: -40px; font-size: 56px; }
-.ceo-name { font-size: clamp(2.8rem, 13vw, 4.6rem); letter-spacing: 0.1em; text-shadow: 0 2px 24px rgba(212, 175, 55, 0.35); }
-.ceo-title { font-size: var(--text-xl, 1.4rem); letter-spacing: 0.4em; }
-.ceo-divider { display: flex; align-items: center; gap: var(--space-4); margin: var(--space-7) 0 var(--space-5); color: #d4af37; }
-.ceo-divider span { flex: 1; height: 1px; background: linear-gradient(90deg, transparent, #d4af37, transparent); }
-.ceo-divider i { font-style: normal; font-size: 14px; }
-.ceo-card { display: grid; gap: 0; margin: var(--space-5) 0; border: 1px solid #5a4710; border-radius: var(--radius); background: linear-gradient(180deg, #17120a, #0d0b06); }
-.ceo-card p { display: flex; justify-content: space-between; gap: var(--space-4); margin: 0; padding: var(--space-4) var(--space-5); border-bottom: 1px solid rgba(90, 71, 16, 0.5); color: #f3e3a4; }
-.ceo-card p:last-child { border-bottom: 0; }
-.ceo-card span { font-size: var(--text-2xs); letter-spacing: 0.12em; text-transform: uppercase; color: #a8925a; align-self: center; }
-.ceo-h3 { color: #e9d8a0; letter-spacing: 0.14em; }
-.ceo-students { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-3); counter-reset: leerling; }
-.ceo-students li { display: grid; grid-template-columns: 52px 1fr; align-items: center; gap: var(--space-4); padding: var(--space-4); border: 1px solid var(--border-strong); border-radius: 16px; background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent); }
-.ceo-students li.is-star { border-color: #d4af37; background: linear-gradient(135deg, rgba(212, 175, 55, 0.16), rgba(212, 175, 55, 0.03)); box-shadow: 0 0 24px rgba(212, 175, 55, 0.16); }
-.ceo-avatar { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 50%; font-family: var(--display); font-size: 1.5rem; color: #2a1f03; background: conic-gradient(from 20deg, #fff1b8, #d4af37, #8a6d1c, #fff1b8); }
-.ceo-student { display: flex; flex-direction: column; min-width: 0; }
-.ceo-student strong { font-size: 1.05rem; overflow-wrap: anywhere; }
-.ceo-star { grid-column: 1 / -1; justify-self: start; padding: 2px 10px; border-radius: 999px; background: #d4af37; color: #2a1f03; font-size: var(--text-2xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
-.ceo-cash { display: block; width: 100%; max-width: 520px; height: auto; margin: var(--space-5) auto 0; filter: drop-shadow(0 6px 18px rgba(212, 175, 55, 0.35)); }
-.ceo-sub { display: block; font-family: var(--sans); font-size: var(--text-2xs); letter-spacing: 0.08em; text-transform: uppercase; color: #a8925a; }
-.ceo-masterclass { margin: var(--space-7) 0; padding: var(--space-6); text-align: center; border: 1px solid #d4af37; border-radius: 20px; background: linear-gradient(160deg, rgba(212, 175, 55, 0.2), rgba(212, 175, 55, 0.03) 60%); box-shadow: 0 0 36px rgba(212, 175, 55, 0.18); }
-.ceo-cta { margin-top: var(--space-4); padding: var(--space-4) var(--space-7); border: 0; border-radius: 999px; background: linear-gradient(180deg, #fff1b8, #d4af37 55%, #a8801f); color: #2a1f03; font-family: var(--display); font-size: 1rem; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; box-shadow: 0 6px 22px rgba(212, 175, 55, 0.4); transition: transform 0.15s ease; }
-.ceo-cta:active { transform: scale(0.96); }
-.ceo-testimonial { grid-column: 1 / -1; display: block; font-style: italic; color: #e9d8a0; }
-.ceo-fine { margin: var(--space-7) 0 var(--space-5); text-align: center; font-size: var(--text-2xs); color: #8a7a4a; }
-.tab-ceo { color: #d4af37; }
-.tab-ceo.is-active { background: rgba(212, 175, 55, 0.16); color: #f3e3a4; }
-.ceo-presence { width: 100%; border-collapse: collapse; }
-.ceo-presence th { text-align: right; padding: var(--space-2) var(--space-3); font-size: var(--text-2xs); letter-spacing: 0.08em; text-transform: uppercase; color: #a8925a; }
-.ceo-presence td { text-align: right; padding: var(--space-3); border-top: 1px solid rgba(90, 71, 16, 0.5); font-variant-numeric: tabular-nums; }
-.ceo-presence th:first-child, .ceo-presence td:first-child { text-align: left; overflow-wrap: anywhere; }
 
 /* Live grafiek: de limietlijn pulseert zodra de koers binnen 0,3% komt. Alleen bij een echte nadering, niet als versiering. */
 @media (prefers-reduced-motion: no-preference) { svg.sc.is-near .sc-limit { animation: limit-pulse 1.4s ease-in-out infinite; } }
@@ -2160,7 +2091,6 @@ html { -webkit-tap-highlight-color: transparent; }
 .keten-table { width: 100%; border-collapse: collapse; font-size: var(--text-sm, 0.875rem); }
 .keten-table th, .keten-table td { padding: var(--space-3); text-align: left; border-bottom: 1px solid var(--border); }
 .keten-note code { font-family: var(--mono); }
-.ceo-scrapped p { color: var(--text-dim); }
 
 /* Pauzeknop voor meldingen (pause.js). Oranje zolang de pauze loopt: het is de enige stand waarin je meldingen mist. */
 .push-pause { display: inline-flex; align-items: center; gap: var(--space-2); padding: 2px 8px; min-height: 28px; border: 1px solid var(--border-strong);
@@ -2191,9 +2121,6 @@ html { -webkit-tap-highlight-color: transparent; }
 @keyframes kt-toast-time { to { transform: scaleX(0); } }
 @media (prefers-reduced-motion: reduce) { .kt-toast { transition: none; transform: none; } .kt-toast.is-on .kt-toast-time { animation: none; } }
 @media (prefers-reduced-motion: reduce) { .copy-toast { transition: none; } }
-.win-toast { position: fixed; left: 50%; bottom: calc(100px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 960; display: flex; align-items: center; gap: var(--space-4);
-             padding: 6px 16px 6px 6px; border-radius: 18px; background: var(--panel); border: 1px solid var(--border-strong); color: var(--text); font-weight: 600; cursor: pointer; }
-.win-toast img { width: 96px; height: auto; border-radius: 12px; display: block; }
 
 /* Versheid van de koersen (stale.js): groen is gemeten en vers, oranje betekent dat je naar een oude koers kijkt. Geen animatie. */
 .price-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); flex: none; }
@@ -2485,7 +2412,7 @@ details.mrow-wrap > .mrow-body { padding: 0 0 var(--space-7) calc(var(--icon-row
 @media (min-width: 761px) { .fsearch, .ph-avatar { display: none; } }
 @media (max-width: 760px) {
   /* De dock is hier ongeveer 138px hoog; lagere meldingen verdwijnen erachter. */
-  .copy-toast, .ceo-toast, .win-toast, .kt-toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
+  .copy-toast, .kt-toast { bottom: calc(160px + env(safe-area-inset-bottom)); }
 }
 @media (prefers-reduced-motion: reduce) { .dock { transition: none; } }
 
@@ -3386,3 +3313,6 @@ details.mrow-wrap.is-focus .mrow-body .proof-number { font-size: 44px; }
 .kc-plan b { color: var(--tx); font-weight: 600; }
 .kc-order { display: inline-block; margin: 0 0 12px; padding: 8px 14px; border-radius: 999px; background: var(--ac); color: var(--s1);
   font: 600 13px / 1.2 var(--sans); text-decoration: none; }
+
+/* De kop van de week: een gewone zin uit app/ceo.week_headline. */
+.week-headline { margin: 0 0 var(--space-5); font-size: var(--text-lg); font-weight: 700; }

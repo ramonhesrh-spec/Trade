@@ -50,8 +50,7 @@ async def run(now: Optional[datetime] = None) -> None:
         level = json.loads(s["plan"])["level"]
         dist = (level - price) / price * 100 if s["direction"] == "short" else (price - level) / price * 100
         waiting.append({"coin": s["coin"], "direction": s["direction"], "grade": s["grade"], "dist_pct": dist})
-    from app import ceo
-    message = build(waiting, ceo.quote_of_the_day(today.local(now).date()))
+    message = build(waiting)
     if not message or not repo.alert_once(key):
         return
     for user in repo.list_users():

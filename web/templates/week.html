@@ -9,7 +9,7 @@
   {{ macros.headline("Resultaat, laatste " ~ dagen ~ " dagen", "%+.1f"|format(week.net_r), "R na kosten", spark=spark,
        explain="Cumulatief resultaat in R per dag." ~ ((" Hoogste punt " ~ "%+.1f"|format(week.cumulative|max) ~ "R, laagste " ~ "%+.1f"|format(week.cumulative|min) ~ "R.") if week.resolved else "")) }}
   {{ macros.utabs(tabs, dagen, "week") }}
-  <p class="ceo-headline">{{ headline }}</p>
+  <p class="week-headline">{{ headline }}</p>
   {{ macros.keylines([
     {"label": "Kansen gemeld", "value": week.signals},
     {"label": "Afgerond", "value": week.resolved},

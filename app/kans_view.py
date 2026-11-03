@@ -4,7 +4,7 @@ import json
 from datetime import datetime, timezone
 from typing import Optional
 
-from app import ceo, setup_chart, today
+from app import setup_chart, today
 from app.track_record import TYPE_LABELS
 
 OUTCOME_TEXT = {"take_profit": "Doel geraakt", "stop_loss": "Stop geraakt", "vervallen": "Vervallen zonder uitkomst",
@@ -72,7 +72,7 @@ def timeline(signal: dict, setup: Optional[dict], outcome_text: Optional[str] = 
 
 def format_events(events: list[dict]) -> list[dict]:
     """Nederlandse tijd, zoals de rest van de site, en de tijdlijnregels in CEO-taal."""
-    return [{"at": today.local(_parse(e["at"])), "text": ceo.timeline_text(e["text"])} for e in events]
+    return [{"at": today.local(_parse(e["at"])), "text": e["text"]} for e in events]
 
 
 def facts(signal: dict) -> dict:

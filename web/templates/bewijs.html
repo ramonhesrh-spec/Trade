@@ -47,7 +47,6 @@
          right_tone=("pos" if e.avg_net and e.avg_net > 0 else "neg" if e.avg_net and e.avg_net < 0 else ""), el="summary") }}
     <div class="mrow-body">
     {% if e.source_label %}<span class="muted proof-source">{{ e.source_label }}</span>{% endif %}
-      <p class="muted proof-quote">{{ ceo_status[e.status] }}</p>
       {% if e.avg_net is not none %}
       <div class="proof-number {{ 'pos' if e.avg_net > 0 else 'neg' }}">{{ "%+.2f"|format(e.avg_net) }}<span class="proof-unit">R per trade, na kosten</span></div>
       {% else %}

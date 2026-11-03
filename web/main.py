@@ -1306,7 +1306,7 @@ async def bewijs_page(request: Request, user: dict = Depends(require_login)):
         "my_week": _week_review(user, datetime.now(timezone.utc)),
         "curves": curves, "total": total, "per_type": per_type, "off_types": off_types, "funding_split": track_record.funding_split(rows, config.TRACK_RECORD_COST_PCT),
         "hours": track_record.hour_grid(rows, config.TRACK_RECORD_COST_PCT),
-        "rule_statuses": rule_statuses, "other_rules": other_rules, "range_sweep": range_sweep, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS, "ceo_status": ceo.STATUS_QUOTE,
+        "rule_statuses": rule_statuses, "other_rules": other_rules, "range_sweep": range_sweep, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS,
         "focus_types": focus.FOCUS_TYPES, "cost_pct": config.TRACK_RECORD_COST_PCT, "cost_line": track_record.cost_text(config.TRACK_RECORD_COST_PCT), "recent_days": track_record.RECENT_DAYS,
         "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,
     })
@@ -2082,9 +2082,6 @@ async def close_journal(
         pass
     target = _safe_next(next)
     extra_query = []
-    if won:
-        extra_query.append(("closed_win", "1"))
-        extra_query.append(("closed_pct", f"{won_pct:.2f}"))
     if eval_flag:
         extra_query.append((eval_flag, "1"))
     if extra_query:
@@ -2595,32 +2592,6 @@ async def beheer_invite_delete(invite_id: int, user: dict = Depends(require_logi
 
 
 @app.get("/ceo")
-async def ceo_page(request: Request, user: dict = Depends(require_login)):
-    """De pagina van de CEO (in het blad achter het initiaal). Alleen echte gegevens waar het ertoe doet (dagen in functie, aantal leerlingen, het weekresultaat voor de geldregen),
-    de rest is de grap. Handelscijfers staan op Bewijs."""
-    boss = ceo_user() or user
-    rows = report_rows(user)
-    week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
-    first = min((track_record._parse(r["created_at"]) for r in rows), default=None)
-    now = datetime.now(timezone.utc)
-    photo = BASE_DIR / "static" / "ceo.jpg"
-    students = ceo.students([u["username"] for u in repo.list_users() if u["id"] != boss["id"]], now.date())
-    scrapped = []
-    from app.structure_live import should_disable
-    for trade_type, name, limit in (("structuur", "Structuur", config.STRUCTURE_MAX_NEGATIVE), ("trend", "Trend-pullback", config.TREND_MAX_NEGATIVE),
-                                    ("rejectie", "Rejectie", config.REJECTION_MAX_NEGATIVE), ("script", "Markt-script", config.SCRIPT_MAX_NEGATIVE),
-                                    ("samenval", "Samenval", config.SAMENVAL_MAX_NEGATIVE)):
-        if should_disable(repo.list_type_results(trade_type, limit), limit):
-            scrapped.append({"name": name, "limit": limit})
-    presence = None
-    if is_ceo(user):
-        stats = repo.visit_stats(now)
-        presence = sorted(
-            ({"name": u["username"], **stats.get(u["id"], {"views": 0, "active_days": 0, "last_at": None})} for u in repo.list_users()),
-            key=lambda p: (-p["views"], p["name"].lower()))
-    return templates.TemplateResponse(request, "ceo.html", {
-        "presence": presence, "scrapped": scrapped,
-        "user": user, "boss": boss, "days_in_office": (now - first).days if first else 0,
-        "quote": ceo.quote_of_the_day(now.date()), "rain": ceo.rain_count(week["net_r"]), "students": students,
-        "photo": f"/static/ceo.jpg?v={int(photo.stat().st_mtime)}" if photo.exists() else None,
-    })
+async def ceo_page(user: dict = Depends(require_login)):
+    """De CEO-pagina is weg (CEO 2026-11-03: "het grappen is nu over"). Oude links en bladwijzers komen bij Beheer of Kansen uit."""
+    return RedirectResponse("/beheer" if is_ceo(user) else "/smc", status_code=303)

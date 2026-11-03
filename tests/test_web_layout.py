@@ -243,7 +243,7 @@ class NavTests(BaseShellTests):
         if not main.is_ceo(repo.get_user_by_username("tester")):
             self.skipTest("CEO_USERNAME wijst naar een ander")
         sheet = html[html.index('id="more-sheet"'):html.index("<footer")]
-        self.assertIn('href="/ceo"', sheet)
+        self.assertNotIn('href="/ceo"', sheet)                  # de CEO-pagina is weg (2026-11-03)
         self.assertIn('href="/galerij"', sheet)
 
     def test_desktop_balk_volgt_dezelfde_vier_plus_het_initiaal(self):
@@ -696,7 +696,7 @@ class ListPagesLayoutTests(BaseShellTests):
     def test_week_in_de_nieuwe_indeling(self):
         html = self.client.get("/week?dagen=30").text
         self.assertRegex(html, r'class="ut-tab is-active" href="/week\?dagen=30"[^>]*>1M<')
-        for needle in ['class="ph"', "data-share-chart", "laatste 30 dagen", 'class="hl-num"', 'class="kl"', "ceo-headline"]:
+        for needle in ['class="ph"', "data-share-chart", "laatste 30 dagen", 'class="hl-num"', 'class="kl"', "week-headline"]:
             self.assertIn(needle, html, needle)
         self.assertNotIn("kans-outcome", html)
 
@@ -752,11 +752,11 @@ class RestLayoutTests(BaseShellTests):
             self.assertIn(needle, html, needle)
         self.assertNotIn("summary-strip", html)
 
-    def test_ceo(self):
-        repo.create_user("leerling1", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
-        html = self.client.get("/ceo").text
-        for needle in ['class="ph"', ">De CEO<", 'class="kl"', "Dagen in functie", "Chief Executive Officer", "De leerlingen", "Leerling van de maand", "Aanwezigheid"]:
-            self.assertIn(needle, html, needle)
+    def test_ceo_pagina_is_weg(self):
+        # CEO 2026-11-03: "het grappen is nu over". Oude links komen bij Beheer (eigenaar) of Kansen uit.
+        r = self.client.get("/ceo", follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertIn(r.headers["location"], ("/beheer", "/smc"))
 
     def test_kans(self):
         sid = repo.insert_signal({"coin": "BTC", "direction": "long", "category": "x", "confidence": "hoog", "technical_confirmed": 1,
@@ -775,7 +775,7 @@ class RestLayoutTests(BaseShellTests):
         self.assertIn(">Ketting<", anon.text)
 
     def test_meer_blad_en_uitloggen(self):
-        for path in ("/account", "/ceo", "/uitleg"):
+        for path in ("/account", "/beheer", "/uitleg"):
             html = self.client.get(path).text
             sheet = html[html.index('id="more-sheet"'):]
             self.assertIn('<form action="/logout" method="post" class="more-logout">', sheet, path)
