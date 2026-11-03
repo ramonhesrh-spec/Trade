@@ -54,6 +54,13 @@ dan pas verder meten. Geen drempel voor winst; die komt uit de preregistratie §
 
 ## Geparkeerd
 
+- **H4. Een 15m-omkeer tegen de dag in na een sweep van de bodem levert netto iets op** (vastgelegd 2026-11-03,
+  `cases/2026-11-03-goud-15m-long.md`). Lezing vooraf: de dag wijst omlaag, de 15m maakt een nieuwe bodem die een gelijke bodem of SL
+  wegneemt en sluit terug, daarna een 15m-breuk omhoog; limiet op het gebroken niveau, stop onder de sweep met de 0,4%-vloer, doel de
+  dichtste van de 4u-range-rand en een naakte POC. Spiegelbeeld voor short. Zou een stille arm worden, zoals de arm tegen de dagtrend,
+  maar op 15m in plaats van 4u. Pas na de bevriezing en pas als de arm tegen de dagtrend een eerste beoordeling heeft; nooit afstellen op
+  dit ene voorbeeld. Beslisregel dan: dezelfde als de arm tegen de dagtrend (50 afgeronde trades, weekinterval van de netto R).
+
 - **H3. Vroege limiet op een naakte POC/vPOC bij een lagere top, met 4u- en BTC-context mee** (`cases/2026-11-btc-1u-vpoc.md`). Eerst
   vastleggen van welke periode het volumeniveau komt. Een niveau uit een periode die de beweging zelf bevat, is vooruitkijken. Pas
   toetsen als B een eerste beoordeling heeft. De POC-niveaus worden nog bijgewerkt (`poc_radar_live.refresh_levels`), dus de data
