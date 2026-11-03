@@ -23,4 +23,4 @@ Eén taak tegelijk. Lees dit bestand aan het begin van elke sessie.
 - Sluit elke sessie af met een regel in het taakbestand onder "Stand van nu" en "Volgende stap".
 
 ## Parkeerlijst
-- (leeg)
+- Short in discount na een lange daling (NEAR, 2026-11-03): het model heeft geen scenario als geen pool in premium binnen 6% ligt. Meten met een stille arm en een eigen preregistratie, pas na de bevriezing. Case: `docs/onderzoek/cases/2026-11-03-near-short-discount.md`. Uitkomst van de CEO-trade nog invullen.
