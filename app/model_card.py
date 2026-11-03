@@ -195,7 +195,7 @@ def waiting_text(row: dict) -> str:
         return f"De koers prikt {below} de pool. Wacht op een slot terug {above} de pool binnen 6 candles van 15m."
     turn = "hogere bodem in discount" if row["direction"] == "long" else "lagere top in premium"
     return (f"Wacht op een entry; een sweep is niet nodig. A: sweep van de pool {below} de koers, dan een 15m-breuk met een gap. "
-            f"B en R: een {turn} met een 15m-breuk, zonder sweep. V1 en P: een limiet op de pool of de POC.")
+            f"B, R en K: een {turn} met een 15m-breuk, zonder sweep.")
 
 
 def step_lines(row: dict, now: Optional[datetime] = None) -> list[dict]:

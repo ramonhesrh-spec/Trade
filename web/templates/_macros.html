@@ -726,7 +726,7 @@
     <h3 class="kd-title" id="kd-t-{{ it.dom_id }}" tabindex="-1">{{ it.title }}</h3>
     <button type="button" class="kd-x" data-kd-close aria-label="Sluiten"><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
   </div>
-  <p class="kd-kind"><span class="state-pill is-{{ it.state or 'laden' }}">{{ it.state_short }}</span><span class="kd-type">{{ kinds.get(it.trade_type, it.trade_type) }}</span>{{ kans_label(it) }}{% if it.shared_text %}<span class="kd-type">· {{ it.shared_text }}</span>{% endif %}</p>
+  <p class="kd-kind"><span class="state-pill is-{{ it.state or 'laden' }}">{{ it.state_short }}</span><span class="kd-type">{{ kinds.get(it.trade_type, it.trade_type) }}</span>{{ kans_label(it) }}{% if it.shared_text %}<span class="kd-type">{{ it.shared_text }}</span>{% endif %}</p>
   {% if it.say %}<p class="kd-say">{{ it.say }}</p>{% endif %}
   {% if it.kind == "scenario" %}
   {# HesPulse-model, moment A: nog geen order. De stappen met het moment waarop ze herkenbaar waren (app/model_card.step_lines). #}

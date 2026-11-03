@@ -27,7 +27,6 @@
     panel.scrollTop = 0;
     panel.style.transform = "";
     sheet.classList.add("is-open");
-    document.documentElement.classList.add("kd-lock");
     var title = item.querySelector(".kd-title");
     if (title) title.focus({ preventScroll: true });
     live();
@@ -36,7 +35,6 @@
     if (!sheet.classList.contains("is-open")) return;
     sheet.classList.remove("is-open");
     panel.style.transform = "";
-    document.documentElement.classList.remove("kd-lock");
     setTimeout(function () { if (!sheet.classList.contains("is-open")) sheet.hidden = true; }, rm ? 0 : 260);
     if (lastFocus && lastFocus.focus) lastFocus.focus({ preventScroll: true });
   }
