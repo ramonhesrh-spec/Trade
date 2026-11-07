@@ -24,3 +24,4 @@ Eén taak tegelijk. Lees dit bestand aan het begin van elke sessie.
 
 ## Parkeerlijst
 - Short in discount na een lange daling (NEAR, 2026-11-03): het model heeft geen scenario als geen pool in premium binnen 6% ligt. Meten met een stille arm en een eigen preregistratie, pas na de bevriezing. Case: `docs/onderzoek/cases/2026-11-03-near-short-discount.md`. Uitkomst van de CEO-trade nog invullen.
+- Conformatie zichtbaar in het TradingView-script (WLD en BTC, 2026-11-04): na een prik onder een bodem toont het script geen sweep en geen 15m-CHoCH tegen de dag in als lijn, alleen "herstel" in de trendregel (`tradingview/hespulse_structuur.pine`, `tradingview/README.md` "Wat hij niet doet"). Besluit CEO nodig: alleen tekenen, geen motorregel, geen melding.
