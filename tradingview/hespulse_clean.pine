@@ -376,7 +376,7 @@ f_label(int x, float y, string txt) =>
     array.push(pendY, y)
     array.push(pendT, txt)
 
-// Samenvoegen binnen tol (een derde ATR): gesorteerd op prijs, elke groep één label op de laatste beginplek, bij de hoogste prijs.
+// Namen staan rechts bij de laatste candle, een stip markeert de candle waar het niveau begon. Samenvoegen binnen tol (een derde ATR): gesorteerd op prijs, bij de hoogste prijs.
 f_flush(float tol) =>
     int[] idx = array.sort_indices(pendY, order.ascending)
     int i = 0
@@ -393,16 +393,17 @@ f_flush(float tol) =>
             x := math.max(x, array.get(pendX, b))
             y := array.get(pendY, b)
             j += 1
-        array.push(labels, label.new(x, y, txt, xloc = xloc.bar_time, style = x > time - 25 * (time - time[1]) ? label.style_label_lower_right : label.style_label_lower_left, color = color.new(chart.bg_color, 100), textcolor = FG, size = size.small))
+        array.push(labels, label.new(x, y, txt, xloc = xloc.bar_time, style = label.style_label_lower_right, color = color.new(chart.bg_color, 100), textcolor = FG, size = size.small))
         i := j
 
 f_line(int x, float y, string txt, bool dashed) =>
     array.push(lines, line.new(x, y, x + 60000, y, xloc = xloc.bar_time, extend = extend.right, color = LINE, width = 1, style = dashed ? line.style_dashed : line.style_solid))
-    f_label(x, y, txt)
+    array.push(labels, label.new(x, y, "", xloc = xloc.bar_time, style = label.style_circle, color = LINE, size = size.tiny))
+    f_label(time, y, txt)
 
 f_box(int x, float lo, float hi, string txt) =>
     array.push(boxes, box.new(x, hi, x + 60000, lo, xloc = xloc.bar_time, extend = extend.right, bgcolor = ZONE, border_color = EDGE))
-    f_label(x, hi, txt)
+    f_label(time, hi, txt)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // De structuur (app/structure_levels.levels), één keer op de laatste candle, over de laatste WINDOW gesloten candles.
@@ -657,7 +658,7 @@ f_word(int d) =>
 f_tf(int d, int sec) =>
     tfSec <= sec ? f_word(d) + (dayDir != 0 and d != 0 and d != dayDir ? " herstel" : "") : "–"
 
-var table tb = table.new(position.bottom_right, 1, 2, bgcolor = color.new(chart.bg_color, 10), border_color = LINE, border_width = 1)
+var table tb = table.new(position.bottom_left, 1, 2, bgcolor = color.new(chart.bg_color, 10), border_color = LINE, border_width = 1)
 if barstate.islast and showTrend
     table.cell(tb, 0, 0, "D " + f_word(dayDir) + " · 4u " + f_tf(h4Dir, 14400) + " · 1u " + f_tf(h1Dir, 3600) + " · 15m " + f_tf(m15Dir, 900), text_color = FG, text_size = size.small)
     string zoek = dayDir == 1 ? "Model zoekt long" : dayDir == -1 ? "Model zoekt short" : "Nog geen dagbreuk"
