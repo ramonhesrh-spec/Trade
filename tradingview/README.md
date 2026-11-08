@@ -93,3 +93,5 @@ reeksen, long en short, dezelfde sweep- en displacement-candles geeft als `_Run.
 compileren, de HTF-aanroepen (`request.security`) in TradingView en het uiterlijk. De ATR rekent dezelfde Wilder-recursie, maar over de candles
 die TradingView laadt, dus de eerste honderd candles kunnen een tik afwijken. De dagrichting en de pools komen uit `request.security` met de
 vorige gesloten candle (`[1]` en `lookahead_on`); of die in TradingView niet herschrijven, moet je op een lopende candle bekijken.
+
+Op ZEC 15m (2026-11-08) gaf L? en S? zes of zeven keer in één stijging, omdat de 4u-range (premium en discount) ontbreekt. Daarom staan L? en S? nu standaard uit (instelling "Ook L? en S? tonen"); L+ en S+ blijven aan. Labels van lijnen vlak bij de rechterrand staan links van de lijn, de trendregel staat rechtsonder en is korter.

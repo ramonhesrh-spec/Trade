@@ -213,7 +213,7 @@ class SignalPortTest(unittest.TestCase):
     def test_het_script_bevat_de_stappen(self):
         src = open("tradingview/hespulse_clean.pine", encoding="utf-8").read()
         for needed in ("2.5 * atrJ", "0.1 * atr15", "jBar + 5", "jBar + 24", "m - 5", "1.0 * atr15", "480", "xloc = xloc.bar_time",
-                       "f_sig(1,", "f_sig(-1,", "display = display.none", "POOL_AGE = 120"):
+                       "f_sig(1,", "f_sig(-1,", "display = display.none", "POOL_AGE = 120", "showWeak"):
             self.assertIn(needed, src)
 
 
