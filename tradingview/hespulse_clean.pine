@@ -1,0 +1,687 @@
+//@version=6
+// HesPulse Clean: dezelfde tekening als "Groot" in de app (app/structure_levels.levels), plus de liquiditeit van 1u en 4u en de sweep-aanduidingen.
+// Structuur: de laatste 499 gesloten candles van het tijdframe van je grafiek, de swing- en breukregels van het model, top-down met de dag.
+// Liquiditeit: onaangeraakte swing highs en lows van 1u (3 candles) en 4u (2 candles) uit gesloten candles, de lijn begint bij de echte pivot-candle.
+// L? en S?: de sweep van het model (stap 4.8): prik door een onaangeroerde 1u-pool, herstel binnen 6 candles van 15m.
+// L+ en S+: dezelfde keten tot en met shift, displacement en een ongevulde FVG (stappen 4.9 tot 4.11). Alleen op 15m, alleen met de dagrichting.
+// Niet gelijk aan de modelplannen A, B, B0, R en K: er zit geen 4u-range (premium of discount), geen groepering van gelijke pools en geen doel in.
+// Experimenteel en ongetest op winst. tests/test_tradingview_signals.py houdt een Python-versie van de keten gelijk aan app/model.py.
+indicator("HesPulse Clean", shorttitle = "HesPulse", overlay = true, scale = scale.right, max_lines_count = 80, max_boxes_count = 20, max_labels_count = 60, max_bars_back = 700)
+
+showStruct = input.bool(true, "Structuur (range, evenwicht, breuk, swings, FVG, OB)", group = "Lagen", display = display.none)
+showPools  = input.bool(true, "Liquiditeit 1u en 4u (BSL, SSL, EQH, EQL)", group = "Lagen", display = display.none)
+showSig    = input.bool(true, "Sweep-aanduidingen (alleen op 15m)", group = "Lagen", display = display.none)
+showTrend  = input.bool(true, "Trend per tijdframe", group = "Lagen", display = display.none)
+planLimit  = input.float(0.0, "Limiet", group = "Plan uit HesPulse", tooltip = "0 = geen positievak", display = display.none)
+planStop   = input.float(0.0, "Stop", group = "Plan uit HesPulse", display = display.none)
+planTake   = input.float(0.0, "Doel", group = "Plan uit HesPulse", display = display.none)
+
+WINDOW = 499
+FVG_LOOKBACK = 150
+EQUAL_ATR = 0.1
+POOL_AGE = 120
+bool LIGHT = color.r(chart.bg_color) + color.g(chart.bg_color) + color.b(chart.bg_color) > 382
+FG    = LIGHT ? #1b2324 : chart.fg_color
+LINE  = LIGHT ? #8a9698 : color.new(chart.fg_color, 35)
+SOFT  = LIGHT ? #4a5759 : color.new(chart.fg_color, 55)
+ZONE  = LIGHT ? color.new(#0d1415, 93) : color.new(chart.fg_color, 88)
+EDGE  = LIGHT ? color.new(#0d1415, 70) : color.new(chart.fg_color, 65)
+RED   = LIGHT ? #c42f3d : #f2685c
+GREEN = LIGHT ? #0f7a45 : #33d69f
+
+// Swings per tijdframe zoals het model: 3 candles op 1u, anders 2.
+tfSec = timeframe.in_seconds()
+K = tfSec == 3600 ? 3 : 2
+WORD = tfSec == 900 ? "15m" : tfSec == 3600 ? "1u" : tfSec == 14400 ? "4u" : tfSec == 43200 ? "12u" : tfSec == 86400 ? "D" : timeframe.period
+
+// ATR zoals het model (Wilder 14, de eerste TR is high min low).
+float tr15 = na(close[1]) ? high - low : math.max(high - low, math.abs(high - close[1]), math.abs(low - close[1]))
+var float atr15 = na
+atr15 := na(atr15) ? tr15 : atr15 + (tr15 - atr15) / 14
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// De richting van de laatste breuk op een tijdframe (voor de dag en de trendregel). Zelfde regels, over alle candles van dat tijdframe.
+
+f_dir(int k) =>
+    var float[] hP = array.new_float()
+    var bool[]  hB = array.new_bool()
+    var float[] lP = array.new_float()
+    var bool[]  lB = array.new_bool()
+    var int dir = 0
+    bool okh = not na(high[2 * k])
+    bool okl = not na(low[2 * k])
+    for j = 1 to k
+        if not (high[k + j] < high[k])
+            okh := false
+        if not (high[k - j] <= high[k])
+            okh := false
+        if not (low[k + j] > low[k])
+            okl := false
+        if not (low[k - j] >= low[k])
+            okl := false
+    if okh
+        array.push(hP, high[k])
+        array.push(hB, false)
+    if okl
+        array.push(lP, low[k])
+        array.push(lB, false)
+    for side in array.from(1, -1)
+        float[] P = side == 1 ? hP : lP
+        bool[]  B = side == 1 ? hB : lB
+        int js = -1
+        int j = array.size(P) - 1
+        while j >= 0
+            if not array.get(B, j)
+                js := j
+                break
+            j -= 1
+        if js >= 0 and (close - array.get(P, js)) * side > 0
+            int q = 0
+            while q < array.size(P)
+                if not array.get(B, q) and (close - array.get(P, q)) * side > 0
+                    array.set(B, q, true)
+                q += 1
+            dir := side
+    if array.size(hP) > 400
+        array.shift(hP)
+        array.shift(hB)
+    if array.size(lP) > 400
+        array.shift(lP)
+        array.shift(lB)
+    dir[1]
+
+// Alleen gesloten candles van het hogere tijdframe (de vorige waarde met lookahead_on: herschrijft niet).
+dayDir = request.security(syminfo.tickerid, "D", f_dir(2), lookahead = barmerge.lookahead_on)
+h4Dir  = request.security(syminfo.tickerid, "240", f_dir(2), lookahead = barmerge.lookahead_on)
+h1Dir  = request.security(syminfo.tickerid, "60", f_dir(3), lookahead = barmerge.lookahead_on)
+m15Dir = request.security(syminfo.tickerid, "15", f_dir(2), lookahead = barmerge.lookahead_on)
+
+// Groot: op de dag zelf geen richting van boven; daaronder volgt alles de dag (top-down).
+BIAS = tfSec >= 86400 ? 0 : dayDir
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// De liquiditeit van een tijdframe: onaangeraakte swing highs (BSL) en lows (SSL) van gesloten candles, de drie dichtstbijzijnde per kant.
+// Een pool is aangeraakt zodra een latere candle hem raakt (high gelijk of hoger, low gelijk of lager); de pivot-candle zelf en de candles
+// rechts ervan tellen niet mee, zoals app/model.py (Pools._touch). Hoogstens POOL_AGE candles oud. Tijden zijn de opening van de pivot-candle.
+
+f_pools(int k) =>
+    var float[] hP = array.new_float()
+    var int[]   hT = array.new_int()
+    var int[]   hX = array.new_int()
+    var float[] lP = array.new_float()
+    var int[]   lT = array.new_int()
+    var int[]   lX = array.new_int()
+    var float atrP = na
+    float trP = na(close[1]) ? high - low : math.max(high - low, math.abs(high - close[1]), math.abs(low - close[1]))
+    atrP := na(atrP) ? trP : atrP + (trP - atrP) / 14
+    int i = array.size(hP) - 1
+    while i >= 0
+        if high >= array.get(hP, i) or bar_index - array.get(hX, i) >= POOL_AGE
+            array.remove(hP, i)
+            array.remove(hT, i)
+            array.remove(hX, i)
+        i -= 1
+    i := array.size(lP) - 1
+    while i >= 0
+        if low <= array.get(lP, i) or bar_index - array.get(lX, i) >= POOL_AGE
+            array.remove(lP, i)
+            array.remove(lT, i)
+            array.remove(lX, i)
+        i -= 1
+    bool okh = not na(high[2 * k])
+    bool okl = not na(low[2 * k])
+    for j = 1 to k
+        if not (high[k + j] < high[k])
+            okh := false
+        if not (high[k - j] <= high[k])
+            okh := false
+        if not (low[k + j] > low[k])
+            okl := false
+        if not (low[k - j] >= low[k])
+            okl := false
+    if okh
+        array.push(hP, high[k])
+        array.push(hT, time[k])
+        array.push(hX, bar_index - k)
+    if okl
+        array.push(lP, low[k])
+        array.push(lT, time[k])
+        array.push(lX, bar_index - k)
+    int[] ih = array.sort_indices(hP, order.ascending)
+    int[] il = array.sort_indices(lP, order.descending)
+    int nh = array.size(hP)
+    int nl = array.size(lP)
+    float b1 = na
+    int   b1t = na
+    bool  b1e = false
+    float b2 = na
+    int   b2t = na
+    float b3 = na
+    int   b3t = na
+    float s1 = na
+    int   s1t = na
+    bool  s1e = false
+    float s2 = na
+    int   s2t = na
+    float s3 = na
+    int   s3t = na
+    if nh > 0
+        int a0 = array.get(ih, 0)
+        b1 := array.get(hP, a0)
+        b1t := array.get(hT, a0)
+        for q = 0 to nh - 1
+            if q != a0 and math.abs(array.get(hP, q) - b1) <= EQUAL_ATR * atrP
+                b1e := true
+    if nh > 1
+        int a1 = array.get(ih, 1)
+        b2 := array.get(hP, a1)
+        b2t := array.get(hT, a1)
+    if nh > 2
+        int a2 = array.get(ih, 2)
+        b3 := array.get(hP, a2)
+        b3t := array.get(hT, a2)
+    if nl > 0
+        int c0 = array.get(il, 0)
+        s1 := array.get(lP, c0)
+        s1t := array.get(lT, c0)
+        for q = 0 to nl - 1
+            if q != c0 and math.abs(array.get(lP, q) - s1) <= EQUAL_ATR * atrP
+                s1e := true
+    if nl > 1
+        int c1 = array.get(il, 1)
+        s2 := array.get(lP, c1)
+        s2t := array.get(lT, c1)
+    if nl > 2
+        int c2 = array.get(il, 2)
+        s3 := array.get(lP, c2)
+        s3t := array.get(lT, c2)
+    [b1[1], b1t[1], b1e[1], b2[1], b2t[1], b3[1], b3t[1], s1[1], s1t[1], s1e[1], s2[1], s2t[1], s3[1], s3t[1]]
+
+[h1b1, h1b1t, h1b1e, h1b2, h1b2t, h1b3, h1b3t, h1s1, h1s1t, h1s1e, h1s2, h1s2t, h1s3, h1s3t] = request.security(syminfo.tickerid, "60", f_pools(3), lookahead = barmerge.lookahead_on)
+[h4b1, h4b1t, h4b1e, h4b2, h4b2t, h4b3, h4b3t, h4s1, h4s1t, h4s1e, h4s2, h4s2t, h4s3, h4s3t] = request.security(syminfo.tickerid, "240", f_pools(2), lookahead = barmerge.lookahead_on)
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// De sweep-keten van het model op 15m (app/model.py, _Run._step en displacement), bar voor bar op gesloten candles. d = 1 long, -1 short:
+// short rekent op gespiegelde candles (high' = -low, low' = -high, open' = -open, close' = -close), net als het model.
+
+f_h(int d, int o) =>
+    d == 1 ? high[o] : -low[o]
+
+f_l(int d, int o) =>
+    d == 1 ? low[o] : -high[o]
+
+f_o(int d, int o) =>
+    d == 1 ? open[o] : -open[o]
+
+f_c(int d, int o) =>
+    d == 1 ? close[o] : -close[o]
+
+// Was de pool sinds hij bekend werd nog onaangeraakt door een eerdere 15m-candle? (Pools._touch kijkt ook naar 15m.)
+f_fresh(int d, float lvM, int tKnown) =>
+    bool ok = true
+    if bar_index >= 1
+        for o = 1 to math.min(480, bar_index)
+            if time[o] < tKnown
+                break
+            if f_l(d, o) <= lvM
+                ok := false
+                break
+    ok
+
+// Displacement en FVG (model.displacement): 1 = ok met een ongevulde FVG, 2 = wacht op de derde FVG-candle, 0 = geen of gevuld. j = prikcandle,
+// c = shiftcandle, beide als bar_index.
+f_disp(int d, int j, int c) =>
+    int last = bar_index
+    int res = -1
+    for m = j to c
+        if res < 0 and not na(atr15[last - m])
+            int kk = -1
+            int q = m - 1
+            while q >= math.max(0, m - 5) and kk < 0
+                if f_c(d, last - q) < f_o(d, last - q)
+                    kk := q
+                q -= 1
+            if kk >= 0 and f_c(d, last - m) - f_h(d, last - kk) >= 1.0 * atr15[last - m]
+                bool anyG = false
+                bool anyU = false
+                for i = math.max(kk + 2, 2) to m + 1
+                    if i <= last
+                        if f_h(d, last - (i - 2)) < f_l(d, last - i)
+                            anyG := true
+                            bool filled = false
+                            if i + 1 <= last
+                                for q2 = i + 1 to last
+                                    if f_l(d, last - q2) <= f_l(d, last - i)
+                                        filled := true
+                            if not filled
+                                anyU := true
+                if anyG
+                    res := anyU ? 1 : 0
+                else if m + 1 > last
+                    res := 2
+    res < 0 ? 0 : res
+
+f_sig(int d, float p1, int k1, float p2, int k2, float p3, int k3) =>
+    var int   ph = 0
+    var float poolLv = na
+    var int   jBar = na
+    var float xLow = na
+    var float atrJ = na
+    var float topB = na
+    var int   rBar = na
+    var int   cBar = na
+    var float lastTop = na
+    bool evSweep = false
+    bool evPlus = false
+    int t = bar_index
+    // De laatste 15m-top (voor short de laatste bodem) die op deze candle bekend is: strikt hoger links, gelijk of lager rechts.
+    bool pk = not na(high[4])
+    for q = 1 to 2
+        if not (f_h(d, 2 + q) < f_h(d, 2))
+            pk := false
+        if not (f_h(d, 2 - q) <= f_h(d, 2))
+            pk := false
+    if pk
+        lastTop := f_h(d, 2)
+    if ph == 0 and not na(atr15)
+        float best = na
+        float m1 = d * p1
+        float m2 = d * p2
+        float m3 = d * p3
+        if not na(m1) and m1 < f_c(d, 1) and f_l(d, 0) <= m1 and f_fresh(d, m1, k1)
+            best := na(best) ? m1 : math.min(best, m1)
+        if not na(m2) and m2 < f_c(d, 1) and f_l(d, 0) <= m2 and f_fresh(d, m2, k2)
+            best := na(best) ? m2 : math.min(best, m2)
+        if not na(m3) and m3 < f_c(d, 1) and f_l(d, 0) <= m3 and f_fresh(d, m3, k3)
+            best := na(best) ? m3 : math.min(best, m3)
+        if not na(best) and f_l(d, 0) <= best - 0.1 * atr15
+            ph := 1
+            poolLv := best
+            jBar := t
+            xLow := f_l(d, 0)
+            atrJ := atr15
+            topB := lastTop
+    if ph == 1
+        xLow := math.min(xLow, f_l(d, 0))
+        if poolLv - xLow > 2.5 * atrJ
+            ph := 0
+        else if f_c(d, 0) > poolLv
+            evSweep := true
+            if na(topB)
+                ph := 0
+            else
+                rBar := t
+                ph := 2
+        else if t >= jBar + 5
+            ph := 0
+    if ph == 2
+        if t > rBar and f_c(d, 0) < xLow
+            ph := 0
+        else if f_c(d, 0) > topB
+            cBar := t
+            ph := 3
+        else if t >= jBar + 24
+            ph := 0
+    if ph == 3
+        int res = f_disp(d, jBar, cBar)
+        if res == 1
+            evPlus := true
+            ph := 0
+        else if res == 0
+            ph := 0
+    [evSweep, evPlus]
+
+// Pools van 1u als invoer: long sweept een SSL, short een BSL. Bekend vanaf het sluiten van de vierde candle na de pivot-candle (3 + 1 uur).
+[swL, plL] = f_sig(1, h1s1, h1s1t + 14400000, h1s2, h1s2t + 14400000, h1s3, h1s3t + 14400000)
+[swS, plS] = f_sig(-1, h1b1, h1b1t + 14400000, h1b2, h1b2t + 14400000, h1b3, h1b3t + 14400000)
+
+// Alleen op 15m (het frame van het model), alleen op een gesloten candle en alleen met de richting van de dag.
+bool sigOn = showSig and tfSec == 900 and barstate.isconfirmed
+plotshape(sigOn and dayDir == 1 and swL, title = "Mogelijke long (sweep)", text = "L?", style = shape.labelup, location = location.belowbar, color = color.new(color.white, 100), textcolor = SOFT, size = size.tiny)
+plotshape(sigOn and dayDir == -1 and swS, title = "Mogelijke short (sweep)", text = "S?", style = shape.labeldown, location = location.abovebar, color = color.new(color.white, 100), textcolor = SOFT, size = size.tiny)
+plotshape(sigOn and dayDir == 1 and plL, title = "Long: sweep, shift, displacement en FVG", text = "L+", style = shape.labelup, location = location.belowbar, color = color.new(color.white, 100), textcolor = GREEN, size = size.tiny)
+plotshape(sigOn and dayDir == -1 and plS, title = "Short: sweep, shift, displacement en FVG", text = "S+", style = shape.labeldown, location = location.abovebar, color = color.new(color.white, 100), textcolor = RED, size = size.tiny)
+alertcondition(sigOn and dayDir == 1 and plL, title = "HesPulse L+", message = "HesPulse L+ op {{ticker}} 15m: sweep, shift, displacement en FVG. Experimenteel, geen modelplan.")
+alertcondition(sigOn and dayDir == -1 and plS, title = "HesPulse S+", message = "HesPulse S+ op {{ticker}} 15m: sweep, shift, displacement en FVG. Experimenteel, geen modelplan.")
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Tekenen. Alles op tijd (xloc.bar_time), zodat een niveau van een hoger tijdframe bij zijn echte pivot-candle begint.
+
+var line[]  lines  = array.new_line()
+var label[] labels = array.new_label()
+var box[]   boxes  = array.new_box()
+// Labels eerst verzamelen: liggen er twee dicht bij elkaar, dan worden ze één regel ("EQ · CHoCH · SL") in plaats van over elkaar heen.
+var int[]    pendX = array.new_int()
+var float[]  pendY = array.new_float()
+var string[] pendT = array.new_string()
+
+f_clear() =>
+    while array.size(lines) > 0
+        line.delete(array.pop(lines))
+    while array.size(labels) > 0
+        label.delete(array.pop(labels))
+    while array.size(boxes) > 0
+        box.delete(array.pop(boxes))
+    array.clear(pendX)
+    array.clear(pendY)
+    array.clear(pendT)
+
+// De openingstijd van de candle met deze bar_index.
+f_t(int idx) =>
+    time[bar_index - idx]
+
+f_label(int x, float y, string txt) =>
+    array.push(pendX, x)
+    array.push(pendY, y)
+    array.push(pendT, txt)
+
+// Samenvoegen binnen tol (een derde ATR): gesorteerd op prijs, elke groep één label op de laatste beginplek, bij de hoogste prijs.
+f_flush(float tol) =>
+    int[] idx = array.sort_indices(pendY, order.ascending)
+    int i = 0
+    while i < array.size(idx)
+        int a = array.get(idx, i)
+        string txt = array.get(pendT, a)
+        int x = array.get(pendX, a)
+        float y = array.get(pendY, a)
+        float first = y
+        int j = i + 1
+        while j < array.size(idx) and array.get(pendY, array.get(idx, j)) - first <= tol
+            int b = array.get(idx, j)
+            txt := txt + " · " + array.get(pendT, b)
+            x := math.max(x, array.get(pendX, b))
+            y := array.get(pendY, b)
+            j += 1
+        array.push(labels, label.new(x, y, txt, xloc = xloc.bar_time, style = label.style_label_lower_left, color = color.new(chart.bg_color, 100), textcolor = FG, size = size.small))
+        i := j
+
+f_line(int x, float y, string txt, bool dashed) =>
+    array.push(lines, line.new(x, y, x + 60000, y, xloc = xloc.bar_time, extend = extend.right, color = LINE, width = 1, style = dashed ? line.style_dashed : line.style_solid))
+    f_label(x, y, txt)
+
+f_box(int x, float lo, float hi, string txt) =>
+    array.push(boxes, box.new(x, hi, x + 60000, lo, xloc = xloc.bar_time, extend = extend.right, bgcolor = ZONE, border_color = EDGE))
+    f_label(x, hi, txt)
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// De structuur (app/structure_levels.levels), één keer op de laatste candle, over de laatste WINDOW gesloten candles.
+
+if barstate.islast
+    f_clear()
+    int off = barstate.isconfirmed ? 0 : 1
+    int n = math.min(WINDOW, bar_index + 1 - off)
+    if showStruct and n >= 30
+        int last = n - 1
+        int base = bar_index - off - last
+        float[] O = array.new_float(n, 0.0)
+        float[] H = array.new_float(n, 0.0)
+        float[] L = array.new_float(n, 0.0)
+        float[] C = array.new_float(n, 0.0)
+        for i = 0 to last
+            array.set(O, i, open[off + last - i])
+            array.set(H, i, high[off + last - i])
+            array.set(L, i, low[off + last - i])
+            array.set(C, i, close[off + last - i])
+        // ATR (Wilder 14): de eerste TR is high min low.
+        float atr = array.get(H, 0) - array.get(L, 0)
+        for i = 1 to last
+            float tr = math.max(array.get(H, i) - array.get(L, i), math.abs(array.get(H, i) - array.get(C, i - 1)), math.abs(array.get(L, i) - array.get(C, i - 1)))
+            atr := atr + (tr - atr) / 14
+        // Swings: strikt aan de linkerkant, gelijk mag rechts.
+        bool[] hiF = array.new_bool(n, false)
+        bool[] loF = array.new_bool(n, false)
+        int p = K
+        while p <= n - 1 - K
+            bool okh = true
+            bool okl = true
+            for j = 1 to K
+                if not (array.get(H, p - j) < array.get(H, p))
+                    okh := false
+                if not (array.get(H, p + j) <= array.get(H, p))
+                    okh := false
+                if not (array.get(L, p - j) > array.get(L, p))
+                    okl := false
+                if not (array.get(L, p + j) >= array.get(L, p))
+                    okl := false
+            array.set(hiF, p, okh)
+            array.set(loF, p, okl)
+            p += 1
+        // Breuken (model.breaks).
+        float[] hP = array.new_float()
+        int[]   hI = array.new_int()
+        bool[]  hB = array.new_bool()
+        float[] lP = array.new_float()
+        int[]   lI = array.new_int()
+        bool[]  lB = array.new_bool()
+        int[]   bI = array.new_int()
+        int[]   bUp = array.new_int()
+        float[] bLvl = array.new_float()
+        int[]   bSw = array.new_int()
+        int[]   bLab = array.new_int()
+        int lastUp = 0
+        for i = 0 to last
+            int q = i - K
+            if q >= 0
+                if array.get(hiF, q)
+                    array.push(hP, array.get(H, q))
+                    array.push(hI, q)
+                    array.push(hB, false)
+                if array.get(loF, q)
+                    array.push(lP, array.get(L, q))
+                    array.push(lI, q)
+                    array.push(lB, false)
+            for side in array.from(1, -1)
+                float[] P = side == 1 ? hP : lP
+                int[]   I = side == 1 ? hI : lI
+                bool[]  B = side == 1 ? hB : lB
+                int js = -1
+                int j = array.size(P) - 1
+                while j >= 0
+                    if not array.get(B, j)
+                        js := j
+                        break
+                    j -= 1
+                if js >= 0 and (array.get(C, i) - array.get(P, js)) * side > 0
+                    int z = 0
+                    while z < array.size(P)
+                        if not array.get(B, z) and (array.get(C, i) - array.get(P, z)) * side > 0
+                            array.set(B, z, true)
+                        z += 1
+                    array.push(bI, i)
+                    array.push(bUp, side)
+                    array.push(bLvl, array.get(P, js))
+                    array.push(bSw, array.get(I, js))
+                    array.push(bLab, lastUp == 0 ? 0 : lastUp == side ? 1 : 2)
+                    lastUp := side
+        float rhV = na
+        float rlV = na
+        // De laatste breuk in de richting van de dag (zonder dag: de laatste).
+        int m = -1
+        int jb = array.size(bI) - 1
+        while jb >= 0
+            if BIAS == 0 or array.get(bUp, jb) == BIAS
+                m := jb
+                break
+            jb -= 1
+        if m >= 0
+            int bi = array.get(bI, m)
+            bool up = array.get(bUp, m) == 1
+            int sw = array.get(bSw, m)
+            int lab = array.get(bLab, m)
+            f_line(f_t(base + sw), array.get(bLvl, m), lab == 2 ? "CHoCH" : lab == 1 ? "BOS" : "MSB", false)
+            int loI = 0
+            int hiI = 0
+            if up
+                loI := sw + 1
+                for j = sw + 1 to bi
+                    if array.get(L, j) < array.get(L, loI)
+                        loI := j
+                hiI := sw
+                for j = sw to last
+                    if array.get(H, j) > array.get(H, hiI)
+                        hiI := j
+            else
+                hiI := sw + 1
+                for j = sw + 1 to bi
+                    if array.get(H, j) > array.get(H, hiI)
+                        hiI := j
+                loI := sw
+                for j = sw to last
+                    if array.get(L, j) < array.get(L, loI)
+                        loI := j
+            // Opgerekt top-down: een slot door de verre rand verschuift die rand naar het nieuwe uiterste.
+            if BIAS != 0
+                int x = -1
+                int j = bi + 1
+                while j <= last
+                    if (up and array.get(C, j) < array.get(L, loI)) or (not up and array.get(C, j) > array.get(H, hiI))
+                        x := j
+                        break
+                    j += 1
+                if x >= 0
+                    if up
+                        loI := x
+                        for jj = x to last
+                            if array.get(L, jj) < array.get(L, loI)
+                                loI := jj
+                    else
+                        hiI := x
+                        for jj = x to last
+                            if array.get(H, jj) > array.get(H, hiI)
+                                hiI := jj
+            float rh = array.get(H, hiI)
+            float rl = array.get(L, loI)
+            rhV := rh
+            rlV := rl
+            f_line(f_t(base + hiI), rh, "RH", false)
+            f_line(f_t(base + loI), rl, "RL", false)
+            f_line(f_t(base + math.min(loI, hiI)), (rh + rl) / 2, "EQ", true)
+            // Order block: de laatste candle tegen de richting vóór de beweging die brak, zolang de koers er niet doorheen sloot.
+            int start = up ? loI : hiI
+            int ob = -1
+            int j2 = math.max(0, start - 3)
+            while j2 <= math.min(bi, start + 1)
+                if (array.get(C, j2) < array.get(O, j2)) == up
+                    ob := j2
+                j2 += 1
+            if ob >= 0
+                bool broken = false
+                int j3 = ob + 1
+                while j3 <= last
+                    if (up and array.get(C, j3) < array.get(L, ob)) or (not up and array.get(C, j3) > array.get(H, ob))
+                        broken := true
+                    j3 += 1
+                if not broken
+                    f_box(f_t(base + ob), array.get(L, ob), array.get(H, ob), "OB")
+        // De laatste swing high en low, of EQH/EQL als de twee laatste binnen 0,1 ATR liggen. Valt hij samen met RH of RL, dan blijft hij weg.
+        for kind in array.from(1, -1)
+            bool[]  F = kind == 1 ? hiF : loF
+            float[] A = kind == 1 ? H : L
+            float edge = kind == 1 ? rhV : rlV
+            int p1 = -1
+            int p2 = -1
+            int q = n - 1
+            while q >= 0
+                if array.get(F, q)
+                    if p1 < 0
+                        p1 := q
+                    else
+                        p2 := q
+                        break
+                q -= 1
+            if p1 >= 0
+                if p2 >= 0 and atr != 0 and math.abs(array.get(A, p1) - array.get(A, p2)) <= EQUAL_ATR * atr
+                    float v = kind == 1 ? math.max(array.get(A, p1), array.get(A, p2)) : math.min(array.get(A, p1), array.get(A, p2))
+                    if na(edge) or math.abs(v - edge) > EQUAL_ATR * atr
+                        f_line(f_t(base + p2), v, kind == 1 ? "EQH" : "EQL", false)
+                else
+                    if na(edge) or math.abs(array.get(A, p1) - edge) > EQUAL_ATR * atr
+                        f_line(f_t(base + p1), array.get(A, p1), kind == 1 ? "SH" : "SL", false)
+        // De dichtste open FVG onder de koers (gap omhoog) en erboven (gap omlaag).
+        float px = array.get(C, last)
+        float belLo = na
+        float belHi = na
+        int   belI = -1
+        float abvLo = na
+        float abvHi = na
+        int   abvI = -1
+        for i = math.max(2, last - FVG_LOOKBACK) to last
+            if array.get(H, i - 2) < array.get(L, i)
+                float lo = array.get(H, i - 2)
+                float hi = array.get(L, i)
+                int j = i + 1
+                while j <= last
+                    hi := math.min(hi, array.get(L, j))
+                    j += 1
+                if hi > lo and hi < px and (belI < 0 or hi > belHi)
+                    belLo := lo
+                    belHi := hi
+                    belI := i - 1
+            if array.get(L, i - 2) > array.get(H, i)
+                float lo = array.get(H, i)
+                float hi = array.get(L, i - 2)
+                int j = i + 1
+                while j <= last
+                    lo := math.max(lo, array.get(H, j))
+                    j += 1
+                if hi > lo and lo > px and (abvI < 0 or lo < abvLo)
+                    abvLo := lo
+                    abvHi := hi
+                    abvI := i - 1
+        if belI >= 0
+            f_box(f_t(base + belI), belLo, belHi, "FVG")
+        if abvI >= 0
+            f_box(f_t(base + abvI), abvLo, abvHi, "FVG")
+    // De liquiditeit van 4u en 1u: de dichtstbijzijnde BSL en SSL per tijdframe. Een tijdframe onder dat van de grafiek is niet te tekenen,
+    // een niveau van 1u binnen 0,1 ATR van het niveau van 4u blijft weg (dat is hetzelfde niveau).
+    if showPools
+        bool at4 = tfSec <= 14400
+        bool at1 = tfSec <= 3600
+        if at4 and not na(h4b1)
+            f_line(h4b1t, h4b1, h4b1e ? "4u EQH" : "4u BSL", true)
+        if at4 and not na(h4s1)
+            f_line(h4s1t, h4s1, h4s1e ? "4u EQL" : "4u SSL", true)
+        if at1 and not na(h1b1) and (na(h4b1) or not at4 or math.abs(h1b1 - h4b1) > EQUAL_ATR * atr15)
+            f_line(h1b1t, h1b1, h1b1e ? "1u EQH" : "1u BSL", true)
+        if at1 and not na(h1s1) and (na(h4s1) or not at4 or math.abs(h1s1 - h4s1) > EQUAL_ATR * atr15)
+            f_line(h1s1t, h1s1, h1s1e ? "1u EQL" : "1u SSL", true)
+    f_flush(atr15 / 3)
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Trend per tijdframe, zoals bovenin Groot. Een tijdframe onder dat van de grafiek is niet betrouwbaar op te vragen: dan een streepje.
+
+f_word(int d) =>
+    d == 1 ? "↑" : d == -1 ? "↓" : "?"
+
+f_tf(int d, int sec) =>
+    tfSec <= sec ? f_word(d) + (dayDir != 0 and d != 0 and d != dayDir ? " herstel" : "") : "–"
+
+var table tb = table.new(position.top_right, 1, 2, bgcolor = color.new(chart.bg_color, 10), border_color = LINE, border_width = 1)
+if barstate.islast and showTrend
+    table.cell(tb, 0, 0, "Trend  D " + f_word(dayDir) + " · 4u " + f_tf(h4Dir, 14400) + " · 1u " + f_tf(h1Dir, 3600) + " · 15m " + f_tf(m15Dir, 900), text_color = FG, text_size = size.normal)
+    string zoek = dayDir == 1 ? "Model zoekt long" : dayDir == -1 ? "Model zoekt short" : "Nog geen dagbreuk"
+    table.cell(tb, 0, 1, zoek + " · structuur " + WORD + " zoals Groot", text_color = SOFT, text_size = size.small)
+
+// ---------------------------------------------------------------------------------------------------------------------------------------
+// Het positievak: rood van limiet tot stop (risico), groen van limiet tot doel.
+
+var box  pvRisk = na
+var box  pvWin  = na
+var line pv0 = na
+var line pv1 = na
+var line pv2 = na
+if barstate.islast
+    box.delete(pvRisk)
+    box.delete(pvWin)
+    line.delete(pv0)
+    line.delete(pv1)
+    line.delete(pv2)
+    if planLimit > 0 and planStop > 0
+        int x0 = bar_index - 3
+        int x1 = bar_index + 30
+        pvRisk := box.new(x0, math.max(planLimit, planStop), x1, math.min(planLimit, planStop), bgcolor = color.new(RED, 82), border_color = color.new(RED, 100), text = "risico", text_color = FG, text_size = size.small, text_halign = text.align_left)
+        pv0 := line.new(x0, planLimit, x1, planLimit, color = FG, width = 2)
+        pv1 := line.new(x0, planStop, x1, planStop, color = RED, width = 2)
+        if planTake > 0
+            pvWin := box.new(x0, math.max(planLimit, planTake), x1, math.min(planLimit, planTake), bgcolor = color.new(GREEN, 85), border_color = color.new(GREEN, 100), text = "doel", text_color = FG, text_size = size.small, text_halign = text.align_left)
+            pv2 := line.new(x0, planTake, x1, planTake, color = GREEN, width = 2)

@@ -3,16 +3,16 @@
 Eén taak tegelijk. Lees dit bestand aan het begin van elke sessie.
 
 ## Actieve taak
-01 Model live controleren (H2): `01-model-live-controle.md`
+06 TradingView-indicator (HesPulse Clean): `06-tradingview-script.md`
 
-## Wacht op data of tijd
+## Wacht op de VPS, data of tijd
+- 01 Model live controleren (H2): `01-model-live-controle.md` (VPS nodig)
 - 02 Bevriezing bewaken: `02-bevriezing-bewaken.md`
 - 03 4u-context (H1): `03-context-4u-h1.md`
 - 04 Controle op de modelcijfers: `04-cijfers-controle.md`
 - 05 Ordertype vergelijken: `05-ordertype-vergelijking.md`
 
 ## Op afroep
-- 06 TradingView-script: `06-tradingview-script.md`
 - 07 Verbeterlus en schaduw: `07-verbeterlus-schaduw.md`
 - 08 Backtesten: `08-backtesten.md` (start na 01)
 

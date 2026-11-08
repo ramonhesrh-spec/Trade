@@ -1,7 +1,7 @@
 # TradingView-script synchroon houden
 
-Status: wacht
-Laatst bijgewerkt: 2026-11-03
+Status: actief
+Laatst bijgewerkt: 2026-11-08
 
 ## Doel
 Het Pine-script blijft een eerlijke benadering van de swing-, breuk- en rangeregels van het model.
@@ -15,10 +15,14 @@ Het Pine-script blijft een eerlijke benadering van de swing-, breuk- en rangereg
 - [ ] Verschillen met de app in `tradingview/README.md` noteren
 
 ## Stand van nu
-Versie in Pine v6, kopie van Groot per tijdframe. Geen openstaande afwijking bekend.
+`tradingview/hespulse_clean.pine` is geschreven (Pine v6) en nog niet in TradingView gecompileerd. Erin: structuur zoals Groot, BSL en SSL van 1u en 4u
+vanaf de echte pivot-candle, sweepketen L?, S?, L+ en S+ op 15m met de dagfilter. De Python-spiegel van de sweepketen is gelijk aan `app/model.py`
+op 60 reeksen, long en short (`tests/test_tradingview_signals.py`). Niet getest: compileren, `request.security` in TradingView, uiterlijk.
+Bekend ontbrekend in de signalen: 4u-range (premium en discount), groepering van gelijke pools, doel. Het zijn geen A, B, B0, R of K.
+Het oude `hespulse_structuur.pine` blijft de geteste kopie van Groot tot Clean is goedgekeurd.
 
 ## Besluiten en bronnen
 `tradingview/hespulse_structuur.pine`, `tradingview/README.md`.
 
 ## Volgende stap
-Geen. Wacht op een regelwijziging (die ligt tijdens de bevriezing stil).
+CEO plakt `hespulse_clean.pine` in TradingView en meldt compileerfouten en wat hij ziet (BTC, ETH, een altcoin, 15m en 1u). Daarna fixen, dan pas Clean als standaard.

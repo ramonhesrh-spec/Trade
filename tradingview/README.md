@@ -37,3 +37,32 @@ Rechtsklik op de grafiek, kies Settings.
 - Canvas: Background Solid #FFFFFF; Vert grid lines uit; Horz grid lines #0D1415 op 6% dekking; Scales text #3E4A4C.
 - Onderaan: Template, Save as, "HesPulse".
 Stop is #C42F3D, doel #0F7A45, lijnen #8A9698.
+
+## HesPulse Clean (nieuw, `hespulse_clean.pine`)
+
+Opvolger van `hespulse_structuur.pine`: dezelfde structuur als Groot, plus de liquiditeit van 1u en 4u en de sweep-aanduidingen. **Nog niet in
+TradingView gecompileerd.** Plak hem in de Pine Editor, kijk of hij zonder fout op je grafiek komt en meld wat je ziet. Tot dan blijft het
+oude script de geteste kopie van Groot.
+
+Wat erbij kwam:
+- **BSL en SSL van 1u en 4u** (`1u BSL`, `4u SSL`, `4u EQH`): de dichtstbijzijnde onaangeroerde swing high en low van gesloten candles, een pool
+  is hoogstens 120 candles oud en vervalt bij de eerste aanraking van een latere candle (`Pools._touch`). De lijn begint bij de echte
+  pivot-candle (tijd van het hogere tijdframe, `xloc.bar_time`). Een niveau van 1u binnen 0,1 ATR van dat van 4u blijft weg. Op een grafiek
+  boven 4u of 1u verschijnt dat tijdframe niet.
+- **L? en S?** (alleen op 15m): sweep van het model (4.8): prik minstens 0,1 en hoogstens 2,5 ATR door een onaangeroerde 1u-pool, slot terug
+  binnen 6 candles van 15m. Een pool geeft hoogstens één sweep: elke aanraking, ook een ondiepe, verbruikt hem.
+- **L+ en S+** (alleen op 15m): dezelfde keten tot en met shift (slot boven de laatste 15m-top vóór de prik, binnen 24 candles), displacement
+  (1,0 ATR, 5 candles) en een ongevulde FVG (4.9 tot 4.11). Het signaal komt op de candle waar de keten sluit, nooit terug op de sweep.
+- Alleen met de dagrichting: L? en L+ bij dag long, S? en S+ bij dag short.
+- Labels vallen niet over elkaar (samengevoegd tot één regel), alle instellingen zijn `display.none`, SH of SL die samenvalt met RH of RL
+  blijft weg, en de range rekt top-down op zoals Groot.
+
+Wat er **niet** in zit en waarom de signalen geen modelplan zijn: de 4u-range (premium en discount), de groepering van gelijke pools tot één
+pool, het doel en de BTC-poort. L+ is dus vaker dan een entry van het model. Het zijn geen A, B, B0, R of K. Experimenteel, niet getest op
+winst, niet voor beslissingen over een trade zonder de kaart in de app.
+
+Wat getest is: `tests/test_tradingview_signals.py` houdt een Python-versie van `f_sig` en `f_disp` bij en eist dat die op 60 willekeurige
+reeksen, long en short, dezelfde sweep- en displacement-candles geeft als `_Run._step` van het model, bij dezelfde pools. Niet getest:
+compileren, de HTF-aanroepen (`request.security`) in TradingView en het uiterlijk. De ATR rekent dezelfde Wilder-recursie, maar over de candles
+die TradingView laadt, dus de eerste honderd candles kunnen een tik afwijken. De dagrichting en de pools komen uit `request.security` met de
+vorige gesloten candle (`[1]` en `lookahead_on`); of die in TradingView niet herschrijven, moet je op een lopende candle bekijken.

@@ -33,3 +33,4 @@ preregistraties; hier staat het overzicht.
 | B-2026-11-03-12 | 2026-11-03 | A | Vier metingen tijdens de bevriezing: strenge vulling (doortik), MAE/MFE en stopslip, placebo met willekeurige instap, auto-misser voor het model. Alleen meting | CEO: "jo" op het voorstel. Preregistratie, laatste aanvulling |
 | B-2026-11-03-13 | 2026-11-03 | A | Terugblik: limiet, market of stop-order per plan, met dezelfde stop en hetzelfde doel (`scripts/instap_vergelijking.py`). Alleen meting achteraf | CEO: "vraag hem om uit te rekenen wat het beste werkt". Preregistratie, laatste aanvulling |
 | B-2026-11-02-09 | 2026-11-02 | A | De nachtexport meet per signaal de 4u-context van coin en BTC (H1), alleen meting | `hypotheses.md` H1 |
+| B-2026-11-08-01 | 2026-11-08 | A | Actieve taak wisselt van H2 (01) naar de TradingView-indicator HesPulse Clean (06): 01 wacht op een koppeling met de VPS | CEO: "focus op de vernieuwde indicator". `docs/taken/NU.md` |
