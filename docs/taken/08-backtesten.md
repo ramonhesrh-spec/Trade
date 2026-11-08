@@ -1,6 +1,6 @@
 # Backtesten van het model en de regels
 
-Status: wacht
+Status: preregistratie klaar, wacht op akkoord CEO
 Laatst bijgewerkt: 2026-11-03
 
 ## Doel
@@ -12,8 +12,8 @@ Het HesPulse-model en elke nieuwe regel historisch toetsen zonder af te stellen 
 - Resultaat staat met commando in `bewijsregister.md`.
 
 ## Stappen
-- [ ] Vastleggen wat het model-backtest moet beantwoorden (preregistratie vóór de run)
-- [ ] Bepalen of `scripts/model_kaarten.py` (14 dagen) genoeg is of dat een langere replay nodig is op `app/replay/`
+- [x] Vastleggen wat het model-backtest moet beantwoorden (preregistratie vóór de run): `docs/onderzoek/hespulse-model/backtest-preregistratie.md`
+- [x] Bepalen of `scripts/model_kaarten.py` (14 dagen) genoeg is of dat een langere replay nodig is op `app/replay/`: niet genoeg, bouwlijst in §8 van de preregistratie
 - [ ] Draaien op de VPS met de 5m-, 15m-, 1u-, 4u- en dagcandles
 - [ ] Resultaat per instappunt (A, B, B0, R, K) netto na kosten en funding
 - [ ] Perps-tijdperk apart houden (vanaf 2026-11-01)
@@ -25,4 +25,4 @@ Beschikbaar: `app/replay/` (engine, stats, lab), `scripts/strategy_lab.py`, `scr
 `CLAUDE.md` (Lab en proefmotor), `docs/onderzoek/range-sweep/vps-protocol.md`, `docs/onderzoek/Crypto edges na kosten onderzoek.md`.
 
 ## Volgende stap
-Eerst taak 01 afronden. Daarna de vraag en de regels van de backtest vastleggen.
+Akkoord van de CEO op `backtest-preregistratie.md` (§10). Daarna de bouwlijst van §8 afwerken (geen run). De backtest draait pas na dat akkoord en de tests.
