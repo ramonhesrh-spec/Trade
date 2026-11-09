@@ -149,7 +149,7 @@ class Route(unittest.TestCase):
                 for k in ("lines", "zones", "trend", "herstel"):
                     self.assertIn(k, out)
         finally:
-            t.tearDown()
+            t.doCleanups()
 
 
 if __name__ == "__main__":
