@@ -99,3 +99,20 @@ Op ZEC 15m (2026-11-08) gaf L? en S? zes of zeven keer in één stijging, omdat 
 ZEC 4H (2026-11-08): bij samengevoegde labels was niet te zien bij welke candle een niveau hoort. Namen staan nu rechts bij de laatste candle, een kleine stip markeert de candle waar het niveau begon, en de trendregel staat linksonder.
 
 WLD 4H (2026-11-09): de stippen waren te groot en niet clean. Een kort verticaal streepje op de beginncandle vervangt ze, en de namen staan drie candles rechts van de laatste candle, buiten de koers.
+
+## Clean 4 (2026-11-09)
+
+Dezelfde motor als Clean (sweepketen getest tegen `app/model.py`, structuur zoals Groot), met de goede delen van de versie "Clean 3.2" uit de
+sessie "TradingView script":
+- De naam staat bij het begin van de lijn, boven of onder het niveau (BSL, RH, EQ, EQH en een breuk omhoog boven; SSL, RL, EQL en een breuk
+  omlaag eronder). Zo hoort een naam bij de candle waar het niveau ontstond. Ligt dat begin links buiten beeld, dan staat de naam aan de
+  linkerrand. Namen worden alleen samengevoegd als de prijs binnen een derde ATR ligt, ze aan dezelfde kant staan en hun begin hoogstens zes
+  candles uit elkaar ligt.
+- Vlakken (OB en FVG) eindigen vijf candles voorbij de laatste candle (instelling), niet aan het einde van de grafiek.
+- Een regel linksonder "tussen 4u SSL en BSL: 62% · premium": de positie tussen de dichtstbijzijnde onaangeroerde 4u-pools. Een benadering,
+  niet de 4u-range van het model.
+- Instelling Labelgrootte (standaard, groot, extra groot).
+- Niet overgenomen uit 3.2: de eigen sweep- en displacementregels (andere ATR, één pool per kant, geen 15m-aanraking, een andere displacement),
+  RH en RL als laatste swing en niet als range van de beweging die brak, en de OB-regel. Reden: ze wijken af van het model en Groot en hebben geen
+  test. De OB-voorwaarde van 3.2 (beweging van minstens een ATR) staat op de parkeerlijst.
+

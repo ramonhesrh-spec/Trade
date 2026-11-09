@@ -34,3 +34,5 @@ preregistraties; hier staat het overzicht.
 | B-2026-11-03-13 | 2026-11-03 | A | Terugblik: limiet, market of stop-order per plan, met dezelfde stop en hetzelfde doel (`scripts/instap_vergelijking.py`). Alleen meting achteraf | CEO: "vraag hem om uit te rekenen wat het beste werkt". Preregistratie, laatste aanvulling |
 | B-2026-11-02-09 | 2026-11-02 | A | De nachtexport meet per signaal de 4u-context van coin en BTC (H1), alleen meting | `hypotheses.md` H1 |
 | B-2026-11-08-01 | 2026-11-08 | A | Actieve taak wisselt van H2 (01) naar de TradingView-indicator HesPulse Clean (06): 01 wacht op een koppeling met de VPS | CEO: "focus op de vernieuwde indicator". `docs/taken/NU.md` |
+| B-2026-11-09-01 | 2026-11-09 | A | TradingView Clean 4: de motor van Clean (getest tegen `app/model.py`) blijft, de opmaak van Clean 3.2 (naam bij het begin van de lijn, compacte vlakken, positie in de 4u-pools) komt erbij; de eigen sweepregels van 3.2 niet | CEO: "Ja". `tradingview/README.md` |
+

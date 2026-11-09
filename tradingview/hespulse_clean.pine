@@ -1,18 +1,20 @@
 //@version=6
-// HesPulse Clean: dezelfde tekening als "Groot" in de app (app/structure_levels.levels), plus de liquiditeit van 1u en 4u en de sweep-aanduidingen.
+// HesPulse Clean 4: dezelfde tekening als "Groot" in de app (app/structure_levels.levels), plus de liquiditeit van 1u en 4u en de sweep-aanduidingen.
 // Structuur: de laatste 499 gesloten candles van het tijdframe van je grafiek, de swing- en breukregels van het model, top-down met de dag.
 // Liquiditeit: onaangeraakte swing highs en lows van 1u (3 candles) en 4u (2 candles) uit gesloten candles, de lijn begint bij de echte pivot-candle.
 // L? en S?: de sweep van het model (stap 4.8): prik door een onaangeroerde 1u-pool, herstel binnen 6 candles van 15m.
 // L+ en S+: dezelfde keten tot en met shift, displacement en een ongevulde FVG (stappen 4.9 tot 4.11). Alleen op 15m, alleen met de dagrichting.
 // Niet gelijk aan de modelplannen A, B, B0, R en K: er zit geen 4u-range (premium of discount), geen groepering van gelijke pools en geen doel in.
-// Experimenteel en ongetest op winst. tests/test_tradingview_signals.py houdt een Python-versie van de keten gelijk aan app/model.py.
-indicator("HesPulse Clean", shorttitle = "HesPulse", overlay = true, scale = scale.right, max_lines_count = 80, max_boxes_count = 20, max_labels_count = 60, max_bars_back = 700)
+// Clean 4: de naam staat bij het begin van de lijn (boven of onder), compacte vlakken, 4u-pools als positie. Experimenteel en ongetest op winst. tests/test_tradingview_signals.py houdt een Python-versie van de keten gelijk aan app/model.py.
+indicator("HesPulse Clean 4", shorttitle = "HesPulse", overlay = true, scale = scale.right, max_lines_count = 80, max_boxes_count = 20, max_labels_count = 60, max_bars_back = 700)
 
 showStruct = input.bool(true, "Structuur (range, evenwicht, breuk, swings, FVG, OB)", group = "Lagen", display = display.none)
 showPools  = input.bool(true, "Liquiditeit 1u en 4u (BSL, SSL, EQH, EQL)", group = "Lagen", display = display.none)
 showSig    = input.bool(true, "Aanduidingen L+ en S+ (alleen op 15m)", group = "Lagen", display = display.none)
 showWeak   = input.bool(false, "Ook L? en S? tonen (veel ruis)", group = "Lagen", display = display.none)
 showTrend  = input.bool(true, "Trend per tijdframe", group = "Lagen", display = display.none)
+lblSizeIn  = input.string("Standaard", "Labelgrootte", options = ["Standaard", "Groot", "Extra groot"], group = "Weergave", display = display.none)
+zoneBars   = input.int(5, "Vlakken voorbij de laatste candle (candles)", minval = 0, maxval = 50, group = "Weergave", display = display.none)
 planLimit  = input.float(0.0, "Limiet", group = "Plan uit HesPulse", tooltip = "0 = geen positievak", display = display.none)
 planStop   = input.float(0.0, "Stop", group = "Plan uit HesPulse", display = display.none)
 planTake   = input.float(0.0, "Doel", group = "Plan uit HesPulse", display = display.none)
@@ -29,6 +31,7 @@ ZONE  = LIGHT ? color.new(#0d1415, 93) : color.new(chart.fg_color, 88)
 EDGE  = LIGHT ? color.new(#0d1415, 70) : color.new(chart.fg_color, 65)
 RED   = LIGHT ? #c42f3d : #f2685c
 GREEN = LIGHT ? #0f7a45 : #33d69f
+string LBL = lblSizeIn == "Extra groot" ? size.large : lblSizeIn == "Groot" ? size.normal : size.small
 
 // Swings per tijdframe zoals het model: 3 candles op 1u, anders 2.
 tfSec = timeframe.in_seconds()
@@ -355,6 +358,7 @@ var box[]   boxes  = array.new_box()
 var int[]    pendX = array.new_int()
 var float[]  pendY = array.new_float()
 var string[] pendT = array.new_string()
+var bool[]   pendU = array.new_bool()
 
 f_clear() =>
     while array.size(lines) > 0
@@ -366,44 +370,55 @@ f_clear() =>
     array.clear(pendX)
     array.clear(pendY)
     array.clear(pendT)
+    array.clear(pendU)
 
 // De openingstijd van de candle met deze bar_index.
 f_t(int idx) =>
     time[bar_index - idx]
 
-f_label(int x, float y, string txt) =>
-    array.push(pendX, x)
+// above = true: de naam staat boven het niveau, anders eronder. De naam staat bij het begin van de lijn, de candle waar het niveau ontstond
+// (ligt dat links buiten beeld, dan aan de linkerrand).
+f_label(int x, float y, string txt, bool above) =>
+    array.push(pendX, math.max(x, chart.left_visible_bar_time))
     array.push(pendY, y)
     array.push(pendT, txt)
+    array.push(pendU, above)
 
-// Namen staan rechts bij de laatste candle, een kort streepje markeert de candle waar het niveau begon. Samenvoegen binnen tol (een derde ATR): gesorteerd op prijs, bij de hoogste prijs.
-f_flush(float tol) =>
-    int[] idx = array.sort_indices(pendY, order.ascending)
-    int i = 0
-    while i < array.size(idx)
-        int a = array.get(idx, i)
-        string txt = array.get(pendT, a)
-        int x = array.get(pendX, a)
-        float y = array.get(pendY, a)
-        float first = y
-        int j = i + 1
-        while j < array.size(idx) and array.get(pendY, array.get(idx, j)) - first <= tol
-            int b = array.get(idx, j)
-            txt := txt + " · " + array.get(pendT, b)
-            x := math.max(x, array.get(pendX, b))
-            y := array.get(pendY, b)
-            j += 1
-        array.push(labels, label.new(x, y, txt, xloc = xloc.bar_time, style = label.style_label_lower_right, color = color.new(chart.bg_color, 100), textcolor = FG, size = size.small))
-        i := j
+// Samenvoegen alleen als de prijs binnen tol ligt (een derde ATR), ze aan dezelfde kant staan en het begin hoogstens xtol uit elkaar ligt.
+f_flush(float tol, int xtol) =>
+    int n = array.size(pendY)
+    if n > 0
+        int[] idx = array.sort_indices(pendY, order.ascending)
+        bool[] done = array.new_bool(n, false)
+        for s = 0 to 1
+            bool above = s == 1
+            for ii = 0 to n - 1
+                int a = array.get(idx, ii)
+                if not array.get(done, a) and array.get(pendU, a) == above
+                    array.set(done, a, true)
+                    string txt = array.get(pendT, a)
+                    int x = array.get(pendX, a)
+                    float y = array.get(pendY, a)
+                    float first = y
+                    int jj = ii + 1
+                    while jj < n and array.get(pendY, array.get(idx, jj)) - first <= tol
+                        int b = array.get(idx, jj)
+                        if not array.get(done, b) and array.get(pendU, b) == above and math.abs(array.get(pendX, b) - x) <= xtol
+                            array.set(done, b, true)
+                            txt := txt + " · " + array.get(pendT, b)
+                            x := math.max(x, array.get(pendX, b))
+                            y := above ? math.max(y, array.get(pendY, b)) : math.min(y, array.get(pendY, b))
+                        jj += 1
+                    array.push(labels, label.new(x, y, txt, xloc = xloc.bar_time, style = above ? label.style_label_lower_left : label.style_label_upper_left, color = color.new(chart.bg_color, 100), textcolor = FG, size = LBL))
 
-f_line(int x, float y, string txt, bool dashed) =>
+f_line(int x, float y, string txt, bool dashed, bool above) =>
     array.push(lines, line.new(x, y, x + 60000, y, xloc = xloc.bar_time, extend = extend.right, color = LINE, width = 1, style = dashed ? line.style_dashed : line.style_solid))
-    array.push(lines, line.new(x, y - atr15 / 4, x, y + atr15 / 4, xloc = xloc.bar_time, color = LINE, width = 1))
-    f_label(time + 3 * (time - time[1]), y, txt)
+    f_label(x, y, txt, above)
 
-f_box(int x, float lo, float hi, string txt) =>
-    array.push(boxes, box.new(x, hi, x + 60000, lo, xloc = xloc.bar_time, extend = extend.right, bgcolor = ZONE, border_color = EDGE))
-    f_label(time + 3 * (time - time[1]), hi, txt)
+// Compact vlak: van de beginplek tot enkele candles voorbij de laatste candle, niet naar het einde van de grafiek.
+f_box(int x, float lo, float hi, string txt, bool above) =>
+    array.push(boxes, box.new(x, hi, time + zoneBars * (time - time[1]), lo, xloc = xloc.bar_time, bgcolor = ZONE, border_color = EDGE))
+    f_label(x, above ? hi : lo, txt, above)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // De structuur (app/structure_levels.levels), één keer op de laatste candle, over de laatste WINDOW gesloten candles.
@@ -510,7 +525,7 @@ if barstate.islast
             bool up = array.get(bUp, m) == 1
             int sw = array.get(bSw, m)
             int lab = array.get(bLab, m)
-            f_line(f_t(base + sw), array.get(bLvl, m), lab == 2 ? "CHoCH" : lab == 1 ? "BOS" : "MSB", false)
+            f_line(f_t(base + sw), array.get(bLvl, m), lab == 2 ? "CHoCH" : lab == 1 ? "BOS" : "MSB", false, up)
             int loI = 0
             int hiI = 0
             if up
@@ -555,9 +570,9 @@ if barstate.islast
             float rl = array.get(L, loI)
             rhV := rh
             rlV := rl
-            f_line(f_t(base + hiI), rh, "RH", false)
-            f_line(f_t(base + loI), rl, "RL", false)
-            f_line(f_t(base + math.min(loI, hiI)), (rh + rl) / 2, "EQ", true)
+            f_line(f_t(base + hiI), rh, "RH", false, true)
+            f_line(f_t(base + loI), rl, "RL", false, false)
+            f_line(f_t(base + math.min(loI, hiI)), (rh + rl) / 2, "EQ", true, true)
             // Order block: de laatste candle tegen de richting vóór de beweging die brak, zolang de koers er niet doorheen sloot.
             int start = up ? loI : hiI
             int ob = -1
@@ -574,7 +589,7 @@ if barstate.islast
                         broken := true
                     j3 += 1
                 if not broken
-                    f_box(f_t(base + ob), array.get(L, ob), array.get(H, ob), "OB")
+                    f_box(f_t(base + ob), array.get(L, ob), array.get(H, ob), "OB", not up)
         // De laatste swing high en low, of EQH/EQL als de twee laatste binnen 0,1 ATR liggen. Valt hij samen met RH of RL, dan blijft hij weg.
         for kind in array.from(1, -1)
             bool[]  F = kind == 1 ? hiF : loF
@@ -595,10 +610,10 @@ if barstate.islast
                 if p2 >= 0 and atr != 0 and math.abs(array.get(A, p1) - array.get(A, p2)) <= EQUAL_ATR * atr
                     float v = kind == 1 ? math.max(array.get(A, p1), array.get(A, p2)) : math.min(array.get(A, p1), array.get(A, p2))
                     if na(edge) or math.abs(v - edge) > EQUAL_ATR * atr
-                        f_line(f_t(base + p2), v, kind == 1 ? "EQH" : "EQL", false)
+                        f_line(f_t(base + p2), v, kind == 1 ? "EQH" : "EQL", false, kind == 1)
                 else
                     if na(edge) or math.abs(array.get(A, p1) - edge) > EQUAL_ATR * atr
-                        f_line(f_t(base + p1), array.get(A, p1), kind == 1 ? "SH" : "SL", false)
+                        f_line(f_t(base + p1), array.get(A, p1), kind == 1 ? "SH" : "SL", false, kind == 1)
         // De dichtste open FVG onder de koers (gap omhoog) en erboven (gap omlaag).
         float px = array.get(C, last)
         float belLo = na
@@ -631,23 +646,23 @@ if barstate.islast
                     abvHi := hi
                     abvI := i - 1
         if belI >= 0
-            f_box(f_t(base + belI), belLo, belHi, "FVG")
+            f_box(f_t(base + belI), belLo, belHi, "FVG", false)
         if abvI >= 0
-            f_box(f_t(base + abvI), abvLo, abvHi, "FVG")
+            f_box(f_t(base + abvI), abvLo, abvHi, "FVG", true)
     // De liquiditeit van 4u en 1u: de dichtstbijzijnde BSL en SSL per tijdframe. Een tijdframe onder dat van de grafiek is niet te tekenen,
     // een niveau van 1u binnen 0,1 ATR van het niveau van 4u blijft weg (dat is hetzelfde niveau).
     if showPools
         bool at4 = tfSec <= 14400
         bool at1 = tfSec <= 3600
         if at4 and not na(h4b1)
-            f_line(h4b1t, h4b1, h4b1e ? "4u EQH" : "4u BSL", true)
+            f_line(h4b1t, h4b1, h4b1e ? "4u EQH" : "4u BSL", true, true)
         if at4 and not na(h4s1)
-            f_line(h4s1t, h4s1, h4s1e ? "4u EQL" : "4u SSL", true)
+            f_line(h4s1t, h4s1, h4s1e ? "4u EQL" : "4u SSL", true, false)
         if at1 and not na(h1b1) and (na(h4b1) or not at4 or math.abs(h1b1 - h4b1) > EQUAL_ATR * atr15)
-            f_line(h1b1t, h1b1, h1b1e ? "1u EQH" : "1u BSL", true)
+            f_line(h1b1t, h1b1, h1b1e ? "1u EQH" : "1u BSL", true, true)
         if at1 and not na(h1s1) and (na(h4s1) or not at4 or math.abs(h1s1 - h4s1) > EQUAL_ATR * atr15)
-            f_line(h1s1t, h1s1, h1s1e ? "1u EQL" : "1u SSL", true)
-    f_flush(atr15 / 3)
+            f_line(h1s1t, h1s1, h1s1e ? "1u EQL" : "1u SSL", true, false)
+    f_flush(atr15 / 3, 6 * (time - time[1]))
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // Trend per tijdframe, zoals bovenin Groot. Een tijdframe onder dat van de grafiek is niet betrouwbaar op te vragen: dan een streepje.
@@ -658,11 +673,17 @@ f_word(int d) =>
 f_tf(int d, int sec) =>
     tfSec <= sec ? f_word(d) + (dayDir != 0 and d != 0 and d != dayDir ? " herstel" : "") : "–"
 
-var table tb = table.new(position.bottom_left, 1, 2, bgcolor = color.new(chart.bg_color, 10), border_color = LINE, border_width = 1)
+var table tb = table.new(position.bottom_left, 1, 3, bgcolor = color.new(chart.bg_color, 10), border_color = LINE, border_width = 1)
 if barstate.islast and showTrend
     table.cell(tb, 0, 0, "D " + f_word(dayDir) + " · 4u " + f_tf(h4Dir, 14400) + " · 1u " + f_tf(h1Dir, 3600) + " · 15m " + f_tf(m15Dir, 900), text_color = FG, text_size = size.small)
     string zoek = dayDir == 1 ? "Model zoekt long" : dayDir == -1 ? "Model zoekt short" : "Nog geen dagbreuk"
     table.cell(tb, 0, 1, zoek + " · structuur " + WORD, text_color = SOFT, text_size = size.tiny)
+    // Positie tussen de dichtstbijzijnde onaangeroerde 4u-pools: een benadering, niet de 4u-range van het model.
+    string poolTxt = "4u-pools: n.v.t."
+    if not na(h4b1) and not na(h4s1) and h4b1 > h4s1
+        float pos = (close - h4s1) / (h4b1 - h4s1) * 100
+        poolTxt := "tussen 4u SSL en BSL: " + str.tostring(pos, "#") + "% · " + (pos >= 50 ? "premium" : "discount")
+    table.cell(tb, 0, 2, poolTxt, text_color = SOFT, text_size = size.tiny)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // Het positievak: rood van limiet tot stop (risico), groen van limiet tot doel.

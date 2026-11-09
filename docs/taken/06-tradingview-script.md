@@ -15,20 +15,15 @@ Het Pine-script blijft een eerlijke benadering van de swing-, breuk- en rangereg
 - [x] Verschillen met de app in `tradingview/README.md` noteren (kop "Bekende verschillen")
 
 ## Stand van nu
-`tradingview/hespulse_clean.pine` is geschreven (Pine v6) en nog niet in TradingView gecompileerd. Erin: structuur zoals Groot, BSL en SSL van 1u en 4u
-vanaf de echte pivot-candle, sweepketen L?, S?, L+ en S+ op 15m met de dagfilter. De Python-spiegel van de sweepketen is gelijk aan `app/model.py`
-op 60 reeksen, long en short (`tests/test_tradingview_signals.py`). Niet getest: compileren, `request.security` in TradingView, uiterlijk.
-Bekend ontbrekend in de signalen: 4u-range (premium en discount), groepering van gelijke pools, doel. Het zijn geen A, B, B0, R of K.
-Het oude `hespulse_structuur.pine` blijft de geteste kopie van Groot tot Clean is goedgekeurd.
-
-Eerder (voor `hespulse_structuur.pine`): op 2026-11-03 is het script nagelopen tegen `app/model.py` en `app/structure_levels.py`. Swing-, breuk-, range-, OB-, EQH/EQL- en FVG-regels zijn gelijk
-aan Groot; het script hoefde niet te veranderen. Acht verschillen staan met reden in `tradingview/README.md` onder "Bekende verschillen"
-(onder meer: geen 60-candleslimiet op de range, range op elk tijdframe, andere geschiedenis voor de dagrichting). Het model is niet gewijzigd.
-`tests/test_tradingview_port.py` draaide niet in deze sessie (module `ta` en `http-ece` niet te bouwen); draai hem op de VPS.
+Clean 4 (`tradingview/hespulse_clean.pine`, 2026-11-09) is geschreven en nog niet in TradingView gecompileerd. De versie ervoor draaide op ZEC en WLD
+(4H en 15m) en gaf de feedback die erin is verwerkt: L? en S? standaard uit, geen ballen, namen bij het begin van de lijn, trendregel linksonder.
+Motor: structuur zoals Groot, 1u- en 4u-pools, sweepketen getest tegen `app/model.py` (`tests/test_tradingview_signals.py`, 60 reeksen, long en
+short). De versie "Clean 3.2" uit de sessie "TradingView script" is gelezen: de opmaak is overgenomen, de eigen regels niet (zie README, kop Clean 4).
+Bekend ontbrekend in de signalen: 4u-range (premium en discount), groepering van gelijke pools, doel. L+ en S+ zijn geen A, B, B0, R of K.
+Niet getest: compileren van Clean 4, `request.security` zonder herschrijven, `chart.left_visible_bar_time`, de samengevoegde namen op een telefoon.
 
 ## Besluiten en bronnen
 `tradingview/hespulse_structuur.pine`, `tradingview/README.md`.
 
 ## Volgende stap
-CEO plakt `hespulse_clean.pine` in TradingView en meldt compileerfouten en wat hij ziet (BTC, ETH, een altcoin, 15m en 1u). Daarna fixen, dan pas Clean als standaard.
-`tests/test_tradingview_port.py` en `tests/test_tradingview_signals.py` slagen (2026-11-08, hier gedraaid).
+CEO plakt Clean 4 in een nieuw indicator-script, meldt compileerfouten met regelnummer en stuurt een schermafdruk (WLD 4H en 15m). Daarna fixen. Daarna de repaint-test op 15m (een 15m-sluiting en Bar Replay) en BTC, ETH en een altcoin.
