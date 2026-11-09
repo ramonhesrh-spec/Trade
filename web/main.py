@@ -1156,7 +1156,14 @@ async def api_structuur(coin: str, tf: str = "1h", user: dict = Depends(require_
     now = time.time()
     # Top-down zoals het model: de dag geeft de richting, de lagere tijdframes volgen alleen de breuken in die richting.
     bias = structure_levels.day_bias(await _cached_candles(coin, "1d"), now) if tf != "1d" else None
-    return structure_levels.levels(rows, tf, now, bias=bias)
+    out = structure_levels.levels(rows, tf, now, bias=bias)
+    # Liquiditeit van 1u en 4u (BSL, SSL): een eigen sleutel, zodat levels() en de poorttest van het TradingView-script gelijk blijven.
+    by_tf = {tf: rows}
+    for need in ("4h", "1h"):
+        if need not in by_tf and tf in ("15m", "1h", "4h") and (need == "4h" or tf != "4h"):
+            by_tf[need] = await _cached_candles(coin, need)
+    out["pools"] = structure_levels.pool_lines({k: v for k, v in by_tf.items() if v}, tf, now)
+    return out
 
 
 @app.get("/api/tegen/{coin}")

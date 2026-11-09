@@ -116,3 +116,5 @@ sessie "TradingView script":
   RH en RL als laatste swing en niet als range van de beweging die brak, en de OB-regel. Reden: ze wijken af van het model en Groot en hebben geen
   test. De OB-voorwaarde van 3.2 (beweging van minstens een ATR) staat op de parkeerlijst.
 
+Groot in de app (2026-11-09): dezelfde opmaak. De naam van een hoog niveau staat boven de lijn, van een laag niveau eronder, en de 4u- en 1u-pools staan als grijs gestippelde lijnen (`/api/structuur`, sleutel `pools`). Niet overgenomen in de app: de compacte vlakken (Groot scrolt, de vlakken lopen door) en de regel "tussen 4u SSL en BSL".
+

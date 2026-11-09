@@ -224,14 +224,27 @@
     // Zoals de kaart (CEO 2026-11-03: "zet een kleine afkorting op het punt zelf, niet alles naar rechts", "alle kleuren hetzelfde"): grijze
     // lijnen vanaf hun punt met een korte naam daar (SH, SL, BOS, FVG, OB, EQ), grijze vlakken, geen paars, geen premium/discount-kleur.
     var lineC = css("--mc-line", "#8a9698"), inkC = css("--mc-ink", "#1b2324");
+    // Hoge niveaus (RH, SH, EQH, een breuk boven het evenwicht) hebben hun naam boven de lijn, lage (RL, SL, EQL, een breuk eronder) eronder;
+    // een vlak onder de koers heeft zijn naam onder het vlak, een vlak erboven erboven (zoals HesPulse Clean 4 in TradingView).
+    var lastClose = lc.candles.length ? lc.candles[lc.candles.length - 1].close : null;
+    var eqLine = st.lines.filter(function (l) { return l.kind === "eq50"; })[0];
+    function lowName(l) {
+      if (l.short === "RL" || l.short === "SL" || l.short === "EQL") return true;
+      return l.kind === "msb" && !!eqLine && l.value < eqLine.value;
+    }
     var hl = st.lines.map(function (l) { return { value: l.value, time: originBar(times, l.time, lc.tf), label: l.short || l.label, color: lineC,
-                                                  text: inkC, dash: l.kind === "eq50" }; });
+                                                  text: inkC, dash: l.kind === "eq50", below: lowName(l) }; });
     st.zones.forEach(function (sz) {
       if (sz.kind === "premium" || sz.kind === "discount") return;
-      var t = originBar(times, sz.time, lc.tf);
+      var t = originBar(times, sz.time, lc.tf), under = lastClose !== null && sz.high < lastClose;
       boxes.unshift({ low: sz.low, high: sz.high, time: t, label: null, plate: plate, text: inkC,
                       fill: rgba(lineC, 0.12, "rgba(127,127,127,0.12)"), edge: rgba(lineC, 0.45, "rgba(127,127,127,0.45)") });
-      hl.push({ value: sz.high, time: t, label: sz.short || sz.label, noLine: true, color: lineC, text: inkC });
+      hl.push({ value: under ? sz.low : sz.high, time: t, label: sz.short || sz.label, noLine: true, color: lineC, text: inkC, below: under });
+    });
+    // De dichtstbijzijnde onaangeroerde BSL en SSL van 4u en 1u (/api/structuur, pools): grijs gestippeld vanaf hun pivot-candle.
+    (st.pools || []).forEach(function (p) {
+      hl.push({ value: p.value, time: originBar(times, p.time, lc.tf), label: p.short || p.label, color: lineC, text: inkC, dash: true,
+                below: p.side === "ssl" });
     });
     // Van het model alleen wat bij deze setup hoort: de andere instappunten en de sweep, rechts met hun letter.
     (s && LAYERS.punten && s.marks || []).forEach(function (m) {
@@ -304,8 +317,8 @@
       target.useBitmapCoordinateSpace(function (scope) {
         var ctx = scope.context, hr = scope.horizontalPixelRatio, vr = scope.verticalPixelRatio, W = scope.bitmapSize.width;
         var Hb = scope.bitmapSize.height, ts = lc.chart.timeScale(), lh = Math.round(14 * vr);
-        // Alleen wat in beeld is. Een label staat op zijn punt (het begin van de lijn), net boven de lijn; botst hij met een eerder label,
-        // dan eronder. Alleen de instappunten van het model (zonder eigen punt) staan rechts, onder elkaar.
+        // Alleen wat in beeld is. Een label staat op zijn punt (het begin van de lijn), boven de lijn (lage niveaus eronder); botst hij met een
+        // eerder label, dan aan de andere kant. Alleen de instappunten van het model (zonder eigen punt) staan rechts, onder elkaar.
         var items = hl.map(function (l) { return { l: l, y: lc.series.priceToCoordinate(l.value) }; })
           .filter(function (p) { return p.y !== null && p.y * vr >= 0 && p.y * vr <= Hb; })
           .sort(function (a, b) { return a.y - b.y; });
@@ -332,10 +345,11 @@
             taken.push([lx - pad, ly, lx + tw + pad, ly + lh]);
           } else {
             lx = Math.min(left + Math.round(4 * hr), W - tw - pad);
-            ly = y - lh;
+            var under = !!p.l.below, belowY = y + Math.round(1 * vr);
+            ly = under ? belowY : y - lh;
             var box = function (yy) { return [lx - pad, yy, lx + tw + pad, yy + lh]; };
             var hit = function (r) { return taken.some(function (t) { return r[0] < t[2] && t[0] < r[2] && r[1] < t[3] && t[1] < r[3]; }); };
-            if (hit(box(ly))) ly = y + Math.round(1 * vr);
+            if (hit(box(ly))) ly = under ? y - lh : belowY;
             if (hit(box(ly))) return;                      // geen plek: liever geen label dan een stapel over elkaar
             taken.push(box(ly));
           }

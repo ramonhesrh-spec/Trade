@@ -157,3 +157,63 @@ def levels(rows: list[list], tf: str, now_s: float, bias: Optional[str] = None) 
     if above:
         out["zones"].append(min(above, key=lambda z: z["low"]))
     return out
+
+
+# Liquiditeit: de dichtstbijzijnde onaangeroerde swing high (BSL) en swing low (SSL) van 1u en 4u, zoals f_pools in tradingview/hespulse_clean.pine
+# en Pools._touch van het model: een latere candle die hem raakt (high gelijk of hoger, low gelijk of lager) verbruikt hem, de candles rechts van de
+# pivot tellen niet mee, en een pool is hoogstens POOL_AGE candles oud (model.POOL_LOOKBACK).
+POOL_TFS = {"1h": model.K_1H, "4h": model.K_4H}
+POOL_AGE = model.POOL_LOOKBACK
+
+
+def pools(rows: Optional[list[list]], tf: str, now_s: float) -> dict:
+    """{"bsl": {value, time, eq} | None, "ssl": {...} | None, "atr": float}; eq als nog een onaangeroerde pivot binnen 0,1 ATR ligt."""
+    out = {"bsl": None, "ssl": None, "atr": 0.0}
+    k = POOL_TFS.get(tf)
+    fr = _frame(rows, tf, now_s) if k and rows else None
+    if fr is None:
+        return out
+    hi_f, lo_f = model.swing_highs(fr, k), model.swing_lows(fr, k)
+    highs: list[tuple[float, int]] = []
+    lows: list[tuple[float, int]] = []
+    for i in range(fr.n):
+        highs = [p for p in highs if not (fr.h[i] >= p[0] or i - p[1] >= POOL_AGE)]
+        lows = [p for p in lows if not (fr.l[i] <= p[0] or i - p[1] >= POOL_AGE)]
+        q = i - k
+        if q >= 0:
+            if hi_f[q]:
+                highs.append((float(fr.h[q]), q))
+            if lo_f[q]:
+                lows.append((float(fr.l[q]), q))
+    atr = float(fr.atr[-1]) if np.isfinite(fr.atr[-1]) else 0.0
+
+    def pick(items, nearest):
+        if not items:
+            return None
+        best = nearest(items, key=lambda p: p[0])
+        eq = bool(atr) and any(p is not best and abs(p[0] - best[0]) <= EQUAL_ATR * atr for p in items)
+        return {"value": best[0], "time": _t(fr, best[1]), "eq": eq}
+
+    out.update(bsl=pick(highs, min), ssl=pick(lows, max), atr=atr)
+    return out
+
+
+def pool_lines(rows_by_tf: dict, tf: str, now_s: float) -> list[dict]:
+    """De pool-lijnen voor "Groot" op tijdframe tf: 4u bij 15m, 1u en 4u; 1u bij 15m en 1u. Een niveau van 1u binnen 0,1 ATR (1u) van dat van 4u
+    blijft weg: dat is hetzelfde niveau. {value, time, label, short, side, kind: "pool"}."""
+    want = [t for t, ok in (("4h", tf in ("15m", "1h", "4h")), ("1h", tf in ("15m", "1h"))) if ok]
+    res = {t: pools(rows_by_tf.get(t), t, now_s) for t in want}
+    out = []
+    for t in want:
+        p = res[t]
+        for side, high in (("bsl", True), ("ssl", False)):
+            lv = p[side]
+            if not lv:
+                continue
+            ref = res.get("4h", {}).get(side) if t == "1h" else None
+            if ref and abs(lv["value"] - ref["value"]) <= EQUAL_ATR * p["atr"]:
+                continue
+            name = ("EQH" if lv["eq"] else "BSL") if high else ("EQL" if lv["eq"] else "SSL")
+            label = f"{TF_TEXT[t]} {name}"
+            out.append({"value": lv["value"], "time": lv["time"], "label": label, "short": label, "side": side, "kind": "pool"})
+    return out

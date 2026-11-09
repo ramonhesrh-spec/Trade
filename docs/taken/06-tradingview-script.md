@@ -20,7 +20,7 @@ Clean 4 (`tradingview/hespulse_clean.pine`, 2026-11-09) is geschreven en nog nie
 Motor: structuur zoals Groot, 1u- en 4u-pools, sweepketen getest tegen `app/model.py` (`tests/test_tradingview_signals.py`, 60 reeksen, long en
 short). De versie "Clean 3.2" uit de sessie "TradingView script" is gelezen: de opmaak is overgenomen, de eigen regels niet (zie README, kop Clean 4).
 Bekend ontbrekend in de signalen: 4u-range (premium en discount), groepering van gelijke pools, doel. L+ en S+ zijn geen A, B, B0, R of K.
-Niet getest: compileren van Clean 4, `request.security` zonder herschrijven, `chart.left_visible_bar_time`, de samengevoegde namen op een telefoon.
+Groot in de app is gelijk getrokken (naam boven of onder, pools van 4u en 1u als lijnen, `tests/test_structure_pools.py`); het uiterlijk in de browser is niet bekeken. Niet getest: compileren van Clean 4, `request.security` zonder herschrijven, `chart.left_visible_bar_time`, de samengevoegde namen op een telefoon.
 
 ## Besluiten en bronnen
 `tradingview/hespulse_structuur.pine`, `tradingview/README.md`.
