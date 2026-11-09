@@ -53,3 +53,17 @@ Zet `origin` terug naar GitHub (`git remote set-url origin <GitHub-url>`). Er is
 - GitHub houden als spiegel of stoppen?
 - Domein of subdomein voor Gitea?
 - Wie krijgt toegang (alleen jij, of ook een tweede beheerder)?
+
+## 7. Overstap naar Gitea als hoofdrepo en GitHub archiveren (besluit B-2026-11-09-08)
+Besluit Ramon: GitHub archiveren (alleen-lezen), niet verwijderen. Verwijderen pas na een geslaagde proef en een volledige back-up buiten de VPS.
+Gevolg dat Ramon kent: Claude-sessies in de cloud bereiken alleen GitHub. Na archiveren kan een cloud-sessie niet meer clonen, pushen of de nachtexport lezen. Claude werkt
+dan lokaal (Claude Code op Ramons computer, `git clone` van Gitea) of niet op de repo. De geplande controle van 2026-11-24 draait in een cloud-sessie en vervalt dan.
+Volgorde (stop bij een fout, ga niet verder):
+1. Laatste synchronisatie GitHub naar Gitea (onderdeel 4, het kloon-en-push-commando). Controleer in Gitea dat de laatste commit er staat.
+2. Alleen-lezen deploy key voor de VPS in Gitea (repo, Instellingen, Deploy-sleutels) en `git remote set-url origin git@git.hespulse.duckdns.org:doalhof/hespulse.git` in `/opt/crypto-alerts`.
+   Eén keer `git fetch` om te testen. De paywall-bestanden staan buiten git en blijven staan; gebruik de stash-methode, nooit `git reset --hard`.
+3. Nachtexport: schrijfrechten deploy key in Gitea (dezelfde publieke sleutel als `HESPULSE_DATA_KEY`), `HESPULSE_DATA_REMOTE` in `.env` naar de Gitea-URL en
+   `git -C data/export-git remote set-url origin <Gitea-URL>`. Test één keer met `scripts/nacht_export.py --git` en controleer de tak `hespulse-data` in Gitea.
+4. Claude lokaal: Claude Code installeren op Ramons computer, repo klonen van Gitea met een token, een proefsessie draaien (lezen, kleine docs-wijziging, push).
+5. Pas na 1 tot 4: GitHub archiveren (repo, Instellingen, Archive this repository). Controleer dat Gitea van daar af de enige schrijfbare repo is.
+6. Werk `CLAUDE.md`, `README.md` en `docs/register/leveringen.md` bij waar GitHub staat.
