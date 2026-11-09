@@ -11,3 +11,4 @@ Eén regel per bestand. Het register wijst naar de bestaande bestanden; er is ni
 - parkeerlijst: `docs/taken/NU.md`, kop Parkeerlijst
 - leveringen: `docs/register/leveringen.md`
 - voortgang en onderzoeksgeheugen: `docs/onderzoek/voortgang.md`, `docs/onderzoek/README.md`
+- architectuur per onderdeel: `docs/architectuur.md`
