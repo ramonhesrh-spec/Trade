@@ -119,5 +119,5 @@ Alles in git. Commit per afgeronde, logische stap. Berichten kort, in het Nederl
 | `config/*.yaml` met alle getallen | constanten in `app/*.py` en `.env` | niet nu: bevroren model en golden tests; eigen taak na 2026-11-24 |
 | Register in `docs/register/` | `docs/onderzoek/` en `docs/taken/` | `docs/register/index.md` wijst ernaar; geen verhuizing |
 | Smoketest end-to-end | golden tests en `tests/` | de skill `smoketest` draait de bestaande tests; een keten met vaste candles is een aparte taak |
-| Gitea | GitHub | besluit van Ramon |
-| Geheimenscan voor commit | niet aanwezig | parkeerlijst |
+| Gitea | GitHub | stappenlijst klaar (`docs/gitea-stappen.md`); uitvoering en keuzes door Ramon |
+| Geheimenscan voor commit | `app/secret_scan.py`, `scripts/geheimenscan.py`, hook in `.githooks/` | gedaan (B-2026-11-09-06); per kloon aanzetten met `scripts/hooks_aan.sh` |

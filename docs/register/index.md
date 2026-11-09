@@ -12,3 +12,4 @@ Eén regel per bestand. Het register wijst naar de bestaande bestanden; er is ni
 - leveringen: `docs/register/leveringen.md`
 - voortgang en onderzoeksgeheugen: `docs/onderzoek/voortgang.md`, `docs/onderzoek/README.md`
 - architectuur per onderdeel: `docs/architectuur.md`
+- Gitea-stappen: `docs/gitea-stappen.md`

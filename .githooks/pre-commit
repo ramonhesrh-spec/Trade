@@ -1,0 +1,3 @@
+#!/bin/sh
+# Eenmalig activeren per kloon: git config core.hooksPath .githooks  (of scripts/hooks_aan.sh)
+exec python3 "$(git rev-parse --show-toplevel)/scripts/geheimenscan.py"
