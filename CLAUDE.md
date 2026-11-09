@@ -2,6 +2,19 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Afspraken met Claude
+
+Bron en uitleg: `docs/blueprint.md`. Register: `docs/register/index.md`. Skills: `.claude/skills/` (`plan-gate`, `besluit-vastleggen`, `smoketest`,
+`meting-draaien`, `sessie-afsluiten`).
+
+- Een niet-triviale wijziging begint met `plan-gate`: zelfbevraging, gerichte vragen aan Ramon, score 1 tot 100, go pas vanaf 95 en na akkoord van Ramon. Typo's en tekstwijzigingen hebben geen score nodig.
+- Claude beslist nooit zelf over: een regel of getal wijzigen, wat "bewezen" is, een hypothese promoveren, juridische, fiscale of financiële zaken en betalingen, de scope of een nieuwe feature, de plek van de repo en wie toegang heeft. Stoppen en Ramon vragen. Een AI-voorstel is geen besluit.
+- Klaar is gemeten: toon de testuitvoer (`smoketest`) voor je "klaar" zegt. Rood betekent geen commit. Werk een verwachte uitkomst nooit stil bij.
+- Een nieuw idee gaat naar de parkeerlijst en start geen werk. Een besluit gaat met `besluit-vastleggen` in `docs/onderzoek/besluiten.md`.
+- Plakcode voor Ramon altijd compleet (het hele blok). Plak geen grote bestanden of logs integraal; zoek gericht.
+- Geen geheimen in git (sleutels, wallet, toegangscodes).
+- Dit bestand is te groot (63 kB, het doel is ongeveer 10 kB). Inkorten naar `docs/architectuur.md` is een aparte taak op de parkeerlijst; voeg hier geen nieuwe uitleg toe zonder iets te verplaatsen.
+
 ## Eén taak tegelijk
 
 Lees aan het begin van elke sessie `docs/taken/NU.md`. Werk alleen aan de actieve taak daarin. Een nieuw idee gaat naar de parkeerlijst
