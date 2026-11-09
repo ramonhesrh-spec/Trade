@@ -34,9 +34,14 @@ git push gitea --tags
 ```
 Gebruik een toegangstoken van Gitea (Instellingen, Toepassingen) in plaats van je wachtwoord. Zet het token nergens in git.
 
-## 4. De nachtexport en de VPS-updates verplaatsen
-- Nachtexport: zet `HESPULSE_DATA_REMOTE` in `.env` op de Gitea-repo en leg de deploy key (`HESPULSE_DATA_KEY`) daar vast (repo, Instellingen, Deploy-sleutels, schrijfrechten). Test één keer met `scripts/nacht_export.py --git`.
-- VPS-update: `git remote set-url origin <Gitea-url>` pas nadat stap 3 geslaagd is. De paywall (`app/sol_paywall.py`, `hp_access`) staat buiten git: werk bij met de stash-methode en nooit met `git reset --hard`.
+## 4. Stand van zaken (2026-11-09): Gitea is een spiegel, geen vervanging
+Uitgevoerd door Ramon op de VPS: Gitea 28.3.0 op `https://git.hespulse.duckdns.org` (nginx en certbot, registratie uit, aanmelden verplicht), gebruiker `doalhof`,
+privérepo `hespulse` met alle branches (`claude/crypto-day-trading-alerts-5p8w6v`, `claude/crypto-day-trading-alerts-geb2v7`, `hespulse-data`). Er zijn geen tags.
+- GitHub blijft `origin`. Claude-sessies hebben alleen toegang tot GitHub en lezen de nachtexport van de tak `hespulse-data` daar. Verplaats de nachtexport en de VPS-updates dus niet,
+  anders ziet Claude de export niet meer en loopt de controle van 2026-11-24 stuk.
+- De kopie in Gitea loopt achter tot hij wordt bijgewerkt. Werk hem bij vanaf de VPS: `cd /tmp/trade-mirror && git fetch --prune origin && git push https://git.hespulse.duckdns.org/doalhof/hespulse.git --all`
+  (of stel in Gitea een pull-spiegel van GitHub in).
+- Het token `vps-push` staat alleen in de wachtwoordmanager van Ramon. Draai het rond als het ooit in een chat of bestand belandt.
 
 ## 5. Releases
 Een tag per release: `git tag -a v2026.11.1 -m "wat en waarom" && git push gitea --tags`. Schrijf de tag in `docs/register/leveringen.md`.
