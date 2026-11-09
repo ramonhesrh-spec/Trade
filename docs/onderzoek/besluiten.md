@@ -37,3 +37,4 @@ preregistraties; hier staat het overzicht.
 | B-2026-11-09-01 | 2026-11-09 | A | TradingView Clean 4: de motor van Clean (getest tegen `app/model.py`) blijft, de opmaak van Clean 3.2 (naam bij het begin van de lijn, compacte vlakken, positie in de 4u-pools) komt erbij; de eigen sweepregels van 3.2 niet | CEO: "Ja". `tradingview/README.md` |
 | B-2026-11-09-02 | 2026-11-09 | A | Groot in de app krijgt dezelfde opmaak als TradingView Clean 4: naam boven of onder het niveau en de 4u- en 1u-pools (BSL, SSL) als lijnen. Alleen weergave, geen motor leest het | CEO: "Ja in de app". `docs/taken/06-tradingview-script.md` |
 
+| B-2026-11-09-03 | 2026-11-09 | A | ADA-case (9 november): geen regelwijziging, de bevriezing van het model blijft tot 2026-11-24. Voorstel over uitleg en scenario's in de nachtexport blijft op de parkeerlijst | CEO: "laat dit maar bevriezen". `cases/2026-11-09-ada-scan-check.md` |
