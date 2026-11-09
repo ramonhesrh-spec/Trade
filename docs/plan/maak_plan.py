@@ -40,8 +40,6 @@ De trader beslist en plaatst de order zelf. HesPulse handelt nooit.</p>
 <tr><td>Product</td><td>Een webapp op de telefoon met meldingen, een grafiek die de structuur toont en een indicator voor TradingView.</td></tr>
 <tr><td>Model</td><td>Abonnement van €15 per 30 dagen, betaling in SOL, geen automatische verlenging. De betaalmuur is gebouwd en nog niet getest met een echte betaling.</td></tr>
 <tr><td>Eerstvolgende mijlpalen</td><td>Einde van de bevriezing eind november. Een eerste echte controle na 30 afgeronde trades per instappunt. Een besluit over het model vroegst eind januari 2027.</td></tr></table>
-<div class="box"><b>Waar jouw oordeel het meest helpt.</b> De meetopzet (hoofdstuk 7), de aannames over de vulling van limietorders (hoofdstuk 8)
-en de rol van AI in dit systeem (hoofdstuk 6). De vragen staan gebundeld in hoofdstuk 11.</div>
 <p class="note">Dit document is geen beleggingsadvies. Handel in crypto brengt grote verliesrisico's mee.</p>
 """)
 
@@ -233,16 +231,6 @@ sec("Risico's", f"""
 <tr><td>Regelgeving en betalingen</td><td>Juridische en fiscale toets staan open. Geen beleggingsadvies. Geen kaartbetaling.</td></tr></table>
 """)
 
-sec("Vragen aan jou", f"""
-<p>Dit zijn de plekken waar jouw ervaring met bots en AI het meeste oplevert.</p>
-<ol><li><b>De meetopzet.</b> Zijn 150 trades over 12 weken en een interval per week een verstandige drempel voor een besluit? Wat zou jij toevoegen of schrappen?</li>
-<li><b>De vulling.</b> Welke aannames over limietorders op perps zijn te optimistisch? Welke kosten of slip mis ik?</li>
-<li><b>De BTC-poort.</b> Hoort een poort tegen de richting van BTC in een model, of hoort die erbuiten als meting?</li>
-<li><b>De AI.</b> Ik houd AI uit het meldpad en gebruik het voor ontwikkeling en onderzoek. Waar zou jij de grens leggen, en welke controles ontbreken?</li>
-<li><b>Automatisering.</b> Als het bewijs ooit sterk is: laat je een gebruiker dan zelf een bot koppelen of blijft de beslissing bij de trader?</li>
-<li><b>Het risico dat ik niet zie.</b> Wat is volgens jou het eerste dat hier misgaat?</li></ol>
-""")
-
 sec("Woordenlijst", f"""
 <dl>
 <div><dt>ATR</dt><dd>De gemiddelde beweging per candle. De stop en de diepte van een prik rekenen ermee.</dd></div>
@@ -266,7 +254,7 @@ def build():
     body = ""
     for i, (t, b) in enumerate(SECTIONS):
         kick = "Woordenlijst" if t == "Woordenlijst" else f"Hoofdstuk {i + 1}"
-        cls = ' class="nieuw"' if t in ("Hoe HesPulse setups vindt", "Het instappunt A, regel voor regel", "Woordenlijst") else ""
+        cls = ' class="nieuw"' if t in ("Hoe HesPulse setups vindt", "Het instappunt A, regel voor regel", "Risico's", "Woordenlijst") else ""
         body += f'<section{cls}><p class="kicker">{kick}</p><h2>{html.escape(t)}</h2>{b}</section>'
     # De hoofdstukken lopen door, zodat er geen halve pagina's leeg blijven; alleen de kern (hoofdstuk 4) begint op een nieuwe pagina.
     css = C.CSS + """
