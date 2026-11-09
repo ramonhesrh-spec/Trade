@@ -97,3 +97,5 @@ vorige gesloten candle (`[1]` en `lookahead_on`); of die in TradingView niet her
 Op ZEC 15m (2026-11-08) gaf L? en S? zes of zeven keer in één stijging, omdat de 4u-range (premium en discount) ontbreekt. Daarom staan L? en S? nu standaard uit (instelling "Ook L? en S? tonen"); L+ en S+ blijven aan. Labels van lijnen vlak bij de rechterrand staan links van de lijn, de trendregel staat rechtsonder en is korter.
 
 ZEC 4H (2026-11-08): bij samengevoegde labels was niet te zien bij welke candle een niveau hoort. Namen staan nu rechts bij de laatste candle, een kleine stip markeert de candle waar het niveau begon, en de trendregel staat linksonder.
+
+WLD 4H (2026-11-09): de stippen waren te groot en niet clean. Een kort verticaal streepje op de beginncandle vervangt ze, en de namen staan drie candles rechts van de laatste candle, buiten de koers.

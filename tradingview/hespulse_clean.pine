@@ -376,7 +376,7 @@ f_label(int x, float y, string txt) =>
     array.push(pendY, y)
     array.push(pendT, txt)
 
-// Namen staan rechts bij de laatste candle, een stip markeert de candle waar het niveau begon. Samenvoegen binnen tol (een derde ATR): gesorteerd op prijs, bij de hoogste prijs.
+// Namen staan rechts bij de laatste candle, een kort streepje markeert de candle waar het niveau begon. Samenvoegen binnen tol (een derde ATR): gesorteerd op prijs, bij de hoogste prijs.
 f_flush(float tol) =>
     int[] idx = array.sort_indices(pendY, order.ascending)
     int i = 0
@@ -398,12 +398,12 @@ f_flush(float tol) =>
 
 f_line(int x, float y, string txt, bool dashed) =>
     array.push(lines, line.new(x, y, x + 60000, y, xloc = xloc.bar_time, extend = extend.right, color = LINE, width = 1, style = dashed ? line.style_dashed : line.style_solid))
-    array.push(labels, label.new(x, y, "", xloc = xloc.bar_time, style = label.style_circle, color = LINE, size = size.tiny))
-    f_label(time, y, txt)
+    array.push(lines, line.new(x, y - atr15 / 4, x, y + atr15 / 4, xloc = xloc.bar_time, color = LINE, width = 1))
+    f_label(time + 3 * (time - time[1]), y, txt)
 
 f_box(int x, float lo, float hi, string txt) =>
     array.push(boxes, box.new(x, hi, x + 60000, lo, xloc = xloc.bar_time, extend = extend.right, bgcolor = ZONE, border_color = EDGE))
-    f_label(time, hi, txt)
+    f_label(time + 3 * (time - time[1]), hi, txt)
 
 // ---------------------------------------------------------------------------------------------------------------------------------------
 // De structuur (app/structure_levels.levels), één keer op de laatste candle, over de laatste WINDOW gesloten candles.
