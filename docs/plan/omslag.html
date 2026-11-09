@@ -1,0 +1,59 @@
+<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>HesPulse, plan en visie</title><style>
+@page { size: A4; }
+* { box-sizing: border-box; }
+body { font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif; color: #1b2324; font-size: 10pt; line-height: 1.55; margin: 0; }
+.cover { height: 297mm; width: 210mm; display: flex; flex-direction: column; page-break-after: always; }
+.cover-top { flex: 1; padding: 26mm 22mm 0; }
+.cover-logo { width: 22mm; height: 22mm; }
+.cover h1 { font-family: 'Inter Display', 'Inter', sans-serif; font-size: 52pt; font-weight: 700; letter-spacing: -1.5px; margin: 18mm 0 4mm; line-height: 1; }
+.cover .sub { font-size: 16pt; color: #4a5658; margin: 0; font-weight: 400; }
+.cover-band { background: #1b2324; color: #fff; padding: 14mm 22mm 16mm; }
+.cover-band h4 { font-family: 'JetBrains Mono', monospace; font-size: 8.5pt; letter-spacing: 2px; text-transform: uppercase; color: #aeb7b8; margin: 0 0 4mm; font-weight: 500; }
+.cover-band ol { columns: 2; column-gap: 12mm; margin: 0; padding-left: 5mm; font-size: 10.5pt; line-height: 1.9; }
+.cover-band .meta { margin-top: 8mm; font-size: 8.5pt; color: #aeb7b8; }
+.cover-chart { width: 100%; height: 48mm; margin-top: 16mm; }
+section { page-break-before: always; } section.first { page-break-before: auto; }
+.kicker { font-family: 'JetBrains Mono', monospace; font-size: 8.5pt; letter-spacing: 2px; text-transform: uppercase; color: #6b7678; margin: 0 0 1.5mm; }
+h2 { font-family: 'Inter Display', 'Inter', sans-serif; font-size: 24pt; font-weight: 700; letter-spacing: -0.5px; margin: 0 0 6mm; line-height: 1.1; }
+h3 { font-size: 11.5pt; font-weight: 700; margin: 7mm 0 2mm; break-after: avoid; }
+.lead { font-size: 12pt; color: #2f3a3b; }
+.box { border-left: 3px solid #1b2324; background: #f4f6f6; border-radius: 0 6px 6px 0; padding: 3.5mm 5mm; margin: 5mm 0; break-inside: avoid; }
+.box.warn { border-left-color: #b3261e; }
+.box ol, .box ul { margin: 2mm 0 0; padding-left: 5mm; }
+.note { color: #5a6668; font-size: 9pt; }
+figure { margin: 5mm 0; break-inside: avoid; }
+figcaption { font-size: 8.8pt; color: #5a6668; margin-top: 1.5mm; }
+.dia { width: 100%; height: auto; }
+.dia .s { font-size: 9.5px; }
+.dia .b { font-family: 'Inter', sans-serif; font-weight: 700; font-size: 13px; }
+table { border-collapse: collapse; width: 100%; margin: 4mm 0; font-size: 9.3pt; break-inside: avoid; }
+th { text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 8pt; letter-spacing: 1px; text-transform: uppercase; color: #6b7678;
+      font-weight: 500; border-bottom: 1.5px solid #1b2324; padding: 2mm 2mm; }
+td { border-bottom: 1px solid #dfe4e4; padding: 2mm 2mm; vertical-align: top; }
+td:first-child { font-family: 'JetBrains Mono', monospace; font-weight: 600; }
+.push { display: flex; gap: 3mm; align-items: flex-start; border: 1px solid #dfe4e4; border-radius: 14px; padding: 3.5mm 4mm; width: 78%;
+        background: #fff; box-shadow: 0 2px 8px rgba(27,35,36,.08); }
+.push svg { width: 9mm; height: 9mm; flex: none; }
+.push .pt { font-weight: 700; } .push .pb { font-family: 'JetBrains Mono', monospace; font-size: 9pt; color: #2f3a3b; }
+dl { font-size: 9.5pt; line-height: 1.4; columns: 2; column-gap: 9mm; }
+dl div { break-inside: avoid; margin-bottom: 2.5mm; }
+dl dt { font-weight: 700; } dl dd { margin: 0; color: #2f3a3b; }
+.chips { display: flex; gap: 2.5mm; margin: 3mm 0 4mm; }
+.chip { background: #1b2324; color: #fff; border-radius: 99px; padding: 1.6mm 4mm; font-weight: 600; font-size: 9.3pt; }
+.chip.off { background: #fff; color: #1b2324; border: 1px solid #c9d0d1; }
+ol, ul { padding-left: 5mm; } li { margin: 1mm 0; }
+
+section { page-break-before: auto; margin-top: 10mm; }
+section.first { margin-top: 0; }
+section.nieuw { page-break-before: always; margin-top: 0; }
+h2, .kicker { break-after: avoid; }
+.cover-chart .dia { width: auto; height: 46mm; }
+table { break-inside: auto; } tr { break-inside: avoid; }
+section .dia { width: 66%; display: block; margin: 0 auto; }
+section .flow-wide .dia { width: 100%; }
+figure { margin: 3.5mm 0; }
+</style></head><body><div class="cover"><div class="cover-top"><svg viewBox="0 0 32 32" fill="none" class="cover-logo"><circle cx="16" cy="16" r="15" stroke="#1b2324" stroke-width="2"/><path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#1b2324" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+<h1>HesPulse</h1><p class="sub">Plan en visie: een systeem dat tradingkansen zoekt, meldt en eerlijk meet.</p>
+<div class="cover-chart"><figure><svg viewBox="0 0 580 250" xmlns="http://www.w3.org/2000/svg" class="dia"><line x1="14" x2="390" y1="43.2" y2="43.2" stroke="#c9d0d1" stroke-width="1.2" stroke-dasharray="5 4"/><text x="394" y="47.2" class="t" fill="#c9d0d1"></text><line x1="14" x2="390" y1="125.1" y2="125.1" stroke="#c9d0d1" stroke-width="1.2" stroke-dasharray="5 4"/><text x="394" y="129.1" class="t" fill="#c9d0d1"></text><line x1="14" x2="390" y1="207.0" y2="207.0" stroke="#c9d0d1" stroke-width="1.2" stroke-dasharray="5 4"/><text x="394" y="211.0" class="t" fill="#c9d0d1"></text><polyline points="14.0,165.0 43.6,118.8 65.8,135.6 95.4,81.0 117.6,97.8 139.8,43.2 162.0,64.2 184.2,55.8 206.4,102.0 228.6,89.4 258.2,148.2 287.8,131.4 317.4,177.6 347.0,165.0 384.0,207.0" fill="none" stroke="#1b2324" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg></figure></div></div>
+<div class="cover-band"><h4>Inhoud</h4><ol><li>Samenvatting</li><li>Visie</li><li>Wat HesPulse doet</li><li>Hoe HesPulse setups vindt</li><li>Het instappunt A, regel voor regel</li><li>De andere instappunten en de poorten</li><li>De indicator en het product</li><li>Techniek en de rol van AI</li><li>Hoe we weten of het werkt</li><li>Wat er nog niet klopt of nog niet bewezen is</li><li>Bedrijfsmodel en plan</li><li>Risico&#x27;s</li><li>Vragen aan jou</li><li>Woordenlijst</li></ol>
+<p class="meta">Stand 9 november 2026 · Alle plannen zijn ongetest · HesPulse plaatst nooit zelf een order · Geen beleggingsadvies</p></div></div></body></html>

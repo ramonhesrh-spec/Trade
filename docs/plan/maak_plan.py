@@ -1,0 +1,296 @@
+"""Maakt docs/plan/hespulse-plan.html en omslag.html: het plan en de visie van HesPulse voor een ervaren trader en bouwer.
+Draaien: python3 docs/plan/maak_plan.py en daarna node docs/plan/naar_pdf.js. De schema's en de stijl komen uit docs/cursus/maak_cursus.py.
+De getallen in de tekst komen uit app/model.py en de preregistratie (docs/onderzoek/hespulse-model/preregistratie.md). Verandert een regel, dan moet deze tekst mee.
+Er staan bewust geen resultaten, winrates of financiële cijfers in: die zijn er nog niet."""
+import html
+import pathlib
+import sys
+
+OUT = pathlib.Path(__file__).parent
+sys.path.insert(0, str(OUT.parent / "cursus"))
+import maak_cursus as C  # noqa: E402
+
+INK = C.INK
+STAND = "9 november 2026"
+
+
+def blocks(rows, caption=""):
+    """Gestapelde rijen vakjes met pijlen (de stroom van data naar melding en van uitkomst naar bewijs)."""
+    return "".join(C.flow(r) for r in rows[:-1]) + C.flow(rows[-1]).replace("</figure>", f"<figcaption>{caption}</figcaption></figure>")
+
+
+LIVE = [("Binance", "candles 5m tot dag"), ("Model", "vaste regels"), ("Plan", "limiet, stop, doel"), ("Melding", "één per kans"), ("Jij", "beslist en plaatst")]
+METING = [("Vulling", "op 5m-candles"), ("Uitkomst", "stop of doel"), ("Kosten", "fee en funding"), ("Bewijs", "netto R per punt"), ("Export", "elke nacht, geen gebruikers")]
+
+SECTIONS = []
+
+
+def sec(title, body):
+    SECTIONS.append((title, body))
+
+
+sec("Samenvatting", f"""
+<p class="lead">HesPulse zoekt tradingkansen op crypto, meldt ze met een vaste limiet, stop en doel, en meet eerlijk of ze werken.
+De trader beslist en plaatst de order zelf. HesPulse handelt nooit.</p>
+<table><tr><th>Onderdeel</th><th>Kort</th></tr>
+<tr><td>Wat</td><td>Een model dat per coin van de dag naar 15 minuten werkt en setups vindt volgens vaste regels: liquiditeit, sweep, structuurbreuk en fair value gap.</td></tr>
+<tr><td>Voor wie</td><td>Actieve traders die kansen willen zien zonder de hele dag naar grafieken te kijken.</td></tr>
+<tr><td>Anders</td><td>Regels in code en geen AI-oordeel in het meldpad. Alles ligt vooraf vast en wordt niet afgesteld. Alleen netto uitkomsten tellen. Eén melding per kans.</td></tr>
+<tr><td>Status</td><td>Live sinds 2 november 2026. Alle plannen zijn ongetest. Er is nog geen bewijs dat ze winst geven. De meting loopt.</td></tr>
+<tr><td>Product</td><td>Een webapp op de telefoon met meldingen, een grafiek die de structuur toont en een indicator voor TradingView.</td></tr>
+<tr><td>Model</td><td>Abonnement van €15 per 30 dagen, betaling in SOL, geen automatische verlenging. De betaalmuur is gebouwd en nog niet getest met een echte betaling.</td></tr>
+<tr><td>Eerstvolgende mijlpalen</td><td>Einde van de bevriezing eind november. Een eerste echte controle na 30 afgeronde trades per instappunt. Een besluit over het model vroegst eind januari 2027.</td></tr></table>
+<div class="box"><b>Waar jouw oordeel het meest helpt.</b> De meetopzet (hoofdstuk 7), de aannames over de vulling van limietorders (hoofdstuk 8)
+en de rol van AI in dit systeem (hoofdstuk 6). De vragen staan gebundeld in hoofdstuk 11.</div>
+<p class="note">Dit document is geen beleggingsadvies. Handel in crypto brengt grote verliesrisico's mee.</p>
+""")
+
+sec("Visie", f"""
+<h3>Het probleem</h3>
+<ul><li>Een trader mist kansen, of kijkt de hele dag naar grafieken.</li>
+<li>Signaaldiensten laten mooie voorbeelden achteraf zien. De verliezers die op dezelfde manier ontstonden, zie je niet.</li>
+<li>Winrates zonder kosten, zonder vaste regels en zonder aantallen zeggen weinig.</li>
+<li>Te veel meldingen maken een trader doof voor de goede.</li>
+<li>Een stop wordt geraakt en de koers loopt daarna alsnog naar het doel. Zonder meting blijft dat een gevoel.</li></ul>
+<h3>De visie</h3>
+<p>Eén model dat vooraf vastligt, per kans één melding stuurt en zijn eigen cijfers eerlijk toont, ook als die slecht zijn.
+De trader houdt de beslissing. HesPulse neemt het zoekwerk en het meetwerk uit handen.</p>
+<h3>Vijf principes</h3>
+<ol><li><b>Regels in code.</b> Elk plan komt uit vaste regels op openbare koersdata. Dezelfde grafiek geeft altijd hetzelfde plan, en elke regel is terug te toetsen.</li>
+<li><b>Vooraf vastleggen, nooit afstellen.</b> Alle getallen staan in een preregistratie voordat er gemeten wordt. Na een slecht resultaat verandert er niets stilletjes.</li>
+<li><b>Alleen netto.</b> Elke trade telt na kosten en funding, in R, op de candles van het contract zelf.</li>
+<li><b>Weinig meldingen.</b> Alleen een beschikbare entry is luid. Een vulling is stil. Er geldt een dagbudget.</li>
+<li><b>Nooit zelf handelen.</b> HesPulse plaatst geen orders en zegt niets over positiegrootte. De trader blijft verantwoordelijk.</li></ol>
+<div class="box warn"><b>Wat HesPulse niet is.</b> Geen handelsrobot, geen vermogensbeheer, geen belofte van rendement en geen vervanging van eigen oordeel.</div>
+""")
+
+sec("Wat HesPulse doet", f"""
+<p>HesPulse draait elke vijf minuten over een vaste lijst coins. Per coin rekent het model opnieuw uit of er een scenario loopt en of er een plan klaarstaat.
+Een stap die eenmaal vaststond, verandert nooit met nieuwe candles. Dat is getest.</p>
+{blocks([LIVE, METING], "Boven: wat de trader ziet. Onder: wat HesPulse ernaast meet. Beide draaien op dezelfde regels.")}
+<h3>Wat een plan bevat</h3>
+<p>Een limiet, een stop en een doel, met de geldigheid. Een plan geldt zes uur. Vult de limiet niet, dan vervalt het.
+Staat de koers al voorbij de limiet, dan is er geen plan: HesPulse doet nooit een marktorder.</p>
+<h3>Hoe meldingen werken</h3>
+<ul><li>Alleen een beschikbare entry geeft een luide melding. Een vulling komt stil binnen. Een nieuw scenario geeft niets.</li>
+<li>Een dagbudget, standaard acht luide meldingen. Daarboven komt een stille melding en een rij op de pagina Meldingen.</li>
+<li>Een conflictregel: ging er de laatste zes uur een push over dezelfde coin de andere kant op, dan komt de nieuwe niet als push. Staan er meer entries in één cyclus klaar, dan komt er één gebundelde push.</li>
+<li>Een entry tegen de richting van BTC op 4 uur krijgt geen melding. HesPulse volgt hem wel stil, zodat zichtbaar wordt of die poort winst kostte.</li></ul>
+<h3>Wie het gebruikt</h3>
+<p>Elke gebruiker heeft een eigen login, eigen instellingen en een eigen journaal. Alle gebruikers zien dezelfde plannen. Een beheerder
+nodigt anderen uit met een code en kan de meldingen van een groep gebruikers beperken tot een vaste set coins.</p>
+""")
+
+sec("Hoe HesPulse setups vindt", f"""
+<p>Het model werkt top-down. Het kiest eerst de richting, zoekt dan een bruikbare range, daarna liquiditeit die de koers waarschijnlijk wil
+aantikken, en wacht op een bevestiging op 15 minuten.</p>
+{C.flow([("Dag", "kiest long of short"), ("4 uur", "geeft de range"), ("1 uur", "geeft de pools"), ("15 minuten", "sweep en breuk")])}
+<ol><li><b>Richting.</b> De laatste structuurbreuk op gesloten dagcandles. Brak de koers onder een vorige bodem, dan zoekt het model alleen shorts. Wijst de dag de andere kant op, of is er nog geen breuk, dan komt er geen scenario.</li>
+<li><b>Range.</b> De laatste 4u-breuk in die richting geeft de range van top tot bodem, met het evenwicht in het midden. Shorts zoekt het model in premium, longs in discount.</li>
+<li><b>Pools.</b> Onaangeroerde 1u-toppen (voor shorts) of bodems (voor longs) waar stops en orders liggen. Gelijke niveaus binnen 0,1 ATR tellen als één pool.</li>
+<li><b>Bevestiging.</b> Een prik door de pool met een slot terug, een structuurbreuk en een harde beweging met een gat in de prijs.</li></ol>
+{C.D_RANGE}
+{C.D_SWEEP}
+<p class="note">Alle schema's tonen een short. Een long werkt hetzelfde op een gespiegelde grafiek. De code rekent ook zo.</p>
+""")
+
+sec("Het instappunt A, regel voor regel", f"""
+<p>A is het basisplan: een sweep van de pool, een breuk en een gat. De andere instappunten zijn varianten daarop.</p>
+{C.D_A}
+<table><tr><th>Stap</th><th>Regel</th><th>Vast getal</th></tr>
+<tr><td>Richting</td><td>Laatste breuk op gesloten dagcandles</td><td>pivots van 2 candles</td></tr>
+<tr><td>Range</td><td>Laatste 4u-breuk in die richting</td><td>geldig 60 candles van 4u</td></tr>
+<tr><td>Pool</td><td>Onaangeroerde 1u-swing in de goede helft van de range, binnen 6% van de koers</td><td>pivots van 3 candles, hoogstens 120 candles oud</td></tr>
+<tr><td>Sweep</td><td>Prik door de pool met een slot erachter terug</td><td>0,1 tot 2,5 ATR diep, herstel binnen 6 candles van 15m</td></tr>
+<tr><td>Shift</td><td>Slot voorbij de laatste 15m-top vóór de prik</td><td>binnen 24 candles</td></tr>
+<tr><td>Displacement</td><td>Slot minstens 1,0 ATR voorbij het uiterste van de laatste tegencandle</td><td>tegencandle binnen 5 candles ervoor</td></tr>
+<tr><td>Gat (FVG)</td><td>Gat van drie candles in die beweging, nog niet teruggekomen</td><td>n.v.t.</td></tr>
+<tr><td>Limiet</td><td>In het gat, op de rand die de koers bij de terugkeer als eerste raakt (of in de overlap met het order block)</td><td>n.v.t.</td></tr>
+<tr><td>Stop</td><td>Voorbij het uiterste van de prik</td><td>0,25 ATR, minstens 0,4% van de limiet</td></tr>
+<tr><td>Doel</td><td>Dichtstbijzijnde van de range-rand en een naakte POC</td><td>geen minimale R:R</td></tr>
+<tr><td>Geldigheid</td><td>Daarna vervalt het plan</td><td>24 candles van 15m (6 uur)</td></tr></table>
+<p class="note">Elke ATR is die van het genoemde tijdframe (15 minuten, tenzij anders gezegd). Een naakte POC is een volumeniveau dat de koers daarna niet meer raakte.</p>
+""")
+
+sec("De andere instappunten en de poorten", f"""
+<table><tr><th>Letter</th><th>Idee</th><th>Verschil met A</th><th>Melding</th></tr>
+<tr><td>A</td><td>Sweep, breuk, gat</td><td>basis</td><td>ja</td></tr>
+<tr><td>B</td><td>Lagere top in premium, breuk onder het laatste 15m-dal</td><td>geen sweep, limiet in het gat en in premium</td><td>ja</td></tr>
+<tr><td>B0</td><td>Als B</td><td>zonder premium-eis</td><td>ja</td></tr>
+<tr><td>R</td><td>Als B, na de breuk een terugtest</td><td>limiet op het gebroken niveau, geen gat nodig</td><td>ja</td></tr>
+<tr><td>K</td><td>Lagere top na een rechte stijging</td><td>breuk van de consolidatie van twee uur na de top</td><td>ja</td></tr>
+<tr><td>V1, P</td><td>Vroege limiet op de pool, POC-limiet</td><td>alleen stil gemeten</td><td>nee</td></tr></table>
+{C.D_B}
+<h3>Poorten</h3>
+<ul><li><b>Dagrichting.</b> Geen scenario tegen de dag in. Die setups loopt HesPulse apart, stil en zichtbaar achter een schakelaar, zodat we later kunnen vergelijken.</li>
+<li><b>BTC.</b> Een entry tegen de 4u-richting van BTC krijgt geen melding.</li>
+<li><b>Nog bereikbaar.</b> Stond de koers al door de limiet of ligt het plan omgekeerd, dan komt er geen melding.</li>
+<li><b>Budget.</b> Zie hoofdstuk 3.</li></ul>
+<div class="box"><b>Eerlijk over de herkomst.</b> Een deel van de regels ontstond uit voorbeelden die een trader aandroeg, zoals K uit één geval op SOL.
+Zo'n regel scoort op zijn eigen aanleiding altijd goed en dat telt niet als bewijs. Daarom geldt voor elk instappunt een eigen meting vanaf het
+bevriezingsmoment en een stopregel.</div>
+""")
+
+sec("De indicator en het product", f"""
+<h3>De indicator voor TradingView</h3>
+<p>De indicator "HesPulse Clean" tekent op de grafiek van de trader wat HesPulse zelf ziet. Hij plaatst geen orders en stuurt geen meldingen.</p>
+<ul><li><b>Structuur.</b> Range high en low, evenwicht, de laatste breuk (BOS, CHoCH of MSB), de laatste swing of een EQH en EQL, de dichtstbijzijnde open FVG en het order block. Top-down met de dag, zoals de grafiek in de app.</li>
+<li><b>Liquiditeit.</b> De dichtstbijzijnde onaangeroerde BSL en SSL van 1u en 4u, vanaf de candle waar de pivot ontstond.</li>
+<li><b>Aanduidingen op 15m.</b> L+ en S+ markeren de keten sweep, shift, displacement en gat, alleen met de richting van de dag.</li>
+<li><b>Trend per tijdframe</b> en een positievak met limiet, stop en doel als je die zelf invult.</li></ul>
+<div class="box warn"><b>Wat de indicator niet is.</b> L+ en S+ zijn geen volledige plannen van het model. De 4u-range (premium en discount), de groepering
+van gelijke pools en het doel ontbreken. Ze komen daardoor vaker voor dan een echte entry. Ze zijn ongetest op winst. Een Python-versie van de keten
+wordt gelijk gehouden aan het model met tests, maar de Pine-code zelf is niet op rendement beproefd.</div>
+<h3>De app</h3>
+<table><tr><th>Scherm</th><th>Wat je ziet</th></tr>
+<tr><td>Kansen</td><td>Alle plannen op één plek, met afstand tot de limiet, het positievak en een checklist voor de order. Verbergen en overslaan kan per kaart.</td></tr>
+<tr><td>Groot</td><td>De grafiek schermvullend op 15m, 1u, 4u of dag, met structuur, liquiditeit, de instappunten en de trend per tijdframe.</td></tr>
+<tr><td>Logboek</td><td>Per dag wat de app zag, wat de trader deed en de uitkomst. Een replay van een trade op 5m.</td></tr>
+<tr><td>Bewijs</td><td>De eerlijke cijfers: per instappunt aantallen, netto R, kosten, de stopregel en de controles.</td></tr>
+<tr><td>Markt</td><td>Context op de dag, zoals kalender en volatiliteit, zonder getallen die niet gemeten zijn.</td></tr>
+<tr><td>Meldingen</td><td>Elke melding die verstuurd of vastgehouden is, met de reden.</td></tr></table>
+""")
+
+sec("Techniek en de rol van AI", f"""
+<h3>Opbouw</h3>
+<ul><li><b>Data.</b> Candles en koersen van de USDT-perpetuals op Binance, via één module. Daarop rekent het model. Valt een coin zonder perp terug op spot.</li>
+<li><b>Model.</b> Zuivere functies in Python zonder bijwerkingen, tests per stap, en een test die eist dat een eerdere stap nooit verandert met meer candles.</li>
+<li><b>Live.</b> Elke vijf minuten een cyclus (systemd-timer). Nieuwe scenario's en plannen staan in SQLite. Een tweede proces draait de webapp (FastAPI) en stuurt de push.</li>
+<li><b>Controle.</b> Ruim 2400 geautomatiseerde tests. Een aparte test houdt de TradingView-keten gelijk aan het model, voor long en short.</li>
+<li><b>Nacht.</b> Elke nacht een export met uitkomsten, controles en gemiste bewegingen naar een aparte tak. Zonder gebruikers, e-mail, journaal of abonnementen.</li></ul>
+<h3>Waar AI wel en niet zit</h3>
+<table><tr><th>Plek</th><th>Rol van AI</th></tr>
+<tr><td>Meldpad</td><td><b>Geen.</b> De eerdere onderdelen die AI inzetten staan uit sinds 2 november: het lezen van doorgestuurde berichten, een oordeel over de kwaliteit van een structuur en scenario's voor de markt. Reden: een AI-oordeel verschilt per keer, kost per vraag en is niet eerlijk terug te toetsen.</td></tr>
+<tr><td>Ontwikkeling</td><td>Een AI-assistent schrijft en controleert code en documentatie. Elke wijziging gaat door tests, een geschreven besluit en een preregistratie. Een hypothese van de AI is een hypothese tot ze in code is gevalideerd en gemeten.</td></tr>
+<tr><td>Context</td><td>Het nieuws op de pagina Markt wordt, waar het draait, door een klein AI-model gesorteerd. Dat raakt geen plan en geen melding.</td></tr>
+<tr><td>Onderzoek</td><td>Een wekelijkse sessie leest de nachtexport en stelt schaduwvarianten voor. Een variant gaat alleen live volgens een vaste regel in code (minstens 50 trades per arm, beter in beide helften en een interval per week boven nul). Geen AI of mens promoveert een variant uit onderbuikgevoel.</td></tr></table>
+<p class="note">Het geheugen van het project staat in vaste bestanden: besluiten, hypotheses, cases, een bewijsregister en een takenlijst met één actieve taak.
+Een nieuw idee gaat naar een parkeerlijst en start geen werk.</p>
+""")
+
+sec("Hoe we weten of het werkt", f"""
+<div class="box warn"><b>Kort antwoord: nog niet.</b> Er zijn nog te weinig afgeronde trades om iets te bewijzen. Eerdere motoren lieten geen aantoonbaar voordeel zien
+en hun trades hingen sterk samen. Daarom is er nu één model met een strakke meetopzet.</div>
+<h3>De meetopzet</h3>
+<ol><li><b>Preregistratie.</b> Elke regel en elk getal ligt vast in een document voordat er gemeten wordt. Wat daarna verandert, krijgt een apart besluit met datum en reden.</li>
+<li><b>Bevriezing.</b> Drie weken verandert er niets aan de instapregels. Alleen wat na het bevriezingsmoment ontstond, telt, en niets terugwerkend.</li>
+<li><b>Netto.</b> Alle uitkomsten na kosten per rondreis en na gemeten funding, in R, op de candles van het contract zelf. Een trade die in één candle stop en doel raakt, telt als stop.</li>
+<li><b>Effectieve steekproef.</b> Trades in dezelfde uren of weken hangen samen. Daarom telt de meting unieke uren en weken, en rekent het interval per week (bootstrap per cluster).</li>
+<li><b>Stopregel per instappunt.</b> Na 30 trades een eerste blik. Na 50 stopt de luide melding van dat punt als het weekinterval van de netto R helemaal onder nul ligt. Meten gaat door.</li>
+<li><b>Besluit over het model.</b> Pas bij 150 afgeronde trades, verspreid over 12 weken.</li></ol>
+<h3>Vier controles tijdens de bevriezing</h3>
+<table><tr><th>Controle</th><th>Vraag</th></tr>
+<tr><td>Strenge vulling</td><td>Houdt de uitkomst stand als de koers de limiet moet doortikken in plaats van alleen raken?</td></tr>
+<tr><td>MAE, MFE en slip</td><td>Hoe ver ging een trade tegen of mee, en hoeveel kost een stop die tegen een open prijs vult?</td></tr>
+<tr><td>Placebo</td><td>Doet een willekeurige instap met dezelfde uitgang het even goed?</td></tr>
+<tr><td>Gemiste bewegingen</td><td>Welke omkeringen van meer dan drie ATR zag het model niet, en welke regel weigerde ze?</td></tr></table>
+""")
+
+sec("Wat er nog niet klopt of nog niet bewezen is", f"""
+<h3>Aannames over de vulling</h3>
+<p>Een limietorder vult in de meting zodra de koers het niveau raakt op 5m-candles. In werkelijkheid staat er een wachtrij en geeft een raakstoot niet altijd een vulling.
+De strenge vulregel meet dat ernaast. Een tweede controle vergelijkt per plan een limietorder, een marktorder en een stoporder met dezelfde stop en hetzelfde doel.
+Dat script is gebouwd en moet nog op de echte data draaien.</p>
+<h3>Een eerlijke tussenstand</h3>
+<ul><li>De volledige keten van A (sweep, breuk, gat) is streng. Het geeft weinig entries.</li>
+<li>Een vroege limiet op de pool (V1) viel in een eerste meting tegen en staat daarom niet meer op de kaart.</li>
+<li>Het instappunt K kwam uit één voorbeeld en heeft nog niets bewezen.</li></ul>
+<h3>Backtest</h3>
+<p>Een backtest over meerdere maanden bestaat nog niet. De preregistratie ervoor ligt klaar: periode, kosten, aantal toetsen en de eisen (beide helften boven nul, een interval per week boven nul
+en een marge boven willekeurige instappen). Hij draait pas na akkoord, en nooit om regels af te stellen.</p>
+<h3>Betaalmuur</h3>
+<p>De betaalmuur is gebouwd en getest met een gratis toegangscode. Een echte betaling in SOL is nog niet gedaan. Een beveiligingscontrole staat open, onder meer of meldingen alleen
+naar gebruikers met een actief abonnement gaan.</p>
+""")
+
+sec("Bedrijfsmodel en plan", f"""
+<h3>Bedrijfsmodel</h3>
+<ul><li><b>Abonnement.</b> €15 per 30 dagen. Betaling alleen in SOL op het Solana-netwerk. Een betaalverzoek geldt 20 minuten en heeft een uniek memo. Geen automatische verlenging.</li>
+<li><b>Gratis toegang.</b> Een eenmalige code per gebruiker, opgeslagen als hash, voor uitgekozen gebruikers.</li>
+<li><b>Geen kaartbetalingen.</b></li>
+<li><b>Open punten.</b> Een juridische toets (valt het delen van tradingplannen onder financiële regels?), de fiscale behandeling van betalingen in SOL en een beveiligingscontrole.</li></ul>
+<h3>Plan</h3>
+<table><tr><th>Wanneer</th><th>Wat</th><th>Waarom</th></tr>
+<tr><td>Nu tot eind november</td><td>Bevriezing: meten, niet afstellen. Het model op echte candles nalopen. De indicator op meerdere coins en tijdframes testen.</td><td>Een schone meting en een betrouwbare indicator</td></tr>
+<tr><td>December</td><td>Ordertype vergelijken op echte data. Backtest laten draaien na akkoord. Een eerste controle zodra een instappunt 30 afgeronde trades heeft.</td><td>Eerste toets van de aannames</td></tr>
+<tr><td>Eind december</td><td>Eerste beoordeling van de context van 4u en BTC na acht weken data.</td><td>Een filter wel of niet in het model</td></tr>
+<tr><td>Vroegst eind januari</td><td>Besluit over het model na 150 trades over 12 weken: doorgaan, aanpassen of stoppen.</td><td>Alleen dan een uitspraak over rendement</td></tr>
+<tr><td>Daarna</td><td>Indicator uitbreiden met de 4u-range als poort. Pas dan een tweede model of nieuwe functies, en alleen na bewijs.</td><td>Eén ding tegelijk</td></tr></table>
+<p class="note">Wat bewijs wordt, bepaalt de volgorde. Valt het bewijs tegen, dan stopt HesPulse met melden en blijft het een meetinstrument.</p>
+""")
+
+sec("Risico's", f"""
+<table><tr><th>Risico</th><th>Wat we doen</th></tr>
+<tr><td>Geen aantoonbaar voordeel</td><td>Niets beloven. Meten, bevriezen, stopregel per instappunt. Stoppen met melden als het interval onder nul ligt.</td></tr>
+<tr><td>Kleine en samenhangende steekproef</td><td>Unieke uren en weken tellen, interval per week, besluit pas bij 150 trades over 12 weken.</td></tr>
+<tr><td>Regels afgestemd op voorbeelden</td><td>Constanten vooraf vast. Regels uit één voorbeeld krijgen een eigen meting. Een placebo-vergelijking.</td></tr>
+<tr><td>Vulling in de praktijk anders dan in de meting</td><td>Strenge vulling, slip en een vergelijking van ordertypes. Een uitkomst met één candle stop en doel telt als stop.</td></tr>
+<tr><td>Afhankelijk van een beurs en de datakwaliteit</td><td>Eén module voor candles met een terugval op spot. Een hartslag per cyclus. Meldingen die uitvallen komen op een pagina.</td></tr>
+<tr><td>Vertraging door de cyclus van vijf minuten</td><td>Latentie wordt per melding gemeten. Een plan blijft zes uur geldig.</td></tr>
+<tr><td>Samenhang tussen coins</td><td>BTC-poort, conflictregel en dagbudget. De trader let zelf op een grote gezamenlijke positie.</td></tr>
+<tr><td>Fouten door AI-ondersteunde code</td><td>Tests per stap, een gelijkheidstest tussen de indicator en het model, een geschreven besluit per wijziging.</td></tr>
+<tr><td>Gedrag van de gebruiker</td><td>Een checklist per order, een logboek en de uitleg dat de stop nooit verder weg gaat. HesPulse zegt niets over positiegrootte.</td></tr>
+<tr><td>Regelgeving en betalingen</td><td>Juridische en fiscale toets staan open. Geen beleggingsadvies. Geen kaartbetaling.</td></tr></table>
+""")
+
+sec("Vragen aan jou", f"""
+<p>Dit zijn de plekken waar jouw ervaring met bots en AI het meeste oplevert.</p>
+<ol><li><b>De meetopzet.</b> Zijn 150 trades over 12 weken en een interval per week een verstandige drempel voor een besluit? Wat zou jij toevoegen of schrappen?</li>
+<li><b>De vulling.</b> Welke aannames over limietorders op perps zijn te optimistisch? Welke kosten of slip mis ik?</li>
+<li><b>De BTC-poort.</b> Hoort een poort tegen de richting van BTC in een model, of hoort die erbuiten als meting?</li>
+<li><b>De AI.</b> Ik houd AI uit het meldpad en gebruik het voor ontwikkeling en onderzoek. Waar zou jij de grens leggen, en welke controles ontbreken?</li>
+<li><b>Automatisering.</b> Als het bewijs ooit sterk is: laat je een gebruiker dan zelf een bot koppelen of blijft de beslissing bij de trader?</li>
+<li><b>Het risico dat ik niet zie.</b> Wat is volgens jou het eerste dat hier misgaat?</li></ol>
+""")
+
+sec("Woordenlijst", f"""
+<dl>
+<div><dt>ATR</dt><dd>De gemiddelde beweging per candle. De stop en de diepte van een prik rekenen ermee.</dd></div>
+<div><dt>BSL, SSL</dt><dd>Liquiditeit boven een top (buy side) en onder een bodem (sell side).</dd></div>
+<div><dt>Bevriezing</dt><dd>Een periode zonder wijzigingen aan de instapregels, zodat de meting schoon blijft.</dd></div>
+<div><dt>Displacement</dt><dd>Een harde, snelle beweging die een gat laat staan.</dd></div>
+<div><dt>FVG</dt><dd>Fair value gap: een gat van drie candles waar de prijs niet verhandeld is.</dd></div>
+<div><dt>Funding</dt><dd>De periodieke betaling tussen long en short op een perpetual. Telt mee in de kosten.</dd></div>
+<div><dt>Placebo</dt><dd>Een willekeurige instap met dezelfde uitgang, ter vergelijking.</dd></div>
+<div><dt>Pool</dt><dd>Een onaangeroerde top of bodem waar stops en orders liggen.</dd></div>
+<div><dt>POC</dt><dd>Point of control: de prijs met het meeste volume in een periode. Naakt als de koers er niet meer kwam.</dd></div>
+<div><dt>Preregistratie</dt><dd>Een document met regels en getallen dat vóór de meting vastligt.</dd></div>
+<div><dt>R</dt><dd>Je risico per trade. +2R is twee keer je risico gewonnen.</dd></div>
+<div><dt>Sweep</dt><dd>Een korte prik door een pool met een slot weer terug.</dd></div>
+<div><dt>Top-down</dt><dd>Van het grote tijdframe naar het kleine werken.</dd></div></dl>
+""")
+
+
+def build():
+    toc = "".join(f"<li>{html.escape(t)}</li>" for t, _ in SECTIONS)
+    body = ""
+    for i, (t, b) in enumerate(SECTIONS):
+        kick = "Woordenlijst" if t == "Woordenlijst" else f"Hoofdstuk {i + 1}"
+        cls = ' class="nieuw"' if t in ("Hoe HesPulse setups vindt", "Het instappunt A, regel voor regel", "Woordenlijst") else ""
+        body += f'<section{cls}><p class="kicker">{kick}</p><h2>{html.escape(t)}</h2>{b}</section>'
+    # De hoofdstukken lopen door, zodat er geen halve pagina's leeg blijven; alleen de kern (hoofdstuk 4) begint op een nieuwe pagina.
+    css = C.CSS + """
+section { page-break-before: auto; margin-top: 10mm; }
+section.first { margin-top: 0; }
+section.nieuw { page-break-before: always; margin-top: 0; }
+h2, .kicker { break-after: avoid; }
+.cover-chart .dia { width: auto; height: 46mm; }
+table { break-inside: auto; } tr { break-inside: avoid; }
+section .dia { width: 66%; display: block; margin: 0 auto; }
+section .flow-wide .dia { width: 100%; }
+figure { margin: 3.5mm 0; }
+"""
+    head = f'<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>HesPulse, plan en visie</title><style>{css}</style></head><body>'
+    cover = f"""{head}<div class="cover"><div class="cover-top">{C.LOGO.format(cls="cover-logo", c=INK)}
+<h1>HesPulse</h1><p class="sub">Plan en visie: een systeem dat tradingkansen zoekt, meldt en eerlijk meet.</p>
+<div class="cover-chart">{C.COVER_CHART}</div></div>
+<div class="cover-band"><h4>Inhoud</h4><ol>{toc}</ol>
+<p class="meta">Stand {STAND} · Alle plannen zijn ongetest · HesPulse plaatst nooit zelf een order · Geen beleggingsadvies</p></div></div></body></html>"""
+    (OUT / "omslag.html").write_text(cover, encoding="utf-8")
+    page = f"{head}{body.replace('<section>', '<section class=first>', 1)}</body></html>"
+    (OUT / "hespulse-plan.html").write_text(page, encoding="utf-8")
+
+
+if __name__ == "__main__":
+    build()
+    print("html klaar")
