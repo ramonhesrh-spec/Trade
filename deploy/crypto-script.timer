@@ -1,0 +1,9 @@
+[Unit]
+Description=Schrijf elke 4 uur een nieuw markt-script
+
+[Timer]
+OnCalendar=*-*-* 00,04,08,12,16,20:03:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

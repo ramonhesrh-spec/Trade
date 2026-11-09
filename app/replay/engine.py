@@ -1,0 +1,112 @@
+"""Afspeel-engine voor dagtrading-signalen: stapt per tijdstip door de
+geschiedenis en roept dezelfde beslislogica aan als de live scan
+(signal_processor.full_confirmation_sync en setup_eval). Niet nagebootst:
+de pre-checks van market_scanner.scan_market (cooldown, whiplash-rem,
+maximum meldingen per cyclus). Elk rapport zegt dat."""
+from dataclasses import dataclass
+from typing import Optional
+
+import pandas as pd
+
+from app import indicators, setup_eval
+from app.replay.candles import BASE_DELTA
+from app.replay.outcome import Outcome, resolve
+from app.replay.view import ReplayData
+from app.signal_processor import full_confirmation_sync
+
+# Genoeg candles voor EMA21, MACD(26) en ADX(14) om betrouwbaar te zijn.
+MIN_CANDLES = 60
+# Zelfde venster en tolerantie als repo.recent_sr_zone_failure.
+ZONE_FAILURE_WINDOW = pd.Timedelta(days=3)
+ZONE_FAILURE_ATR_TOLERANCE = 0.5
+
+
+@dataclass
+class ReplaySignal:
+    coin: str
+    direction: str
+    at: pd.Timestamp
+    entry: float
+    stop: float
+    take: float
+    confirmed: bool
+    reason: str
+    outcome: Optional[Outcome]
+    nearest_sr_zone_price: Optional[float] = None
+
+
+def _zone_recently_failed(failures, direction, zone_price, atr, now) -> bool:
+    if not atr:
+        return False
+    return any(
+        d == direction and now - ZONE_FAILURE_WINDOW <= failed_at <= now
+        and abs(price - zone_price) <= ZONE_FAILURE_ATR_TOLERANCE * atr
+        for d, price, failed_at in failures
+    )
+
+
+def replay_day_trading(
+    coin: str, base: dict[str, pd.DataFrame], start: pd.Timestamp, end: pd.Timestamp,
+    step: pd.Timedelta = pd.Timedelta(hours=1), max_age: pd.Timedelta = pd.Timedelta(days=2),
+    fee_pct: float = 0.1, slippage_pct: float = 0.05, trace: Optional[list] = None,
+) -> list[ReplaySignal]:
+    """`trace` (optioneel) krijgt per uitgevoerde beoordeling een tuple
+    (coin, direction, tijd, confirmed), ook voor beoordelingen die het
+    signaal niet wijzigen; het resultaat verandert er niet door."""
+    # Live vervalt een signaal pas bij (nu - created_at).days > 1; .days kapt af,
+    # dus effectief na >= 48 uur (level_check.py, SIGNAL_MAX_AGE_DAYS), en zo lang
+    # houdt het signaal ook zijn richting bezet.
+    signals: list[ReplaySignal] = []
+    # Per signaal (op identiteit) de stop-zone die het veroorzaakte: wordt een
+    # signaal vervangen, dan is dat live een update van dezelfde rij en
+    # bestaat zijn mislukking niet meer.
+    failures: dict[int, tuple[str, float, pd.Timestamp]] = {}
+    open_signal: dict[str, ReplaySignal] = {}
+    coin_candles = base[coin.upper()]
+
+    t = start
+    while t <= end:
+        data = ReplayData(base, t)
+        df = data.fetch_ohlcv(coin)
+        if len(df) >= MIN_CANDLES:
+            ind = indicators.compute_indicators(df)
+            direction = "long" if ind.ema9 > ind.ema21 else "short"
+            existing = open_signal.get(direction)
+            # exit_at is het BEGIN van de candle waarin het niveau werd geraakt;
+            # de gebeurtenis is pas een candle later bekend.
+            if (existing is not None and existing.outcome is not None
+                    and existing.outcome.exit_at + BASE_DELTA <= t):
+                existing = None
+            # Zelfde voorfilter als scan_market: een NIEUW signaal begint pas als
+            # de basisfactoren bevestigen; een al open signaal wordt altijd ververst.
+            if existing is None and not indicators.confirms_direction(ind, direction)[0]:
+                t += step
+                continue
+            if existing is None or not existing.confirmed:
+                zones = indicators.detect_sr_zones(df)
+                confirmation = full_confirmation_sync(coin, direction, df, ind, zones, True, data)
+                evaluation = setup_eval.evaluate_day_trading_setup(
+                    direction, df, ind, zones, confirmation,
+                    lambda zone_price, d=direction, a=ind.atr, now=t: _zone_recently_failed(failures.values(), d, zone_price, a, now),
+                    [],
+                )
+                if trace is not None:
+                    trace.append((coin, direction, t, evaluation.confirmed))
+                if existing is None or evaluation.confirmed:
+                    signal = ReplaySignal(
+                        coin=coin, direction=direction, at=t, entry=ind.price, stop=evaluation.stop_loss,
+                        take=evaluation.take_profit, confirmed=evaluation.confirmed, reason=evaluation.reason,
+                        outcome=resolve(direction, ind.price, evaluation.stop_loss, evaluation.take_profit,
+                                        coin_candles, t, max_age, fee_pct, slippage_pct),
+                        nearest_sr_zone_price=evaluation.nearest_sr_zone_price,
+                    )
+                    if (signal.outcome is not None and signal.outcome.result == "stop_loss"
+                            and evaluation.nearest_sr_zone_price is not None):
+                        failures[id(signal)] = (direction, evaluation.nearest_sr_zone_price, signal.outcome.exit_at + BASE_DELTA)
+                    if existing is not None:
+                        failures.pop(id(existing), None)
+                        signals[:] = [s for s in signals if s is not existing]
+                    signals.append(signal)
+                    open_signal[direction] = signal
+        t += step
+    return signals

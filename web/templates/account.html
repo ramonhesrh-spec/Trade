@@ -1,10 +1,8 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
 {% block title %}Mijn account — HesPulse{% endblock %}
+{% block page_title %}Account{% endblock %}
 {% block content %}
-
-<h2>Mijn account</h2>
-<p class="page-intro">Journaal, instellingen en winrate.</p>
 
 {% if not onboarding_complete %}
 <section class="card onboarding-checklist" style="--i: 0">
@@ -24,16 +22,16 @@
 </section>
 {% endif %}
 
-<section class="summary-strip" style="--i: 0">
-  <div class="summary-stat">
-    <span class="summary-value">{{ pending_entries|length }}</span>
-    <span class="summary-label">nieuwe kans{{ "en" if pending_entries|length != 1 else "" }}</span>
-  </div>
-  <div class="summary-stat">
-    <span class="summary-value">{{ taken_entries|length }}</span>
-    <span class="summary-label">open positie{{ "s" if taken_entries|length != 1 else "" }}</span>
-  </div>
-</section>
+{{ macros.headline("Open posities", taken_entries|length,
+     explain=(("Welkom terug, CEO " ~ user.username ~ ".") if is_ceo(user) else ("Welkom, leerling " ~ user.username ~ ". De CEO kijkt mee.")) ~ " Journaal, instellingen en winrate.") }}
+{{ macros.keylines([
+  {"label": "Nieuwe kansen", "value": pending_entries|length},
+  {"label": "Winrate", "value": ("%.0f"|format(winrate.winrate_pct) if winrate.winrate_pct is not none else "-"), "unit": ("%" if winrate.winrate_pct is not none else ""), "explain": "Eigen trades, oefentrades niet meegeteld."},
+  {"label": "Drempel", "value": user.confirm_threshold_pct, "unit": "%"}], "ac") }}
+
+{{ macros.install_help("card") }}
+
+{# Geen themakeuze meer: alleen de witte versie (CEO 2026-11-03, "alleen een witte versie, we gaan voor clean en mooi"). #}
 
 {% if unclear_messages %}
 <details class="stats-collapse js-accordion" style="--i: 1">
@@ -199,11 +197,24 @@
       <button type="submit">Opslaan</button>
     </form>
     <p class="muted levels-hint">Binnen dit venster komt ook een bevestigde kans stil binnen, zonder geluid. Beide velden leeg laten zet stille uren weer uit.</p>
+    <form action="/settings/risico" method="post" class="inline-form" style="margin-top: var(--space-6);">
+      <label>Bedrag per trade (1R), in euro
+        <input type="text" inputmode="decimal" name="risk_eur" placeholder="bijvoorbeeld 25" value="{{ user.risk_per_trade_eur if user.risk_per_trade_eur is not none else '' }}">
+      </label>
+      <button type="submit">Opslaan</button>
+    </form>
+    <p class="muted levels-hint">Alleen voor de weergave: op elke kaart staat dan wat je verliest als de stop raakt en wat het doel oplevert. HesPulse plaatst nooit zelf een order. Leeg laten zet het uit.</p>
+    <form action="/settings/meldingen" method="post" class="inline-form" style="margin-top: var(--space-6);">
+      <label>Maximaal aantal luide pushes per dag
+        <input type="text" inputmode="numeric" name="budget" placeholder="standaard {{ push_budget_default }}" value="{{ user.push_budget if user.push_budget is not none else '' }}">
+      </label>
+      <button type="submit">Opslaan</button>
+    </form>
+    <p class="muted levels-hint">Een nieuwe kaart komt stil: op Kansen en de meldingenpagina, zonder geluid of trilling, en telt niet mee. Luid is alleen een kans waarvan de limiet vult; vullen er meer tegelijk, dan krijg je één push. Elke luide push telt. Is het budget op, dan komt een vulling als stille melding en staat hij op de meldingenpagina. Een vulling die de andere kant op wijst dan een push van de laatste 6 uur op dezelfde coin komt alleen op de meldingenpagina. Updates van een lopende trade en stop of doel komen altijd en tellen niet mee. Leeg laten geeft de standaard, 0 zet het budget uit.</p>
     <div id="push-subscribe-block" style="margin-top: var(--space-6);">
       <button id="push-subscribe-btn" type="button">Meldingen aanzetten</button>
       <p id="push-subscribe-status" class="muted" style="margin: var(--space-2) 0 0; font-size: var(--text-base);" hidden></p>
     </div>
-    <script src="/static/push-subscribe.js?v=2" defer></script>
     <form action="/push/voorbeeld" method="post" class="inline-form">
       <button type="submit" class="button-link">Stuur mezelf een testpush</button>
     </form>
@@ -350,7 +361,7 @@
   {% endif %}
 </details>
 
-<section style="--i: 5">
+<section style="--i: 5" id="journaal">
   <div class="table-header">
     <h2><svg class="h2-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Meldingen</h2>
     <form method="get" action="/account" class="inline-form">
@@ -454,6 +465,8 @@
   </div>
 </section>
 
+<p class="muted tab-meta"><a href="/static/diag.html">Schermcontrole</a> toont hoe jouw telefoon de bovenrand doorgeeft.</p>
+
 <script defer src="/static/dashboard.js"></script>
 
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
@@ -516,8 +529,8 @@
           datasets: [{
             label: "Cumulatief resultaat (%)",
             data: cumulativeData.map((p) => p.cumulative_pct),
-            borderColor: "#17e5d6",
-            backgroundColor: "rgba(23, 229, 214, 0.12)",
+            borderColor: "#1b2324",
+            backgroundColor: "rgba(10, 186, 181, 0.14)",
             fill: true,
             tension: 0.1,
           }],
@@ -542,7 +555,7 @@
           datasets: [{
             label: "Winrate",
             data: ratioStats.map((r) => r.winrate),
-            backgroundColor: ratioStats.map((r) => r.passed / r.total >= 0.75 ? "#17e5d6" : "#556c67"),
+            backgroundColor: ratioStats.map((r) => r.passed / r.total >= 0.75 ? "#1b2324" : "#8a9698"),
             borderRadius: 4,
             maxBarThickness: 56,
           }],

@@ -1,0 +1,59 @@
+/* Live verversing van Vandaag: haalt elke 15 seconden /api/vandaag op en werkt koersen en per scenario status, afstand,
+   resterende tijd en de niveaus op de grafiek bij. De eerste weergave komt van de server; zonder JS blijft de pagina volledig bruikbaar.
+   Stopt zolang het tabblad verborgen is. */
+(function () {
+  var INTERVAL_MS = 15000;
+  if (!document.querySelector("[data-vd-price]")) return;
+
+  function fmtPrice(value, coin) {
+    if (value === null || value === undefined) return "";
+    if (coin === "BTC") return Math.round(value).toLocaleString("nl-NL");
+    return value < 100 ? value.toFixed(4) : value.toFixed(2);
+  }
+
+  function apply(payload) {
+    var live = window.hesLiveFresh && window.hesLiveFresh();      // de koersstroom (live.js) is actueler dan deze poll
+    if (!live) document.querySelectorAll("[data-vd-price]").forEach(function (el) {
+      var coin = el.getAttribute("data-vd-price");
+      var text = fmtPrice(payload.prices[coin], coin);
+      if (text) el.textContent = text;
+    });
+    document.querySelectorAll("[data-vd-scenario]").forEach(function (el) {
+      var data = payload.scenarios[el.getAttribute("data-vd-scenario")];
+      if (!data) return;
+      var state = el.querySelector('[data-vd="state"]');
+      if (state) { state.textContent = data.short || data.label; state.title = data.label; state.className = "state-pill is-" + data.state; }
+      var action = el.querySelector('[data-vd="action"]');
+      if (action && data.action) action.textContent = data.action;
+      el.className = el.className.replace(/vd-scenario-\w+/, "vd-scenario-" + data.state);
+      var dist = el.querySelector('[data-vd="distance"]');
+      if (dist && !live) dist.textContent = data.to_trigger_pct === null ? "-" : (data.to_trigger_pct >= 0 ? "+" : "") + data.to_trigger_pct.toFixed(2) + "%";
+      var left = el.querySelector('[data-vd="left"]');
+      if (left) left.textContent = Math.round(data.hours_left);
+      var chart = el.querySelector("[data-levelchart]");
+      if (chart && data.chart && window.hesLevelChart) window.hesLevelChart.update(chart, data.chart);
+    });
+  }
+
+  function refresh(force) {
+    if (document.hidden && !force) return Promise.resolve(false);
+    // Zonder tijdslimiet blijft een haperende verbinding eeuwig "bezig" en blijft de trekhint van smooth.js hangen.
+    var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 10000) : null;
+    return fetch("/api/vandaag", { cache: "no-store", credentials: "same-origin", signal: ctrl ? ctrl.signal : undefined })
+      .then(function (resp) {
+        if (!resp.ok) return false;
+        var age = resp.headers.get("X-Price-Age");
+        if (age !== null && window.hesPriceSeen) window.hesPriceSeen(age);
+        return resp.json().then(function (payload) { apply(payload); return true; });
+      })
+      .catch(function () { return false; /* een mislukte verversing laat de laatste stand staan */ })
+      .then(function (ok) { if (timer) clearTimeout(timer); return ok; });
+  }
+
+  window.hesRefresh = function () { return refresh(true); };
+
+  refresh();
+  setInterval(refresh, INTERVAL_MS);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
+})();

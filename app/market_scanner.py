@@ -15,13 +15,20 @@ docs/superpowers/specs/2026-09-14-autonome-marktscan-design.md.
 import asyncio
 import logging
 import sys
+import time
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import exchange, indicators, patterns, push_notify, repo, risk
+from app import model_live
+from app import announce_live, calendar_alerts, chance_checks, config, exchange, focus, indicators, market_context_live, market_script, trend_live, rejection_live, patterns, push_notify, range_sweep_live, range_watch, repo, risk, rule_live, samenval, structure_live, trade_plan, zone_radar_live, zone_sweep_live, poc_radar_live, shadow_live
 from app.anthropic_interpret import Interpretation
+from app.smc_eval import (  # noqa: F401  (andere modules importeren deze namen hier)
+    LEGACY_STOP_MARGIN_PCT, LEGACY_TARGET_MARGIN_PCT, SMC_ENTRY_CANDLE_MINUTES, SMC_MAX_CANDLES_PER_CHECK,
+    SMC_SETUP_MAX_AGE_HOURS, SMC_ZONE_SEARCH_LOOKBACK_30M, STOP_MARGIN_ATR_MULTIPLE, TARGET_MARGIN_ATR_MULTIPLE,
+    ZONE_BREAK_BUFFER_ATR_MULTIPLE, candles_since, evaluate_completion, find_candidate, judge_forming_setup,
+    floor_stop, last_candle_state, setup_expired, smc_stop_take_margins, valid_stop_take,
+)
 from app.signal_processor import (
-    MIN_RISK_REWARD_RATIO,
     compute_full_confirmation,
     fanout_confirmed_signal,
     process_day_trading_signal,
@@ -212,7 +219,7 @@ async def _find_breakout_retest_candidate(coin: str, direction: str, df, ind) ->
         premise_level = zone.price_high if direction == "long" else zone.price_low
         await fanout_confirmed_signal(
             signal_id, coin, direction, ind.price, stop_take.stop_loss, stop_take.take_profit, premise_level,
-            title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, {pattern_label}",
+            title=push_notify.alert_title(coin, direction, pattern_label if len(pattern_label) <= 22 else "Patroon"), signal_type="patroon",
             make_body=_breakout_body,
             kansberekening=kansberekening,
             hard_gates_ok=bool(factor_hard_gates_ok),
@@ -374,7 +381,7 @@ async def _find_trendline_retest_candidate(coin: str, direction: str, df, ind) -
         # match.neckline bij een chart-patroon.
         await fanout_confirmed_signal(
             signal_id, coin, direction, ind.price, stop_take.stop_loss, stop_take.take_profit, current_value,
-            title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, {pattern_label}",
+            title=push_notify.alert_title(coin, direction, pattern_label if len(pattern_label) <= 22 else "Patroon"), signal_type="patroon",
             make_body=_trendline_body,
             kansberekening=kansberekening,
             hard_gates_ok=bool(factor_hard_gates_ok),
@@ -409,15 +416,7 @@ def _same_pattern(existing_key: Optional[str], direction: str, match, atr: float
     return abs(prev_neckline - match.neckline) <= PATTERN_DEDUP_ATR_MULTIPLE * atr
 
 
-def _valid_stop_take(direction: str, entry_price: float, stop_loss: float, take_profit: float) -> bool:
-    """Ligt de stop aan de verliezende en de take aan de winnende kant van de
-    prijs waarop we melden? Patroongeometrie (of een prijs die sinds de
-    doorbraak flink is doorgelopen) kan anders een omgekeerde stop/take
-    opleveren, en die gaat ongecontroleerd de positiegrootte en de
-    automatische trackrecord in."""
-    if direction == "long":
-        return stop_loss < entry_price < take_profit
-    return take_profit < entry_price < stop_loss
+_valid_stop_take = valid_stop_take  # alias: ook de andere detectoren (patroon e.d.) gebruiken hem
 
 
 def _correlated_with_btc_divergence(coin: str, match, btc_divergence_direction: Optional[str]) -> bool:
@@ -646,7 +645,7 @@ async def _find_chart_pattern_candidate(
         # van detectie, die intussen al verder kan zijn doorgelopen).
         await fanout_confirmed_signal(
             signal_id, coin, match.direction, ind.price, stop_loss, take_profit, match.neckline,
-            title=f"{push_notify.coin_symbol(coin)} {coin} {match.direction}, {match.name}",
+            title=push_notify.alert_title(coin, match.direction, match.name if len(match.name) <= 22 else "Patroon"), signal_type="patroon",
             make_body=_pattern_body,
             kansberekening=kansberekening,
             hard_gates_ok=bool(factor_hard_gates_ok),
@@ -659,135 +658,6 @@ async def _find_chart_pattern_candidate(
         "score": _candidate_score(ind.price, stop_loss, take_profit),
         "notify": notify,
     }
-
-
-SMC_ZONE_SEARCH_LOOKBACK_30M = 60  # 30m-candles, ongeveer anderhalve dag
-
-# Was een vast percentage (STOP_MARGIN_PCT 0.1%, TARGET_MARGIN_PCT 0.5%) van
-# de prijs. Op een coin die op dat moment flink beweegt is 0.1% vaak maar
-# een fractie van normale ruis binnen één candle — een SUI-trade (zie
-# gesprek) werd zo op de stop gezet door een gewone tegenwiek, terwijl de
-# structuurpremisse zelf klopte en de prijs er later alsnog heen liep. ATR
-# van de 30m-candle op het moment van de structuurbreuk (dezelfde
-# tijdshorizon als de breuk zelf) maakt de marge groter op een drukke coin
-# en kleiner op een rustige, in plaats van overal hetzelfde vaste getal.
-# Zelfde multiple (0.25) als risk.ATR_BUFFER_MULTIPLIER, om dezelfde reden:
-# ruimte tegen een korte wiek, niet tegen een echte trendomkeer.
-STOP_MARGIN_ATR_MULTIPLE = 0.25    # marge voorbij de sweep
-TARGET_MARGIN_ATR_MULTIPLE = 0.25  # marge vóór de liquidity
-
-# Fallback voor een setup die al "bouwend" stond vóór atr een kolom op
-# smc_setups werd (zie _complete_smc_setup) — niet meer gebruikt voor een
-# nieuwe setup, blijft alleen staan zodat zo'n oude rij nog een geldig
-# signaal kan opleveren in plaats van te crashen op een ontbrekende atr.
-LEGACY_STOP_MARGIN_PCT = 0.1
-LEGACY_TARGET_MARGIN_PCT = 0.5
-
-
-def smc_stop_take_margins(setup: dict) -> tuple[float, float]:
-    """(stop_margin, target_margin) in prijseenheden, nog zonder teken —
-    de aanroeper bepaalt zelf aan welke kant van sweep_price/
-    liquidity_target de marge moet. Eén plek voor deze fallback-logica in
-    plaats van 'm drie keer te laten driften (hier, /smc-pagina preview in
-    web/main.py, scripts/cleanup_stale_smc_setups.py)."""
-    if setup["atr"] is not None:
-        return STOP_MARGIN_ATR_MULTIPLE * setup["atr"], TARGET_MARGIN_ATR_MULTIPLE * setup["atr"]
-    return (
-        LEGACY_STOP_MARGIN_PCT / 100 * setup["sweep_price"],
-        LEGACY_TARGET_MARGIN_PCT / 100 * setup["liquidity_target"],
-    )
-
-# Een bouwende setup die dit lang niet is opgelost (geraakt+afgewezen, of
-# doorbroken zonder afwijzing) wordt als vervallen beschouwd. Zonder deze
-# grens bleef een zone voor altijd "bouwend" staan zodra de prijs simpelweg
-# wegliep in de gunstige richting zonder ooit terug te keren: het bestaande
-# passed_without_rejection-oordeel signaleert alleen een mislukte kant
-# (short: close boven de zone, long: eronder), niet "de koers is te ver weg
-# om nog terug te keren". Zelfde 1-dag-grens als SIGNAL_MAX_AGE_DAYS in
-# level_check.py voor een gewoon signaal.
-SMC_SETUP_MAX_AGE_HOURS = 24
-
-
-# Hoeveel ATR een candle voorbij de zone moet sluiten voordat een bouwende
-# setup als 'doorbraak zonder afwijzing' ongeldig wordt gemaakt. Uit
-# achteraf-onderzoek (scripts/check_dead_smc_setups.py, 1 okt): van de 25
-# setups die hierdoor stierven, bleek de richting achteraf in 80% van de
-# gevallen toch te kloppen — een candle die net over zone_high/zone_low
-# sluit is meestal een gewone wiek, geen echte trendomkeer. Zelfde multiple
-# en redenering als STOP_MARGIN_ATR_MULTIPLE hierboven. Geldt uitsluitend
-# voor passed_without_rejection (de ongeldig-verklaring) — rejected (de
-# entry-trigger) blijft bewust zonder marge, scherpe entries zijn het hele
-# punt van deze detector.
-ZONE_BREAK_BUFFER_ATR_MULTIPLE = 0.25
-
-
-def _smc_last_candle_state(
-    candle, zone_low: float, zone_high: float, direction: str, atr: Optional[float] = None,
-) -> tuple[bool, bool, bool]:
-    """Bepaalt voor één gesloten 15m-candle en één bouwende zone drie
-    onafhankelijke toestanden: (in_zone, rejected, passed_without_rejection).
-    in_zone: de candle raakte de zone (wick of volledige overlap).
-    rejected: de candle raakte de zone EN sloot er weer buiten aan de
-    kant die de setup ongeldig maakt voor voortzetting maar geldig maakt
-    als entry-trigger (short: sluit onder zone_low, long: sluit boven
-    zone_high) — dit is het moment waarop _complete_smc_setup het signaal
-    maakt. Zonder marge: een vroege, scherpe entry is het hele punt.
-    passed_without_rejection: het SPIEGELBEELD van rejected, niet
-    hetzelfde teken. Een short-zone ligt BOVEN de prijs die er van
-    onderaf naartoe beweegt (na de bearish structuurbreuk) — 'voorbij
-    zonder afwijzing' betekent dus dat de candle DOOR de top van de zone
-    brak (close boven zone_high + ZONE_BREAK_BUFFER_ATR_MULTIPLE * atr)
-    zonder ooit een rejectie-close onder zone_low te laten zien: de supply
-    hield niet stand, de setup is achterhaald. Long is het spiegelbeeld
-    (close onder zone_low - marge, door de bodem heen). Vóórdat de zone
-    ooit bereikt is — bijvoorbeeld een short-setup waarvan de laatste close
-    nog onder zone_low ligt, op weg naar boven — is dit nadrukkelijk GEEN
-    'passed': met hetzelfde teken als rejected zou elke net aangemaakte,
-    nog nooit geraakte setup de cyclus erna meteen weer weggegooid worden.
-    atr=None (bv. een bouwende setup van vóór de atr-kolom) valt terug op
-    geen marge, het oude gedrag."""
-    in_zone = (
-        zone_low <= candle["low"] <= zone_high
-        or zone_low <= candle["high"] <= zone_high
-        or (candle["low"] <= zone_low and candle["high"] >= zone_high)
-    )
-    rejected = in_zone and (
-        (direction == "short" and candle["close"] < zone_low) or
-        (direction == "long" and candle["close"] > zone_high)
-    )
-    buffer = ZONE_BREAK_BUFFER_ATR_MULTIPLE * atr if atr else 0.0
-    passed_without_rejection = (
-        (direction == "short" and candle["close"] > zone_high + buffer) or
-        (direction == "long" and candle["close"] < zone_low - buffer)
-    )
-    return in_zone, rejected, passed_without_rejection
-
-
-SMC_ENTRY_CANDLE_MINUTES = 15
-
-# Hoeveel 15m-candles fase 1 hoogstens per bouwende setup beoordeelt: alle
-# candles die sinds de vorige scan gesloten zijn. De scan draait elke 20
-# minuten (deploy/crypto-market-scan.timer), dus er kunnen er twee sluiten
-# tussen twee runs — alleen de allerlaatste bekijken sloeg zo één op de
-# vier 15m-candles over, inclusief een afwijzing of doorbraak die precies
-# daarop gebeurde. Begrensd (geen onbeperkte inhaalslag) zodat een
-# afwijzing waar _complete_smc_setup geen geldige trade van kon maken niet
-# elke volgende cyclus opnieuw als trigger terugkomt.
-SMC_MAX_CANDLES_PER_CHECK = 2
-
-
-def _smc_candles_since(closed_15m, since_iso: str) -> list:
-    """Gesloten 15m-candles die NA since_iso sloten (updated_at: de
-    sluittijd van de laatste candle waartegen de setup al beoordeeld is),
-    oudste eerst, hoogstens
-    SMC_MAX_CANDLES_PER_CHECK. Een candle die al sloot vóór de setup
-    (opnieuw) gedefinieerd werd, heeft die zone nooit 'gezien' en mag hem
-    dus ook niet afwijzen of ongeldig maken — dat werd bij het aanmaken al
-    tegen de laatste gesloten candle getoetst."""
-    since = datetime.fromisoformat(since_iso)
-    close_times = closed_15m["timestamp"] + timedelta(minutes=SMC_ENTRY_CANDLE_MINUTES)
-    fresh = closed_15m[close_times > since].tail(SMC_MAX_CANDLES_PER_CHECK)
-    return [candle for _, candle in fresh.iterrows()]
 
 
 async def _check_smc_setup(coin: str) -> Optional[dict]:
@@ -819,147 +689,48 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
 
     existing = [s for s in repo.list_forming_smc_setups() if s["coin"] == coin]
     for existing_setup in existing:
-        created_at = datetime.fromisoformat(existing_setup["created_at"])
-        age_hours = (datetime.now(timezone.utc) - created_at).total_seconds() / 3600
-        if age_hours > SMC_SETUP_MAX_AGE_HOURS:
+        if setup_expired(existing_setup, datetime.now(timezone.utc)):
+            age_hours = (datetime.now(timezone.utc) - datetime.fromisoformat(existing_setup["created_at"])).total_seconds() / 3600
             repo.invalidate_smc_setup(existing_setup["id"])
             logger.info(
                 "%s %s SMC-setup vervallen na %.0f uur zonder afwijzing of doorbraak",
                 coin, existing_setup["direction"], age_hours,
             )
             continue
-        for candle in _smc_candles_since(closed_15m, existing_setup["updated_at"]):
-            in_zone, rejected, passed_without_rejection = _smc_last_candle_state(
-                candle, existing_setup["zone_low"], existing_setup["zone_high"], existing_setup["direction"],
-                atr=existing_setup["atr"],
-            )
-            if rejected:
-                return existing_setup
-            # Geen extra in_zone-eis: de candle die door de zone heen sluit
-            # heeft vrijwel altijd zelf een staart in de zone, en rejected en
-            # passed_without_rejection sluiten elkaar al uit (close aan
-            # tegenovergestelde kanten van de zone).
-            if passed_without_rejection:
-                repo.invalidate_smc_setup(existing_setup["id"])
-                break
+        verdict = judge_forming_setup(existing_setup, closed_15m)
+        if verdict == "rejected":
+            return existing_setup
+        if verdict == "passed":
+            repo.invalidate_smc_setup(existing_setup["id"])
+            continue
 
     # +1: de nog vormende candle valt hieronder weg voor de breuk-toets.
     df_30m = await asyncio.to_thread(
         exchange.fetch_ohlcv, coin, timeframe="30m", limit=SMC_ZONE_SEARCH_LOOKBACK_30M + 1,
     )
     closed_30m = df_30m.iloc[:-1]
-    structure_break = indicators.find_structure_break(closed_30m)
-    if structure_break is None:
+    scan = find_candidate(closed_30m, df_30m, closed_15m, last_candle)
+    if scan.break_direction is None:
         return None
-    direction = structure_break.direction
-    # Op hetzelfde moment en dezelfde candle-set als de breuk zelf: de
-    # volatiliteit die hier geldt, is die van de 30m-candle waarop de
-    # structuur net brak, niet een latere, mogelijk heel andere ATR.
-    atr = indicators.compute_indicators(closed_30m).atr
-
     # Een nieuwe breuk in de TEGENGESTELDE richting van een bestaande
     # bouwende setup maakt die setup achterhaald (de markt heeft zijn
     # structuur omgedraaid voordat de oude zone geraakt werd).
     for existing_setup in existing:
-        if existing_setup["direction"] != direction:
+        if existing_setup["direction"] != scan.break_direction:
             repo.invalidate_smc_setup(existing_setup["id"])
-
-    sweep = indicators.find_liquidity_sweep_before_break(closed_30m, structure_break)
-    if sweep is None:
+    if scan.candidate is None:
+        if scan.skip_reason in ("stop_of_doel_binnen_zone", "stop_te_dichtbij"):
+            logger.info("%s %s SMC-setup overgeslagen: %s", coin, scan.break_direction, scan.detail)
         return None
-
-    # Zonder deze afbakening zochten find_fair_value_gaps/find_order_blocks
-    # los in de laatste ZONE_SEARCH_LOOKBACK (10 uur) 15m-candles, zonder
-    # koppeling aan DEZE structuurbreuk. In een coin met meerdere bewegingen
-    # in dezelfde richting binnen die 10 uur pakte find_confluence_zone dan
-    # de eerste overlap die hij tegenkwam, ook als die uit een andere,
-    # oudere beweging kwam dan de displacement die de structuur brak — een
-    # afwijzing op zo'n zone bevestigt dan niets over de eigenlijke
-    # sweep+breuk-premisse van deze setup. sweep.index wijst terug in
-    # closed_30m (zelfde 0-based positie, zie find_liquidity_sweep_before_break),
-    # dus de sweep-candle zijn eigen tijdstip is de ondergrens: de
-    # displacement die de structuur brak begint per definitie niet vóór de
-    # sweep die hem voedde.
-    sweep_time = closed_30m["timestamp"].iloc[sweep.index]
-    displacement_15m = closed_15m[closed_15m["timestamp"] >= sweep_time]
-
-    fvgs = indicators.find_fair_value_gaps(displacement_15m, direction)
-    order_blocks = indicators.find_order_blocks(displacement_15m, direction)
-    zone = indicators.find_confluence_zone(fvgs, order_blocks)
-    if zone is None:
-        return None
-    zone_low, zone_high = zone
-
-    # Liquidity-doel: de dichtstbijzijnde tegengestelde pivot die de prijs
-    # sinds de breuk nog NIET geraakt heeft, op hetzelfde 30m-venster als
-    # de structuurbreuk zelf (dezelfde bron als structure_level en
-    # sweep_price, geen extra candle-fetch). Alleen "voorbij de zone" was
-    # niet genoeg: de net gebroken pivot zelf, en elke oudere pivot waar de
-    # doorbraak-beweging al doorheen liep, ligt ook voorbij de zone maar
-    # die liquidity is al opgehaald — zo'n doel gaf een take profit aan de
-    # verkeerde kant van de entry zodra de afwijzing eronder sloot. Hier
-    # WEL inclusief de nog vormende 30m-candle (df_30m, niet closed_30m):
-    # een niveau waar de prijs al doorheen handelde is opgehaald, of die
-    # candle nu al gesloten is of niet.
-    since_break = df_30m.iloc[structure_break.break_index:]
-    if direction == "long":
-        untouched_from = max(zone_high, float(since_break["high"].max()))
-    else:
-        untouched_from = min(zone_low, float(since_break["low"].min()))
-    target_kind = "high" if direction == "long" else "low"
-    target_pivots = [
-        p for p in indicators._find_pivots(closed_30m)
-        if p.kind == target_kind and (
-            (direction == "long" and p.price > untouched_from) or
-            (direction == "short" and p.price < untouched_from)
-        )
-    ]
-    if not target_pivots:
-        return None
-    liquidity_target_pivot = min(target_pivots, key=lambda p: abs(p.price - untouched_from))
-
-    # De ATR-marge kan, net als het oude vaste percentage kon, groter zijn
-    # dan de afstand tussen zone en sweep/liquidity-doel, of de rauwe sweep
-    # kan zelf al binnen de zone liggen in plaats van eronder/erboven
-    # (short/long) — in beide gevallen komt de stop of het doel dan aan de
-    # verkeerde kant van de zone terecht. _valid_stop_take zou zo'n setup
-    # later toch afwijzen zodra de afwijzing binnenkomt, maar dan is de
-    # "bouwt op"-melding al verstuurd voor een setup die nooit een geldig
-    # signaal kon worden. Hier al overslaan voorkomt die dode melding.
-    sign = 1 if direction == "short" else -1
-    projected_stop_loss = sweep.price + sign * STOP_MARGIN_ATR_MULTIPLE * atr
-    projected_take_profit = liquidity_target_pivot.price + sign * TARGET_MARGIN_ATR_MULTIPLE * atr
-    stop_niet_voorbij_zone = (
-        (direction == "short" and projected_stop_loss <= zone_high) or
-        (direction == "long" and projected_stop_loss >= zone_low)
-    )
-    doel_niet_voorbij_zone = (
-        (direction == "short" and projected_take_profit >= zone_low) or
-        (direction == "long" and projected_take_profit <= zone_high)
-    )
-    if stop_niet_voorbij_zone or doel_niet_voorbij_zone:
-        logger.info(
-            "%s %s SMC-setup overgeslagen: stop %.4f / doel %.4f (na marge) liggen niet voorbij de zone %.4f-%.4f",
-            coin, direction, projected_stop_loss, projected_take_profit, zone_low, zone_high,
-        )
-        return None
-
-    # Een bouwende setup is pas zinvol zolang de koers nog naar de zone
-    # moet terugtrekken (short: nog eronder, long: nog erboven). Zonder
-    # deze eis kon fase 1 hierboven een setup opruimen omdat de koers door
-    # de zone heen sloot, en maakte deze fase dezelfde zone in dezelfde
-    # cyclus meteen weer aan met alert_sent=0 — een tweede 'bouwt op'-push
-    # voor een zone die net ongeldig was geworden.
-    last_close = float(last_candle["close"])
-    if (direction == "short" and last_close >= zone_low) or (direction == "long" and last_close <= zone_high):
-        return None
+    candidate = scan.candidate
+    direction, zone_low, zone_high = candidate.direction, candidate.zone_low, candidate.zone_high
 
     setup_id = repo.upsert_smc_setup(
         coin, direction, zone_low, zone_high,
-        structure_level=structure_break.broken_pivot.price,
-        sweep_price=sweep.price,
-        liquidity_target=liquidity_target_pivot.price,
-        atr=atr,
+        structure_level=candidate.structure_level,
+        sweep_price=candidate.sweep_price,
+        liquidity_target=candidate.liquidity_target,
+        atr=candidate.atr,
         seen_until=(last_candle["timestamp"] + timedelta(minutes=SMC_ENTRY_CANDLE_MINUTES)).isoformat(),
     )
 
@@ -968,24 +739,118 @@ async def _check_smc_setup(coin: str) -> Optional[dict]:
     if setup is None:
         return None  # deze breuk + sweep leverde al een signaal op of is vervallen (zie upsert_smc_setup)
 
-    _, rejected, _ = _smc_last_candle_state(last_candle, zone_low, zone_high, direction)
+    _, rejected, _ = last_candle_state(last_candle, zone_low, zone_high, direction)
     if rejected:
         return setup
 
     if not setup["alert_sent"]:
-        title = f"{push_notify.coin_symbol(coin)} {coin} {direction}, SMC-setup bouwt op"
+        title = push_notify.alert_title(coin, direction, "zone gezet")
         body = (
-            f"Structuur + sweep gezien ({direction}), zone {zone_low:.4f}-{zone_high:.4f}. "
-            f"Zet je {direction} limit order klaar."
+            f"Structuur en sweep gezien.\nZone {push_notify.fmt_price(zone_low)} tot {push_notify.fmt_price(zone_high)}.\n"
+            "Zet je limietorder klaar.\nTik voor de zone op de grafiek."
         )
         for user in repo.list_users():
             quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
             try:
-                await push_notify.send_push(user["id"], title, body, "/smc", silent=quiet)
+                await push_notify.send_kans_push(user["id"], coin, direction, title, body, f"/smc#radar-setup-{setup_id}", silent=quiet, tag=f"smc-zone-{coin}")
             except Exception:
                 logger.exception("SMC-bouwend-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
         repo.mark_smc_alert_sent(setup_id)
     return None
+
+
+def format_smc_body(setup: dict, entry_price: float, stop_loss: float, take_profit: float,
+                    sniper_entry_price: Optional[float], sniper_reason: Optional[str]) -> str:
+    """Meldingstekst van een SMC-signaal. De limietorder op de zone-rand staat voorop met de R:R vanaf die prijs: wie met een
+    limietorder op de zone instapt, krijgt zo de prijs en de verhouding die voor hem gelden, niet alleen die van de marktprijs."""
+    plan = trade_plan.limit_plan(setup["direction"], setup["zone_low"], setup["zone_high"], stop_loss, take_profit)
+    zone = (f"Zone {push_notify.fmt_price(setup['zone_low'])} tot {push_notify.fmt_price(setup['zone_high'])}, "
+            f"doel {push_notify.fmt_price(setup['liquidity_target'])}")
+    if plan is not None:
+        body = push_notify.trade_body("Limietorder", plan.limit, stop_loss, take_profit, plan.rr,
+                                      f"{zone}. Nu {push_notify.fmt_price(entry_price)}.")
+    else:
+        body = push_notify.trade_body("Entry", entry_price, stop_loss, take_profit, None, zone)
+    if sniper_entry_price is not None:
+        body += f"\n🎯 Sniper {push_notify.fmt_price(sniper_entry_price)}: {sniper_reason}"
+    return body
+
+
+async def _notify_zone_touches(coin: str) -> None:
+    """Eén melding per bouwende setup zodra de koers in de zone staat: een limietorder op de zone-rand is dan waarschijnlijk
+    geraakt. Los van het signaal zelf: dat komt pas bij een afwijzende candle en een geldige R:R, en soms nooit."""
+    setups = [s for s in repo.list_forming_smc_setups() if s["coin"] == coin and not s["zone_alert_sent"]]
+    if not setups:
+        return
+    try:
+        price = await asyncio.to_thread(exchange.fetch_last_price, coin)
+    except Exception:
+        logger.exception("Koers voor %s niet op te halen, zone-check overgeslagen", coin)
+        return
+    for setup in setups:
+        direction = setup["direction"]
+        sign = -1 if direction == "long" else 1
+        stop_margin, target_margin = smc_stop_take_margins(setup)
+        stop_loss = setup["sweep_price"] + stop_margin * sign
+        take_profit = setup["liquidity_target"] + target_margin * sign
+        plan = trade_plan.limit_plan(direction, setup["zone_low"], setup["zone_high"], stop_loss, take_profit)
+        if plan is None or trade_plan.plan_state(direction, setup["zone_low"], setup["zone_high"], stop_loss, price, take=take_profit) != "in_zone":
+            continue
+        repo.mark_smc_zone_alert_sent(setup["id"])
+        badge = repo.count_zone_alerted_setups()
+        title = push_notify.alert_title(coin, direction, "in de zone")
+        body = push_notify.trade_body("Limietorder", plan.limit, stop_loss, take_profit, plan.rr,
+                                      "Waarschijnlijk geraakt. Een signaal volgt bij een afwijzende candle.")
+        for user in repo.list_users():
+            quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+            try:
+                await push_notify.send_kans_push(user["id"], coin, direction, title, body, f"/smc#radar-setup-{setup['id']}", silent=quiet, tag=f"smc-zone-{coin}", badge=badge)
+            except Exception:
+                logger.exception("Zone-melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
+
+
+SMC_WARNING_TEXT = {
+    "entry_slechter_dan_sniper": "Let op: de koers liep al verder dan de sniper prijs, de entry is slechter dan de setup veronderstelt.",
+    "risico_rendement_te_laag": "Let op: lage verhouding tussen risico en rendement.",
+}
+
+
+async def _fire_smc_warning(coin: str, setup: dict, df_15m, completion) -> Optional[int]:
+    """SMC-kans die de code normaal weigert, met een waarschuwing gemeld. Geen melding als stop of doel aan de verkeerde kant
+    van de prijs liggen: dan is er geen trade om te wegen."""
+    direction = setup["direction"]
+    sign = -1 if direction == "long" else 1
+    stop_margin, target_margin = smc_stop_take_margins(setup)
+    stop_loss = setup["sweep_price"] + stop_margin * sign
+    take_profit = setup["liquidity_target"] + target_margin * sign
+    entry_price = float(df_15m["close"].iloc[-1])
+    if not valid_stop_take(direction, entry_price, stop_loss, take_profit):
+        return None
+    stop_loss = floor_stop(direction, entry_price, stop_loss)
+    warning = SMC_WARNING_TEXT[completion.reject_reason]
+    narrative = (f"SMC-liquidity-setup met waarschuwing: structuur brak op {setup['structure_level']:.4f}, sweep op {setup['sweep_price']:.4f}, "
+                 f"zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, doel bij liquidity {setup['liquidity_target']:.4f}. {warning}")
+    rr = abs(take_profit - entry_price) / abs(entry_price - stop_loss) if entry_price != stop_loss else 0.0
+    reason, pass_pct = chance_checks.finish(chance_checks.smc_checks(
+        rr, abs(entry_price - stop_loss) / entry_price * 100, False, warning=completion.reject_reason == "entry_slechter_dan_sniper"))
+    signal_id = repo.insert_signal({
+        "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "smc_waarschuwing",
+        "pattern_name": "SMC liquidity sweep", "price": entry_price, "rsi": None, "macd": None, "macd_signal": None,
+        "volume_ratio": None, "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None,
+        "technical_confirmed": 1, "pass_pct": pass_pct, "hard_gates_ok": 1, "confidence": "SMC met waarschuwing",
+        "reason": reason, "stop_loss": stop_loss, "take_profit": take_profit, "context_note": None,
+        "is_practice": 0, "plain_explanation": narrative, "suggested_entry_low": None, "suggested_entry_high": None,
+        "sniper_entry_price": None, "sniper_reason": None,
+    })
+    repo.complete_smc_setup(setup["id"], signal_id)
+    premise_level = setup["zone_high"] if direction == "short" else setup["zone_low"]
+    await fanout_confirmed_signal(
+        signal_id, coin, direction, entry_price, stop_loss, take_profit, premise_level,
+        title=push_notify.alert_title(coin, direction, "SMC waarschuwing"), signal_type="smc_waarschuwing",
+        make_body=lambda sl, tp, _capped: format_smc_body(setup, entry_price, sl, tp, None, None) + f"\n{warning}",
+        reason=reason, force_silent=True,
+    )
+    return signal_id
 
 
 async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
@@ -995,7 +860,7 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     (de sweep bepaalt de stop, de volgende liquidity het doel), alleen de
     marge eromheen gebruikt setup['atr'] (vastgezet bij het bouwen van de
     setup, zie _check_smc_setup) in plaats van een vast percentage — zie
-    STOP_MARGIN_ATR_MULTIPLE hierboven. sign is voor zowel stop als doel
+    smc_eval.STOP_MARGIN_ATR_MULTIPLE. sign is voor zowel stop als doel
     hetzelfde teken, dat is geen typefout: voor short ligt de stop BOVEN de
     geveegde high (verder van de entry af) en het doel ligt ook BOVEN de
     liquidity-low (dichter bij de entry, 'net vóór' het niveau) — voor long
@@ -1007,91 +872,18 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     oude vaste percentage, puur om zo'n al bestaande rij niet alsnog te
     laten crashen; een nieuwe setup heeft hem altijd gezet."""
     direction = setup["direction"]
-    sign = -1 if direction == "long" else 1
-    stop_margin, target_margin = smc_stop_take_margins(setup)
-    stop_loss = setup["sweep_price"] + stop_margin * sign
-    take_profit = setup["liquidity_target"] + target_margin * sign
-
     df_15m = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="15m")
-    entry_price = float(df_15m["close"].iloc[-1])
-
-    # entry_price hierboven is de ACTUELE marktprijs op het moment dat dit
-    # signaal gebouwd wordt, niet de prijs van de candle die de afwijzing
-    # triggerde — daar zit altijd wat vertraging tussen (de marktscan draait
-    # periodiek, niet precies op elke 15m-candle-close). Stop en doel liggen
-    # vast op structuurniveaus sinds de setup bouwde, dus als de koers in die
-    # tussentijd verder wegliep dan de sniper-prijs (dezelfde stop-hunt-prijs
-    # die ook getoond wordt), is de entry al slechter dan de setup
-    # veronderstelt — dat eet rechtstreeks in op het rendement zonder dat de
-    # risk_reward_ratio-check hieronder dat per se opvangt (een kleine
-    # verschuiving kan nog ruim boven de ondergrens blijven). Geen sniper
-    # gevonden behandelen we hetzelfde als een te late entry: als het
-    # stop-hunt-moment niet meer zichtbaar is binnen het zoekvenster, is de
-    # kans klein dat dit nog een verse kans is.
-    sniper = indicators.find_sniper_entry_price(direction, df_15m)
-    sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
-    entry_worse_than_sniper = (
-        sniper_entry_price is None
-        or (direction == "short" and entry_price < sniper_entry_price)
-        or (direction == "long" and entry_price > sniper_entry_price)
-    )
-    if entry_worse_than_sniper:
-        logger.info(
-            "SMC-setup %s voor %s niet gemeld: entry %.4f ligt niet meer aan de juiste kant van de sniper-prijs "
-            "(%s, %s), de koers is al verder bewogen dan de setup veronderstelt",
-            setup["id"], coin, entry_price,
-            f"{sniper_entry_price:.4f}" if sniper_entry_price is not None else "geen sniper gevonden",
-            direction,
-        )
+    completion = evaluate_completion(setup, df_15m)
+    if completion.signal is None:
+        logger.info("SMC-setup %s voor %s niet gemeld: %s", setup["id"], coin, completion.detail)
+        # Een late entry of een lage verhouding blijft een kans die jij zelf mag wegen: gemeld met een waarschuwing en apart op
+        # Bewijs (trade_type 'smc_waarschuwing').
+        if config.SMC_WARNING_ALERTS and completion.reject_reason in ("entry_slechter_dan_sniper", "risico_rendement_te_laag"):
+            return await _fire_smc_warning(coin, setup, df_15m, completion)
         return None
-
-    # De entry_worse_than_sniper-poort hierboven toetst alleen entry_price
-    # tegen de sniper-prijs, niet de sniper-prijs tegen de stop — die twee
-    # kunnen nog steeds los van elkaar liggen (zie
-    # indicators.sniper_beyond_stop). Puur voor de weergave: de melding zelf
-    # blijft ongewijzigd, alleen een inconsistente sniper-regel op de kaart
-    # wordt onderdrukt.
-    if sniper_entry_price is not None and indicators.sniper_beyond_stop(direction, sniper_entry_price, stop_loss):
-        sniper_entry_price, sniper_reason = None, None
-
-    # Stop en doel liggen vast sinds de setup bouwde, de live prijs niet:
-    # een afwijzing die al voorbij het doel sloot, of een prijs die sinds de
-    # afwijzing boven de stop (short) uitliep, is geen trade meer. Geen
-    # ATR-terugval zoals bij patroon — smc's hele premisse is structuur-
-    # gebaseerde stop/doel, dan liever geen signaal.
-    if not _valid_stop_take(direction, entry_price, stop_loss, take_profit):
-        logger.info(
-            "SMC-setup %s voor %s niet gemeld: stop %.4f / doel %.4f liggen niet aan de juiste kant van entry %.4f (%s)",
-            setup["id"], coin, stop_loss, take_profit, entry_price, direction,
-        )
-        return None
-
-    # Geen stop_within_max_distance-toets hier, bewust anders dan de andere
-    # drie detectoren: die grens (1,5%) is gebouwd voor ATR-gebaseerde
-    # stops, waar een strakke stop een teken van precisie is. SMC's stop
-    # ligt vast op de sweep-prijs (structuur, geen ATR) — die sweep zit op
-    # veel coins verder dan 1,5% van de entry af, zonder dat de setup zelf
-    # minder geldig is. De hergebruikte grens hield hierdoor structureel
-    # goede SMC-setups tegen. De kwaliteitsborging zit al in de eigen
-    # stappen hierboven (structuurbreuk, sweep vóór de breuk, confluence-
-    # zone, stop/doel aan de juiste kant) en in de R:R-eis hieronder.
-
-    # Zelfde ondergrens als het dagtrading-pad (signal_processor.py), zelfde
-    # "geen signaal" in plaats van "signaal met lagere confidence" als
-    # hierboven bij _valid_stop_take: smc heeft geen pass_pct/hard_gates_ok
-    # confidence-schaal om een zwakke verhouding in te laten wegen, dus een
-    # setup die er niet aan voldoet mag geen signaal worden.
-    risk_distance = abs(entry_price - stop_loss)
-    reward_distance = abs(take_profit - entry_price)
-    risk_reward_ratio = (reward_distance / risk_distance) if risk_distance else 0.0
-    if risk_reward_ratio < MIN_RISK_REWARD_RATIO:
-        logger.info(
-            "SMC-setup %s voor %s niet gemeld: risico/rendement %.2f tegen 1 ligt onder de ondergrens van %s "
-            "(stop %.4f / doel %.4f / entry %.4f, %s)",
-            setup["id"], coin, risk_reward_ratio, MIN_RISK_REWARD_RATIO,
-            stop_loss, take_profit, entry_price, direction,
-        )
-        return None
+    draft = completion.signal
+    entry_price, stop_loss, take_profit = draft.entry_price, draft.stop_loss, draft.take_profit
+    sniper_entry_price, sniper_reason = draft.sniper_entry_price, draft.sniper_reason
 
     # Zelfde opruiming als de andere detectoren vóór hun insert_signal: een
     # nog niet genomen melding voor de andere richting op deze coin is
@@ -1111,11 +903,13 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
             except Exception:
                 logger.exception("Vervallen-kans melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
 
-    reason = (
+    narrative = (
         f"SMC-liquidity-setup: structuur brak op {setup['structure_level']:.4f}, "
         f"sweep op {setup['sweep_price']:.4f}, zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, "
         f"doel bij liquidity {setup['liquidity_target']:.4f}."
     )
+    reason, pass_pct = chance_checks.finish(chance_checks.smc_checks(
+        draft.risk_reward_ratio, abs(entry_price - stop_loss) / entry_price * 100, sniper_entry_price is not None, warning=False))
 
     signal_data = {
         "message_id": None, "coin": coin, "direction": direction,
@@ -1123,11 +917,11 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
         "price": entry_price, "rsi": None, "macd": None, "macd_signal": None,
         "volume_ratio": None, "ema9": None, "ema21": None,
         "atr": None, "atr_avg20": None, "adx": None,
-        "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1,
+        "technical_confirmed": 1, "pass_pct": pass_pct, "hard_gates_ok": 1,
         "confidence": "SMC-setup bevestigd",
         "reason": reason,
         "stop_loss": stop_loss, "take_profit": take_profit,
-        "context_note": None, "is_practice": 0, "plain_explanation": None,
+        "context_note": None, "is_practice": 0, "plain_explanation": narrative,
         "suggested_entry_low": None, "suggested_entry_high": None,
         "sniper_entry_price": sniper_entry_price, "sniper_reason": sniper_reason,
     }
@@ -1135,23 +929,21 @@ async def _complete_smc_setup(coin: str, setup: dict) -> Optional[int]:
     repo.complete_smc_setup(setup["id"], signal_id)
 
     def _smc_body(effective_stop_loss: float, effective_take_profit: float, stop_was_capped: bool) -> str:
-        base = (
-            f"Entry {entry_price:.4f}\n"
-            f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}\n"
-            f"Zone {setup['zone_low']:.4f}-{setup['zone_high']:.4f}, doel bij liquidity {setup['liquidity_target']:.4f}"
-        )
-        if sniper_entry_price is not None:
-            base += f"\n🎯 Sniper: {sniper_entry_price:.4f} — {sniper_reason}"
-        return base
+        return format_smc_body(setup, entry_price, effective_stop_loss, effective_take_profit, sniper_entry_price, sniper_reason)
 
     premise_level = setup["zone_high"] if direction == "short" else setup["zone_low"]
     await fanout_confirmed_signal(
         signal_id, coin, direction, entry_price, stop_loss, take_profit, premise_level,
-        title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, SMC liquidity sweep",
+        title=push_notify.alert_title(coin, direction, "SMC"), signal_type="smc",
         make_body=_smc_body,
         reason=reason,
     )
     return signal_id
+
+
+def _focus_off(name: str) -> None:
+    logger.info("%s: %s, geen nieuwe kansen", name, focus.OFF_DETAIL)
+    repo.beat(name, focus.OFF_DETAIL)
 
 
 async def _run_smc_check(coin: str) -> Optional[str]:
@@ -1165,6 +957,7 @@ async def _run_smc_check(coin: str) -> Optional[str]:
         setup = await _check_smc_setup(coin)
         if setup and await _complete_smc_setup(coin, setup) is not None:
             return setup["direction"]
+        await _notify_zone_touches(coin)
     except Exception:
         logger.exception("SMC-check voor %s is mislukt, ga door met de rest van de cyclus", coin)
     return None
@@ -1202,13 +995,19 @@ async def scan_market() -> None:
     # cyclus, over alle coins heen — pas na de hele scan geëvalueerd tegen
     # MAX_STRUCTURAL_NOTIFICATIONS_PER_CYCLE, zie de constante hierboven.
     cycle_structural_candidates: list[dict] = []
+    smc_on, structural_on, day_on = focus.engine_on("smc"), focus.engine_on("patroon"), focus.engine_on("day_trading")
+    for name, on in (("smc", smc_on), ("patroon", structural_on), ("day_trading", day_on)):
+        if not on:
+            _focus_off(name)
 
     for coin_row in coins:
         coin = coin_row["symbol"]
         # SMC draait altijd buiten het 4u-blok hieronder: smc's structuur+
         # sweep+zone werkt lokaal per coin op 30m/15m, een 4u-fout voor deze
         # coin mag de smc-check niet overslaan.
-        smc_direction = await _run_smc_check(coin)
+        smc_direction = await _run_smc_check(coin) if smc_on else None
+        if coin in config.EXTRA_COINS:
+            continue    # extra coins: alleen SMC, zie config.EXTRA_COINS
         try:
             df = await asyncio.to_thread(exchange.fetch_ohlcv, coin)
             ind = indicators.compute_indicators(df)
@@ -1238,15 +1037,16 @@ async def scan_market() -> None:
             # kandidaat daadwerkelijk gemeld (_candidate_score: risk:reward,
             # de enige maat die voor alle drie soorten gelijk berekenbaar is).
             structural: list[dict] = []
-            breakout_candidate = await _find_breakout_retest_candidate(coin, direction, df, ind)
-            if breakout_candidate:
-                structural.append(breakout_candidate)
-            trendline_candidate = await _find_trendline_retest_candidate(coin, direction, df, ind)
-            if trendline_candidate:
-                structural.append(trendline_candidate)
-            pattern_candidate = await _find_chart_pattern_candidate(coin, df, ind, btc_divergence_direction)
-            if pattern_candidate:
-                structural.append(pattern_candidate)
+            if structural_on:
+                breakout_candidate = await _find_breakout_retest_candidate(coin, direction, df, ind)
+                if breakout_candidate:
+                    structural.append(breakout_candidate)
+                trendline_candidate = await _find_trendline_retest_candidate(coin, direction, df, ind)
+                if trendline_candidate:
+                    structural.append(trendline_candidate)
+                pattern_candidate = await _find_chart_pattern_candidate(coin, df, ind, btc_divergence_direction)
+                if pattern_candidate:
+                    structural.append(pattern_candidate)
 
             # Deze cyclus al een smc-signaal op deze coin gepusht: een
             # structurele kandidaat de andere kant op zou aan het eind van de
@@ -1314,6 +1114,9 @@ async def scan_market() -> None:
             # is. Elke cyclus geregistreerd (ook als dit een refresh is),
             # zodat de teller altijd de echte, actuele reeks weerspiegelt.
             consecutive = repo.record_scan_direction(coin, direction)
+            # Na de whiplash-teller, zodat die bij ENGINE_FOCUS=false de echte reeks kent. Een al open signaal wordt wel ververst.
+            if not was_open_before and not day_on:
+                continue
             if not was_open_before and consecutive < WHIPLASH_MIN_CONSECUTIVE_CYCLES:
                 logger.info(
                     "%s %s overgeslagen: richting pas %s cyclus/cycli op rij, nog geen %s",
@@ -1409,7 +1212,34 @@ async def scan_market() -> None:
     logger.info("Marktscan klaar")
 
 
+# Hartslag van de snelcyclus zelf: hoe laat na het 5m-slot hij begon en hoe lang hij duurde. De timer (deploy/crypto-market-scan-smc.timer,
+# *:0/5:20) start 20 s na een slot (eerder *:3/5:00, gemeten 183 s); zonder deze meting was de werkelijke vertraging tot een melding niet te zien.
+FAST_CYCLE_BEAT = "snelcyclus"
+
+
+def seconds_after_slot(moment: datetime) -> float:
+    """Seconden sinds het laatste 5m-slot (:00, :05, ...) in UTC."""
+    return float((moment.minute % 5) * 60 + moment.second)
+
+
 async def scan_smc_fast() -> None:
+    started, t0 = datetime.now(timezone.utc), time.monotonic()
+    # Vullen er in deze cyclus meer kansen voor dezelfde gebruiker, dan krijgt hij één push (CEO, 2026-11-02, te veel meldingen).
+    push_notify.open_bundle()
+    try:
+        await _scan_smc_fast()
+    finally:
+        try:
+            await push_notify.close_bundle()
+        except Exception:
+            logger.exception("Gebundelde kansmeldingen zijn mislukt")
+        try:
+            repo.beat(FAST_CYCLE_BEAT, f"start {seconds_after_slot(started):.0f} s na het 5m-slot, duur {time.monotonic() - t0:.0f} s")
+        except Exception:
+            logger.exception("Hartslag van de snelcyclus is mislukt")
+
+
+async def _scan_smc_fast() -> None:
     """Zelfde SMC-check als binnen scan_market() (_run_smc_check), maar
     los daarvan en op een veel kortere cyclus (zie
     deploy/crypto-market-scan-smc.timer) — SMC reageert op 15m-candles,
@@ -1432,15 +1262,99 @@ async def scan_smc_fast() -> None:
     ruimt repo.auto_ignore_opposite_pending (al aangeroepen door beide
     paden) dat net zo op als bij elke andere opeenvolgende tegengestelde
     melding — geen nieuw risico, hetzelfde bestaande opruimmechanisme."""
+    # Vóór de noodrem: de aankondiging van een update is geen marktscan en moet ook komen als die even uit staat.
+    try:
+        await announce_live.run()
+    except Exception:
+        logger.exception("Aankondigingspush is mislukt")
     if not repo.is_market_scan_enabled():
         logger.info("Marktscan staat uit (noodrem), SMC-snelcheck overgeslagen")
         return
-    for coin_row in repo.list_coins():
-        await _run_smc_check(coin_row["symbol"])
+    # De marktcontext haalt intussen op in zijn eigen threads, zodat zijn netwerkwachttijd nooit bij die van de motoren optelt. Hij beslist niets.
+    context = asyncio.ensure_future(market_context_live.run())
+    if focus.engine_on("smc"):
+        for coin_row in repo.list_coins():
+            await _run_smc_check(coin_row["symbol"])
+    else:
+        # Ook een bouwende setup wordt geen signaal meer: de Radar toont hem met focus niet, dus niemand heeft er een order op.
+        _focus_off("smc")
+    try:
+        await samenval.run()
+    except Exception:
+        logger.exception("Samenval-check is mislukt")
+    try:
+        await market_script.run_triggers()
+    except Exception:
+        logger.exception("Markt-script-motor is mislukt")
+    try:
+        await calendar_alerts.run()
+    except Exception:
+        logger.exception("Agenda-herinneringen zijn mislukt")
+    try:
+        await trend_live.run()
+    except Exception:
+        logger.exception("Trend-motor is mislukt")
+    try:
+        await rejection_live.run()
+    except Exception:
+        logger.exception("Rejectie-motor is mislukt")
+    try:
+        await rule_live.scan()
+    except Exception:
+        logger.exception("Proefmotor is mislukt")
+    try:
+        await range_watch.run()
+    except Exception:
+        logger.exception("Range-watch is mislukt")
+    # Elke stap apart: een fout in het zoeken van nieuwe setups mag het volgen van wat al gemeld is niet stilleggen.
+    for step in (range_sweep_live.scan, range_sweep_live.track, range_sweep_live.follow):
+        try:
+            await step()
+        except Exception:
+            logger.exception("Range sweep-motor (%s) is mislukt", step.__name__)
+    # Na de range sweep: dezelfde candles staan dan nog in de cache van range_sweep_live.fetch_bars.
+    for step in (zone_sweep_live.scan, zone_sweep_live.track, zone_sweep_live.follow):
+        try:
+            await step()
+        except Exception:
+            logger.exception("Zone-sweep-motor (%s) is mislukt", step.__name__)
+    try:
+        await structure_live.run()
+    except Exception:
+        logger.exception("Structuur-motor is mislukt")
+    try:
+        await context          # vóór de zone-radar: een nieuwe kaart bewaart de stand van deze cyclus
+    except Exception:
+        logger.exception("Marktcontext is mislukt")
+    try:
+        await zone_radar_live.run()
+    except Exception:
+        logger.exception("Zone-radar is mislukt")
+    try:
+        await poc_radar_live.run()       # zoekt in de eerste cyclus na het uurslot, als de zone-sweep zijn 1u- en 4u-candles al in de cache zette
+    except Exception:
+        logger.exception("POC-radar is mislukt")
+    try:
+        # Na de POC-radar: zijn niveaus van deze cyclus staan dan in poc_levels, en de 1u- en 4u-candles in de cache van fetch_bars.
+        await model_live.run()
+    except Exception:
+        logger.exception("HesPulse-model is mislukt")
+    try:
+        # Alle vullingen van deze cyclus zijn er: niet nog op de schaduwmeting wachten met de push.
+        await push_notify.close_bundle()
+    except Exception:
+        logger.exception("Gebundelde kansmeldingen zijn mislukt")
+    try:
+        # Na de motoren: hun schaduwplannen van deze cyclus staan er dan al. Alleen meting, geen melding (app/shadow_live.py).
+        await asyncio.to_thread(shadow_live.track)
+    except Exception:
+        logger.exception("Schaduwmeting is mislukt")
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    from app import db
+    db.init_db()      # nieuwe tabellen (rule_trades) bestaan dan ook als deze timer na een deploy eerder draait dan de bot
     if "--smc-only" in sys.argv:
         asyncio.run(scan_smc_fast())
     else:

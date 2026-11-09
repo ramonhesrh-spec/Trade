@@ -21,7 +21,7 @@ _TICKER_SUFFIXES = ("usdt", "usd", "perp", "eur")
 # mapping in plaats van afgeleid uit FIXED_COINS: de sleutels moeten
 # exact FIXED_COINS zijn, zie de assert hieronder die dat bij elke import
 # bevestigt in plaats van pas bij een gemiste melding te ontdekken.
-COIN_NAME_ALIASES = {
+_KNOWN_ALIASES = {
     "BTC": ["btc", "bitcoin"],
     "ETH": ["eth", "ethereum"],
     "SOL": ["sol", "solana"],
@@ -29,7 +29,19 @@ COIN_NAME_ALIASES = {
     "AVAX": ["avax", "avalanche"],
     "DOGE": ["doge", "dogecoin"],
     "SUI": ["sui"],
+    "XRP": ["xrp", "ripple"],
+    "HBAR": ["hbar", "hedera"],
+    "WLD": ["wld", "worldcoin"],
+    "ONDO": ["ondo"],
+    "LINK": ["link", "chainlink"],
+    "ADA": ["ada", "cardano"],
+    "LTC": ["ltc", "litecoin"],
+    "NEAR": ["near"],
+    "APT": ["apt", "aptos"],
+    "ARB": ["arb", "arbitrum"],
+    "INJ": ["inj", "injective"],
 }
+COIN_NAME_ALIASES = {coin: _KNOWN_ALIASES.get(coin, [coin.lower()]) for coin in config.FIXED_COINS}
 assert set(COIN_NAME_ALIASES) == set(config.FIXED_COINS), (
     "COIN_NAME_ALIASES moet exact dezelfde coins als config.FIXED_COINS bevatten"
 )

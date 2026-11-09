@@ -1,0 +1,109 @@
+"""Handelsplan van een SMC-setup voor iemand die met een limietorder op de zone instapt: waar de order staat, wat de
+R:R vanaf die prijs is, waar de koers nu staat ten opzichte van het plan, en een grafiekgegevens (de niveaus als getallen) voor in de
+pagina. Alleen rekenen en tekenen, geen database en geen netwerk, zodat live melding, pagina en tests dezelfde
+cijfers gebruiken."""
+from dataclasses import dataclass
+from typing import Optional
+
+
+@dataclass
+class TradePlan:
+    direction: str
+    limit: float
+    stop: float
+    take: Optional[float]      # None: een plan zonder doel (zone-sweep zonder tegenovergestelde zone op 2R), het doel kies je zelf
+    risk_pct: float
+    rr: Optional[float]
+
+
+def limit_plan(direction: str, zone_low: float, zone_high: float, stop: float, take: Optional[float],
+               limit: Optional[float] = None) -> Optional[TradePlan]:
+    """De limietorder staat op de rand van de zone die de koers als eerste raakt: de bovenkant voor een long (de
+    koers komt van boven), de onderkant voor een short. None als stop of doel niet aan de juiste kant van die prijs liggen.
+    `limit`: een andere limiet dan de rand (de zone-sweep zet hem op het slot als dat al in de zone lag). `take` None: plan zonder doel."""
+    limit = limit if limit is not None else zone_high if direction == "long" else zone_low
+    sign = 1 if direction == "long" else -1
+    if (limit - stop) * sign <= 0 or (take is not None and (take - limit) * sign <= 0):
+        return None
+    risk = abs(limit - stop)
+    return TradePlan(direction, limit, stop, take, risk / limit * 100, abs(take - limit) / risk if take is not None else None)
+
+
+def plan_state(direction: str, zone_low: float, zone_high: float, stop: float, price: float,
+               take: Optional[float] = None) -> str:
+    """Waar de koers staat ten opzichte van een nog niet gevulde setup:
+    wacht (nog buiten de zone, aan de kant waar de order wacht), in_zone (de order is waarschijnlijk geraakt),
+    door_zone (voorbij de zone maar nog niet de stop), ongeldig (voorbij de stop, het plan is vervallen),
+    doel_geraakt (met `take`: de koers is het doel al voorbij zonder de zone te raken, dus er valt niets meer te wachten;
+    binnen of voorbij de zone blijft de order mogelijk gevuld, dan geldt dit niet)."""
+    if direction == "long":
+        if price <= stop:
+            return "ongeldig"
+        if price > zone_high:
+            return "doel_geraakt" if take is not None and price >= take else "wacht"
+        return "in_zone" if price >= zone_low else "door_zone"
+    if price >= stop:
+        return "ongeldig"
+    if price < zone_low:
+        return "doel_geraakt" if take is not None and price <= take else "wacht"
+    return "in_zone" if price <= zone_high else "door_zone"
+
+
+# Kort woord voor de standpil bovenaan een kaart; de zin eronder (chance_steps.now_line) zegt wat je doet.
+STATE_SHORT = {"wacht": "Wacht", "in_zone": "In zone", "door_zone": "Door de zone", "ongeldig": "Vervallen", "doel_geraakt": "Gemist", "open": "Open trade"}
+
+STATE_LABELS = {
+    "wacht": "Wacht op de zone",
+    "in_zone": "In de zone: je order is waarschijnlijk geraakt",
+    "door_zone": "Koers is door de zone heen",
+    "ongeldig": "Plan vervallen, de stop is geraakt",
+    "doel_geraakt": "Doel gehaald zonder dat jouw order vulde",
+}
+
+
+def distance_to_limit_pct(plan: TradePlan, price: float) -> float:
+    """Procent dat de koers nog van de limietprijs afstaat (positief = moet nog naar de order toe)."""
+    return (price - plan.limit) / plan.limit * 100 if plan.direction == "long" else (plan.limit - price) / plan.limit * 100
+
+
+APPROACH_SCALE_PCT = 3.0
+
+
+def approach_pct(distance_pct: Optional[float], scale_pct: float = APPROACH_SCALE_PCT) -> Optional[float]:
+    """Plek van de koers op de afstandsbalk: 0 (scale_pct of verder weg) tot 100 (op de instap). Dezelfde schaal van 3% als de balk in stap 1 op de
+    Setups-kaarten (ring.js, die met de absolute afstand rekent)."""
+    if distance_pct is None:
+        return None
+    if distance_pct <= 0:
+        return 100.0
+    return max(0.0, 100.0 - distance_pct / scale_pct * 100.0)
+
+
+def live_r(direction: str, entry: float, stop: float, price: float) -> Optional[float]:
+    """Huidig resultaat in R voor een open trade; 1R is de afstand van entry tot stop."""
+    risk = abs(entry - stop)
+    if risk <= 0:
+        return None
+    return (price - entry) / risk if direction == "long" else (entry - price) / risk
+
+
+def _fmt(value: float) -> str:
+    return f"{value:.4f}" if abs(value) < 100 else f"{value:.2f}"
+
+
+def chart_spec(direction: str, stop: float, take: Optional[float], limit: float, price: Optional[float] = None,
+               zone_low: Optional[float] = None, zone_high: Optional[float] = None, entry: Optional[float] = None,
+               zone: Optional[dict] = None) -> dict:
+    """Wat web/static/levelchart.js nodig heeft om de niveaus op een echte candlegrafiek te tekenen. De server stuurt
+    alleen getallen (stop, take, limit, zone_low, zone_high, entry, price, direction; None als iets ontbreekt), de browser
+    tekent. `entry` gezet = een open trade (lijn "Entry" in plaats van "Limiet"). `zone` is wat de schermvullende grafiek over de herkomst
+    van het niveau weet (zone_radar.chart_zone), of None als de kaart geen zone met bekende herkomst heeft. `label` is dezelfde informatie als tekst,
+    voor aria-label en voor wie geen JavaScript heeft."""
+    parts = ([f"Doel {_fmt(take)}"] if take is not None else []) + [f"Stop {_fmt(stop)}"]
+    parts.append(f"Entry {_fmt(entry)}" if entry is not None else f"Limiet {_fmt(limit)}")
+    if zone_low is not None and zone_high is not None:
+        parts.append(f"zone {_fmt(zone_low)} tot {_fmt(zone_high)}")
+    if price is not None:
+        parts.append(f"Nu {_fmt(price)}")
+    return {"direction": direction, "stop": stop, "take": take, "limit": limit, "zone_low": zone_low, "zone_high": zone_high,
+            "entry": entry, "price": price, "zone": zone, "label": f"{direction.capitalize()}-plan: " + ", ".join(parts)}

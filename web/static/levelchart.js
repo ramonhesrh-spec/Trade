@@ -1,0 +1,764 @@
+/* Candlegrafiek met de niveaus van een plan, op elke radar-kaart en op Vandaag. Een element met data-levelchart (JSON uit
+   trade_plan.chart_spec: stop, take, limit, zone_low, zone_high, entry, price, direction), data-coin en data-tf krijgt een
+   echte grafiek van lightweight-charts (vendor/lightweight-charts-4.2.0.*). De server stuurt getallen, hier wordt getekend.
+   - Lazy: de grafiek wordt pas gemaakt als de kaart bijna in beeld komt en weer weggehaald als hij ver weg scrolt; nooit meer
+     dan MAX_LIVE tegelijk, zodat een lange pagina op een telefoon soepel blijft.
+   - Kaartgrafiek: geen gebaren, een veeg over de grafiek scrolt gewoon de pagina (iOS). Schermvullend: slepen en knijpen staan aan, met de volle historie.
+   - Live: update(el, spec) verschuift de laatste candle en de Nu-lijn; de grafiek wordt niet opnieuw gemaakt.
+   - Rood vlak van instap (of limiet) tot stop, groen van instap tot doel (areas): de niveaus van het plan, geen schatting.
+   - Candles komen van /api/radar_candles (een minuut gecachet op de server en hier per coin+tijdframe gedeeld).
+   - Schermvullend: een tik op de grafiek of op "Groot" opent een dialoog (telt niet mee voor MAX_LIVE, weg bij sluiten) op het tijdframe waar
+     het niveau vandaan komt (spec.zone.tf van de zone-radar, anders 1u), met een keuze 15m/1u/4u. Daar staan de zone en de doelzone als vlak
+     vanaf de candle waar de zone ontstond, met een markering en de uitleg uit zone_radar.chart_zone eronder.
+   De lightweight-charts-bibliotheek tekent zonder animatie, dus er is niets dat prefers-reduced-motion hoeft te dempen. */
+(function () {
+  var MAX_LIVE = 8;
+  var CANDLE_LIMIT = 60;            // 60 candles: op een telefoon blijft elke candle zichtbaar breed genoeg
+  var REFRESH_MS = 60000;
+  // Lagen op "Groot" (CEO 2026-11-03: "het moet wel overzichtelijk blijven op de grafiek"): structuur, de instappunten van het model en de
+  // stille arm tegen de dagtrend, elk aan of uit. Alleen weergave; de keuze blijft op dit toestel.
+  var LAYERS = { struct: true, punten: true, tegen: false };
+  try { var savedLayers = JSON.parse(localStorage.getItem("hp_lagen") || "null"); if (savedLayers) Object.assign(LAYERS, savedLayers); } catch (e) { /* standaard */ }
+  var AREA_ALPHA = 0.07;            // risico- en winstvlak: zacht, de candles en zones moeten erdoor leesbaar blijven
+  var FULL_TFS = ["15m", "1h", "4h", "1d"];
+  var TF_TEXT = { "15m": "15m", "1h": "1u", "4h": "4u", "1d": "D" };
+  var TF_SEC = { "15m": 900, "1h": 3600, "4h": 14400, "1d": 86400 };
+  // Genoeg historie om een zone te zien ontstaan; de server levert er hooguit 200 (RADAR_CANDLE_FETCH in web/main.py).
+  var FULL_BASE = { "15m": 160, "1h": 120, "4h": 120, "1d": 90 };
+  var FULL_MAX = 500;
+  var LINE_LABEL_ROOM = 96;         // css-px aan de rechterkant van de grafiek waar de titels van de prijslijnen staan
+  var LC = window.LightweightCharts;
+  var api = { update: function () {}, screenshot: function () { return Promise.resolve(null); } };
+  window.hesLevelChart = api;
+  api.areas = areas;
+  api.rgba = rgba;
+  api.candleLimit = candleLimit;
+  api.originBar = originBar;
+  api.fullTf = fullTf;
+  api.fullNote = fullNote;
+  var els = document.querySelectorAll("[data-levelchart]");
+  if (!LC || !els.length) return;
+
+  var live = new Set();          // elementen met een echte grafiek
+  var wanted = new Set();        // bijna in beeld, maar nog zonder grafiek (cap bereikt of ophalen mislukt)
+  var memo = {};                 // "COIN|tf" -> {at, promise}
+
+  function css(name, fallback) {
+    var v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+    return v || fallback;
+  }
+
+  function spec(el) {
+    if (!el._spec) { try { el._spec = JSON.parse(el.getAttribute("data-levelchart")); } catch (e) { el._spec = null; } }
+    return el._spec;
+  }
+
+  function levels(s) {
+    var marks = (s.marks || []).map(function (m) { return m.value; });
+    return [s.stop, s.take, s.limit, s.zone_low, s.zone_high, s.entry, s.price].concat(marks).filter(function (v) { return typeof v === "number" && isFinite(v); });
+  }
+
+  // Zelfde decimalen als app/price_text.py (en ladder.js): 2 vanaf 10, 3 vanaf 1, 4 vanaf 0,01, daaronder minstens drie cijfers die tellen.
+  function precision(s) {
+    // Een modelscenario (moment A) heeft nog geen limiet: dan bepaalt de range de decimalen.
+    var ref = Math.abs(s.entry != null ? s.entry : s.limit != null ? s.limit : s.zone_low != null ? s.zone_low : s.marks && s.marks.length ? s.marks[0].value : 0);
+    if (!(ref > 0)) return 2;
+    return ref >= 10 ? 2 : ref >= 1 ? 3 : ref >= 0.01 ? 4 : Math.max(6, 2 - Math.floor(Math.log10(ref)));
+  }
+
+  // Risico en beloning van het plan zelf: van instap (of limiet) tot stop, en van instap tot doel. Geen schatting, alleen de niveaus.
+  function num(v) { return typeof v === "number" && isFinite(v); }
+
+  function areas(s) {
+    var base = typeof s.entry === "number" && isFinite(s.entry) ? s.entry : s.limit;
+    if (typeof base !== "number" || !isFinite(base)) return [];
+    var out = [], hasStop = num(s.stop), hasTake = num(s.take);
+    // Een stop of doel aan de verkeerde kant van de instap zou een vlak tekenen dat het plan tegenspreekt (bijvoorbeeld bij een verouderd of omgekeerd plan): dan liever geen vlak.
+    var opposite = hasStop && hasTake && (s.stop - base) * (s.take - base) < 0;
+    var lossSide = s.direction === "long" ? s.stop < base : s.direction === "short" ? s.stop > base : true;
+    var winSide = s.direction === "long" ? s.take > base : s.direction === "short" ? s.take < base : true;
+    if (hasStop && s.stop !== base && lossSide && (!hasTake || opposite)) out.push({ key: "risk", base: base, value: s.stop });
+    if (hasTake && s.take !== base && winSide && (!hasStop || opposite)) out.push({ key: "reward", base: base, value: s.take });
+    return out;
+  }
+
+  // Hoeveel candles de schermvullende grafiek vraagt: de basis per tijdframe, of meer als de zone ouder is, zodat de candle waar hij ontstond
+  // er nog op staat (plus een marge links); nooit meer dan de server levert.
+  function candleLimit(tf, origin, nowSec) {
+    var base = FULL_BASE[tf] || CANDLE_LIMIT, step = TF_SEC[tf];
+    if (!num(origin) || !step) return base;
+    return Math.min(FULL_MAX, Math.max(base, Math.ceil((nowSec - origin) / step) + 12));
+  }
+
+  // De candle (openmoment) waarin het ontstaansmoment valt, of null als het voor de eerste candle ligt of er geen candles zijn.
+  function originBar(times, origin, tf) {
+    if (!num(origin) || !times.length || origin < times[0]) return null;
+    var hit = null;
+    for (var i = 0; i < times.length && times[i] <= origin; i++) hit = times[i];
+    if (hit !== null && TF_SEC[tf] && origin >= hit + TF_SEC[tf]) return null;      // na de laatste candle: niet op deze grafiek
+    return hit;
+  }
+
+  function fullTf(s) {
+    return s && s.zone && TF_SEC[s.zone.tf] ? s.zone.tf : s && TF_SEC[s.tf] ? s.tf : "1h";
+  }
+
+  // Welke uitleg onder de grafiek staat: alleen als de herkomst van de zone bekend is, en eerlijk over waar de markering staat.
+  function fullNote(s, tf, bar) {
+    var z = s && s.zone;
+    if (!z || !num(z.origin)) return "";
+    if (bar === null) return z.note_outside || "";
+    return tf === z.tf ? (z.note || "") : (z.note_other_tf || "");
+  }
+
+  // De themakleur kan een ander formaat zijn dan 6-cijferige hex (rgb(), hsl(), leeg); de aanroeper geeft dan een vaste rgba mee in plaats van dat de invoer ongewijzigd terugkomt, want dat zou een dekkend vlak over de candles leggen.
+  function rgba(hex, a, fallback) {
+    var m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(String(hex).trim());
+    return m ? "rgba(" + parseInt(m[1], 16) + "," + parseInt(m[2], 16) + "," + parseInt(m[3], 16) + "," + a + ")" : (fallback || "transparent");
+  }
+
+  // Een baselineserie met een prijsgrondlijn blijft aan de prijzen vastzitten als de schaal verschuift of de grafiek van maat wisselt.
+  function areaSeries(chart, color, fallback, priceFormat) {
+    var fill = rgba(color, AREA_ALPHA, fallback), none = "rgba(0,0,0,0)";
+    return chart.addBaselineSeries({
+      baseValue: { type: "price", price: 0 },
+      topLineColor: none, bottomLineColor: none,
+      topFillColor1: fill, topFillColor2: fill, bottomFillColor1: fill, bottomFillColor2: fill,
+      lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, priceFormat: priceFormat,
+      autoscaleInfoProvider: function () { return null; },
+    });
+  }
+
+  function syncAreas(lc) {
+    var s = lc.full ? null : spec(lc.el), wanted = {};       // schermvullend geen winst/risico-vlakken: zoals de kaart, rustig
+    (s ? areas(s) : []).forEach(function (a) { wanted[a.key] = a; });
+    ["risk", "reward"].forEach(function (k) {
+      var a = wanted[k], series = lc.areas[k];
+      if (!a || !lc.candles.length) { series.setData([]); return; }
+      series.applyOptions({ baseValue: { type: "price", price: a.base } });
+      series.setData(lc.candles.map(function (c) { return { time: c.time, value: a.value }; }));
+    });
+  }
+
+  function fetchCandles(coin, tf, limit) {
+    var key = coin + "|" + tf + "|" + limit, hit = memo[key];
+    if (hit && Date.now() - hit.at < REFRESH_MS - 2000) return hit.promise;
+    var promise = fetch("/api/radar_candles/" + encodeURIComponent(coin) + "?tf=" + encodeURIComponent(tf) + "&limit=" + limit, { credentials: "same-origin" })
+      .then(function (resp) { if (!resp.ok) throw new Error("candles " + resp.status); return resp.json(); })
+      .then(function (body) {
+        return body.candles.map(function (c) { return { time: c[0], open: c[1], high: c[2], low: c[3], close: c[4] }; });
+      });
+    memo[key] = { at: Date.now(), promise: promise };
+    promise.catch(function () { if (memo[key] && memo[key].promise === promise) delete memo[key]; });
+    return promise;
+  }
+
+  function tickLabel(time, type) {
+    var d = new Date(time * 1000);
+    if (type <= 2) return d.toLocaleDateString("nl-NL", { day: "numeric", month: "short" });
+    return d.toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function setLine(lc, key, price, options) {
+    if (price === null || price === undefined) {
+      if (lc.lines[key]) { lc.series.removePriceLine(lc.lines[key]); delete lc.lines[key]; }
+      return;
+    }
+    var opts = Object.assign({ price: price, lineWidth: 1, lineStyle: 0, axisLabelVisible: true }, options);
+    if (lc.lines[key]) lc.lines[key].applyOptions(opts);
+    else lc.lines[key] = lc.series.createPriceLine(opts);
+  }
+
+  function applyLevels(lc) {
+    var s = spec(lc.el);
+    if (!s) return;
+    var green = css("--green", "#33d69f"), red = css("--red", "#f2685c"), accent = css("--accent", "#0ABAB5");
+    var bg = css("--panel", "#131a1b");
+    // Schermvullend staan de woorden niet op de lijnen: ze liggen over de candles. De kleur van het prijslabel is dan de sleutel (zie de legenda).
+    var word = function (w) { return lc.full ? "" : w; };
+    setLine(lc, "take", s.take, { color: green, title: word("Doel"), axisLabelTextColor: bg });
+    setLine(lc, "stop", s.stop, { color: red, title: word("Stop"), axisLabelTextColor: bg });
+    var open = s.entry !== null && s.entry !== undefined;
+    // Gewone woorden op de lijnen: je limietorder en je gevulde entry zijn allebei "Instap".
+    setLine(lc, "limit", open ? null : s.limit, { color: accent, title: word("Instap"), axisLabelTextColor: bg });
+    setLine(lc, "entry", open ? s.entry : null, { color: accent, title: word("Instap"), axisLabelTextColor: bg });
+    setLine(lc, "now", s.price, { color: css("--text-dim", "#b7c4c2"), lineStyle: 2, title: word("Koers nu"), axisLabelTextColor: bg });
+    // De benoemde niveaus (s.marks) en de structuur van het tijdframe tekent syncZones als lijnen met de naam rechts, niet als prijslijnen:
+    // die zetten elk een blok op de prijsas en werden onleesbaar druk.
+    lc.el.setAttribute("aria-label", s.label || "");
+    lc.band.applyOptions({ baseValue: { type: "price", price: s.zone_low != null ? s.zone_low : 0 } });
+    if (lc.full) syncZones(lc);
+  }
+
+  // Schermvullend: de zone en de doelzone als vlak met een dunne rand, getekend als primitive op de candleserie zodat ze aan prijs en tijd vastzitten
+  // en tot de rechterrand doorlopen (een serie stopt bij de laatste candle). De zone begint bij de candle waar hij ontstond als die op de grafiek staat.
+  function syncZones(lc) {
+    var s = spec(lc.el), z = s && s.zone, boxes = [];
+    var accent = css("--accent", "#0ABAB5"), green = css("--green", "#33d69f"), plate = rgba(css("--panel", "#131a1b"), 0.85, "rgba(19,26,27,0.85)");
+    var times = lc.candles.map(function (c) { return c.time; });
+    lc.originBar = z ? originBar(times, z.origin, lc.tf) : null;
+    if (z && num(s.zone_low) && num(s.zone_high)) {
+      boxes.push({ low: s.zone_low, high: s.zone_high, time: lc.originBar, label: z.label, text: accent, plate: plate,
+                   fill: rgba(accent, 0.12, "rgba(10,186,181,0.12)"), edge: rgba(accent, 0.6, "rgba(10,186,181,0.6)") });
+    }
+    if (z && num(z.target_low) && num(z.target_high)) {
+      boxes.push({ low: z.target_low, high: z.target_high, time: null, label: z.target_label, text: green, plate: plate,
+                   fill: rgba(green, 0.07, "rgba(51,214,159,0.07)"), edge: rgba(green, 0.45, "rgba(51,214,159,0.45)") });
+    }
+    // Het positievak zoals op TradingView (CEO 2026-11-03): pas als het plan bekend is, vanaf dat moment tot de vervaltijd. Risico (instap tot
+    // stop) donkergrijs, beloning (instap tot doel) lichtgrijs; de lijnen met hun prijs tekent setLine al.
+    if (s && s.pos && num(s.pos.limit) && num(s.pos.stop)) {
+      var from = num(s.pos.from) ? originBar(times, s.pos.from, lc.tf) : null;
+      if (num(s.pos.from) && from === null && times.length && s.pos.from >= times[times.length - 1]) from = times[times.length - 1];
+      var ink = css("--mc-ink", "#1b2324");
+      boxes.push({ low: Math.min(s.pos.limit, s.pos.stop), high: Math.max(s.pos.limit, s.pos.stop), time: from, end: s.pos.until, label: null,
+                   fill: rgba(ink, 0.2, "rgba(27,35,36,0.2)"), edge: null });
+      if (num(s.pos.take)) boxes.push({ low: Math.min(s.pos.limit, s.pos.take), high: Math.max(s.pos.limit, s.pos.take), time: from, end: s.pos.until,
+                                        label: null, fill: rgba(ink, 0.07, "rgba(27,35,36,0.07)"), edge: null });
+    }
+    // De structuur van dit tijdframe (/api/structuur, app/structure_levels.py) en de niveaus van het model (card_chart.model_marks), zoals een
+    // analist ze tekent: lichtpaarse vlakken en dunne lijnen met de naam rechts (CEO 2026-11-03). Premium en discount heel licht eronder.
+    var mz = css("--mz", "rgba(167,139,250,0.16)"), mzEdge = css("--mz-edge", "rgba(167,139,250,0.42)"), mzTx = css("--mz-tx", "#cdbdff");
+    var red = css("--red", "#f2685c"), clear = "rgba(0,0,0,0)";
+    var st = LAYERS.struct && lc.struct ? lc.struct : { lines: [], zones: [] };
+    // Zoals de kaart (CEO 2026-11-03: "zet een kleine afkorting op het punt zelf, niet alles naar rechts", "alle kleuren hetzelfde"): grijze
+    // lijnen vanaf hun punt met een korte naam daar (SH, SL, BOS, FVG, OB, EQ), grijze vlakken, geen paars, geen premium/discount-kleur.
+    var lineC = css("--mc-line", "#8a9698"), inkC = css("--mc-ink", "#1b2324");
+    // Hoge niveaus (RH, SH, EQH, een breuk boven het evenwicht) hebben hun naam boven de lijn, lage (RL, SL, EQL, een breuk eronder) eronder;
+    // een vlak onder de koers heeft zijn naam onder het vlak, een vlak erboven erboven (zoals HesPulse Clean 4 in TradingView).
+    var lastClose = lc.candles.length ? lc.candles[lc.candles.length - 1].close : null;
+    var eqLine = st.lines.filter(function (l) { return l.kind === "eq50"; })[0];
+    function lowName(l) {
+      if (l.short === "RL" || l.short === "SL" || l.short === "EQL") return true;
+      return l.kind === "msb" && !!eqLine && l.value < eqLine.value;
+    }
+    var hl = st.lines.map(function (l) { return { value: l.value, time: originBar(times, l.time, lc.tf), label: l.short || l.label, color: lineC,
+                                                  text: inkC, dash: l.kind === "eq50", below: lowName(l) }; });
+    st.zones.forEach(function (sz) {
+      if (sz.kind === "premium" || sz.kind === "discount") return;
+      var t = originBar(times, sz.time, lc.tf), under = lastClose !== null && sz.high < lastClose;
+      boxes.unshift({ low: sz.low, high: sz.high, time: t, label: null, plate: plate, text: inkC,
+                      fill: rgba(lineC, 0.12, "rgba(127,127,127,0.12)"), edge: rgba(lineC, 0.45, "rgba(127,127,127,0.45)") });
+      hl.push({ value: under ? sz.low : sz.high, time: t, label: sz.short || sz.label, noLine: true, color: lineC, text: inkC, below: under });
+    });
+    // De dichtstbijzijnde onaangeroerde BSL en SSL van 4u en 1u (/api/structuur, pools): grijs gestippeld vanaf hun pivot-candle.
+    (st.pools || []).forEach(function (p) {
+      hl.push({ value: p.value, time: originBar(times, p.time, lc.tf), label: p.short || p.label, color: lineC, text: inkC, dash: true,
+                below: p.side === "ssl" });
+    });
+    // Van het model alleen wat bij deze setup hoort: de andere instappunten en de sweep, rechts met hun letter.
+    (s && LAYERS.punten && s.marks || []).forEach(function (m) {
+      if (m.kind !== "alt" && m.kind !== "sweep") return;
+      // Een instappunt begint op het moment dat de app hem zag; vóór die tijd stond hij er niet.
+      hl.push({ value: m.value, time: !num(m.time) || !times.length ? null : m.time >= times[times.length - 1] ? times[times.length - 1]
+                : originBar(times, m.time, lc.tf), label: m.label, color: accent, text: accent,
+                dash: true, right: true });
+    });
+    // Tegen de dagtrend: alleen de limieten, grijs gestippeld, met "tegen" voor de letter, vanaf het moment dat de app ze zag.
+    if (LAYERS.tegen) (lc.tegen || []).forEach(function (t) {
+      hl.push({ value: t.limit, time: !num(t.time) || !times.length ? null : t.time >= times[times.length - 1] ? times[times.length - 1]
+                : originBar(times, t.time, lc.tf), label: "tegen " + t.code, color: lineC, text: lineC, dash: true, right: true });
+    });
+    lc.hlines = hl;
+    lc.boxes = boxes;
+    var marks = [];
+    if (z && lc.originBar !== null) {
+      var bull = z.kind === "bull";
+      marks.push({ time: lc.originBar, position: bull ? "belowBar" : "aboveBar", shape: bull ? "arrowUp" : "arrowDown", color: accent, text: "Zone" });
+    }
+    lc.series.setMarkers(marks);
+    if (lc.onNote && lc.candles.length) lc.onNote(fullNote(s, lc.tf, lc.originBar));
+    if (lc.redraw) lc.redraw();
+  }
+
+  function zonePrimitive(lc) {
+    var font = css("--mono", "monospace").replace(/"/g, "");
+    // Twee lagen: de vlakken onder de candles, de labels erboven (anders lopen candles door de tekst).
+    function draw(target, labels) {
+      var boxes = lc.boxes || [];
+      drawLines(target, labels);
+      if (!boxes.length) return;
+      target.useBitmapCoordinateSpace(function (scope) {
+        var ctx = scope.context, hr = scope.horizontalPixelRatio, vr = scope.verticalPixelRatio, W = scope.bitmapSize.width;
+        var ts = lc.chart.timeScale(), half = (ts.options().barSpacing || 6) / 2;
+        boxes.forEach(function (b) {
+          var y1 = lc.series.priceToCoordinate(b.high), y2 = lc.series.priceToCoordinate(b.low);
+          if (y1 === null || y2 === null) return;
+          var x = b.time !== null ? ts.timeToCoordinate(b.time) : null;
+          var left = x === null ? 0 : Math.max(0, Math.round((x - half) * hr));
+          var top = Math.round(Math.min(y1, y2) * vr), h = Math.max(Math.round(Math.abs(y2 - y1) * vr), Math.round(2 * vr));
+          var line = Math.max(1, Math.round(hr));
+          // Een vak met een einde (het positievak: tot de vervaltijd van het plan) stopt daar, ook als dat na de laatste candle ligt.
+          var right = W;
+          if (num(b.end) && lc.candles.length) {
+            var lastT = lc.candles[lc.candles.length - 1].time, step = TF_SEC[lc.tf] || 900;
+            // Na de laatste candle telt de candlebreedte vanaf die candle; logicalToCoordinate gaf daar een waarde bij 0 en het vak viel weg.
+            var xl = ts.timeToCoordinate(lastT);
+            var xe = b.end <= lastT ? ts.timeToCoordinate(originBar(lc.candles.map(function (c) { return c.time; }), b.end, lc.tf))
+              : xl === null ? null : xl + (b.end - lastT) / step * (ts.options().barSpacing || 6);
+            if (xe !== null) right = Math.min(W, Math.round((xe + half) * hr));
+          }
+          if (right <= left) return;
+          if (labels) { drawLabel(ctx, b, left, top, h, right, hr, vr); return; }
+          ctx.fillStyle = b.fill;
+          ctx.fillRect(left, top, right - left, h);
+          if (b.edge) {
+            ctx.fillStyle = b.edge;
+            ctx.fillRect(left, top, right - left, line);
+            ctx.fillRect(left, top + h - line, right - left, line);
+            if (x !== null) ctx.fillRect(left, top, line, h);
+          }
+        });
+      });
+    }
+    function drawLines(target, labels) {
+      var hl = lc.hlines || [];
+      if (!hl.length) return;
+      target.useBitmapCoordinateSpace(function (scope) {
+        var ctx = scope.context, hr = scope.horizontalPixelRatio, vr = scope.verticalPixelRatio, W = scope.bitmapSize.width;
+        var Hb = scope.bitmapSize.height, ts = lc.chart.timeScale(), lh = Math.round(14 * vr);
+        // Alleen wat in beeld is. Een label staat op zijn punt (het begin van de lijn), boven de lijn (lage niveaus eronder); botst hij met een
+        // eerder label, dan aan de andere kant. Alleen de instappunten van het model (zonder eigen punt) staan rechts, onder elkaar.
+        var items = hl.map(function (l) { return { l: l, y: lc.series.priceToCoordinate(l.value) }; })
+          .filter(function (p) { return p.y !== null && p.y * vr >= 0 && p.y * vr <= Hb; })
+          .sort(function (a, b) { return a.y - b.y; });
+        var taken = [], rightY = -1e9;
+        // Eerst de instappunten rechts (die moeten er altijd staan), daarna de structuur, die ze dan ontwijkt.
+        if (labels) items = items.filter(function (p) { return p.l.right; }).concat(items.filter(function (p) { return !p.l.right; }));
+        items.forEach(function (p) {
+          var y = Math.round(p.y * vr), x = p.l.time !== null ? ts.timeToCoordinate(p.l.time) : null;
+          var left = x === null ? 0 : Math.max(0, Math.round(x * hr));
+          if (!labels) {
+            if (p.l.noLine) return;
+            ctx.fillStyle = p.l.color;
+            var lw = Math.max(1, Math.round(hr));
+            if (p.l.dash) { for (var dx = left; dx < W; dx += Math.round(8 * hr)) ctx.fillRect(dx, y, Math.round(4 * hr), lw); }
+            else ctx.fillRect(left, y, W - left, lw);
+            return;
+          }
+          ctx.font = "600 " + Math.round(10 * vr) + "px " + font;
+          var tw = ctx.measureText(p.l.label).width, pad = Math.round(2 * hr), lx, ly;
+          if (p.l.right) {
+            lx = W - tw - Math.round(6 * hr);
+            ly = Math.max(y - lh, rightY + lh);
+            rightY = ly;
+            taken.push([lx - pad, ly, lx + tw + pad, ly + lh]);
+          } else {
+            lx = Math.min(left + Math.round(4 * hr), W - tw - pad);
+            var under = !!p.l.below, belowY = y + Math.round(1 * vr);
+            ly = under ? belowY : y - lh;
+            var box = function (yy) { return [lx - pad, yy, lx + tw + pad, yy + lh]; };
+            var hit = function (r) { return taken.some(function (t) { return r[0] < t[2] && t[0] < r[2] && r[1] < t[3] && t[1] < r[3]; }); };
+            if (hit(box(ly))) ly = under ? y - lh : belowY;
+            if (hit(box(ly))) return;                      // geen plek: liever geen label dan een stapel over elkaar
+            taken.push(box(ly));
+          }
+          ly = Math.max(0, Math.min(ly, Hb - lh));
+          ctx.fillStyle = plateColor;
+          ctx.fillRect(lx - pad, ly, tw + 2 * pad, lh);
+          ctx.fillStyle = p.l.text || p.l.color;
+          ctx.textBaseline = "middle";
+          ctx.fillText(p.l.label, lx, ly + lh / 2);
+        });
+      });
+    }
+    var plateColor = rgba(css("--panel", "#131a1b"), 0.85, "rgba(19,26,27,0.85)");
+    function drawLabel(ctx, b, left, top, h, W, hr, vr) {
+      if (!b.label) return;
+      ctx.font = "500 " + Math.round(11 * vr) + "px " + font;
+      // Rechts staan de labels van Instap, Stop en Doel; begint het vlak daar te dichtbij, dan komt het label links van zijn begin.
+      var tw = ctx.measureText(b.label).width, gap = Math.round(6 * hr), lx = left + gap;
+      if (b.right) lx = W - tw - gap;                 // structuur: de naam rechts in het vlak, zoals een analist hem zet
+      else if (lx + tw > W - Math.round(LINE_LABEL_ROOM * hr)) lx = left - gap - tw >= 0 ? left - gap - tw : Math.min(lx, W - tw - gap);
+      // Past het label niet in het vlak, dan erboven; zo blijft het los van de candles in de zone.
+      var inside = h >= Math.round(20 * vr), lh = Math.round(15 * vr), pad = Math.round(4 * hr);
+      var ly = inside ? top + Math.round(3 * vr) : top - lh - Math.round(2 * vr);
+      lx = Math.max(0, lx);
+      // Een vlak in de achtergrondkleur achter het label: zo blijft het leesbaar boven candles die door de zone lopen.
+      ctx.fillStyle = b.plate;
+      ctx.fillRect(lx - pad, ly, tw + 2 * pad, lh);
+      ctx.fillStyle = b.text;
+      ctx.textBaseline = "middle";
+      ctx.fillText(b.label, lx, ly + lh / 2);
+    }
+    var below = { zOrder: function () { return "bottom"; }, renderer: function () { return { draw: function (t) { draw(t, false); } }; } };
+    var above = { zOrder: function () { return "top"; }, renderer: function () { return { draw: function (t) { draw(t, true); } }; } };
+    return {
+      paneViews: function () { return [below, above]; },
+      updateAllViews: function () {},
+      attached: function (p) { lc.redraw = p.requestUpdate; },
+      detached: function () { lc.redraw = null; },
+    };
+  }
+
+  // De zone als vlak tussen zone_low en zone_high. Is hij te dun om te zien (minder dan ZONE_MIN_PX hoog), dan toont de limietlijn alleen.
+  function syncBand(lc) {
+    var s = spec(lc.el);
+    var show = false;
+    // Schermvullend met een zone-radar-zone tekent syncZones het vlak, met rand en vanaf zijn ontstaan.
+    if (s && !(lc.full && s.zone) && s.zone_low != null && s.zone_high != null && lc.candles.length) {
+      var a = lc.series.priceToCoordinate(s.zone_low), b = lc.series.priceToCoordinate(s.zone_high);
+      show = a !== null && b !== null && Math.abs(a - b) >= 6;
+    }
+    lc.band.setData(show ? lc.candles.map(function (c) { return { time: c.time, value: s.zone_high }; }) : []);
+  }
+
+  function overlayPrice(lc) {
+    var s = spec(lc.el);
+    if (!s || s.price == null || !lc.candles.length) return;
+    var last = lc.candles[lc.candles.length - 1];
+    last.close = s.price;
+    last.high = Math.max(last.high, s.price);
+    last.low = Math.min(last.low, s.price);
+    lc.series.update(last);
+  }
+
+  function load(lc) {
+    var el = lc.el;
+    var tf = el.getAttribute("data-tf") || "15m", s = spec(el);
+    // Schermvullend: altijd de volle historie, zodat je terug kunt scrollen; de eerste weergave toont wat candleLimit bepaalt.
+    var shown = lc.full ? candleLimit(tf, s && s.zone ? s.zone.origin : null, Date.now() / 1000) : CANDLE_LIMIT;
+    return fetchCandles(el.getAttribute("data-coin"), tf, lc.full ? FULL_MAX : shown).then(function (candles) {
+      if (lc.dead) return;
+      lc.candles = candles.map(function (c) { return Object.assign({}, c); });   // kopie: overlayPrice past de laatste aan
+      lc.series.setData(lc.candles);
+      overlayPrice(lc);
+      if (lc.full) {
+        var n = lc.candles.length;
+        lc.chart.timeScale().setVisibleLogicalRange({ from: Math.max(-2, n - shown), to: n + 8 });
+      } else lc.chart.timeScale().fitContent();
+      syncBand(lc);
+      syncAreas(lc);
+      if (lc.full) { syncZones(lc); loadStruct(lc); loadTegen(lc); }
+    });
+  }
+
+  function loadTegen(lc) {
+    var coin = lc.el.getAttribute("data-coin");
+    if (!coin || !LAYERS.tegen) return;
+    fetch("/api/tegen/" + encodeURIComponent(coin), { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (lc.dead || !d) return; lc.tegen = d.points || []; syncZones(lc); })
+      .catch(function () {});
+  }
+
+  // Per tijdframe opnieuw: wisselen naar 15m, 1u of 4u maakt de grafiek opnieuw (show), en dan komt de structuur van dat tijdframe.
+  function loadStruct(lc) {
+    var coin = lc.el.getAttribute("data-coin");
+    if (!coin) return;
+    fetch("/api/structuur/" + encodeURIComponent(coin) + "?tf=" + encodeURIComponent(lc.tf), { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) { if (lc.dead || !d) return; lc.struct = d; syncZones(lc); })
+      .catch(function () {});
+  }
+
+  function create(el, temp, full) {
+    var s = spec(el);
+    if (!s || el._lc) return el._lc ? el._lc.ready : Promise.resolve();
+    el.classList.remove("is-failed");
+    var panel = css("--panel", "#131a1b"), green = css("--green", "#33d69f"), red = css("--red", "#f2685c");
+    var up = css("--candle-up", "#0ABAB5"), down = css("--candle-down", "#f4f8f7");
+    var chart = LC.createChart(el, {
+      autoSize: true,
+      layout: { background: { type: "solid", color: panel }, textColor: css("--text-dim", "#b7c4c2"), fontSize: 12, fontFamily: css("--mono", "monospace").replace(/"/g, "") },
+      grid: { vertLines: { visible: false }, horzLines: { color: css("--chart-grid", "rgba(255,255,255,0.04)") } },
+      rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0.08 } },
+      timeScale: { borderVisible: false, timeVisible: true, secondsVisible: false, rightOffset: full ? 8 : 12, fixLeftEdge: !full, tickMarkFormatter: tickLabel },
+      crosshair: { vertLine: { visible: false, labelVisible: false }, horzLine: { visible: false, labelVisible: false } },
+      handleScroll: !!full, handleScale: !!full,
+      // Komma als decimaalteken, zoals overal in de app; het aantal decimalen volgt de prijs (precision).
+      localization: { priceFormatter: function (p) { return p.toFixed(precision(s)).replace(".", ","); } },
+    });
+    var lc = { el: el, chart: chart, lines: {}, candles: [], dead: false, areas: {}, full: !!full, tf: el.getAttribute("data-tf") || "15m",
+               boxes: [], originBar: null, onNote: full ? full.onNote : null };
+    // Eerst toegevoegd, dus onderop: zone en candles blijven er leesbaar overheen.
+    // Elke serie op de schaal krijgt het prijsformaat van de candles: de schaal neemt het formaat van de eerst toegevoegde serie, en met de
+    // standaard van twee decimalen stond een instap van 0,162 als "0.16" op de as.
+    var pf = { type: "price", precision: precision(s), minMove: Math.pow(10, -precision(s)) };
+    lc.areas.risk = areaSeries(chart, red, "rgba(242,104,92,0.07)", pf);
+    lc.areas.reward = areaSeries(chart, green, "rgba(51,214,159,0.07)", pf);
+    // De zone eerst: een baselineserie met als grondlijn zone_low en overal zone_high als waarde vult precies het vlak ertussen.
+    lc.band = chart.addBaselineSeries({
+      baseValue: { type: "price", price: s.zone_low != null ? s.zone_low : 0 },
+      topLineColor: "rgba(0,0,0,0)", topFillColor1: "rgba(10,186,181,0.16)", topFillColor2: "rgba(10,186,181,0.16)",
+      bottomLineColor: "rgba(0,0,0,0)", bottomFillColor1: "rgba(0,0,0,0)", bottomFillColor2: "rgba(0,0,0,0)",
+      lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false, priceFormat: pf,
+      autoscaleInfoProvider: function () { return null; },
+    });
+    // Schermvullend dezelfde rustige candles als de kaarttekening (CEO 2026-11-03, "alle kleuren hetzelfde als foto 1"): wit met rand omhoog,
+    // gevuld omlaag, in de inktkleur van de kaart.
+    var ink = css("--mc-ink", "#1b2324"), paper = css("--mc-paper", "#ffffff");
+    var seriesOpts = {
+      upColor: up, downColor: down, borderVisible: false, wickUpColor: up, wickDownColor: down,
+      priceLineVisible: false, lastValueVisible: false,
+      priceFormat: pf,
+      // Stop, limiet en doel horen er altijd op, naast de candles: de schaal is de unie van beide.
+      autoscaleInfoProvider: function (original) {
+        var r = original(), cur = spec(el);
+        var lv = cur ? levels(cur) : [];
+        // Schermvullend horen de hele zone en doelzone in beeld, anders valt een rand van het vlak buiten de grafiek.
+        if (full && cur && cur.zone) lv = lv.concat([cur.zone.target_low, cur.zone.target_high].filter(num));
+        if (!lv.length) return r;
+        var lo = Math.min.apply(null, lv), hi = Math.max.apply(null, lv);
+        if (r && r.priceRange) { lo = Math.min(lo, r.priceRange.minValue); hi = Math.max(hi, r.priceRange.maxValue); }
+        return { priceRange: { minValue: lo, maxValue: hi }, margins: r ? r.margins : undefined };
+      },
+    };
+    if (full) Object.assign(seriesOpts, { upColor: paper, downColor: ink, borderVisible: true, borderUpColor: ink, borderDownColor: ink,
+                                          wickUpColor: ink, wickDownColor: ink });
+    lc.series = chart.addCandlestickSeries(seriesOpts);
+    if (full) lc.series.attachPrimitive(zonePrimitive(lc));
+    el._lc = lc;
+    if (!temp) live.add(el);
+    applyLevels(lc);
+    lc.ready = load(lc).catch(function () {
+      if (lc.dead) return;
+      destroy(el);
+      el.classList.add("is-failed");
+      if (!temp) wanted.add(el);
+    });
+    return lc.ready;
+  }
+
+  function destroy(el) {
+    var lc = el._lc;
+    if (!lc) return;
+    lc.dead = true;
+    try { lc.chart.remove(); } catch (e) { /* al weg */ }
+    el._lc = null;
+    live.delete(el);
+    el.innerHTML = "";
+  }
+
+  function fill() {
+    wanted.forEach(function (el) {
+      if (live.size >= MAX_LIVE) return;
+      wanted.delete(el);
+      create(el, false);
+    });
+  }
+
+  function want(el) {
+    if (el._lc) return;
+    if (live.size < MAX_LIVE) create(el, false); else wanted.add(el);
+  }
+
+  function onIntersect(entries) {
+    entries.forEach(function (entry) {
+      var el = entry.target;
+      if (entry.isIntersecting) { want(el); return; }
+      wanted.delete(el);
+      el.classList.remove("is-failed");
+      destroy(el);
+    });
+    fill();
+  }
+
+  function update(el, next) {
+    // /api/radar ververst limiet, stop en koers; de benoemde niveaus van het model komen alleen van de server-render en blijven staan.
+    var cur = spec(el);          // ook een grafiek die nog niet getekend is: zijn spec staat dan alleen nog in data-levelchart
+    if (cur && cur.marks && !next.marks) next = Object.assign({}, next, { marks: cur.marks, tf: cur.tf });
+    el._spec = next;
+    var lc = el._lc;
+    if (!lc) { el.setAttribute("aria-label", next.label || ""); return; }
+    applyLevels(lc);
+    overlayPrice(lc);
+    lc.chart.priceScale("right").applyOptions({ autoScale: true });     // de schaal opnieuw bepalen met de nieuwe niveaus
+    syncBand(lc);
+    syncAreas(lc);
+  }
+
+  api.update = function (el, next) {
+    if (!next) return;
+    update(el, next);
+    if (full && full.src === el) update(full.el, next);
+  };
+
+  // Schermvullend: een eigen element met dezelfde gegevens, tijdelijk gemaakt (niet in `live`) en bij sluiten weer weggehaald. Een ander tijdframe
+  // kiezen maakt de grafiek opnieuw op dat tijdframe; de niveaus blijven dezelfde.
+  var full = null;
+
+  function node(tag, cls, text) {
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text) n.textContent = text;
+    return n;
+  }
+
+  function legendItem(cls, text) {
+    var item = node("span", "lc-key " + cls);
+    item.textContent = text;
+    return item;
+  }
+
+  function openFull(src) {
+    if (full || !spec(src)) return;
+    var s = spec(src), coin = src.getAttribute("data-coin"), dlg = node("dialog", "lc-full");
+    dlg.setAttribute("aria-label", "Grafiek " + coin);
+    var head = node("div", "lc-full-head");
+    var title = node("p", "lc-full-title", coin + " ");
+    if (s.direction) title.appendChild(node("span", "lc-full-dir", s.direction === "long" ? "Long" : "Short"));
+    var seg = node("div", "lc-seg");
+    seg.setAttribute("role", "group");
+    seg.setAttribute("aria-label", "Tijdframe van de candles");
+    var close = node("button", "lc-full-close");
+    close.type = "button";
+    close.setAttribute("aria-label", "Grafiek sluiten");
+    close.innerHTML = '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg>';
+    head.appendChild(title);
+    head.appendChild(seg);
+    head.appendChild(close);
+    // Eén regel met de trend per tijdframe (/api/trend): van dag naar 15m, zodat je ziet of de lagere tijdframes met de hogere meegaan.
+    var trend = node("p", "lc-full-trend", "Trend laden…");
+    trend.setAttribute("aria-live", "polite");
+    fetch("/api/trend/" + encodeURIComponent(coin), { credentials: "same-origin" })
+      .then(function (r) { return r.ok ? r.json() : null; })
+      .then(function (d) {
+        if (!d) { trend.textContent = "Trend nu niet beschikbaar"; return; }
+        var sign = { bullish: "↑", bearish: "↓" };
+        // "herstel": de laatste breuk ging tegen de dag in; het model en de range op deze grafiek volgen dan de dag (top-down).
+        trend.textContent = "Trend " + d.trend.map(function (t) { return t.word + " " + (sign[t.trend] || (t.trend === "onbekend" ? "?" : "–")) + (t.herstel ? " herstel" : ""); }).join(" · ");
+        trend.setAttribute("aria-label", "Trend per tijdframe: " + d.trend.map(function (t) {
+          return t.word + " " + ({ bullish: "omhoog", bearish: "omlaag", onbekend: "onbekend" }[t.trend] || "geen breuk") + (t.herstel ? ", herstel tegen de dag in" : ""); }).join(", "));
+      })
+      .catch(function () { trend.textContent = "Trend nu niet beschikbaar"; });
+    var layers = node("div", "lc-layers");
+    layers.setAttribute("role", "group");
+    layers.setAttribute("aria-label", "Lagen op de grafiek");
+    [["struct", "Structuur"], ["punten", "Instappunten"], ["tegen", "Tegen de trend"]].forEach(function (l) {
+      var b = node("button", "lc-layer", l[1]);
+      b.type = "button";
+      b.setAttribute("aria-pressed", String(!!LAYERS[l[0]]));
+      b.addEventListener("click", function () {
+        LAYERS[l[0]] = !LAYERS[l[0]];
+        b.setAttribute("aria-pressed", String(LAYERS[l[0]]));
+        try { localStorage.setItem("hp_lagen", JSON.stringify(LAYERS)); } catch (e) { /* alleen nu */ }
+        var lcx = full && full.el._lc;
+        if (!lcx) return;
+        if (l[0] === "tegen" && LAYERS.tegen && !lcx.tegen) loadTegen(lcx);
+        syncZones(lcx);
+      });
+      layers.appendChild(b);
+    });
+    var el = node("div", "level-chart");
+    ["data-coin", "role", "aria-label"].forEach(function (a) { if (src.hasAttribute(a)) el.setAttribute(a, src.getAttribute(a)); });
+    el._spec = s;
+    var foot = node("div", "lc-full-foot");
+    var note = node("p", "lc-full-note");
+    note.setAttribute("aria-live", "polite");
+    var legend = node("p", "lc-full-legend");
+    if (s.zone) {
+      legend.appendChild(legendItem("is-zone", s.zone.label));
+      if (s.zone.target_label) legend.appendChild(legendItem("is-target", s.zone.target_label));
+    } else if (num(s.zone_low) && num(s.zone_high)) {
+      legend.appendChild(legendItem("is-zone", "Zone"));
+    }
+    if (num(s.limit) || num(s.entry)) legend.appendChild(legendItem("is-line-entry", "Instap"));
+    if (num(s.stop)) legend.appendChild(legendItem("is-line-stop", "Stop"));
+    // Een plan zonder doel (zone-sweep) heeft geen doellijn en geen winstvlak: dan ook niet in de legenda.
+    if (num(s.take)) legend.appendChild(legendItem("is-line-take", "Doel"));
+    legend.appendChild(legendItem("is-line-now", "Nu"));
+    // De afkortingen op de grafiek (app/structure_levels.py) in gewone woorden, één keer.
+    legend.appendChild(node("span", "lc-full-abbr", "RH/RL range · SH/SL swing · EQ evenwicht · EQH/EQL gelijke toppen/bodems · BOS/CHoCH breuk"));
+
+    foot.appendChild(note);
+    foot.appendChild(legend);
+    dlg.appendChild(head);
+    dlg.appendChild(trend);
+    dlg.appendChild(layers);
+    dlg.appendChild(el);
+    dlg.appendChild(foot);
+    document.body.appendChild(dlg);
+    full = { dlg: dlg, el: el, src: src };
+    var opts = { onNote: function (text) { note.textContent = text; note.hidden = !text; } };
+    note.hidden = true;
+
+    function show(tf) {
+      destroy(el);
+      el.setAttribute("data-tf", tf);
+      Array.prototype.forEach.call(seg.children, function (b) { b.setAttribute("aria-pressed", String(b.getAttribute("data-tf") === tf)); });
+      create(el, true, opts);
+    }
+    FULL_TFS.forEach(function (tf) {
+      var b = node("button", "lc-seg-btn", TF_TEXT[tf]);
+      b.type = "button";
+      b.setAttribute("data-tf", tf);
+      b.setAttribute("aria-label", "Candles van " + { "15m": "15 minuten", "1h": "1 uur", "4h": "4 uur", "1d": "1 dag" }[tf]);
+      b.addEventListener("click", function () { if (b.getAttribute("aria-pressed") !== "true") show(tf); });
+      seg.appendChild(b);
+    });
+
+    document.documentElement.classList.add("lc-lock");
+    close.addEventListener("click", function () { if (dlg.close) dlg.close(); else done(); });
+    function done() {
+      destroy(el);
+      dlg.remove();
+      full = null;
+      document.documentElement.classList.remove("lc-lock");
+      document.dispatchEvent(new Event("hp:chart-closed"));
+      var back = src.closest(".lc") && src.closest(".lc").querySelector("[data-lc-expand]");
+      if (back) back.focus();
+    }
+    dlg.addEventListener("close", done);
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+    show(fullTf(s));
+  }
+
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest && e.target.closest("[data-lc-expand], .lc .level-chart");
+    if (!t) return;
+    var src = t.matches("[data-lc-expand]") ? t.closest(".lc").querySelector("[data-levelchart]") : t;
+    if (src) openFull(src);
+  });
+
+  // Voor de deelafbeelding (share.js): het canvas van de grafiek zoals hij er nu staat. Staat hij nog niet (kaart ver weg), dan
+  // wordt hij even gemaakt en daarna weer weggehaald.
+  api.screenshot = function (el) {
+    var temp = !el._lc;
+    var ready = temp ? create(el, true) : el._lc.ready;
+    return ready.then(function () {
+      var lc = el._lc;
+      if (!lc) return null;
+      var canvas = lc.chart.takeScreenshot();
+      if (temp) destroy(el);
+      return canvas;
+    }).catch(function () { return null; });
+  };
+
+  setInterval(function () {
+    if (document.hidden) return;
+    live.forEach(function (el) { if (el._lc) load(el._lc).catch(function () { /* laatste stand blijft staan */ }); });
+    if (full && full.el._lc) refreshFull(full.el._lc);
+    fill();
+  }, REFRESH_MS);
+
+  // Schermvullend live (CEO 2026-11-03: "de grafiek lijkt niet live mee te bewegen"): elke minuut de candles opnieuw zonder het beeld te
+  // verschuiven dat jij koos, en elke twee seconden de koers uit de live-stroom (live.js) op de laatste candle, met een nieuwe candle zodra
+  // het tijdframe omslaat.
+  function refreshFull(lc) {
+    var ts = lc.chart.timeScale(), range = ts.getVisibleLogicalRange();
+    fetchCandles(lc.el.getAttribute("data-coin"), lc.tf, FULL_MAX).then(function (candles) {
+      if (lc.dead || !candles.length) return;
+      lc.candles = candles.map(function (c) { return Object.assign({}, c); });
+      lc.series.setData(lc.candles);
+      if (range) ts.setVisibleLogicalRange(range);
+    }).catch(function () { /* laatste stand blijft staan */ });
+  }
+  function tickFull() {
+    var lc = full && full.el._lc, coin = full && full.el.getAttribute("data-coin");
+    var p = coin && window.__livePrices ? window.__livePrices[coin] : null;
+    if (!lc || lc.dead || !num(p) || !lc.candles || !lc.candles.length || !TF_SEC[lc.tf]) return;
+    var last = lc.candles[lc.candles.length - 1], bar = Math.floor(Date.now() / 1000 / TF_SEC[lc.tf]) * TF_SEC[lc.tf];
+    if (bar > last.time) {
+      last = { time: bar, open: last.close, high: p, low: p, close: p };
+      lc.candles.push(last);
+    } else {
+      last.close = p; last.high = Math.max(last.high, p); last.low = Math.min(last.low, p);
+    }
+    lc.series.update(last);
+  }
+  setInterval(function () { if (!document.hidden) tickFull(); }, 2000);
+
+  var observer = "IntersectionObserver" in window ? new IntersectionObserver(onIntersect, { rootMargin: "300px 0px" }) : null;
+  els.forEach(function (el) { if (observer) observer.observe(el); else want(el); });
+})();

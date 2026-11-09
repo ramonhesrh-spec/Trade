@@ -1,0 +1,79 @@
+/* Live verversing van de Trade Radar: haalt elke 15 seconden /api/radar op en werkt per kaart de status, afstand,
+   live R en de niveaus op de candlegrafiek bij (levelchart.js werkt de bestaande grafiek bij, hij wordt niet opnieuw gemaakt). De eerste weergave komt gewoon van de server; zonder JS blijft de pagina volledig bruikbaar.
+   Stopt zolang het tabblad verborgen is, zodat een vergeten tabblad geen koersen blijft ophalen. */
+(function () {
+  var INTERVAL_MS = 15000;
+  var cards = document.querySelectorAll("[data-radar-key]");
+  if (!cards.length) return;
+
+  function setText(card, name, text) {
+    var el = card.querySelector('[data-radar="' + name + '"]');
+    if (el) el.textContent = text;
+  }
+
+  function apply(payload) {
+    cards.forEach(function (card) {
+      var data = payload[card.getAttribute("data-radar-key")];
+      if (!data) return;
+      var state = card.querySelector('[data-radar="state"]');
+      if (state) {
+        state.textContent = data.short || data.label;
+        state.title = data.label;
+        state.className = "state-pill is-" + (data.state || "laden");
+      }
+      if (data.action) setText(card, "action", data.action);
+      // Doel gehaald terwijl de pagina openstaat: grafiek en stappen verdwijnen, de rest van de kaart komt bij de volgende paginaweergave.
+      card.classList.toggle("is-moot", data.state === "doel_geraakt");
+      var liveEl = card.querySelector("[data-live-coin]"), liveCoin = liveEl && liveEl.getAttribute("data-live-coin");
+      if (!(liveCoin && window.hesLiveFresh && window.hesLiveFresh(liveCoin)) && data.distance_pct !== null && data.distance_pct !== undefined) {
+        setText(card, "distance", (data.distance_pct >= 0 ? "+" : "") + data.distance_pct.toFixed(2) + "%");
+      }
+      var approach = card.querySelector(".approach"), dot = card.querySelector('[data-radar="approach"]');
+      if (approach && dot) {
+        var has = data.approach_pct !== null && data.approach_pct !== undefined;
+        approach.hidden = !has;
+        if (has) {
+          dot.style.left = data.approach_pct.toFixed(1) + "%";
+          approach.setAttribute("aria-label", "Koers op " + data.approach_pct.toFixed(0) + "% van de weg naar je instap");
+        }
+      }
+      var r = card.querySelector('[data-radar="live_r"]');
+      if (r && data.live_r !== null && data.live_r !== undefined) {
+        r.textContent = (data.live_r >= 0 ? "+" : "") + data.live_r.toFixed(2) + "R";
+        r.className = "radar-r " + (data.live_r > 0 ? "pos" : data.live_r < 0 ? "neg" : "");
+      }
+      var bar = card.querySelector(".r-progress");
+      var mark = card.querySelector('[data-radar="progress"]');
+      if (bar && mark && data.live_r !== null && data.live_r !== undefined) {
+        var rr = parseFloat(bar.getAttribute("data-rr"));
+        mark.style.left = Math.max(0, Math.min(100, (data.live_r + 1) / (rr + 1) * 100)).toFixed(1) + "%";
+        mark.className = "r-progress-mark" + (data.live_r > 0 ? " pos" : data.live_r < 0 ? " neg" : "");
+      }
+      var chart = card.querySelector("[data-levelchart]");
+      if (chart && data.chart && window.hesLevelChart) window.hesLevelChart.update(chart, data.chart);
+    });
+  }
+
+  function refresh(force) {
+    if (document.hidden && !force) return Promise.resolve(false);
+    // Zonder tijdslimiet blijft een haperende verbinding eeuwig "bezig" en blijft de trekhint van smooth.js hangen.
+    var ctrl = typeof AbortController !== "undefined" ? new AbortController() : null;
+    var timer = ctrl ? setTimeout(function () { ctrl.abort(); }, 10000) : null;
+    return fetch("/api/radar", { cache: "no-store", credentials: "same-origin", signal: ctrl ? ctrl.signal : undefined })
+      .then(function (resp) {
+        if (!resp.ok) return false;
+        var age = resp.headers.get("X-Price-Age");
+        if (age !== null && window.hesPriceSeen) window.hesPriceSeen(age);
+        // Kansen telt na elke verversing opnieuw (kaarten.js): een kaart die van stand wisselt, wisselt ook de tellers boven de tabs.
+        return resp.json().then(function (payload) { apply(payload); document.dispatchEvent(new CustomEvent("hp:radar")); return true; });
+      })
+      .catch(function () { return false; /* een mislukte verversing laat de laatste stand staan */ })
+      .then(function (ok) { if (timer) clearTimeout(timer); return ok; });
+  }
+
+  window.hesRefresh = function () { return refresh(true); };
+
+  refresh();
+  setInterval(refresh, INTERVAL_MS);
+  document.addEventListener("visibilitychange", function () { if (!document.hidden) refresh(); });
+})();

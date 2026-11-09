@@ -1,0 +1,118 @@
+"""Plannen en trades als item (app/nu.py) voor het detailblad op Kansen en de order-checklist, plus overslaan."""
+import unittest
+
+from app import nu, radar
+
+LONG = {"id": 7, "coin": "XRP", "direction": "long", "zone_low": 99.0, "zone_high": 100.0,
+        "preview_stop_loss": 97.0, "preview_take_profit": 106.0, "created_at": "2026-10-05T10:00:00+00:00"}
+SHORT = {"id": 8, "coin": "BTC", "direction": "short", "zone_low": 80774.8, "zone_high": 80900.0, "source": "zone_radar",
+         "preview_stop_loss": 81097.9, "preview_take_profit": 80128.6, "created_at": "2026-10-05T11:00:00+00:00"}
+TRADE = {"id": 3, "coin": "ETH", "direction": "short", "price": 100.0, "stop_loss": 103.0, "take_profit": 94.0, "trade_type": "smc",
+         "created_at": "2026-10-05T10:00:00+00:00"}
+
+
+def setup(row, price):
+    return radar.setup_card(row, price)
+
+
+class SkipTests(unittest.TestCase):
+    def test_skip_cookie_houdt_alleen_geldige_sleutels(self):
+        self.assertEqual(nu.parse_skip("zone:8,setup:7,<script>,signal:x"), frozenset({"zone:8", "setup:7"}))
+        self.assertEqual(nu.parse_skip(None), frozenset())
+        raw = nu.add_skip("zone:8", "setup:7")
+        self.assertEqual(nu.parse_skip(raw), frozenset({"zone:8", "setup:7"}))
+        self.assertEqual(nu.add_skip(",".join(f"setup:{i}" for i in range(40)), "zone:1").split(",")[-1], "zone:1")
+        self.assertLessEqual(len(nu.add_skip(",".join(f"setup:{i}" for i in range(40)), "zone:1").split(",")), nu.MAX_SKIP)
+
+
+class LookupTests(unittest.TestCase):
+    def test_datumregel_in_het_nederlands(self):
+        from datetime import datetime
+        self.assertEqual(nu.date_line(datetime(2026, 10, 25, 23, 46)), "Zondag 25 oktober · 23:46")
+        self.assertEqual(nu.date_line(datetime(2026, 3, 2, 9, 5)), "Maandag 2 maart · 09:05")
+
+    def test_item_voor_de_checklist_alleen_als_het_plan_nog_kan_vullen(self):
+        cards = [setup(SHORT, 80800.0), setup(LONG, 96.0), radar.signal_card(TRADE, 97.0)]
+        self.assertEqual(nu.item_for(cards, "zone:8")["key"], "zone:8")
+        self.assertIsNone(nu.item_for(cards, "setup:7"))                # stop geraakt
+        self.assertIsNone(nu.item_for(cards, "signal:3"))               # een open trade heeft geen order meer te zetten
+        self.assertIsNone(nu.item_for(cards, "zone:99"))
+
+    def test_setupkaart_wordt_een_plan_met_meerdere_doelen(self):
+        card = {"id": 4, "coin": "SOL", "direction": "long", "plan": {"level": 100.0, "stop": 99.0}, "targets": [(102.0, 2.0), (103.0, 3.0)]}
+        item = nu.structure_item(card, 100.5, "wacht")
+        self.assertEqual(item["key"], "structuur:4")
+        self.assertEqual(item["distance_text"], "0,50%")
+        self.assertEqual(len(item["targets"]), 2)
+        self.assertEqual(item["trade_type"], "structuur")
+
+
+class PlanRowTests(unittest.TestCase):
+    def test_rijen_staan_op_prijs_zoals_de_grafiek(self):
+        short = nu.plan_rows("short", 80774.8, 81097.9, [(80128.6, 2.0)])
+        self.assertEqual([r["tone"] for r in short], ["loss", "entry", "win"])
+        self.assertEqual(short[2]["label"], "Doel · 2,0 R")
+        long = nu.plan_rows("long", 100.0, 97.0, [(103.0, 1.0), (106.0, 2.0)])
+        self.assertEqual([r["label"] for r in long], ["Doel 2 · 2,0 R", "Doel 1 · 1,0 R", "Instap", "Stop"])
+        self.assertEqual(long[2]["copy"], "100.00")
+        self.assertEqual(long[2]["text"], "100,00")
+
+
+class ChecklistTests(unittest.TestCase):
+    def test_vier_stappen_in_de_volgorde_van_de_beurs_zonder_grootte(self):
+        item = nu.item_for([setup(SHORT, 80800.0)], "zone:8")
+        steps = nu.checklist(item)
+        self.assertEqual([s["title"] for s in steps], ["Open BTC bij je beurs", "Limietprijs", "Stop", "Doel"])
+        self.assertIn("Short en Limit", steps[0]["sub"])
+        self.assertIsNone(steps[0]["value"])
+        self.assertEqual(steps[1]["copy"], "80774.80")
+        self.assertEqual(steps[2]["tone"], "loss")
+        self.assertEqual(steps[3]["choices"], [])
+        self.assertEqual(steps[3]["copy"], "80128.60")
+        self.assertNotIn("Grootte", " ".join(s["title"] for s in steps))
+        self.assertFalse(any("€" in (s["sub"] or "") for s in steps))
+
+    def test_meerdere_doelen_geven_een_keuze(self):
+        item = nu.plan_item("structuur:4", "SOL", "long", 100.0, 99.0, [(102.0, 2.0), (103.0, 3.0)], price=100.4, state=None,
+                            trade_type="structuur", untested=False)
+        doel = nu.checklist(item)[3]
+        self.assertEqual([c["label"] for c in doel["choices"]], ["Doel 1 · 2,0 R", "Doel 2 · 3,0 R"])
+        self.assertEqual(doel["copy"], "102.00")
+        self.assertIn("Kies", doel["sub"])
+
+    def test_koersregel_onderaan(self):
+        self.assertEqual(nu.price_note(nu.item_for([setup(SHORT, 80800.0)], "zone:8")), "nog in zone")
+        self.assertEqual(nu.price_note(nu.item_for([setup(SHORT, 80537.0)], "zone:8")), "nog 0,29% tot instap")
+        self.assertEqual(nu.price_note(nu.plan_item("structuur:4", "SOL", "long", 100.0, 99.0, [(102.0, 2.0)], price=None, state=None)), "")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class LadderItemTests(unittest.TestCase):
+    """Elk item draagt zijn ladder (app/ladder.py) met de getallen die de kaart al had; er wordt niets opnieuw berekend."""
+    def test_een_plan_in_de_zone_heeft_een_volle_ladder_met_zone(self):
+        f = nu.item_for([setup(SHORT, 80800.0)], "zone:8")
+        lad = f["ladder"]
+        self.assertEqual([ln["name"] for ln in lad["lines"]], ["Stop", "Instap", "Doel"])
+        self.assertEqual((lad["zone"]["low"], lad["zone"]["high"]), (80774.8, 80900.0))
+        self.assertTrue(lad["in_zone"])
+        self.assertEqual(f["zone_low"], 80774.8)
+
+    def test_de_koers_op_de_ladder_met_komma(self):
+        item = nu.item_for([setup(SHORT, 80537.0)], "zone:8")
+        self.assertEqual(item["ladder"]["price"]["text"], "80537,00")
+        self.assertEqual(item["distance_text"], "0,29%")
+
+    def test_herkomst_is_een_regel_uit_de_zone(self):
+        row = {**SHORT, "tf": "4h", "chart_zone": {"label": "Aanbodzone 4u", "tf": "4h"}}
+        f = nu.item_for([setup(row, 80800.0)], "zone:8")
+        self.assertEqual(f["origin"], "Aanbodzone 4u")
+        self.assertEqual(nu.item_for([setup(LONG, 99.5)], "setup:7")["origin"], "")
+
+    def test_een_open_trade_heeft_een_ladder_zonder_zone(self):
+        f = nu._from_signal(radar.signal_card(TRADE, 98.0))
+        self.assertIsNone(f["ladder"]["zone"])
+        self.assertTrue(f["ladder"]["trade"])
+        self.assertEqual(f["chart"]["entry"], 100.0)

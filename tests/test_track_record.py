@@ -1,0 +1,488 @@
+import unittest
+from datetime import datetime, timezone
+
+from app import track_record as tr
+
+NOW = datetime(2026, 10, 5, 12, tzinfo=timezone.utc)
+
+
+def row(trade_type="smc", outcome="take_profit", price=100.0, stop=99.0, take=102.0, message_id=None,
+        created="2026-09-20T10:00:00+00:00", done="2026-09-20T10:30:00+00:00"):
+    return {"message_id": message_id, "trade_type": trade_type, "auto_outcome": outcome, "price": price,
+            "stop_loss": stop, "take_profit": take, "created_at": created, "auto_outcome_at": done}
+
+
+class RTests(unittest.TestCase):
+    def test_r_override_beats_the_fixed_formula(self):
+        r = {"price": 100.0, "stop_loss": 95.0, "take_profit": 120.0, "auto_outcome": "take_profit", "r_override": 2.3}
+        self.assertEqual(tr.signal_r(r), 2.3)
+        r["auto_outcome"], r["r_override"] = "stop_loss", -0.4
+        self.assertEqual(tr.signal_r(r), -0.4)
+
+    def test_without_override_nothing_changes(self):
+        r = {"price": 100.0, "stop_loss": 95.0, "take_profit": 110.0, "auto_outcome": "take_profit"}
+        self.assertEqual(tr.signal_r(r), 2.0)
+        self.assertEqual(tr.signal_r({**r, "r_override": None}), 2.0)
+
+    def test_override_on_unresolved_signal_is_ignored(self):
+        for outcome in (None, "vervallen"):
+            self.assertIsNone(tr.signal_r({**row(outcome=outcome), "r_override": 1.5}))
+
+    def test_r_per_uitkomst(self):
+        self.assertEqual(tr.signal_r(row()), 2.0)
+        self.assertEqual(tr.signal_r(row(outcome="stop_loss")), -1.0)
+        self.assertIsNone(tr.signal_r(row(outcome="vervallen")))
+        self.assertIsNone(tr.signal_r(row(outcome=None)))
+        self.assertIsNone(tr.signal_r(row(stop=100.0)))
+
+    def test_score_split_toont_hoge_tegenover_lage_score(self):
+        rows = [dict(row(outcome="take_profit"), pass_pct=86.0), dict(row(outcome="stop_loss"), pass_pct=43.0),
+                dict(row(outcome="stop_loss"), pass_pct=29.0), row(outcome="take_profit")]   # laatste heeft geen score
+        entry = next(e for e in tr.summarize(rows, 0.0, NOW) if e["source"] == "scan" and e["trade_type"] == "smc")
+        split = entry["score_split"]
+        self.assertEqual((split["high_n"], split["low_n"]), (1, 2))
+        self.assertAlmostEqual(split["high_avg"], 2.0)
+        self.assertAlmostEqual(split["low_avg"], -1.0)
+        plain = next(e for e in tr.summarize([row()], 0.0, NOW) if e["source"] == "scan")
+        self.assertIsNone(plain["score_split"])
+
+    def test_kosten_per_signaal_hangen_af_van_stopafstand(self):
+        # stop 1% en kosten 0,06% per rondreis: 0,06R. Stop 0,1%: 0,6R.
+        self.assertAlmostEqual(tr._cost_r(row(), 0.06), 0.06)
+        self.assertAlmostEqual(tr._cost_r(row(stop=99.9), 0.06), 0.6)
+
+
+class SummarizeTests(unittest.TestCase):
+    def test_groepen_tellingen_en_netto(self):
+        rows = [row(), row(outcome="stop_loss"), row(outcome="vervallen"), row(trade_type="patroon", outcome="stop_loss"),
+                row(trade_type="day_trading", message_id=4)]
+        out = {(e["source"], e["trade_type"]): e for e in tr.summarize(rows, 0.06, NOW)}
+        smc = out[("scan", "smc")]
+        self.assertEqual((smc["total"], smc["resolved"], smc["wins"], smc["losses"], smc["open_or_expired"]), (3, 2, 1, 1, 1))
+        self.assertAlmostEqual(smc["winrate"], 0.5)
+        self.assertAlmostEqual(smc["avg_gross"], 0.5)
+        self.assertAlmostEqual(smc["avg_net"], 0.5 - 0.06)
+        self.assertEqual(out[("community", "day_trading")]["total"], 1)
+        self.assertEqual(out[("alles", "alles")]["total"], 5)
+        self.assertEqual(tr.summarize(rows, 0.06, NOW)[-1]["source"], "alles")
+
+    def test_status(self):
+        self.assertEqual(tr._status(10, 1.0), "te_weinig")
+        self.assertEqual(tr._status(40, -0.1), "verlies")
+        self.assertEqual(tr._status(40, 0.0), "verlies")
+        self.assertEqual(tr._status(40, 0.2), "positief")
+        self.assertEqual(tr._status(150, 0.2), "voordeel")
+        self.assertEqual(tr._status(0, None), "te_weinig")
+
+    def test_status_in_summary_en_vervallen_tellen_niet_mee(self):
+        rows = [row(outcome="stop_loss") for _ in range(35)] + [row(outcome="vervallen") for _ in range(50)]
+        smc = [e for e in tr.summarize(rows, 0.06, NOW) if e["trade_type"] == "smc"][0]
+        self.assertEqual(smc["status"], "verlies")
+        self.assertEqual(smc["resolved"], 35)
+        self.assertEqual(smc["open_or_expired"], 50)
+
+    def test_cumulatief_per_week_en_recent(self):
+        rows = [row(outcome="stop_loss", created="2026-05-01T10:00:00+00:00", done="2026-05-01T10:30:00+00:00"),   # ver terug
+                row(outcome="stop_loss", done="2026-10-01T10:00:00+00:00"),
+                row(done="2026-10-02T10:00:00+00:00")]
+        smc = [e for e in tr.summarize(rows, 0.0, NOW) if e["trade_type"] == "smc"][0]
+        self.assertEqual(len(smc["cumulative"]), tr.WEEKS_SHOWN)
+        self.assertAlmostEqual(smc["cumulative"][-1], -1.0 + -1.0 + 2.0)   # alles sinds het begin is -1 -1 +2
+        self.assertEqual(smc["recent_resolved"], 2)                        # de eerste ligt buiten 90 dagen
+
+    def test_lege_invoer(self):
+        self.assertEqual(tr.summarize([], 0.06, NOW), [])
+
+
+class SparklineTests(unittest.TestCase):
+    def test_stijgend_dalend_vlak_en_leeg(self):
+        self.assertIn("proof-spark-up", tr.sparkline_svg([0, 1, 2]))
+        self.assertIn("proof-spark-down", tr.sparkline_svg([2, 1, 0]))
+        self.assertIn("polyline", tr.sparkline_svg([0.0, 0.0, 0.0]))
+        self.assertEqual(tr.sparkline_svg([]), "")
+
+
+class EquityTests(unittest.TestCase):
+    def rows(self):
+        return [
+            row(outcome="take_profit", done="2026-09-20T10:00:00+00:00"),            # +2R
+            row(outcome="stop_loss", done="2026-09-21T10:00:00+00:00"),              # -1R
+            row(outcome="stop_loss", done="2026-09-22T10:00:00+00:00"),              # -1R
+            row(outcome="take_profit", done="2026-09-23T10:00:00+00:00"),            # +2R
+            row(outcome="vervallen"), row(outcome=None),
+            row(trade_type="structuur", outcome="stop_loss"),
+        ]
+
+    def test_curve_counts_only_take_and_stop_in_order_of_outcome(self):
+        curves = tr.equity_curves(list(reversed(self.rows())), 0.0)
+        smc = curves[0]
+        self.assertEqual(smc["trade_type"], "smc")
+        self.assertEqual(smc["cumulative"], [2.0, 1.0, 0.0, 2.0])
+        self.assertEqual(smc["drawdown"], [0.0, -1.0, -2.0, 0.0])
+        self.assertEqual(smc["max_drawdown"], -2.0)
+        self.assertEqual((smc["n"], smc["excluded"]), (4, 2))
+        self.assertEqual(smc["total_text"], "+2,00R")
+        self.assertEqual(curves[1]["drawdown"], [-1.0])                         # een eerste verlies is al terugval vanaf 0
+
+    def test_curve_total_equals_live_net_r_sum(self):
+        rows = self.rows()
+        curve = tr.equity_curves(rows, 0.1)[0]
+        self.assertAlmostEqual(curve["total"], sum(tr.live_net_r(rows, "smc", 0.1)))
+
+    def test_no_drawdown_is_worded_as_such(self):
+        only_wins = tr.equity_curves([row(outcome="take_profit"), row(outcome="take_profit")], 0.0)[0]
+        self.assertEqual(only_wins["dd_line"], "geen terugval")
+        self.assertEqual(tr.equity_curves(self.rows(), 0.0)[0]["dd_line"], "grootste terugval -2,00R")
+
+    def test_costs_come_off_every_trade(self):
+        smc = tr.equity_curves(self.rows()[:1], 0.1)[0]
+        self.assertAlmostEqual(smc["cumulative"][0], 2.0 - 0.1 / 1.0)            # stop op 1% afstand: 0,1R kosten
+
+    def test_type_without_resolved_trades_has_no_curve(self):
+        self.assertEqual(tr.equity_curves([row(outcome=None)], 0.0), [])
+
+    def test_svg_has_line_and_drawdown_shade(self):
+        svg = tr.equity_svg([2.0, 1.0, 0.0, 2.0], [0.0, -1.0, -2.0, 0.0], width=108, height=40)
+        self.assertIn('class="equity-dd"', svg)
+        self.assertIn('class="equity-line"', svg)
+        self.assertEqual(svg.count(",", svg.index('class="equity-line" points="')), 5)       # 0 plus vier trades
+        self.assertEqual(tr.equity_svg([], []), "")
+
+
+class HourGridTests(unittest.TestCase):
+    def test_cells_by_local_weekday_and_hour_with_weak_cells(self):
+        monday_14 = "2026-10-05T12:10:00+00:00"                                  # maandag 14:10 in Amsterdam (zomertijd)
+        tuesday_9 = "2026-10-06T07:00:00+00:00"
+        rows = [row(outcome="take_profit", created=monday_14)] * 4 + [row(outcome="stop_loss", created=monday_14)] \
+            + [row(outcome="stop_loss", created=tuesday_9)] * 2 + [row(outcome=None, created=tuesday_9)]
+        grid = tr.hour_grid(rows, 0.0)
+        mon = grid["rows"][0]["cells"][14]
+        self.assertEqual((grid["rows"][0]["day"], mon["n"], mon["weak"]), ("ma", 5, False))
+        self.assertAlmostEqual(mon["avg"], (4 * 2.0 - 1.0) / 5)
+        self.assertEqual(mon["heat"], "pos2")
+        self.assertEqual(mon["avg_short"], "+1,4")
+        tue = grid["rows"][1]["cells"][9]
+        self.assertEqual((tue["n"], tue["weak"], tue["heat"]), (2, True, "zwak"))     # open signaal telt niet, te weinig voor kleur
+        self.assertIn("2 trades", tue["title"])
+        self.assertEqual(grid["total"], 7)
+        self.assertEqual(grid["rows"][2]["cells"][0]["n"], 0)
+
+    def test_heat_follows_the_rounded_value_shown(self):
+        self.assertEqual(tr._heat(0.04), "nul")                                 # +0,0 in het vak, dus geen groen
+        self.assertEqual(tr._heat(-0.04), "nul")
+        self.assertEqual(tr._heat(0.46), "pos2")                                # toont +0,5
+
+    def test_rounded_zero_has_no_sign(self):
+        rows = [row(outcome="take_profit", take=100.04, created="2026-10-05T12:10:00+00:00")] * 5       # +0,04R per trade
+        cell = tr.hour_grid(rows, 0.0)["rows"][0]["cells"][14]
+        self.assertEqual((cell["avg_short"], cell["heat"]), ("0,0", "nul"))
+        neg = tr.hour_grid([row(outcome="take_profit", take=99.96, created="2026-10-05T12:10:00+00:00")] * 5, 0.0)["rows"][0]["cells"][14]
+        self.assertEqual(neg["avg_short"], "0,0")
+
+    def test_dst_boundary_lands_on_local_sunday_hour(self):
+        # 2026-10-25 00:30 UTC is nog zomertijd (CEST, +2): zondag 02:30 in Amsterdam, het uur dat bij het terugzetten twee keer voorkomt.
+        grid = tr.hour_grid([row(created="2026-10-25T00:30:00+00:00")] * 5, 0.0)
+        self.assertEqual(grid["rows"][6]["cells"][2]["n"], 5)
+        self.assertEqual(grid["rows"][6]["day"], "zo")
+
+    def test_heat_levels(self):
+        self.assertEqual([tr._heat(v) for v in (0.6, 0.1, 0.0, -0.1, -0.7)], ["pos2", "pos1", "nul", "neg1", "neg2"])
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class SamenvalGroupTest(unittest.TestCase):
+    def test_samenval_rows_get_own_entry_without_double_counting_total(self):
+        base = {"message_id": None, "trade_type": "smc", "auto_outcome": "take_profit", "auto_outcome_at": "2026-10-01T10:00:00+00:00",
+                "price": 100.0, "stop_loss": 99.0, "take_profit": 102.0, "created_at": "2026-10-01T09:00:00+00:00"}
+        rows = [{**base, "samenval": 1}, {**base, "samenval": 0}]
+        out = {(e["source"], e["trade_type"]): e for e in tr.summarize(rows, 0.06, now=datetime(2026, 10, 5, tzinfo=timezone.utc))}
+        self.assertEqual(out[("scan", "samenval")]["resolved"], 1)
+        self.assertEqual(out[("scan", "smc")]["resolved"], 2)
+        self.assertEqual(out[("alles", "alles")]["resolved"], 2)
+
+
+class DaySummaryTests(unittest.TestCase):
+    def test_telt_gemeld_afgerond_en_netto_r_sinds_een_moment(self):
+        since = datetime(2026, 10, 5, 0, tzinfo=timezone.utc)
+        rows = [row(created="2026-10-05T09:00:00+00:00"),                              # winst +2R
+                row(outcome="stop_loss", created="2026-10-05T10:00:00+00:00"),         # -1R
+                row(outcome=None, created="2026-10-05T11:00:00+00:00"),                # nog open
+                row(created="2026-10-01T09:00:00+00:00")]                              # te oud
+        d = tr.day_summary(rows, 0.0, since)
+        self.assertEqual((d["signals"], d["resolved"], d["wins"]), (3, 2, 1))
+        self.assertAlmostEqual(d["net_r"], 1.0)
+
+
+class WeekSummaryTests(unittest.TestCase):
+    def test_week_telt_per_dag_en_kiest_beste_en_slechtste(self):
+        rows = [dict(row(created="2026-10-04T09:00:00+00:00", done="2026-10-04T10:00:00+00:00"), id=1, coin="BTC", direction="long"),            # +2R
+                dict(row(outcome="stop_loss", created="2026-10-05T09:00:00+00:00", done="2026-10-05T10:00:00+00:00"), id=2, coin="ETH", direction="short"),   # -1R
+                dict(row(outcome=None, created="2026-10-05T11:00:00+00:00"), id=3, coin="SOL", direction="long"),                                          # open
+                dict(row(created="2026-09-01T09:00:00+00:00"), id=4, coin="OLD", direction="long")]                                                        # te oud
+        w = tr.week_summary(rows, 0.0, NOW)
+        self.assertEqual((w["signals"], w["resolved"], w["wins"]), (3, 2, 1))
+        self.assertAlmostEqual(w["net_r"], 1.0)
+        self.assertEqual(len(w["days"]), 7)
+        self.assertAlmostEqual(w["cumulative"][-1], 1.0)
+        self.assertEqual((w["best"]["coin"], w["worst"]["coin"]), ("BTC", "ETH"))
+
+
+class WeekSummaryLocalDaysTest(unittest.TestCase):
+    def test_vandaag_is_de_nederlandse_dag_ook_na_middernacht_nl(self):
+        now = datetime(2026, 10, 13, 22, 30, tzinfo=timezone.utc)     # 00:30 NL op 14 oktober
+        win = dict(row(created="2026-10-13T22:00:00+00:00", done="2026-10-13T22:10:00+00:00"), id=1, coin="BTC", direction="long")   # 00:10 NL
+        late = dict(row(created="2026-10-13T20:00:00+00:00", done="2026-10-13T21:50:00+00:00"), id=2, coin="ETH", direction="long")  # 23:50 NL, gisteren
+        w = tr.week_summary([win, late], 0.0, now)
+        self.assertEqual(str(w["days"][-1][0]), "2026-10-14")
+        self.assertAlmostEqual(w["days"][-1][1], 2.0)                   # alleen de winst van na middernacht NL
+        self.assertAlmostEqual(w["days"][-2][1], 2.0)
+
+    def test_totaal_en_dagstaven_tellen_dezelfde_trades_op_de_vensterrand(self):
+        now = datetime(2026, 10, 13, 12, 0, tzinfo=timezone.utc)      # NL-dagen 7 t/m 13 oktober
+        edge_in = dict(row(created="2026-10-06T22:00:00+00:00", done="2026-10-06T23:00:00+00:00"), id=1, coin="BTC", direction="long")   # 00:00 NL op 7 oktober
+        edge_out = dict(row(created="2026-10-06T21:59:00+00:00", done="2026-10-06T23:00:00+00:00"), id=2, coin="ETH", direction="long")  # 23:59 NL op 6 oktober
+        w = tr.week_summary([edge_in, edge_out], 0.0, now)
+        self.assertEqual((w["signals"], w["resolved"]), (1, 1))
+        self.assertAlmostEqual(w["net_r"], sum(v for _, v in w["days"]))
+        self.assertAlmostEqual(w["days"][0][1], w["net_r"])
+
+
+class RuleStatusTest(unittest.TestCase):
+    PASS = {"lab_passes": True}
+
+    def test_new_rule_is_in_proef(self):
+        self.assertEqual(tr.rule_status(self.PASS, [0.1] * 10)["status"], "In proef")
+        self.assertEqual(tr.rule_status(None, [])["status"], "In proef")
+
+    def test_proven_needs_lab_and_fifty_live_trades(self):
+        self.assertEqual(tr.rule_status(self.PASS, [0.1] * 50)["status"], "Bewezen")
+        self.assertEqual(tr.rule_status(self.PASS, [0.1] * 49)["status"], "In proef")
+        self.assertEqual(tr.rule_status(None, [0.1] * 80)["status"], "In proef")
+
+    def test_thirty_losing_trades_make_a_rule_negative(self):
+        self.assertEqual(tr.rule_status(self.PASS, [0.2] * 60 + [-0.5] * 30)["status"], "Negatief")
+
+    def test_failed_lab_is_negative_even_without_live_trades(self):
+        self.assertEqual(tr.rule_status({"lab_passes": False}, [])["status"], "Negatief")
+
+    def test_clearly_negative_recent_trades_are_negatief_by_rule_one(self):
+        self.assertEqual(tr.rule_status(self.PASS, [0.5] * 100 + [-0.2] * 100)["status"], "Negatief")
+
+    def test_bewaking_alone_blocks_proof_and_gives_in_proef(self):
+        series = [1.0] * 300 + [-0.5] * 70 + [0.1] * 30   # laatste 30 +0.1, alles +0.67, laatste 100 -0.32 met bovengrens < 0
+        self.assertGreaterEqual(sum(series[-30:]) / 30, 0)
+        self.assertGreaterEqual(sum(series) / len(series), 0)
+        from app import structure_review
+        self.assertLess(structure_review.bootstrap_mean(series[-100:])[1], 0)
+        self.assertEqual(tr.rule_status(self.PASS, series)["status"], "In proef")
+
+    def test_negative_boundary_is_exactly_thirty(self):
+        self.assertEqual(tr.rule_status(self.PASS, [-0.5] * 29)["status"], "In proef")
+        self.assertEqual(tr.rule_status(self.PASS, [-0.5] * 30)["status"], "Negatief")
+
+    def test_hundred_trade_boundary_for_average_and_bewaking(self):
+        self.assertIsNone(tr.rule_status(self.PASS, [0.1] * 99)["avg_last100"])
+        self.assertAlmostEqual(tr.rule_status(self.PASS, [0.1] * 100)["avg_last100"], 0.1)
+        # onder 100 trades is er geen bewaking: 99 trades met een zwakke staart blijven Bewezen, de bewaking pakt pas bij 100
+        self.assertEqual(tr.rule_status(self.PASS, [1.0] * 99)["status"], "Bewezen")
+        self.assertEqual(tr.rule_status(self.PASS, [1.0] * 100)["status"], "Bewezen")
+
+    def test_visible_rule_types(self):
+        types = {"don55_trend", "don20", "trend"}
+        self.assertEqual(tr.visible_rule_types(types, True, ("don55_trend",)), ["don20", "don55_trend", "trend"])
+        self.assertEqual(tr.visible_rule_types(types, False, ("don55_trend",)), ["trend"])
+
+    def test_result_keys_and_average_of_last_hundred(self):
+        few = tr.rule_status(self.PASS, [0.1] * 99)
+        self.assertIsNone(few["avg_last100"])
+        self.assertEqual(few["n_live"], 99)
+        self.assertTrue(few["reason"])
+        full = tr.rule_status(self.PASS, [-0.1] * 20 + [0.2] * 100)
+        self.assertAlmostEqual(full["avg_last100"], 0.2)
+        self.assertEqual(full["status"], "Bewezen")
+
+    def test_last_hundred_with_negative_upper_bound_blocks_proof(self):
+        series = [1.0] * 400 + [-0.05] * 100       # gemiddelde alles positief, laatste 100 duidelijk onder 0
+        self.assertNotEqual(tr.rule_status(self.PASS, series)["status"], "Bewezen")
+
+
+class RangeSweepStatusTest(unittest.TestCase):
+    """Besluit uit review: de proef van de range sweep draait om de stopkwaliteit; de strenge toets op een voordeel (t >= 3,4) hoort bij Bewezen, niet bij Negatief."""
+    STOP_PASS = {"lab_passes": True}
+    EDGE_FAIL = {"lab_passes": False}
+    EDGE_PASS = {"lab_passes": True}
+
+    def test_stop_quality_pass_and_edge_fail_is_in_proef_not_negatief(self):
+        out = tr.rule_status(self.EDGE_FAIL, [], stop_lab=self.STOP_PASS)
+        self.assertEqual(out["status"], "In proef")
+        self.assertIn("stopkwaliteit", out["reason"].lower())
+        self.assertEqual(tr.rule_status(self.EDGE_FAIL, [0.1] * 80, stop_lab=self.STOP_PASS)["status"], "In proef")   # nooit Bewezen zonder de strenge toets
+
+    def test_only_a_negative_live_series_makes_it_negatief(self):
+        self.assertEqual(tr.rule_status(self.EDGE_FAIL, [-0.5] * 30, stop_lab=self.STOP_PASS)["status"], "Negatief")
+        self.assertEqual(tr.rule_status(self.EDGE_FAIL, [-0.5] * 29, stop_lab=self.STOP_PASS)["status"], "In proef")
+
+    def test_failed_stop_quality_is_negatief(self):
+        out = tr.rule_status(self.EDGE_PASS, [], stop_lab={"lab_passes": False})
+        self.assertEqual(out["status"], "Negatief")
+        self.assertIn("stopkwaliteit", out["reason"].lower())
+
+    def test_bewezen_needs_both_tests_and_the_live_watch(self):
+        self.assertEqual(tr.rule_status(self.EDGE_PASS, [0.1] * 50, stop_lab=self.STOP_PASS)["status"], "Bewezen")
+        self.assertEqual(tr.rule_status(self.EDGE_PASS, [0.1] * 49, stop_lab=self.STOP_PASS)["status"], "In proef")
+
+    def test_without_a_stop_lab_nothing_changes(self):
+        self.assertEqual(tr.rule_status(self.EDGE_FAIL, [])["status"], "Negatief")
+
+    def test_rule_proof_uses_the_stop_lab_too(self):
+        self.assertEqual(tr.rule_proof(self.EDGE_FAIL, [], stop_lab=self.STOP_PASS)["label"], "In proef")
+        self.assertEqual(tr.rule_proof(self.EDGE_FAIL, [])["label"], "Negatief")
+
+
+class StopQualityLiveTest(unittest.TestCase):
+    def t(self, stop=False, r1=False, closed=True, **kw):
+        return {"entry": 100.0, "stop": 102.5, "stop_hit_at": "x" if stop else None, "closed_at": "x" if closed else None,
+                **{f"reached_{k}r_at": ("x" if (k == 1 and r1) else None) for k in range(1, 7)}, **kw}
+
+    def test_counts_only_finished_trades(self):
+        out = tr.stop_quality_live([self.t(stop=True), self.t(r1=True), self.t(closed=False)])
+        self.assertEqual((out["n"], out["open"]), (2, 1))
+        self.assertAlmostEqual(out["stop_hit"], 0.5)
+        self.assertAlmostEqual(out["reach"][1], 0.5)
+        self.assertFalse(out["enough"])
+        self.assertFalse(out["tight_known"])
+
+    def test_empty_has_no_numbers(self):
+        out = tr.stop_quality_live([])
+        self.assertEqual((out["n"], out["open"]), (0, 0))
+        self.assertIsNone(out["stop_hit"])
+        self.assertIsNone(out["median_stop_pct"])
+
+    def test_enough_at_thirty(self):
+        self.assertTrue(tr.stop_quality_live([self.t()] * 30)["enough"])
+        self.assertFalse(tr.stop_quality_live([self.t()] * 29)["enough"])
+
+    def test_quantiles_and_cost_in_r(self):
+        trades = [self.t(mae_r=m, mfe_r=f) for m, f in [(0.2, 1.0), (0.4, 2.0), (0.6, 3.0), (0.8, 4.0), (1.0, 5.0)]]
+        out = tr.stop_quality_live(trades, cost_pct=0.12)
+        self.assertAlmostEqual(out["mae_q"][1], 0.6)              # mediaan
+        self.assertAlmostEqual(out["mfe_q"][1], 3.0)
+        self.assertAlmostEqual(out["median_cost_r"], 0.12 / 2.5)   # stop 2,5% van de instap
+        self.assertIsNone(tr.stop_quality_live(trades)["median_cost_r"])
+
+    def test_rows_show_lab_beside_live(self):
+        lab = {"summary": {"n": 412, "stop_hit": {"p": 0.55}, "reach": {str(k): {"p": 0.5 / k} for k in range(1, 7)}, "median_stop_pct": 2.4, "median_cost_r": 0.05, "tight_rate": 0.18}}
+        rows = tr.stop_quality_rows(lab, tr.stop_quality_live([]))
+        self.assertEqual(rows[0], {"label": "Stop geraakt", "lab_text": "55%", "live_text": "-"})
+        self.assertEqual(rows[6]["label"], "+6R vóór de stop")
+        labels = [r["label"] for r in rows]
+        for needle in ("Stopafstand (mediaan)", "Te krappe stops"):
+            self.assertIn(needle, labels)
+        tight = next(r for r in rows if r["label"] == "Te krappe stops")
+        self.assertEqual((tight["lab_text"], tight["live_text"]), ("18%", "niet gemeten"))
+
+    def test_rows_without_a_lab_show_dashes_not_zeros(self):
+        rows = tr.stop_quality_rows(None, tr.stop_quality_live([self.t(stop=True)]))
+        self.assertEqual(rows[0]["lab_text"], "-")
+        self.assertEqual(rows[0]["live_text"], "100%")
+
+    def test_stored_lab_row_shape_is_unwrapped(self):
+        stored = {"rule": "range_sweep_stop", "lab_passes": True, "summary": {"variant": "RZ_2H", "summary": {"n": 412, "stop_hit": {"p": 0.55}}}}
+        view = tr.stop_lab_view(stored)
+        self.assertEqual(view["summary"]["n"], 412)
+        self.assertEqual(tr.stop_quality_rows(view, tr.stop_quality_live([]))[0]["lab_text"], "55%")
+        self.assertEqual(tr.stop_lab_view({"lab_passes": False, "summary": {"variant": None, "reason": "x"}})["summary"], {})
+        self.assertIsNone(tr.stop_lab_view(None))
+
+    def test_drift_warning_after_fifty(self):
+        lab = {"summary": {"reach": {"1": {"p": 0.48, "ci": [0.42, 0.54]}}}}
+        self.assertIn("wijkt af van het lab", tr.drift_warning(lab, {"n": 60, "reach": {1: 0.30}}))
+        self.assertIsNone(tr.drift_warning(lab, {"n": 20, "reach": {1: 0.30}}))
+        self.assertIsNone(tr.drift_warning(lab, {"n": 60, "reach": {1: 0.50}}))
+        self.assertIsNone(tr.drift_warning(None, {"n": 60, "reach": {1: 0.30}}))
+
+
+class ReferenceLiveTest(unittest.TestCase):
+    def test_mark_r_is_direction_aware(self):
+        long = {"direction": "long", "entry": 100.0, "stop": 98.0}
+        short = {"direction": "short", "entry": 100.0, "stop": 102.0}
+        self.assertAlmostEqual(tr.mark_r(long, 103.0), 1.5)
+        self.assertAlmostEqual(tr.mark_r(short, 103.0), -1.5)
+        self.assertIsNone(tr.mark_r(long, None))
+
+    def test_open_trades_are_shown_beside_the_finished_ones(self):
+        trades = [{"coin": "A", "ref_r": 1.0, "direction": "long", "entry": 100.0, "stop": 98.0},
+                  {"coin": "B", "ref_r": None, "direction": "long", "entry": 100.0, "stop": 98.0},
+                  {"coin": "C", "ref_r": None, "direction": "short", "entry": 100.0, "stop": 102.0}]
+        out = tr.reference_live(trades, [0.8, -1.1], {"B": 102.0, "C": 101.0})
+        self.assertEqual((out["n"], out["open"]), (2, 2))
+        self.assertAlmostEqual(out["avg_net"], -0.15)
+        self.assertEqual(out["marks"], [1.0, -0.5])        # alleen lopende trades, op de koers van nu
+
+    def test_no_finished_trades_gives_no_average(self):
+        out = tr.reference_live([], [], {})
+        self.assertIsNone(out["avg_net"])
+        self.assertEqual(out["marks"], [])
+
+
+class LabRuleHelpersTest(unittest.TestCase):
+    def test_labels_cover_every_lab_variant_and_fall_back_to_the_raw_name(self):
+        from app.replay import trendlab
+        for v in trendlab.VARIANTS:
+            self.assertIn(v.name.lower(), tr.LAB_LABELS)
+        self.assertEqual(tr.rule_label("onbekend_x"), "onbekend_x")
+        self.assertEqual(tr.rule_label("don55_trend"), "Trend 4u met meelopende stop")
+
+    def test_fmt_r_uses_comma_and_sign(self):
+        self.assertEqual(tr.fmt_r(0.094), "+0,09R")
+        self.assertEqual(tr.fmt_r(-0.06), "-0,06R")
+
+    def test_lab_line_omits_what_is_missing(self):
+        lab = {"lab_passes": False, "summary": {"n": 2218, "avg": 0.09}}
+        self.assertEqual(tr.lab_line(lab), "Test op historische data: niet geslaagd, gemiddeld +0,09R netto per trade over 2218 trades")
+        self.assertEqual(tr.lab_line({"lab_passes": True, "summary": {}}), "Test op historische data: geslaagd")
+        self.assertEqual(tr.lab_line(None), "")
+
+    def test_split_and_sort(self):
+        eng, other = tr.split_rule_types(["don20", "don55_trend", "pull21"], ("don55_trend",))
+        self.assertEqual((eng, other), (["don55_trend"], ["don20", "pull21"]))
+        labs = {"don20": {"lab_passes": False, "summary": {"n": 10, "avg": 0.08}},
+                "pull21": {"lab_passes": False, "summary": {"n": 5, "avg": 0.11}},
+                "sw_don_1h": {"lab_passes": True, "summary": {"n": 7, "avg": -0.02}},
+                "pull50": {"lab_passes": False, "summary": {}}}
+        rows = tr.other_rule_rows(labs, list(labs))
+        self.assertEqual([r["rule"] for r in rows], ["sw_don_1h", "pull21", "don20", "pull50"])
+        self.assertEqual(rows[1]["avg_text"], "+0,11R")
+        self.assertEqual(rows[3]["avg_text"], "-")
+
+
+class FundingSplitTests(unittest.TestCase):
+    """Bewijs: kaarten met extreme funding bij het ontstaan tegenover de rest, per soort. Beschrijft, voorspelt niets."""
+
+    def test_extreme_against_the_rest_per_type(self):
+        rows = [dict(row("zone_radar", "take_profit"), ctx_funding=0.08), dict(row("zone_radar", "stop_loss"), ctx_funding=-0.05),
+                dict(row("zone_radar", "take_profit"), ctx_funding=0.01), dict(row("zone_radar", "stop_loss"), ctx_funding=0.0),
+                dict(row("zone_radar", "stop_loss"), ctx_funding=0.02), dict(row("zone_radar", None), ctx_funding=0.09),
+                dict(row("zone_radar", "take_profit"), ctx_funding=None), dict(row("smc", "take_profit"), ctx_funding=None)]
+        out = tr.funding_split(rows, 0.0)
+        self.assertEqual([s["trade_type"] for s in out], ["zone_radar"])         # smc heeft geen gemeten stand: geen tabel
+        s = out[0]
+        self.assertEqual(s["label"], "Zone-radar (ongetest)")
+        self.assertEqual((s["extreme"]["n"], s["extreme"]["wins"], s["extreme"]["open"]), (2, 1, 1))
+        self.assertAlmostEqual(s["extreme"]["winrate"], 0.5)
+        self.assertAlmostEqual(s["extreme"]["avg_net"], 0.5)                    # (+2 - 1) / 2
+        self.assertEqual((s["rest"]["n"], s["rest"]["wins"]), (3, 1))
+        self.assertAlmostEqual(s["rest"]["avg_net"], 0.0)                       # (+2 - 1 - 1) / 3
+        self.assertEqual(s["unmeasured"], 1)                                    # afgerond, maar zonder stand: apart geteld, niet weggelaten
+        self.assertEqual((s["high"], s["low"]), (0.05, -0.03))
+
+    def test_empty_group_has_no_numbers(self):
+        out = tr.funding_split([dict(row("zone_radar", "take_profit"), ctx_funding=0.01)], 0.0)
+        self.assertEqual(out[0]["extreme"], {"n": 0, "wins": 0, "open": 0, "winrate": None, "avg_net": None})
+
+    def test_costs_count_like_elsewhere(self):
+        out = tr.funding_split([dict(row("zone_radar", "take_profit"), ctx_funding=0.2)], 0.1)
+        self.assertAlmostEqual(out[0]["extreme"]["avg_net"], 2.0 - 0.1)         # 0,1% kosten op een stop van 1%

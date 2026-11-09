@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+{% import "_macros.html" as macros %}
+{% block title %}Bewijs — HesPulse{% endblock %}
+{% block page_title %}Bewijs{% endblock %}
+{% block content %}
+
+{% set intro = "Wat elke soort melding echt opleverde, automatisch gemeten uit de uitkomsten van alle signalen. Geen selectie, geen beste maanden: wat hier staat, staat er voor iedereen." ~ (" Jij ziet ook de regels in proef; die tellen mee in jouw totalen, leerlingen zien ze niet." if ceo_view else "") %}
+{% if total %}
+{{ macros.headline(total.label, ("%+.2f"|format(total.avg_net)) if total.avg_net is not none else "-", "R per trade, na kosten", spark=total.spark,
+     delta=(("%+.2f"|format(total.recent_avg_net) ~ "R laatste " ~ recent_days ~ " dagen") if total.recent_avg_net is not none else ""),
+     tone=("pos" if total.recent_avg_net and total.recent_avg_net > 0 else "neg" if total.recent_avg_net and total.recent_avg_net < 0 else ""), explain=intro) }}
+{# Winst en verlies staan naast de winrate, niet in een losse alinea: open en vervallen blijven zichtbaar in de derde regel. #}
+{{ macros.keylines([
+  {"label": "Afgeronde trades", "value": total.resolved, "explain": total.wins ~ " winst, " ~ total.losses ~ " verlies. " ~ total.open_or_expired ~ " nog open of vervallen, die tellen niet mee in winrate en R."},
+  {"label": "Winrate", "value": (("%.0f"|format(total.winrate * 100)) if total.winrate is not none else "-"), "unit": ("%" if total.winrate is not none else ""),
+   "explain": "Alleen doel en stop tellen. Open en vervallen staan ernaast."},
+  {"label": "Open of vervallen", "value": total.open_or_expired, "explain": "Tellen niet mee in winrate en R."}], "bw") }}
+{% else %}
+<p class="muted tab-meta">{{ intro }}</p>
+{% endif %}
+
+{{ macros.utabs([
+  {"key": "soort", "label": "Per soort", "href": "#tab-soort"},
+  {"key": "week", "label": "Week", "href": "#tab-week"},
+  {"key": "regels", "label": "Regels", "href": "#tab-regels"},
+  {"key": "curves", "label": "Curves", "href": "#tab-curves"},
+  {"key": "uurkaart", "label": "Uurkaart", "href": "#tab-uurkaart"}], "soort", "bewijs",
+  menu=[{"label": "Jouw week als plaatje", "href": "/week"}]) }}
+
+<div class="ut-panels" data-utabs-panels="bewijs">
+
+<section id="tab-soort" data-utab-panel class="is-shown">
+{% if not summary %}
+<p class="muted empty">Nog geen signalen om te meten.</p>
+{% else %}
+{% set focus_view = off_types or focus.active() %}
+<div class="flat">
+  {% if focus_view %}<h3 class="focus-title">In focus <span class="muted">deze soorten melden nieuwe kansen</span></h3>{% endif %}
+  {{ macros.row_head("Soort", "", "Per trade") }}
+  {% if focus_view and not per_type %}<p class="muted empty">Nog geen signalen van Structuur of de zone-radar.</p>{% endif %}
+  {% for e in per_type %}
+  {# Met focus staan de soorten die nog melden open: het grote getal en de feiten zonder extra tik. #}
+  <details class="mrow-wrap{% if focus_view %} is-focus{% endif %}"{% if focus_view %} open{% endif %}>
+    {{ macros.market_row(e.label[:3]|upper, e.label, chip=status_labels[e.status],
+         subtitle=e.resolved ~ " afgerond" ~ ((", winrate " ~ "%.0f"|format(e.winrate * 100) ~ "%") if e.winrate is not none else ""),
+         right_text=(("%+.2f"|format(e.avg_net) ~ "R") if e.avg_net is not none else "-"),
+         right_tone=("pos" if e.avg_net and e.avg_net > 0 else "neg" if e.avg_net and e.avg_net < 0 else ""), el="summary") }}
+    <div class="mrow-body">
+    {% if e.source_label %}<span class="muted proof-source">{{ e.source_label }}</span>{% endif %}
+      {% if e.avg_net is not none %}
+      <div class="proof-number {{ 'pos' if e.avg_net > 0 else 'neg' }}">{{ "%+.2f"|format(e.avg_net) }}<span class="proof-unit">R per trade, na kosten</span></div>
+      {% else %}
+      <div class="proof-number">-<span class="proof-unit">nog niets afgerond</span></div>
+      {% endif %}
+      {% if e.avg_net is not none %}{{ macros.r_ruler(e.avg_net) }}{% endif %}
+      {{ e.spark }}
+      <div class="proof-caption muted">Cumulatief resultaat in R, laatste {{ weeks }} weken</div>
+      <dl class="proof-facts">
+        <div><dt>Afgeronde trades</dt><dd>{{ e.resolved }}</dd></div>
+        <div><dt>Winrate</dt><dd>{% if e.winrate is not none %}{{ "%.0f"|format(e.winrate * 100) }}%{% else %}-{% endif %}</dd></div>
+        <div><dt>Bruto per trade</dt><dd>{% if e.avg_gross is not none %}{{ "%+.2f"|format(e.avg_gross)|replace(".", ",") }}R{% else %}-{% endif %}</dd></div>
+        <div><dt>Netto per trade</dt><dd>{% if e.avg_net is not none %}{{ "%+.2f"|format(e.avg_net)|replace(".", ",") }}R{% else %}-{% endif %}</dd></div>
+        <div><dt>Kosten per trade</dt><dd>{% if e.avg_cost_r is not none %}{{ "%.2f"|format(e.avg_cost_r)|replace(".", ",") }}R{% else %}-{% endif %}</dd></div>
+        <div><dt>Laatste {{ recent_days }} dagen</dt><dd>{% if e.recent_avg_net is not none %}{{ "%+.2f"|format(e.recent_avg_net) }}R ({{ e.recent_resolved }})</dd>{% else %}-</dd>{% endif %}</div>
+      </dl>
+      {% if e.gross_total is not none %}<p class="proof-footnote muted proof-cost">Samen {{ "%+.2f"|format(e.gross_total)|replace(".", ",") }}R bruto, {{ "%+.2f"|format(e.net_total)|replace(".", ",") }}R {{ cost_line }}. Een krappe stop maakt de kosten in R groter.</p>{% endif %}
+      {% if e.trade_type in focus_types and e.resolved %}<p class="proof-footnote muted proof-funding">{% if e.avg_funding_r is not none %}Kosten per trade waarvan funding {{ "%+.2f"|format(e.avg_funding_r)|replace(".", ",") }}R ({{ e.funding_measured }} gemeten{% if e.funding_unknown %}, {{ e.funding_unknown }} trade{{ "s" if e.funding_unknown != 1 }} met onbekende funding, niet meegeteld{% endif %}).{% else %}Funding nog niet gemeten: {{ e.funding_unknown }} trade{{ "s" if e.funding_unknown != 1 }} met onbekende funding, niet meegeteld.{% endif %}</p>{% endif %}
+      {% if e.ambiguous %}<p class="proof-footnote muted proof-ambiguous">{{ e.ambiguous }} keer stop en doel in dezelfde candle: volgorde onbekend, als stop geteld.</p>{% endif %}
+      {% if e.mae_line %}<p class="proof-footnote muted proof-mae">{{ e.mae_line }} Gemeten op de candles van na de vulling tot doel of stop.</p>{% endif %}
+      {% if ceo_view %}{% for line in shadow_lines.get(e.trade_type, []) %}<p class="proof-footnote muted proof-shadow">{{ line }}</p>{% endfor %}{% endif %}
+      {% if e.score_split and e.source != 'alles' %}
+      <p class="proof-footnote muted">Score van {{ "%.0f"|format(e.score_split.cut) }}% of hoger: {% if e.score_split.high_avg is not none %}{{ "%+.2f"|format(e.score_split.high_avg) }}R ({{ e.score_split.high_n }}){% else %}nog geen afgeronde kans{% endif %}.
+        Lager: {% if e.score_split.low_avg is not none %}{{ "%+.2f"|format(e.score_split.low_avg) }}R ({{ e.score_split.low_n }}){% else %}nog geen afgeronde kans{% endif %}. Dit toont of de gemeten kenmerken iets zeggen.</p>
+      {% endif %}
+      {% if e.trade_type == "range_sweep" %}<p class="proof-footnote muted">R gemeten bij de referentie-uitgang (meelopende stop 3 ATR op 1u), niet bij een doel; de stopkwaliteit staat onder Regels.</p>{% endif %}
+      {% if e.trade_type == "zone_sweep" %}<p class="proof-footnote muted">Ongetest: live op verzoek, de labrun volgt later. Met een doel telt doel of stop; een kaart zonder doel telt de R bij de referentie-uitgang (meelopende stop 3 ATR op 1u).</p>{% endif %}
+      {% if e.trade_type == "poc_radar" %}<p class="proof-footnote muted">Ongetest: live op verzoek, zonder labrun. Met een doel telt doel of stop; een kaart zonder doel telt de R bij de referentie-uitgang (meelopende stop 3 ATR op 1u).</p>{% endif %}
+      {% if e.trade_type in ("zone_radar", "zone_sweep") and e.score_split %}<p class="proof-footnote muted">De score is hier één kenmerk, POC-samenval: 100% als de limiet binnen 0,3% van een naakte POC lag, anders 0%. Kaarten van vóór die meting tellen niet mee.</p>{% endif %}
+      <p class="proof-footnote muted">{{ e.wins }} winst, {{ e.losses }} verlies. {{ e.open_or_expired }} nog open of vervallen, die tellen niet mee in winrate en R.</p>
+      {% if e.trade_type in focus_types %}<p class="proof-footnote muted proof-era">Bovenstaande cijfers zijn op perps-candles, de bron sinds 1 november.</p>{% endif %}
+      {% if e.older %}{% set o = e.older %}
+      <div class="proof-older">
+        <p class="proof-older-title">{{ o.label }}</p>
+        <p class="proof-footnote muted">{{ o.resolved }} afgerond ({{ o.wins }} winst, {{ o.losses }} verlies){% if o.winrate is not none %}, winrate {{ "%.0f"|format(o.winrate * 100) }}%{% endif %}{% if o.avg_net is not none %}, netto {{ "%+.2f"|format(o.avg_net)|replace(".", ",") }}R per trade (samen {{ "%+.2f"|format(o.net_total)|replace(".", ",") }}R){% endif %}. {{ o.open_or_expired }} open of vervallen.{% if o.ambiguous %} {{ o.ambiguous }} keer volgorde onbekend, als stop geteld.{% endif %} Apart gehouden: uitkomsten op andere candles.</p>
+      </div>
+      {% endif %}
+    </div>
+  </details>
+  {% endfor %}
+</div>
+
+{% if model_report %}{% set m = model_report %}{% set ex = m.execution %}{% set h = m.h %}
+{# HesPulse-model (app/model_measure.py, preregistratie §8): meting, geen oordeel. Een besluit pas bij 150 trades, 12 weken en N_eff 60. #}
+<div class="flat model-proof" id="hespulse-model">
+  <h3>HesPulse-model, meting</h3>
+  <p class="proof-footnote muted">Ongetest. Na 50 afgeronde trades volgt een technische controle; een besluit pas bij 150 trades, 12 weken en 60 onafhankelijke trades.</p>
+  {% if m.freeze_at %}<p class="proof-footnote muted">Instapregels bevroren sinds {{ m.freeze_at.strftime("%d-%m-%Y %H:%M") }} UTC. Alleen wat daarna ontstond telt hieronder. Apart: {{ m.apart.scenarios }} scenario's van vóór de bevriezing of met terugwerkende kracht gevonden ({{ m.apart.h.n }} afgeronde trades, netto {{ r_text(m.apart.h.mean) }}; V1 {{ m.apart.v1.n }}, netto {{ r_text(m.apart.v1.mean) }}; overige punten {{ m.apart.punten.n }}, netto {{ r_text(m.apart.punten.mean) }}).</p>{% endif %}
+  <dl class="proof-facts">
+    <div><dt>Scenario's ontdekt</dt><dd>{{ m.funnel.ontdekt }}</dd></div>
+    <div><dt>Sweep · shift</dt><dd>{{ m.funnel.sweep }} · {{ m.funnel.shift }}</dd></div>
+    <div><dt>Entries gemeld</dt><dd>{{ m.funnel.entry }}</dd></div>
+    <div><dt>Vulbaar bij melding</dt><dd>{% if ex.vulbaar_pct is not none %}{{ "%.0f"|format(ex.vulbaar_pct) }}%{% else %}-{% endif %}</dd></div>
+    <div><dt>Gevuld · uitkomst</dt><dd>{{ m.funnel.gevuld }} · {{ m.funnel.uitkomst }}</dd></div>
+    <div><dt>Vertraging entry (mediaan)</dt><dd>{% if ex.delay_b_median is not none %}{{ "%.0f"|format(ex.delay_b_median) }} min{% else %}-{% endif %}</dd></div>
+    <div><dt>Afgerond · N_eff</dt><dd>{{ h.n }} · {{ h.n_eff }}</dd></div>
+    <div><dt>Netto per trade</dt><dd>{{ r_text(h.mean) }}</dd></div>
+    <div><dt>Interval 98,75% (per week)</dt><dd>{{ ci_text(h.ci) }}</dd></div>
+    <div><dt>Zonder beste 5%</dt><dd>{{ r_text(h.mean_wo_best) }}</dd></div>
+    <div><dt>Langste verliesreeks</dt><dd>{{ h.streak }}</dd></div>
+    <div><dt>Grootste daling</dt><dd>{{ r_text(-h.max_dd) if h.n else "-" }}</dd></div>
+  </dl>
+  {% if h.dd_flag %}<p class="proof-footnote muted">De grootste daling is groter dan bij 95% van 2000 willekeurige volgordes van dezelfde trades.</p>{% endif %}
+  <p class="proof-footnote muted">{{ ex.niet_vulbaar }} entries stonden bij de melding al door de limiet, {{ ex.terugtest_al_geweest }} keer was de terugtest al geweest voordat de entry bekend was.{% if m.cost_median_r is not none %} Kosten per trade, mediaan: {{ "%.2f"|format(m.cost_median_r)|replace(".", ",") }}R.{% endif %}{% if m.funding_unknown %} {{ m.funding_unknown }} trades met onbekende funding.{% endif %}</p>
+  {% if m.instappunten %}
+  {# Per instappunt de stopregel (model_measure.verdict): na 30 een eerste blik, na 50 stopt de melding als de netto R duidelijk onder 0 ligt. #}
+  <table class="ctx-table" aria-label="Meting per instappunt">
+    <thead><tr><th scope="col">Instappunt</th><th scope="col">Afgerond</th><th scope="col">Netto</th><th scope="col">Stand</th></tr></thead>
+    <tbody>{% for x in m.instappunten %}<tr><td>{{ x.label }}</td><td>{{ x.arm.n }}</td><td>{{ r_text(x.arm.mean) }}</td><td>{{ x.verdict_text }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% if m.hogere_tf %}
+  {# Hogere tijdframes (app/htf_zones.py): alleen meting, beschrijft; onbekend telt apart. #}
+  <table class="ctx-table" aria-label="Plannen met en zonder een kenmerk op 12u of dag">
+    <thead><tr><th scope="col">Kenmerk</th><th scope="col">Met</th><th scope="col">Zonder</th></tr></thead>
+    <tbody>{% for x in m.hogere_tf %}<tr><td>{{ x.label }}</td><td>{{ x.met.n }} · {{ r_text(x.met.mean) }}</td><td>{{ x.zonder.n }} · {{ r_text(x.zonder.mean) }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+  <p class="proof-footnote muted">Per instappunt: na 30 afgeronde trades een eerste blik; na 50 stopt de melding als de netto R per week duidelijk onder 0 ligt. Meten gaat altijd door.</p>
+  {% endif %}
+  {% if m.redenen %}
+  {# Waarom een poging géén plan werd (model_measure.reasons): per instappunt de redenen, meeste bovenaan. #}
+  <details class="kt-more">
+    <summary>Waarom geen plan <span class="kt-n">{{ m.redenen|sum(attribute="n") }}</span></summary>
+    <table class="ctx-table" aria-label="Redenen per instappunt">
+      <thead><tr><th scope="col">Punt</th><th scope="col">Reden</th><th scope="col">Aantal</th></tr></thead>
+      <tbody>{% for x in m.redenen %}<tr><td>{{ x.code }}</td><td>{{ x.tekst }}</td><td>{{ x.n }}</td></tr>{% endfor %}</tbody>
+    </table>
+  </details>
+  {% endif %}
+  {% if m.tegen and m.tegen.scenarios %}
+  {# De stille arm tegen de dagtrend (B-2026-11-03-11): telt nergens mee in de cijfers hierboven, en meldt niets. #}
+  <h4 class="proof-sub">Tegen de dagtrend (stil gemeten)</h4>
+  <table class="ctx-table" aria-label="Instappunten tegen de dagtrend">
+    <thead><tr><th scope="col">Instappunt</th><th scope="col">Afgerond</th><th scope="col">Netto</th></tr></thead>
+    <tbody>{% for x in m.tegen.punten if x.gevonden %}<tr><td>{{ x.label }}</td><td>{{ x.arm.n }}</td><td>{{ r_text(x.arm.mean) }}</td></tr>{% endfor %}</tbody>
+  </table>
+  <p class="proof-footnote muted">{{ m.tegen.scenarios }} scenario's tegen de dagtrend sinds de bevriezing. Zichtbaar op Kansen met de schakelaar, nooit een melding. Ongetest.</p>
+  {% endif %}
+  {% if (m.strikt and m.strikt.main) or m.excursie or (m.placebo and (m.placebo.n or m.placebo.missing)) %}
+  {# De vier metingen tijdens de bevriezing (B-2026-11-03-12): controleren of de cijfers hierboven niet te mooi zijn. Alleen meting. #}
+  <details class="kt-more">
+    <summary>Controle op de cijfers</summary>
+    {% if m.strikt and m.strikt.main %}
+    <h4 class="proof-sub">Strenge vulling: pas gevuld als de koers door de limiet ging</h4>
+    <table class="ctx-table" aria-label="Gewone en strenge vulling per instappunt">
+      <thead><tr><th scope="col">Punt</th><th scope="col">Plannen</th><th scope="col">Gevuld</th><th scope="col">Afgerond</th><th scope="col">Netto</th></tr></thead>
+      <tbody>{% for x in m.strikt.main %}<tr><td>{{ x.code }}</td><td>{{ x.plans }}</td><td>{{ x.fill_n }} → {{ x.fill_s }}</td><td>{{ x.done_n }} → {{ x.done_s }}</td><td>{{ r_text(x.mean_n) }} → {{ r_text(x.mean_s) }}</td></tr>{% endfor %}</tbody>
+    </table>
+    <p class="proof-footnote muted">Links de gewone regel (aanraken vult), rechts de strenge. Zakt de netto R rechts flink, dan zijn de cijfers hierboven te optimistisch.</p>
+    {% endif %}
+    {% if m.excursie %}
+    <h4 class="proof-sub">Hoe ver tegen en mee</h4>
+    <table class="ctx-table" aria-label="MAE, MFE en stopslip per instappunt">
+      <thead><tr><th scope="col">Punt</th><th scope="col">Afgerond</th><th scope="col">Winnaars eerst tegen</th><th scope="col">Verliezers eerst +1R</th><th scope="col">Stopslip</th></tr></thead>
+      <tbody>{% for x in m.excursie %}<tr><td>{{ x.code }}</td><td>{{ x.n }}{% if x.unknown %} ({{ x.unknown }} onbekend){% endif %}</td>
+        <td>{% if x.mae_win_med is not none %}{{ "%.2f"|format(x.mae_win_med)|replace(".", ",") }} R, p90 {{ "%.2f"|format(x.mae_win_p90)|replace(".", ",") }} R{% else %}–{% endif %}</td>
+        <td>{% if x.loss_1r is not none %}{{ (x.loss_1r * 100)|round|int }}% van {{ x.losses }}{% else %}–{% endif %}</td>
+        <td>{% if x.slip_mean is not none %}{{ "%.2f"|format(x.slip_mean)|replace(".", ",") }} R{% else %}–{% endif %}</td></tr>{% endfor %}</tbody>
+    </table>
+    <p class="proof-footnote muted">Stopslip is een ondergrens: alleen de gap bij de open van de stopcandle, op 5m-candles.</p>
+    {% endif %}
+    {% if m.placebo and (m.placebo.n or m.placebo.missing) %}
+    <h4 class="proof-sub">Tegen willekeurig instappen</h4>
+    <table class="ctx-table" aria-label="Model tegen willekeurige instap">
+      <thead><tr><th scope="col">Trades</th><th scope="col">Model</th><th scope="col">Willekeurig</th><th scope="col">Verschil, 98,75%</th></tr></thead>
+      <tbody><tr><td>{{ m.placebo.n }}</td><td>{{ r_text(m.placebo.mean_model) }}</td><td>{{ r_text(m.placebo.mean_placebo) }}</td><td>{{ r_text(m.placebo.diff) }} ({{ ci_text(m.placebo.ci) }})</td></tr></tbody>
+    </table>
+    <p class="proof-footnote muted">Willekeurig: dezelfde coin, richting, stop en doel, op tien willekeurige momenten in de week ervoor. Pas als het hele interval boven 0 ligt, voegt het instapmoment iets toe.{% if m.placebo.missing %} {{ m.placebo.missing }} trades wachten nog op de nachtelijke berekening.{% endif %}</p>
+    {% endif %}
+  </details>
+  {% endif %}
+  {% if m.compare %}
+  <table class="ctx-table" aria-label="Vergelijkingen met het model, alleen voor de CEO">
+    <thead><tr><th scope="col">Arm</th><th scope="col">n</th><th scope="col">Netto</th><th scope="col">Min model, 98,75%</th></tr></thead>
+    <tbody>{% for c in m.compare %}<tr><td>{{ c.label }}{% if c.note %} ({{ c.note }}){% endif %}</td><td>{{ c.arm.n }}</td><td>{{ r_text(c.arm.mean) }}</td><td>{{ ci_text(c.diff) }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+</div>
+{% endif %}
+
+{% if off_types %}
+<div class="flat focus-off" id="uitgezet">
+  <h3>Uitgezet, ter verbetering</h3>
+  <p class="proof-footnote muted">Deze soorten melden niets nieuws: ze staan tijdelijk uit om ze één voor één te verbeteren. Een trade die nog loopt, volgt HesPulse tot hij sluit. Hun cijfers blijven hier staan, ook de verliezers.</p>
+  <table class="ctx-table off-table" aria-label="Eindcijfers van de uitgezette soorten">
+    <thead><tr><th scope="col">Soort</th><th scope="col">n</th><th scope="col">Doel</th><th scope="col">Stop</th><th scope="col">Netto R</th></tr></thead>
+    <tbody>
+    {% for e in off_types %}
+    <tr><th scope="row">{{ e.label }}{% if e.source_label %}<span class="off-sub">{{ e.source_label }}{% if e.open_or_expired %} · {{ e.open_or_expired }} open of vervallen{% endif %}</span>{% elif e.open_or_expired %}<span class="off-sub">{{ e.open_or_expired }} open of vervallen</span>{% endif %}</th><td>{{ e.resolved }}</td><td>{{ e.wins }}</td><td>{{ e.losses }}</td><td class="{{ 'pos' if e.net_total and e.net_total > 0 else 'neg' if e.net_total and e.net_total < 0 else '' }}">{% if e.net_total is not none %}{{ "%+.2f"|format(e.net_total)|replace(".", ",") }}R{% else %}-{% endif %}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  <p class="proof-footnote muted">n is het aantal afgeronde trades; alleen doel en stop tellen, open en vervallen staan ernaast. Netto R is de som na {{ "%.2f"|format(cost_pct)|replace(".", ",") }}% kosten per rondreis. Zonder vast doel (meelopende stop) telt een winst als doel.</p>
+</div>
+{% endif %}
+
+{% if funding_split %}
+{% set fs = funding_split[0] %}
+<div class="flat" id="funding">
+  <h3>Funding bij het ontstaan</h3>
+  <p class="proof-footnote muted">Kaarten waar de funding op Binance bij het ontstaan extreem was (+{{ "%.2f"|format(fs.high)|replace(".", ",") }}% per 8u of hoger, of {{ "%.2f"|format(fs.low)|replace(".", ",") }}% of lager; vooraf vastgelegd) naast de rest. Alleen doel en stop tellen, na kosten.</p>
+  {% for f in funding_split %}
+  <div class="ctx">
+    <header class="ctx-head"><h4 class="ctx-title">{{ f.label }}</h4></header>
+    <table class="ctx-table" aria-label="{{ f.label }}: extreme funding tegenover de rest">
+      <thead><tr><th scope="col"></th><th scope="col">n</th><th scope="col">Winrate</th><th scope="col">R</th></tr></thead>
+      <tbody>
+      {% for name, g in (("Extreme funding", f.extreme), ("De rest", f.rest)) %}
+      <tr><th scope="row">{{ name }}</th><td><span class="ctx-num">{{ g.n }}</span></td>
+        <td><span class="ctx-num">{% if g.winrate is not none %}{{ "%.0f"|format(g.winrate * 100) }}%{% else %}-{% endif %}</span></td>
+        <td><span class="ctx-num {{ 'pos' if g.avg_net and g.avg_net > 0 else 'neg' if g.avg_net and g.avg_net < 0 else '' }}">{% if g.avg_net is not none %}{{ "%+.2f"|format(g.avg_net)|replace(".", ",") }}R{% else %}-{% endif %}</span></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    <p class="ctx-foot">{{ f.extreme.open + f.rest.open }} nog open of vervallen{% if f.unmeasured %}, {{ f.unmeasured }} afgerond zonder bewaarde stand (nog geen meting toen de kaart ontstond){% endif %}; die tellen hier niet mee.</p>
+  </div>
+  {% endfor %}
+  <p class="proof-footnote muted">Dit beschrijft wat er gebeurde en voorspelt niets. Geen kaart of melding houdt rekening met funding; zo is te zien of het samengaat met een andere uitkomst, zonder dat het er iets aan verandert.</p>
+</div>
+{% endif %}
+
+<div class="flat">
+  <details class="setup-why proof-read">
+  <summary>Zo lees je dit</summary>
+  <div class="proof-notes">
+    <p><strong>R</strong> is de winst als veelvoud van het risico. Een take van 2 keer de stop is +2R, een stop is -1R. Een gemiddelde van +0,20R betekent dat een trade gemiddeld een vijfde van het risico opleverde.</p>
+    <p><strong>Na kosten:</strong> per trade gaan de kosten ({{ "%.2f"|format(cost_pct) }}% per rondreis, een aanname) af, gedeeld door de stopafstand. Een strakke stop maakt de kosten zwaarder.</p>
+    <p><strong>De status</strong> is een vaste regel, geen oordeel: onder {{ min_status }} afgeronde trades staat er "Nog te weinig data". Daarboven telt het gemiddelde na kosten: positief of negatief. Pas bij {{ min_proven }} afgeronde trades en een positief gemiddelde staat er "Voordeel gemeten". Dat is gemeten, niet beloofd.</p>
+    <p><strong>Wat ontbreekt bewust niet:</strong> vervallen en open signalen staan er per soort bij, zodat je ziet hoeveel er buiten de winrate valt.</p>
+  </div>
+  </details>
+</div>
+{% endif %}
+</section>
+
+<section id="tab-regels" data-utab-panel>
+{% if focus.active() and (range_sweep or rule_statuses) %}<p class="engine-status is-off">Uit door focus: de proefmotor en de range sweep openen geen nieuwe trades. Lopende trades volgen ze tot hun stop.</p>{% endif %}
+{% if range_sweep %}
+{% set rs = range_sweep %}
+<div class="flat" id="range-sweep">
+  <div class="proof-card proof-rule-{{ rs.status.status.lower().replace(" ", "-") }}">
+    <header class="proof-head">
+      <div><h4>Range sweep, stopkwaliteit <span class="muted">ongetest</span></h4></div>
+      <span class="proof-chip proof-chip-{{ rs.status.status.lower().replace(" ", "-") }}">{{ rs.status.status }}</span>
+    </header>
+    <p class="muted proof-quote">{{ rs.status.reason }}</p>
+    <p class="muted proof-quote">Geen vast doel: deze proef meet wat de stop doet, niet of er winst in zit.{% if rs.variant %} Lab-variant: {{ rs.variant }}.{% endif %}
+      Stopkwaliteit: {{ rs.verdict.stop }}. Strenge toets op een voordeel: {{ rs.verdict.edge }}{% if rs.verdict.edge_detail %} ({{ rs.verdict.edge_detail }}){% endif %}. Getoetst: {{ rs.verdict.tests_text }}.</p>
+    {% if rs.drift %}<p class="tone-neg proof-quote">{{ rs.drift }}</p>{% endif %}
+    <div class="rs-doelkans-wrap">
+      <table class="rs-doelkans rs-bewijs" aria-label="Stopkwaliteit, lab naast live">
+        <caption class="muted">Lab ({% if rs.lab_n %}historisch, {{ rs.lab_n }} trades{% else %}geen labuitslag{% endif %}) naast live: {{ rs.live.n }} klaar, {{ rs.live.open }} lopend{% if not rs.live.enough %}, nog te weinig om te vergelijken{% endif %}.</caption>
+        <thead><tr><th scope="col"></th><th scope="col">Lab</th><th scope="col">Live</th></tr></thead>
+        <tbody>
+        {% for r in rs.rows %}<tr><th scope="row">{{ r.label }}</th><td>{{ r.lab_text }}</td><td>{{ r.live_text }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <p class="proof-footnote muted">Een kans op +1R tot +6R vóór de stop is historisch en beschrijvend, geen voorspeller van jouw trade. Dat geldt ook voor de score van 40 of 60 op een kaart. Alleen trades waarvan de meting klaar is (stop geraakt of 7 dagen voorbij) tellen live mee; lopende staan ernaast, dus de eerste weken kleuren de cijfers naar wat snel klaar was.</p>
+    <dl class="proof-facts">
+      <div><dt>Gemeld</dt><dd>{{ rs.setups.total }} setups</dd></div>
+      <div><dt>Gevuld</dt><dd>{{ rs.setups.filled }}</dd></div>
+      <div><dt>Niet gevuld</dt><dd>{{ rs.setups.unfilled_total }}</dd></div>
+      <div><dt>Wachtend</dt><dd>{{ rs.setups.waiting }}</dd></div>
+    </dl>
+    <p class="proof-footnote muted">{{ rs.setups.unfilled_total }} niet gevuld: {{ rs.setups.unfilled.verlopen }} verlopen, {{ rs.setups.unfilled.weggelopen }} weggelopen, {{ rs.setups.unfilled.stop_voor_vulling }} stop voor de vulling. {{ rs.setups.waiting }} wachtend op de limiet.</p>
+    {% if rs.setups.filled == 0 %}<p class="muted proof-quote">Nog geen gevulde setups: er is nog niets live te meten.</p>{% endif %}
+    <p class="proof-footnote muted"><strong>R gemeten bij de referentie-uitgang</strong> (meelopende stop 3 ATR op 1u), niet bij jouw eigen doel en geen belofte. Alleen een afgeronde referentie-uitgang telt, na {{ "%.2f"|format(rs.cost_pct)|replace(".", ",") }}% kosten per rondreis:
+      {{ rs.reference.n }} afgeronde trades{% if rs.reference.avg_net is not none %}, gemiddeld {{ "%+.2f"|format(rs.reference.avg_net)|replace(".", ",") }}R per trade{% endif %}.
+      {{ rs.reference.open }} lopend, nog zonder referentie-uitgang, dus geen uitkomst{% if rs.reference.marks %}: stand op de koers van nu gemiddeld {{ "%+.2f"|format(rs.reference.marks|sum / rs.reference.marks|length)|replace(".", ",") }}R, een momentopname die nergens meetelt{% endif %}.</p>
+  </div>
+</div>
+{% endif %}
+{% if rule_statuses or other_rules %}
+<div class="flat">
+  <h3>{{ macros.term("Status per regel", "Eerlijk: 50 live trades kunnen een voordeel van 0,1R per trade niet bewijzen. Het bewijs komt uit de test op historische data; live is een controle of de werkelijkheid daarvan afwijkt.", "bw-regels-pop") }}</h3>
+  {% for r in rule_statuses %}
+  <div class="proof-card proof-rule-{{ r.css }}">
+    <header class="proof-head">
+      <div><h4>{{ r.label }}</h4></div>
+      <span class="proof-chip proof-chip-{{ r.css }}">{{ r.status }}</span>
+    </header>
+    <p class="muted proof-quote">{{ r.reason }}</p>
+    {% if r.lab_line %}<p class="muted proof-quote">{{ r.lab_line }}.</p>{% endif %}
+    <p class="proof-footnote muted">{{ r.n_live }} afgeronde live trades{% if r.avg_last100 is not none %}, laatste 100 gemiddeld {{ "%+.2f"|format(r.avg_last100) }}R na kosten{% endif %}.</p>
+  </div>
+  {% endfor %}
+  {% if other_rules %}
+  <details class="stats-collapse js-accordion proof-others">
+    <summary class="stats-summary">
+      <span>Andere geteste regels ({{ other_rules|length }})</span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+    </summary>
+    <p class="muted">Voor deze regels draait geen live motor. Ze zijn alleen getoetst op historische data.</p>
+    <ul class="proof-others-list">
+      {% for o in other_rules %}
+      <li>
+        <span class="proof-others-name">{{ o.label }}</span>
+        <span class="proof-others-num">{{ o.avg_text }}{% if o.n is not none %} <span class="muted">· {{ o.n }} trades</span>{% endif %}</span>
+        <span class="proof-chip proof-others-chip">{{ "geslaagd" if o.passes else "niet geslaagd" }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+</div>
+{% elif not range_sweep %}
+<p class="muted empty">Nog geen regels getoetst.</p>
+{% endif %}
+
+</section>
+
+<section id="tab-curves" data-utab-panel>
+{% if curves %}
+<div class="flat">
+  <details class="stats-collapse js-accordion" open>
+    <summary class="stats-summary">
+      <span>Resultaatcurve per soort</span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+    </summary>
+    <p class="muted">Elke afgeronde trade (doel of stop) schuift de lijn op, in R na kosten. De schaduw is de terugval vanaf de hoogste stand. Open en vervallen signalen tellen niet mee en staan ernaast.</p>
+    <div class="equity-grid">
+      {% for c in curves %}
+      <figure class="equity-card">
+        <figcaption><strong>{{ c.label }}</strong><span class="muted">{{ c.n }} afgerond, {{ c.total_text }}, {{ c.dd_line }}. Alle bronnen samen. {{ c.excluded }} open of vervallen, niet meegeteld.</span></figcaption>
+        {{ c.svg }}
+      </figure>
+      {% endfor %}
+    </div>
+  </details>
+</div>
+{% else %}
+<p class="muted empty">Nog geen afgeronde trades voor een curve.</p>
+{% endif %}
+
+</section>
+
+{# Jouw week (ontwerp E, app/week_review.py): alleen jouw eigen trades, R uit de uitkomst van het signaal. Acht weken in neutraal grijs,
+   deze week in accent; hoogstens één observatie en alleen een telbare. #}
+<section id="tab-week" data-utab-panel>
+  {% set w = my_week %}
+  <div class="wk">
+    <span class="wk-label">{{ w.label }}</span>
+    <span class="wk-total">{{ w.total_text }}</span>
+    <span class="wk-counts">{{ w.counts_text }}</span>
+    <div class="wk-chart">
+      <div class="wk-chart-head"><span>R per week</span><span>{{ w.weeks|length }} weken · totaal <span class="wk-mono">{{ w.eight_total_text }}</span></span></div>
+      <div class="wk-bars" role="img" aria-label="R per week over {{ w.weeks|length }} weken, deze week rechts">
+        {% for b in w.weeks %}<div class="wk-col"><i class="wk-bar{% if b.current %} is-cur{% endif %}{% if b.negative %} is-neg{% endif %}" style="--h: {{ b.height_pct }}%"></i></div>{% endfor %}
+      </div>
+      <div class="wk-names" aria-hidden="true">
+        {% for b in w.weeks %}<span class="wk-name{% if b.current %} is-cur{% endif %}"><b>{{ b.value_text }}</b>{{ b.name }}</span>{% endfor %}
+      </div>
+    </div>
+    {% if w.stats %}
+    <dl class="wk-stats">
+      {% for st in w.stats %}<div><dt>{{ st.label }}</dt><dd>{{ st.value }}</dd></div>{% endfor %}
+    </dl>
+    {% endif %}
+    {% if w.observation %}
+    <div class="wk-obs"><span class="wk-obs-t">Wat opviel</span><span>{{ w.observation }}</span></div>
+    {% endif %}
+    <p class="lb-note">Jouw trades: plannen met een afgeronde checklist die vulden, en meldingen die je in het Journaal als genomen markeerde. R uit doel of stop, zonder kosten. Zie ook het <a href="/signalen">Logboek</a>.</p>
+  </div>
+</section>
+
+<section id="tab-uurkaart" data-utab-panel>
+{% if hours.total %}
+<div class="flat">
+  <details class="stats-collapse js-accordion" open>
+    <summary class="stats-summary">
+      <span>Uurkaart</span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6,9 12,15 18,9"/></svg>
+    </summary>
+    <p class="muted">Gemiddelde R na kosten per weekdag en uur van de melding, Nederlandse tijd. Het kleine getal is het aantal afgeronde trades. Onder {{ hours.min_n }} trades blijft een vak grijs: te weinig om iets te zeggen.</p>
+    <p class="muted">Een vak is geen bewijs. Met 168 vakken springt er bij toeval altijd een paar groen of rood uit; zoek hier geen uren om op te handelen.</p>
+    <div class="hourmap-wrap">
+      <table class="hourmap">
+        <thead><tr><th></th>{% for h in range(24) %}<th scope="col">{{ "%02d"|format(h) }}</th>{% endfor %}</tr></thead>
+        <tbody>
+          {% for r in hours.rows %}
+          <tr><th scope="row">{{ r.day }}</th>{% for c in r.cells %}<td class="hm hm-{{ c.heat }}{% if c.weak %} is-weak{% endif %}" title="{{ c.title }}">{% if c.n %}{% if not c.weak %}<span class="hm-avg">{{ c.avg_short }}</span>{% endif %}<span class="hm-n">{{ c.n }}</span>{% endif %}</td>{% endfor %}</tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </details>
+</div>
+{% else %}
+<p class="muted empty">Nog geen afgeronde trades voor een uurkaart.</p>
+{% endif %}
+
+</section>
+
+</div>
+{% endblock %}

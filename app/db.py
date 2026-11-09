@@ -2,7 +2,7 @@
 lezers (dashboard) en schrijvers (bot)."""
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from app import config
@@ -187,6 +187,15 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE users ADD COLUMN quiet_hours_start TEXT")
     if "quiet_hours_end" not in existing_users:
         conn.execute("ALTER TABLE users ADD COLUMN quiet_hours_end TEXT")
+    if "risk_per_trade_eur" not in existing_users:
+        conn.execute("ALTER TABLE users ADD COLUMN risk_per_trade_eur REAL")
+    if "push_budget" not in existing_users:
+        conn.execute("ALTER TABLE users ADD COLUMN push_budget INTEGER")
+    if "push_paused_until" not in existing_users:
+        conn.execute("ALTER TABLE users ADD COLUMN push_paused_until TEXT")
+    # Een bundel vullingen (één push) telt één keer in het dagbudget: alleen zijn eerste rij heeft counts = 1 (CEO, 2026-11-02).
+    if "counts" not in {row["name"] for row in conn.execute("PRAGMA table_info(push_log)")}:
+        conn.execute("ALTER TABLE push_log ADD COLUMN counts INTEGER NOT NULL DEFAULT 1")
     if "confirm_threshold_pct" not in existing_users:
         conn.execute(
             "ALTER TABLE users ADD COLUMN confirm_threshold_pct REAL NOT NULL DEFAULT 60.0"
@@ -203,6 +212,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE signals ADD COLUMN auto_outcome TEXT")
     if "auto_outcome_at" not in existing_signals:
         conn.execute("ALTER TABLE signals ADD COLUMN auto_outcome_at TEXT")
+    if "auto_outcome_note" not in existing_signals:
+        conn.execute("ALTER TABLE signals ADD COLUMN auto_outcome_note TEXT")
     if "nearest_sr_zone_price" not in existing_signals:
         conn.execute("ALTER TABLE signals ADD COLUMN nearest_sr_zone_price REAL")
     if "suggested_entry_low" not in existing_signals:
@@ -273,6 +284,8 @@ def _migrate(conn: sqlite3.Connection) -> None:
         conn.execute("ALTER TABLE smc_setups ADD COLUMN invalidated_at TEXT")
     if "atr" not in existing_smc_setups:
         conn.execute("ALTER TABLE smc_setups ADD COLUMN atr REAL")
+    if "zone_alert_sent" not in existing_smc_setups:
+        conn.execute("ALTER TABLE smc_setups ADD COLUMN zone_alert_sent INTEGER NOT NULL DEFAULT 0")
 
     # sr_zone_failures zelf heeft geen migratie nodig (CREATE TABLE IF NOT
     # EXISTS in schema.sql dekt zowel verse als bestaande databases, want
@@ -282,6 +295,82 @@ def _migrate(conn: sqlite3.Connection) -> None:
         "CREATE INDEX IF NOT EXISTS idx_sr_zone_failures_lookup "
         "ON sr_zone_failures (coin, direction, failed_at)"
     )
+    _migrate_rule_trades(conn)
+    # push_sent: ging de setupmelding echt uit (het kansbudget of een tegenstrijdige richting kan hem houden)? Alleen dan meldt een vervallen setup dat.
+    if "push_sent" not in {row["name"] for row in conn.execute("PRAGMA table_info(range_sweep_setups)")}:
+        conn.execute("ALTER TABLE range_sweep_setups ADD COLUMN push_sent INTEGER NOT NULL DEFAULT 0")
+    # Hier en niet in schema.sql: op een bestaande database met dubbele rijen zou de index het opstarten breken, en een tweede trade per setup is
+    # precies de fout die hij moet voorkomen.
+    conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_range_sweep_trades_setup ON range_sweep_trades (setup_id)")
+    if "follow_set_id" not in {row["name"] for row in conn.execute("PRAGMA table_info(users)")}:
+        conn.execute("ALTER TABLE users ADD COLUMN follow_set_id INTEGER")
+    if "zone_alert_at" not in {row["name"] for row in conn.execute("PRAGMA table_info(smc_setups)")}:
+        conn.execute("ALTER TABLE smc_setups ADD COLUMN zone_alert_at TEXT")
+    zone_radar_cols = {row["name"] for row in conn.execute("PRAGMA table_info(zone_radar_setups)")}
+    for col in ("ctx_funding", "ctx_oi_change_24h", "ctx_spread"):
+        if col not in zone_radar_cols:
+            conn.execute(f"ALTER TABLE zone_radar_setups ADD COLUMN {col} REAL")
+    # POC-samenval (chance_checks.poc_checks) op de kaarten van de zone-radar en de zone-sweep; leeg op oude rijen: toen niet gemeten.
+    for table in ("zone_radar_setups", "zone_sweep_setups"):
+        if "poc_near" not in {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN poc_near INTEGER")
+    # De niveaus voorbij de limiet bij het ontstaan van de kaart (zone_radar.obstacles, poc_radar.obstacles); leeg op oude rijen.
+    for table in ("zone_radar_setups", "poc_radar_setups"):
+        if "obstacles" not in {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN obstacles TEXT")
+    # De markt van de candles (app/candle_source.py); oude rijen blijven leeg, ze worden nooit herberekend. Niet op smc_setups: de golden
+    # test van de SMC-motor (tests/test_smc_golden.py) legt elke kolom van die tabel vast, en de SMC-motor staat uit (focus).
+    for table in ("signals", "structure_setups", "range_sweep_setups", "zone_radar_setups", "zone_sweep_setups", "poc_radar_setups"):
+        cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if cols and "candle_market" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN candle_market TEXT")
+    # De BTC-poort van het model (config.MODEL_BTC_GATE): wat een tegengehouden entry stil had gedaan. Leeg op oude rijen.
+    model_cols = {row["name"] for row in conn.execute("PRAGMA table_info(model_scenarios)")}
+    for col, kind in (("cf_state", "TEXT"), ("cf_filled_at", "TEXT"), ("cf_outcome", "TEXT"), ("cf_r", "REAL"), ("cf_ambiguous", "INTEGER"),
+                      ("cf_at", "TEXT")):
+        if model_cols and col not in model_cols:
+            conn.execute(f"ALTER TABLE model_scenarios ADD COLUMN {col} {kind}")
+    # Hogere-tijdframezones per plan (app/htf_zones.py, B-2026-11-03-09): alleen meting, leeg op oude rijen.
+    for table in ("model_scenarios", "model_entries", "model_v1"):
+        cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        if cols and "htf" not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN htf TEXT")
+    # Waarom B, B0, R en K per poging afvielen (audit 2026-11-03: "waarom werd een setup géén plan"). Alleen meting.
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(model_scenarios)")}
+    if cols and "alt_log" not in cols:
+        conn.execute("ALTER TABLE model_scenarios ADD COLUMN alt_log TEXT")
+    # MAE, MFE en stopslip per modeltrade (M2, aanvulling 2026-11-03 avond). Leeg: niet gemeten of 'onbekend'.
+    for table in ("model_scenarios", "model_entries"):
+        cols = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for col in ("mae_r", "mfe_r", "slip_r"):
+            if cols and col not in cols:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {col} REAL")
+    # trade_excursions had mae_r en mfe_r NOT NULL; 'onbekend' (outcome_measure.record_excursion) slaat ze leeg op. SQLite kan NOT NULL niet
+    # weghalen, dus de tabel wordt één keer herbouwd met dezelfde rijen.
+    if any(r["name"] == "mae_r" and r["notnull"] for r in conn.execute("PRAGMA table_info(trade_excursions)")):
+        conn.execute("ALTER TABLE trade_excursions RENAME TO trade_excursions_old")
+        conn.execute("""CREATE TABLE trade_excursions (signal_id INTEGER PRIMARY KEY, mae_r REAL, mfe_r REAL, timeframe TEXT,
+                        measured_at TEXT NOT NULL)""")
+        conn.execute("""INSERT INTO trade_excursions (signal_id, mae_r, mfe_r, timeframe, measured_at)
+                        SELECT signal_id, mae_r, mfe_r, timeframe, measured_at FROM trade_excursions_old""")
+        conn.execute("DROP TABLE trade_excursions_old")
+
+
+def _migrate_rule_trades(conn: sqlite3.Connection) -> None:
+    """rule_trades bestond kort zonder checked_until. Bestaande rijen krijgen het openmoment van de signaalcandle (instap min één candle): dan
+    wordt de instapcandle nog getoetst, zoals bij een nieuwe trade. Onbekende regel of timeframe: entered_at, de veilige kant (geen oude candle
+    wordt opnieuw getoetst)."""
+    cols = {row["name"] for row in conn.execute("PRAGMA table_info(rule_trades)")}
+    if not cols or "checked_until" in cols:
+        return
+    conn.execute("ALTER TABLE rule_trades ADD COLUMN checked_until TEXT")
+    from app.replay.trendlab import VARIANTS     # pas hier: alleen nodig voor deze eenmalige aanvulling
+    hours = {v.name.lower(): int(v.timeframe[:-1]) for v in VARIANTS if v.timeframe.endswith("h")}
+    for row in conn.execute("SELECT signal_id, rule, entered_at FROM rule_trades").fetchall():
+        entered = datetime.fromisoformat(row["entered_at"])
+        h = hours.get(row["rule"])
+        checked = entered - timedelta(hours=h) if h else entered
+        conn.execute("UPDATE rule_trades SET checked_until = ? WHERE signal_id = ?", (checked.isoformat(), row["signal_id"]))
 
 
 def get_setting(key: str, default: str = "") -> str:

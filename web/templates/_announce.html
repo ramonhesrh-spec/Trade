@@ -1,0 +1,75 @@
+{# Aankondiging (app/announce.py): de tekening per kaart en het verhaal "Wat is nieuw". Gedeeld door /nieuw, het verhaal in de app en
+   /wat-is-nieuw. De tekeningen lezen alleen thematokens, dus ze kloppen in licht en donker; ze tonen geen getallen, want een getal in een
+   tekening zou een verzonnen koers zijn. #}
+
+{% macro art(key) -%}
+<svg class="wn-art-svg" viewBox="0 0 240 140" aria-hidden="true" focusable="false">
+{%- if key == "tabs" %}
+  {# Alle kansen op één plek: drie tabs met de gekozen onderstreept, eronder een kaart met de zone als vlak, de instap en de koers. #}
+  <rect class="a-line" x="24" y="14" width="52" height="8" rx="4"/><rect class="a-line" x="94" y="14" width="52" height="8" rx="4"/><rect class="a-line" x="164" y="14" width="52" height="8" rx="4"/>
+  <rect class="a-bar" x="94" y="28" width="52" height="3" rx="1.5"/>
+  <rect class="a-frame" x="24" y="44" width="192" height="84" rx="10"/>
+  <rect class="a-zone" x="36" y="78" width="168" height="16" rx="2"/>
+  <line class="a-zone-edge" x1="36" x2="204" y1="78" y2="78"/>
+  <polyline class="a-price" points="36,62 60,70 84,64 108,82 132,76 156,88 180,84"/>
+  <circle class="a-price-dot" cx="180" cy="84" r="5"/>
+{%- elif key == "kansen" %}
+  {# Precies 35 stippen: één per coin. De gekleurde zijn wat er gespot is, als voorbeeld, geen meting. #}
+  {% for r in range(5) %}{% for c in range(7) %}<circle class="{{ 'a-dot-ac' if (r * 7 + c) in (3, 9, 16, 24, 30) else 'a-dot' }}" cx="{{ 48 + c * 24 }}" cy="{{ 22 + r * 24 }}" r="6"/>{% endfor %}{% endfor %}
+{%- elif key == "checklist" %}
+  {# De order-checklist: drie regels met hun naam en een vlak voor het getal; de eerste is net gekopieerd. #}
+  {% for label in ("Limiet", "Stop", "Doel") %}
+  <text class="a-label" x="30" y="{{ 34 + loop.index0 * 38 }}">{{ label }}</text>
+  <rect class="{{ 'a-chip-ac' if loop.first else 'a-chip' }}" x="110" y="{{ 16 + loop.index0 * 38 }}" width="100" height="26" rx="6"/>
+  {% endfor %}
+  <polyline class="a-check" points="146,29 156,38 174,22"/>
+{%- elif key == "logboek" %}
+  {# Logboek: je dag als tijdlijn; de open stip is een plan dat je oversloeg, ook dat staat erin. #}
+  <line class="a-tick" x1="60" x2="60" y1="14" y2="126"/>
+  {% for i in range(4) %}
+  <circle class="{{ 'a-node-skip' if i == 2 else ('a-dot-ac' if i == 3 else 'a-node') }}" cx="60" cy="{{ 22 + i * 32 }}" r="7"/>
+  <rect class="a-line" x="80" y="{{ 18 + i * 32 }}" width="{{ (110, 80, 96, 124)[i] }}" height="8" rx="4"/>
+  {% endfor %}
+{%- elif key == "installeer" %}
+  {# Op je beginscherm: een telefoon met het HesPulse-teken en een melding die binnenkomt. #}
+  <rect class="a-frame" x="84" y="8" width="72" height="124" rx="14"/>
+  <circle cx="120" cy="58" r="13" fill="none" stroke="#1b2324" stroke-width="2.5"/>
+  <path d="M110 58h4l2-5 4 10 2-5h4" fill="none" stroke="#1b2324" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect class="a-chip-ac" x="96" y="18" width="48" height="12" rx="6"/>
+  <rect class="a-line" x="100" y="96" width="40" height="8" rx="4"/>
+{%- elif key == "thema" %}
+  {# Licht en donker, en HesPulse als app op je beginscherm. Vaste kleuren: het zijn de twee thema's zelf. #}
+  <rect x="80" y="8" width="80" height="124" rx="14" fill="#0a0e0f"/>
+  <path d="M120 8h26a14 14 0 0 1 14 14v96a14 14 0 0 1-14 14h-26z" fill="#f4f6f6"/>
+  <rect class="a-frame" x="80" y="8" width="80" height="124" rx="14"/>
+  <rect x="98" y="70" width="8" height="34" rx="2" fill="#1b2324"/>
+  <rect x="134" y="70" width="8" height="34" rx="2" fill="#067a76"/>
+  <circle cx="120" cy="40" r="11" fill="none" stroke="#1b2324" stroke-width="2.5"/>
+{%- endif %}
+</svg>
+{%- endmacro %}
+
+{# Het verhaal. `page`: op /wat-is-nieuw meteen open en sluiten gaat naar Kansen; anders opent story.js het en onthoudt dat het gezien is. #}
+{% macro story(cards, version, page=false) -%}
+<div id="wn-story" class="wn-story" data-version="{{ version }}" data-return="/smc"{% if page %} data-page{% endif %} hidden>
+  <div class="wn-panel" role="dialog" aria-modal="true" aria-labelledby="wn-heading">
+    <div class="wn-top">
+      <p class="wn-eyebrow" id="wn-heading">Wat is nieuw</p>
+      <button type="button" class="wn-skip" data-wn-close>Sla over</button>
+    </div>
+    <div class="wn-track" data-wn-track tabindex="-1">
+      {% for c in cards %}
+      <section class="wn-card" aria-roledescription="kaart" aria-label="{{ loop.index }} van {{ cards|length }}: {{ c.title }}"{% if not loop.first %} aria-hidden="true"{% endif %}>
+        <div class="wn-art">{{ art(c.key) }}</div>
+        <h2 class="wn-title">{{ c.title }}</h2>
+        <p class="wn-text">{{ c.text }}</p>
+      </section>
+      {% endfor %}
+    </div>
+    <div class="wn-dots">
+      {% for c in cards %}<button type="button" class="wn-dot" data-wn-dot="{{ loop.index0 }}" aria-label="Kaart {{ loop.index }} van {{ cards|length }}"{% if loop.first %} aria-current="step"{% endif %}><i></i></button>{% endfor %}
+    </div>
+    <button type="button" class="wn-next" data-wn-next data-last="Aan de slag">Volgende</button>
+  </div>
+</div>
+{%- endmacro %}

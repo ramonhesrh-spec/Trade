@@ -57,7 +57,7 @@ function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
     const total = real.reduce((sum, p) => sum + p.pnl_pct, 0);
     const sign = total >= 0 ? "+" : "";
     document.title = `${sign}${total.toFixed(1)}% · HesPulse`;
-    setFavicon(total > 0 ? "%2333d69f" : total < 0 ? "%23f2685c" : "%2317e5d6");
+    setFavicon(total > 0 ? "%2333d69f" : total < 0 ? "%23f2685c" : "%230ABAB5");
   }
 
   // Korte triltik op het moment dat een echte trade zijn stop loss of
@@ -258,7 +258,7 @@ function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
       // Sluiten van een aan een evaluatie-run gekoppelde trade kan die run
       // laten slagen/mislukken; resp.url (de eindbestemming na de 303-
       // redirect van /journal/{id}/close) draagt dan evaluatie_geslaagd=1/
-      // evaluatie_mislukt=1, net als closed_win=1 hieronder. Dat reveal
+      // evaluatie_mislukt=1. Dat reveal
       // bestaat alleen op /evaluatie zelf (zie base.html) en de gebruiker
       // blijft bij deze AJAX-flow gewoon op /dashboard staan -- dus hier
       // niet de net-gestarte DOM-swap afmaken, meteen doornavigeren,
@@ -285,13 +285,6 @@ function computeSltpProgressPct(direction, price, stopLoss, takeProfit) {
         fresh.style.opacity = "1";
       });
       if (window.HP) window.HP.progressDone();
-      // fetch volgt de 303-redirect zelf af: resp.url is de eindbestemming,
-      // met ?closed_win=1 erin als het sluiten een echte winst was (zie
-      // /journal/{id}/close). Die query komt hier nooit in de adresbalk,
-      // dus alleen via resp.url te herkennen, niet via location.search.
-      if (resp.url.indexOf("closed_win=1") !== -1 && window.HP && window.HP.confetti) {
-        window.HP.confetti();
-      }
     } catch (err) {
       if (btn) { btn.disabled = false; btn.textContent = originalLabel; }
       // Geen verbinding: een gewone form.submit() zou hier gegarandeerd

@@ -1,0 +1,38 @@
+{
+  "atr_t": 0.6839014558425354,
+  "direction": "short",
+  "extreme": 106.5,
+  "family": "sweep",
+  "features": {
+    "age_bars": 120,
+    "displacement_atr": 1.3159790673222749,
+    "edge_spread_atr": 0.0,
+    "ob_opposite": true,
+    "touches_high": 6,
+    "touches_low": 6,
+    "width_atr": 9.30811047670848,
+    "zone_atr": 0.9138743523071295,
+    "zone_fresh": true
+  },
+  "htf_ok": false,
+  "htf_pos": null,
+  "htf_trend": 0,
+  "legs": [
+    [
+      1.0,
+      106.1875
+    ]
+  ],
+  "place_idx15": 700,
+  "placed_at": "2025-03-10 07:00:00+00:00",
+  "range_first_at": "2025-03-05 06:00:00+00:00",
+  "range_high": 106.025,
+  "range_low": 99.975,
+  "ref_price": 105.6,
+  "return_at": "2025-03-10 07:00:00+00:00",
+  "sweep_at": "2025-03-10 06:00:00+00:00",
+  "tf": "1h",
+  "zone_at": "2025-03-10 06:15:00+00:00",
+  "zone_high": 106.5,
+  "zone_low": 105.875
+}

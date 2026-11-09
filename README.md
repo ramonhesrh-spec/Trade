@@ -27,6 +27,73 @@ aanmaken, dat is een bewuste keuze, geen invite-only systeem. Na
 registreren of inloggen kom je op `/dashboard`, het besloten logboek, dat
 blijft voor elke gebruiker apart.
 
+## HesPulse-model: het ene model dat meldt
+
+Sinds 2026-11-02 (besluit CEO) meldt alleen het HesPulse-model: het hoofdmodel uit hoofdstuk 25 van het boek, in vaste regels vastgelegd in
+`docs/onderzoek/hespulse-model/preregistratie.md`. Context op 4u (richting uit de laatste breuk, dealing range met evenwicht), een
+onaangeraakte pool op 1u in discount (long) of premium (short), dan op 15m een sweep van die pool, een slot voorbij de top ervoor met
+displacement en een fair value gap, en een limiet op de gap. Stop voorbij het uiterste van de sweep, doel de rand van de range of een
+dichtere naakte dag- of week-POC; de kaart toont de R:R, er is geen minimum. Live, ongetest, voor iedereen.
+
+- **Twee momenten op één kaart** in de tab "HesPulse" op Kansen: "scenario ontdekt" (alleen in de app, wat er nog moet gebeuren, elke stap
+  met zijn tijdstip) en "entry beschikbaar" (limiet, stop, doel: de ene luide melding, binnen het dagbudget en gebundeld per cyclus). De
+  vulling is stil (een rij op `/meldingen`); gevuld wordt het een gewoon signaal `hespulse_model` en `level_check` meldt doel of stop.
+- **De andere soorten meten stil mee** (`MODEL_ONLY_ALERTS`): Structuur, zone-radar, zone-sweep en POC-radar maken nog kaarten en
+  signalen voor Bewijs, maar sturen niets en hebben geen tab; een open trade van zo'n soort blijft onder Open tot hij klaar is.
+- **Aan en uit:** `HESPULSE_MODEL_ENABLED` (standaard `true`) en `MODEL_ONLY_ALERTS` (standaard gelijk aan het model). `false` in `.env`
+  zet het terug; herstart daarna `crypto-bot` en `crypto-web` (de snelcyclus-timer leest het bij zijn volgende ronde).
+- **Controle achteraf:** `python3 scripts/model_kaarten.py` laat het model over de laatste 14 dagen op alle coins lopen (alleen gesloten
+  candles, per stap opnieuw zonder latere candles) en tekent de eerste 30 scenario's in één bestand, standaard `data/model_kaarten.html`
+  (`--uit`, `--dagen`, `--aantal`, `--coins BTC,ETH`). Haal het op met bijvoorbeeld
+  `scp gebruiker@vps:/pad/naar/Trade/data/model_kaarten.html .` en open het in een browser.
+- **Meting:** Bewijs toont onder "HesPulse-model, meting" de trechter, vulbaarheid, vertraging, N_eff, verliesreeks, daling en het
+  gemiddelde zonder de beste 5%; de vergelijkingen V1 (vroege limiet, stil in `model_v1`), V2 (zone-sweep) en V3 (POC-radar) alleen voor de
+  CEO. De nachtexport heeft hetzelfde onder `model`.
+
+## Focus: welke soorten nu melden
+
+Sinds oktober 2026 zoeken en melden alleen drie soorten nog nieuwe kansen: Structuur A/B (`structuur`), Structuur C (`structuur_c`) en de
+zone-radar (`zone_radar`). De zone-sweep en de POC-radar draaien live en ongetest (op verzoek van de eigenaar, zonder labrun). Alle andere soorten staan uit, zodat de app overzichtelijk blijft
+en ze later één voor één verbeterd kunnen worden: day trading via Discord, patroon (uitbraak, trendlijn, chart-patroon), trend, rejectie,
+het markt-script, SMC en SMC met waarschuwing, swing, samenval, de range sweep en range-watch, en de proefmotor (`don55_trend`).
+
+Uitzetten is geen weggooien: code en data blijven, en `ENGINE_FOCUS=false` in `.env` zet alles terug zoals het was (herstart `crypto-bot`,
+`crypto-web` en de timers pakken het bij hun volgende ronde op). De bron van waarheid is `app/focus.py`.
+
+- **Motoren:** een uitgezette motor zoekt niets nieuws en stuurt geen nieuwe melding. Zijn hartslag zegt `uit door focus`
+  (`scripts/push_diag.py` toont ze). Een eigen vlag zoals `TREND_ENABLED` of `RANGE_SWEEP_ENABLED` geldt daarnaast gewoon.
+- **Discord:** een doorgestuurd bericht wordt nog opgeslagen en gededupliceerd, maar niet meer aan Anthropic voorgelegd; er komt geen
+  signaal, journaalregel of push uit.
+- **Lopende trades:** `app/level_check.py`, `rule_live.update_open` en het volgen van de range sweep blijven open posities, stops en doelen
+  volgen en melden hun uitkomst tot ze sluiten. Een wachtende SMC-setup wordt geen signaal meer en staat niet meer op de Radar.
+- **Weergave:** Kansen en de tellers (dok, appicoon) tonen alleen nieuwe en wachtende kansen van de focus-soorten; een open trade van
+  een uitgezette soort blijft staan onder zijn eigen naam (een eigen tab op Kansen, of Verder open op Markt). Het markt-script verdwijnt van Markt.
+- **Bewijs:** de focus-soorten staan bovenaan en open, de andere onder "Uitgezet, ter verbetering" met hun eindcijfers (n, doel, stop,
+  netto R). Niets verdwijnt.
+- **Pushbudget:** omdat alleen de focus-soorten nog iets nieuws melden, gaat het dagbudget in de praktijk alleen naar hun vullingen (zie
+  hieronder).
+
+## Meldingen: wat luid is en wat stil
+
+Sinds 2026-11-02, op verzoek van de CEO (in een week ~560 nieuwe kaarten en ~255 vullingen, veel te veel meldingen):
+
+- **Met het HesPulse-model aan** (standaard) meldt alleen het model: "entry beschikbaar" luid (telt in het budget, bundel "3 entries
+  klaar"), de vulling stil, "scenario ontdekt" niet. De vier soorten hieronder sturen dan niets (`MODEL_ONLY_ALERTS`); de regels hieronder
+  gelden voor hen alleen met `MODEL_ONLY_ALERTS=false`.
+- **Nieuwe kaart = stil.** Een nieuwe kaart van Structuur, zone-radar, zone-sweep of POC-radar staat op Kansen en op `/meldingen` en komt
+  hoogstens als stille push (geen geluid, geen trilling). Hij telt niet mee in het dagbudget en valt niet onder de conflictregel
+  (`push_notify.send_new_card`).
+- **Vulling = luid**, met een dagmaximum per gebruiker: `push_policy.DEFAULT_BUDGET` (8) luide pushes per 24 uur, in te stellen bij Account
+  (`users.push_budget`, leeg = standaard, 0 = geen maximum). Elke luide push telt, ook een tweede op dezelfde coin en richting. Boven het
+  maximum komt de vulling als stille push en staat hij op `/meldingen`: een kans krijgt altijd een melding zodra de limiet vult.
+- **Bundelen:** vullen er in één snelcyclus (`scan_smc_fast`) meer kansen voor dezelfde gebruiker, dan komt er één push "3 kansen gevuld:
+  SOL long, ETH short, ADA long" met een link naar Kansen, en die telt één keer (`push_notify.open_bundle`/`close_bundle`, `push_log.counts`).
+- **Uitkomst** (doel of stop uit `level_check`, updates van een lopende trade) komt zoals altijd, één keer per trade, en telt niet mee.
+- **Pauze en volg-set** werken voor alles: tijdens een pauze of voor een coin buiten je volg-set gaat er geen push uit, de melding staat
+  wel op `/meldingen`. Een vulling de andere kant op dan een push van de laatste 6 uur op dezelfde coin komt alleen op `/meldingen`.
+- De ring "Meldingen, 24 uur" op Markt telt de luide pushes tegen het budget. `scripts/push_diag.py` laat per gebruiker zien waarom iets
+  wel of geen push werd.
+
 ## Onderdelen
 
 - `app/discord_bot.py` — leest DM's, alleen leesrechten
@@ -270,7 +337,9 @@ Checkt elke 15 minuten twee dingen:
 
 Beide sturen één keer een seintje per logboekregel, geen herhaling zolang
 er niets verandert. Een reset in het dashboard maakt een nieuw seintje
-weer mogelijk.
+weer mogelijk. Kwam een seintje niet aan, dan probeert de volgende ronde
+het opnieuw, hoogstens drie keer; elke poging staat in `push_attempts`
+(soort `niveau` voor stop en doel, `terug_bij_niveau` voor de terugkeer).
 Zo ja, dan krijg je daar één keer een pushmelding over, met het
 verzoek om de trade zelf te sluiten in het dashboard. Er wordt niets
 automatisch gesloten, en je krijgt niet elke 15 minuten opnieuw hetzelfde
@@ -307,13 +376,381 @@ sudo systemctl daemon-reload
 sudo systemctl enable --now crypto-market-scan-smc.timer
 ```
 
-Draait los van de marktscan hierboven, elke 5 minuten (op minuten
-03/08/13/.../58, buiten zowel `crypto-level-check.timer`'s als
-`crypto-market-scan.timer`'s eigen grid). Alleen de SMC-structuurbreuk-
+Draait los van de marktscan hierboven, elke 5 minuten, 20 seconden na elk
+5m-slot (`OnCalendar=*:0/5:20`): gemeten op de VPS begon de oude timer
+(`*:3/5:00`) 183 s na het slot en duurde de cyclus 83 s. Na een wijziging
+aan de timer op de VPS opnieuw laden:
+
+```bash
+sudo cp deploy/crypto-market-scan-smc.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl restart crypto-market-scan-smc.timer
+systemctl list-timers crypto-market-scan-smc.timer   # de volgende start hoort op :x0:20 of :x5:20 te staan
+```
+
+Hoe lang een kansmelding onderweg was, van de candle-sluiting tot de verzonden push, per soort (mediaan en 90e
+percentiel, alleen-lezen):
+
+```bash
+.venv/bin/python3 scripts/vertraging.py --dagen 7
+```
+
+Alleen de SMC-structuurbreuk-
 check, niets van de drie 4u-detectoren: SMC reageert op 15m-candles en
 heeft dus veel meer baat bij een korte cyclus dan die 4u-detectoren, die
 toch pas om de 4 uur nieuwe data krijgen. Gebruikt dezelfde
 systeembrede noodrem hierboven.
+
+Een stop dichter dan `SMC_MIN_STOP_PCT` (standaard 0,4% van de entry) wordt verbreed tot die afstand, niet geweigerd. Dit geldt voor
+SMC, Structuur, Trend en het markt-script. Uit het meetraam: stops onder 0,1% wonnen 6% en verloren gemiddeld -0,73R, omdat ze binnen de
+ruis van een minuutcandle liggen, en een stop van 0,2% wordt al geraakt door een prijsverschil tussen twee beurzen. De R:R zakt mee en
+de kans valt af als die onder 2 komt. Zet de waarde op 0 in `.env` om het uit te zetten. De timers starten elke keer een nieuw
+proces en lezen `.env` opnieuw, dus daarvoor is geen herstart nodig.
+
+### Wekelijks kwaliteitsrapport
+
+```bash
+sudo cp deploy/crypto-quality-report.service /etc/systemd/system/
+sudo cp deploy/crypto-quality-report.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-quality-report.timer
+```
+
+Elke zondag om 19:47 meet `app/quality_report.py` zelf wat werkt: de uitkomst per type scan-signaal (smc, patroon,
+day_trading, swing) in R, en de community-calls (gaat de koers na een bericht de kant van het bericht op, tegen een
+controle van dezelfde coin en richting op willekeurige momenten, en wat levert elke call als vaste trade). Het rapport
+komt als rustige melding op `/meldingen` bij `ADMIN_USERNAME` (of `--user`). Een oordeel over de community staat er
+pas bij 60 onafhankelijke calls. Het script haalt 1m-candles op voor coins met minstens 8 calls en houdt die bij.
+Direct proberen: `sudo -u crypto /opt/crypto-alerts/.venv/bin/python3 -m app.quality_report` in `/opt/crypto-alerts`.
+
+### Derivatendata verzamelen
+
+```bash
+sudo cp deploy/crypto-derivs.service deploy/crypto-derivs.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-derivs.timer
+sudo systemctl start crypto-derivs.service   # eerste keer: haalt 29 dagen terug op
+```
+
+`app/derivs.py` bewaart per coin funding, open interest, taker-verhouding en long/short (5 minuten) in
+`data/derivs/<COIN>.csv`. Candle-kenmerken zijn uitgeput, dit is nieuwe informatie om SMC en day trading mee te
+toetsen. Binance geeft maar ~30 dagen history; elke dag zonder verzamelaar is voorgoed kwijt.
+
+### Candlebron: perps of spot
+
+Alle live motoren, `level_check`, de koerscache van het dashboard en de koers in de browser lezen candles en koersen uit één markt
+(`app/candle_source.py`, `app/exchange.py`). Standaard is dat Binance USDⓈ-M perpetuals (`CANDLE_MARKET=perp`, ccxt `binanceusdm`,
+symbool `BTC/USDT:USDT`, browserstroom `wss://fstream.binance.com`), want daar wordt gehandeld. `CANDLE_MARKET=spot` zet alles terug op de
+spotmarkt van `EXCHANGE_ID`. Een coin zonder perpcontract valt per coin terug op spot. Een 1000-contract (PEPE heet `1000PEPEUSDT`) noteert
+de prijs van 1000 munten; HesPulse rekent die om naar de prijs per munt (prijs gedeeld door 1000, volume maal 1000), zodat oude kaarten
+en open trades in dezelfde eenheid blijven. Elke nieuwe kaart en elk nieuw signaal bewaart de markt in `candle_market`; het detailblad
+toont "Bron: Binance perps" of "Bron: Binance spot". Oude rijen blijven leeg en worden niet herberekend. Lab en replay lezen hun eigen data.
+
+Controle na een update op de VPS:
+
+```bash
+cd /opt/crypto-alerts && sudo -u crypto .venv/bin/python -c "from app import exchange as e; [print(c, e.resolve(c), e.fetch_last_price(c)) for c in ('BTC','PEPE')]"
+sqlite3 data/trading.db "SELECT candle_market, COUNT(*) FROM zone_radar_setups GROUP BY 1"
+```
+
+### Extra coins
+
+`EXTRA_COINS=XRP,HBAR` in `.env` voegt coins toe aan de vaste zeven. Daarop draait alleen de SMC-check, niet de 4u-detectoren
+(patroon, uitbraak, trendlijn). Community-berichten over die coins worden wel herkend. Toets eerst met
+`scripts/replay_smc_report.py --coins XRP,HBAR` en `scripts/replay_smc_setup_analysis.py` of SMC er na kosten positief is.
+Herstart `crypto-bot` en `crypto-web` na een wijziging. De derivatenverzamelaar pakt de nieuwe coins vanzelf mee. Een coin
+weghalen kan door hem uit `EXTRA_COINS` te halen: de coin gaat op inactief, er gaat niets verloren.
+
+Voor de range sweep-proef (hieronder) moeten ARB, APT, AAVE en WLD in de coinlijst staan: `EXTRA_COINS=ARB,APT,AAVE,WLD`. Op een verse
+database bestaan alleen de vaste zeven, dus ARB ontbreekt; zonder de coin in de lijst bestaat zijn coinpagina niet (404) en weigert het
+prijsalarm hem. De range sweep-motor zelf scant de 20 coins van `trendlab.LAB_COINS` (daar staan ARB, APT en AAVE in, WLD niet) en
+gebruikt `EXTRA_COINS` niet om coins te kiezen; WLD krijgt dus een coinpagina en prijsalarm, maar geen automatische kaart.
+
+### Range sweep en range-watch (proef)
+
+Onze lezing van een range-sweep-strategie: een echte range, een zone als vak (aanbod of vraag), een limiet in de zone en een stop voorbij de
+buitenkant. Er is geen vast doel: de proef meet de kwaliteit van de stop (hoe vaak de stop raakt, hoe ver de koers meeliep, de kans op +1R
+tot +6R vóór de stop, de kosten in R). Alles staat vooraf vastgelegd in `docs/onderzoek/range-sweep/preregistratie.md`, de labrun op de VPS
+staat in `docs/onderzoek/range-sweep/vps-protocol.md`. De motor (`app/range_sweep_live.py`) en de range-watch (`app/range_watch.py`) draaien in
+de snelle SMC-check (`crypto-market-scan-smc`, zie hierboven); een extra systemd-unit is niet nodig. Beide zijn standaard uit:
+
+| Instelling | Standaard | Wat het doet |
+|---|---|---|
+| `RANGE_SWEEP_ENABLED` | `false` | Zoekt nieuwe setups. Pas aan na een geslaagde toets op stopkwaliteit (`scripts/strategy_lab.py --familie rangesweep --opslaan`); gemelde setups en open trades worden altijd afgemaakt. |
+| `RANGE_WATCH_ENABLED` | `false` | Volgt ranges en meldt stil dat een range gevonden is of de koers bij een rand komt. Informatie, geen kans. |
+| `RANGE_SWEEP_PUBLIC` | `false` | `false`: alleen de CEO ziet de kansen, de ranges, de kanspagina en de cijfers op Bewijs, en de signalen staan niet in de openbare `/keten`. `true`: ook leerlingen. Herstart `crypto-web` en `crypto-bot` na een wijziging. |
+| `RANGE_SWEEP_MAX_PER_DAY` | `6` | Hoeveel setups per 24 uur gemeld worden; de rest blijft zichtbaar als "niet gemeld". |
+| `RANGE_WATCH_MAX_PER_DAY` | `3` | Eigen budget voor stille range-meldingen per gebruiker per 24 uur, los van het kansbudget. |
+| `RANGE_SWEEP_MAX_NEGATIVE` | `30` | De motor zet zichzelf uit na zoveel afgeronde proeftrades die samen negatief zijn bij de referentie-uitgang. |
+
+Op Bewijs (tab Regels) staat de stopkwaliteit uit het lab naast dezelfde cijfers uit de live metingen, met het oordeel van het lab
+(stopkwaliteit geslaagd of niet, de strenge toets op een voordeel ernaast, 30 toetsen en een register van 64). De status is "In proef" zodra de
+stopkwaliteit geslaagd is; "Bewezen" vraagt ook de strenge toets en de live bewaking. De R die Bewijs telt is de R bij de referentie-uitgang
+(meelopende stop van 3 ATR op 1u), niet bij jouw eigen doel; lopende en niet gevulde setups staan als aantal ernaast. De score 40/60 op een
+kaart en de doelkans zijn historisch en beschrijvend, geen voorspeller.
+
+### Marktbrein, deel A: liquidaties en kalender
+
+```bash
+sudo cp deploy/crypto-liq.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-liq.service
+```
+
+`app/liquidations.py` bewaart gedwongen sluitingen op Binance futures per coin per 5 minuten in `liquidations_5m`. De stroom
+bestaat alleen live, dus laat dit proces altijd draaien. `app/market_calendar.py` levert voorspelbare momenten (funding,
+opening VS-beurs, opties-expiry); CPI en FOMC zet je zelf in `data/macro_events.csv` (kolommen `at`, `label`). Toets de
+momenten met `python3 scripts/calendar_scan.py`. Zie `docs/superpowers/specs/2026-10-06-marktbrein-design.md`.
+
+### Marktbrein, deel B: markt-script, nieuws en Vandaag
+
+```bash
+sudo cp deploy/crypto-script.service deploy/crypto-script.timer deploy/crypto-news.service deploy/crypto-news.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now crypto-script.timer crypto-news.timer
+sudo systemctl start crypto-news.service crypto-script.service
+```
+
+- `app/market_script.py`: elke 4 uur schrijft Claude per coin een duiding en maximaal twee scenario's met een voorwaarde. De code
+  toetst elk scenario (stop minimaal `SMC_MIN_STOP_PCT`, R:R minimaal 2, niveaus dicht bij de prijs). De motor draait mee in de
+  SMC-snelcyclus: een voorwaarde die klopt wordt een gewoon signaal met `trade_type = 'script'` en het label ongetest. Max
+  `SCRIPT_MAX_ALERTS_PER_DAY` (6) meldingen per dag. Gaat vanzelf uit als de laatste `SCRIPT_MAX_NEGATIVE` (30) afgeronde
+  scenario's samen negatief zijn. `SCRIPT_ENABLED=false` zet het uit. Model: `SCRIPT_MODEL` (standaard `claude-haiku-5-5`).
+- `app/structure_live.py`: breuk van een lijn of range op 30m, of van de laatste top na een hogere bodem (CHOCH, gespiegeld voor short; live
+  sinds 2026-10-28 zonder labrun, ongetest) (detectoren `find_breaks` en `find_choch` uit `app/replay/breakretest.py`, alleen gesloten candles).
+  Claude geeft een oordeel A, B of C, maar dat is alleen nog een meting: het filtert niets en staat op geen scherm. De code berekent niveau, stop
+  en doelen. Elke breuk met een plan krijgt dezelfde stille melding (luid is alleen de vulling, zie "Meldingen"); bij een volle dagcap gaat de kans die het dichtst bij zijn limiet ligt voor.
+  Bewijs houdt de vullingen met oordeel C apart als `structuur_c`, naar buiten heten beide Structuur. Het plan staat in de melding en op de pagina Setups (`/structuur#structuur-<id>`), vóórdat de limiet vult. Raakt de koers het niveau,
+  dan volgt een signaal met `trade_type = 'structuur'` (label ongetest, score op Bewijs). Max `STRUCTURE_MAX_ALERTS_PER_DAY` (30)
+  per dag. Gaat vanzelf uit na `STRUCTURE_MAX_NEGATIVE` (30) afgeronde signalen die samen negatief zijn. `STRUCTURE_ENABLED=false`
+  zet het uit. De mechanische versie scoorde -0,16R netto op een jaar candles (`scripts/breakretest_scan.py`): het oordeel van
+  Claude moet dat verschil maken, en dat is een hypothese die Bewijs toetst. Komen er minder kansen dan je verwacht, draai dan
+  `.venv/bin/python3 scripts/structuur_check.py` (alleen-lezen): per dag breuken, plannen, gemeld, gevuld, doel/stop/open en of de
+  dagcap geraakt werd, de hartslag ("33 van 35 coins gecontroleerd in 41 s; mislukt: ...") en welke coins geen enkel plan kregen.
+  Hield een dagcap de laatste 24 uur kansen tegen, dan zegt de hartslag dat ("...; 3 kansen tegengehouden door de dagcap van 30"), net als die
+  van de zone-radar, de zone-sweep en de POC-radar, en staat er per soort één regel onder Dagcap in Beheer (`app/daycap.py`, tabel `cap_holds`).
+  Een kans die elke cyclus terugkomt telt één keer. Zo zie je of een cap nog knelt; de caps gingen op 2026-11-01 omhoog omdat de volle
+  Structuur-cap op 29 oktober de WLD-breuk tegenhield.
+- `app/zone_radar_live.py` (rekenregels in `app/zone_radar.py`): per coin de dichtstbijzijnde actieve vraagzone onder en aanbodzone boven de koers
+  op 1u en 4u (binnen 6%), als limietplan op de Radar (`/smc`): limiet op de binnenrand, stop een kwart ATR voorbij de buitenrand (minstens
+  `SMC_MIN_STOP_PCT`), doel de rand van de eerste tegenovergestelde zone vanaf de limiet (ook als die tussen limiet en koers ligt), zonder minimale
+  R:R (de kaart op Kansen toont de geplande R:R vanaf de limiet als klein label, "2,4 R"; het blad zegt "gepland" bij Doel). De kaart bewaart tot 5 obstakels voorbij de limiet met R en het moment waarop ze bekend werden (`obstacles`); het
+  detailblad toont het eerste en er hoogstens twee daarna. Stille melding bij een nieuwe kaart, luide bij de vulling;
+  gevuld wordt het een signaal met `trade_type = 'zone_radar'` (ongetest, apart op Bewijs). Max `ZONE_RADAR_MAX_PER_DAY` (40, de kaarten dichtst bij de koers gaan voor) nieuwe kaarten
+  per dag, `ZONE_RADAR_ENABLED=false` zet het uit. Handmatig draaien: `python3 -m app.zone_radar_live`.
+- `app/zone_sweep_live.py` (kaart in `app/zone_sweep.py`, detector `app/replay/zonesweep.py`): de koers prikt door een actieve vraagzone (long) of
+  aanbodzone (short) en sluit binnen 6 candles op 1u terug. Live vóór de labrun, op verzoek van de gebruiker, altijd ongetest (zie
+  `docs/onderzoek/zone-sweep/preregistratie.md`, "Aanvullende besluiten"). Varianten ZS_1H, ZS_2H en ZS_4H, limiet op de binnenrand, stop een
+  kwart ATR voorbij de prik, doel de rand van de eerstvolgende tegenovergestelde zone bij minstens 2R, anders geen doel (dan telt Bewijs de R bij de
+  referentie-uitgang, zoals bij de range sweep). Kaart op de Radar, stille melding bij een nieuwe kaart en luide bij de vulling, gevuld een signaal met
+  `trade_type = 'zone_sweep'` buiten de `/keten`. `ZONE_SWEEP_ENABLED` (standaard `true`), `ZONE_SWEEP_PUBLIC` (standaard `true`; `false` is
+  alleen de CEO), `ZONE_SWEEP_MAX_PER_DAY` (10 gemelde kaarten per 24 uur, de rest staat stil op de Radar). Draait in de snelle SMC-check, geen
+  eigen unit. Handmatig: `python3 -m app.zone_sweep_live`.
+- `app/poc_radar_live.py` (POC in `app/poc.py`, kaart in `app/poc_radar.py`): de POC (point of control, de prijs met het meeste volume) van elke
+  gesloten UTC-dag en ISO-week uit 5m-candles (bakken van 0,05%, volume gelijk verdeeld over low tot high). Naakt zolang geen latere 5m-candle hem
+  raakte, ook niet met een lont. Per coin en richting de dichtstbijzijnde naakte POC binnen 6%: onder de koers long, erboven short, limiet op de
+  POC, stop een kwart ATR (1u) erachter, doel het eerste niveau voorbij de limiet (een POC of zonerand) bij minstens 2R, anders geen doel
+  (referentie-uitgang zoals de zone-sweep). Live op verzoek van de eigenaar zonder labrun, altijd ongetest. De niveaus worden één keer per uur per
+  coin bijgewerkt met alleen de nieuwe candles en bewaard (`poc_levels`, `poc_scans`); kaarten in `poc_radar_setups`, gevuld een signaal met
+  `trade_type = 'poc_radar'` buiten de `/keten`. Een kaart die niet vult vervalt na 3 dagen. `POC_RADAR_ENABLED` (standaard `true`),
+  `POC_RADAR_PUBLIC` (standaard `true`; `false` is alleen de CEO), `POC_RADAR_MAX_PER_DAY` (30). Kaarten van de zone-radar en de zone-sweep
+  krijgen het kenmerk POC-samenval (limiet binnen 0,3% van een naakte POC), alleen als meting; Bewijs toont of het samengaat. Draait in de
+  snelle SMC-check, geen eigen unit. Handmatig: `python3 -m app.poc_radar_live`.
+- `app/model_live.py` (regels in `app/model.py`, kaart in `app/model_card.py`): het HesPulse-model (zie bovenaan). Draait in de snelle
+  SMC-check na de POC-radar, geen eigen unit; tabellen `model_scenarios` en `model_v1`. Handmatig: `python3 -m app.model_live`.
+- `app/calendar_alerts.py`: herinnering 30 minuten vóór de opening van de VS-beurs (stil) en vóór een macro-uitslag uit
+  `data/macro_events.csv` (met geluid). De agenda toont alleen momenten die de toets als duidelijk anders mat, plus macro;
+  funding-resets en opties-expiry stonden er eerst bij maar bewegen de markt niet meetbaar. De agenda is niet volledig
+  automatisch: CPI en FOMC komen uit het csv-bestand dat jij vult.
+- Structuur-setups sturen na de vulling een melding bij elk doel dat raakt. Bij T1 hoort de instructie: stop naar de instap.
+  Een motor die zichzelf uitzet na een negatieve score meldt dat aan de beheerder (tabel `sent_alerts` voorkomt dubbele meldingen).
+- `app/trend_live.py`: trend plus pullback (4u en 1u trend, impuls op 15m, zone, bevestiging op 5m), dezelfde detector als de toets
+  `scripts/trendpullback_scan.py`. Gemeten op een jaar en 7 coins: bruto +0,03R, netto -0,06R. Daarom altijd ongetest, alleen stille meldingen
+  (max `TREND_MAX_PER_DAY`, 6) en `trade_type = 'trend'` zodat Bewijs de score toont. Gaat uit na `TREND_MAX_NEGATIVE` (40) negatieve afgeronde signalen.
+- `app/news.py`: RSS (CoinDesk, Cointelegraph, The Block) en Binance-aankondigingen, elke 10 minuten, gesorteerd door
+  `ANTHROPIC_EXPLAIN_MODEL`. Een bron die niet antwoordt wordt overgeslagen.
+- `/vandaag` (Markt): scripts, agenda van 24 uur, liquidaties van het laatste uur, nieuws en de score van
+  de eigen voorspellingen. `/api/vandaag` ververst koersen en scenario's elke 15 seconden (`web/static/vandaag.js`).
+- Bewijs en het weekrapport tonen de soort `script` apart.
+
+### Marktcontext: funding, OI, Fear and Greed en stablecoins (alleen weergave)
+
+Geen eigen service: `app/market_context_live.py` draait in de snelle SMC-cyclus (`crypto-market-scan-smc.timer`, elke 5 minuten),
+naast de motoren en hooguit 20 seconden. Bronnen, allemaal publiek en zonder sleutel: Binance (`/fapi/v1/premiumIndex`,
+`/fapi/v1/fundingInfo`, `/futures/data/openInterestHist`), Hyperliquid (`POST https://api.hyperliquid.xyz/info`, `metaAndAssetCtxs`),
+Bybit (`/v5/market/tickers?category=linear`), OKX (`/api/v5/public/funding-rate`), alternative.me (`/fng/`) en DefiLlama
+(`stablecoins.llama.fi/stablecoincharts/all`). Funding en OI worden elke cyclus opgehaald, Fear and Greed en stablecoins elke 6 uur;
+een bron die faalt schrijft niets, de oude waarde blijft met zijn tijd staan. Metingen staan in de tabel `market_context` (30 dagen).
+
+Wat je ziet: een blok Context op elke Radar-kaart en kanspagina (funding per 8u met wie betaalt, het grootste verschil met Binance,
+OI over 24 uur, met bron en leeftijd), Marktcontext op Vandaag (tab Markt) en op Bewijs een tabel per kaartsoort: kaarten met extreme
+funding bij het ontstaan (vaste grenzen +0,05% en -0,03% per 8u) naast de rest. Een zone-radar-kaart bewaart de stand bij zijn ontstaan
+(`ctx_funding`, `ctx_oi_change_24h`, `ctx_spread`). Geen motor, filter of melding leest iets hiervan. `MARKET_CONTEXT_ENABLED=false` zet het uit.
+
+Controleren op de VPS:
+
+```bash
+cd /opt/crypto-alerts && source .venv/bin/activate
+python3 -m app.market_context_live                      # één ronde met logregels per bron
+sqlite3 data/trading.db "SELECT name, at, detail FROM engine_heartbeat WHERE name = 'marktcontext'"
+sqlite3 data/trading.db "SELECT bron, metric, COUNT(*), MAX(gemeten_op) FROM market_context GROUP BY bron, metric"
+```
+
+### Samenval en alleen-informatie per soort
+
+Samenval (`app/samenval.py`): een SMC-signaal en een community-call (day_trading) op dezelfde coin en kant binnen
+`SAMENVAL_WINDOW_HOURS` (6) geven één extra pushmelding met het label ongetest. `/bewijs` en het weekrapport tonen de
+uitkomst apart. De detector gaat vanzelf uit zodra de laatste `SAMENVAL_MAX_NEGATIVE` (30) afgeronde samenvallen samen
+negatief zijn in R. De check draait mee in de SMC-snelcyclus.
+
+`SIGNAL_TYPE_INFO_ONLY` in `.env` (bijvoorbeeld `patroon,day_trading`) zet de push voor die soorten uit. Het signaal blijft
+bestaan, in het journaal en op Bewijs, dus het meten gaat door. De timers en de bot lezen `.env` opnieuw bij de volgende
+start; herstart `crypto-bot` na een wijziging.
+
+### Trade Radar en Bewijs (dashboard)
+
+`/smc` heet in de navigatie **Kansen** (zie hieronder): elke wachtende kans en elke open trade staat als kaart met grafiek in de tab van
+zijn soort, met een live status die elke 15 seconden meebeweegt (`/api/radar`, `web/static/radar.js`; koersen staan 10 seconden in een cache).
+De rekenlaag zit in `app/trade_plan.py` en `app/radar.py`. Zodra de koers in de zone komt stuurt de SMC-check eenmalig een
+melding "koers in de zone" (`market_scanner._notify_zone_touches`, kolom `smc_setups.zone_alert_sent`), en de SMC-melding zelf
+begint met de limietorder en de R:R vanaf die prijs.
+
+`/bewijs` toont per soort melding de automatisch gemeten uitkomst in R na kosten (`app/track_record.py`, kosten uit
+`TRACK_RECORD_COST_PCT`): aantal afgeronde trades, winrate, gemiddelde R met en zonder kosten, een curve per week en een status
+die een vaste regel volgt (onder 30 afgeronde trades "nog te weinig data", daarboven positief of negatief na kosten, "voordeel
+gemeten" pas bij 100 trades en een positief gemiddelde). Vervallen en open signalen staan er bewust bij maar tellen niet mee.
+Per soort staan bruto en netto R naast elkaar, met de kosten per trade in R en de regel in woorden (`track_record.cost_text`);
+het Logboek blijft bruto en zegt dat erbij. Netto is bruto min de vaste kosten per rondreis min de funding: per afgeronde trade van
+een focus-soort de som van de funding-rates van het perpcontract van de vulling tot het einde van de uitgangscandle (long betaalt
+een positieve rate, short ontvangt hem; het interval volgt het contract), omgerekend naar R met de stopafstand (`app/funding.py`,
+tabel `trade_funding`, één aanroep naar `/fapi/v1/fundingRate` per uitkomst met een timeout van 5 s). Lukt dat niet, dan staat er
+"onbekend" en telt die trade zonder funding; Bewijs zegt "waarvan funding X R" en hoeveel trades onbekend bleven.
+
+Sinds 1 november komen de candles van perps. Per focus-soort zijn de hoofdcijfers daarom alleen de trades op perps-candles
+(`signals.candle_market = 'perp'`); het oudere deel (spot of leeg) staat kleiner eronder als "Vóór 1 november (spot-candles)".
+
+Per focus-soort staat ook één gemeten regel over hoe ver winnaars eerst tegen je in gingen (MAE, `app/excursion.py`, tabel
+`trade_excursions`), en hoe vaak stop en doel in dezelfde candle vielen (volgorde onbekend, als stop geteld). Met en zonder doel
+gelijk gemeten: `level_check` op de candles van de vulling tot de uitkomst, en een kaart zonder doel bij de referentie-uitgang op de
+5m-candles van de vulling tot het einde van de uitgangscandle (`app/outcome_measure.py`); lukt ophalen niet, dan "onbekend".
+Voor oude trades, alleen-lezen, met de MAE van winnaars en verliezers en hoeveel stops binnen 24 uur toch het doel haalden:
+
+```bash
+.venv/bin/python3 scripts/mae_check.py --dagen 60
+```
+
+Eenmalig na deze versie op de VPS (beide schrijven; zonder de vlag rekenen ze alleen):
+
+```bash
+.venv/bin/python3 scripts/funding_check.py --dagen 60 --opslaan     # funding van oude afgeronde trades
+.venv/bin/python3 scripts/mae_check.py --opnieuw --dagen 60         # oude metingen zonder doel opnieuw op 5m-candles
+```
+
+Een kaart die eindigt zonder vulling (zone gebroken, verlopen, doel eerst, weggelopen, stop vóór de vulling) staat 7 dagen onder
+"Uitgevallen, gemist of vervallen" in de tab van zijn soort, met de reden in gewone woorden (`app/end_reason.py`), en in het Logboek
+op de dag dat hij eindigde. Het anker van de kaart blijft, zodat een oude melding er nog naartoe leidt.
+
+### Navigatie, Kansen en thema (ontwerp V4)
+
+Vier tabs: **Kansen** (`/smc`), **Logboek** (`/signalen`), **Bewijs** (`/bewijs`) en **Markt** (`/vandaag`); geen url veranderde, de
+oude `/structuur` stuurt door naar de tab Structuur op Kansen. Account, Meldingen, Handleiding, Zone-radar uitleg, Kwartaalcijfers,
+Galerij en CEO (alleen de eigenaar) staan in het menu achter je initiaal rechtsboven. Het getal op Kansen telt de kansen die nu in de
+zone staan.
+
+Kansen (`app/kansen.py`) heeft een tab per soort: Structuur, Zone-radar, Zone-sweep en POC-radar (met `ENGINE_FOCUS=false` ook SMC). Boven de
+tabs staat het totaal over alle tabs ("12 kansen klaar · 2 in de zone · 3 open", alleen wat er is; "Geen kansen" als er niets is), naast
+elke tabnaam het aantal wachtende kansen en zolang er iets in de zone staat een accentbadge met dat aantal; elke tab herhaalt zijn eigen
+regel. Wisselt een kaart van stand terwijl de pagina openstaat, dan tellen de getallen mee (`kaarten.js` na elke `/api/radar`). De tab met
+de meeste kansen in de zone gaat vanzelf open. Een kaart toont coin en richting, de stand (Wacht, In zone, Open), het label ongetest of
+in proef en een grafiek die per soort anders is: Structuur zijn eigen momentopname bij de breuk (`setup_chart.setup_svg`: de gebroken
+lijn of range, het retest-niveau, de stop en T1 tot T3, ook voor een open Structuur-trade), Zone-radar en Zone-sweep een tekening in de
+stijl van de galerij op het tijdframe van de zone (`app/card_chart.py`, lazy via `/api/kaart_svg/<sleutel>`: de zone als vlak vanaf de
+ontstaanscandle met een markering, de doelzone, bij de zone-sweep ook de prik en het herstel, en limiet, stop en doel met prijs rechts;
+de POC-radar zonder vlak, met lijnen voor limiet op de POC, stop en doel en een markering op het begin van zijn dag of week;
+"Groot" opent de schermvullende grafiek). Dubbele kaarten (zelfde soort, coin en richting, instap binnen 0,2%) staan één keer, de oudste;
+het blad zegt "Nog 1 vergelijkbaar signaal". Dat geldt alleen voor deze weergave: Bewijs, Logboek en meldingen houden elk signaal.
+In de zone staat bovenaan, daarna op gemeten afstand tot de instap; open trades staan onder Open.
+Wat niet meer actief is, en onder Structuur ook wat uitviel, de trend-trades en de range sweep (proef), staat als inklapbare regel
+onder de lijst. Een tik op de kop van een kaart opent het **detailblad**: de prijs als ladder (koerslabel links, lijnen in het midden,
+alleen de namen Stop, Instap en Doel rechts, zodat tekst nooit botst; `app/ladder.py`, live in `web/static/ladder.js`), daaronder de
+getallen één keer (houd vast om te kopiëren, de bel zet een prijsalarm), de herkomst, de gemeten context en vast onderaan
+"Zet de order, stap voor stap" naar de order-checklist (`/nu/order/<sleutel>`: instrument en richting, limietprijs, stop, doel; geen
+positiegrootte) of "Bekijk de trade". "Sla over voor vandaag" zet een kans een dag achteraan (cookie `hp_skip` en `plan_skips`, ook in
+het Logboek).
+
+**Verbergen.** Elke kaart op Kansen (wachtend plan of open trade, in elke tab) heeft een kruisje naast de kop en in het blad de knop
+"Verberg"; onder Wachtend en onder Open staat bij twee of meer kaarten "Verberg alles". De kaart klapt meteen weg en een balk van 5 s
+biedt "Ongedaan" ("HYPE short verborgen · Ongedaan"), zonder bevestigingsvraag. Verborgen kaarten staan onderaan hun tab onder
+"Verborgen (N)" met "Toon weer" per rij en "Toon alles weer". Het is per gebruiker op de server bewaard (tabel `kans_hidden`, routes
+`POST /api/kans/verberg` en `/api/kans/toon` met `{"keys": [...]}`, alleen voor wie ingelogd is) en alleen een weergavekeuze: een
+verborgen kaart telt niet mee in het tab-getal, de badge, de totaalregel, het getal op Kansen in het dok en op het appicoon
+(`radar.in_zone_count(..., hidden)`), en niet als "vergelijkbaar". Het signaal zelf, de uitkomst, Bewijs, Logboek, Replay, het journaal
+en de meldingen veranderen niet: een verborgen open trade wordt gevolgd zoals altijd en een vulling of uitkomst geeft nog steeds een
+melding. Een verborgen plan dat vult, komt als nieuwe open trade terug (andere kaart). Verbergen is sterker dan overslaan: overslaan
+houdt de kaart een dag achteraan, verbergen haalt hem weg tot je hem terugzet.
+Prijzen staan overal met een komma en zoveel decimalen als bij de prijs past (`app/price_text.py`: 80,92 voor HYPE); kopiëren geeft
+hetzelfde getal met een punt. Pushteksten houden hun oude notatie (golden tests).
+
+**Markt** (`/vandaag`) is de oude Vandaag zonder het scherm Nu: marktcontext, agenda, liquidaties, nieuws, scenario's (zolang het
+markt-script aan staat) en de score; open meldingen van soorten zonder eigen tab staan er onder Verder open.
+
+Thema: donker is de standaard. In Account kies je Systeem, Donker of Licht; de keuze staat in de cookie `hp_theme` (en in
+localStorage), zodat de server de pagina meteen in het goede thema schrijft. Controleer het contrast na een kleurwijziging voor beide:
+`python3 scripts/layout_check.py --base http://127.0.0.1:8000 --user <naam> --out /tmp/lc --theme dark` en daarna `--theme light`.
+Letters: Geist en Geist Mono (Google Fonts); offline valt de pagina terug op de systeemletters.
+
+### Logboek, replay, week en Beheer (ontwerp V2, fase 2)
+
+**Logboek** (`/signalen`) is een dagtijdlijn: per dag wat de app zag (nieuwe plannen, in de zone), wat jij deed (checklist afgerond
+met de gemeten duur, gevuld, genomen, overgeslagen) en de uitkomst met R. Een trade is een plan waarvan je de checklist afrondde en
+dat vulde, of een melding die je in het Journaal als genomen of aangepast markeerde. R komt uit de uitkomst van het signaal (doel of
+stop), zonder kosten; oefentrades tellen nooit mee. Overslaan op Kansen en de tijden van de checklist staan per gebruiker in de database
+(`plan_skips`, `checklist_runs`). De oude signalenlijst staat onder de tabs Open en Alle; het Journaal (status, sluiten, terugzetten,
+export) staat op Account. Bij elke afgeronde trade opent **Bekijk replay** de 5m-candles van een uur voor de vulling tot de uitkomst,
+met stop, instap en doel, een schuifbalk, een knop per moment en Speel af.
+
+**Week** is een tab op Bewijs: de R van jouw trades deze week, acht weken ernaast, gemiddelde en grootste verlies, en hoogstens één
+telbare observatie over overgeslagen plannen.
+
+**Beheer** (`/beheer`, alleen de eigenaar, via het initiaal): leerlingen met hun set, week-R en wanneer ze laatst keken; volg-sets
+(een naam en coins; een set filtert alleen de pushmeldingen van die leerling); uitnodigingen per code met aantal keer en
+verloopdatum. Registreren blijft open; zet `REGISTRATION_REQUIRES_INVITE=true` in `.env` om alleen met een geldige code toe te
+laten. Een code kent zijn set toe. Leerlingen zien elkaar of elkaars resultaten nooit.
+
+### Een update aankondigen (/nieuw)
+
+`/nieuw` is openbaar en deelbaar (Discord, WhatsApp; linkvoorbeeld `web/static/og/nieuw.png`, opnieuw maken met
+`python3 scripts/make_og.py`). Vóór het gekozen moment telt hij af, daarna toont hij wat er live is met een knop naar HesPulse.
+Na het moment ziet elke ingelogde gebruiker één keer het verhaal "Wat is nieuw" (zes kaarten: alle kansen op één plek, zones en
+Structuur, de order stap voor stap, Logboek en Replay, licht en donker, op je beginscherm; opnieuw te openen via het initiaal),
+en gaat er in de snelle cyclus (`crypto-market-scan-smc.timer`) precies één pushmelding uit naar iedereen met een abonnement
+(pauze telt, binnen stille uren stil). Het moment staat in de database, dus geen herstart nodig:
+
+```bash
+python3 scripts/aankondiging.py --zet 2026-11-02T18:00   # Amsterdamse tijd
+python3 scripts/aankondiging.py --zet +30m               # vanaf nu, ook +2u of +1u30m: direct na een update laten afgaan
+python3 scripts/aankondiging.py --toon                   # het moment en hoe lang nog
+python3 scripts/aankondiging.py --test-push              # alleen naar de eigenaar
+python3 scripts/aankondiging.py --wis
+```
+
+`ANNOUNCEMENT_AT` in `.env` is alleen een startwaarde. Het verhaal en de push horen bij `announce.STORY_VERSION`: een tijd verzetten
+geeft niemand iets twee keer; een volgende update met nieuwe kaarten krijgt een nieuwe versie.
+
+### App op het beginscherm (PWA)
+
+HesPulse is te installeren als app (`web/static/manifest.json`, `service-worker.js`, `pwa.js`, `install.js`). De app start voor
+iedereen op Kansen (`start_url` `/smc`, sinds ontwerp V4; een oude installatie die nog `/vandaag?bron=app` opent, wordt doorgestuurd
+naar `/smc`); het manifest houdt `id` `/ceo` zodat bestaande installaties dezelfde app blijven. Een gewijzigde `start_url` neemt een
+telefoon pas over als hij het manifest opnieuw ophaalt. Lang drukken op het icoon geeft snelkoppelingen naar Kansen, Markt en Bewijs.
+Account toont de installatiehulp (iPhone: Delen, Zet op beginscherm, open de app; Android en Chrome: een eigen knop), Vandaag
+een rustige banner die je kunt wegklikken; beide verdwijnen in de geïnstalleerde app. Offline toont de app de laatst bekende
+Radar en Vandaag met de balk "Offline, laatst bijgewerkt om HH:MM": de service worker bewaart alleen die twee pagina's, per pad
+en alleen met de kijker-kop `X-HP-Viewer` van een ingelogde gebruiker; een andere kijker, uitloggen of een omleiding naar
+`/login` wist ze. `/api`, POST en push gaan nooit door een cache. Na een wijziging aan `service-worker.js` verhoog je
+`SW_VERSION` (de test `tests/test_pwa.py` bewaakt dat); gebruikers krijgen dan "Nieuwe versie beschikbaar, tik om te laden".
+De opstartbeelden voor iPhone en de snelkoppelingsiconen maak je opnieuw met `python3 scripts/make_splash.py` (Pillow, komt mee
+met matplotlib); de formaten staan in `web/splash.py`. Na een deploy is alleen `crypto-web` herstarten nodig.
 
 ### Periodieke factor-drift-check
 
@@ -387,6 +824,90 @@ ENABLE_ADVANCED_FACTORS=true
 en herstart `crypto-bot`. Terug naar de basisversie kan altijd door de
 regel weer op `false` te zetten of te verwijderen.
 
+### Meetraam (replay)
+
+`scripts/replay_report.py` speelt de dagtrading-beslislogica af over historische
+Binance-candles en toont winrate en verwachting in R (na kosten) per coin,
+kwartaal en train/test. `scripts/replay_compare_live.py` controleert het raam
+tegen de echte signalen uit de database (op de VPS met `DATABASE_PATH=/opt/crypto-alerts/data/trading.db /opt/crypto-alerts/.venv/bin/python3 scripts/replay_compare_live.py --since 2026-10-01 --until 2026-10-05`; `--until` is exclusief en alleen `day_trading` telt). Candles staan in `data/candles/`
+(niet in git). Zie `docs/superpowers/specs/2026-10-04-signaalkwaliteit-design.md`.
+Tests: `python3 -m unittest discover -s tests -t . -v`.
+
+Het SMC-raam draai je met `scripts/replay_smc_report.py --months 12`. Het
+rapport toont de trechter (waarom setups doodlopen), de uitkomst in R, de
+snelheid en de break-even kosten. De eerste keer downloadt hij 1m-candles; reken
+op enkele uren voor 7 coins met `--workers 2` (ongeveer 45 tot 60 minuten rekentijd per coin). Draai het op de VPS met
+`nohup nice -n 10 python3 -u scripts/replay_smc_report.py --months 12 --workers 2 > /tmp/smc12.txt 2>&1 &`
+(de voortgangsregels worden direct geflusht). De scanmomenten staan 3 minuten
+na een vijfminutengrens (`--offset-minutes`), zodat ze nooit op een kwartiersgrens
+vallen. Controle tegen de echte SMC-signalen (minstens 70% moet terugkomen; `--until` is exclusief):
+`DATABASE_PATH=/opt/crypto-alerts/data/trading.db /opt/crypto-alerts/.venv/bin/python3 scripts/replay_smc_compare_live.py --since 2026-09-01 --until 2026-10-04T10:00`.
+Het rapport schrijft naast de signalen-CSV ook `data/replay/smc_setups_*.csv` met alle setups. `scripts/replay_smc_analyze.py` (kosten, stopafstand, vaste take met `--grid`) werkt op de signalen. `scripts/replay_smc_setup_analysis.py` speelt elke setup na als vaste limietorder op de zonerand en toetst kenmerken (4u- en dagtrend, sweepdiepte, zonegrootte, tijdblok) op train en test.
+`scripts/replay_lab.py` is een testbank voor eenvoudige instap-regels op 15m en 30m (pullback naar de EMA in de 4u-trend, uitbraak met volume, sweep en terugkeer, RSI-uitersten, sessie-opening, plus een willekeurige controle). Per regel en take toont het trades per jaar, winrate en R bruto en netto op train en test, en markeert kandidaten. Het raakt het live systeem niet aan.
+Met `scripts/replay_lab.py --positioning` test je regels op positioneringsdata van Binance (open interest, top-traders, takers, funding), gratis van data.binance.vision. Dat is informatie die niet in een candle zit.
+De trage equivalentietest (`tests/test_smc_equivalence.py`, enkele minuten) sla je over met `SKIP_SLOW_TESTS=1 python3 -m unittest discover -s tests -t .`.
+
+### Automatische verbeterlus
+
+HesPulse meet elke nacht zelf waar de focus-soorten (Structuur, Zone-radar, Zone-sweep, POC-radar) kansen laten liggen, zonder dat je trades
+instuurt. Om 03:17 UTC draait `deploy/hespulse-nacht.timer`:
+
+1. `scripts/nacht_export.py --git` zoekt de auto-missers van de laatste 24 uur (`scripts/auto_misser.py`: een omkeer van minstens 3 ATR op
+   gesloten 1u-candles binnen 24 uur, met per motor de weigerreden als geen motor hem zag), telt per soort de lekken over 7 en 30 dagen
+   (`app/leaks.py`), schrijft `data/export/hespulse-JJJJ-MM-DD.json` en `.md` en pusht alleen die twee bestanden naar de tak `hespulse-data`.
+   In de export staan marktdata en uitkomsten per signaal; nooit gebruikers, e-mail, journaal, push-abonnementen of `.env`-waarden.
+2. `scripts/schaduw.py --auto` voert de verdicts van de schaduwvarianten uit (`app/shadow.py`): promoveren, afvallen of wachten volgens de vaste
+   regel. Een promotie zet de parameter in de overlay die de motor bij zijn volgende cyclus leest en stuurt de CEO één push met de terugdraai-opdracht.
+
+Een wekelijkse Claude-sessie leest de nieuwste export en legt per soort hoogstens één variant vooraf vast (`docs/verbeterlus.md`).
+
+Handmatig:
+
+```bash
+cd /opt/crypto-alerts
+sudo -u crypto .venv/bin/python3 scripts/auto_misser.py --droog        # alleen tonen
+sudo -u crypto .venv/bin/python3 scripts/nacht_export.py               # export zonder push
+sudo -u crypto .venv/bin/python3 scripts/schaduw.py --lijst
+sudo -u crypto .venv/bin/python3 scripts/schaduw.py --terug <id>       # een promotie terugdraaien
+```
+
+**Eenmalig op de VPS: de deploy key.** De nacht pusht met een eigen SSH-sleutel van de service-gebruiker `crypto`. Let op: een deploy key met
+schrijfrechten geeft toegang tot de hele repository; GitHub kent voor deploy keys geen rechten per tak. Het script pusht alleen naar
+`hespulse-data` (de tak staat vast in de code, en het weigert elk ander bestand dan de twee exportbestanden), maar wie de sleutel heeft, kan
+meer. Bewaar hem dus alleen op de VPS, leesbaar voor `crypto`.
+
+```bash
+sudo apt install -y git
+# De home van crypto; adduser --system geeft soms /nonexistent, dan dezelfde map als de back-up-sleutel.
+CRYPTO_HOME=$(getent passwd crypto | cut -d: -f6)
+{ [ -d "$CRYPTO_HOME" ] && [ "$CRYPTO_HOME" != /nonexistent ]; } || CRYPTO_HOME=/opt/crypto-alerts
+sudo -u crypto mkdir -p "$CRYPTO_HOME/.ssh" && sudo -u crypto chmod 700 "$CRYPTO_HOME/.ssh"
+sudo -u crypto ssh-keygen -t ed25519 -N "" -C "hespulse-nacht" -f "$CRYPTO_HOME/.ssh/hespulse_data_ed25519"
+sudo cat "$CRYPTO_HOME/.ssh/hespulse_data_ed25519.pub"
+```
+
+Kopieer die regel (begint met `ssh-ed25519`). Op GitHub: open de repository, **Settings > Deploy keys > Add deploy key**, titel
+`hespulse-nacht`, plak de sleutel, vink **Allow write access** aan en klik **Add key**. Daarna, terug op de VPS:
+
+```bash
+echo "HESPULSE_DATA_REMOTE=git@github.com:ramonhesrh-spec/Trade.git" | sudo -u crypto tee -a /opt/crypto-alerts/.env
+echo "HESPULSE_DATA_KEY=$CRYPTO_HOME/.ssh/hespulse_data_ed25519" | sudo -u crypto tee -a /opt/crypto-alerts/.env
+# verbinding testen: GitHub antwoordt met "Hi ramonhesrh-spec/Trade! You've successfully authenticated"
+sudo -u crypto ssh -i "$CRYPTO_HOME/.ssh/hespulse_data_ed25519" -o IdentitiesOnly=yes \
+  -o UserKnownHostsFile="$CRYPTO_HOME/.ssh/known_hosts" -o StrictHostKeyChecking=accept-new -T git@github.com
+# eerste run met de hand
+cd /opt/crypto-alerts && sudo -u crypto .venv/bin/python3 scripts/nacht_export.py --git
+# timer installeren
+sudo cp deploy/hespulse-nacht.service deploy/hespulse-nacht.timer /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now hespulse-nacht.timer
+systemctl list-timers hespulse-nacht.timer
+```
+
+De git-remote voor de tak hoef je niet zelf te zetten: het script houdt een aparte kloon van alleen `hespulse-data` in `data/export-git/`
+met `HESPULSE_DATA_REMOTE` als `origin`, los van de code in `/opt/crypto-alerts` (die hoeft geen git-checkout te zijn). Bestaat de tak nog
+niet, dan maakt de eerste run hem aan als losse tak zonder de code. Logboek: `journalctl -u hespulse-nacht`.
+
 ### HTTPS met Let's Encrypt
 
 ```bash
@@ -422,7 +943,8 @@ melding (genomen, entry, exit, notitie) is niet zichtbaar voor hem, en
 andersom.
 
 Registratie is open voor iedereen die de link heeft, dat is bewust zo
-gekozen. Tegen geautomatiseerde spam-registraties zit een limiet van
+gekozen (met `REGISTRATION_REQUIRES_INVITE=true` alleen met een code uit
+`/beheer`). Tegen geautomatiseerde spam-registraties zit een limiet van
 `MAX_REGISTRATIONS_PER_HOUR` (standaard 5) per IP-adres per uur, in te
 stellen in `.env`.
 

@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e0f">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Schermcontrole</title>
+<style>
+  html { background: #0a0e0f; color: #e6edec; font: 16px/1.5 -apple-system, system-ui, sans-serif; }
+  body { margin: 0; padding: 24px 16px 120px; }
+  .probe { position: fixed; top: 0; left: 0; width: 1px; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); visibility: hidden; }
+  .top { position: fixed; top: 0; left: 0; right: 0; height: 40px; background: #e11; opacity: .8; }
+  pre { white-space: pre-wrap; background: #131a1b; padding: 12px; border-radius: 12px; font-size: 14px; }
+  a { color: #33d6c0; }
+</style>
+</head>
+<body>
+<div class="top"></div>
+<div class="probe" id="probe"></div>
+<h1 style="margin-top:80px">Schermcontrole</h1>
+<p>De rode balk hoort helemaal bovenaan te staan, ook achter de klok. Zie je zwart boven de rode balk, dan tekent de app niet onder de statusbalk.</p>
+<pre id="out">Meten...</pre>
+<p><a href="/account">Terug naar Account</a></p>
+<script>
+  var cs = getComputedStyle(document.getElementById("probe"));
+  var vv = window.visualViewport;
+  var lines = [
+    "veilige rand boven: " + cs.paddingTop,
+    "veilige rand onder: " + cs.paddingBottom,
+    "standalone (iOS): " + String(navigator.standalone),
+    "display-mode standalone: " + String(matchMedia("(display-mode: standalone)").matches),
+    "venster: " + innerWidth + " x " + innerHeight,
+    "scherm: " + screen.width + " x " + screen.height,
+    "visualViewport: " + (vv ? (vv.width + " x " + vv.height + ", top " + vv.offsetTop) : "n.v.t."),
+    "pixelratio: " + devicePixelRatio,
+    "browser: " + navigator.userAgent
+  ];
+  document.getElementById("out").textContent = lines.join("\n");
+</script>
+</body>
+</html>

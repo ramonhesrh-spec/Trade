@@ -5,10 +5,14 @@ uvicorn web.main:app --host 0.0.0.0 --port 8000
 """
 import asyncio
 import csv
+import hashlib
 import io
+import json
 import logging
+import math
 import re
 import sys
+import time
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -19,20 +23,176 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pandas as pd
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 
 from app import advice as advice_module
 from app import patterns as chart_patterns
-from app import config, db, exchange, indicators, push_notify, repo, risk, security
-from app.market_scanner import smc_stop_take_margins
+from app import candle_source, config, structure_levels, db, exchange, indicators, market_calendar, notifications_view, push_notify, push_policy, price_alerts, radar, repo, risk, security, setup_chart, shadow, today, track_record
+from app.replay import rangesweep_lab, stopquality
+from app import gallery_job
+from app import model, model_card, model_measure
+from app import announce, card_chart, ceo, chance_checks, daycap, end_reason, excursion, focus, freshness, chance_steps, kans_view, kansen, ladder, logbook, market_context, nu, trade_replay, week_review, beheer, rule_live, trust, zone_radar, zone_sweep, poc_radar
+from app import chain as chain_mod
+from app.market_scanner import floor_stop, smc_stop_take_margins
+from web import splash
 
 logger = logging.getLogger("web")
 
 BASE_DIR = Path(__file__).resolve().parent
-templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+def ceo_user() -> Optional[dict]:
+    """De enige CEO: CEO_USERNAME, anders de eerst aangemaakte gebruiker. Alle anderen zijn leerlingen."""
+    return repo.get_ceo_user()
+
+
+_ceo_cache: dict = {"at": 0.0, "id": None}
+
+
+def is_ceo(user: Optional[dict]) -> bool:
+    """Is deze gebruiker de CEO? Een minuut onthouden: base.html vraagt het bij elke pagina."""
+    if not user:
+        return False
+    if time.monotonic() - _ceo_cache["at"] > 60:
+        found = ceo_user()
+        _ceo_cache.update(at=time.monotonic(), id=found["id"] if found else None)
+    return user["id"] == _ceo_cache["id"]
+
+
+def report_rows(user: Optional[dict]) -> list[dict]:
+    """Signalen voor de cijfers op Bewijs, Vandaag, Week en de CEO-pagina. De proefmotor (app/rule_live.py) is alleen voor de CEO: leerlingen
+    zien zijn trades niet, ook niet in de totalen."""
+    return rule_live.for_viewer(repo.list_signals_for_quality_report(None), is_ceo(user))
+
+
+def _cookie_user(request: Request) -> Optional[dict]:
+    token = request.cookies.get(SESSION_COOKIE)
+    user_id = security.verify_session_token(token) if token else None
+    return repo.get_user(user_id) if user_id else None
+
+
+def _nav_context(request: Request) -> dict:
+    """De coinlijst in het menu staat in elke pagina. Zonder dit moest elke route `coins` zelf meegeven, en de nieuwere
+    pagina's (Markt, Kansen, Bewijs) deden dat niet: het menu klapte open met een lege lijst."""
+    # Alleen de koersen uit de cache: het menu mag geen Binance-aanroep per paginaweergave doen. Zonder koers telt een setup mee.
+    cached = {coin: hit[1] for coin, hit in _price_cache.items() if hit[1]}
+    viewer = _cookie_user(request)
+    forming = _forming_setups(viewer)
+    # Het getal op Kansen in het dok: wat nu in de zone staat, zoals het appicoon (radar.in_zone_count), zonder wat deze kijker verborg.
+    hidden = repo.list_hidden_kansen(viewer["id"] if viewer else None)
+    return {"coins": repo.list_coins(), "nav_counts": {"radar": radar.waiting_count(forming, cached, hidden), "in_zone": radar.in_zone_count(forming, cached, hidden)}}
+
+
+def _announce_context(request: Request) -> dict:
+    """De aankondiging (app/announce.py) op elke pagina: de link naar /nieuw zolang hij loopt en het verhaal "Wat is nieuw" één keer per
+    ingelogde gebruiker na het moment. Een bezoeker zonder inlog krijgt het verhaal nooit."""
+    now = datetime.now(timezone.utc)
+    at = repo.get_announcement_at()
+    user = _cookie_user(request) if announce.story_due(at, now, seen=False) else None
+    return {"announce": {
+        "phase": announce.phase(at, now),
+        "link_visible": announce.link_visible(at, now),
+        "story_due": bool(user) and not repo.story_seen(user["id"], announce.STORY_VERSION),
+        "version": announce.STORY_VERSION,
+        "cards": announce.CARDS,
+    }}
+
+
+templates = Jinja2Templates(directory=str(BASE_DIR / "templates"), context_processors=[_nav_context, _announce_context])
 templates.env.globals["disclaimer"] = config.DISCLAIMER
+templates.env.globals["splash_screens"] = splash.SCREENS
+def asset(path: str) -> str:
+    """URL van een statisch bestand met zijn wijzigingstijd erachter, zodat de browser het onthoudt tot het bestand verandert."""
+    try:
+        version = int((BASE_DIR / "static" / path).stat().st_mtime)
+    except OSError:
+        version = 0
+    return f"/static/{path}?v={version}"
+
+
+# Eén keer bij het starten gelezen: een coin zonder bestand krijgt meteen zijn letters, zonder een 404-verzoek per rij.
+COIN_LOGOS = frozenset(p.stem for p in (BASE_DIR / "static" / "coins").glob("*.svg"))
+# Gemeten op een contactblad tegen #0a0e0f: bij deze logo's is meer dan 40% van het beeld te donker voor de donkere chip
+# (zwarte of marineblauwe cirkels). Zij krijgen een licht rond plaatje erachter.
+DARK_COIN_LOGOS = frozenset({"ada", "apt", "atom", "hbar", "wld", "xlm", "xrp"})
+
+
+def coin_logo(coin: str | None) -> dict | None:
+    sym = (coin or "").strip().lower()
+    if sym not in COIN_LOGOS:
+        return None
+    return {"src": asset(f"coins/{sym}.svg"), "dark": sym in DARK_COIN_LOGOS}
+
+
+_proof_cache = {"at": 0.0, "map": {}, "labs": {}, "rows": []}
+# Proeven die om de stopkwaliteit draaien: hun strenge toets op een voordeel mag Negatief niet veroorzaken (track_record.rule_status, stop_lab=).
+STOP_LAB_KEYS = {"range_sweep": "range_sweep_stop", "zone_sweep": "zone_sweep_stop"}
+# De labrijen van de zone-sweep die bij de live motor horen: op Bewijs onder de motor, niet als "regel zonder live motor".
+ZONE_SWEEP_LAB_KEYS = ("zone_sweep_stop", "zs_1h", "zs_2h", "zs_4h")
+
+
+def proof(trade_type: str) -> dict:
+    """Bewijsstatus van een soort kans (app/trust.py), een minuut onthouden: elke kaart vraagt erom."""
+    if time.monotonic() - _proof_cache["at"] > 60:
+        rows = repo.list_signals_for_quality_report(None)
+        entries = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT)
+        by_type = {}
+        for e in entries:
+            if e["source"] != "alles":
+                prev = by_type.get(e["trade_type"])
+                if prev is None or e["resolved"] > prev["resolved"]:
+                    by_type[e["trade_type"]] = e
+        _proof_cache.update(at=time.monotonic(), map=by_type, labs={lab["rule"]: lab for lab in repo.list_rule_labs()}, rows=rows)
+    labs = _proof_cache["labs"]
+    if trade_type in rule_live.CEO_ONLY_TYPES or trade_type in labs:
+        # Eén betekenis van Bewezen: voor een regel met een labtoets dezelfde status als op Bewijs (labtoets, 50 live trades, bewaking).
+        # De range sweep draait om de stopkwaliteit: zijn strenge toets op een voordeel mag Negatief niet veroorzaken (track_record.rule_status).
+        stop_lab = labs.get(STOP_LAB_KEYS[trade_type]) if trade_type in STOP_LAB_KEYS else None
+        return track_record.rule_proof(labs.get(trade_type), track_record.live_net_r(_proof_cache["rows"], trade_type, config.TRACK_RECORD_COST_PCT), stop_lab=stop_lab)
+    return trust.status(_proof_cache["map"].get(trade_type))
+
+
+templates.env.globals["proof"] = proof
+templates.env.globals["focus"] = focus
+templates.env.globals["asset"] = asset
+templates.env.globals["coin_logo"] = coin_logo
+templates.env.filters["grade_word"] = lambda g: {"A": "Sterk", "B": "Redelijk", "C": "Zwak"}.get(g, "Geen oordeel")
+def _nl_price(v: float) -> str:
+    """Zelfde notatie als de live koers in coin.html (toLocaleString nl-NL): punt voor duizendtallen, komma voor decimalen."""
+    return f"{v:.4f}" .replace(".", ",") if v < 100 else f"{v:,.2f}".replace(",", "\0").replace(".", ",").replace("\0", ".")
+
+
+templates.env.filters["nl_price"] = _nl_price
+templates.env.filters["outcome_word"] = lambda o: kans_view.OUTCOME_TEXT.get(o, "Open")
+templates.env.globals["fmt_price"] = today.fmt_price
+templates.env.globals["is_ceo"] = lambda user: is_ceo(user)
+templates.env.globals["live_exchange"] = config.EXCHANGE_ID
+templates.env.globals["live_quote"] = config.QUOTE_CURRENCY.lower()
+# De koersstroom in de browser volgt de markt van de candles (app/candle_source.py, live.js): perps of spot, met de symboolkaart.
+templates.env.globals["live_market"] = candle_source.configured
+templates.env.globals["live_symbols"] = candle_source.stream_map
+templates.env.globals["pause_minutes_left"] = lambda u: push_policy.pause_minutes_left((u or {}).get("push_paused_until"), datetime.now(timezone.utc))
+templates.env.globals["pause_text"] = push_policy.pause_text
+templates.env.globals["push_budget_default"] = push_policy.DEFAULT_BUDGET
+templates.env.globals["stale_after_s"] = freshness.STALE_AFTER_S
+
+# Thema per toestel: de cookie laat de server meteen het juiste data-theme en de juiste achtergrond schrijven, zodat er geen flits van
+# donker naar licht is. Zonder keuze blijft het donker, zoals voor de lichte versie bestond. theme.js houdt cookie en localStorage gelijk.
+THEME_COOKIE = "hp_theme"
+THEMES = ("system", "dark", "light")
+THEME_BG = {"dark": "#0a0e0f", "light": "#f4f6f6"}
+
+
+def theme_of(request: Optional[Request]) -> str:
+    """Altijd licht (CEO 2026-11-03: "alleen een witte versie"). Een oude cookie of de donkere stand van het toestel verandert niets meer;
+    eerder werd de site 's avonds via "systeem" ineens zwart."""
+    return "light"
+
+
+templates.env.globals["theme_of"] = theme_of
+templates.env.globals["theme_bg"] = THEME_BG
 
 
 def _age_label(iso: str | None) -> str:
@@ -56,8 +216,21 @@ def _age_label(iso: str | None) -> str:
 
 templates.env.filters["age"] = _age_label
 
+class CachedStatic(StaticFiles):
+    """Statische bestanden krijgen een lange cache: de pagina verwijst met ?v=<wijzigingstijd> (zie asset()), dus een nieuw bestand krijgt een nieuwe
+    URL en een oud blijft veilig onthouden. Zonder dit haalde elke paginawissel style.css (140 KB) opnieuw op."""
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            # Alleen met ?v= is de URL gegarandeerd nieuw bij een wijziging; een kale URL (icoon, manifest) blijft kort in de cache.
+            versioned = b"v=" in scope.get("query_string", b"")
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable" if versioned else "public, max-age=3600"
+        return response
+
+
 app = FastAPI(title="HesPulse")
-app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+app.add_middleware(GZipMiddleware, minimum_size=1024)
+app.mount("/static", CachedStatic(directory=str(BASE_DIR / "static")), name="static")
 
 
 @app.get("/service-worker.js")
@@ -69,8 +242,9 @@ async def service_worker():
     kunnen bedienen. navigator.serviceWorker.ready op /dashboard bleef
     daardoor voor altijd hangen, precies de oorzaak van de kapotte
     pushmelding-knop. Zie base.html voor de registratie."""
+    # no-cache: een gewijzigde service worker moet bij het volgende openen van de app opgepikt worden, anders blijft een oude versie hangen.
     return FileResponse(
-        str(BASE_DIR / "static" / "service-worker.js"), media_type="application/javascript",
+        str(BASE_DIR / "static" / "service-worker.js"), media_type="application/javascript", headers={"Cache-Control": "no-cache"},
     )
 
 SESSION_COOKIE = "session"
@@ -93,6 +267,12 @@ def require_login(request: Request) -> dict:
     user = repo.get_user(user_id) if user_id else None
     if not user:
         raise HTTPException(status_code=401)
+    # Alleen paginaweergaven tellen: de koers- en kansenpolls van een open tab zouden elke gebruiker de hele dag "actief" maken.
+    if request.method == "GET" and not request.url.path.startswith(("/api", "/static", "/ws")):
+        try:
+            repo.record_visit(user["id"], datetime.now(timezone.utc))
+        except Exception:
+            pass
     return user
 
 
@@ -105,12 +285,36 @@ async def landing(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     user_id = security.verify_session_token(token) if token else None
     if user_id and repo.get_user(user_id):
-        return RedirectResponse(url="/signalen", status_code=303)
+        return RedirectResponse(url="/smc", status_code=303)
 
+    now = datetime.now(timezone.utc)
+    scripts = repo.latest_scripts()
     return templates.TemplateResponse(request, "landing.html", {
+        "timeline": Markup(today.timeline_svg(now, today.agenda(market_calendar.upcoming(now, 24)))), "mood": today.mood(scripts),
+        "n_scripts": len(scripts), "now": today.nl_stamp(today.local(now)), "demo_chart": Markup(setup_chart.demo_svg()),
         "kraken_referral_url": config.KRAKEN_REFERRAL_URL,
         "kraken_referral_code": config.KRAKEN_REFERRAL_CODE,
     })
+
+
+@app.get("/keten")
+async def keten_page(request: Request):
+    """Openbaar, zonder login: de ketting moet voor iedereen narekenbaar zijn."""
+    rows = repo.list_chain(100000)
+    ok, bad = chain_mod.verify(rows)
+    recent = []
+    for r in reversed(rows[-100:]):
+        body = json.loads(r["payload"])
+        recent.append({**r, "created_at": body["created_at"], "coin": body["coin"], "direction": body["direction"], "trade_type": body["trade_type"]})
+    return templates.TemplateResponse(request, "keten.html", {
+        "ok": ok, "bad": bad, "total": len(rows), "recent": recent, "first_id": rows[0]["signal_id"] if rows else None,
+        "base_url": config.DASHBOARD_URL.rstrip("/"),
+    })
+
+
+@app.get("/keten.json")
+async def keten_json():
+    return JSONResponse(repo.list_chain(100000))
 
 
 # Vaste, kleine lijst voor de tickerstrook op de landingspagina: geen login
@@ -131,6 +335,38 @@ async def api_public_prices():
         except Exception:
             prices[coin] = None
     return prices
+
+
+@app.get("/nieuw")
+async def nieuw(request: Request):
+    """Openbaar, zonder inlog en deelbaar: vóór het moment een aftelklok, daarna wat er live is. Zonder gezet moment de live-versie."""
+    now = datetime.now(timezone.utc)
+    at = repo.get_announcement_at()
+    base = config.DASHBOARD_URL.rstrip("/")
+    return templates.TemplateResponse(request, "nieuw.html", {
+        "user": _cookie_user(request), "phase_now": announce.phase(at, now), "at": at, "now": now,
+        "at_label": announce.fmt_local(at) if at else "", "left": announce.remaining(at, now) if at else None, "a": announce,
+        "og_image": f"{base}/static/og/nieuw.png?v={int((BASE_DIR / 'static' / 'og' / 'nieuw.png').stat().st_mtime)}",
+        "og_url": f"{base}/nieuw",
+    })
+
+
+@app.get("/wat-is-nieuw")
+async def wat_is_nieuw(request: Request, user: dict = Depends(require_login)):
+    """Het verhaal opnieuw, vanuit het menu; sluiten gaat terug naar Nu."""
+    return templates.TemplateResponse(request, "wat_is_nieuw.html", {"user": user, "bare": True})
+
+
+@app.post("/api/wat-is-nieuw/gezien")
+async def wat_is_nieuw_gezien(user: dict = Depends(require_login)):
+    repo.mark_story_seen(user["id"], announce.STORY_VERSION)
+    return {"ok": True}
+
+
+@app.get("/zone-radar")
+async def zone_radar_uitleg(request: Request, user: dict = Depends(require_login)):
+    """Uitleg voor gebruikers bij de kaarten 'Zone-radar' op /smc."""
+    return templates.TemplateResponse(request, "zones_uitleg.html", {"user": user, "coins": repo.list_coins()})
 
 
 @app.get("/uitleg")
@@ -160,8 +396,8 @@ async def meldingen_page(request: Request, user: dict = Depends(require_login)):
     return templates.TemplateResponse(request, "meldingen.html", {
         "user": user,
         "coins": repo.list_coins(),
-        "notifications": repo.list_notifications(user["id"]),
-        "admin_notifications": repo.list_admin_notifications() if is_admin else None,
+        "notification_groups": notifications_view.group_notifications(repo.list_notifications(user["id"])),
+        "admin_groups": notifications_view.group_notifications(repo.list_admin_notifications()) if is_admin else None,
         # Los van de getoonde lijst (die stopt bij limit=50): de "alles
         # gelezen"-knop moet ook verschijnen als de ongelezen achterstand
         # verder terugligt dan wat hier zichtbaar is.
@@ -181,8 +417,78 @@ async def mark_all_meldingen_gelezen(user: dict = Depends(require_login)):
     return RedirectResponse(url="/meldingen", status_code=303)
 
 
+LOGBOOK_DAYS = logbook.DAYS_SHOWN
+
+
+def _logbook_inputs(user: dict, since: str) -> dict:
+    """Wat app/logbook.py van deze ene gebruiker leest: zijn overgeslagen plannen, zijn checklists en zijn genomen journaalregels (alle drie
+    gefilterd op zijn user_id), met de gedeelde plannen en signalen erachter. Een proefsoort die hij niet mag zien valt weg (rule_live.for_viewer)."""
+    skips = repo.list_plan_skips(user["id"], since)
+    runs = repo.list_checklist_runs(user["id"], since)
+    taken = [e for e in repo.list_journal(user["id"]) if not e["is_practice"] and e["status"] in logbook.TAKEN_STATUSES]
+    plans = repo.plans_for_keys([r["plan_key"] for r in skips + runs])
+    ids = [p["signal_id"] for p in plans.values()] + [e["signal_id"] for e in taken]
+    signals = {s["id"]: s for s in rule_live.for_viewer(list(repo.signals_by_ids(ids).values()), is_ceo(user))}
+    return {"skips": skips, "runs": runs, "plans": plans, "signals": signals, "taken": taken}
+
+
+def _logbook_days(user: dict, now: datetime) -> list[dict]:
+    since = (now - timedelta(days=LOGBOOK_DAYS + 1)).isoformat()
+    zs, poc = _sees_zone_sweep(user), _sees_poc(user)
+    return logbook.timeline(**_logbook_inputs(user, since), seen=repo.list_plan_moments(since, include_zone_sweep=zs, include_poc=poc),
+                            ended=repo.list_ended_cards(since, include_zone_sweep=zs, include_poc=poc), now=now, tz=today.LOCAL_TZ)
+
+
+def _week_review(user: dict, now: datetime) -> dict:
+    """De weekterugblik van deze ene gebruiker (app/week_review.py) over de laatste acht weken."""
+    d = _logbook_inputs(user, (now - timedelta(weeks=week_review.WEEKS, days=1)).isoformat())
+    return week_review.review(logbook.closed_trades(d["runs"], d["plans"], d["signals"], d["taken"]),
+                              logbook.skip_outcomes(d["skips"], d["runs"], d["plans"], d["signals"]), now, today.LOCAL_TZ)
+
+
+REPLAY_CACHE_MAX = 64
+_replay_candles: dict[tuple[str, str, int, int], list] = {}
+
+
+async def _closed_candles(coin: str, tf: str, start: datetime, count: int) -> Optional[list]:
+    """Candles van een afgesloten venster. Die veranderen nooit meer, dus ze blijven bewaard (de oudste vallen eraf na REPLAY_CACHE_MAX)."""
+    key = (coin, tf, int(start.timestamp()), count)
+    if key not in _replay_candles:
+        try:
+            df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, tf, count, int(start.timestamp() * 1000))
+        except Exception:
+            logger.exception("Replay-candles voor %s niet opgehaald", coin)
+            return None
+        rows = [[int(r.timestamp.timestamp()), float(r.open), float(r.high), float(r.low), float(r.close)] for r in df.itertuples()]
+        if not rows:
+            return None
+        while len(_replay_candles) >= REPLAY_CACHE_MAX:
+            _replay_candles.pop(next(iter(_replay_candles)))
+        _replay_candles[key] = rows
+    return _replay_candles[key]
+
+
+@app.get("/logboek/replay/{signal_id}")
+async def logboek_replay(request: Request, signal_id: int, user: dict = Depends(require_login)):
+    """Replay van een afgeronde trade (app/trade_replay.py): candles van een uur voor de vulling tot de uitkomst, de niveaus en elk moment
+    met zijn echte tijd. De checklist is die van deze gebruiker; de rest is het gedeelde signaal."""
+    rows = repo.signals_by_ids([signal_id])
+    signal = rows.get(signal_id)
+    if (not signal or signal["auto_outcome"] not in trade_replay.OUTCOME_LABEL or not signal["auto_outcome_at"]
+            or not rule_live.for_viewer([signal], is_ceo(user))):
+        raise HTTPException(status_code=404)
+    plan = repo.plan_for_signal(signal_id)
+    run = repo.get_checklist_run(user["id"], plan["key"]) if plan else None
+    start, end, tf = trade_replay.window(signal["created_at"], signal["auto_outcome_at"])
+    candles = await _closed_candles(signal["coin"], tf, start, trade_replay.candle_count(start, end, tf))
+    view = trade_replay.build(candles or [], signal, trade_replay.moments(signal, plan, run), tf, today.LOCAL_TZ)
+    day = logbook.short_date(logbook._parse(signal["auto_outcome_at"]).astimezone(today.LOCAL_TZ).date()).lower()
+    return templates.TemplateResponse(request, "replay.html", {"user": user, "signal": signal, "view": view, "day": day,
+                                                                "svg": Markup(view["svg"]) if view else None})
+
+
 @app.get("/signalen")
-async def signalen_page(request: Request, alles: bool = False, user: dict = Depends(require_login)):
+async def signalen_page(request: Request, alles: bool = False, weergave: str = "", user: dict = Depends(require_login)):
     """Kale, puur signalen-pagina (geen journaal/portfolio-content, zie
     CLAUDE.md 'pure signals'-uitgangspunt van deze taak): dezelfde
     gedeelde signalen als het dashboard, hier chronologisch, nieuwste
@@ -204,7 +510,11 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     aparte open/resolved-scheiding nodig zoals de oude percentage-sortering
     die wel had (die moest voorkomen dat een oud, toevallig hoog percentage
     een vers signaal overstemde; dat risico bestaat niet meer zodra tijd
-    zelf de sorteersleutel is)."""
+    zelf de sorteersleutel is).
+
+    Sinds fase 2 is de standaard de dagtijdlijn (app/logbook.py); de signalenlijst staat onder ?weergave=open en ?alles=1."""
+    if not alles and weergave != "open":
+        return templates.TemplateResponse(request, "signalen.html", {"user": user, "view": "dag", "days": _logbook_days(user, datetime.now(timezone.utc))})
     entries = repo.list_signalen_for_user(user["id"])
     if not alles:
         entries = [e for e in entries if e["auto_outcome"] is None]
@@ -215,46 +525,823 @@ async def signalen_page(request: Request, alles: bool = False, user: dict = Depe
     _apply_user_confirmed(entries, user["confirm_threshold_pct"], required_factors)
     entries.sort(key=lambda e: e["created_at"], reverse=True)
     return templates.TemplateResponse(request, "signalen.html", {
-        "user": user,
+        "user": user, "view": "alle" if alles else "open",
         "coins": repo.list_coins(),
         "entries": entries,
         "showing_all": alles,
     })
 
 
+PRICE_TTL_SECONDS = 10
+_price_cache: dict[str, tuple[float, Optional[float]]] = {}
+_price_fetched_at: dict[str, float] = {}       # wandklok (time.time) van de laatste geslaagde ophaal per coin, zie app/freshness.py
+
+
+async def _cached_prices(coins) -> dict[str, Optional[float]]:
+    """Live koersen met een korte cache: elke ingelogde gebruiker die de radar open heeft ververst elke paar seconden,
+    en dat mag niet voor elke gebruiker en elke kaart een eigen Binance-aanroep worden."""
+    now = time.monotonic()
+    prices: dict[str, Optional[float]] = {}
+    stale = []
+    for coin in set(coins):
+        hit = _price_cache.get(coin)
+        if hit and now - hit[0] < PRICE_TTL_SECONDS:
+            prices[coin] = hit[1]
+        else:
+            stale.append(coin)
+
+    async def fetch(coin: str) -> Optional[float]:
+        try:
+            return await asyncio.to_thread(exchange.fetch_last_price, coin)
+        except Exception:
+            return None
+
+    for coin, price in zip(stale, await asyncio.gather(*[fetch(c) for c in stale])):
+        if price is not None:
+            _price_fetched_at[coin] = time.time()
+        # Een mislukte ophaal (None) vervangt een eerdere goede koers niet: liever een koers van een minuut
+        # geleden dan een kaart zonder koers.
+        if price is None and coin in _price_cache:
+            price = _price_cache[coin][1]
+        _price_cache[coin] = (now, price)
+        prices[coin] = price
+    return prices
+
+
+def _with_preview(setup: dict) -> dict:
+    """Stop en doel van een bouwende setup, zelfde formule als market_scanner._complete_smc_setup: ze hangen alleen af
+    van sweep_price/liquidity_target, niet van de (nog onbekende) entry-prijs, dus dit is geen schatting maar het exacte
+    cijfer dat straks ook echt gebruikt wordt, tenzij de setup intussen vervalt of vervangen wordt."""
+    sign = -1 if setup["direction"] == "long" else 1
+    stop_margin, target_margin = smc_stop_take_margins(setup)
+    stop = setup["sweep_price"] + stop_margin * sign
+    limit = setup["zone_high"] if setup["direction"] == "long" else setup["zone_low"]
+    setup["preview_stop_loss"] = floor_stop(setup["direction"], limit, stop)
+    setup["preview_take_profit"] = setup["liquidity_target"] + target_margin * sign
+    return setup
+
+
+def _sees_zone_sweep(user: Optional[dict]) -> bool:
+    """De zone-sweep is voor iedereen tot ZONE_SWEEP_PUBLIC uit staat; dan alleen de CEO (rule_live.CEO_ONLY_TYPES, dezelfde bron als voor de signalen).
+    Zonder kijker (een aanroep zonder gebruiker) alleen als hij openbaar is."""
+    return rule_live.ZONE_SWEEP not in rule_live.CEO_ONLY_TYPES or is_ceo(user)
+
+
+def _sees_poc(user: Optional[dict]) -> bool:
+    """De POC-radar is voor iedereen tot POC_RADAR_PUBLIC uit staat; dan alleen de CEO, zoals de zone-sweep."""
+    return rule_live.POC_RADAR not in rule_live.CEO_ONLY_TYPES or is_ceo(user)
+
+
+def _forming_setups(user: Optional[dict] = None) -> list[dict]:
+    """Wat de Radar als wachtende kaart toont: bouwende SMC-setups, wachtende zone-radar-kaarten en, als de kijker hem mag zien, wachtende
+    zone-sweep-kaarten, in de vorm die radar.setup_card leest.
+    Met focus geen SMC-setups: die motor zoekt niets nieuws en maakt er geen signaal meer van. Hier gefilterd, zodat Radar, Nu, het dok en het appicoon gelijk tellen."""
+    # Moment B van het HesPulse-model (entry beschikbaar) is een gewoon limietplan; ook als het model uit staat, loopt een open limiet af.
+    model_rows = [model_card.radar_setup(r) for r in repo.list_model_scenarios(statuses=("afgerond",), entry_states=("wacht",))]
+    if focus.model_only():
+        # Alleen het model heeft een tab (MODEL_ONLY_ALERTS): de wachtende kaarten van de andere soorten tellen nergens mee (dok, appicoon).
+        return model_rows
+    smc = [_with_preview(s) for s in repo.list_forming_smc_setups()] if focus.engine_on("smc") else []
+    rows = smc + [zone_radar.radar_setup(r) for r in repo.list_zone_radar_setups()]
+    if _sees_zone_sweep(user):
+        rows += [zone_sweep.radar_setup(r) for r in repo.list_zone_sweep_setups()]
+    if _sees_poc(user):
+        rows += [poc_radar.radar_setup(r) for r in repo.list_poc_radar_setups()]
+    return rows + model_rows
+
+
+def _context_lines(coins) -> dict[str, list[dict]]:
+    """Het blok Context per coin (app/market_context.coin_lines): alleen wat de ophaler echt mat, met bron en leeftijd."""
+    coins = set(coins)
+    latest = market_context.latest(repo.latest_market_context(coins)) if coins else {}
+    now = datetime.now(timezone.utc)
+    return {c: market_context.coin_lines(latest.get(c, {}), now) for c in coins}
+
+
+async def _radar_cards(user: Optional[dict] = None) -> list[dict]:
+    forming = _forming_setups(user)
+    types = (("smc", zone_radar.TRADE_TYPE, model.TRADE_TYPE) + ((zone_sweep.TRADE_TYPE,) if _sees_zone_sweep(user) else ())
+             + ((poc_radar.TRADE_TYPE,) if _sees_poc(user) else ()))
+    open_signals = repo.list_open_smc_signals(types=types)
+    prices = await _cached_prices([s["coin"] for s in forming] + [s["coin"] for s in open_signals])
+    cards = [c for s in forming if (c := radar.setup_card(s, prices.get(s["coin"])))]
+    cards += [c for s in open_signals if (c := radar.signal_card(s, prices.get(s["coin"])))]
+    return cards
+
+
+async def _structure_cards() -> list[dict]:
+    """Wachtende structuur-setups met hun plan (app/structure_live.py). Een plan dat verlopen is of waarvan de koers al voorbij stop of doel
+    staat, valt weg: de engine zet de rij pas bij zijn volgende scan om, en tot dan mag hij nergens meetellen of staan."""
+    setups = repo.list_structure_setups(("waiting",), 12)
+    prices = await _cached_prices({s["coin"] for s in setups}) if setups else {}
+    now = datetime.now(timezone.utc)
+    cards = []
+    for s in setups:
+        plan = json.loads(s["plan"])
+        if today.structure_state(s, plan, prices.get(s["coin"]), now) not in today.OPEN_PLAN_STATES:
+            continue
+        targets = list(zip(plan["targets"], plan["targets_r"]))
+        checks = chance_checks.structure_checks(chance_checks.parse_features(s.get("features")), plan, s["grade"])
+        cards.append({**s, "plan": plan, "targets": targets, "checks": [c for c in checks if not c[0].startswith("De CEO")],
+                      "steps": chance_steps.structure_steps(plan, targets, prices.get(s["coin"]), s["direction"], s["coin"]),
+                      "chart": Markup(setup_chart.setup_svg(plan.get("candles", []), s, plan, prices.get(s["coin"])))})
+    return cards
+
+
+def _sees_range_sweep(user: dict) -> bool:
+    """De range sweep en de range-watch zijn proef: alleen de CEO, tot RANGE_SWEEP_PUBLIC aan staat (rule_live.CEO_ONLY_TYPES, dezelfde bron als voor de signalen)."""
+    return rule_live.RANGE_SWEEP not in rule_live.CEO_ONLY_TYPES or is_ceo(user)
+
+
+def _range_sweep_shown(user: dict) -> bool:
+    """Wachtende range sweeps en de ranges zijn nieuwe kansen: met focus staan ze nergens. Een gevulde range sweep blijft als open signaal staan."""
+    return _sees_range_sweep(user) and focus.engine_on(rule_live.RANGE_SWEEP)
+
+
+async def _range_sweep_cards(user: dict) -> list[dict]:
+    """Wachtende range sweeps met kaart, stappen en chips. Zoals _structure_cards valt een setup weg die verlopen is, waarvan de koers het midden van de
+    range al raakte of voorbij de stop staat: de motor zet de rij pas bij zijn volgende cyclus om, en tot dan mag hij nergens meetellen of staan.
+    Setups die de dagcap niet meldde ('niet_gemeld') staan wel op de pagina."""
+    if not _range_sweep_shown(user):
+        return []
+    setups = repo.list_range_sweep_setups(("waiting", "niet_gemeld"))
+    if not setups:
+        return []
+    prices = await _cached_prices({s["coin"] for s in setups})
+    now = datetime.now(timezone.utc)
+    lab = repo.get_rule_lab("range_sweep_stop")
+    cards = []
+    for s in setups:
+        if today.range_sweep_state(s, prices.get(s["coin"]), now) not in today.OPEN_RANGE_STATES:
+            continue
+        view = today.range_sweep_view(s, prices.get(s["coin"]), lab, rangesweep_lab.LAB_COST_PCT)
+        cards.append({**view, "chart": Markup(view["chart"])})
+    return cards
+
+
+async def _range_watch_rows(user: dict) -> list[dict]:
+    """De ranges die de range-watch nu volgt, dichtstbij een rand eerst; een range zonder koers staat achteraan."""
+    if not _sees_range_sweep(user) or not focus.engine_on("range_watch"):
+        return []
+    watches = repo.list_range_watches(("actief",))
+    if not watches:
+        return []
+    prices = await _cached_prices({w["coin"] for w in watches})
+    now = datetime.now(timezone.utc)
+    rows = [today.range_watch_row(w, prices.get(w["coin"]), now) for w in watches]
+    return sorted(rows, key=lambda r: (r["dist_pct"] is None, r["dist_pct"] or 0))
+
+
+STRUCTURE_STATE_LABELS = {"schaduw": "Stil gevolgd, wacht op de terugkeer", "geen_plan": "Geen plan: te weinig ruimte of stop buiten bereik", "fired": "Limiet geraakt, signaal gemeld", "expired": "Verlopen, koers kwam niet terug",
+                          "niet_gemeld": "Niet gemeld: het dagmaximum was bereikt", "overgeslagen": "Stop buiten het toegestane bereik", "geen_oordeel": "Niet gemeld"}
+
+
+async def _structure_extras(user: dict) -> dict:
+    """Wat van de oude pagina Setups niet dubbel is, als inklapbare regels onder de tab Structuur: wat de laatste 7 dagen uitviel, de range sweep
+    en de ranges (proef, alleen zonder focus en voor wie ze mag zien), trend-trades die nog lopen en de stand van de motor."""
+    now = datetime.now(timezone.utc)
+    since = (now - timedelta(days=7)).isoformat()
+    history = [{**h, "state_label": STRUCTURE_STATE_LABELS.get(h["state"], h["state"]),
+                "reason_text": end_reason.text("structuur", h["state"]) if h["state"] not in ("fired", "schaduw") else ""}
+               for h in repo.list_structure_setups(("fired", "expired", "niet_gemeld", "overgeslagen", "geen_oordeel", "geen_plan", "schaduw"), 40)
+               if h["created_at"] >= since]
+    beat = repo.get_beat("structuur")
+    minutes = int((now - datetime.fromisoformat(beat["at"])).total_seconds() // 60) if beat else None
+    since24 = (now - timedelta(hours=24)).isoformat()
+    trend_focus_off = not focus.engine_on("trend")        # uit door focus: alleen nog de trades die lopen
+    return {"history": history, "engine_minutes": minutes, "engine_on": config.STRUCTURE_ENABLED, "counts": repo.structure_counts(since24),
+            "trend_signals": [s for s in repo.list_recent_signals_of_type("trend", since24) if not trend_focus_off or s["auto_outcome"] is None],
+            "range_sweep_cards": await _range_sweep_cards(user), "range_watches": await _range_watch_rows(user), "range_visible": _range_sweep_shown(user)}
+
+
+@app.get("/structuur")
+async def structuur_page(request: Request):
+    """De oude pagina Setups is de tab Structuur op Kansen. Zonder hash in de Location: de browser houdt dan het anker van de melding
+    (/structuur#structuur-12) vast, en ?tab= opent de tab als er geen anker is."""
+    return RedirectResponse(url="/smc?tab=structuur", status_code=307)
+
+
+@app.get("/galerij")
+async def galerij_page(request: Request, maak: str = "", user: dict = Depends(require_login)):
+    """Keuring van de range sweep met het oog (poort 0b en 1 van het VPS-protocol), alleen voor de CEO."""
+    if not is_ceo(user):
+        raise HTTPException(status_code=404)
+    if maak:
+        gallery_job.start(maak)
+        return RedirectResponse("/galerij", status_code=303)
+    kinds = [{"key": k, "title": t, **gallery_job.status(k)} for k, t in gallery_job.KINDS.items()]
+    return templates.TemplateResponse(request, "galerij.html", {"user": user, "kinds": kinds, "busy": any(k["busy"] for k in kinds)})
+
+
+@app.get("/galerij/{kind}")
+async def galerij_file(kind: str, user: dict = Depends(require_login)):
+    if not is_ceo(user) or kind not in gallery_job.KINDS or not gallery_job.path_of(kind).exists():
+        raise HTTPException(status_code=404)
+    return HTMLResponse(gallery_job.decorate(gallery_job.path_of(kind).read_text(encoding="utf-8"), kind))
+
+
+def _kansen_kinds(user: dict) -> list[str]:
+    """De soorten met een tab op Kansen: de focus-soorten (focus.FOCUS_TYPES), de zone-sweep alleen voor wie hem mag zien, en zonder focus ook SMC.
+    Met MODEL_ONLY_ALERTS alleen het HesPulse-model; een open trade van een andere soort houdt zijn tab (kansen.page)."""
+    if focus.model_only():
+        return [model.TRADE_TYPE]
+    kinds = ([model.TRADE_TYPE] if focus.model_on() else []) + ["structuur", "zone_radar"] + (["zone_sweep"] if _sees_zone_sweep(user) and focus.engine_on(zone_sweep.TRADE_TYPE) else [])
+    kinds += ["poc_radar"] if _sees_poc(user) and focus.engine_on(poc_radar.TRADE_TYPE) else []
+    return kinds + ([] if focus.active() else ["smc"])
+
+
+ENDED_DAYS = 7      # zoals 'Uitgevallen, gemist of vervallen' onder Structuur
+
+
+async def _kansen_page(user: dict, skipped=()) -> dict:
+    cards = await _radar_cards(user)
+    structure = await _structure_cards()
+    prices = await _cached_prices({c["coin"] for c in structure}) if structure else {}
+    now = datetime.now(timezone.utc)
+    struct = [(c, prices.get(c["coin"]), today.structure_state(c, c["plan"], prices.get(c["coin"]), now)) for c in structure]
+    open_struct = repo.list_open_smc_signals(types=("structuur", "structuur_c"))
+    sprices = await _cached_prices({s["coin"] for s in open_struct}) if open_struct else {}
+    trades = [{**c, "svg": _structure_trade_svg(s, sprices.get(s["coin"]))} for s in open_struct if (c := radar.signal_card(s, sprices.get(s["coin"])))]
+    since = (now - timedelta(days=ENDED_DAYS)).isoformat()
+    ended = repo.list_ended_cards(since, include_zone_sweep=_sees_zone_sweep(user), include_poc=_sees_poc(user)) + repo.list_ended_model(since)
+    model_rows = repo.list_model_scenarios(statuses=model.WAIT_STATES) + repo.list_model_scenarios(statuses=("afgerond",), entry_states=("wacht",))
+    # Alle instappunten per scenario op één kaart (aanvullend besluit CEO 2026-11-03): A, V1, B en P met hun basis en stand.
+    extra = repo.list_model_entries(scenario_ids=[r["id"] for r in model_rows])
+    mprices = await _cached_prices({r["coin"] for r in model_rows}) if model_rows else {}
+    model_rows = [{**r, "price": mprices.get(r["coin"]),
+                   "entry_points": model_card.entry_points(r, repo.get_model_v1(r["id"]), [e for e in extra if e["scenario_id"] == r["id"]])}
+                  for r in model_rows]
+    # Tegen de dagtrend: lopende scenario's, en afgeronde met een punt dat nog wacht (A is daar een stil punt).
+    counter = repo.list_model_scenarios(counter=True)
+    c_extra = repo.list_model_entries(("wacht",), scenario_ids=[r["id"] for r in counter])
+    waiting_ids = {e["scenario_id"] for e in c_extra}
+    counter = [r for r in counter if r["status"] in model.WAIT_STATES or r["id"] in waiting_ids]
+    cprices = await _cached_prices({r["coin"] for r in counter}) if counter else {}
+    counter_rows = [{**r, "price": cprices.get(r["coin"]), "entry_points": model_card.entry_points(r, None, [e for e in c_extra if e["scenario_id"] == r["id"]])}
+                    for r in counter]
+    return kansen.page(cards, struct, trades, _kansen_kinds(user), skipped, repo.list_hidden_kansen(user["id"]), ended, model_rows=model_rows,
+                       default_tab=model.TRADE_TYPE if focus.model_on() else None, counter_rows=counter_rows)
+
+
+def _structure_trade_svg(signal: dict, price: Optional[float]) -> Markup:
+    """De getekende setup van een open Structuur-trade, zoals de kanspagina hem toont, met de koers van nu. Zonder de candles sinds de breuk:
+    die kosten een beursaanroep per trade bij elke paginaweergave; de momentopname met de stippen van wat er gebeurde en de koerslijn (live.js)
+    is genoeg om de kaart te herkennen, de kanspagina verlengt hem wel."""
+    setup = repo.get_structure_setup_by_signal(signal["id"])
+    return Markup(kans_view.chart(signal, setup, None, price)) if setup else Markup("")
+
+
 @app.get("/smc")
-async def smc_page(request: Request, user: dict = Depends(require_login)):
-    """SMC liquidity-setups: bouwende setups bovenaan (de zone om een
-    limit order op te zetten), afgeronde signalen daaronder in dezelfde
-    stijl als /signalen. Afgeronde signalen verschijnen ook gewoon op de
-    bestaande /signalen en het dashboard (zie de spec, Component 6) —
-    deze pagina is een extra, gerichte weergave, geen aparte wereld."""
-    forming = repo.list_forming_smc_setups()
-    # Zelfde formule als market_scanner._complete_smc_setup: stop en doel
-    # hangen alleen af van sweep_price/liquidity_target, niet van de
-    # (nog onbekende) entry-prijs, dus dit is geen schatting maar het
-    # exacte cijfer dat straks ook echt gebruikt wordt — tenzij de setup
-    # intussen vervalt of vervangen wordt door een nieuwe structuurbreuk.
-    for setup in forming:
-        sign = -1 if setup["direction"] == "long" else 1
-        stop_margin, target_margin = smc_stop_take_margins(setup)
-        setup["preview_stop_loss"] = setup["sweep_price"] + stop_margin * sign
-        setup["preview_take_profit"] = setup["liquidity_target"] + target_margin * sign
-    entries = [e for e in repo.list_signalen_for_user(user["id"]) if e["trade_type"] == "smc"]
-    winrate = repo.winrate_stats(user["id"])
-    pattern_winrate = repo.pattern_winrate_stats()
-    entries = _add_signal_context(entries, winrate, pattern_winrate)
-    # Zonder deze aanroep blijft entry["user_confirmed"] ongezet en leest
-    # macros.signal_card dat als Undefined (falsy), dus is-rejected voor
-    # elk SMC-signaal ongeacht de smc-tak in _apply_user_confirmed hieronder
-    # — zelfde patroon als signalen_page hierboven en het dashboard hieronder.
-    required_factors = repo.list_required_factors(user["id"])
-    _apply_user_confirmed(entries, user["confirm_threshold_pct"], required_factors)
-    entries.sort(key=lambda e: e["created_at"], reverse=True)
+async def smc_page(request: Request, tab: str = "", user: dict = Depends(require_login)):
+    """Kansen (ontwerp V4): een tab per soort met de kansen als kaart met grafiek; een tik opent het detailblad met ladder, getallen en de knop
+    naar de order-checklist (app/kansen.py). De tab met de meeste kansen in de zone gaat open; ?tab= (de oude /structuur) kiest er een."""
+    page = await _kansen_page(user, _skipped_keys(request, user))
+    if tab in {t["key"] for t in page["tabs"]}:
+        page["active"] = tab
+    # Ook de verborgen kaarten krijgen hun detailblad: Toon weer zet de kaart terug zonder te herladen (kaarten.js).
+    items = [it for t in page["tabs"] for it in t["plans"] + t["scenarios"] + t.get("tegen", []) + t["trades"] + t["hidden_cards"]]
     return templates.TemplateResponse(request, "smc.html", {
-        "user": user,
-        "forming": forming,
-        "entries": entries,
+        "user": user, "page": page, "items": items, "context": _context_lines({it["coin"] for it in items}),
+        **await _structure_extras(user)}, headers=_viewer_header(user))
+
+
+async def _open_chances(user: dict, structure_cards: list[dict], scripts: list[dict], prices: dict, now: datetime,
+                        radar_cards: Optional[list[dict]] = None) -> list[dict]:
+    """De open kansen die deze kijker ziet, volgens today.open_chances: een proefsoort telt niet mee voor een leerling."""
+    since = (now - timedelta(hours=today.OPEN_SIGNAL_HOURS)).isoformat()
+    signals = [g for t in today.SIGNAL_LABELS for g in repo.list_recent_signals_of_type(t, since) if not g["is_practice"]]
+    signals = rule_live.for_viewer(signals, is_ceo(user))
+    prices = {**prices, **await _cached_prices({g["coin"] for g in signals} - prices.keys())}
+    cards = radar_cards if radar_cards is not None else await _radar_cards(user)
+    # Een wachtend scenario is een nieuwe kans; een gevuld script-signaal staat hierboven bij de open signalen en blijft.
+    scripts = scripts if focus.engine_on("script") else []
+    return today.open_chances(structure_cards, scripts, cards, signals, prices, now, range_cards=await _range_sweep_cards(user))
+
+
+async def _vandaag_context(user: dict) -> dict:
+    now = datetime.now(timezone.utc)
+    script_on = focus.engine_on("script")
+    scripts_raw = repo.latest_scripts() if script_on else []      # met focus schrijft niemand een nieuw script; een oud script is geen kans
+    coins = [c["symbol"] for c in repo.list_coins()]
+    prices = await _cached_prices(set(coins) | {"BTC"})
+    scripts = [today.script_view(s, prices.get(s["coin"]), now) for s in scripts_raw]
+    moments = today.agenda(market_calendar.upcoming(now, 24))
+    liq_since = (now - timedelta(hours=1)).isoformat()
+    liquidations = today.liquidation_rows({c: repo.list_liquidations(c, liq_since) for c in coins})
+    events = []
+    for e in repo.list_recent_events(None, (now - timedelta(hours=12)).isoformat(), limit=8):
+        at = datetime.fromisoformat(e["at"])
+        events.append({**e, "time": today.local(at if at.tzinfo else at.replace(tzinfo=timezone.utc)).strftime("%H:%M")})
+    structure_cards = await _structure_cards()
+    radar_cards = await _radar_cards(user)
+    chances = await _open_chances(user, structure_cards, scripts, prices, now, radar_cards=radar_cards)
+    rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
+    week = track_record.week_summary(rows, config.TRACK_RECORD_COST_PCT)
+    # Naar buiten is elke structuurkans Structuur: Vandaag telt structuur_c erbij; Bewijs houdt de twee interne soorten apart.
+    summary = track_record.summarize([{**r, "trade_type": "structuur"} if r["trade_type"] == "structuur_c" else r for r in rows], config.TRACK_RECORD_COST_PCT)
+    score_types = focus.FOCUS_TYPES if focus.active() else ("script", "samenval", "smc", "structuur", "structuur_c", "trend", "rejectie", "smc_waarschuwing", "zone_radar", "zone_sweep", "poc_radar")
+    score = [e for e in summary if e["trade_type"] in score_types or e["source"] == "alles"]
+    for e in score:
+        e["spark"] = Markup(track_record.sparkline_svg(e["cumulative"], width=180, height=36))
+    return {
+        "now": today.nl_stamp(today.local(now)), "fmt": today.fmt_price, "prices": prices, "scripts": scripts, "mood": today.mood(scripts_raw),
+        "timeline": Markup(today.timeline_svg(now, moments)), "moments": moments, "liquidations": liquidations,
+        "liq_last": repo.latest_liquidation_bucket(), "events": events, "score": score, "money": today.money,
+        "status_labels": track_record.STATUS_LABELS, "script_enabled": config.SCRIPT_ENABLED, "script_on": script_on,
+        "structure_cards": structure_cards,
+        "chances": chances, "nearest": today.nearest_chance(chances), "chances_unit": today.chances_unit(len(chances)),
+        "last_message_ago": today.ago_text(repo.last_message_received_at(), now),
+        "last_check_ago": today.ago_text((repo.get_beat("structuur") or {}).get("at"), now),
+        "chance_plans": [c["card"] for c in chances if c["card"]], "chance_rows": [c for c in chances if not c["card"]],
+        "scenarios_waiting": sum(1 for sc in scripts for x in sc["scenarios"] if x["state"] == "waiting"),
+        "ctx_high": market_context.FUNDING_HIGH_PCT, "ctx_low": market_context.FUNDING_LOW_PCT,
+        "market_context": market_context.market_view(market_context.latest(repo.latest_market_context([market_context.MARKET, *market_context.VANDAAG_COINS])), now),
+        "budget": today.budget_ring(push_policy.used(repo.list_recent_pushes(user["id"], (now - timedelta(hours=24)).isoformat())), user.get("push_budget")),
+        "radar_cards": radar_cards,
+    }
+
+
+@app.get("/vandaag")
+async def vandaag_page(request: Request, bron: str = "", user: dict = Depends(require_login)):
+    """Markt: marktcontext, agenda, wat beweegt (liquidaties en nieuws), scenario's zolang het markt-script aan staat, en de score van wat
+    HesPulse zelf voorspelde. Alles komt uit app/today.py en de verzamelaars; er staat niets op wat niet gemeten is. De kansen staan op /smc.
+    ?bron=app was de start_url van een oudere manifest: die opent nu ook Kansen."""
+    if bron == "app":
+        return RedirectResponse(url="/smc", status_code=303)
+    ctx = await _vandaag_context(user)
+    greeting = ceo.greeting(today.local(datetime.now(timezone.utc)).hour, is_ceo(user), user["username"])
+    # Kansen toont de soorten met een tab; een open melding of wachtend scenario van een andere soort (markt-script, trend ...) blijft hier staan.
+    other = [c for c in ctx["chances"] if c["kind"] == "scenario" or (c["kind"] == "signal" and c.get("trade_type") not in kansen.TAB_OF)]
+    return templates.TemplateResponse(request, "vandaag.html", {"user": user, "greeting": greeting, **ctx, "other_open": other},
+                                      headers=_viewer_header(user))
+
+
+NU_SKIP_COOKIE = "hp_skip"
+NU_SKIP_HOURS = 24
+
+
+def _skipped_keys(request: Request, user: dict) -> frozenset:
+    """Overgeslagen op dit toestel (cookie) of op een ander toestel van dezelfde gebruiker (plan_skips), allebei een dag."""
+    since = (datetime.now(timezone.utc) - timedelta(hours=NU_SKIP_HOURS)).isoformat()
+    return nu.parse_skip(request.cookies.get(NU_SKIP_COOKIE)) | {r["plan_key"] for r in repo.list_plan_skips(user["id"], since)}
+
+
+@app.post("/nu/overslaan")
+async def nu_skip(request: Request, key: str = Form(""), user: dict = Depends(require_login)):
+    """Sla over: dit plan vult Nu een dag niet meer. Het blijft op de Radar staan. De cookie houdt het op dit toestel; de rij in plan_skips
+    zet het met zijn moment in het Logboek en de weekterugblik."""
+    if nu.SKIP_KEY.match(key):
+        item = nu.item_for(await _radar_cards(user), key)
+        repo.record_plan_skip(user["id"], key, item["coin"] if item else None, item["direction"] if item else None, db.now_iso())
+    response = RedirectResponse(url="/smc", status_code=303)
+    response.set_cookie(NU_SKIP_COOKIE, nu.add_skip(request.cookies.get(NU_SKIP_COOKIE), key), max_age=24 * 3600, samesite="lax", path="/")
+    return response
+
+
+async def _kans_keys(request: Request) -> tuple[list[str], bool]:
+    """De sleutels uit een verberg- of toon-verzoek: JSON {"keys": [...]} van kaarten.js, of een formulier met `key` als JavaScript ontbreekt."""
+    if request.headers.get("content-type", "").startswith("application/json"):
+        try:
+            data = await request.json()
+        except ValueError:
+            return [], True
+        return kansen.parse_keys(data.get("keys") if isinstance(data, dict) else None), True
+    form = await request.form()
+    return kansen.parse_keys(form.get("key")), False
+
+
+@app.post("/api/kans/verberg")
+async def api_kans_hide(request: Request, user: dict = Depends(require_login)):
+    """Verberg op Kansen: alleen voor de ingelogde gebruiker en alleen de weergave (kans_hidden). Het signaal, zijn uitkomst, Bewijs, Logboek,
+    het overslaan en de meldingen blijven zoals ze zijn."""
+    keys, is_json = await _kans_keys(request)
+    if not keys:
+        return JSONResponse({"error": "Geen geldige kaart"}, status_code=400)
+    repo.hide_kansen(user["id"], keys, db.now_iso())
+    return {"hidden": keys} if is_json else RedirectResponse(url="/smc", status_code=303)
+
+
+@app.post("/api/kans/toon")
+async def api_kans_show(request: Request, user: dict = Depends(require_login)):
+    """Toon weer (ook het Ongedaan van de balk): de kaart staat weer in de lijst en telt weer mee, alleen voor deze gebruiker."""
+    keys, is_json = await _kans_keys(request)
+    if not keys:
+        return JSONResponse({"error": "Geen geldige kaart"}, status_code=400)
+    repo.show_kansen(user["id"], keys)
+    return {"shown": keys} if is_json else RedirectResponse(url="/smc", status_code=303)
+
+
+async def _model_point_item(entry_id: int) -> Optional[dict]:
+    """Een B-, R- of B0-plan van het model als checklist-item, alleen zolang het wacht en geldig is (model_card.ready_plan)."""
+    e = repo.get_model_entry(entry_id)
+    if not e or e["code"] not in model_card.READY_CODES or e["state"] != "wacht" or e.get("take_profit") is None:
+        return None
+    if e.get("expires_at") and datetime.fromisoformat(e["expires_at"]) <= datetime.now(timezone.utc):
+        return None
+    price = (await _cached_prices({e["coin"]})).get(e["coin"])
+    sign = 1 if e["direction"] == "long" else -1
+    dist = (price - e["limit_price"]) / e["limit_price"] * 100 * sign if price else None
+    return nu.plan_item(model_card.point_key(entry_id), e["coin"], e["direction"], e["limit_price"], e["stop_loss"],
+                        [(e["take_profit"], e.get("rr") or 0.0)], price=price, state="wacht", distance_pct=dist,
+                        trade_type=model.TRADE_TYPE, untested=True, origin=f"HesPulse-model · plan {e['code']}")
+
+
+@app.get("/nu/order/{key}")
+async def nu_order(request: Request, key: str, user: dict = Depends(require_login)):
+    """De order-checklist, schermvullend: de stappen van het orderformulier met een tik-om-te-kopiëren per getal."""
+    item = None
+    if key.startswith("structuur:"):
+        card = next((c for c in await _structure_cards() if f"structuur:{c['id']}" == key), None)
+        if card:
+            price = (await _cached_prices({card["coin"]})).get(card["coin"])
+            item = nu.structure_item(card, price, today.structure_state(card, card["plan"], price, datetime.now(timezone.utc)))
+    elif key.startswith(model_card.POINT_KEY + ":") and nu.SKIP_KEY.match(key):
+        item = await _model_point_item(int(key.split(":")[1]))
+    elif nu.SKIP_KEY.match(key):
+        item = nu.item_for(await _radar_cards(user), key)
+    if item is None:
+        raise HTTPException(status_code=404)
+    repo.open_checklist(user["id"], key, item["coin"], item["direction"], db.now_iso())
+    return templates.TemplateResponse(request, "order.html", {"user": user, "item": item, "steps": nu.checklist(item), "note": nu.price_note(item)})
+
+
+@app.post("/nu/order/{key}/klaar")
+async def nu_order_done(key: str, user: dict = Depends(require_login)):
+    """order.js meldt dat alle stappen stonden; met het openmoment geeft dat de gemeten duur in het Logboek. Een tweede melding verandert niets."""
+    if not nu.SKIP_KEY.match(key):
+        raise HTTPException(status_code=404)
+    return {"ok": repo.finish_checklist(user["id"], key, db.now_iso())}
+
+
+def _viewer_header(user: dict) -> dict:
+    """Kop voor de pagina's die de service worker offline bewaart (Radar, Vandaag). Hij wist de bewaarde pagina's zodra een andere kijker
+    op hetzelfde apparaat inlogt. Afgeleid met het geheim, zodat er geen kaal gebruikers-id in een kop of cache staat."""
+    tag = hashlib.sha256(f"hespulse-viewer:{config.JWT_SECRET}:{user['id']}".encode()).hexdigest()[:20]
+    return {"X-HP-Viewer": tag}
+
+
+def _age_header(coins) -> dict:
+    age = freshness.oldest_age(_price_fetched_at, coins, time.time())
+    return {} if age is None else {"X-Price-Age": str(age)}
+
+
+@app.get("/api/vandaag")
+async def api_vandaag(user: dict = Depends(require_login)):
+    """Live koersen en afstand tot de voorwaarde per scenario, voor vandaag.js."""
+    ctx = await _vandaag_context(user)
+    payload = {
+        "prices": ctx["prices"],
+        "scenarios": {str(sc["id"]): {"state": sc["state"], "label": sc["state_label"], "short": sc["state_short"], "to_trigger_pct": sc["to_trigger_pct"],
+                                       "hours_left": sc["hours_left"], "chart": sc["chart"], "action": sc["action"]}
+                      for s in ctx["scripts"] for sc in s["scenarios"]},
+    }
+    return JSONResponse(payload, headers=_age_header(ctx["prices"].keys()))
+
+
+KANS_TIMEFRAMES = ("5m", "15m", "30m", "4h")
+
+
+@app.get("/kans/{signal_id}")
+async def kans_page(request: Request, signal_id: int, tf: str = "30m", user: dict = Depends(require_login)):
+    """Eén kans op één scherm: grafiek, feiten, gemeten kenmerken en wat er sinds de melding gebeurde. Hier landt een tik op een melding."""
+    signal = repo.get_signal(signal_id)
+    if not signal or signal["is_practice"] or (signal["trade_type"] in rule_live.CEO_ONLY_TYPES and not is_ceo(user)):
+        raise HTTPException(status_code=404)
+    if signal["trade_type"] == rule_live.RANGE_SWEEP and (page := await _range_sweep_kans(request, signal, user)) is not None:
+        return page
+    setup = repo.get_structure_setup_by_signal(signal_id)
+    candles, price = None, None
+    tf = tf if tf in KANS_TIMEFRAMES and not setup else "30m"        # Structuur tekent zijn eigen momentopname op 30 minuten
+    try:
+        df = await asyncio.to_thread(exchange.fetch_ohlcv, signal["coin"], timeframe=tf, limit=60)
+        candles = [[row.timestamp.isoformat(), row.open, row.high, row.low, row.close] for row in df.itertuples()]
+    except Exception:
+        candles = None
+    prices = await _cached_prices({signal["coin"]})
+    price = prices.get(signal["coin"])
+    signal.setdefault("message_summary", None)
+    trailing = reference = None
+    if signal["trade_type"] in rule_live.ENGINE_TYPES:          # meelopende stop: geen doel, de uitkomst is winst of verlies in R
+        trailing = kans_view.trailing_outcome(signal, (repo.get_trade_result(signal_id) or {}).get("r_value"))
+    elif signal["trade_type"] in (zone_sweep.TRADE_TYPE, poc_radar.TRADE_TYPE) and signal["take_profit"] is None:
+        # Een zone-sweep of POC-kaart zonder doel: de R op Bewijs komt van de referentie-uitgang, niet van een doel dat geraakt werd.
+        reference = kans_view.reference_outcome(signal, (repo.get_trade_result(signal_id) or {}).get("r_value"))
+    facts = kans_view.facts(signal)
+    still_open = signal["auto_outcome"] is None and facts["entry"] and facts["stop"]
+    return templates.TemplateResponse(request, "kans.html", {
+        "user": user, "signal": signal, "facts": facts, "trailing": trailing, "reference": reference,
+        "action": chance_steps.now_line("open", signal["direction"], facts["entry"], facts["stop"], facts["take"]) if still_open else None,
+        "levels": chance_steps.level_chips(facts["entry"], facts["stop"], facts["take"] or None) if facts["entry"] and facts["stop"] else [],
+        "events": kans_view.timeline(signal, setup, (trailing or reference or {}).get("text")),
+        "chart": Markup(kans_view.chart(signal, setup, candles, price)), "price": price, "setup": setup,
+        "tf": tf, "timeframes": KANS_TIMEFRAMES if not setup else (),
+        "fingerprint": (repo.get_chain_link(signal["id"]) or {}).get("hash"),
+        **_kans_context(signal),
+    })
+
+
+def _kans_context(signal: dict) -> dict:
+    """Context nu, en voor een zone-radar-kaart ook de bewaarde stand bij zijn ontstaan."""
+    origin = repo.get_zone_radar_setup_by_signal(signal["id"]) if signal["trade_type"] == zone_radar.TRADE_TYPE else None
+    return {"context": _context_lines([signal["coin"]])[signal["coin"]], "context_origin": market_context.snapshot_lines(origin) if origin else []}
+
+
+async def _range_sweep_kans(request: Request, signal: dict, user: dict):
+    """De kanspagina van een gevulde range sweep: de getekende setup, wat de stop deed (uit de meting van de motor) en de referentie-uitgang die Bewijs telt.
+    Geen doel en geen R:R: er is er geen, en de referentie is niet jouw trade."""
+    setup = repo.get_range_sweep_setup_by_signal(signal["id"])
+    trade = repo.get_range_sweep_trade(signal["id"])
+    if not setup or not trade:
+        return None          # de motor schrijft het signaal vóór de meting; een signaal zonder meting krijgt de gewone pagina
+    price = (await _cached_prices({signal["coin"]})).get(signal["coin"])
+    plan = json.loads(setup["plan"]) if setup.get("plan") else {}
+    chart = setup_chart.range_sweep_svg(plan.get("candles", []), {**setup, "legs": chance_steps.range_legs(setup)}, setup["stop"], price, plan.get("zones"))
+    r_value = (repo.get_trade_result(signal["id"]) or {}).get("r_value")
+    ref = kans_view.reference_outcome(signal, r_value)
+    pct = abs(trade["entry"] - trade["stop"]) / trade["entry"] * 100
+    stopped = bool(trade["stop_hit_at"])
+    state = ("Stop geraakt" if stopped else "Meting klaar, de stop werd niet geraakt" if trade["closed_at"] else "Loopt nog")
+    reached = [k for k in track_record.RANGE_R_LEVELS if trade.get(f"reached_{k}r_at")]
+    return templates.TemplateResponse(request, "kans.html", {
+        "user": user, "signal": signal, "facts": kans_view.facts(signal), "trailing": None, "price": price, "setup": None, "tf": "30m", "timeframes": (),
+        "events": kans_view.format_events(kans_view.range_sweep_events(setup, trade)),
+        "chart": Markup(chart), "fingerprint": None, **_kans_context(signal),
+        "range_sweep": {"state": state, "stopped": stopped, "running": not trade["closed_at"] and not stopped, "reference": ref, "stop_pct": pct,
+                        "cost_r": rangesweep_lab.LAB_COST_PCT / pct if pct else None, "lab_cost_pct": rangesweep_lab.LAB_COST_PCT,
+                        "mae": trade["mae_r"], "mfe": trade["mfe_r"], "reached": reached, "score": setup["score"], "grade": setup["grade"],
+                        "family": {"zone": "Zone-retest", "sweep": "Range sweep"}.get(setup["family"], setup["family"]),
+                        "tf": {"30m": "30m", "1h": "1u", "2h": "2u", "4h": "4u"}.get(setup["range_tf"], setup["range_tf"]),
+                        }})
+
+
+WEEK_RANGES = {7: "1W", 14: "2W", 30: "1M", 90: "3M"}
+
+
+@app.get("/week")
+async def week_page(request: Request, dagen: int = 7, user: dict = Depends(require_login)):
+    """Jouw week in één plaatje, om te delen: kansen, resultaat in R na kosten, beste en slechtste kans."""
+    dagen = dagen if dagen in WEEK_RANGES else 7
+    week = track_record.week_summary(report_rows(user), config.TRACK_RECORD_COST_PCT, days=dagen)
+    spark = track_record.sparkline_svg(week["cumulative"], width=320, height=80).replace("<svg", "<svg data-share-chart", 1)
+    return templates.TemplateResponse(request, "week.html", {"user": user, "week": week, "spark": Markup(spark), "headline": ceo.week_headline(week["net_r"], week["resolved"]), "dagen": dagen, "ranges": WEEK_RANGES})
+
+
+@app.get("/api/kansen")
+async def api_kansen(user: dict = Depends(require_login)):
+    """Live afstand tot stap 1 per wachtend Structuur-plan, voor kansen.js."""
+    cards = await _structure_cards()
+    return {"structuur": {str(c["id"]): {"dist": c["steps"][0]["dist"]} for c in cards}}
+
+
+@app.get("/api/radar")
+async def api_radar(user: dict = Depends(require_login)):
+    """Live status per radar-kaart, voor radar.js: nieuwe koers, afstand tot de limietorder, live R en de niveaus voor de grafiek.
+    De leeftijd van de oudste koers staat in de header X-Price-Age, zodat de vorm van de payload per kaart gelijk blijft."""
+    cards = await _radar_cards(user)
+    return JSONResponse(radar.live_payload(cards), headers=_age_header({c["coin"] for c in cards}))
+
+
+RADAR_TIMEFRAMES = ("5m", "15m", "1h", "4h", "1d")
+RADAR_CANDLE_TTL_SECONDS = 60
+RADAR_CANDLE_FETCH = 500            # altijd evenveel ophalen, zodat elke `limit` uit dezelfde cache-regel komt
+_candle_cache: dict[tuple[str, str], tuple[float, list]] = {}
+
+
+async def _cached_candles(coin: str, tf: str) -> Optional[list]:
+    """Candles per (coin, tf) uit de minuutcache, [[unix_s, open, high, low, close], ...] oudste eerst. Mislukt het ophalen, dan geldt de
+    laatste goede stand (ook al is die verlopen); None als er nog nooit een goede ophaal was."""
+    hit = _candle_cache.get((coin, tf))
+    if not hit or time.monotonic() - hit[0] >= RADAR_CANDLE_TTL_SECONDS:
+        try:
+            df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, tf, RADAR_CANDLE_FETCH)
+            rows = [[int(r.timestamp.timestamp()), float(r.open), float(r.high), float(r.low), float(r.close)] for r in df.itertuples()]
+            hit = (time.monotonic(), rows)
+            _candle_cache[(coin, tf)] = hit
+        except Exception:
+            if not hit:
+                return None
+    return hit[1]
+
+
+@app.get("/api/radar_candles/{coin}")
+async def api_radar_candles(coin: str, tf: str = "15m", limit: int = 96, user: dict = Depends(require_login)):
+    """Compacte candles voor de grafiek op een radar-kaart: {"coin", "tf", "candles": [[unix_s, open, high, low, close], ...]},
+    oudste eerst. Per (coin, tf) een minuut onthouden (_cached_candles): elke kaart en elke ingelogde gebruiker vraagt erom."""
+    coin = coin.upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,12}", coin) or tf not in RADAR_TIMEFRAMES:
+        raise HTTPException(status_code=422)
+    # Alleen coins uit de lijst: anders groeit de candlecache met willekeurige symbolen en gaat elk daarvan naar de beurs.
+    if coin not in {c["symbol"] for c in repo.list_coins()}:
+        raise HTTPException(status_code=404)
+    limit = max(10, min(limit, RADAR_CANDLE_FETCH))
+    rows = await _cached_candles(coin, tf)
+    if rows is None:
+        raise HTTPException(status_code=503, detail="candles niet beschikbaar")
+    return {"coin": coin, "tf": tf, "candles": rows[-limit:]}
+
+
+@app.get("/api/structuur/{coin}")
+async def api_structuur(coin: str, tf: str = "1h", user: dict = Depends(require_login)):
+    """De structuur van één tijdframe als benoemde niveaus voor "Groot" (app/structure_levels.py): range high/low met evenwicht, premium en
+    discount, MSB, swing high/low of EQH/EQL, de dichtste open FVG boven en onder de koers en het order block. Uit dezelfde minuutcache als
+    de candles, alleen gesloten candles."""
+    coin = coin.upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,12}", coin) or tf not in structure_levels.K:
+        raise HTTPException(status_code=422)
+    if coin not in {c["symbol"] for c in repo.list_coins()}:
+        raise HTTPException(status_code=404)
+    rows = await _cached_candles(coin, tf)
+    if rows is None:
+        raise HTTPException(status_code=503, detail="candles niet beschikbaar")
+    now = time.time()
+    # Top-down zoals het model: de dag geeft de richting, de lagere tijdframes volgen alleen de breuken in die richting.
+    bias = structure_levels.day_bias(await _cached_candles(coin, "1d"), now) if tf != "1d" else None
+    out = structure_levels.levels(rows, tf, now, bias=bias)
+    # Liquiditeit van 1u en 4u (BSL, SSL): een eigen sleutel, zodat levels() en de poorttest van het TradingView-script gelijk blijven.
+    by_tf = {tf: rows}
+    for need in ("4h", "1h"):
+        if need not in by_tf and tf in ("15m", "1h", "4h") and (need == "4h" or tf != "4h"):
+            by_tf[need] = await _cached_candles(coin, need)
+    out["pools"] = structure_levels.pool_lines({k: v for k, v in by_tf.items() if v}, tf, now)
+    return out
+
+
+@app.get("/api/tegen/{coin}")
+async def api_tegen(coin: str, user: dict = Depends(require_login)):
+    """De wachtende punten van de stille arm tegen de dagtrend voor één coin (B-2026-11-03-11), voor de laag "Tegen de trend" op Groot.
+    Alleen weergave; nooit een melding."""
+    coin = coin.upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,12}", coin):
+        raise HTTPException(status_code=422)
+    pts = [e for e in repo.list_model_entries(("wacht",)) if e["coin"] == coin and str(e.get("scenario_range_id") or "").startswith(model.COUNTER_PREFIX)]
+    out = []
+    for e in pts:
+        seen = max(datetime.fromisoformat(e["known_at"]), datetime.fromisoformat(e["detected_at"]))
+        out.append({"code": e["code"], "direction": e["direction"], "limit": e["limit_price"], "stop": e["stop_loss"], "take": e["take_profit"],
+                    "time": int(seen.timestamp())})
+    return {"coin": coin, "points": out}
+
+
+@app.get("/api/trend/{coin}")
+async def api_trend(coin: str, user: dict = Depends(require_login)):
+    """De trend per tijdframe (dag, 4u, 1u, 15m) voor de kop van "Groot": de richting van de laatste structuurbreuk op gesloten candles
+    (structure_levels.levels). Een tijdframe zonder candles is 'onbekend', nooit neutraal."""
+    coin = coin.upper()
+    if not re.fullmatch(r"[A-Z0-9]{2,12}", coin):
+        raise HTTPException(status_code=422)
+    if coin not in {c["symbol"] for c in repo.list_coins()}:
+        raise HTTPException(status_code=404)
+    out, now = [], time.time()
+    bias = structure_levels.day_bias(await _cached_candles(coin, "1d"), now)
+    for tf in structure_levels.TREND_TFS:
+        rows = await _cached_candles(coin, tf)
+        lv = structure_levels.levels(rows, tf, now, bias=bias if tf != "1d" else None) if rows else {"trend": None, "herstel": False}
+        out.append({"tf": tf, "word": structure_levels.TF_TEXT[tf], "trend": lv["trend"] if rows else "onbekend", "herstel": lv["herstel"]})
+    return {"coin": coin, "trend": out}
+
+
+def _card_setup(key: str, user: dict) -> Optional[tuple[str, dict]]:
+    """(soort, rij) achter een kaartsleutel van Kansen, of None: alleen zone:N, zsweep:N en een signal:N van die twee soorten, met dezelfde
+    kijkrechten als de kaart zelf (de zone-sweep is CEO-only zolang ZONE_SWEEP_PUBLIC uit staat)."""
+    m = re.fullmatch(r"(zone|zsweep|poc|model|signal):(\d{1,9})", key)
+    if not m:
+        return None
+    kind, ident = m.group(1), int(m.group(2))
+    by_signal = {"zone": repo.get_zone_radar_setup_by_signal, "zsweep": repo.get_zone_sweep_setup_by_signal, "poc": repo.get_poc_radar_setup_by_signal,
+                 "model": repo.get_model_scenario_by_signal}
+    by_id = {"zone": repo.get_zone_radar_setup, "zsweep": repo.get_zone_sweep_setup, "poc": repo.get_poc_radar_setup, "model": repo.get_model_scenario}
+    if kind == "signal":
+        sig = repo.get_signal(ident)
+        if not sig or sig["is_practice"]:
+            return None
+        kind = {zone_radar.TRADE_TYPE: "zone", zone_sweep.TRADE_TYPE: "zsweep", poc_radar.TRADE_TYPE: "poc", model.TRADE_TYPE: "model"}.get(sig["trade_type"])
+        row = by_signal[kind](ident) if kind else None
+    else:
+        row = by_id[kind](ident)
+    if not row or (kind == "zsweep" and not _sees_zone_sweep(user)) or (kind == "poc" and not _sees_poc(user)):
+        return None
+    return kind, row
+
+
+@app.get("/api/kaart_svg/{key}")
+async def api_kaart_svg(key: str, groot: int = 0, user: dict = Depends(require_login)):
+    """De eigen kaartgrafiek van een Zone-radar- of Zone-sweep-kaart op Kansen (app/card_chart.py), als SVG-fragment voor kaarten.js. Lazy per
+    kaart in beeld; de candles komen uit dezelfde minuutcache als de grafieken (_cached_candles), dus geen beursaanroep per kijker."""
+    found = _card_setup(key, user)
+    if not found:
+        raise HTTPException(status_code=404)
+    kind, row = found
+    if kind == "poc":
+        tf = card_chart.poc_tf(row["period"])
+    elif kind == "model":
+        tf = card_chart.model_tf(row)          # range vanaf zijn swing en de entry samen in beeld
+    else:
+        origin = zone_radar.zone_origin(row.get("zone_key", ""), ("1h", "2h", "4h"))
+        tf = card_chart.candle_tf(origin[0] if origin else row["tf"])
+    rows = await _cached_candles(row["coin"], tf)
+    if not rows:
+        return HTMLResponse("", status_code=503)
+    price = (await _cached_prices({row["coin"]})).get(row["coin"])
+    if kind == "model":
+        points = model_card.entry_points(row, repo.get_model_v1(row["id"]), repo.list_model_entries(scenario_ids=[row["id"]]))
+        alts = [p for p in points if p["code"] != "A"]
+        pos_plan = None if row.get("limit_price") is not None and row.get("entry_detected_at") else model_card.ready_plan({**row, "entry_points": points})
+        svg = card_chart.model_svg({**row, "alt_entries": alts, "pos_plan": pos_plan}, rows, price, big=bool(groot))
+    else:
+        svg = {"zone": card_chart.zone_radar_svg, "zsweep": card_chart.zone_sweep_svg, "poc": card_chart.poc_radar_svg}[kind](row, rows, price)
+    return HTMLResponse(svg, headers={"Cache-Control": "no-store"})
+
+
+@app.get("/api/sparklines")
+async def api_sparklines(coins: str = "", user: dict = Depends(require_login)):
+    """Minigrafiek van de laatste 24 uur per coin, voor spark.js: een aanroep voor alle kaarten, uit dezelfde candlecache als de grafieken
+    (1u-candles), dus nooit een beursaanroep per kaart. Een coin zonder data ontbreekt in het antwoord."""
+    active = {c["symbol"] for c in repo.list_coins()}
+    wanted = [c for c in dict.fromkeys(x.strip().upper() for x in coins.split(",")) if c in active]
+    out = {}
+    for coin, rows in zip(wanted, await asyncio.gather(*[_cached_candles(c, "1h") for c in wanted])):
+        item = radar.spark([r[4] for r in rows[-(radar.SPARK_HOURS + 1):]]) if rows else None
+        if item:
+            out[coin] = item
+    return out
+
+
+RANGE_REGISTER_TESTS = 64       # docs/onderzoek/range-sweep/preregistratie.md, 'Register': 34 eerdere varianten plus de 30 toetsen van deze familie
+
+
+async def _range_sweep_proof(user: dict, rows: list[dict], labs: dict) -> Optional[dict]:
+    """De sectie 'Range sweep, stopkwaliteit' van Bewijs, of None als deze kijker de proef niet mag zien. Alles wat telt komt uit de afgeronde
+    metingen en de signalen van rows (al gefilterd op wat deze kijker ziet); lopende trades, niet gevulde setups en wachtende setups staan als aantal ernaast."""
+    if rule_live.RANGE_SWEEP not in track_record.visible_rule_types({rule_live.RANGE_SWEEP}, is_ceo(user), rule_live.CEO_ONLY_TYPES):
+        return None
+    lab_stop, lab_edge = labs.get("range_sweep_stop"), labs.get(rule_live.RANGE_SWEEP)
+    trades = repo.list_range_sweep_trades(1000)
+    live = track_record.stop_quality_live(trades, rangesweep_lab.LAB_COST_PCT)
+    net = track_record.live_net_r(rows, rule_live.RANGE_SWEEP, config.TRACK_RECORD_COST_PCT)
+    running = {t["coin"] for t in trades if t.get("ref_r") is None}
+    prices = await _cached_prices(running) if running else {}
+    states = repo.count_range_sweep_setups_by_state()
+    unfilled = {k: states.get(k, 0) for k in ("verlopen", "weggelopen", "stop_voor_vulling")}
+    lab_view = track_record.stop_lab_view(lab_stop)
+    return {"rows": track_record.stop_quality_rows(lab_view, live), "live": live, "drift": track_record.drift_warning(lab_view, live),
+            "status": track_record.rule_status(lab_edge, net, stop_lab=lab_stop),
+            "verdict": track_record.range_lab_verdict(lab_stop, lab_edge, stopquality.KILL_TESTS, RANGE_REGISTER_TESTS, rangesweep_lab.EDGE_T_MIN),
+            "variant": track_record.rule_label(variant.lower()) if (variant := ((lab_stop or {}).get("summary") or {}).get("variant")) else None,
+            "lab_n": (lab_view or {}).get("summary", {}).get("n"),
+            "reference": track_record.reference_live(trades, net, prices), "cost_pct": config.TRACK_RECORD_COST_PCT, "lab_cost_pct": rangesweep_lab.LAB_COST_PCT,
+            "setups": {"filled": states.get("filled", 0), "waiting": states.get("waiting", 0) + states.get("niet_gemeld", 0), "unfilled": unfilled,
+                       "unfilled_total": sum(unfilled.values()), "total": sum(states.values())}}
+
+
+@app.get("/bewijs")
+async def bewijs_page(request: Request, user: dict = Depends(require_login)):
+    """Eerlijk, automatisch gemeten trackrecord per soort melding in R na kosten (zie app/track_record.py)."""
+    rows = report_rows(user)        # al gefilterd op wat deze kijker mag zien
+    # Focus-soorten: hoofdcijfers op perps-candles, het oudere deel op spot-candles apart (track_record.SPOT_ERA_LABEL).
+    summary = track_record.summarize(rows, config.TRACK_RECORD_COST_PCT, era_types=focus.FOCUS_TYPES)
+    summary.sort(key=lambda e: e["source"] != "alles")      # het totaal bovenaan, de rest in vaste volgorde
+    for entry in summary:
+        entry["spark"] = Markup(track_record.sparkline_svg(entry["cumulative"]))
+    total = next((e for e in summary if e["source"] == "alles"), None)
+    per_type, off_types = focus.split(e for e in summary if e["source"] != "alles")
+    moves = excursion.stats(rows)
+    for e in per_type:
+        if focus.is_focus(e["trade_type"]):
+            e["mae_line"] = excursion.line(moves.get(e["trade_type"]))
+    lab_types = {lab["rule"]: lab for lab in repo.list_rule_labs()}
+    visible = track_record.visible_rule_types(set(lab_types) | set(rule_live.CEO_ONLY_TYPES), is_ceo(user), rule_live.CEO_ONLY_TYPES)
+    # De range sweep heeft zijn eigen sectie met de stopmeting; als 'andere regel zonder motor' zou hij een live motor ontkennen die er wel is.
+    # De zone-sweep draait live (ongetest): zodra zijn labrun is opgeslagen staat hij bij de regels met een motor, met zijn stoptoets als stop_lab.
+    # Tot dan is zijn eigen rij onder Per soort de enige plek, zonder status.
+    range_sweep = await _range_sweep_proof(user, rows, lab_types)
+    # De POC-radar heeft geen labrun: als CEO-only soort hoort hij niet bij "regels zonder live motor", zijn rij staat onder Per soort.
+    hidden = (rule_live.RANGE_SWEEP, "range_sweep_stop", rule_live.POC_RADAR) + ZONE_SWEEP_LAB_KEYS
+    engine_types, other_types = track_record.split_rule_types([t for t in visible if t not in hidden], rule_live.ENGINE_TYPES + (rule_live.ZONE_SWEEP,))
+    rule_statuses = []
+    for trade_type in engine_types:
+        stop_lab = lab_types.get(STOP_LAB_KEYS[trade_type]) if trade_type in STOP_LAB_KEYS else None
+        status = track_record.rule_status(lab_types.get(trade_type), track_record.live_net_r(rows, trade_type, config.TRACK_RECORD_COST_PCT), stop_lab=stop_lab)
+        rule_statuses.append({**status, "label": track_record.rule_label(trade_type), "css": status["status"].lower().replace(" ", "-"),
+                              "lab_line": track_record.lab_line(lab_types.get(trade_type))})
+    other_rules = track_record.other_rule_rows(lab_types, other_types)
+    curves = track_record.equity_curves(rows, config.TRACK_RECORD_COST_PCT)
+    for c in curves:
+        c["svg"] = Markup(track_record.equity_svg(c["cumulative"], c["drawdown"]))
+    # Schaduwvarianten (app/shadow.py) zijn een meting voor de CEO: leerlingen zien ze niet.
+    shadow_lines = shadow.bewijs_lines() if is_ceo(user) else {}
+    # HesPulse-model (app/model_measure.py): de meting voor de eerste evaluatie voor iedereen, de vergelijkingen V1-V3 alleen voor de CEO.
+    scenarios = repo.list_model_scenarios(counter=None)
+    model_report = model_measure.report(scenarios, repo.list_model_v1() if is_ceo(user) else [], rows, config.TRACK_RECORD_COST_PCT,
+                                        ceo=is_ceo(user), entries=repo.list_model_entries(), freeze_at=repo.model_freeze_at(),
+                                        strict=repo.list_model_strict_compare(), placebo_rs=repo.list_model_placebo()) if scenarios else None
+    return templates.TemplateResponse(request, "bewijs.html", {
+        "shadow_lines": shadow_lines, "model_report": model_report, "r_text": model_measure.r_text, "ci_text": model_measure.ci_text,
+        "my_week": _week_review(user, datetime.now(timezone.utc)),
+        "curves": curves, "total": total, "per_type": per_type, "off_types": off_types, "funding_split": track_record.funding_split(rows, config.TRACK_RECORD_COST_PCT),
+        "hours": track_record.hour_grid(rows, config.TRACK_RECORD_COST_PCT),
+        "rule_statuses": rule_statuses, "other_rules": other_rules, "range_sweep": range_sweep, "ceo_view": is_ceo(user), "user": user, "summary": summary, "status_labels": track_record.STATUS_LABELS,
+        "focus_types": focus.FOCUS_TYPES, "cost_pct": config.TRACK_RECORD_COST_PCT, "cost_line": track_record.cost_text(config.TRACK_RECORD_COST_PCT), "recent_days": track_record.RECENT_DAYS,
+        "weeks": track_record.WEEKS_SHOWN, "min_status": track_record.MIN_FOR_STATUS, "min_proven": track_record.MIN_FOR_PROVEN,
     })
 
 
@@ -311,7 +1398,7 @@ async def login_submit(request: Request, username: str = Form(...), password: st
         )
 
     token = security.create_session_token(user["id"])
-    response = RedirectResponse(url="/signalen", status_code=303)
+    response = RedirectResponse(url="/smc", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 
@@ -331,8 +1418,9 @@ USERNAME_PATTERN = re.compile(r"^[a-zA-Z0-9_-]{3,32}$")
 
 
 @app.get("/registreer")
-async def register_form(request: Request):
-    return templates.TemplateResponse(request, "register.html", {"error": None})
+async def register_form(request: Request, code: str = ""):
+    return templates.TemplateResponse(request, "register.html", {"error": None, "code": beheer.normalize_code(code)[:16],
+                                                                  "invite_required": config.REGISTRATION_REQUIRES_INVITE})
 
 
 @app.post("/registreer")
@@ -341,12 +1429,14 @@ async def register_submit(
     username: str = Form(...),
     password: str = Form(...),
     password_confirm: str = Form(...),
+    code: str = Form(""),
 ):
     ip = request.client.host if request.client else ""
+    code = beheer.normalize_code(code)[:16]
 
     def error(message: str, status_code: int = 400):
         return templates.TemplateResponse(
-            request, "register.html", {"error": message}, status_code=status_code,
+            request, "register.html", {"error": message, "code": code, "invite_required": config.REGISTRATION_REQUIRES_INVITE}, status_code=status_code,
         )
 
     if security.is_registration_rate_limited(ip):
@@ -360,13 +1450,21 @@ async def register_submit(
     if password != password_confirm:
         return error("Wachtwoorden komen niet overeen.")
 
+    now = datetime.now(timezone.utc)
+    if config.REGISTRATION_REQUIRES_INVITE and not code:
+        return error("Registreren gaat met een uitnodigingscode. Vraag er een aan de eigenaar.")
+    if code:
+        invite = repo.get_invite(code)
+        if not invite or not beheer.invite_usable(invite, now):
+            return error("Deze uitnodigingscode is onbekend, verlopen of al op.")
+
     security.record_registration_attempt(ip)
-    user_id = repo.register_user(username, security.hash_password(password))
+    user_id = repo.register_user(username, security.hash_password(password), invite_code=code or None, now_iso=now.isoformat())
     if user_id is None:
-        return error("Deze gebruikersnaam is al in gebruik.")
+        return error("Deze gebruikersnaam is al in gebruik." if repo.get_user_by_username(username) else "Deze uitnodigingscode is net op of verlopen.")
 
     token = security.create_session_token(user_id)
-    response = RedirectResponse(url="/signalen", status_code=303)
+    response = RedirectResponse(url="/smc", status_code=303)
     response.set_cookie(SESSION_COOKIE, token, httponly=True, samesite="lax", max_age=config.SESSION_HOURS * 3600)
     return response
 
@@ -464,6 +1562,10 @@ def _add_signal_context(entries: list[dict], winrate: dict, pattern_winrate: dic
     return entries
 
 
+# Soorten met gemeten kenmerken (app/chance_checks.py): de melding ging al uit, de score beschrijft de kans en bepaalt geen groene of rode rand.
+SCORED_TYPES = ("structuur", "structuur_c", "trend", "rejectie", "script", "smc_waarschuwing")
+
+
 def _apply_user_confirmed(entries: list[dict], threshold_pct: float, required_factors: set[str]) -> None:
     """Zet entry['user_confirmed'] per signaal, de echte trade-kans-vlag
     achter macros.signal_card's groene rand. Swing is altijd bevestigd
@@ -484,7 +1586,7 @@ def _apply_user_confirmed(entries: list[dict], threshold_pct: float, required_fa
     tussen een echte kans en ruis. Moet NA _add_signal_context draaien:
     patroon se success_rate bestaat pas dan."""
     for entry in entries:
-        if entry["trade_type"] in ("swing", "smc"):
+        if entry["trade_type"] in ("swing", "smc", *SCORED_TYPES):
             entry["user_confirmed"] = True
         elif entry["trade_type"] == "patroon":
             entry["user_confirmed"] = repo.user_confirmed(
@@ -521,7 +1623,7 @@ def _compute_tension(current_price: Optional[float], stop_loss: Optional[float],
     dichtst is, groen als de take profit het dichtst is. Puur visueel,
     geen nieuw getal dat nergens anders al stond."""
     if current_price is None or not stop_loss or not take_profit:
-        return 0.0, "23, 229, 214"
+        return 0.0, "10, 186, 181"
     dist_to_sl = abs(current_price - stop_loss)
     dist_to_tp = abs(current_price - take_profit)
     total_range = abs(take_profit - stop_loss) or 1.0
@@ -618,7 +1720,7 @@ async def dashboard():
     # geen navigatielink wijst hier meer naartoe, maar een oude
     # PWA-snelkoppeling kan nog steeds deze URL openen. Doorsturen i.p.v.
     # verwijderen voorkomt een kale 404 op zo'n bestaande snelkoppeling.
-    return RedirectResponse(url="/signalen", status_code=303)
+    return RedirectResponse(url="/smc", status_code=303)
 
 
 @app.get("/account")
@@ -763,12 +1865,16 @@ async def api_system_status(user: dict = Depends(require_login)):
             "received_at": s["created_at"],
         }
 
+    forming = _forming_setups(user)
+    # Alleen wat de radar al in de cache zette: deze poll mag niet trager worden door een beurs die net niet antwoordt.
+    zone_prices = {c: hit[1] for c in {s["coin"] for s in forming} if (hit := _price_cache.get(c)) and hit[1]}
     return {
         "exchange_ok": exchange_ok,
         "last_message_at": repo.last_message_received_at(),
         "server_started_at": SERVER_STARTED_AT,
         "checked_at": db.now_iso(),
         "pending_count": repo.count_pending_signals(user["id"]),
+        "in_zone": radar.in_zone_count(forming, zone_prices, repo.list_hidden_kansen(user["id"])),
         "unread_notifications": repo.count_unread_notifications(user["id"]),
         "week_result_pct": repo.week_result_pct(user["id"]),
         "volatility_ratio": repo.largest_open_position_volatility(user["id"]),
@@ -794,6 +1900,75 @@ async def api_push_subscribe(request: Request, user: dict = Depends(require_logi
     repo.upsert_push_subscription(
         user["id"], endpoint, keys["p256dh"], keys["auth"], data.get("device_label"),
     )
+    return {"ok": True}
+
+
+def _pause_state(user: dict) -> dict:
+    left = push_policy.pause_minutes_left(user.get("push_paused_until"), datetime.now(timezone.utc))
+    return {"paused_until": user.get("push_paused_until") if left else None, "minutes_left": left, "label": push_policy.pause_text(left)}
+
+
+@app.get("/api/push/pauze")
+async def api_push_pause_state(user: dict = Depends(require_login)):
+    return _pause_state(user)
+
+
+@app.post("/api/push/pauze")
+async def api_push_pause_toggle(user: dict = Depends(require_login)):
+    """Eén tik: twee uur geen pushes. Een tik tijdens de pauze heft hem op. Signalen en journaal lopen door (alleen push_notify kijkt hiernaar)."""
+    now = datetime.now(timezone.utc)
+    if push_policy.pause_minutes_left(user.get("push_paused_until"), now):
+        repo.set_push_pause(user["id"], None)
+    else:
+        repo.set_push_pause(user["id"], push_policy.pause_until(now).isoformat())
+    return _pause_state(repo.get_user(user["id"]))
+
+
+@app.get("/api/prijsalarm")
+async def api_price_alerts(user: dict = Depends(require_login)):
+    return {"alerts": [{"id": a["id"], "coin": a["coin"], "price": a["price"], "label": a["label"]} for a in repo.list_price_alerts(user["id"])]}
+
+
+def _is_local_path(url: str) -> bool:
+    """Alleen een pad op deze site. Een backslash telt als schuine streep in browsers, dus "/\\evil.test" is geen pad."""
+    parts = urlsplit(url)
+    return url.startswith("/") and not url.startswith("//") and "\\" not in url and not parts.netloc and not parts.scheme
+
+
+@app.post("/api/prijsalarm")
+async def api_price_alert_create(request: Request, user: dict = Depends(require_login)):
+    """Alarm op een niveau van een kaart. De kant (boven of onder de koers) ligt vast bij het aanmaken; level_check toetst elke 15 minuten."""
+    try:
+        data = await request.json()
+    except ValueError:
+        data = None
+    if not isinstance(data, dict):
+        return JSONResponse({"error": "Ongeldig alarm"}, status_code=400)
+    # create_price_alert slaat de coin op zoals hij komt, dus hier normaliseren en tegen de lijst toetsen.
+    coin = str(data.get("coin", "")).strip().upper()
+    raw_price = data.get("price")
+    try:
+        price = float(raw_price)
+    except (TypeError, ValueError):
+        return JSONResponse({"error": "Ongeldige prijs"}, status_code=400)
+    if isinstance(raw_price, bool) or not math.isfinite(price) or price <= 0 or coin not in {c["symbol"] for c in repo.list_coins()}:
+        return JSONResponse({"error": "Ongeldig alarm"}, status_code=400)
+    if repo.count_open_price_alerts(user["id"]) >= price_alerts.MAX_OPEN_PER_USER:
+        return JSONResponse({"error": f"Maximaal {price_alerts.MAX_OPEN_PER_USER} alarmen tegelijk"}, status_code=409)
+    current = (await _cached_prices({coin})).get(coin)
+    if current is None:
+        return JSONResponse({"error": "Geen koers, probeer het zo opnieuw"}, status_code=503)
+    raw_url = str(data.get("url") or "")
+    url = raw_url if _is_local_path(raw_url) else "/smc"
+    side = price_alerts.side_for(price, current)
+    alert_id = repo.create_price_alert(user["id"], coin, price, side, str(data.get("label") or "Niveau")[:20], url)
+    return {"id": alert_id, "side": side, "message": f"Alarm staat op {chance_steps.fmt(price)}. Melding binnen 15 minuten na het raken."}
+
+
+@app.delete("/api/prijsalarm/{alert_id}")
+async def api_price_alert_delete(alert_id: int, user: dict = Depends(require_login)):
+    if not repo.delete_price_alert(alert_id, user["id"]):
+        raise HTTPException(status_code=404)
     return {"ok": True}
 
 
@@ -856,6 +2031,32 @@ async def update_settings(
     return RedirectResponse(url="/account", status_code=303)
 
 
+@app.post("/settings/risico")
+async def update_risk_per_trade(risk_eur: str = Form(""), user: dict = Depends(require_login)):
+    """Eigen bedrag per trade (1R) in euro, alleen voor de weergave op de kaarten. Leeg of ongeldig zet het weer uit."""
+    try:
+        amount = float(risk_eur.strip().replace(",", ".")) if risk_eur.strip() else None
+    except ValueError:
+        amount = None
+    if amount is not None and not (0 < amount <= 1_000_000):
+        amount = None
+    repo.set_risk_per_trade_eur(user["id"], amount)
+    return RedirectResponse(url="/account", status_code=303)
+
+
+@app.post("/settings/meldingen")
+async def update_push_budget(budget: str = Form(""), user: dict = Depends(require_login)):
+    """Maximaal aantal luide pushes (vullingen) per 24 uur (app/push_policy.py). Leeg is de standaard, 0 zet het budget uit."""
+    try:
+        value = int(budget.strip()) if budget.strip() else None
+    except ValueError:
+        value = None
+    if value is not None and not (0 <= value <= 500):
+        value = None
+    repo.set_push_budget(user["id"], value)
+    return RedirectResponse(url="/account", status_code=303)
+
+
 @app.post("/push/voorbeeld")
 async def send_demo_push_message(user: dict = Depends(require_login)):
     """Stuurt een testpush naar elk apparaat van de ingelogde gebruiker:
@@ -902,9 +2103,11 @@ async def close_journal(
     user: dict = Depends(require_login),
 ):
     won = False
+    won_pct = 0.0
     eval_flag = None
     try:
         result_pct, is_practice = repo.close_journal_trade(entry_id, user["id"], exit_price, exit_time)
+        won_pct = result_pct
         won = (not is_practice) and result_pct > 0
     except ValueError:
         # Geen eigen entry gevonden (niet van deze gebruiker, of nog geen
@@ -912,8 +2115,6 @@ async def close_journal(
         pass
     target = _safe_next(next)
     extra_query = []
-    if won:
-        extra_query.append(("closed_win", "1"))
     if eval_flag:
         extra_query.append((eval_flag, "1"))
     if extra_query:
@@ -1004,7 +2205,7 @@ PROP_EVAL_TIERS = (5000.0, 10000.0, 25000.0, 50000.0, 100000.0, 200000.0)
 # ---------------------------------------------------------------------------
 
 @app.get("/coins/{symbol}")
-async def coin_page(request: Request, symbol: str, user: dict = Depends(require_login)):
+async def coin_page(request: Request, symbol: str, signal: Optional[int] = None, user: dict = Depends(require_login)):
     symbol = symbol.upper()
     source_levels = repo.list_source_levels(symbol)
     await _annotate_level_outcomes(symbol, source_levels)
@@ -1036,11 +2237,19 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         e["signal_id"]: e for e in entries
         if e["entry_price"] is None and e["status"] != "genegeerd"
     }
+    hidden = () if is_ceo(user) else rule_live.CEO_ONLY_TYPES          # de proefmotor is alleen voor de CEO
     recent_signals = [
-        s for s in repo.list_recent_signals(symbol)
+        s for s in repo.list_recent_signals(symbol, exclude_types=hidden)
         if s["id"] not in open_signal_ids and s["id"] not in ignored_signal_ids
         and (s["stop_loss"] or s["take_profit"])
     ]
+    # Een melding linkt hierheen met ?signal=: de pagina toont maar de laatste paar signalen, dus een oudere kans (of een stille Trend-melding
+    # tussen nieuwere) zou anders ontbreken en de tik landde op een pagina zonder zijn kans.
+    if signal and signal not in open_signal_ids and all(s["id"] != signal for s in recent_signals):
+        wanted = repo.get_signal(signal)
+        if wanted and wanted["coin"] == symbol and not wanted["is_practice"] and wanted["trade_type"] not in hidden:
+            wanted.setdefault("message_summary", "Zelf gedetecteerd door HesPulse")
+            recent_signals.insert(0, wanted)
     for s in recent_signals:
         s.setdefault("entry_price", None)  # signalen zijn geen journal-rijen, dat veld bestaat niet
         pending_entry = pending_by_signal_id.get(s["id"])
@@ -1058,7 +2267,7 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
     # tijdlijn leest. Puur signaal-geschiedenis (niet oefentrades, dat zijn
     # geen signalen), alleen om in één oogopslag te zien hoe vaak deze coin
     # recent hoog vertrouwen gaf.
-    sparkline = list(reversed(repo.list_recent_signals(symbol, limit=14)))
+    sparkline = list(reversed(repo.list_recent_signals(symbol, limit=14, exclude_types=hidden)))
 
     # Korte context bovenaan de pagina: hoeveel signalen kwamen er recent
     # binnen voor deze coin, zonder eerst de hele sparkline te moeten
@@ -1124,7 +2333,16 @@ async def coin_page(request: Request, symbol: str, user: dict = Depends(require_
         "is_muted": repo.is_coin_muted(user["id"], symbol),
         "active_swing_watches": active_swing_watches,
         "narrative_updates": narrative_updates,
+        "price": (await _cached_prices({symbol})).get(symbol),
+        "structure_card": next((c for c in await _structure_cards() if c["coin"] == symbol), None),
     })
+
+
+@app.get("/api/price/{symbol}")
+async def api_price(symbol: str, user: dict = Depends(require_login)):
+    """Live koers voor de kop van de coinpagina."""
+    symbol = symbol.upper()
+    return {"price": (await _cached_prices({symbol})).get(symbol)}
 
 
 @app.post("/coins/{symbol}/note")
@@ -1159,6 +2377,14 @@ async def toggle_market_scan(enabled: str = Form(...), user: dict = Depends(requ
 
 
 CONFIRM_THRESHOLD_PRESETS = {"soepel": 45.0, "normaal": 60.0, "streng": 75.0}
+
+
+@app.post("/instellingen/thema")
+async def update_theme(thema: str = Form("dark"), user: dict = Depends(require_login)):
+    """Zonder JavaScript: het formulier in Account zet de cookie. Met JavaScript doet theme.js dat zelf, zonder herladen."""
+    response = RedirectResponse(url="/account#weergave", status_code=303)
+    response.set_cookie(THEME_COOKIE, thema if thema in THEMES else "dark", max_age=400 * 24 * 3600, samesite="lax", path="/")
+    return response
 
 
 @app.post("/instellingen/drempel")
@@ -1234,7 +2460,7 @@ async def api_coins(user: dict = Depends(require_login)):
 async def api_coin_menu_activity(user: dict = Depends(require_login)):
     """Welke coins de laatste 24 uur nog een echt signaal hadden, voor het
     activiteits-stipje in het coin-menu (base.html)."""
-    return sorted(repo.coins_with_recent_signal())
+    return sorted(repo.coins_with_recent_signal(exclude_types=() if is_ceo(user) else rule_live.CEO_ONLY_TYPES))
 
 
 @app.get("/api/candles/{symbol}")
@@ -1308,3 +2534,97 @@ async def api_candles(symbol: str, user: dict = Depends(require_login)):
         "patterns": patterns, "sr_zones": sr_zones, "trendlines": trendline_data,
         "forming_patterns": forming_patterns,
     }
+
+
+def _owner(user: dict) -> dict:
+    """Beheer is alleen van de eigenaar; voor iedereen anders bestaat de pagina niet (404, geen 403: een leerling hoort niet te weten dat hij er is)."""
+    if not is_ceo(user):
+        raise HTTPException(status_code=404)
+    return user
+
+
+@app.get("/beheer")
+async def beheer_page(request: Request, fout: str = "", user: dict = Depends(require_login)):
+    """Leerlingen, volg-sets en uitnodigingen op één pagina, in die volgorde (ontwerp E). Week-R per leerling is zijn eigen weekterugblik;
+    laatst gekeken komt uit user_visits en ontbreekt als hij nooit keek."""
+    _owner(user)
+    now = datetime.now(timezone.utc)
+    visits = repo.visit_stats(now)
+    sets = repo.list_follow_sets()
+    names = {s["id"]: s["name"] for s in sets}
+    students = []
+    for u in repo.list_users():
+        if u["id"] == user["id"]:
+            continue
+        students.append({"id": u["id"], "name": u["username"], "initials": beheer.initials(u["username"]), "set_id": u.get("follow_set_id"),
+                         "set": names.get(u.get("follow_set_id"), "Geen set"), "week_r": _week_review(u, now)["total_text"],
+                         "seen": beheer.seen_text((visits.get(u["id"]) or {}).get("last_at"), now)})
+    invites = [{**i, "line": beheer.invite_line(i, now), "usable": beheer.invite_usable(i, now)} for i in repo.list_invites()]
+    caps = {"structuur": config.STRUCTURE_MAX_ALERTS_PER_DAY, "zone_radar": config.ZONE_RADAR_MAX_PER_DAY,
+            "zone_sweep": config.ZONE_SWEEP_MAX_PER_DAY, "poc_radar": config.POC_RADAR_MAX_PER_DAY}
+    held = daycap.lines(repo.cap_hold_counts((now - daycap.WINDOW).isoformat()), caps)
+    return templates.TemplateResponse(request, "beheer.html", {
+        "user": user, "students": students, "sets": sets, "invites": invites, "open_invites": sum(1 for i in invites if i["usable"]), "held": held,
+        "invite_required": config.REGISTRATION_REQUIRES_INVITE, "fout": fout[:120]})
+
+
+@app.post("/beheer/sets")
+async def beheer_set_create(name: str = Form(""), coins: str = Form(""), user: dict = Depends(require_login)):
+    _owner(user)
+    name = name.strip()[:40]
+    if not name or repo.create_follow_set(name, beheer.parse_coins(coins)) is None:
+        return RedirectResponse("/beheer?fout=" + ("Geef de set een naam." if not name else "Er is al een set met deze naam.") + "#sets", status_code=303)
+    return RedirectResponse("/beheer#sets", status_code=303)
+
+
+@app.post("/beheer/sets/{set_id}/coins")
+async def beheer_set_coins(set_id: int, coins: str = Form(""), user: dict = Depends(require_login)):
+    _owner(user)
+    repo.update_follow_set(set_id, beheer.parse_coins(coins))
+    return RedirectResponse("/beheer#sets", status_code=303)
+
+
+@app.post("/beheer/sets/{set_id}/verwijder")
+async def beheer_set_delete(set_id: int, user: dict = Depends(require_login)):
+    _owner(user)
+    repo.delete_follow_set(set_id)
+    return RedirectResponse("/beheer#sets", status_code=303)
+
+
+@app.post("/beheer/leerling/{student_id}/set")
+async def beheer_student_set(student_id: int, set_id: str = Form(""), user: dict = Depends(require_login)):
+    _owner(user)
+    valid = {s["id"] for s in repo.list_follow_sets()}
+    chosen = int(set_id) if set_id.isdigit() and int(set_id) in valid else None
+    if repo.get_user(student_id):
+        repo.set_user_follow_set(student_id, chosen)
+    return RedirectResponse("/beheer#leerlingen", status_code=303)
+
+
+INVITE_MAX_USES = 100
+INVITE_MAX_DAYS = 90
+
+
+@app.post("/beheer/uitnodiging")
+async def beheer_invite_create(set_id: str = Form(""), uses: int = Form(1), days: int = Form(7), user: dict = Depends(require_login)):
+    _owner(user)
+    valid = {s["id"] for s in repo.list_follow_sets()}
+    chosen = int(set_id) if set_id.isdigit() and int(set_id) in valid else None
+    expires = (datetime.now(timezone.utc) + timedelta(days=max(1, min(days, INVITE_MAX_DAYS)))).isoformat()
+    for _ in range(10):         # een botsing met een bestaande code is zeldzaam; dan een nieuwe
+        if repo.create_invite(beheer.new_code(), chosen, max(1, min(uses, INVITE_MAX_USES)), expires):
+            break
+    return RedirectResponse("/beheer#uitnodigen", status_code=303)
+
+
+@app.post("/beheer/uitnodiging/{invite_id}/verwijder")
+async def beheer_invite_delete(invite_id: int, user: dict = Depends(require_login)):
+    _owner(user)
+    repo.delete_invite(invite_id)
+    return RedirectResponse("/beheer#uitnodigen", status_code=303)
+
+
+@app.get("/ceo")
+async def ceo_page(user: dict = Depends(require_login)):
+    """De CEO-pagina is weg (CEO 2026-11-03: "het grappen is nu over"). Oude links en bladwijzers komen bij Beheer of Kansen uit."""
+    return RedirectResponse("/beheer" if is_ceo(user) else "/smc", status_code=303)

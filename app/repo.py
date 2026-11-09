@@ -2,10 +2,13 @@
 signalen. Wordt gebruikt door de Discord bot, de verwerkingspijplijn en het
 webdashboard."""
 import json
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from app import config, db, risk
+from app import announce, candle_source, chain, config, db, risk
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -831,15 +834,16 @@ def list_coins() -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def coins_with_recent_signal(hours: int = 24) -> set[str]:
+def coins_with_recent_signal(hours: int = 24, exclude_types: tuple[str, ...] = ()) -> set[str]:
     """Coins met minstens één echt signaal in de laatste `hours` uur. Basis
     voor het activiteits-stipje in het coin-menu: welke coins net nog iets
     deden, in plaats van dat de lijst er overal even stil uitziet."""
     cutoff = (datetime.now(timezone.utc) - timedelta(hours=hours)).isoformat()
     with db.session() as conn:
         rows = conn.execute(
-            "SELECT DISTINCT coin FROM signals WHERE created_at >= ? AND is_practice = 0",
-            (cutoff,),
+            f"""SELECT DISTINCT coin FROM signals WHERE created_at >= ? AND is_practice = 0
+                AND trade_type NOT IN ({",".join("?" * len(exclude_types)) or "''"})""",
+            (cutoff, *exclude_types),
         ).fetchall()
         return {r["coin"] for r in rows}
 
@@ -892,24 +896,35 @@ def create_user(
         return row["id"]
 
 
-def register_user(username: str, password_hash: str) -> Optional[int]:
+def register_user(username: str, password_hash: str, invite_code: Optional[str] = None, now_iso: Optional[str] = None) -> Optional[int]:
     """Voor open registratie via /registreer. In tegenstelling tot
     create_user() faalt dit gewoon (geeft None) als de gebruikersnaam al
     bestaat, in plaats van het bestaande account te overschrijven. Portfolio
     en risicopercentage starten op 0 / de standaardwaarde, in te stellen na
     het inloggen. telegram_chat_id staat hier vast op NULL: die kolom is
-    een restant van de Telegram-bot (Taak 11), niet meer instelbaar."""
+    een restant van de Telegram-bot (Taak 11), niet meer instelbaar.
+
+    Met invite_code (fase 2): de code moet bruikbaar zijn op now_iso; in dezelfde transactie telt hij een gebruik en krijgt het account de
+    set van de code. Een bezette naam of een ongeldige code geeft None en kost geen gebruik."""
     with db.session() as conn:
         existing = conn.execute(
             "SELECT 1 FROM users WHERE username = ?", (username,)
         ).fetchone()
         if existing:
             return None
+        set_id = None
+        if invite_code is not None:
+            invite = conn.execute("SELECT * FROM invites WHERE code = ? AND uses < max_uses AND expires_at > ?",
+                                  (invite_code, now_iso or db.now_iso())).fetchone()
+            if not invite:
+                return None
+            conn.execute("UPDATE invites SET uses = uses + 1 WHERE id = ?", (invite["id"],))
+            set_id = invite["set_id"]
         cur = conn.execute(
             """INSERT INTO users
-               (username, password_hash, portfolio_eur, risk_percent, telegram_chat_id, created_at)
-               VALUES (?, ?, 0, ?, NULL, ?)""",
-            (username, password_hash, config.DEFAULT_RISK_PERCENT, db.now_iso()),
+               (username, password_hash, portfolio_eur, risk_percent, telegram_chat_id, created_at, follow_set_id)
+               VALUES (?, ?, 0, ?, NULL, ?, ?)""",
+            (username, password_hash, config.DEFAULT_RISK_PERCENT, db.now_iso(), set_id),
         )
         return cur.lastrowid
 
@@ -924,6 +939,28 @@ def get_user_by_username(username: str) -> Optional[dict]:
     with db.session() as conn:
         row = conn.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
         return dict(row) if row else None
+
+
+def record_visit(user_id: int, now: datetime) -> None:
+    stamp = now.astimezone(timezone.utc)
+    with db.session() as conn:
+        conn.execute(
+            "INSERT INTO user_visits (user_id, day, views, last_at) VALUES (?, ?, 1, ?) "
+            "ON CONFLICT(user_id, day) DO UPDATE SET views = views + 1, last_at = excluded.last_at",
+            (user_id, stamp.date().isoformat(), stamp.isoformat()),
+        )
+
+
+def visit_stats(now: datetime, days: int = 30) -> dict[int, dict]:
+    """Per gebruiker: paginaweergaven en actieve dagen in de laatste `days` dagen, en het laatste bezoek ooit."""
+    since = (now.astimezone(timezone.utc).date() - timedelta(days=days - 1)).isoformat()
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT user_id, SUM(CASE WHEN day >= ? THEN views ELSE 0 END) AS views, "
+            "SUM(CASE WHEN day >= ? THEN 1 ELSE 0 END) AS active_days, MAX(last_at) AS last_at "
+            "FROM user_visits GROUP BY user_id", (since, since),
+        ).fetchall()
+    return {r["user_id"]: {"views": r["views"] or 0, "active_days": r["active_days"] or 0, "last_at": r["last_at"]} for r in rows}
 
 
 def list_users() -> list[dict]:
@@ -948,6 +985,12 @@ def update_user_settings(
         )
 
 
+def set_risk_per_trade_eur(user_id: int, amount: Optional[float]) -> None:
+    """Het bedrag dat de gebruiker per trade riskeert, alleen om op de kaarten 'verlies bij de stop' in euro te tonen."""
+    with db.session() as conn:
+        conn.execute("UPDATE users SET risk_per_trade_eur = ? WHERE id = ?", (amount, user_id))
+
+
 def update_confirm_threshold(user_id: int, threshold_pct: float) -> None:
     """Zet confirm_threshold_set_at mee op het huidige moment: Task 9's
     onboarding-check leest dit veld om te weten of een gebruiker de drempel
@@ -964,29 +1007,65 @@ def update_confirm_threshold(user_id: int, threshold_pct: float) -> None:
 # Signalen: gedeelde technische toetsing, hetzelfde voor iedereen
 # ---------------------------------------------------------------------------
 
-def insert_signal(data: dict) -> int:
+def _candle_market(row: dict) -> str:
+    """De markt van de candles waarop deze rij berekend is: wat de aanroeper meegaf, anders wat dit proces voor de coin ophaalde."""
+    return row.get("candle_market") or candle_source.market_of(row["coin"])
+
+
+def insert_signal(data: dict, chain_it: bool = True) -> int:
+    """chain_it=False: geen schakel in de openbare ketting (/keten), voor de proefmotor die alleen de CEO ziet."""
+    with db.session() as conn:
+        return _insert_signal(conn, data, chain_it)
+
+
+def _insert_signal(conn, data: dict, chain_it: bool) -> int:
+    """Op een bestaande verbinding, zodat een aanroeper het signaal in zijn eigen transactie kan leggen."""
     fields = [
         "message_id", "coin", "direction", "category", "price", "rsi", "macd",
         "macd_signal", "volume_ratio", "ema9", "ema21", "atr", "atr_avg20", "adx",
         "technical_confirmed", "pass_pct", "hard_gates_ok", "confidence", "reason", "stop_loss", "take_profit",
         "context_note", "is_practice", "plain_explanation", "trade_type", "nearest_sr_zone_price",
         "suggested_entry_low", "suggested_entry_high", "pattern_name",
-        "sniper_entry_price", "sniper_reason",
+        "sniper_entry_price", "sniper_reason", "candle_market",
     ]
     values = [
         data.get("is_practice", 0) if f == "is_practice"
         else data.get("trade_type", "day_trading") if f == "trade_type"
+        else _candle_market(data) if f == "candle_market"
         else data.get(f)
         for f in fields
     ]
     placeholders = ", ".join("?" for _ in fields)
-    with db.session() as conn:
-        cur = conn.execute(
-            f"""INSERT INTO signals ({", ".join(fields)}, created_at)
-                VALUES ({placeholders}, ?)""",
-            (*values, db.now_iso()),
-        )
+    created_at = db.now_iso()
+    cur = conn.execute(
+        f"""INSERT INTO signals ({", ".join(fields)}, created_at)
+            VALUES ({placeholders}, ?)""",
+        (*values, created_at),
+    )
+    if not chain_it:
         return cur.lastrowid
+    # In dezelfde transactie als het signaal, zodat er nooit een signaal zonder schakel is. Een fout hier mag het melden niet blokkeren.
+    try:
+        signal = {**dict(zip(fields, values)), "id": cur.lastrowid, "created_at": created_at}
+        last = conn.execute("SELECT hash FROM signal_chain ORDER BY signal_id DESC LIMIT 1").fetchone()
+        prev = last["hash"] if last else None
+        body = chain.payload(signal)
+        conn.execute("INSERT INTO signal_chain (signal_id, prev, payload, hash) VALUES (?, ?, ?, ?)", (cur.lastrowid, prev, body, chain.link(prev, body)))
+    except Exception:
+        logger.exception("Schakel voor signaal %s niet vastgelegd", cur.lastrowid)
+    return cur.lastrowid
+
+
+def list_chain(limit: int = 500, newest_first: bool = False) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT signal_id, prev, payload, hash FROM signal_chain ORDER BY signal_id " + ("DESC" if newest_first else "ASC") + " LIMIT ?", (limit,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_chain_link(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT signal_id, prev, payload, hash FROM signal_chain WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
 
 
 def get_signal(signal_id: int) -> Optional[dict]:
@@ -1017,7 +1096,7 @@ def list_day_trading_signals_for_backtest(limit: int = 50) -> list[dict]:
         return [dict(r) for r in rows]
 
 
-def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
+def list_recent_signals(coin: str, limit: int = 3, exclude_types: tuple[str, ...] = ()) -> list[dict]:
     """Gedeelde, echte signalen voor deze coin, hetzelfde voor iedereen.
     Oefentrades zijn persoonlijk en horen hier niet tussen, anders lijkt
     een handmatige oefening net een echt signaal voor alle gebruikers.
@@ -1025,14 +1104,15 @@ def list_recent_signals(coin: str, limit: int = 3) -> list[dict]:
     signaal heeft geen message_id, zie app/market_scanner.py."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT s.*,
+            f"""SELECT s.*, (SELECT r_value FROM trade_results WHERE signal_id = s.id) AS ref_r,
                       COALESCE(mcr.message_summary, m.message_summary, 'Zelf gedetecteerd door HesPulse')
                           AS message_summary
                FROM signals s
                LEFT JOIN messages m ON m.id = s.message_id
                LEFT JOIN message_coin_results mcr ON mcr.message_id = s.message_id AND mcr.coin = s.coin
-               WHERE s.coin = ? AND s.is_practice = 0 ORDER BY s.created_at DESC LIMIT ?""",
-            (coin.upper(), limit),
+               WHERE s.coin = ? AND s.is_practice = 0 AND s.trade_type NOT IN ({",".join("?" * len(exclude_types)) or "''"})
+               ORDER BY s.created_at DESC LIMIT ?""",
+            (coin.upper(), *exclude_types, limit),
         ).fetchall()
         return [dict(r) for r in rows]
 
@@ -1087,6 +1167,10 @@ def find_open_signal(coin: str, direction: str) -> Optional[dict]:
         if not row:
             return None
         signal = dict(row)
+        # Een plan met een uitkomst is af: een nieuw bericht maakt dan een vers signaal, anders overschreef update_signal de niveaus van een
+        # plan dat Bewijs al als doel of stop telt (externe review 2026-10-31).
+        if signal.get("auto_outcome") is not None:
+            return None
         still_open = conn.execute(
             """SELECT COUNT(*) FROM journal_entries
                WHERE signal_id = ? AND exit_price IS NULL AND status != 'genegeerd'""",
@@ -1125,7 +1209,7 @@ def update_signal(signal_id: int, data: dict) -> None:
             f"""UPDATE signals SET {", ".join(f"{f} = ?" for f in fields)},
                 sniper_entry_price = COALESCE(?, sniper_entry_price),
                 sniper_reason = COALESCE(?, sniper_reason)
-                WHERE id = ?""",
+                WHERE id = ? AND auto_outcome IS NULL""",
             (*values, data.get("sniper_entry_price"), data.get("sniper_reason"), signal_id),
         )
 
@@ -1156,6 +1240,7 @@ _JOURNAL_SELECT = """
         s.confidence AS confidence, s.technical_confirmed AS technical_confirmed,
         s.pass_pct AS pass_pct, s.hard_gates_ok AS hard_gates_ok,
         s.auto_outcome AS auto_outcome,
+        (SELECT r_value FROM trade_results WHERE signal_id = s.id) AS ref_r,
         s.rsi AS rsi, s.ema9 AS ema9, s.ema21 AS ema21,
         s.macd AS macd, s.macd_signal AS macd_signal, s.volume_ratio AS volume_ratio,
         s.atr_avg20 AS atr_avg20, s.adx AS adx,
@@ -1635,8 +1720,8 @@ def list_open_entries_with_levels() -> list[dict]:
     niet echt, daar hoort geen Telegram seintje bij."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT je.id AS id, je.user_id AS user_id, je.entry_price AS entry_price,
-                      s.coin AS coin, s.direction AS direction,
+            """SELECT je.id AS id, je.user_id AS user_id, je.entry_price AS entry_price, je.signal_id AS signal_id,
+                      s.coin AS coin, s.direction AS direction, s.trade_type AS trade_type, s.created_at AS signal_created_at,
                       COALESCE(je.stop_loss_override, s.stop_loss) AS stop_loss,
                       COALESCE(je.take_profit_override, s.take_profit) AS take_profit,
                       u.username AS username, u.telegram_chat_id AS telegram_chat_id,
@@ -1662,7 +1747,7 @@ def list_pending_entries_with_price() -> list[dict]:
     check, die voorrang krijgt op de andere twee triggers."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT je.id AS id, je.user_id AS user_id,
+            """SELECT je.id AS id, je.user_id AS user_id, je.signal_id AS signal_id,
                       s.coin AS coin, s.direction AS direction, s.price AS signal_price,
                       s.atr AS atr, s.confidence AS confidence, s.created_at AS signal_created_at,
                       s.message_id AS message_id,
@@ -1692,7 +1777,7 @@ def mark_level_alert_sent(entry_id: int) -> None:
         conn.execute("UPDATE journal_entries SET level_alert_sent = 1 WHERE id = ?", (entry_id,))
 
 
-def pending_directions_for_coin(coin: str) -> set[str]:
+def pending_directions_for_coin(coin: str, exclude_types: tuple[str, ...] = ()) -> set[str]:
     """Alle richtingen waarin deze coin nu nog minstens één niet-genomen,
     niet-genegeerd signaal heeft staan, over alle trade_types en
     gebruikers heen (dus ook swing, die auto_ignore_opposite_pending
@@ -1701,13 +1786,15 @@ def pending_directions_for_coin(coin: str) -> set[str]:
     stil te houden zolang er een tegenstrijdig signaal open staat, zonder
     een van beide signalen zelf aan te passen."""
     with db.session() as conn:
+        # Een signaal met een uitkomst is niet meer open, en exclude_types (de proef van de CEO) mag de meldingen van anderen niet stilhouden.
         rows = conn.execute(
-            """SELECT DISTINCT s.direction AS direction
+            f"""SELECT DISTINCT s.direction AS direction
                FROM journal_entries je
                JOIN signals s ON s.id = je.signal_id
                WHERE s.coin = ? AND je.entry_price IS NULL
-                     AND je.status != 'genegeerd' AND s.is_practice = 0""",
-            (coin.upper(),),
+                     AND je.status != 'genegeerd' AND s.is_practice = 0 AND s.auto_outcome IS NULL
+                     AND s.trade_type NOT IN ({",".join("?" * len(exclude_types)) or "''"})""",
+            (coin.upper(), *exclude_types),
         ).fetchall()
         return {r["direction"] for r in rows}
 
@@ -1720,7 +1807,7 @@ def list_unresolved_signals_with_levels() -> list[dict]:
     markeerde."""
     with db.session() as conn:
         rows = conn.execute(
-            """SELECT id, coin, direction, stop_loss, take_profit, created_at, nearest_sr_zone_price
+            """SELECT id, coin, direction, price, stop_loss, take_profit, created_at, nearest_sr_zone_price, trade_type
                FROM signals
                WHERE auto_outcome IS NULL
                  AND stop_loss IS NOT NULL
@@ -1730,11 +1817,107 @@ def list_unresolved_signals_with_levels() -> list[dict]:
         return [dict(row) for row in rows]
 
 
-def mark_signal_auto_outcome(signal_id: int, outcome: str, occurred_at: str) -> None:
+def record_push(user_id: int, coin: str, direction: str, at: str, counts: int = 1) -> None:
+    """counts 0: een coin die meeging in een bundel; de bundel telde al één keer in het dagbudget (push_policy.used)."""
+    with db.session() as conn:
+        conn.execute("INSERT INTO push_log (user_id, at, coin, direction, counts) VALUES (?, ?, ?, ?, ?)", (user_id, at, coin, direction, counts))
+        conn.execute("DELETE FROM push_log WHERE at < ?", ((datetime.fromisoformat(at) - timedelta(days=3)).isoformat(),))
+
+
+def record_push_attempt(user_id: int, kind: str, ref: str, ok: bool, error: Optional[str] = None) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT INTO push_attempts (user_id, kind, ref, attempted_at, ok, error) VALUES (?, ?, ?, ?, ?, ?)",
+                     (user_id, kind, ref, db.now_iso(), 1 if ok else 0, (error or "")[:500] or None))
+
+
+def list_push_attempts(kind: str, ref: str) -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM push_attempts WHERE kind = ? AND ref = ? ORDER BY id", (kind, ref)).fetchall()]
+
+
+def record_alert_timing(user_id: int, ref: str, ok: bool, timing: dict, sent_at: str) -> None:
+    with db.session() as conn:
+        conn.execute("""INSERT INTO alert_timing (user_id, trade_type, event, ref, candle_at, detected_at, sent_at, ok)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                     (user_id, timing.get("trade_type"), timing.get("event"), ref, timing["candle_at"], timing["detected_at"], sent_at, 1 if ok else 0))
+
+
+def list_alert_timings(since: Optional[str] = None) -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM alert_timing WHERE (? IS NULL OR sent_at >= ?) ORDER BY id", (since, since)).fetchall()]
+
+
+def count_failed_push_attempts(kind: str, ref: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM push_attempts WHERE kind = ? AND ref = ? AND ok = 0", (kind, ref)).fetchone()[0]
+
+
+def list_recent_pushes(user_id: int, since: str) -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT coin, direction, at, counts FROM push_log WHERE user_id = ? AND at >= ? ORDER BY at", (user_id, since)).fetchall()]
+
+
+def set_push_budget(user_id: int, budget: Optional[int]) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE users SET push_budget = ? WHERE id = ?", (budget, user_id))
+
+
+def set_push_pause(user_id: int, until: Optional[str]) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE users SET push_paused_until = ? WHERE id = ?", (until, user_id))
+
+
+def create_price_alert(user_id: int, coin: str, price: float, side: str, label: str, url: Optional[str]) -> int:
+    with db.session() as conn:
+        cur = conn.execute(
+            "INSERT INTO price_alerts (user_id, coin, price, side, label, url, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (user_id, coin, price, side, label, url, db.now_iso()))
+        return cur.lastrowid
+
+
+def list_price_alerts(user_id: int) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT * FROM price_alerts WHERE user_id = ? AND sent_at IS NULL ORDER BY created_at", (user_id,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def count_open_price_alerts(user_id: int) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) AS n FROM price_alerts WHERE user_id = ? AND sent_at IS NULL", (user_id,)).fetchone()["n"]
+
+
+def delete_price_alert(alert_id: int, user_id: int) -> bool:
+    with db.session() as conn:
+        return conn.execute("DELETE FROM price_alerts WHERE id = ? AND user_id = ? AND sent_at IS NULL", (alert_id, user_id)).rowcount == 1
+
+
+def list_open_price_alerts() -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM price_alerts WHERE sent_at IS NULL ORDER BY coin, created_at").fetchall()]
+
+
+def mark_price_alert_sent(alert_id: int) -> bool:
+    """True alleen voor de aanroep die hem markeert: twee overlappende runs van level_check sturen zo nooit twee keer."""
+    with db.session() as conn:
+        return conn.execute("UPDATE price_alerts SET sent_at = ? WHERE id = ? AND sent_at IS NULL", (db.now_iso(), alert_id)).rowcount == 1
+
+
+def list_expired_signals_with_levels() -> list[dict]:
+    """Signalen die als 'vervallen' zijn afgesloten, voor een herbeoordeling op candles sinds hun aanmaakmoment (scripts/backfill_signal_outcomes.py)."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, coin, direction, stop_loss, take_profit, created_at, nearest_sr_zone_price
+               FROM signals
+               WHERE auto_outcome = 'vervallen' AND stop_loss IS NOT NULL AND take_profit IS NOT NULL AND is_practice = 0"""
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+
+def mark_signal_auto_outcome(signal_id: int, outcome: str, occurred_at: str, note: Optional[str] = None) -> None:
     with db.session() as conn:
         conn.execute(
-            "UPDATE signals SET auto_outcome = ?, auto_outcome_at = ? WHERE id = ?",
-            (outcome, occurred_at, signal_id),
+            "UPDATE signals SET auto_outcome = ?, auto_outcome_at = ?, auto_outcome_note = ? WHERE id = ?",
+            (outcome, occurred_at, note, signal_id),
         )
 
 
@@ -2327,6 +2510,20 @@ def list_forming_smc_setups() -> list[dict]:
         return [dict(r) for r in rows]
 
 
+def mark_smc_zone_alert_sent(setup_id: int) -> None:
+    """zone_alert_at is het moment dat de koers in de zone kwam (Logboek en replay); een tweede aanroep houdt het eerste moment."""
+    with db.session() as conn:
+        conn.execute("UPDATE smc_setups SET zone_alert_sent = 1, zone_alert_at = COALESCE(zone_alert_at, ?) WHERE id = ?", (db.now_iso(), setup_id))
+
+
+def count_zone_alerted_setups() -> int:
+    """Bouwende setups waarvoor de zone-melding al uitging: het getal op het appicoon terwijl de app dicht is. Een setup die daarna weer
+    uit de zone liep telt hier nog mee; de pagina zet het exacte getal (radar.in_zone_count) zodra de app opent."""
+    with db.session() as conn:
+        return conn.execute(
+            "SELECT COUNT(*) AS n FROM smc_setups WHERE signal_id IS NULL AND invalidated_at IS NULL AND zone_alert_sent = 1").fetchone()["n"]
+
+
 def mark_smc_alert_sent(setup_id: int) -> None:
     with db.session() as conn:
         conn.execute("UPDATE smc_setups SET alert_sent = 1 WHERE id = ?", (setup_id,))
@@ -2457,3 +2654,1756 @@ def winrate_for_user(user_id: int) -> dict:
     resolved = wins + losses
     winrate_pct = (wins / resolved * 100) if resolved else None
     return {"total": total, "wins": wins, "losses": losses, "open": open_count, "winrate_pct": winrate_pct}
+
+
+def list_signals_for_quality_report(since_iso: Optional[str] = None) -> list[dict]:
+    """Alle echte signalen (geen oefentrades) met hun automatische uitkomst, voor het wekelijkse kwaliteitsrapport.
+    message_id is leeg voor signalen die de scan zelf vond."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT s.id, s.coin, s.direction, s.message_id, s.trade_type, s.auto_outcome, s.auto_outcome_at, s.price, s.stop_loss, s.take_profit,
+                      s.created_at, s.pass_pct, (sv.id IS NOT NULL) AS samenval, tr.r_value AS r_override, zr.ctx_funding,
+                      s.auto_outcome_note, tx.mae_r, tx.mfe_r, tx.timeframe AS mae_timeframe, s.candle_market, tf.funding_r,
+                      tf.status AS funding_status
+               FROM signals s LEFT JOIN samenvallen sv ON sv.smc_signal_id = s.id
+               LEFT JOIN trade_results tr ON tr.signal_id = s.id
+               LEFT JOIN trade_excursions tx ON tx.signal_id = s.id
+               LEFT JOIN trade_funding tf ON tf.signal_id = s.id
+               LEFT JOIN zone_radar_setups zr ON zr.signal_id = s.id
+               WHERE s.is_practice = 0 AND (? IS NULL OR s.created_at >= ?) ORDER BY s.created_at""",
+            (since_iso, since_iso),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_community_calls() -> list[dict]:
+    """Per (bericht, coin): coin, richting en categorie zoals de AI ze las, met het ontvangsttijdstip. Alleen
+    duidelijke berichten met richting long of short."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT m.id AS message_id, m.received_at AS at, COALESCE(r.coin, m.coin) AS coin,
+                      COALESCE(r.direction, m.direction) AS direction, COALESCE(r.category, m.category) AS category
+               FROM messages m LEFT JOIN message_coin_results r ON r.message_id = m.id
+               WHERE COALESCE(r.direction, m.direction) IN ('long', 'short') AND COALESCE(r.coin, m.coin) IS NOT NULL
+                 AND COALESCE(r.unclear, m.unclear) = 0
+               ORDER BY m.received_at"""
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_open_smc_signals(limit: int = 30, types: tuple[str, ...] = ("smc",)) -> list[dict]:
+    """Open SMC-signalen (nog geen take, stop of verloop), nieuwste eerst, voor de Trade Radar. Gedeeld over gebruikers:
+    signalen zijn globaal, alleen het journaal is per gebruiker. `types`: de Radar toont ook de gevulde zone-radar ('zone_radar')."""
+    marks = ", ".join("?" for _ in types)
+    with db.session() as conn:
+        rows = conn.execute(
+            f"""SELECT id, coin, direction, price, stop_loss, take_profit, created_at, trade_type FROM signals
+               WHERE trade_type IN ({marks}) AND is_practice = 0 AND auto_outcome IS NULL
+               ORDER BY created_at DESC LIMIT ?""", (*types, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_smc_signals_since(since_iso: str) -> list[dict]:
+    """SMC-signalen sinds een tijdstip, voor de samenval-detector."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, coin, direction, price, stop_loss, take_profit, created_at FROM signals
+               WHERE trade_type = 'smc' AND is_practice = 0 AND created_at >= ? ORDER BY created_at""", (since_iso,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def samenval_signal_ids() -> set[int]:
+    with db.session() as conn:
+        return {r["smc_signal_id"] for r in conn.execute("SELECT smc_signal_id FROM samenvallen")}
+
+
+def create_samenval(coin: str, direction: str, smc_signal_id: int, message_id: Optional[int]) -> bool:
+    """Legt een samenval vast. False als dit SMC-signaal er al een heeft: dan geen tweede melding."""
+    with db.session() as conn:
+        cur = conn.execute(
+            "INSERT OR IGNORE INTO samenvallen (coin, direction, smc_signal_id, message_id, created_at) VALUES (?, ?, ?, ?, ?)",
+            (coin, direction, smc_signal_id, message_id, db.now_iso()),
+        )
+        return cur.rowcount == 1
+
+
+def list_samenval_results(limit: int = 30) -> list[dict]:
+    """De laatste afgeronde samenvallen (take of stop geraakt) met de prijzen om R uit te rekenen."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT s.price, s.stop_loss, s.take_profit, s.auto_outcome, tr.r_value AS r_override FROM samenvallen sv
+               JOIN signals s ON s.id = sv.smc_signal_id
+               LEFT JOIN trade_results tr ON tr.signal_id = s.id
+               WHERE s.auto_outcome IN ('take_profit', 'stop_loss')
+               ORDER BY s.auto_outcome_at DESC LIMIT ?""", (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def add_liquidations(rows: list[tuple]) -> None:
+    """Telt (coin, bucket, long_usd, short_usd, n) op bij wat er al staat voor die coin en dat 5-minutenblok."""
+    if not rows:
+        return
+    with db.session() as conn:
+        conn.executemany(
+            """INSERT INTO liquidations_5m (coin, bucket, long_usd, short_usd, n) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(coin, bucket) DO UPDATE SET long_usd = long_usd + excluded.long_usd,
+               short_usd = short_usd + excluded.short_usd, n = n + excluded.n""", rows,
+        )
+
+
+def list_liquidations(coin: str, since_iso: str) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT bucket, long_usd, short_usd, n FROM liquidations_5m WHERE coin = ? AND bucket >= ? ORDER BY bucket",
+            (coin, since_iso),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def insert_market_script(coin: str, summary: str, bias: str, model: str, scenarios: list[dict], n_dropped: int,
+                         expires_at: str) -> int:
+    with db.session() as conn:
+        cur = conn.execute(
+            "INSERT INTO market_scripts (coin, created_at, summary, bias, model, n_dropped) VALUES (?, ?, ?, ?, ?, ?)",
+            (coin, db.now_iso(), summary, bias, model, n_dropped),
+        )
+        script_id = cur.lastrowid
+        for sc in scenarios:
+            conn.execute(
+                """INSERT INTO script_scenarios (script_id, coin, created_at, expires_at, direction, trigger_type,
+                   trigger_level, entry, stop_loss, take_profit, reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (script_id, coin, db.now_iso(), expires_at, sc["direction"], sc["trigger_type"], sc["trigger_level"],
+                 sc["entry"], sc["stop_loss"], sc["take_profit"], sc["reason"]),
+            )
+        # Een nieuw script vervangt de scenario's die nog wachten: ze zijn gebaseerd op een oudere stand van de markt.
+        conn.execute("UPDATE script_scenarios SET state = 'expired' WHERE coin = ? AND state = 'waiting' AND script_id < ?",
+                     (coin, script_id))
+        return script_id
+
+
+def list_waiting_scenarios() -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM script_scenarios WHERE state = 'waiting' ORDER BY id")]
+
+
+def expire_scenarios(now_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("UPDATE script_scenarios SET state = 'expired' WHERE state = 'waiting' AND expires_at < ?",
+                            (now_iso,)).rowcount
+
+
+def set_scenario_state(scenario_id: int, state: str, signal_id: Optional[int] = None) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE script_scenarios SET state = ?, signal_id = COALESCE(?, signal_id), "
+            "fired_at = CASE WHEN ? = 'fired' THEN ? ELSE fired_at END WHERE id = ?",
+            (state, signal_id, state, db.now_iso(), scenario_id),
+        )
+
+
+def count_script_alerts_since(since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM script_scenarios WHERE state = 'fired' AND fired_at >= ?",
+                            (since_iso,)).fetchone()[0]
+
+
+def list_script_results(limit: int = 30) -> list[dict]:
+    """De laatste afgeronde script-signalen (take of stop geraakt), voor de zelfuitschakeling."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT s.price, s.stop_loss, s.take_profit, s.auto_outcome, tr.r_value AS r_override FROM signals s
+               LEFT JOIN trade_results tr ON tr.signal_id = s.id
+               WHERE s.trade_type = 'script' AND s.auto_outcome IN ('take_profit', 'stop_loss')
+               ORDER BY s.auto_outcome_at DESC LIMIT ?""", (limit,),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def latest_scripts() -> list[dict]:
+    """Per coin het laatste script met zijn scenario's, voor de pagina Vandaag."""
+    with db.session() as conn:
+        scripts = conn.execute(
+            """SELECT * FROM market_scripts WHERE id IN (SELECT MAX(id) FROM market_scripts GROUP BY coin)
+               ORDER BY coin"""
+        ).fetchall()
+        out = []
+        for sc in scripts:
+            item = dict(sc)
+            item["scenarios"] = [dict(r) for r in conn.execute(
+                "SELECT * FROM script_scenarios WHERE script_id = ? ORDER BY id", (sc["id"],))]
+            out.append(item)
+        return out
+
+
+def list_recent_events(coin: Optional[str], since_iso: str, limit: int = 8) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT at, source, title, coins, direction, impact, summary FROM market_events
+               WHERE at >= ? AND (? IS NULL OR coins LIKE ? OR coins = 'ALLES') ORDER BY at DESC LIMIT ?""",
+            (since_iso, coin, f"%{coin}%" if coin else None, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def known_event_urls(urls: list[str]) -> set[str]:
+    if not urls:
+        return set()
+    with db.session() as conn:
+        marks = ",".join("?" for _ in urls)
+        return {r["url"] for r in conn.execute(f"SELECT url FROM market_events WHERE url IN ({marks})", urls)}
+
+
+def insert_market_event(at: str, source: str, title: str, url: str, coins: str, direction: str, impact: str, summary: str) -> bool:
+    with db.session() as conn:
+        return conn.execute(
+            """INSERT OR IGNORE INTO market_events (at, source, title, url, coins, direction, impact, summary)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (at, source, title, url, coins, direction, impact, summary),
+        ).rowcount == 1
+
+
+def latest_liquidation_bucket() -> Optional[str]:
+    """Het laatste 5-minutenblok met een gemeten liquidatie, of None als de verzamelaar nog niets heeft opgeleverd."""
+    with db.session() as conn:
+        row = conn.execute("SELECT MAX(bucket) AS b FROM liquidations_5m").fetchone()
+        return row["b"]
+
+
+def insert_structure_setup(row: dict) -> Optional[int]:
+    """None als dezelfde breuk al bestaat."""
+    with db.session() as conn:
+        cur = conn.execute(
+            """INSERT OR IGNORE INTO structure_setups (coin, direction, kind, break_at, p1_at, line_a, line_slope, atr, grade,
+                   reason, features, state, created_at, expires_at, plan, candle_market)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (row["coin"], row["direction"], row["kind"], row["break_at"], row["p1_at"], row["line_a"], row["line_slope"],
+             row["atr"], row["grade"], row["reason"], row["features"], row["state"], db.now_iso(), row["expires_at"], row.get("plan"),
+             _candle_market(row)),
+        )
+        return cur.lastrowid if cur.rowcount else None
+
+
+def list_structure_setups(states: tuple = ("waiting",), limit: int = 50) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        rows = conn.execute(f"SELECT * FROM structure_setups WHERE state IN ({marks}) ORDER BY id DESC LIMIT ?",
+                            (*states, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def get_structure_setup_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM structure_setups WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def set_structure_state(setup_id: int, state: str, signal_id: Optional[int] = None) -> None:
+    with db.session() as conn:
+        conn.execute(
+            "UPDATE structure_setups SET state = ?, signal_id = COALESCE(?, signal_id), "
+            "fired_at = CASE WHEN ? = 'fired' THEN ? ELSE fired_at END WHERE id = ?",
+            (state, signal_id, state, db.now_iso(), setup_id),
+        )
+
+
+def list_structure_report_rows(since_iso: str) -> list[dict]:
+    """Elke structuur-setup sinds een moment met de uitkomst van zijn signaal (scripts/structuur_check.py, app/structure_report.py)."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT ss.id, ss.coin, ss.direction, ss.kind, ss.state, ss.created_at, ss.signal_id, s.auto_outcome
+               FROM structure_setups ss LEFT JOIN signals s ON s.id = ss.signal_id WHERE ss.created_at >= ? ORDER BY ss.created_at""",
+            (since_iso,)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def count_structure_alerts_since(since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM structure_setups WHERE state NOT IN ('geen_plan', 'niet_gemeld', 'geen_oordeel', 'schaduw', 'oordeel') AND created_at >= ?",
+                            (since_iso,)).fetchone()[0]
+
+
+def list_type_results(trade_type: str, limit: int = 30) -> list[dict]:
+    """De laatste afgeronde signalen van één soort (take of stop geraakt), voor een zelfuitschakeling."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT s.price, s.stop_loss, s.take_profit, s.auto_outcome, tr.r_value AS r_override FROM signals s
+               LEFT JOIN trade_results tr ON tr.signal_id = s.id
+               WHERE s.trade_type = ? AND s.auto_outcome IN ('take_profit', 'stop_loss')
+               ORDER BY s.auto_outcome_at DESC LIMIT ?""", (trade_type, limit),
+        ).fetchall()
+        return [dict(r) for r in rows]
+
+
+def update_structure_judgement(setup_id: int, grade: Optional[str], reason: str, state: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE structure_setups SET grade = ?, reason = ?, state = ? WHERE id = ?", (grade, reason, state, setup_id))
+
+
+def expire_structure_setups(now_iso: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE structure_setups SET state = 'expired' WHERE state IN ('waiting', 'schaduw') AND expires_at < ?", (now_iso,))
+
+
+def alert_once(key: str) -> bool:
+    """True als deze sleutel nieuw was en nu is vastgelegd: de aanroeper mag dan melden."""
+    with db.session() as conn:
+        cur = conn.execute("INSERT OR IGNORE INTO sent_alerts (key, at) VALUES (?, ?)", (key, db.now_iso()))
+        return cur.rowcount > 0
+
+
+def notify_engine_disabled(name: str, detail: str) -> None:
+    """Een motor die zichzelf uitzet na een negatieve score mag dat niet stil doen: de beheerder ziet het op Meldingen."""
+    day = db.now_iso()[:10]
+    if alert_once(f"engine-off:{name}:{day}"):
+        create_notification(None, "engine", f"{name} staat uit", detail, "/bewijs")
+
+
+def update_structure_plan(setup_id: int, plan_json: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE structure_setups SET plan = ? WHERE id = ?", (plan_json, setup_id))
+
+
+def beat(name: str, detail: str = "") -> None:
+    with db.session() as conn:
+        conn.execute(
+            "INSERT INTO engine_heartbeat (name, at, detail) VALUES (?, ?, ?) "
+            "ON CONFLICT(name) DO UPDATE SET at = excluded.at, detail = excluded.detail", (name, db.now_iso(), detail))
+
+
+def record_cap_hold(engine: str, key: str, at_iso: str) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT INTO cap_holds (engine, key, at) VALUES (?, ?, ?) ON CONFLICT(engine, key) DO UPDATE SET at = excluded.at",
+                     (engine, key, at_iso))
+
+
+def count_cap_holds(engine: str, since_iso: str) -> int:
+    return cap_hold_counts(since_iso).get(engine, 0)
+
+
+def cap_hold_counts(since_iso: str) -> dict:
+    with db.session() as conn:
+        return {r["engine"]: r["n"] for r in conn.execute(
+            "SELECT engine, COUNT(*) AS n FROM cap_holds WHERE at >= ? GROUP BY engine", (since_iso,)).fetchall()}
+
+
+def has_zone_radar_setup(coin: str, zone_key: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("SELECT 1 FROM zone_radar_setups WHERE coin = ? AND zone_key = ?", (coin, zone_key)).fetchone() is not None
+
+
+def has_poc_radar_setup(coin: str, level_key: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("SELECT 1 FROM poc_radar_setups WHERE coin = ? AND level_key = ?", (coin, level_key)).fetchone() is not None
+
+
+def get_beat(name: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM engine_heartbeat WHERE name = ?", (name,)).fetchone()
+        return dict(row) if row else None
+
+
+def structure_counts(since_iso: str) -> dict:
+    """Aantal gevonden breuken sinds een tijdstip, per uitkomst van de beoordeling."""
+    with db.session() as conn:
+        rows = conn.execute(
+            "SELECT state, grade, COUNT(*) AS n FROM structure_setups WHERE created_at >= ? GROUP BY state, grade", (since_iso,)).fetchall()
+    out = {"total": 0, "goedgekeurd": 0, "afgekeurd": 0, "geen_plan": 0, "geen_oordeel": 0, "met_plan": 0}
+    for r in rows:
+        out["total"] += r["n"]
+        if r["state"] != "geen_plan":
+            out["met_plan"] += r["n"]
+        if r["state"] == "geen_plan":
+            out["geen_plan"] += r["n"]
+        elif r["state"] == "geen_oordeel":
+            out["geen_oordeel"] += r["n"]
+        elif r["grade"] in ("A", "B") and r["state"] != "niet_gemeld":
+            out["goedgekeurd"] += r["n"]
+        else:
+            out["afgekeurd"] += r["n"]
+    return out
+
+
+def insert_trend_entry(key: str, coin: str, direction: str, at: str) -> bool:
+    """True als deze instap nieuw was."""
+    with db.session() as conn:
+        cur = conn.execute("INSERT OR IGNORE INTO trend_entries (key, coin, direction, at) VALUES (?, ?, ?, ?)", (key, coin, direction, at))
+        return cur.rowcount > 0
+
+
+def set_trend_signal(key: str, signal_id: int) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE trend_entries SET signal_id = ? WHERE key = ?", (signal_id, key))
+
+
+def count_trend_since(since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM trend_entries WHERE signal_id IS NOT NULL AND at >= ?", (since_iso,)).fetchone()[0]
+
+
+def list_recent_signals_of_type(trade_type: str, since_iso: str, limit: int = 30) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT id, coin, direction, price, stop_loss, take_profit, created_at, auto_outcome, trade_type, is_practice FROM signals
+               WHERE trade_type = ? AND created_at >= ? ORDER BY id DESC LIMIT ?""", (trade_type, since_iso, limit)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_trade_result(signal_id: int, r_value: float, closed_at: str) -> None:
+    """De echte R van een meelopende stop; Bewijs gebruikt die in plaats van de vaste formule (track_record.signal_r)."""
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO trade_results (signal_id, r_value, closed_at) VALUES (?, ?, ?)
+               ON CONFLICT(signal_id) DO UPDATE SET r_value = excluded.r_value, closed_at = excluded.closed_at""",
+            (signal_id, r_value, closed_at))
+
+
+def set_trade_excursion(signal_id: int, mae_r: Optional[float], mfe_r: Optional[float], timeframe: Optional[str]) -> None:
+    """MAE en MFE van een afgeronde trade (app/excursion.py); een tweede meting van hetzelfde signaal vervangt de eerste. Leeg met timeframe
+    'onbekend': niet te meten (app/outcome_measure.py)."""
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO trade_excursions (signal_id, mae_r, mfe_r, timeframe, measured_at) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(signal_id) DO UPDATE SET mae_r = excluded.mae_r, mfe_r = excluded.mfe_r, timeframe = excluded.timeframe,
+               measured_at = excluded.measured_at""",
+            (signal_id, mae_r, mfe_r, timeframe, db.now_iso()))
+
+
+def get_trade_excursion(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM trade_excursions WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def reference_exits() -> dict[int, str]:
+    """Per signaal zonder doel het moment van de referentie-uitgang (openmoment van de 15m-candle), uit de tabellen van de drie motoren die hun
+    uitkomst zelf zetten. Voor funding_check en mae_check --opnieuw."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT signal_id, ref_closed_at FROM range_sweep_trades WHERE ref_closed_at IS NOT NULL
+               UNION ALL SELECT signal_id, ref_closed_at FROM zone_sweep_trades WHERE ref_closed_at IS NOT NULL
+               UNION ALL SELECT signal_id, ref_closed_at FROM poc_radar_trades WHERE ref_closed_at IS NOT NULL""").fetchall()
+        return {r["signal_id"]: r["ref_closed_at"] for r in rows}
+
+
+def set_trade_funding(signal_id: int, funding_r: Optional[float], funding_pct: Optional[float], events: Optional[int], status: str,
+                      start_at: str, end_at: str) -> None:
+    """Funding van een afgeronde trade (app/funding.py); een nieuwe meting (funding_check --opslaan) vervangt de oude."""
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO trade_funding (signal_id, funding_r, funding_pct, events, status, start_at, end_at, measured_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+               ON CONFLICT(signal_id) DO UPDATE SET funding_r = excluded.funding_r, funding_pct = excluded.funding_pct, events = excluded.events,
+               status = excluded.status, start_at = excluded.start_at, end_at = excluded.end_at, measured_at = excluded.measured_at""",
+            (signal_id, funding_r, funding_pct, events, status, start_at, end_at, db.now_iso()))
+
+
+def get_trade_funding(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM trade_funding WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def set_rule_lab(rule: str, passes: bool, summary: dict, now: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO rule_status (rule, lab_passes, lab_json, lab_at) VALUES (?, ?, ?, ?)
+               ON CONFLICT(rule) DO UPDATE SET lab_passes = excluded.lab_passes, lab_json = excluded.lab_json, lab_at = excluded.lab_at""",
+            (rule, 1 if passes else 0, json.dumps(summary, default=lambda o: o.item() if hasattr(o, "item") else float(o)), now))
+
+
+def _rule_lab_row(row) -> dict:
+    return {"rule": row["rule"], "lab_passes": bool(row["lab_passes"]),
+            "summary": json.loads(row["lab_json"]) if row["lab_json"] else {}, "lab_at": row["lab_at"]}
+
+
+def get_rule_lab(rule: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT rule, lab_passes, lab_json, lab_at FROM rule_status WHERE rule = ?", (rule,)).fetchone()
+        return _rule_lab_row(row) if row else None
+
+
+def list_rule_labs() -> list[dict]:
+    with db.session() as conn:
+        return [_rule_lab_row(r) for r in conn.execute("SELECT rule, lab_passes, lab_json, lab_at FROM rule_status ORDER BY rule").fetchall()]
+
+
+def get_ceo_user() -> Optional[dict]:
+    """De enige CEO: CEO_USERNAME, anders de eerst aangemaakte gebruiker. Alle anderen zijn leerlingen."""
+    if config.CEO_USERNAME:
+        found = get_user_by_username(config.CEO_USERNAME)
+        if found:
+            return found
+    users = list_users()
+    return users[0] if users else None
+
+
+def list_ceo_user_ids() -> list[int]:
+    ceo = get_ceo_user()
+    return [ceo["id"]] if ceo else []
+
+
+def insert_rule_trade(signal_id: int, rule: str, coin: str, entered_at: str, initial_stop: float, atr: float, checked_until: str) -> None:
+    with db.session() as conn:
+        conn.execute("""INSERT INTO rule_trades (signal_id, rule, coin, entered_at, initial_stop, current_stop, atr, checked_until)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""", (signal_id, rule, coin, entered_at, initial_stop, initial_stop, atr, checked_until))
+
+
+def rule_trade_exists(rule: str, coin: str, entered_at: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("SELECT 1 FROM rule_trades WHERE rule = ? AND coin = ? AND entered_at = ?", (rule, coin, entered_at)).fetchone() is not None
+
+
+def list_open_rule_trades(rule: str, coin: Optional[str] = None) -> list[dict]:
+    """Open is: het signaal heeft nog geen uitkomst."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT rt.signal_id, rt.rule, rt.coin, rt.entered_at, rt.initial_stop, rt.current_stop, rt.atr, rt.checked_until, s.direction, s.price, s.created_at
+               FROM rule_trades rt JOIN signals s ON s.id = rt.signal_id
+               WHERE rt.rule = ? AND (? IS NULL OR rt.coin = ?) AND s.auto_outcome IS NULL ORDER BY rt.signal_id""",
+            (rule, coin, coin)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_rule_progress(signal_id: int, stop: float, checked_until: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE rule_trades SET current_stop = ?, checked_until = ? WHERE signal_id = ?", (stop, checked_until, signal_id))
+
+
+def get_trade_result(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT signal_id, r_value, closed_at FROM trade_results WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def upsert_range_watch(row: dict) -> tuple[int, bool]:
+    """(id, nieuw). Bestaat de range al (zelfde coin, timeframe en eerste zwaaipunt), dan schuiven alleen de randen en de ATR bij, en alleen zolang hij
+    actief is: een geëindigde range komt nooit terug, anders meldt een volgende cyclus hem opnieuw."""
+    with db.session() as conn:
+        cur = conn.execute("""INSERT OR IGNORE INTO range_watches (coin, tf, range_high, range_low, first_at, found_at, atr)
+                              VALUES (:coin, :tf, :range_high, :range_low, :first_at, :found_at, :atr)""", row)
+        if cur.rowcount:
+            return cur.lastrowid, True
+        conn.execute("""UPDATE range_watches SET range_high = :range_high, range_low = :range_low, atr = :atr
+                        WHERE coin = :coin AND tf = :tf AND first_at = :first_at AND state = 'actief'""", row)
+        rid = conn.execute("SELECT id FROM range_watches WHERE coin = ? AND tf = ? AND first_at = ?", (row["coin"], row["tf"], row["first_at"])).fetchone()["id"]
+        return rid, False
+
+
+def list_range_watches(states: tuple[str, ...] = ("actief",)) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"SELECT * FROM range_watches WHERE state IN ({marks}) ORDER BY id", states).fetchall()]
+
+
+def set_range_watch_state(watch_id: int, state: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE range_watches SET state = ?, ended_at = CASE WHEN ? = 'actief' THEN NULL ELSE COALESCE(ended_at, ?) END WHERE id = ?",
+                     (state, state, db.now_iso(), watch_id))
+
+
+def mark_range_watch_edge(watch_id: int, edge: str) -> bool:
+    """Eén waarschuwing per rand: markeer vóór het versturen, zoals price_alerts, zodat een herstart niet dubbel meldt."""
+    col = {"high": "edge_high_at", "low": "edge_low_at"}[edge]
+    with db.session() as conn:
+        return conn.execute(f"UPDATE range_watches SET {col} = ? WHERE id = ? AND {col} IS NULL", (db.now_iso(), watch_id)).rowcount == 1
+
+
+def log_range_watch_push(user_id: int, watch_id: int, kind: str, at: str, pushed: bool) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT INTO range_watch_log (user_id, watch_id, kind, at, pushed) VALUES (?, ?, ?, ?, ?)", (user_id, watch_id, kind, at, 1 if pushed else 0))
+        conn.execute("DELETE FROM range_watch_log WHERE at < ?", ((datetime.fromisoformat(at) - timedelta(days=3)).isoformat(),))
+
+
+def count_range_watch_pushes(user_id: int, since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) FROM range_watch_log WHERE user_id = ? AND pushed = 1 AND at >= ?", (user_id, since_iso)).fetchone()[0]
+
+
+_SETUP_COLS = ("coin", "direction", "variant", "family", "stop_name", "range_tf", "range_high", "range_low", "range_first_at", "zone_low", "zone_high",
+               "zone_at", "sweep_at", "extreme", "placed_at", "legs", "stop", "atr_t", "score", "grade", "reason", "features", "liq_json", "expires_at", "plan",
+               "candle_market")
+
+
+def insert_range_sweep_setup(row: dict) -> Optional[int]:
+    """None als dezelfde setup al bestaat: de motor draait elke cyclus over dezelfde candles en mag er niet twee van maken."""
+    with db.session() as conn:
+        cur = conn.execute(f"INSERT OR IGNORE INTO range_sweep_setups ({', '.join(_SETUP_COLS)}) VALUES ({', '.join(':' + c for c in _SETUP_COLS)})",
+                           {c: _candle_market(row) if c == "candle_market" else row[c] for c in _SETUP_COLS})
+        return cur.lastrowid if cur.rowcount else None
+
+
+def mark_range_sweep_push_sent(setup_id: int) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE range_sweep_setups SET push_sent = 1 WHERE id = ?", (setup_id,))
+
+
+def list_range_sweep_setups(states: tuple[str, ...], since_iso: Optional[str] = None) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        rows = conn.execute(f"SELECT * FROM range_sweep_setups WHERE state IN ({marks}) AND (? IS NULL OR placed_at >= ?) ORDER BY id", (*states, since_iso, since_iso)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_range_sweep_setup_state(setup_id: int, state: str, signal_id: Optional[int] = None) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE range_sweep_setups SET state = ?, signal_id = COALESCE(?, signal_id) WHERE id = ?", (state, signal_id, setup_id))
+
+
+def insert_range_sweep_trade(signal_id: int, setup_id: int, legs_filled_json: str, entry: float, stop: float, filled_at: str) -> None:
+    """De referentie-uitgang begint op de echte stop en de instap; checked_until op het vulmoment, zodat de eerste 15m-candle na de vulling de eerste is
+    die de meting verwerkt."""
+    with db.session() as conn:
+        conn.execute("""INSERT INTO range_sweep_trades (signal_id, setup_id, legs_filled, entry, stop, filled_at, checked_until, ref_stop, ref_extreme)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", (signal_id, setup_id, legs_filled_json, entry, stop, filled_at, filled_at, stop, entry))
+
+
+def _journal_in(conn, signal_id: int, user_id: int) -> None:
+    conn.execute("INSERT INTO journal_entries (signal_id, user_id, risk_eur, created_at) VALUES (?, ?, NULL, ?)", (signal_id, user_id, db.now_iso()))
+
+
+def fill_range_sweep_setup(setup_id: int, signal: dict, legs_filled_json: str, entry: float, stop: float, filled_at: str, checked_until: str,
+                           user_ids: list[int]) -> Optional[int]:
+    """Alles van een vulling in een transactie: de staat, het signaal (buiten de openbare ketting), de trade en het dagboek. De staatswissel komt
+    eerst en geldt alleen vanuit waiting of niet_gemeld: een tweede cyclus of een crash halverwege geeft nooit twee signalen of een gevulde setup
+    zonder trade. None als de setup al gevuld of vervallen was."""
+    with db.session() as conn:
+        if conn.execute("UPDATE range_sweep_setups SET state = 'filled' WHERE id = ? AND state IN ('waiting', 'niet_gemeld')", (setup_id,)).rowcount != 1:
+            return None
+        signal_id = _insert_signal(conn, signal, False)
+        conn.execute("UPDATE range_sweep_setups SET signal_id = ? WHERE id = ?", (signal_id, setup_id))
+        conn.execute("""INSERT INTO range_sweep_trades (signal_id, setup_id, legs_filled, entry, stop, filled_at, checked_until, ref_stop, ref_extreme)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""", (signal_id, setup_id, legs_filled_json, entry, stop, filled_at, checked_until, stop, entry))
+        for uid in user_ids:
+            _journal_in(conn, signal_id, uid)
+        return signal_id
+
+
+_TRADE_FIELDS = frozenset({"legs_filled", "entry", "stop", "checked_until", "mae_r", "mfe_r", "reached_1r_at", "reached_2r_at", "reached_3r_at",
+                           "reached_4r_at", "reached_5r_at", "reached_6r_at", "stop_hit_at", "ref_stop", "ref_extreme", "ref_r", "ref_closed_at", "closed_at"})
+
+
+def update_range_sweep_trade(signal_id: int, **fields) -> None:
+    unknown = set(fields) - _TRADE_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor range_sweep_trades: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE range_sweep_trades SET {', '.join(f + ' = ?' for f in fields)} WHERE signal_id = ?", (*fields.values(), signal_id))
+
+
+_TRADE_SELECT = """SELECT rt.*, s.coin, s.direction, s.price, s.created_at, s.auto_outcome, st.variant, st.family, st.stop_name, st.range_tf, st.grade, st.score
+                   FROM range_sweep_trades rt JOIN signals s ON s.id = rt.signal_id JOIN range_sweep_setups st ON st.id = rt.setup_id"""
+
+
+def list_open_range_sweep_trades() -> list[dict]:
+    """Open is: de meting is nog niet afgesloten (closed_at leeg). Voor de motor, niet voor het signaal: een signaal kan zijn uitkomst eerder krijgen."""
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"{_TRADE_SELECT} WHERE rt.closed_at IS NULL ORDER BY rt.signal_id").fetchall()]
+
+
+def list_range_sweep_trades(limit: int) -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"{_TRADE_SELECT} ORDER BY rt.signal_id DESC LIMIT ?", (limit,)).fetchall()]
+
+
+def get_range_sweep_setup_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM range_sweep_setups WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_range_sweep_trade(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute(f"{_TRADE_SELECT} WHERE rt.signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def count_range_sweep_setups_by_state() -> dict[str, int]:
+    """Alle gemelde setups per staat, ook de niet gevulde: Bewijs laat zien hoeveel limieten verliepen of wegliepen, zodat een gevuld-percentage nooit stil ontbreekt."""
+    with db.session() as conn:
+        return {r["state"]: r["n"] for r in conn.execute("SELECT state, COUNT(*) AS n FROM range_sweep_setups GROUP BY state").fetchall()}
+
+
+def set_signal_price(signal_id: int, price: float) -> None:
+    """De instapprijs van een signaal dat eerst als wachtende limiet bestond en bij de vulling zijn gewogen instap krijgt."""
+    with db.session() as conn:
+        conn.execute("UPDATE signals SET price = ? WHERE id = ?", (price, signal_id))
+
+
+_ZONE_RADAR_COLS = ("coin", "direction", "tf", "zone_key", "zone_low", "zone_high", "stop_loss", "take_profit", "rr", "atr",
+                    "target_tf", "target_low", "target_high", "ctx_funding", "ctx_oi_change_24h", "ctx_spread", "poc_near", "obstacles",
+                    "candle_market")
+
+
+def _setup_value(row: dict, col: str):
+    """De obstakels van een kaart gaan als JSON-tekst de database in; een lijst kan SQLite niet bewaren."""
+    if col == "candle_market":
+        return _candle_market(row)
+    value = row.get(col)
+    return json.dumps(value) if col == "obstacles" and isinstance(value, list) else value
+
+
+def insert_zone_radar_setup(row: dict, created_at: str) -> Optional[int]:
+    """None als deze zone voor deze coin al eens een kaart had (UNIQUE coin, zone_key): wachtend, gevuld of vervallen, hij komt niet terug.
+    created_at met tijdzone (de klok van de motor): het age-filter leest het naïeve SQLite-tijdstip niet, en de vulling telt alleen candles daarna."""
+    with db.session() as conn:
+        cur = conn.execute(
+            f"INSERT OR IGNORE INTO zone_radar_setups ({', '.join(_ZONE_RADAR_COLS)}, created_at) VALUES ({', '.join('?' for _ in _ZONE_RADAR_COLS)}, ?)",
+            (*(_setup_value(row, c) for c in _ZONE_RADAR_COLS), created_at))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def list_zone_radar_setups(states: tuple[str, ...] = ("waiting",)) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"SELECT * FROM zone_radar_setups WHERE state IN ({marks}) ORDER BY id", states).fetchall()]
+
+
+def count_zone_radar_setups_since(since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) AS n FROM zone_radar_setups WHERE created_at >= ?", (since_iso,)).fetchone()["n"]
+
+
+def mark_zone_radar_alert_sent(setup_id: int) -> bool:
+    """True als deze aanroep de vlag zette: alleen die mag de melding van de nieuwe kaart sturen."""
+    with db.session() as conn:
+        return conn.execute("UPDATE zone_radar_setups SET alert_sent = 1 WHERE id = ? AND alert_sent = 0", (setup_id,)).rowcount == 1
+
+
+def end_zone_radar_setup(setup_id: int, state: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE zone_radar_setups SET state = ?, ended_at = ? WHERE id = ? AND state = 'waiting'", (state, db.now_iso(), setup_id))
+
+
+def fill_zone_radar_setup(setup_id: int, signal: dict) -> Optional[int]:
+    """Zet de kaart op gevuld en schrijft het signaal in één transactie. None als de kaart al niet meer wachtte: twee cycli die tegelijk dezelfde
+    vulling zien, maken zo nooit twee signalen of twee meldingen."""
+    with db.session() as conn:
+        if conn.execute("UPDATE zone_radar_setups SET state = 'filled', ended_at = ? WHERE id = ? AND state = 'waiting'",
+                        (db.now_iso(), setup_id)).rowcount != 1:
+            return None
+        signal_id = _insert_signal(conn, signal, True)
+        conn.execute("UPDATE zone_radar_setups SET signal_id = ? WHERE id = ?", (signal_id, setup_id))
+        return signal_id
+
+
+def get_zone_radar_setup_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM zone_radar_setups WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_zone_radar_setup(setup_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM zone_radar_setups WHERE id = ?", (setup_id,)).fetchone()
+        return dict(row) if row else None
+
+
+_ZONE_SWEEP_COLS = ("coin", "direction", "variant", "stop_name", "tf", "zone_key", "zone_low", "zone_high", "zone_at", "sweep_at", "extreme",
+                    "placed_at", "expires_at", "ref_price", "range_high", "range_low", "atr_t", "limit_price", "stop_loss", "take_profit", "rr",
+                    "target_tf", "target_low", "target_high", "prik_atr", "herstel_bars", "quiet", "poc_near", "candle_market")
+
+
+def insert_zone_sweep_setup(row: dict, created_at: str) -> Optional[int]:
+    """None als deze zone voor deze coin al een kaart had (UNIQUE coin, zone_key): een tweede cyclus of een herstart maakt er geen tweede."""
+    with db.session() as conn:
+        cur = conn.execute(
+            f"INSERT OR IGNORE INTO zone_sweep_setups ({', '.join(_ZONE_SWEEP_COLS)}, created_at) VALUES ({', '.join('?' for _ in _ZONE_SWEEP_COLS)}, ?)",
+            (*(row.get(c, 0) if c == "quiet" else _setup_value(row, c) for c in _ZONE_SWEEP_COLS), created_at))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def list_zone_sweep_setups(states: tuple[str, ...] = ("waiting",), since_iso: Optional[str] = None) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        rows = conn.execute(f"SELECT * FROM zone_sweep_setups WHERE state IN ({marks}) AND (? IS NULL OR placed_at >= ?) ORDER BY id",
+                            (*states, since_iso, since_iso)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def count_zone_sweep_announced_since(since_iso: str) -> int:
+    """Kaarten die gemeld mochten worden (niet stil) sinds `since_iso`, in welke staat ook: de melding ging al uit. Voor de dagcap."""
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) AS n FROM zone_sweep_setups WHERE placed_at >= ? AND quiet = 0", (since_iso,)).fetchone()["n"]
+
+
+def mark_zone_sweep_alert_sent(setup_id: int) -> bool:
+    """True als deze aanroep de vlag zette: alleen die mag de melding van de nieuwe kaart sturen."""
+    with db.session() as conn:
+        return conn.execute("UPDATE zone_sweep_setups SET alert_sent = 1 WHERE id = ? AND alert_sent = 0", (setup_id,)).rowcount == 1
+
+
+def end_zone_sweep_setup(setup_id: int, state: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("UPDATE zone_sweep_setups SET state = ?, ended_at = ? WHERE id = ? AND state = 'waiting'",
+                            (state, db.now_iso(), setup_id)).rowcount == 1
+
+
+def fill_zone_sweep_setup(setup_id: int, signal: dict, user_ids: list[int], measure: Optional[dict] = None) -> Optional[int]:
+    """Alles van een vulling in één transactie: de staat (alleen vanuit waiting), het signaal buiten de openbare ketting, het dagboek van de
+    kijkers en, bij een kaart zonder doel, de meetrij (measure: entry, stop, filled_at, checked_until). None als de kaart al niet meer wachtte."""
+    with db.session() as conn:
+        if conn.execute("UPDATE zone_sweep_setups SET state = 'filled', ended_at = ? WHERE id = ? AND state = 'waiting'",
+                        (db.now_iso(), setup_id)).rowcount != 1:
+            return None
+        signal_id = _insert_signal(conn, signal, False)
+        conn.execute("UPDATE zone_sweep_setups SET signal_id = ? WHERE id = ?", (signal_id, setup_id))
+        if measure is not None:
+            conn.execute("""INSERT INTO zone_sweep_trades (signal_id, setup_id, entry, stop, filled_at, checked_until, ref_stop, ref_extreme)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                         (signal_id, setup_id, measure["entry"], measure["stop"], measure["filled_at"], measure["checked_until"],
+                          measure["stop"], measure["entry"]))
+        for uid in user_ids:
+            _journal_in(conn, signal_id, uid)
+        return signal_id
+
+
+_ZONE_SWEEP_TRADE_FIELDS = _TRADE_FIELDS - {"legs_filled"}
+
+
+def update_zone_sweep_trade(signal_id: int, **fields) -> None:
+    unknown = set(fields) - _ZONE_SWEEP_TRADE_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor zone_sweep_trades: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE zone_sweep_trades SET {', '.join(f + ' = ?' for f in fields)} WHERE signal_id = ?", (*fields.values(), signal_id))
+
+
+_ZONE_SWEEP_TRADE_SELECT = """SELECT zt.*, s.coin, s.direction, s.price, s.created_at, s.auto_outcome, st.variant, st.tf
+                              FROM zone_sweep_trades zt JOIN signals s ON s.id = zt.signal_id JOIN zone_sweep_setups st ON st.id = zt.setup_id"""
+
+
+def list_open_zone_sweep_trades() -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"{_ZONE_SWEEP_TRADE_SELECT} WHERE zt.closed_at IS NULL ORDER BY zt.signal_id").fetchall()]
+
+
+def get_zone_sweep_trade(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute(f"{_ZONE_SWEEP_TRADE_SELECT} WHERE zt.signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_zone_sweep_setup_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM zone_sweep_setups WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_zone_sweep_setup(setup_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM zone_sweep_setups WHERE id = ?", (setup_id,)).fetchone()
+        return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# POC-radar (app/poc_radar_live.py): de POC-niveaus per coin, tot waar ze zijn bijgewerkt, de kaarten en de meting zonder doel.
+# ---------------------------------------------------------------------------
+
+def list_poc_levels(coin: str, since_iso: str) -> list[dict]:
+    """Niveaus van periodes die op of na `since_iso` begonnen, oudste eerst."""
+    with db.session() as conn:
+        rows = conn.execute("SELECT period, period_start, price, touched_at FROM poc_levels WHERE coin = ? AND period_start >= ? "
+                            "ORDER BY period_start, period", (coin, since_iso)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def add_poc_levels(coin: str, rows: list[dict]) -> None:
+    """rows: period, period_start, price, touched_at. Een periode die er al staat blijft zoals hij was: een gesloten periode verandert niet."""
+    if not rows:
+        return
+    with db.session() as conn:
+        conn.executemany("INSERT OR IGNORE INTO poc_levels (coin, period, period_start, price, touched_at, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                         [(coin, r["period"], r["period_start"], r["price"], r.get("touched_at"), db.now_iso()) for r in rows])
+
+
+def touch_poc_level(coin: str, period: str, period_start: str, touched_at: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE poc_levels SET touched_at = ? WHERE coin = ? AND period = ? AND period_start = ? AND touched_at IS NULL",
+                     (touched_at, coin, period, period_start))
+
+
+def get_poc_scan(coin: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM poc_scans WHERE coin = ?", (coin,)).fetchone()
+        return dict(row) if row else None
+
+
+def set_poc_scan(coin: str, checked_until: str, scanned_at: str) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT INTO poc_scans (coin, checked_until, scanned_at) VALUES (?, ?, ?) "
+                     "ON CONFLICT(coin) DO UPDATE SET checked_until = excluded.checked_until, scanned_at = excluded.scanned_at",
+                     (coin, checked_until, scanned_at))
+
+
+_POC_RADAR_COLS = ("coin", "direction", "period", "period_start", "level_key", "level", "limit_price", "stop_loss", "take_profit", "rr", "atr",
+                   "target_kind", "target_text", "target_tf", "target_low", "target_high", "expires_at", "obstacles",
+                   "candle_market")
+
+
+def insert_poc_radar_setup(row: dict, created_at: str) -> Optional[int]:
+    """None als dit niveau voor deze coin al een kaart had (UNIQUE coin, level_key): hij komt nooit terug."""
+    with db.session() as conn:
+        cur = conn.execute(
+            f"INSERT OR IGNORE INTO poc_radar_setups ({', '.join(_POC_RADAR_COLS)}, created_at) VALUES ({', '.join('?' for _ in _POC_RADAR_COLS)}, ?)",
+            (*(_setup_value(row, c) for c in _POC_RADAR_COLS), created_at))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def list_poc_radar_setups(states: tuple[str, ...] = ("waiting",)) -> list[dict]:
+    marks = ", ".join("?" for _ in states)
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"SELECT * FROM poc_radar_setups WHERE state IN ({marks}) ORDER BY id", states).fetchall()]
+
+
+def count_poc_radar_setups_since(since_iso: str) -> int:
+    with db.session() as conn:
+        return conn.execute("SELECT COUNT(*) AS n FROM poc_radar_setups WHERE created_at >= ?", (since_iso,)).fetchone()["n"]
+
+
+def mark_poc_radar_alert_sent(setup_id: int) -> bool:
+    """True als deze aanroep de vlag zette: alleen die mag de melding van de nieuwe kaart sturen."""
+    with db.session() as conn:
+        return conn.execute("UPDATE poc_radar_setups SET alert_sent = 1 WHERE id = ? AND alert_sent = 0", (setup_id,)).rowcount == 1
+
+
+def end_poc_radar_setup(setup_id: int, state: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("UPDATE poc_radar_setups SET state = ?, ended_at = ? WHERE id = ? AND state = 'waiting'",
+                            (state, db.now_iso(), setup_id)).rowcount == 1
+
+
+def fill_poc_radar_setup(setup_id: int, signal: dict, user_ids: list[int], measure: Optional[dict] = None) -> Optional[int]:
+    """Zoals fill_zone_sweep_setup: staat, signaal buiten de ketting, journaal van de kijkers en zonder doel de meetrij, in één transactie."""
+    with db.session() as conn:
+        if conn.execute("UPDATE poc_radar_setups SET state = 'filled', ended_at = ? WHERE id = ? AND state = 'waiting'",
+                        (db.now_iso(), setup_id)).rowcount != 1:
+            return None
+        signal_id = _insert_signal(conn, signal, False)
+        conn.execute("UPDATE poc_radar_setups SET signal_id = ? WHERE id = ?", (signal_id, setup_id))
+        if measure is not None:
+            conn.execute("""INSERT INTO poc_radar_trades (signal_id, setup_id, entry, stop, filled_at, checked_until, ref_stop, ref_extreme)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                         (signal_id, setup_id, measure["entry"], measure["stop"], measure["filled_at"], measure["checked_until"],
+                          measure["stop"], measure["entry"]))
+        for uid in user_ids:
+            _journal_in(conn, signal_id, uid)
+        return signal_id
+
+
+def update_poc_radar_trade(signal_id: int, **fields) -> None:
+    unknown = set(fields) - _ZONE_SWEEP_TRADE_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor poc_radar_trades: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE poc_radar_trades SET {', '.join(f + ' = ?' for f in fields)} WHERE signal_id = ?", (*fields.values(), signal_id))
+
+
+_POC_RADAR_TRADE_SELECT = """SELECT pt.*, s.coin, s.direction, s.price, s.created_at, s.auto_outcome, st.period
+                             FROM poc_radar_trades pt JOIN signals s ON s.id = pt.signal_id JOIN poc_radar_setups st ON st.id = pt.setup_id"""
+
+
+def list_open_poc_radar_trades() -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(f"{_POC_RADAR_TRADE_SELECT} WHERE pt.closed_at IS NULL ORDER BY pt.signal_id").fetchall()]
+
+
+def get_poc_radar_setup(setup_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM poc_radar_setups WHERE id = ?", (setup_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_poc_radar_setup_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM poc_radar_setups WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def add_market_context(rows: list[tuple]) -> None:
+    """rows: (coin, bron, metric, waarde, gemeten_op)."""
+    if not rows:
+        return
+    with db.session() as conn:
+        conn.executemany("INSERT INTO market_context (coin, bron, metric, waarde, gemeten_op) VALUES (?, ?, ?, ?, ?)", rows)
+
+
+def latest_market_context(coins) -> list[dict]:
+    """De nieuwste meting per (coin, bron, metric) voor deze coins ('markt' voor de marktbrede bronnen)."""
+    coins = list(coins)
+    if not coins:
+        return []
+    marks = ", ".join("?" for _ in coins)
+    with db.session() as conn:
+        rows = conn.execute(
+            f"""SELECT m.coin, m.bron, m.metric, m.waarde, m.gemeten_op FROM market_context m
+                JOIN (SELECT coin, bron, metric, MAX(gemeten_op) AS at FROM market_context WHERE coin IN ({marks}) GROUP BY coin, bron, metric) l
+                  ON l.coin = m.coin AND l.bron = m.bron AND l.metric = m.metric AND l.at = m.gemeten_op
+                GROUP BY m.coin, m.bron, m.metric""", coins).fetchall()
+        return [dict(r) for r in rows]
+
+
+def market_context_last_at(bron: str) -> Optional[str]:
+    with db.session() as conn:
+        return conn.execute("SELECT MAX(gemeten_op) AS at FROM market_context WHERE bron = ?", (bron,)).fetchone()["at"]
+
+
+def market_context_series(coin: str, bron: str, metric: str, since_iso: str) -> list[tuple[str, float]]:
+    with db.session() as conn:
+        return [(r["gemeten_op"], r["waarde"]) for r in conn.execute(
+            "SELECT gemeten_op, waarde FROM market_context WHERE coin = ? AND bron = ? AND metric = ? AND gemeten_op >= ? ORDER BY gemeten_op",
+            (coin, bron, metric, since_iso)).fetchall()]
+
+
+def prune_market_context(before_iso: str) -> None:
+    with db.session() as conn:
+        conn.execute("DELETE FROM market_context WHERE gemeten_op < ?", (before_iso,))
+
+
+# ---------------------------------------------------------------------------
+# Overslaan en de order-checklist (fase 2): altijd per gebruiker, elke query filtert op user_id
+# ---------------------------------------------------------------------------
+
+def record_plan_skip(user_id: int, plan_key: str, coin: Optional[str], direction: Optional[str], at: str) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT OR IGNORE INTO plan_skips (user_id, plan_key, coin, direction, skipped_at) VALUES (?, ?, ?, ?, ?)",
+                     (user_id, plan_key, coin, direction, at))
+
+
+def list_plan_skips(user_id: int, since_iso: Optional[str] = None) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT * FROM plan_skips WHERE user_id = ? AND (? IS NULL OR skipped_at >= ?) ORDER BY skipped_at",
+                            (user_id, since_iso, since_iso)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def open_checklist(user_id: int, plan_key: str, coin: Optional[str], direction: Optional[str], at: str) -> None:
+    with db.session() as conn:
+        conn.execute(
+            """INSERT INTO checklist_runs (user_id, plan_key, coin, direction, opened_at) VALUES (?, ?, ?, ?, ?)
+               ON CONFLICT(user_id, plan_key) DO UPDATE SET opened_at = excluded.opened_at WHERE checklist_runs.done_at IS NULL""",
+            (user_id, plan_key, coin, direction, at))
+
+
+def finish_checklist(user_id: int, plan_key: str, at: str) -> bool:
+    """True als deze aanroep de checklist afrondde; een tweede keer, of zonder openen, verandert niets."""
+    with db.session() as conn:
+        return conn.execute("UPDATE checklist_runs SET done_at = ? WHERE user_id = ? AND plan_key = ? AND done_at IS NULL",
+                            (at, user_id, plan_key)).rowcount == 1
+
+
+def list_checklist_runs(user_id: int, since_iso: Optional[str] = None) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT * FROM checklist_runs WHERE user_id = ? AND (? IS NULL OR opened_at >= ?) ORDER BY opened_at",
+                            (user_id, since_iso, since_iso)).fetchall()
+        return [dict(r) for r in rows]
+
+
+# Sleutel -> plan, per soort: zone:<id> (zone_radar_setups, in de zone komen is daar de vulling zelf), zsweep:<id> (zone_sweep_setups, idem),
+# setup:<id> (smc_setups, zone_alert_at) en structuur:<id> (structure_setups, fired_at is het raken van de limiet).
+_PLAN_SOURCES = {
+    "zone": "SELECT z.id, z.coin, z.direction, z.created_at, z.signal_id, s.created_at AS zone_at FROM zone_radar_setups z "
+            "LEFT JOIN signals s ON s.id = z.signal_id WHERE z.id IN ({marks})",
+    "zsweep": "SELECT z.id, z.coin, z.direction, z.created_at, z.signal_id, s.created_at AS zone_at FROM zone_sweep_setups z "
+              "LEFT JOIN signals s ON s.id = z.signal_id WHERE z.id IN ({marks})",
+    "poc": "SELECT z.id, z.coin, z.direction, z.created_at, z.signal_id, s.created_at AS zone_at FROM poc_radar_setups z "
+           "LEFT JOIN signals s ON s.id = z.signal_id WHERE z.id IN ({marks})",
+    "setup": "SELECT id, coin, direction, created_at, signal_id, zone_alert_at AS zone_at FROM smc_setups WHERE id IN ({marks})",
+    "structuur": "SELECT id, coin, direction, created_at, signal_id, fired_at AS zone_at FROM structure_setups WHERE id IN ({marks})",
+}
+
+
+def plans_for_keys(keys) -> dict[str, dict]:
+    ids: dict[str, list[int]] = {}
+    for key in set(keys):
+        kind, _, raw = key.partition(":")
+        if kind in _PLAN_SOURCES and raw.isdigit():
+            ids.setdefault(kind, []).append(int(raw))
+    out = {}
+    with db.session() as conn:
+        for kind, wanted in ids.items():
+            for r in conn.execute(_PLAN_SOURCES[kind].format(marks=", ".join("?" for _ in wanted)), wanted).fetchall():
+                out[f"{kind}:{r['id']}"] = {**dict(r), "key": f"{kind}:{r['id']}"}
+    return out
+
+
+def signals_by_ids(ids) -> dict[int, dict]:
+    """Signalen met hun uitkomst en de echte R van een meelopende stop (r_override, zoals track_record.signal_r leest). Geen oefentrades."""
+    wanted = sorted({i for i in ids if i is not None})
+    if not wanted:
+        return {}
+    with db.session() as conn:
+        rows = conn.execute(
+            f"""SELECT s.id, s.coin, s.direction, s.trade_type, s.price, s.stop_loss, s.take_profit, s.created_at, s.auto_outcome,
+                       s.auto_outcome_at, s.auto_outcome_note, s.is_practice, tr.r_value AS r_override
+                FROM signals s LEFT JOIN trade_results tr ON tr.signal_id = s.id
+                WHERE s.is_practice = 0 AND s.id IN ({", ".join("?" for _ in wanted)})""", wanted).fetchall()
+        return {r["id"]: dict(r) for r in rows}
+
+
+def list_plan_moments(since_iso: str, include_zone_sweep: bool = True, include_poc: bool = True) -> list[dict]:
+    """Wat de app zag: elk Radar-plan (SMC, zone-radar en, als de kijker ze mag zien, zone-sweep en POC-radar) dat sinds `since_iso` ontstond of
+    in de zone kwam, met beide momenten."""
+    extra = [table for table, on in (("zone_sweep_setups", include_zone_sweep), ("poc_radar_setups", include_poc)) if on]
+    more = "".join(f"""
+               UNION ALL
+               SELECT z.created_at, s.created_at AS zone_at FROM {table} z LEFT JOIN signals s ON s.id = z.signal_id
+               WHERE z.created_at >= ? OR s.created_at >= ?""" for table in extra)
+    with db.session() as conn:
+        rows = conn.execute(
+            f"""SELECT z.created_at, s.created_at AS zone_at FROM zone_radar_setups z LEFT JOIN signals s ON s.id = z.signal_id
+               WHERE z.created_at >= ? OR s.created_at >= ?
+               UNION ALL
+               SELECT created_at, zone_alert_at AS zone_at FROM smc_setups WHERE created_at >= ? OR zone_alert_at >= ?{more}""",
+            (since_iso,) * (4 + 2 * len(extra))).fetchall()
+        return [dict(r) for r in rows]
+
+
+def list_ended_cards(since_iso: str, include_zone_sweep: bool = True, include_poc: bool = True) -> list[dict]:
+    """Kaarten die sinds `since_iso` eindigden zonder vulling, met hun stand (app/end_reason.py zegt waarom): zone-radar, zone-sweep en POC-radar
+    met ended_at, en Structuur-plannen die verliepen of bij de vulling werden overgeslagen (op hun verloopmoment). Nieuwste eerst."""
+    tables = [("zone_radar", "zone_radar_setups")] + [(k, t) for k, t, on in (("zone_sweep", "zone_sweep_setups", include_zone_sweep),
+                                                                              ("poc_radar", "poc_radar_setups", include_poc)) if on]
+    parts = [f"""SELECT '{kind}' AS kind, id, coin, direction, state, COALESCE(ended_at, created_at) AS ended_at, created_at FROM {table}
+                 WHERE state NOT IN ('waiting', 'filled') AND COALESCE(ended_at, created_at) >= ?""" for kind, table in tables]
+    parts.append("""SELECT 'structuur' AS kind, id, coin, direction, state, CASE WHEN state = 'expired' THEN expires_at ELSE created_at END AS ended_at,
+                    created_at FROM structure_setups
+                    WHERE state IN ('expired', 'overgeslagen') AND CASE WHEN state = 'expired' THEN expires_at ELSE created_at END >= ?""")
+    with db.session() as conn:
+        rows = conn.execute(" UNION ALL ".join(parts) + " ORDER BY ended_at DESC", (since_iso,) * len(parts)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def plan_for_signal(signal_id: int) -> Optional[dict]:
+    """Het Radar- of Setups-plan waaruit dit signaal ontstond, in dezelfde vorm als plans_for_keys; None voor een signaal zonder plan."""
+    with db.session() as conn:
+        for kind, table in (("zone", "zone_radar_setups"), ("zsweep", "zone_sweep_setups"), ("poc", "poc_radar_setups"), ("setup", "smc_setups"),
+                            ("structuur", "structure_setups")):
+            row = conn.execute(f"SELECT id FROM {table} WHERE signal_id = ?", (signal_id,)).fetchone()
+            if row:
+                return plans_for_keys([f"{kind}:{row['id']}"]).get(f"{kind}:{row['id']}")
+    return None
+
+
+def get_checklist_run(user_id: int, plan_key: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM checklist_runs WHERE user_id = ? AND plan_key = ?", (user_id, plan_key)).fetchone()
+        return dict(row) if row else None
+
+
+# ---------------------------------------------------------------------------
+# Beheer (fase 2, R6): volg-sets en uitnodigingen. Alleen de eigenaar komt hier via /beheer.
+# ---------------------------------------------------------------------------
+
+def _set_row(row) -> dict:
+    d = dict(row)
+    d["coins"] = [c for c in (d.get("coins") or "").split(",") if c]
+    return d
+
+
+def create_follow_set(name: str, coins: list[str]) -> Optional[int]:
+    with db.session() as conn:
+        cur = conn.execute("INSERT OR IGNORE INTO follow_sets (name, coins, created_at) VALUES (?, ?, ?)", (name, ",".join(coins), db.now_iso()))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def update_follow_set(set_id: int, coins: list[str]) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE follow_sets SET coins = ? WHERE id = ?", (",".join(coins), set_id))
+
+
+def delete_follow_set(set_id: int) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE users SET follow_set_id = NULL WHERE follow_set_id = ?", (set_id,))
+        conn.execute("UPDATE invites SET set_id = NULL WHERE set_id = ?", (set_id,))
+        conn.execute("DELETE FROM follow_sets WHERE id = ?", (set_id,))
+
+
+def list_follow_sets() -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT f.*, (SELECT COUNT(*) FROM users u WHERE u.follow_set_id = f.id) AS members FROM follow_sets f ORDER BY f.name").fetchall()
+        return [_set_row(r) for r in rows]
+
+
+def set_user_follow_set(user_id: int, set_id: Optional[int]) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE users SET follow_set_id = ? WHERE id = ?", (set_id, user_id))
+
+
+def follow_set_coins(user_id: int) -> Optional[set]:
+    """De coins van de volg-set van deze gebruiker, of None zonder set (dan komt elke kans als push)."""
+    with db.session() as conn:
+        row = conn.execute("SELECT f.* FROM users u JOIN follow_sets f ON f.id = u.follow_set_id WHERE u.id = ?", (user_id,)).fetchone()
+        return set(_set_row(row)["coins"]) if row else None
+
+
+def create_invite(code: str, set_id: Optional[int], max_uses: int, expires_at: str) -> Optional[int]:
+    with db.session() as conn:
+        cur = conn.execute("INSERT OR IGNORE INTO invites (code, set_id, max_uses, expires_at, created_at) VALUES (?, ?, ?, ?, ?)",
+                           (code, set_id, max_uses, expires_at, db.now_iso()))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def get_invite(code: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM invites WHERE code = ?", (code,)).fetchone()
+        return dict(row) if row else None
+
+
+def list_invites() -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT i.*, f.name AS set_name FROM invites i LEFT JOIN follow_sets f ON f.id = i.set_id ORDER BY i.id DESC").fetchall()
+        return [dict(r) for r in rows]
+
+
+def delete_invite(invite_id: int) -> None:
+    with db.session() as conn:
+        conn.execute("DELETE FROM invites WHERE id = ?", (invite_id,))
+
+
+# ---------------------------------------------------------------------------
+# Aankondiging (app/announce.py)
+# ---------------------------------------------------------------------------
+
+ANNOUNCEMENT_SETTING_KEY = "announcement_at"
+
+
+def get_announcement_at() -> Optional[datetime]:
+    """Het moment uit de settings-tabel; staat het daar niet, dan de startwaarde uit .env. Een gewist moment is een lege waarde in de tabel,
+    zodat .env het daarna niet stilletjes terugzet."""
+    with db.session() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (ANNOUNCEMENT_SETTING_KEY,)).fetchone()
+    return announce.parse_moment(row["value"] if row else config.ANNOUNCEMENT_AT)
+
+
+def set_announcement_at(at: datetime) -> None:
+    db.set_setting(ANNOUNCEMENT_SETTING_KEY, at.astimezone(timezone.utc).isoformat())
+
+
+def clear_announcement_at() -> None:
+    db.set_setting(ANNOUNCEMENT_SETTING_KEY, "")
+
+
+# v2: de bevriezing begon opnieuw met instappunt K en de herstelde tijd van R (B-2026-11-03-10); v1 bleef in settings staan.
+MODEL_FREEZE_KEY = "model_freeze_at_v2"
+
+
+def model_freeze_at() -> Optional[datetime]:
+    """Het moment waarop de instapregels van het model bevroren werden (B-2026-11-03-09), of None als de motor nog niet met die code draaide."""
+    with db.session() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (MODEL_FREEZE_KEY,)).fetchone()
+    if not row or not row[0]:
+        return None
+    d = datetime.fromisoformat(row[0])
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def claim_flag(key: str) -> bool:
+    """True voor precies één aanroeper, ook als twee processen tegelijk claimen: de INSERT slaagt maar één keer (settings.key is uniek)."""
+    with db.session() as conn:
+        cur = conn.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO NOTHING", (key, db.now_iso()))
+        return cur.rowcount == 1
+
+
+def story_seen(user_id: int, version: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("SELECT 1 FROM user_flags WHERE user_id = ? AND flag = ?", (user_id, f"story:{version}")).fetchone() is not None
+
+
+def mark_story_seen(user_id: int, version: str) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT OR IGNORE INTO user_flags (user_id, flag, created_at) VALUES (?, ?, ?)", (user_id, f"story:{version}", db.now_iso()))
+
+
+def hide_kansen(user_id: int, keys: list[str], at: str) -> None:
+    """Verberg op Kansen: alleen voor deze gebruiker en alleen de weergave. Een tweede keer verbergen houdt het eerste moment."""
+    with db.session() as conn:
+        conn.executemany("INSERT OR IGNORE INTO kans_hidden (user_id, key, at) VALUES (?, ?, ?)", [(user_id, k, at) for k in keys])
+
+
+def show_kansen(user_id: int, keys: list[str]) -> None:
+    with db.session() as conn:
+        conn.executemany("DELETE FROM kans_hidden WHERE user_id = ? AND key = ?", [(user_id, k) for k in keys])
+
+
+def list_hidden_kansen(user_id: Optional[int]) -> set:
+    if not user_id:
+        return set()
+    with db.session() as conn:
+        return {r["key"] for r in conn.execute("SELECT key FROM kans_hidden WHERE user_id = ?", (user_id,)).fetchall()}
+
+
+# ---------------------------------------------------------------------------
+# Automatische verbeterlus: auto-missers, lekken en schaduwvarianten (app/auto_misser.py, app/leaks.py, app/shadow.py).
+# ---------------------------------------------------------------------------
+
+def auto_misser_seen_rows(coin: str, lo_iso: str, hi_iso: str) -> list[dict]:
+    """Kaarten en signalen van deze coin tussen lo en hi, als bron, richting en moment. Een Structuur-breuk zonder plan (geen_plan) is geen kaart:
+    die weigerde de motor zelf."""
+    parts = [("structuur", "SELECT direction, created_at FROM structure_setups WHERE coin = ? AND state != 'geen_plan' AND created_at BETWEEN ? AND ?"),
+             ("zone_radar", "SELECT direction, created_at FROM zone_radar_setups WHERE coin = ? AND created_at BETWEEN ? AND ?"),
+             ("zone_sweep", "SELECT direction, created_at FROM zone_sweep_setups WHERE coin = ? AND created_at BETWEEN ? AND ?"),
+             ("poc_radar", "SELECT direction, created_at FROM poc_radar_setups WHERE coin = ? AND created_at BETWEEN ? AND ?")]
+    out = []
+    with db.session() as conn:
+        for source, sql in parts:
+            out += [{"source": source, "direction": r["direction"], "at": r["created_at"]} for r in conn.execute(sql, (coin, lo_iso, hi_iso))]
+        # M4: een scenario van het model telt als gezien vanaf het vastleggen; de arm tegen de dagtrend apart.
+        out += [{"source": "hespulse_model_tegen" if str(r["range_id"]).startswith("tegen:") else "hespulse_model", "direction": r["direction"],
+                 "at": r["detected_at"]}
+                for r in conn.execute("SELECT range_id, direction, detected_at FROM model_scenarios WHERE coin = ? AND detected_at BETWEEN ? AND ?",
+                                      (coin, lo_iso, hi_iso))]
+        out += [{"source": f"signaal:{r['trade_type']}", "direction": r["direction"], "at": r["created_at"]}
+                for r in conn.execute("SELECT trade_type, direction, created_at FROM signals WHERE coin = ? AND is_practice = 0 AND created_at BETWEEN ? AND ?",
+                                      (coin, lo_iso, hi_iso))]
+    return out
+
+
+def save_auto_misser(row: dict, found_at: str) -> None:
+    with db.session() as conn:
+        conn.execute("""INSERT INTO auto_missers (coin, direction, begin_at, end_at, begin_price, end_price, size_atr, size_pct, seen_by, reasons, found_at)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(coin, direction, begin_at) DO UPDATE SET end_at = excluded.end_at, end_price = excluded.end_price,
+                          size_atr = excluded.size_atr, size_pct = excluded.size_pct, seen_by = excluded.seen_by, reasons = excluded.reasons,
+                          found_at = excluded.found_at""",
+                     (row["coin"], row["direction"], row["begin_at"], row["end_at"], row["begin_price"], row["end_price"], row["size_atr"],
+                      row["size_pct"], json.dumps(row.get("seen_by") or []), json.dumps(row.get("reasons") or {}), found_at))
+
+
+def list_auto_missers(since_iso: str) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute("SELECT * FROM auto_missers WHERE begin_at >= ? ORDER BY begin_at", (since_iso,)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["seen_by"], d["reasons"] = json.loads(d["seen_by"] or "[]"), json.loads(d["reasons"] or "{}")
+        out.append(d)
+    return out
+
+
+def leak_inputs(since_iso: str) -> dict:
+    """De invoer van app/leaks.py vanaf `since_iso`: kaarten van de vier focus-motoren (soort, stand, moment), signalen zoals Bewijs ze leest,
+    dagcap-houds, meldingsvertraging en auto-missers. Geen gebruikers: alert_timing zonder user_id."""
+    cards = []
+    with db.session() as conn:
+        for kind, table in (("zone_radar", "zone_radar_setups"), ("zone_sweep", "zone_sweep_setups"), ("poc_radar", "poc_radar_setups")):
+            cards += [{"kind": kind, "state": r["state"], "created_at": r["created_at"]}
+                      for r in conn.execute(f"SELECT state, created_at FROM {table} WHERE created_at >= ?", (since_iso,))]
+        cards += [{"kind": "structuur", "state": r["state"], "created_at": r["created_at"]}
+                  for r in conn.execute("SELECT state, created_at FROM structure_setups WHERE state != 'geen_plan' AND created_at >= ?", (since_iso,))]
+        holds = [dict(r) for r in conn.execute("SELECT engine, at FROM cap_holds WHERE at >= ?", (since_iso,))]
+        timings = [dict(r) for r in conn.execute("SELECT trade_type, event, candle_at, detected_at, sent_at, ok FROM alert_timing WHERE sent_at >= ?",
+                                                 (since_iso,))]
+    return {"cards": cards, "signals": list_signals_for_quality_report(since_iso), "cap_holds": holds, "timings": timings,
+            "missers": list_auto_missers(since_iso)}
+
+
+def insert_shadow_variant(variant_id: str, trade_type: str, description: str, reason: str, params_json: str, created_at: str) -> None:
+    with db.session() as conn:
+        conn.execute("""INSERT INTO shadow_variants (id, trade_type, description, reason, params, created_at) VALUES (?, ?, ?, ?, ?, ?)""",
+                     (variant_id, trade_type, description, reason, params_json, created_at))
+
+
+def get_shadow_variant(variant_id: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM shadow_variants WHERE id = ?", (variant_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def active_shadow(trade_type: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM shadow_variants WHERE trade_type = ? AND status = 'schaduw'", (trade_type,)).fetchone()
+        return dict(row) if row else None
+
+
+def list_shadow_variants(statuses: tuple = ("schaduw",)) -> list[dict]:
+    with db.session() as conn:
+        rows = conn.execute(f"SELECT * FROM shadow_variants WHERE status IN ({','.join('?' * len(statuses))}) ORDER BY created_at, id",
+                            tuple(statuses)).fetchall()
+        return [dict(r) for r in rows]
+
+
+def set_shadow_status(variant_id: str, status: str, at_iso: str, note: str) -> None:
+    with db.session() as conn:
+        conn.execute("UPDATE shadow_variants SET status = ?, decided_at = ?, decision_note = ? WHERE id = ?", (status, at_iso, note, variant_id))
+
+
+def insert_shadow_result(variant_id: str, arm: str, plan: dict, created_at: str) -> bool:
+    """Eén plan van een arm; hetzelfde plan (plan_key) in een volgende cyclus telt niet opnieuw. True als de rij nieuw is."""
+    with db.session() as conn:
+        cur = conn.execute("""INSERT OR IGNORE INTO shadow_results (variant_id, arm, plan_key, coin, direction, created_at, expires_at, limit_price,
+                              stop_loss, take_profit) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                           (variant_id, arm, plan["key"], plan["coin"], plan["direction"], created_at, plan["expires_at"], plan["limit"],
+                            plan["stop"], plan.get("take")))
+        return cur.rowcount > 0
+
+
+def list_shadow_results(variant_id: str) -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM shadow_results WHERE variant_id = ? ORDER BY id", (variant_id,)).fetchall()]
+
+
+def list_open_shadow_results() -> list[dict]:
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute("SELECT * FROM shadow_results WHERE state IN ('waiting', 'filled') ORDER BY id").fetchall()]
+
+
+def update_shadow_result(result_id: int, upd: dict) -> None:
+    with db.session() as conn:
+        conn.execute("""UPDATE shadow_results SET state = ?, filled_at = ?, outcome_at = ?, checked_until = ?, r_gross = ?, r_net = ? WHERE id = ?""",
+                     (upd["state"], upd["filled_at"], upd["outcome_at"], upd["checked_until"], upd["r_gross"], upd["r_net"], result_id))
+
+
+def list_engine_overrides(trade_type: str) -> dict:
+    with db.session() as conn:
+        return {r["param"]: r["value"] for r in conn.execute("SELECT param, value FROM engine_overrides WHERE trade_type = ?", (trade_type,))}
+
+
+def promote_shadow(variant_id: str, trade_type: str, params: dict, at_iso: str, note: str) -> None:
+    """Zet de parameters van de variant in de overlay en markeert hem gepromoveerd, in één transactie."""
+    with db.session() as conn:
+        for name, value in params.items():
+            conn.execute("""INSERT INTO engine_overrides (trade_type, param, value, variant_id, set_at) VALUES (?, ?, ?, ?, ?)
+                            ON CONFLICT(trade_type, param) DO UPDATE SET value = excluded.value, variant_id = excluded.variant_id, set_at = excluded.set_at""",
+                         (trade_type, name, float(value), variant_id, at_iso))
+        conn.execute("UPDATE shadow_variants SET status = 'gepromoveerd', decided_at = ?, decision_note = ? WHERE id = ?", (at_iso, note, variant_id))
+
+
+def revert_shadow(variant_id: str, at_iso: str, note: str) -> int:
+    """Haalt de overlay van deze variant weg (alleen zijn eigen rijen) en markeert hem afgevallen. Geeft het aantal weggehaalde parameters."""
+    with db.session() as conn:
+        n = conn.execute("DELETE FROM engine_overrides WHERE variant_id = ?", (variant_id,)).rowcount
+        conn.execute("UPDATE shadow_variants SET status = 'afgevallen', decided_at = ?, decision_note = ? WHERE id = ?", (at_iso, note, variant_id))
+        return n
+
+
+# ---------------------------------------------------------------------------
+# HesPulse-model (app/model_live.py): de scenario's met hun stappen, de entry na moment B en V1 (stil).
+# ---------------------------------------------------------------------------
+
+_MODEL_NEW_COLS = ("coin", "direction", "range_id", "status", "range_low", "range_high", "eq", "pool_level", "candidates", "steps",
+                   "discovered_at", "detected_at", "sweep_at", "shift_at", "updated_at", "candle_market", "btc_context", "alt_log")
+# Wat een nieuwe berekening van een lopend scenario mag bijwerken. Wat het moment van vastleggen draagt (detected_at, entry_detected_at),
+# de vulling en de meldvlag schrijft alleen de motor zelf, één keer.
+_MODEL_SYNC_COLS = ("status", "steps", "sweep_at", "shift_at", "entry_at", "ended_at", "limit_price", "stop_loss", "take_profit", "rr",
+                    "zone_low", "zone_high", "target_kind", "target_text", "ob_overlap", "poc_samenval", "shift_label", "extreme", "expires_at",
+                    "btc_context", "alt_log")
+MODEL_FINAL = ("afgerond", "context_weg", "geen_pool")
+
+
+def get_model_scenario_by_range(coin: str, range_id: str) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM model_scenarios WHERE coin = ? AND range_id = ?", (coin, range_id)).fetchone()
+        return dict(row) if row else None
+
+
+def insert_model_scenario(row: dict) -> Optional[int]:
+    """None als deze range voor deze coin al een scenario had (UNIQUE coin, range_id): één scenario per range."""
+    with db.session() as conn:
+        cur = conn.execute(f"INSERT OR IGNORE INTO model_scenarios ({', '.join(_MODEL_NEW_COLS)}) VALUES ({', '.join('?' for _ in _MODEL_NEW_COLS)})",
+                           tuple(_candle_market(row) if c == "candle_market" else row.get(c) for c in _MODEL_NEW_COLS))
+        return cur.lastrowid if cur.rowcount else None
+
+
+def sync_model_scenario(scenario_id: int, fields: dict, entry_detected_at: Optional[str] = None) -> bool:
+    """Werkt een lopend scenario bij met de nieuwe berekening. Een afgerond scenario verandert nooit meer. Met entry_detected_at (de eerste
+    keer dat moment B gezien is) gaat de limiet open: entry_state 'wacht'. True als dit de overgang naar moment B was."""
+    cols = [c for c in _MODEL_SYNC_COLS if c in fields]
+    with db.session() as conn:
+        n = conn.execute(f"UPDATE model_scenarios SET {', '.join(c + ' = ?' for c in cols)}, updated_at = ? "
+                         f"WHERE id = ? AND status NOT IN ({', '.join('?' for _ in MODEL_FINAL)})",
+                         (*(fields[c] for c in cols), db.now_iso(), scenario_id, *MODEL_FINAL)).rowcount
+        if n and entry_detected_at and fields.get("status") == "afgerond" and fields.get("limit_price") is not None:
+            return conn.execute("UPDATE model_scenarios SET entry_detected_at = ?, entry_state = 'wacht', price_at_publish = ?, vulbaar = ? "
+                                "WHERE id = ? AND entry_detected_at IS NULL",
+                                (entry_detected_at, fields.get("price_at_publish"), fields.get("vulbaar"), scenario_id)).rowcount == 1
+        return False
+
+
+COUNTER_LIKE = "tegen:%"          # model.COUNTER_PREFIX: de stille arm tegen de dagtrend (B-2026-11-03-11)
+
+
+def list_model_scenarios(statuses: Optional[tuple[str, ...]] = None, entry_states: Optional[tuple[str, ...]] = None,
+                         counter: Optional[bool] = False) -> list[dict]:
+    """statuses filtert op het scenario, entry_states op de limiet na moment B. counter: False (standaard) alleen de gewone scenario's,
+    True alleen die tegen de dagtrend, None allebei. De standaard houdt de tegen-arm uit elke weergave en telling die er niet om vraagt."""
+    where, args = [], []
+    if counter is not None:
+        where.append("range_id NOT LIKE ?" if not counter else "range_id LIKE ?")
+        args.append(COUNTER_LIKE)
+    if statuses:
+        where.append(f"status IN ({', '.join('?' for _ in statuses)})")
+        args += list(statuses)
+    if entry_states:
+        where.append(f"entry_state IN ({', '.join('?' for _ in entry_states)})")
+        args += list(entry_states)
+    with db.session() as conn:
+        q = "SELECT * FROM model_scenarios" + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY id"
+        return [dict(r) for r in conn.execute(q, args).fetchall()]
+
+
+def get_model_scenario(scenario_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM model_scenarios WHERE id = ?", (scenario_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def get_model_scenario_by_signal(signal_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        row = conn.execute("SELECT * FROM model_scenarios WHERE signal_id = ?", (signal_id,)).fetchone()
+        return dict(row) if row else None
+
+
+def mark_model_alert_sent(scenario_id: int) -> bool:
+    """True als deze aanroep de vlag zette: alleen die mag de melding 'entry beschikbaar' sturen."""
+    with db.session() as conn:
+        return conn.execute("UPDATE model_scenarios SET alert_sent = 1 WHERE id = ? AND alert_sent = 0", (scenario_id,)).rowcount == 1
+
+
+def end_model_scenario(scenario_id: int, status: str, ended_at: str) -> bool:
+    """Een scenario dat eindigde zonder dat de nieuwe berekening het nog ziet (de range viel buiten het candlevenster)."""
+    with db.session() as conn:
+        return conn.execute(f"UPDATE model_scenarios SET status = ?, ended_at = ?, updated_at = ? WHERE id = ? "
+                            f"AND status NOT IN ({', '.join('?' for _ in MODEL_FINAL)})",
+                            (status, ended_at, db.now_iso(), scenario_id, *MODEL_FINAL)).rowcount == 1
+
+
+_MODEL_CF_FIELDS = {"cf_state", "cf_filled_at", "cf_outcome", "cf_r", "cf_ambiguous", "cf_at"}
+
+
+def update_model_cf(scenario_id: int, **fields) -> None:
+    """De stille meting van een entry die de BTC-poort tegenhield (model_live.track_cf)."""
+    unknown = set(fields) - _MODEL_CF_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor de BTC-poort: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE model_scenarios SET {', '.join(f + ' = ?' for f in fields)} WHERE id = ?", (*fields.values(), scenario_id))
+
+
+def end_model_entry(scenario_id: int, state: str, at: str) -> bool:
+    with db.session() as conn:
+        return conn.execute("UPDATE model_scenarios SET entry_state = ?, ended_at = COALESCE(ended_at, ?), updated_at = ? "
+                            "WHERE id = ? AND entry_state = 'wacht'", (state, at, db.now_iso(), scenario_id)).rowcount == 1
+
+
+def fill_model_entry(scenario_id: int, signal: dict, user_ids: list[int], filled_at: str, door_limiet: Optional[bool]) -> Optional[int]:
+    """Zoals fill_poc_radar_setup: stand, signaal buiten de ketting en journaal van de kijkers in één transactie. None als hij al gevuld of
+    vervallen was."""
+    with db.session() as conn:
+        if conn.execute("UPDATE model_scenarios SET entry_state = 'gevuld', filled_at = ?, door_limiet = ?, updated_at = ? "
+                        "WHERE id = ? AND entry_state = 'wacht'",
+                        (filled_at, None if door_limiet is None else int(door_limiet), db.now_iso(), scenario_id)).rowcount != 1:
+            return None
+        signal_id = _insert_signal(conn, signal, False)
+        conn.execute("UPDATE model_scenarios SET signal_id = ? WHERE id = ?", (signal_id, scenario_id))
+        for uid in user_ids:
+            _journal_in(conn, signal_id, uid)
+        return signal_id
+
+
+def list_open_model_trades() -> list[dict]:
+    """Gevulde modeltrades zonder uitkomst: model_live meet ze zelf vanaf de vulcandle (preregistratie §4.14), niet level_check."""
+    with db.session() as conn:
+        rows = conn.execute(
+            """SELECT m.id AS scenario_id, m.filled_at, s.id, s.coin, s.direction, s.price, s.stop_loss, s.take_profit, s.trade_type, s.created_at
+               FROM model_scenarios m JOIN signals s ON s.id = m.signal_id
+               WHERE s.auto_outcome IS NULL AND m.filled_at IS NOT NULL AND s.is_practice = 0""").fetchall()
+        return [dict(r) for r in rows]
+
+
+def insert_model_v1(scenario_id: int, row: dict) -> bool:
+    with db.session() as conn:
+        return conn.execute("""INSERT OR IGNORE INTO model_v1 (scenario_id, coin, direction, limit_price, stop_loss, take_profit, rr, placed_at, state,
+                               htf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (scenario_id, row["coin"], row["direction"], row["limit_price"], row["stop_loss"], row.get("take_profit"),
+                             row.get("rr"), row["placed_at"], row.get("state", "wacht"), row.get("htf"))).rowcount == 1
+
+
+def set_model_htf(scenario_id: int, htf: str) -> None:
+    """De hogere-tijdframezones van entry A, één keer bij moment B (alleen meting)."""
+    with db.session() as conn:
+        conn.execute("UPDATE model_scenarios SET htf = ? WHERE id = ? AND htf IS NULL", (htf, scenario_id))
+
+
+_MODEL_V1_FIELDS = {"state", "filled_at", "outcome", "outcome_at", "r_gross", "ambiguous", "ended_at"}
+
+
+def update_model_v1(scenario_id: int, **fields) -> None:
+    unknown = set(fields) - _MODEL_V1_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor model_v1: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE model_v1 SET {', '.join(f + ' = ?' for f in fields)} WHERE scenario_id = ?", (*fields.values(), scenario_id))
+
+
+def list_model_v1(states: Optional[tuple[str, ...]] = None) -> list[dict]:
+    with db.session() as conn:
+        if states:
+            q = f"SELECT v.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at, m.range_id AS scenario_range_id FROM model_v1 v JOIN model_scenarios m ON m.id = v.scenario_id WHERE v.state IN ({', '.join('?' for _ in states)}) ORDER BY v.scenario_id"
+            return [dict(r) for r in conn.execute(q, states).fetchall()]
+        return [dict(r) for r in conn.execute("SELECT v.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at, m.range_id AS scenario_range_id FROM model_v1 v "
+                                              "JOIN model_scenarios m ON m.id = v.scenario_id ORDER BY v.scenario_id").fetchall()]
+
+
+def insert_model_entry(scenario_id: int, row: dict) -> bool:
+    """Eén instappunt (B, B0 of P) per scenario, één keer (UNIQUE): een punt verandert nooit meer nadat hij is vastgelegd."""
+    with db.session() as conn:
+        return conn.execute("""INSERT OR IGNORE INTO model_entries (scenario_id, code, coin, direction, known_at, detected_at, limit_price,
+                               stop_loss, take_profit, rr, expires_at, basis, htf) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                            (scenario_id, row["code"], row["coin"], row["direction"], row["known_at"], row["detected_at"], row["limit_price"],
+                             row["stop_loss"], row.get("take_profit"), row.get("rr"), row.get("expires_at"), row.get("basis"),
+                             row.get("htf"))).rowcount == 1
+
+
+_MODEL_ENTRY_FIELDS = {"state", "filled_at", "outcome", "outcome_at", "r_gross", "ambiguous", "ended_at", "mae_r", "mfe_r", "slip_r"}
+
+
+def update_model_entry(entry_id: int, **fields) -> None:
+    unknown = set(fields) - _MODEL_ENTRY_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor model_entries: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE model_entries SET {', '.join(f + ' = ?' for f in fields)} WHERE id = ?", (*fields.values(), entry_id))
+
+
+def list_model_entries(states: Optional[tuple[str, ...]] = None, scenario_ids: Optional[list[int]] = None) -> list[dict]:
+    where, args = [], []
+    if states:
+        where.append(f"e.state IN ({', '.join('?' for _ in states)})")
+        args += list(states)
+    if scenario_ids is not None:
+        if not scenario_ids:
+            return []
+        where.append(f"e.scenario_id IN ({', '.join('?' for _ in scenario_ids)})")
+        args += list(scenario_ids)
+    q = ("SELECT e.*, m.status AS scenario_status, m.ended_at AS scenario_ended_at, m.range_id AS scenario_range_id FROM model_entries e "
+         "JOIN model_scenarios m ON m.id = e.scenario_id"
+         + (" WHERE " + " AND ".join(where) if where else "") + " ORDER BY e.scenario_id, e.code")
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(q, args).fetchall()]
+
+
+def get_model_entry(entry_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        r = conn.execute("SELECT * FROM model_entries WHERE id = ?", (entry_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def set_model_excursion(scenario_id: int, mae_r: Optional[float], mfe_r: Optional[float], slip_r: Optional[float]) -> None:
+    """M2: MAE, MFE en stopslip van de A-trade van dit scenario (leeg = niet gemeten)."""
+    with db.session() as conn:
+        conn.execute("UPDATE model_scenarios SET mae_r = ?, mfe_r = ?, slip_r = ? WHERE id = ?", (mae_r, mfe_r, slip_r, scenario_id))
+
+
+MODEL_STRICT_KEY = "model_strict_from"
+_STRICT_CODES = ("A", "B", "B0", "R", "K")
+_STRICT_FIELDS = {"state", "filled_at", "outcome", "outcome_at", "r_gross", "ambiguous", "ended_at"}
+
+
+def flag_at(key: str) -> Optional[datetime]:
+    """Het moment waarop claim_flag deze sleutel vastlegde, of None."""
+    with db.session() as conn:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    if not row or not row[0]:
+        return None
+    d = datetime.fromisoformat(row[0])
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def seed_model_strict(since_iso: str) -> int:
+    """M1: elk plan dat na since ontstond krijgt één rij in de strenge arm, met dezelfde niveaus, start en vervaltijd als de gewone arm. A
+    alleen als hij gepubliceerd werd (niet al door de limiet, niet door de BTC-poort tegengehouden), net als de gewone A."""
+    with db.session() as conn:
+        n = conn.execute("""INSERT OR IGNORE INTO model_strict (kind, ref_id, code, counter, coin, direction, limit_price, stop_loss, take_profit,
+                                                                 start_at, expires_at)
+                            SELECT 'A', id, 'A', 0, coin, direction, limit_price, stop_loss, take_profit, entry_detected_at, expires_at
+                            FROM model_scenarios WHERE entry_detected_at >= ? AND limit_price IS NOT NULL AND expires_at IS NOT NULL
+                              AND COALESCE(entry_state, '') NOT IN ('niet_vulbaar', 'btc_tegen') AND range_id NOT LIKE 'tegen:%'""",
+                         (since_iso,)).rowcount
+        n += conn.execute(f"""INSERT OR IGNORE INTO model_strict (kind, ref_id, code, counter, coin, direction, limit_price, stop_loss,
+                                                                  take_profit, start_at, expires_at)
+                              SELECT 'E', e.id, e.code, CASE WHEN m.range_id LIKE 'tegen:%' THEN 1 ELSE 0 END, e.coin, e.direction,
+                                     e.limit_price, e.stop_loss, e.take_profit, e.detected_at, e.expires_at
+                              FROM model_entries e JOIN model_scenarios m ON m.id = e.scenario_id
+                              WHERE e.detected_at >= ? AND e.expires_at IS NOT NULL
+                                AND e.code IN ({', '.join('?' for _ in _STRICT_CODES)})""", (since_iso, *_STRICT_CODES)).rowcount
+    return n
+
+
+def list_model_strict(states: Optional[tuple[str, ...]] = None) -> list[dict]:
+    q, args = "SELECT * FROM model_strict", []
+    if states:
+        q += f" WHERE state IN ({', '.join('?' for _ in states)})"
+        args = list(states)
+    with db.session() as conn:
+        return [dict(r) for r in conn.execute(q + " ORDER BY id", args).fetchall()]
+
+
+def update_model_strict(strict_id: int, **fields) -> None:
+    unknown = set(fields) - _STRICT_FIELDS
+    if unknown or not fields:
+        raise ValueError(f"onbekende of lege velden voor model_strict: {sorted(unknown)}")
+    with db.session() as conn:
+        conn.execute(f"UPDATE model_strict SET {', '.join(f + ' = ?' for f in fields)} WHERE id = ?", (*fields.values(), strict_id))
+
+
+def list_model_strict_compare() -> list[dict]:
+    """M1 naast de gewone arm: elke strenge rij met de vulling en uitkomst van hetzelfde plan onder de gewone regel (n_filled_at, n_outcome),
+    plus de momenten voor de scheiding rond de bevriezing (known, detected)."""
+    with db.session() as conn:
+        a = conn.execute("""SELECT t.*, m.filled_at AS n_filled_at, s.auto_outcome AS n_outcome, s.auto_outcome_at AS n_outcome_at,
+                                   m.discovered_at AS known, m.detected_at AS detected
+                            FROM model_strict t JOIN model_scenarios m ON m.id = t.ref_id LEFT JOIN signals s ON s.id = m.signal_id
+                            WHERE t.kind = 'A'""").fetchall()
+        e = conn.execute("""SELECT t.*, e.filled_at AS n_filled_at, e.outcome AS n_outcome, e.outcome_at AS n_outcome_at,
+                                   e.known_at AS known, e.detected_at AS detected
+                            FROM model_strict t JOIN model_entries e ON e.id = t.ref_id WHERE t.kind = 'E'""").fetchall()
+    return [dict(r) for r in a] + [dict(r) for r in e]
+
+
+def model_placebo_due() -> list[dict]:
+    """M3: afgeronde modeltrades (stop of doel) zonder placebo, met wat de placebo nodig heeft. A: het signaal; E: het instappunt. De arm
+    tegen de dagtrend niet: die telt nergens mee."""
+    with db.session() as conn:
+        a = conn.execute("""SELECT 'A' AS kind, m.id AS ref_id, 'A' AS code, m.coin, m.direction, s.price AS entry, s.stop_loss, s.take_profit,
+                                   m.filled_at AS start_at
+                            FROM model_scenarios m JOIN signals s ON s.id = m.signal_id
+                            LEFT JOIN model_placebo p ON p.kind = 'A' AND p.ref_id = m.id
+                            WHERE p.ref_id IS NULL AND s.auto_outcome IN ('take_profit', 'stop_loss') AND s.is_practice = 0
+                              AND m.range_id NOT LIKE 'tegen:%'""").fetchall()
+        e = conn.execute("""SELECT 'E' AS kind, e.id AS ref_id, e.code, e.coin, e.direction, e.limit_price AS entry, e.stop_loss, e.take_profit,
+                                   e.filled_at AS start_at
+                            FROM model_entries e JOIN model_scenarios m ON m.id = e.scenario_id
+                            LEFT JOIN model_placebo p ON p.kind = 'E' AND p.ref_id = e.id
+                            WHERE p.ref_id IS NULL AND e.outcome IN ('take_profit', 'stop_loss') AND m.range_id NOT LIKE 'tegen:%'""").fetchall()
+    return [dict(r) for r in a] + [dict(r) for r in e]
+
+
+def save_model_placebo(kind: str, ref_id: int, rs: list[float]) -> None:
+    with db.session() as conn:
+        conn.execute("INSERT OR REPLACE INTO model_placebo (kind, ref_id, rs, made_at) VALUES (?, ?, ?, ?)",
+                     (kind, ref_id, json.dumps(rs), db.now_iso()))
+
+
+def list_model_placebo() -> dict:
+    """{(kind, ref_id): [bruto R, ...]}"""
+    with db.session() as conn:
+        return {(r["kind"], r["ref_id"]): json.loads(r["rs"]) for r in conn.execute("SELECT kind, ref_id, rs FROM model_placebo")}
+
+
+def get_model_v1(scenario_id: int) -> Optional[dict]:
+    with db.session() as conn:
+        r = conn.execute("SELECT * FROM model_v1 WHERE scenario_id = ?", (scenario_id,)).fetchone()
+        return dict(r) if r else None
+
+
+def list_ended_model(since_iso: str) -> list[dict]:
+    """Scenario's en limieten die eindigden zonder vulling, voor 'Uitgevallen, gemist of vervallen' op Kansen. state is de eindstand die
+    end_reason vertaalt: de stand van de limiet als er een was, anders die van het scenario."""
+    with db.session() as conn:
+        rows = conn.execute("""SELECT id, coin, direction, ended_at, COALESCE(CASE WHEN entry_state != 'wacht' AND entry_state != 'gevuld'
+                                      THEN entry_state END, status) AS state
+                               FROM model_scenarios WHERE ended_at >= ? AND range_id NOT LIKE 'tegen:%' AND (status IN ('context_weg', 'geen_pool')
+                                     OR entry_state IN ('vervallen', 'weggelopen', 'context_weg', 'niet_vulbaar', 'btc_tegen'))
+                               ORDER BY ended_at DESC""", (since_iso,)).fetchall()
+        return [{**dict(r), "kind": "hespulse_model"} for r in rows]

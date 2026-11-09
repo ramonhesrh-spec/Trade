@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>body{margin:0;background:#E8ECEC} a{color:#05706C;text-decoration:none} a:hover{color:#0ABAB5} input[type=range]{margin:0}</style>
+</helmet>
+<div style="min-height:100vh; padding:56px 48px 96px; display:flex; flex-direction:column; gap:72px; font-family:'Geist',sans-serif; color:#0D1415; background:#E8ECEC">
+
+  <div data-screen-label="00 Richting" style="display:flex; flex-direction:column; gap:28px; max-width:1100px">
+    <div style="display:flex; flex-direction:column; gap:10px">
+      <span style="font:500 13px 'Geist Mono',monospace; color:#4C595B; letter-spacing:.04em">HESPULSE V3 · INSTRUMENT</span>
+      <span style="font-size:44px; font-weight:600; letter-spacing:-.03em; line-height:1.05; text-wrap:balance">Je kijkt, je weet het, je doet één ding.</span>
+    </div>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:16px">
+      <div id="1a" style="padding:20px; border-radius:16px; background:#fff; border:2px solid #0ABAB5; display:flex; flex-direction:column; gap:10px">
+        <div style="display:flex; gap:8px; align-items:center"><span style="font:600 13px 'Geist Mono',monospace; background:#0D1415; color:#fff; padding:3px 8px; border-radius:6px">1a</span><span style="font-size:18px; font-weight:600">Ladder</span><span style="margin-left:auto; font:500 12px 'Geist Mono',monospace; color:#05706C">AANBEVOLEN</span></div>
+        <span style="font-size:15px; line-height:1.5; text-wrap:pretty">De prijs staat rechtop. De koers is een lijn die naar een zone schuift, en de afstand is een accentbalk die krimpt.</span>
+      </div>
+      <div id="1b" style="padding:20px; border-radius:16px; background:#fff; border:1px solid #CBD3D3; display:flex; flex-direction:column; gap:10px">
+        <div style="display:flex; gap:8px; align-items:center"><span style="font:600 13px 'Geist Mono',monospace; background:#0D1415; color:#fff; padding:3px 8px; border-radius:6px">1b</span><span style="font-size:18px; font-weight:600">Kompas</span></div>
+        <span style="font-size:15px; line-height:1.5; text-wrap:pretty">Elke kans is een wijzer op een ronde schaal. Hoe dichter bij twaalf uur, hoe dichter bij de zone.</span>
+      </div>
+      <div id="1c" style="padding:20px; border-radius:16px; background:#fff; border:1px solid #CBD3D3; display:flex; flex-direction:column; gap:10px">
+        <div style="display:flex; gap:8px; align-items:center"><span style="font:600 13px 'Geist Mono',monospace; background:#0D1415; color:#fff; padding:3px 8px; border-radius:6px">1c</span><span style="font-size:18px; font-weight:600">Kop</span></div>
+        <span style="font-size:15px; line-height:1.5; text-wrap:pretty">Geen beeld, alleen letters: één zin met de afstand als reusachtige kop die zichzelf steeds herschrijft.</span>
+      </div>
+    </div>
+    <span style="font-size:16px; line-height:1.55; max-width:760px; text-wrap:pretty">Ik kies <a href="#1a">1a</a>. Boven is duurder en onder is goedkoper, zoals op elke beurs. Stop, zone en doel staan dus op hun echte plek; je hoeft niets te vertalen. Een kompas verliest de echte prijs, een kop verliest het gevoel van ruimte. Eén ladder werkt op Nu, in de replay en in de uitleg voor nieuwe gebruikers. Al het andere hieronder is 1a.</span>
+  </div>
+
+  <div data-screen-label="00 Systeem" style="display:flex; flex-direction:column; gap:28px; max-width:1100px">
+    <span style="font-size:28px; font-weight:600; letter-spacing:-.02em">Ontwerpsysteem</span>
+    <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:16px; align-items:start">
+      <div style="padding:20px; border-radius:16px; background:#fff; border:1px solid #CBD3D3; display:flex; flex-direction:column; gap:4px">
+        <div style="display:grid; grid-template-columns:minmax(0,1fr) 92px 92px; gap:8px; padding-bottom:8px; font:500 12px 'Geist Mono',monospace; color:#4C595B"><span>KLEUR</span><span>DONKER</span><span>LICHT</span></div>
+        <sc-for list="{{ tokens }}" as="t" hint-placeholder-count="13">
+          <div style="display:grid; grid-template-columns:minmax(0,1fr) 92px 92px; gap:8px; align-items:center; min-height:36px; border-top:1px solid #E3E8E8">
+            <div style="display:flex; flex-direction:column"><span style="font:500 13px 'Geist Mono',monospace">{{ t.k }}</span><span style="font-size:12px; color:#4C595B">{{ t.u }}</span></div>
+            <div style="display:flex; gap:6px; align-items:center"><span style="{{ t.ds }}"></span><span style="font:400 11px 'Geist Mono',monospace; color:#4C595B">{{ t.dv }}</span></div>
+            <div style="display:flex; gap:6px; align-items:center"><span style="{{ t.ls }}"></span><span style="font:400 11px 'Geist Mono',monospace; color:#4C595B">{{ t.lv }}</span></div>
+          </div>
+        </sc-for>
+        <span style="padding-top:10px; font-size:13px; line-height:1.5; color:#4C595B">Eén accent. Groen en rood alleen voor doel, stop, winst en verlies. Bijtekst haalt minstens 6,9:1 in beide thema's. Accent als tekst haalt 4,5:1 of meer.</span>
+      </div>
+      <div style="display:flex; flex-direction:column; gap:16px">
+        <div style="padding:20px; border-radius:16px; background:#fff; border:1px solid #CBD3D3; display:flex; flex-direction:column; gap:14px">
+          <span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">LETTERS · GEIST EN GEIST MONO</span>
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px"><span style="font:500 52px 'Geist Mono',monospace; letter-spacing:-.05em; line-height:1">0,40%</span><span style="font:400 12px 'Geist Mono',monospace; color:#4C595B">Afstand 52 mono</span></div>
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px"><span style="font:500 40px 'Geist Mono',monospace; letter-spacing:-.04em; line-height:1">+4,1 R</span><span style="font:400 12px 'Geist Mono',monospace; color:#4C595B">Gemeten 40–56 mono</span></div>
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px"><span style="font:400 20px 'Geist Mono',monospace">80774,8</span><span style="font:400 12px 'Geist Mono',monospace; color:#4C595B">Getal 20 mono</span></div>
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px"><span style="font-size:28px; font-weight:600; letter-spacing:-.02em">BTC short</span><span style="font:400 12px 'Geist Mono',monospace; color:#4C595B">Kop 28 / 600</span></div>
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px"><span style="font-size:17px; font-weight:500">Wacht op de zone.</span><span style="font:400 12px 'Geist Mono',monospace; color:#4C595B">Zin 17 / 500</span></div>
+          <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px"><span style="font-size:13px; font-weight:500; color:#4C595B">Zone-sweep</span><span style="font:400 12px 'Geist Mono',monospace; color:#4C595B">Label 13 / 500</span></div>
+        </div>
+        <div style="padding:20px; border-radius:16px; background:#fff; border:1px solid #CBD3D3; display:flex; flex-direction:column; gap:12px">
+          <span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">GEMETEN · PLAN · SCHATTING</span>
+          <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:baseline">
+            <span style="font:500 24px 'Geist Mono',monospace">+2,0 R</span>
+            <span style="font:400 20px 'Geist Mono',monospace">80774,8</span>
+            <span style="font:400 15px 'Geist Mono',monospace; color:#4C595B; border-bottom:1.5px dotted #4C595B">≈ 40 min</span>
+            <span style="height:22px; padding:0 8px; border:1px dashed #4C595B; border-radius:11px; display:inline-flex; align-items:center; font:500 12px 'Geist Mono',monospace; color:#4C595B">ongetest</span>
+            <span style="height:22px; padding:0 8px; border:1px solid #4C595B; border-radius:11px; display:inline-flex; align-items:center; font:500 12px 'Geist Mono',monospace; color:#4C595B">proef</span>
+          </div>
+          <span style="font-size:13px; line-height:1.5; color:#4C595B; text-wrap:pretty">Gemeten: vol gewicht, mag groot. Plan: normaal gewicht. Schatting: bijtekst, ≈ en een stippellijn, nooit groot en nooit in een kop.</span>
+        </div>
+        <div style="padding:20px; border-radius:16px; background:#fff; border:1px solid #CBD3D3; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:16px">
+          <div style="display:flex; flex-direction:column; gap:8px">
+            <span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">RUIMTE</span>
+            <div style="display:flex; align-items:flex-end; gap:6px"><span style="width:4px; height:4px; background:#0ABAB5"></span><span style="width:8px; height:8px; background:#0ABAB5"></span><span style="width:12px; height:12px; background:#0ABAB5"></span><span style="width:16px; height:16px; background:#0ABAB5"></span><span style="width:24px; height:24px; background:#0ABAB5"></span><span style="width:32px; height:32px; background:#0ABAB5"></span><span style="width:48px; height:48px; background:#0ABAB5"></span></div>
+            <span style="font:400 12px 'Geist Mono',monospace; color:#4C595B">4 8 12 16 24 32 48 · zijmarge 16</span>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:8px">
+            <span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">VORMEN</span>
+            <div style="display:flex; gap:8px; align-items:flex-end"><span style="width:36px; height:22px; border-radius:11px; border:1.5px solid #0D1415"></span><span style="width:40px; height:40px; border-radius:14px; border:1.5px solid #0D1415"></span><span style="width:48px; height:40px; border-radius:28px 28px 0 0; border:1.5px solid #0D1415; border-bottom:0"></span></div>
+            <span style="font:400 12px 'Geist Mono',monospace; color:#4C595B">badge pil · knop 14 · blad 28 · geen schaduw</span>
+          </div>
+          <div style="grid-column:1 / -1; display:flex; flex-direction:column; gap:8px">
+            <span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">ICONEN · 20 PX · LIJN 1,5 · RONDE UITEINDEN · ALLEEN WAAR WOORDEN NIET PASSEN</span>
+            <div style="display:flex; gap:18px; color:#0D1415">
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"></path></svg>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4.5L7 10l5.5 5.5"></path></svg>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 12.5V3M6.5 6.5L10 3l3.5 3.5M5 9.5H4v7.5h12V9.5h-1"></path></svg>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 13.5V9a4.5 4.5 0 019 0v4.5l1.5 1.5H4zM8.5 17.5h3"></path></svg>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><circle cx="10" cy="10" r="7"></circle><path d="M10 9v4.5M10 6.5v.01"></path></svg>
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 15l4-5 3 3 4-6 3 4"></path></svg>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="padding:20px; border-radius:16px; background:#fff; border:1px solid #CBD3D3; display:flex; flex-direction:column; gap:4px">
+        <span style="padding-bottom:8px; font:500 12px 'Geist Mono',monospace; color:#4C595B">BEWEGING · TOKENS</span>
+        <div style="display:grid; grid-template-columns:64px 56px minmax(0,1fr); gap:8px; padding:8px 0; border-top:1px solid #E3E8E8; font-size:13px"><b>tik</b><span style="font-family:'Geist Mono',monospace">120</span><span><span style="font-family:'Geist Mono',monospace">(.2,.8,.2,1)</span> · druk-feedback, kopieer-flits</span></div>
+        <div style="display:grid; grid-template-columns:64px 56px minmax(0,1fr); gap:8px; padding:8px 0; border-top:1px solid #E3E8E8; font-size:13px"><b>staat</b><span style="font-family:'Geist Mono',monospace">180</span><span><span style="font-family:'Geist Mono',monospace">(.2,.8,.2,1)</span> · fade, thema, skeleton naar inhoud</span></div>
+        <div style="display:grid; grid-template-columns:64px 56px minmax(0,1fr); gap:8px; padding:8px 0; border-top:1px solid #E3E8E8; font-size:13px"><b>blad</b><span style="font-family:'Geist Mono',monospace">240</span><span><span style="font-family:'Geist Mono',monospace">(.32,.72,0,1)</span> · blad omhoog, kaart weg, stap door</span></div>
+        <div style="display:grid; grid-template-columns:64px 56px minmax(0,1fr); gap:8px; padding:8px 0; border-top:1px solid #E3E8E8; font-size:13px"><b>mee</b><span style="font-family:'Geist Mono',monospace">320</span><span><span style="font-family:'Geist Mono',monospace">(.4,0,.2,1)</span> · gedeelde elementen, prijslijn, cijferrol</span></div>
+        <div style="display:grid; grid-template-columns:64px 56px minmax(0,1fr); gap:8px; padding:8px 0; border-top:1px solid #E3E8E8; font-size:13px"><b>vast</b><span style="font-family:'Geist Mono',monospace">450</span><span><span style="font-family:'Geist Mono',monospace">linear</span> · houd-vast-balk bij kopiëren</span></div>
+        <div style="display:grid; grid-template-columns:64px 56px minmax(0,1fr); gap:8px; padding:8px 0; border-top:1px solid #E3E8E8; font-size:13px"><b>replay</b><span style="font-family:'Geist Mono',monospace">220</span><span><span style="font-family:'Geist Mono',monospace">linear</span> · één tijdstap per tik</span></div>
+        <span style="padding-top:10px; font-size:13px; line-height:1.5; color:#4C595B; text-wrap:pretty">Gebaren volgen de vinger 1:1, zonder curve. Alleen bij loslaten loopt de curve. Bij reduced motion valt alle verplaatsing weg: waarden springen direct, en er blijft alleen een opacity-wissel van 120 ms.</span>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:flex; flex-direction:column; gap:56px">
+    <span style="font-size:28px; font-weight:600; letter-spacing:-.02em">Schermen · 375 px</span>
+
+    <div data-screen-label="01 Nu rust" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">01</span><span style="font-size:20px; font-weight:600">Nu · rust</span><span style="font-size:14px; color:#4C595B">Dezelfde ladder, uitgezoomd en zonder accent. Komt de kans dichterbij, dan zoomt hij in naar 02.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }}</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="height:56px; flex:none; padding:0 16px; display:flex; align-items:center; justify-content:flex-end"><span style="width:44px; height:44px; display:flex; align-items:center; justify-content:center"><span style="width:34px; height:34px; border-radius:50%; background:var(--s2); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:600">R</span></span></div>
+            <div style="padding:32px 16px 0; display:flex; flex-direction:column; gap:10px">
+              <span style="font-size:64px; font-weight:600; letter-spacing:-.04em; line-height:1">Rust</span>
+              <span style="font-size:17px; font-weight:500; color:var(--tx2)">Niets te doen.</span>
+            </div>
+            <div style="position:relative; flex:1; margin:0 16px">
+              <div style="position:absolute; left:164px; right:0; top:56px; height:20px; border-top:1px dashed var(--tx2); border-bottom:1px dashed var(--tx2)"></div>
+              <span style="position:absolute; left:164px; top:34px; font-size:12px; font-weight:500; color:var(--tx2)">Zone</span>
+              <span style="position:absolute; right:0; top:34px; font:400 13px 'Geist Mono',monospace; color:var(--tx2)">2382,0</span>
+              <div style="position:absolute; left:163px; width:3px; top:76px; height:240px; border-radius:2px; background:var(--s2)"></div>
+              <div style="position:absolute; left:158px; right:0; top:316px; border-top:1.5px solid var(--tx)"></div>
+              <span style="position:absolute; left:158px; top:311px; width:11px; height:11px; border-radius:50%; background:var(--tx)"></span>
+              <span style="position:absolute; right:0; top:322px; font:500 13px 'Geist Mono',monospace">2339,1</span>
+              <div style="position:absolute; left:0; width:146px; top:168px; display:flex; flex-direction:column; align-items:flex-end; gap:4px"><span style="font:500 40px 'Geist Mono',monospace; letter-spacing:-.05em; line-height:1">1,80%</span><span style="font-size:13px; color:var(--tx2)">ETH long</span></div>
+            </div>
+            <div style="height:80px; flex:none; border-top:1px solid var(--bd); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:20px">
+              <sc-for list="{{ navNu }}" as="n" hint-placeholder-count="4"><span style="{{ n.s }}">{{ n.l }}</span></sc-for>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="02 Nu kans" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">02</span><span style="font-size:20px; font-weight:600">Nu · één kans</span><span style="font-size:14px; color:#4C595B">De koers beweegt live. Veeg de ladder opzij om de kans over te slaan; probeer het.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }}</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="height:64px; flex:none; padding:0 16px; display:flex; align-items:center; justify-content:space-between">
+              <div style="display:flex; flex-direction:column; gap:4px">
+                <span style="font-size:22px; font-weight:600; letter-spacing:-.02em">BTC short</span>
+                <div style="display:flex; align-items:center; gap:8px"><span style="font-size:13px; font-weight:500; color:var(--tx2)">Zone-sweep</span><span style="height:20px; padding:0 7px; border:1px dashed var(--tx2); border-radius:10px; display:inline-flex; align-items:center; font:500 11px 'Geist Mono',monospace; color:var(--tx2)">ongetest</span></div>
+              </div>
+              <span style="width:44px; height:44px; display:flex; align-items:center; justify-content:center"><span style="width:34px; height:34px; border-radius:50%; background:var(--s2); display:flex; align-items:center; justify-content:center; font-size:14px; font-weight:600">R</span></span>
+            </div>
+            <div style="flex:none; height:500px; margin:12px 16px 0; overflow:visible">
+              <div onPointerDown="{{ swDown }}" onPointerMove="{{ swMove }}" onPointerUp="{{ swUp }}" onPointerCancel="{{ swUp }}" style="{{ card }}">
+                <sc-for list="{{ lad.levels }}" as="l" hint-placeholder-count="2"><div style="{{ l.line }}"><span style="{{ l.tag }}">{{ l.name }}</span><span style="{{ l.px }}">{{ l.val }}</span></div></sc-for>
+                <div style="{{ lad.zone }}"></div>
+                <span style="{{ lad.zoneTag }}">Zone</span><span style="{{ lad.zonePx }}">80774,8</span>
+                <div style="{{ lad.gap }}"></div>
+                <div style="{{ lad.line }}"></div><span style="{{ lad.dot }}"></span><span style="{{ lad.pxTag }}">{{ lad.pxVal }}</span>
+                <div style="{{ lad.num }}">
+                  <div style="display:flex; font:500 52px 'Geist Mono',monospace; letter-spacing:-.05em; line-height:1">
+                    <sc-for list="{{ lad.roll }}" as="c" hint-placeholder-count="4"><span style="display:block; height:1em; overflow:hidden"><span style="{{ c.col }}"><sc-for list="{{ c.g }}" as="g" hint-placeholder-count="1"><span style="display:block; height:1em">{{ g }}</span></sc-for></span></span></sc-for><span>%</span>
+                  </div>
+                  <span style="font-size:13px; color:var(--tx2)">tot zone</span>
+                </div>
+              </div>
+            </div>
+            <div style="flex:1; padding:0 16px; display:flex; flex-direction:column; justify-content:center; gap:10px">
+              <sc-if value="{{ notSkipped }}" hint-placeholder-val="{{ true }}">
+                <span style="align-self:center; width:36px; height:4px; border-radius:2px; background:var(--bd)"></span>
+                <span style="font-size:17px; font-weight:500">Wacht. Melding in de zone.</span>
+              </sc-if>
+              <sc-if value="{{ skipped }}" hint-placeholder-val="{{ false }}">
+                <div style="display:flex; align-items:center; justify-content:space-between"><span style="font-size:17px; font-weight:500">Overgeslagen.</span><button onClick="{{ undo }}" style="height:44px; padding:0 14px; border:0; border-radius:12px; background:var(--s2); color:var(--aci); font:600 15px 'Geist',sans-serif; cursor:pointer">Ongedaan</button></div>
+              </sc-if>
+            </div>
+            <div style="height:80px; flex:none; border-top:1px solid var(--bd); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:20px">
+              <sc-for list="{{ navNu }}" as="n" hint-placeholder-count="4"><span style="{{ n.s }}">{{ n.l }}</span></sc-for>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="03 Detail" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">03</span><span style="font-size:20px; font-weight:600">Kaart uitgeklapt</span><span style="font-size:14px; color:#4C595B">Trek omhoog. De ladder krimpt mee en blijft live. Houd een getal vast om het te kopiëren.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }}</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="height:64px; flex:none; padding:0 16px; display:flex; align-items:center; justify-content:space-between">
+              <div style="display:flex; flex-direction:column; gap:4px">
+                <span style="font-size:22px; font-weight:600; letter-spacing:-.02em">BTC short</span>
+                <div style="display:flex; align-items:center; gap:8px"><span style="font-size:13px; font-weight:500; color:var(--tx2)">Zone-sweep</span><span style="height:20px; padding:0 7px; border:1px dashed var(--tx2); border-radius:10px; display:inline-flex; align-items:center; font:500 11px 'Geist Mono',monospace; color:var(--tx2)">ongetest</span></div>
+              </div>
+              <span style="font:400 13px 'Geist Mono',monospace; color:var(--tx2); border-bottom:1.5px dotted var(--tx2)">≈ 40 min</span>
+            </div>
+            <div style="position:relative; flex:none; height:230px; margin:8px 16px 16px">
+              <sc-for list="{{ ladS.levels }}" as="l" hint-placeholder-count="2"><div style="{{ l.line }}"><span style="{{ l.tag }}">{{ l.name }}</span><span style="{{ l.px }}">{{ l.val }}</span></div></sc-for>
+              <div style="{{ ladS.zone }}"></div>
+              <span style="{{ ladS.zoneTag }}">Zone</span><span style="{{ ladS.zonePx }}">80774,8</span>
+              <div style="{{ ladS.gap }}"></div>
+              <div style="{{ ladS.line }}"></div><span style="{{ ladS.dot }}"></span><span style="{{ ladS.pxTag }}">{{ ladS.pxVal }}</span>
+              <div style="{{ ladS.num }}">
+                <div style="display:flex; font:500 32px 'Geist Mono',monospace; letter-spacing:-.05em; line-height:1">
+                  <sc-for list="{{ ladS.roll }}" as="c" hint-placeholder-count="4"><span style="display:block; height:1em; overflow:hidden"><span style="{{ c.col }}"><sc-for list="{{ c.g }}" as="g" hint-placeholder-count="1"><span style="display:block; height:1em">{{ g }}</span></sc-for></span></span></sc-for><span>%</span>
+                </div>
+              </div>
+            </div>
+            <div style="flex:1; border-radius:28px 28px 0 0; background:var(--s1); border-top:1px solid var(--bd); padding:8px 16px 28px; display:flex; flex-direction:column">
+              <span style="align-self:center; width:36px; height:4px; border-radius:2px; background:var(--bd); margin-bottom:8px"></span>
+              <sc-for list="{{ detail }}" as="r" hint-placeholder-count="5">
+                <div onPointerDown="{{ r.down }}" onPointerUp="{{ r.up }}" onPointerLeave="{{ r.up }}" style="min-height:52px; display:flex; flex-direction:column; justify-content:center; gap:6px; border-bottom:1px solid var(--bd); cursor:pointer; user-select:none; -webkit-user-select:none">
+                  <div style="display:flex; justify-content:space-between; align-items:baseline"><span style="{{ r.labS }}">{{ r.lab }}</span><span style="{{ r.valS }}">{{ r.val }}</span></div>
+                  <div style="{{ r.bar }}"></div>
+                </div>
+              </sc-for>
+              <div style="min-height:48px; display:flex; align-items:center; justify-content:space-between; gap:12px">
+                <span style="font-size:13px; color:var(--tx2)">Zone uit 4u, 3× gekeerd</span>
+                <span style="height:44px; display:flex; align-items:center; font-size:15px; font-weight:500; color:var(--aci)">Grafiek</span>
+              </div>
+              <button style="margin-top:auto; height:56px; border:0; border-radius:14px; background:var(--ac); color:var(--onac); font:600 17px 'Geist',sans-serif">Zet order</button>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="04 Grafiek" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">04</span><span style="font-size:20px; font-weight:600">Grafiek · schermvullend</span><span style="font-size:14px; color:#4C595B">De lijnen van de ladder blijven staan; de candles komen eronder in beeld. Ringen tonen waar de zone eerder keerde. Bouw: lightweight-charts.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }}</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="height:52px; flex:none; padding:0 8px 0 4px; display:flex; align-items:center; gap:4px">
+              <span style="width:44px; height:44px; display:flex; align-items:center; justify-content:center"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"></path></svg></span>
+              <span style="font-size:17px; font-weight:600">BTC short</span>
+              <span style="margin-left:auto; height:20px; padding:0 7px; border:1px dashed var(--tx2); border-radius:10px; display:inline-flex; align-items:center; font:500 11px 'Geist Mono',monospace; color:var(--tx2)">ongetest</span>
+            </div>
+            <div style="position:relative; flex:none; height:540px; margin:0 16px">
+              <div style="{{ ch.zone }}"></div>
+              <sc-for list="{{ ch.candles }}" as="c" hint-placeholder-count="20"><div style="{{ c.wick }}"><div style="{{ c.body }}"></div></div></sc-for>
+              <sc-for list="{{ ch.levels }}" as="l" hint-placeholder-count="4"><div style="{{ l.line }}"><span style="{{ l.px }}">{{ l.val }}</span></div></sc-for>
+              <sc-for list="{{ ch.marks }}" as="m" hint-placeholder-count="3"><span style="{{ m }}"></span></sc-for>
+            </div>
+            <div style="flex:none; padding:10px 16px 0; display:flex; align-items:center; gap:8px; font-size:13px; color:var(--tx2)"><span style="width:10px; height:10px; flex:none; border-radius:50%; border:1.5px solid var(--aci)"></span>Zone uit 4u · gekeerd op 9, 14 en 21 okt</div>
+            <div style="margin-top:auto; padding:0 16px 24px; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px">
+              <sc-for list="{{ tfs }}" as="t" hint-placeholder-count="5"><button onClick="{{ t.go }}" style="{{ t.s }}">{{ t.t }}</button></sc-for>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="05 Checklist" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">05</span><span style="font-size:20px; font-weight:600">Order-checklist</span><span style="font-size:14px; color:#4C595B">Eén getal tegelijk, groot. Houd het vast; na het kopiëren schuift de volgende stap omhoog. Probeer het.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }}</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="height:52px; flex:none; padding:0 16px 0 4px; display:flex; align-items:center; gap:12px">
+              <button onClick="{{ ckReset }}" style="width:44px; height:44px; border:0; background:transparent; color:var(--tx); display:flex; align-items:center; justify-content:center; cursor:pointer"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"></path></svg></button>
+              <div style="flex:1; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:4px"><sc-for list="{{ ck }}" as="s" hint-placeholder-count="5"><span style="{{ s.seg }}"></span></sc-for></div>
+              <span style="font:500 13px 'Geist Mono',monospace; color:var(--tx2)">{{ ckCount }}</span>
+            </div>
+            <div style="flex:1; padding:12px 16px 0; display:flex; flex-direction:column; gap:4px">
+              <sc-for list="{{ ck }}" as="s" hint-placeholder-count="5">
+                <sc-if value="{{ s.cur }}" hint-placeholder-val="{{ false }}">
+                  <div onPointerDown="{{ s.down }}" onPointerUp="{{ s.up }}" onPointerLeave="{{ s.up }}" style="margin:12px 0; padding:24px 0 20px; display:flex; flex-direction:column; gap:12px; border-top:1px solid var(--bd); border-bottom:1px solid var(--bd); cursor:pointer; user-select:none; -webkit-user-select:none; -webkit-touch-callout:none">
+                    <span style="font-size:15px; font-weight:500; color:var(--tx2)">{{ s.title }}</span>
+                    <span style="{{ s.bigS }}">{{ s.val }}</span>
+                    <div style="height:2px; border-radius:1px; background:var(--s2)"><div style="{{ s.bar }}"></div></div>
+                    <div style="display:flex; justify-content:space-between"><span style="font-size:15px; color:var(--tx2)">{{ s.sub }}</span><span style="{{ s.hintS }}">{{ s.hint }}</span></div>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ s.notCur }}" hint-placeholder-val="{{ true }}">
+                  <div onClick="{{ s.go }}" style="{{ s.row }}">
+                    <span style="{{ s.mk }}">{{ s.mark }}</span>
+                    <span style="flex:1; font-size:15px">{{ s.title }}</span>
+                    <span style="{{ s.smallS }}">{{ s.val }}</span>
+                  </div>
+                </sc-if>
+              </sc-for>
+            </div>
+            <div style="flex:none; padding:16px 16px 28px; display:flex; flex-direction:column; gap:10px">
+              <span style="font-size:13px; color:var(--tx2); text-align:center">Koers <span style="font-family:'Geist Mono',monospace; color:var(--tx)">{{ lad.pxVal }}</span> · nog in zone</span>
+              <button onClick="{{ ckNext }}" style="height:56px; border:0; border-radius:14px; background:var(--ac); color:var(--onac); font:600 17px 'Geist',sans-serif; cursor:pointer">{{ ckCta }}</button>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="06 Plannen" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">06</span><span style="font-size:20px; font-weight:600">Plannen</span><span style="font-size:14px; color:#4C595B">Gesorteerd op afstand. Elke rij heeft een mini-ladder: de stip zakt weg naarmate de zone verder ligt. Trek omlaag om te verversen.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }}</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="flex:none; padding:16px 16px 12px; display:flex; align-items:baseline; justify-content:space-between"><span style="font-size:28px; font-weight:600; letter-spacing:-.02em">Plannen</span><span style="font:400 15px 'Geist Mono',monospace; color:var(--tx2)">6</span></div>
+            <div style="flex:1; padding:0 16px">
+              <sc-for list="{{ plans }}" as="p" hint-placeholder-count="6">
+                <div style="min-height:76px; display:flex; align-items:center; gap:14px; border-top:1px solid var(--bd)">
+                  <div style="flex:1; min-width:0; display:flex; flex-direction:column; gap:5px">
+                    <div style="display:flex; align-items:baseline; gap:8px"><span style="font-size:17px; font-weight:600">{{ p.c }}</span><span style="font-size:15px; color:var(--tx2)">{{ p.dir }}</span></div>
+                    <div style="display:flex; align-items:center; gap:8px"><span style="font-size:13px; color:var(--tx2)">{{ p.type }}</span><span style="{{ p.badge }}">{{ p.st }}</span></div>
+                  </div>
+                  <span style="font:500 20px 'Geist Mono',monospace; letter-spacing:-.02em">{{ p.d }}</span>
+                  <span style="position:relative; width:4px; height:44px; flex:none; border-radius:2px; background:var(--s2)"><span style="position:absolute; left:0; top:0; width:4px; height:6px; border-radius:2px; background:var(--ac)"></span><span style="{{ p.dot }}"></span></span>
+                </div>
+              </sc-for>
+            </div>
+            <div style="height:80px; flex:none; border-top:1px solid var(--bd); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:20px">
+              <sc-for list="{{ navPlan }}" as="n" hint-placeholder-count="4"><span style="{{ n.s }}">{{ n.l }}</span></sc-for>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="07 Logboek" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">07</span><span style="font-size:20px; font-weight:600">Logboek · dagtijdlijn</span><span style="font-size:14px; color:#4C595B">Veeg horizontaal naar een andere dag. Een tik op een trade opent de replay.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }}</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="flex:none; padding:16px 16px 0; display:flex; justify-content:space-between; align-items:flex-end">
+              <div style="display:flex; flex-direction:column; gap:4px"><span style="font-size:13px; color:var(--tx2)">Zondag 25 okt</span><span style="font-size:28px; font-weight:600; letter-spacing:-.02em">Vandaag</span></div>
+              <span style="font:500 32px 'Geist Mono',monospace; letter-spacing:-.04em">+1,0 R</span>
+            </div>
+            <div style="flex:none; padding:12px 16px 0; display:flex; gap:6px"><span style="width:6px; height:6px; border-radius:50%; background:var(--bd)"></span><span style="width:6px; height:6px; border-radius:50%; background:var(--bd)"></span><span style="width:18px; height:6px; border-radius:3px; background:var(--tx)"></span></div>
+            <div style="flex:1; padding:24px 16px 0; display:flex; flex-direction:column">
+              <sc-for list="{{ log }}" as="e" hint-placeholder-count="5">
+                <div style="display:grid; grid-template-columns:46px 12px minmax(0,1fr); gap:12px">
+                  <span style="padding-top:1px; font:400 13px 'Geist Mono',monospace; color:var(--tx2)">{{ e.t }}</span>
+                  <div style="display:flex; flex-direction:column; align-items:center"><span style="{{ e.dot }}"></span><span style="flex:1; width:1px; background:var(--bd)"></span></div>
+                  <div style="padding-bottom:26px; display:flex; flex-direction:column; gap:4px">
+                    <div style="display:flex; justify-content:space-between; gap:8px"><span style="font-size:15px; font-weight:600">{{ e.title }}</span><span style="{{ e.rS }}">{{ e.r }}</span></div>
+                    <span style="font-size:13px; color:var(--tx2)">{{ e.sub }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="height:80px; flex:none; border-top:1px solid var(--bd); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:20px">
+              <sc-for list="{{ navLog }}" as="n" hint-placeholder-count="4"><span style="{{ n.s }}">{{ n.l }}</span></sc-for>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="08 Replay" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">08</span><span style="font-size:20px; font-weight:600">Replay op de ladder</span><span style="font-size:14px; color:#4C595B">Dezelfde ladder, nu in de tijd. Schuif, tik per moment of speel af. Kijk hoe de zone verandert in Instap en hoe de stop naar Instap schuift.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }}</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="height:52px; flex:none; padding:0 16px 0 4px; display:flex; align-items:center; gap:4px">
+              <span style="width:44px; height:44px; display:flex; align-items:center; justify-content:center"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4.5L7 10l5.5 5.5"></path></svg></span>
+              <span style="font-size:17px; font-weight:600">BTC short</span>
+              <span style="margin-left:auto; font:400 13px 'Geist Mono',monospace; color:var(--tx2)">{{ rp.time }}</span>
+            </div>
+            <div style="flex:none; padding:4px 16px 0; display:flex; justify-content:space-between; align-items:baseline"><span style="font-size:13px; color:var(--tx2)">{{ rp.rLab }}</span><span style="font:500 40px 'Geist Mono',monospace; letter-spacing:-.04em; line-height:1">{{ rp.r }}</span></div>
+            <div style="position:relative; flex:none; height:340px; margin:20px 16px 0">
+              <sc-for list="{{ rp.levels }}" as="l" hint-placeholder-count="2"><div style="{{ l.line }}"><span style="{{ l.tag }}">{{ l.name }}</span><span style="{{ l.px }}">{{ l.val }}</span></div></sc-for>
+              <div style="{{ rp.zone }}"></div>
+              <span style="{{ rp.zoneTag }}">{{ rp.zoneName }}</span>
+              <div style="{{ rp.line }}"></div><span style="{{ rp.dot }}"></span><span style="{{ rp.pxTag }}">{{ rp.pxVal }}</span>
+              <div style="position:absolute; left:0; width:146px; top:120px; display:flex; flex-direction:column; gap:6px"><span style="font-size:12px; color:var(--tx2)">{{ rp.step }}</span><span style="font-size:17px; font-weight:500; line-height:1.35; text-wrap:pretty">{{ rp.event }}</span></div>
+            </div>
+            <div style="flex:none; padding:16px 16px 0"><input type="range" min="0" max="39" step="1" value="{{ rp.i }}" onChange="{{ rpScrub }}" style="width:100%; height:44px; accent-color:#0ABAB5; cursor:pointer"></input></div>
+            <div style="flex:none; padding:0 16px; display:flex; gap:6px; flex-wrap:wrap">
+              <sc-for list="{{ rp.chips }}" as="m" hint-placeholder-count="6"><button onClick="{{ m.go }}" style="{{ m.s }}">{{ m.t }}</button></sc-for>
+            </div>
+            <div style="margin-top:auto; padding:16px 16px 28px; display:grid; grid-template-columns:56px minmax(0,1fr) 56px; gap:8px">
+              <button onClick="{{ rpPrev }}" style="height:56px; border-radius:14px; border:1px solid var(--bd); background:transparent; color:var(--tx); font:500 20px 'Geist',sans-serif; cursor:pointer">‹</button>
+              <button onClick="{{ rpToggle }}" style="height:56px; border:0; border-radius:14px; background:var(--ac); color:var(--onac); font:600 17px 'Geist',sans-serif; cursor:pointer">{{ rp.play }}</button>
+              <button onClick="{{ rpNext }}" style="height:56px; border-radius:14px; border:1px solid var(--bd); background:transparent; color:var(--tx); font:500 20px 'Geist',sans-serif; cursor:pointer">›</button>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="09 Bewijs" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">09</span><span style="font-size:20px; font-weight:600">Bewijs</span><span style="font-size:14px; color:#4C595B">Elke trade is een stip, ook de verliezers. Alleen gemeten resultaat. Geen winkans, geen verwachting.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }}</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="flex:none; padding:16px 16px 0; display:flex; flex-direction:column; gap:8px">
+              <span style="font-size:28px; font-weight:600; letter-spacing:-.02em">Bewijs</span>
+              <span style="padding-top:12px; font:500 56px 'Geist Mono',monospace; letter-spacing:-.05em; line-height:1">+4,1 R</span>
+              <span style="font-size:15px; color:var(--tx2)">44 trades sinds 1 okt</span>
+            </div>
+            <div style="flex:1; padding:24px 16px 0">
+              <sc-for list="{{ proof }}" as="b" hint-placeholder-count="4">
+                <div style="padding:14px 0; display:flex; flex-direction:column; gap:10px; border-top:1px solid var(--bd)">
+                  <div style="display:flex; align-items:center; gap:8px"><span style="font-size:15px; font-weight:600">{{ b.name }}</span><span style="{{ b.badge }}">{{ b.st }}</span><span style="{{ b.rS }}">{{ b.r }}</span></div>
+                  <div style="display:flex; align-items:center; gap:12px">
+                    <div style="flex:1; display:flex; flex-wrap:wrap; gap:4px"><sc-for list="{{ b.dots }}" as="d" hint-placeholder-count="8"><span style="{{ d }}"></span></sc-for></div>
+                    <span style="font:400 13px 'Geist Mono',monospace; color:var(--tx2)">{{ b.n }}</span>
+                  </div>
+                </div>
+              </sc-for>
+              <div style="min-height:48px; display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--bd); font-size:15px; font-weight:500"><span>Week 43</span><span style="color:var(--aci)">Terugblik</span></div>
+            </div>
+            <div style="height:80px; flex:none; border-top:1px solid var(--bd); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:20px">
+              <sc-for list="{{ navBew }}" as="n" hint-placeholder-count="4"><span style="{{ n.s }}">{{ n.l }}</span></sc-for>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="10 Week" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">10</span><span style="font-size:20px; font-weight:600">Weekterugblik en R-trend</span><span style="font-size:14px; color:#4C595B">Eén groot gemeten getal, acht weken in neutraal grijs, en één ding dat opviel.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }}</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="height:52px; flex:none; padding:0 16px 0 4px; display:flex; align-items:center"><span style="width:44px; height:44px; display:flex; align-items:center; justify-content:center"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.5 4.5L7 10l5.5 5.5"></path></svg></span><span style="font-size:15px; color:var(--tx2)">Week 43 · 19–25 okt</span></div>
+            <div style="flex:none; padding:24px 16px 0; display:flex; flex-direction:column; gap:10px">
+              <span style="font:500 64px 'Geist Mono',monospace; letter-spacing:-.05em; line-height:1">+3,4 R</span>
+              <span style="font-size:15px; color:var(--tx2)">7 trades · 5 overgeslagen</span>
+            </div>
+            <div style="flex:none; margin:48px 16px 0; display:flex; flex-direction:column; gap:10px">
+              <div style="position:relative; height:160px; display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:10px">
+                <div style="position:absolute; left:0; right:0; top:110px; height:1px; background:var(--bd)"></div>
+                <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="8"><div style="position:relative; height:160px"><div style="{{ w.bar }}"></div></div></sc-for>
+              </div>
+              <div style="display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:10px">
+                <sc-for list="{{ weeks }}" as="w" hint-placeholder-count="8"><div style="display:flex; flex-direction:column; align-items:center; gap:2px"><span style="{{ w.vS }}">{{ w.v }}</span><span style="font-size:11px; color:var(--tx2)">{{ w.n }}</span></div></sc-for>
+              </div>
+            </div>
+            <div style="flex:none; margin:40px 16px 0; padding-top:16px; border-top:1px solid var(--bd); display:flex; flex-direction:column; gap:6px">
+              <span style="font-size:13px; font-weight:500; color:var(--aci)">Opgevallen</span>
+              <span style="font-size:17px; font-weight:500; line-height:1.4; text-wrap:pretty">3 van je 5 overgeslagen kansen haalden doel 1.</span>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="11 Account" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">11</span><span style="font-size:20px; font-weight:600">Account · thema</span><span style="font-size:14px; color:#4C595B">Bereikbaar via het initiaal. De kleuren wisselen in 180 ms.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }}</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="height:52px; flex:none; padding:0 4px 0 16px; display:flex; align-items:center; justify-content:flex-end"><span style="width:44px; height:44px; display:flex; align-items:center; justify-content:center"><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M5 5l10 10M15 5L5 15"></path></svg></span></div>
+            <div style="flex:none; padding:8px 16px 0; display:flex; align-items:center; gap:14px">
+              <span style="width:56px; height:56px; border-radius:50%; background:var(--s2); display:flex; align-items:center; justify-content:center; font-size:22px; font-weight:600">R</span>
+              <div style="display:flex; flex-direction:column; gap:2px"><span style="font-size:22px; font-weight:600">Ramon</span><span style="font-size:13px; color:var(--tx2)">Eigenaar</span></div>
+            </div>
+            <div style="flex:none; padding:32px 16px 0; display:flex; flex-direction:column; gap:10px">
+              <span style="font-size:13px; color:var(--tx2)">Thema</span>
+              <div style="padding:4px; border-radius:14px; background:var(--s2); display:flex; gap:4px"><sc-for list="{{ th.seg }}" as="g" hint-placeholder-count="3"><span style="{{ g.s }}">{{ g.l }}</span></sc-for></div>
+            </div>
+            <div style="flex:1; padding:28px 16px 0">
+              <div style="min-height:52px; display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--bd); font-size:16px"><span>Meldingen</span><span style="color:var(--tx2)">Aan</span></div>
+              <div style="min-height:52px; display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--bd); font-size:16px"><span>1 R</span><span style="font-family:'Geist Mono',monospace; color:var(--tx2)">€100</span></div>
+              <div style="min-height:52px; display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--bd); font-size:16px"><span>Beurs</span><span style="color:var(--tx2)">Bybit</span></div>
+              <div style="min-height:52px; display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--bd); font-size:16px"><span>Handleiding</span><span style="color:var(--tx2)">›</span></div>
+              <div style="min-height:52px; display:flex; align-items:center; justify-content:space-between; border-top:1px solid var(--bd); font-size:16px"><span>Beheer</span><span style="color:var(--tx2)">›</span></div>
+              <div style="min-height:52px; display:flex; align-items:center; border-top:1px solid var(--bd); border-bottom:1px solid var(--bd); font-size:16px; color:var(--tx2)">Uitloggen</div>
+            </div>
+            <span style="flex:none; padding:0 16px 28px; font:400 12px 'Geist Mono',monospace; color:var(--tx2)">HesPulse · plaatst nooit zelf een order</span>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="12 Eerste gebruik" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">12</span><span style="font-size:20px; font-weight:600">Eerste gebruik · drie schermen</span><span style="font-size:14px; color:#4C595B">Op iPhone werken pushmeldingen pas als de app op het beginscherm staat. Daarom komt installeren eerst.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }} · 1</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="flex:1; padding:96px 16px 0; display:flex; flex-direction:column; gap:16px">
+              <svg width="48" height="48" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="1.5"></circle><path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#0ABAB5" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+              <span style="font-size:34px; font-weight:600; letter-spacing:-.03em; line-height:1.1; text-wrap:balance">Zet HesPulse op je beginscherm.</span>
+              <div style="padding-top:24px; display:flex; flex-direction:column">
+                <div style="min-height:56px; display:flex; align-items:center; gap:14px; border-top:1px solid var(--bd)"><span style="width:28px; height:28px; border-radius:50%; border:1.5px solid var(--ac); display:flex; align-items:center; justify-content:center; font:500 13px 'Geist Mono',monospace; color:var(--aci)">1</span><span style="flex:1; font-size:17px">Tik op Deel</span><svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 12.5V3M6.5 6.5L10 3l3.5 3.5M5 9.5H4v7.5h12V9.5h-1"></path></svg></div>
+                <div style="min-height:56px; display:flex; align-items:center; gap:14px; border-top:1px solid var(--bd); border-bottom:1px solid var(--bd)"><span style="width:28px; height:28px; border-radius:50%; border:1.5px solid var(--ac); display:flex; align-items:center; justify-content:center; font:500 13px 'Geist Mono',monospace; color:var(--aci)">2</span><span style="flex:1; font-size:17px">Zet op beginscherm</span></div>
+              </div>
+            </div>
+            <div style="flex:none; padding:0 16px 28px; display:flex; flex-direction:column; align-items:center; gap:16px">
+              <div style="display:flex; gap:6px"><span style="width:18px; height:6px; border-radius:3px; background:var(--tx)"></span><span style="width:6px; height:6px; border-radius:50%; background:var(--bd)"></span><span style="width:6px; height:6px; border-radius:50%; background:var(--bd)"></span></div>
+              <button style="width:100%; height:56px; border:0; border-radius:14px; background:var(--ac); color:var(--onac); font:600 17px 'Geist',sans-serif">Gedaan</button>
+            </div>
+          </div></div>
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }} · 2</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="flex:1; padding:96px 16px 0; display:flex; flex-direction:column; gap:16px">
+              <svg width="48" height="48" viewBox="0 0 20 20" fill="none" stroke="#0ABAB5" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 13.5V9a4.5 4.5 0 019 0v4.5l1.5 1.5H4zM8.5 17.5h3"></path></svg>
+              <span style="font-size:34px; font-weight:600; letter-spacing:-.03em; line-height:1.1; text-wrap:balance">Eén melding per kans.</span>
+              <span style="font-size:17px; color:var(--tx2); line-height:1.4">Alleen als de koers in de zone is. Verder stil.</span>
+              <div style="margin-top:20px; padding:12px 14px; border-radius:18px; background:var(--s2); display:flex; gap:12px">
+                <span style="width:36px; height:36px; flex:none; border-radius:9px; background:var(--bg); display:flex; align-items:center; justify-content:center"><svg width="22" height="22" viewBox="0 0 32 32" fill="none"><circle cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="2"></circle><path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#0ABAB5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg></span>
+                <div style="flex:1; display:flex; flex-direction:column; gap:2px"><div style="display:flex; justify-content:space-between; font-size:14px"><b>BTC short in zone</b><span style="font-size:13px; color:var(--tx2)">nu</span></div><span style="font-size:14px; color:var(--tx2)">Limiet <span style="font-family:'Geist Mono',monospace; color:var(--tx)">80774,8</span></span></div>
+              </div>
+            </div>
+            <div style="flex:none; padding:0 16px 28px; display:flex; flex-direction:column; align-items:center; gap:8px">
+              <div style="display:flex; gap:6px; padding-bottom:8px"><span style="width:6px; height:6px; border-radius:50%; background:var(--bd)"></span><span style="width:18px; height:6px; border-radius:3px; background:var(--tx)"></span><span style="width:6px; height:6px; border-radius:50%; background:var(--bd)"></span></div>
+              <button style="width:100%; height:56px; border:0; border-radius:14px; background:var(--ac); color:var(--onac); font:600 17px 'Geist',sans-serif">Sta meldingen toe</button>
+              <button style="width:100%; height:44px; border:0; background:transparent; color:var(--tx2); font:500 15px 'Geist',sans-serif">Niet nu</button>
+            </div>
+          </div></div>
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }} · 3</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="flex:none; padding:48px 16px 0"><span style="font-size:34px; font-weight:600; letter-spacing:-.03em; line-height:1.1">Zo lees je een kans.</span></div>
+            <div style="position:relative; flex:none; height:340px; margin:48px 16px 0">
+              <sc-for list="{{ ladO.levels }}" as="l" hint-placeholder-count="2"><div style="{{ l.line }}"><span style="{{ l.tag }}">{{ l.name }}</span><span style="{{ l.px }}">{{ l.val }}</span></div></sc-for>
+              <div style="{{ ladO.zone }}"></div>
+              <span style="{{ ladO.zoneTag }}">Zone</span><span style="{{ ladO.zonePx }}">80774,8</span>
+              <div style="{{ ladO.gap }}"></div>
+              <div style="{{ ladO.line }}"></div><span style="{{ ladO.dot }}"></span><span style="{{ ladO.pxTag }}">{{ ladO.pxVal }}</span>
+              <sc-for list="{{ obNotes }}" as="o" hint-placeholder-count="3">
+                <div style="{{ o.s }}"><span style="width:22px; height:22px; flex:none; border-radius:50%; border:1.5px solid var(--ac); display:flex; align-items:center; justify-content:center; font:500 12px 'Geist Mono',monospace; color:var(--aci)">{{ o.n }}</span><span style="font-size:14px; line-height:1.35">{{ o.t }}</span></div>
+              </sc-for>
+            </div>
+            <div style="margin-top:auto; padding:0 16px 28px; display:flex; flex-direction:column; align-items:center; gap:16px">
+              <div style="display:flex; gap:6px"><span style="width:6px; height:6px; border-radius:50%; background:var(--bd)"></span><span style="width:6px; height:6px; border-radius:50%; background:var(--bd)"></span><span style="width:18px; height:6px; border-radius:3px; background:var(--tx)"></span></div>
+              <button style="width:100%; height:56px; border:0; border-radius:14px; background:var(--ac); color:var(--onac); font:600 17px 'Geist',sans-serif">Begrepen</button>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+
+    <div data-screen-label="13 Laden en leeg" style="display:flex; flex-direction:column; gap:14px">
+      <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap"><span style="font:500 13px 'Geist Mono',monospace; color:#4C595B">13</span><span style="font-size:20px; font-weight:600">Laden, verversen, leeg</span><span style="font-size:14px; color:#4C595B">Geen spinner. Het skelet heeft de vorm van de ladder, zodat de inhoud op dezelfde plek verschijnt. De lijn bovenaan groeit met je trekafstand.</span></div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap">
+        <sc-for list="{{ themes }}" as="th" hint-placeholder-count="2">
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }} · laden</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="flex:none; height:2px; margin:0 16px; display:flex; justify-content:center"><span style="width:56%; height:2px; border-radius:1px; background:var(--ac)"></span></div>
+            <div style="height:62px; flex:none; padding:0 16px; display:flex; align-items:center; justify-content:space-between">
+              <div style="display:flex; flex-direction:column; gap:8px"><span style="width:120px; height:20px; border-radius:6px; background:var(--s2)"></span><span style="width:84px; height:12px; border-radius:6px; background:var(--s2)"></span></div>
+              <span style="width:34px; height:34px; border-radius:50%; background:var(--s2)"></span>
+            </div>
+            <div style="position:relative; flex:none; height:500px; margin:12px 16px 0">
+              <span style="position:absolute; left:164px; right:0; top:60px; height:2px; background:var(--s2)"></span>
+              <span style="position:absolute; left:164px; right:0; top:176px; height:28px; background:var(--s2); opacity:.6"></span>
+              <span style="position:absolute; left:164px; right:0; top:332px; height:2px; background:var(--s2)"></span>
+              <span style="position:absolute; left:164px; right:0; top:448px; height:2px; background:var(--s2)"></span>
+              <span style="position:absolute; left:30px; top:236px; width:116px; height:44px; border-radius:8px; background:var(--s2)"></span>
+            </div>
+            <div style="flex:1; padding:0 16px; display:flex; align-items:center"><span style="width:220px; height:14px; border-radius:7px; background:var(--s2)"></span></div>
+            <div style="height:80px; flex:none; border-top:1px solid var(--bd); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:20px">
+              <sc-for list="{{ navNu }}" as="n" hint-placeholder-count="4"><span style="{{ n.s }}">{{ n.l }}</span></sc-for>
+            </div>
+          </div></div>
+          <div style="display:flex; flex-direction:column; gap:8px"><span style="font:500 12px 'Geist Mono',monospace; color:#4C595B">{{ th.label }} · leeg</span>
+          <div style="{{ th.frame }}">
+            <div style="height:44px; flex:none; padding:0 24px; display:flex; align-items:center; justify-content:space-between; font-size:15px; font-weight:600"><span>9:41</span><span style="width:24px; height:11px; border:1.5px solid var(--tx); border-radius:3px"></span></div>
+            <div style="flex:none; padding:16px 16px 12px"><span style="font-size:28px; font-weight:600; letter-spacing:-.02em">Plannen</span></div>
+            <div style="flex:1; padding:0 16px 120px; display:flex; flex-direction:column; justify-content:center; gap:8px">
+              <span style="font-size:22px; font-weight:600">Geen plannen.</span>
+              <span style="font-size:17px; color:var(--tx2)">De app zoekt elke 5 minuten.</span>
+            </div>
+            <div style="height:80px; flex:none; border-top:1px solid var(--bd); display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); padding-bottom:20px">
+              <sc-for list="{{ navPlan }}" as="n" hint-placeholder-count="4"><span style="{{ n.s }}">{{ n.l }}</span></sc-for>
+            </div>
+          </div></div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+
+  <div data-screen-label="14 Lijsten" style="display:grid; grid-template-columns:repeat(auto-fit,minmax(420px,1fr)); gap:24px; max-width:1240px; align-items:start">
+    <div style="padding:24px; border-radius:16px; background:#fff; border:1px solid #CBD3D3; display:flex; flex-direction:column; gap:4px">
+      <span style="font-size:22px; font-weight:600; padding-bottom:10px">Wat is geschrapt</span>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Candlegrafiek op Nu</b><span>Komt pas na een tik, schermvullend. Op Nu is er maar één vraag: hoe ver nog?</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Plannen als tabel</b><span>Vervangen door rijen met afstand en een mini-ladder. Je zoekt wat dichtbij is, niet acht kolommen.</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Koppen "Limiet / Stop / Doel" boven getallen</b><span>De plek op de ladder zegt het al. Er blijft een tag van 12 px over.</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Uitleg per kaart</b><span>Hoe de zone ontstond: één regel in het detail. De rest staat in de Handleiding.</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Winkans, signaalsterkte, verwachte R</b><span>Niet gemeten, dus niet in beeld. Schattingen krijgen ≈ en een stippellijn, en staan nooit in een kop.</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>"Bijgewerkt om 23:46:12"</b><span>De bewegende prijslijn bewijst al dat de data leeft. Alleen als de koers ouder is dan 30 s verschijnt "Koers 2 min oud".</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Coin-logo's, 24u-verandering, volume</b><span>Ruis voor het plan. De ticker als tekst is genoeg.</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Iconen in de tabbalk</b><span>Vier woorden zijn sneller gelezen dan vier symbolen.</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Gekleurde badges per soort</b><span>De soortnaam staat in grijs. Alleen "ongetest" en "proef" krijgen een rand, gestippeld of doorgetrokken.</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Melding "zone nadert"</b><span>Eén melding per kans, alleen in de zone.</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Bevestiging bij overslaan</b><span>Een ongedaan-balk van 4 s in plaats van een vraag.</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Kaartranden, schaduwen, verlopen op Nu</b><span>De ladder staat los op de achtergrond. Alleen het detailblad heeft een vlak.</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Grootte in € én in coin</b><span>Op de checklist alleen de coin, want dat typ je in. Euro's staan bij Account (1 R).</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Spinners, widget, trillen</b><span>Skeletons in de vorm van de ladder. Widgets en trillen werken niet in een webapp op Safari.</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.3fr); gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Statistieken in de week</b><span>Gemiddelde, grootste verlies en ratio's zijn weg. Eén getal, één trend, één observatie.</span></div>
+    </div>
+    <div style="padding:24px; border-radius:16px; background:#fff; border:1px solid #CBD3D3; display:flex; flex-direction:column; gap:4px">
+      <span style="font-size:22px; font-weight:600; padding-bottom:10px">Bewegingen en hun oorzaak</span>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:0 0 8px; font:500 12px 'Geist Mono',monospace; color:#4C595B"><span>GEBEURTENIS</span><span>BEWEGING</span><span>TIJD · CURVE</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Nieuwe koers binnen</b><span>Prijslijn schuift naar de nieuwe hoogte en de afstandsbalk groeit of krimpt mee. De cijfers rollen per positie.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">320 mee</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Kans komt dichterbij (rust → kans)</b><span>"Rust" vervaagt. De ladder zoomt in vanaf de zone-lijn, die op zijn plek blijft, en de balk kleurt van grijs naar accent.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">180 staat + 320 mee</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Koers raakt de zone</b><span>Het zone-vlak wordt eenmaal dieper (14 → 24%) en de afstandsbalk verdwijnt.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">240 blad</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Vinger trekt omhoog</b><span>Het blad volgt 1:1 en de ladder krimpt tot 230 px. Bij loslaten klikt alles vast, open of dicht.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">240 blad</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Tik op Grafiek</b><span>De niveaulijnen blijven staan en schuiven naar hun plek op volle hoogte. De candles verschijnen eronder.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">320 mee + 180</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Vinger veegt opzij</b><span>De ladder volgt de vinger en wordt doorzichtig. Voorbij 110 px schuift hij weg; anders veert hij terug.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">240 blad</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Vinger houdt een getal vast</b><span>Een balk loopt vol onder het getal. Is hij vol, dan wordt het label "Gekopieerd".</span><span style="font-family:'Geist Mono',monospace; font-size:12px">450 vast + 120</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Checkliststap gekopieerd</b><span>De stap klapt in tot een rij met ✓ en de volgende groeit open. Het segment bovenaan vult.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">240 blad</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Trek omlaag</b><span>De lijn onder de statusbalk groeit met je trekafstand. Voorbij 64 px wordt er ververst; het skelet gaat over in de inhoud.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">1:1 · 180 staat</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Veeg tussen tabs of dagen</b><span>De pagina's schuiven mee en het tab-streepje loopt mee.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">1:1 · 240 blad</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Order gevuld</b><span>Het zone-vlak trekt samen tot de lijn "Instap" en de R-teller verschijnt.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">240 blad</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Doel 1 geraakt</b><span>De stoplijn schuift naar de instap. Je ziet het risico letterlijk verdwijnen.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">320 mee</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Doel of stop geraakt</b><span>Die lijn flitst één keer (opacity 1 → 0,4 → 1). Daarna staat alles stil.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">320 mee</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Replay afspelen of schuiven</b><span>De prijslijn springt per tijdstap mee. Zone, stop en instap veranderen op het moment dat ze echt veranderden.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">220 linear</span></div>
+      <div style="display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.4fr) 92px; gap:12px; padding:10px 0; border-top:1px solid #E3E8E8; font-size:14px; line-height:1.45"><b>Thema gekozen</b><span>Alle kleuren vloeien over. Niets beweegt.</span><span style="font-family:'Geist Mono',monospace; font-size:12px">180 staat</span></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;live&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Gedrag&quot;}, &quot;view&quot;: {&quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;Beide&quot;, &quot;Donker&quot;, &quot;Licht&quot;], &quot;default&quot;: &quot;Beide&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Gedrag&quot;}}">
+class Component extends DCLogic {
+  state = { px: 80420.5, dx: 0, drag: false, skipped: false, ck: 1, holding: null, copied: null, ri: 34, tf: '15m' };
+  componentDidMount() {
+    this.rm = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    this.t = setInterval(() => {
+      if (this.props.live === false) return;
+      this.setState(s => { let p = s.px + (Math.random() - .5) * 90 + (80440 - s.px) * .12; p = Math.max(80340, Math.min(80600, p)); return { px: Math.round(p * 10) / 10 }; });
+    }, 1600);
+    this.forceUpdate();
+  }
+  componentWillUnmount() { clearInterval(this.t); clearInterval(this.pt); clearTimeout(this.ht); clearTimeout(this.ut); clearTimeout(this.ct); }
+  copyTo(v) { try { navigator.clipboard && navigator.clipboard.writeText(String(v).replace(' BTC', '').replace(',', '.')).catch(() => {}); } catch (e) {} }
+  renderVals() {
+    const P = this.props, S = this.state, rm = this.rm;
+    const tr = (props, ms = 320, ease = 'cubic-bezier(.4,0,.2,1)') => rm ? 'none' : props.split(' ').map(p => `${p} ${ms}ms ${ease}`).join(', ');
+    const f1 = p => p.toFixed(1).replace('.', ',');
+    const fR = v => (v > 0.05 ? '+' : v < -0.05 ? '−' : '') + Math.abs(v).toFixed(1).replace('.', ',') + ' R';
+    const TH = {
+      dark: { '--bg': '#0B0F10', '--s1': '#12181A', '--s2': '#1C2427', '--bd': '#263235', '--tx': '#EEF3F3', '--tx2': '#94A2A4', '--ac': '#0ABAB5', '--aci': '#3FD3CE', '--onac': '#03201F', '--win': '#3DD68C', '--loss': '#FF6B6B', '--zone': 'rgba(10,186,181,.14)', '--cu': '#8F9B9E', '--cdn': '#55625F' },
+      light: { '--bg': '#F5F7F7', '--s1': '#FFFFFF', '--s2': '#E7ECEC', '--bd': '#D3DBDB', '--tx': '#0D1415', '--tx2': '#4C595B', '--ac': '#0ABAB5', '--aci': '#05706C', '--onac': '#03201F', '--win': '#0B7A47', '--loss': '#C42F2C', '--zone': 'rgba(10,186,181,.16)', '--cu': '#A9B3B5', '--cdn': '#6B7779' }
+    };
+    const view = P.view ?? 'Beide';
+    const keys = view === 'Donker' ? ['dark'] : view === 'Licht' ? ['light'] : ['dark', 'light'];
+    const themes = keys.map(k => {
+      const label = k === 'dark' ? 'Donker' : 'Licht';
+      return {
+        k, label,
+        frame: { ...TH[k], width: 375, height: 812, flex: 'none', borderRadius: 44, overflow: 'hidden', position: 'relative', background: 'var(--bg)', color: 'var(--tx)', border: '1px solid ' + (k === 'dark' ? '#1E282A' : '#CBD3D3'), fontFamily: "'Geist',sans-serif", display: 'flex', flexDirection: 'column', transition: rm ? 'none' : 'background 180ms cubic-bezier(.2,.8,.2,1), color 180ms' },
+        seg: ['Donker', 'Licht', 'Systeem'].map(l => { const a = l === label; return { l, s: { flex: 1, height: 40, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 15, fontWeight: a ? 600 : 500, background: a ? 'var(--bg)' : 'transparent', color: a ? 'var(--tx)' : 'var(--tx2)' } }; })
+      };
+    });
+    const tokens = [['--bg', 'Achtergrond'], ['--s1', 'Blad'], ['--s2', 'Spoor, skelet'], ['--bd', 'Haarlijn'], ['--tx', 'Tekst, koers'], ['--tx2', 'Bijtekst'], ['--ac', 'Accent, zone, afstand'], ['--aci', 'Accent als tekst'], ['--win', 'Doel, winst'], ['--loss', 'Stop, verlies'], ['--zone', 'Zone-vlak'], ['--cu', 'Candle op'], ['--cdn', 'Candle neer']].map(([k, u]) => ({ k, u, dv: TH.dark[k].startsWith('rgba') ? 'ac 14%' : TH.dark[k], lv: TH.light[k].startsWith('rgba') ? 'ac 16%' : TH.light[k], ds: { width: 26, height: 26, flex: 'none', borderRadius: 7, background: TH.dark[k] === TH.dark['--zone'] ? '#0B0F10' : TH.dark[k], boxShadow: TH.dark[k] === TH.dark['--zone'] ? 'inset 0 0 0 26px ' + TH.dark[k] : 'none', border: '1px solid #263235' }, ls: { width: 26, height: 26, flex: 'none', borderRadius: 7, background: TH.light[k], border: '1px solid #D3DBDB' } }));
+    const navOf = act => ['Nu', 'Plannen', 'Logboek', 'Bewijs'].map(l => ({ l, s: { height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 13, fontWeight: l === act ? 600 : 500, color: l === act ? 'var(--tx)' : 'var(--tx2)', borderTop: '2px solid ' + (l === act ? 'var(--ac)' : 'transparent'), marginTop: -1 } }));
+
+    const HI = 81250, LO = 79950, ST = 81097.9, ZH = 80810, ZL = 80740, EN = 80774.8, D2 = 80128.6, L = 164, RU = ST - EN;
+    const DIG = '0123456789'.split('');
+    const roll = s => s.split('').map(ch => /\d/.test(ch) ? { g: DIG, col: { display: 'block', transform: `translateY(-${ch}em)`, transition: tr('transform') } } : { g: [ch], col: { display: 'block' } });
+    const mono = (sz, col, w = 400) => ({ font: `${w} ${sz}px 'Geist Mono',monospace`, color: col });
+    const ladder = (H, price, numPx) => {
+      const y = p => (HI - p) / (HI - LO) * H, py = y(price), zt = y(ZH), zb = y(ZL);
+      const lv = (p, name, col) => ({ name, val: f1(p), line: { position: 'absolute', left: L, right: 0, top: y(p), borderTop: '1px solid ' + col }, tag: { position: 'absolute', left: 0, bottom: 4, fontSize: 12, fontWeight: 500, color: col }, px: { position: 'absolute', right: 0, bottom: 4, ...mono(13, col) } });
+      const d = Math.max(0, (ZL - price) / price * 100);
+      return {
+        y, levels: [lv(ST, 'Stop', 'var(--loss)'), lv(D2, 'Doel', 'var(--win)')],
+        zone: { position: 'absolute', left: L, right: 0, top: zt, height: zb - zt, background: 'var(--zone)', borderTop: '1px dashed var(--ac)', borderBottom: '1px dashed var(--ac)' },
+        zoneTag: { position: 'absolute', left: L, top: zt - 20, fontSize: 12, fontWeight: 500, color: 'var(--aci)' },
+        zonePx: { position: 'absolute', right: 0, top: zt - 20, ...mono(13, 'var(--aci)') },
+        line: { position: 'absolute', left: L - 6, right: 0, top: py, borderTop: '1.5px solid var(--tx)', transition: tr('top') },
+        dot: { position: 'absolute', left: L - 6, top: py - 5, width: 11, height: 11, borderRadius: '50%', background: 'var(--tx)', transition: tr('top') },
+        pxTag: { position: 'absolute', right: 0, top: py + 6, ...mono(13, 'var(--tx)', 500), transition: tr('top') },
+        pxVal: f1(price),
+        gap: { position: 'absolute', left: L - 1, width: 3, borderRadius: 2, top: zb, height: Math.max(0, py - zb), background: 'var(--ac)', transition: tr('top height') },
+        num: { position: 'absolute', left: 0, width: L - 18, top: (zb + py) / 2 - numPx * .75, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 6, transition: tr('top') },
+        roll: roll(d.toFixed(2).replace('.', ','))
+      };
+    };
+    const lad = ladder(500, S.px, 52), ladS = ladder(230, S.px, 32), ladO = ladder(340, 80420.5, 0);
+    const obNotes = [[ladO.y(ST) - 12, '1', 'Stop en doel. Rood is risico, groen is winst.'], [ladO.y(ZH) + 2, '2', 'De zone. Hier staat je limiet.'], [ladO.y(80420.5) - 12, '3', 'De koers. De balk is de afstand.']].map(([top, n, t]) => ({ n, t, s: { position: 'absolute', left: 0, width: L - 14, top, display: 'flex', gap: 8, alignItems: 'flex-start' } }));
+
+    const card = { position: 'relative', height: 500, transform: `translateX(${S.dx}px)`, opacity: Math.max(0, 1 - Math.abs(S.dx) / 420), transition: S.drag || rm ? 'none' : 'transform 240ms cubic-bezier(.32,.72,0,1), opacity 240ms cubic-bezier(.32,.72,0,1)', touchAction: 'pan-y', cursor: S.drag ? 'grabbing' : 'grab', userSelect: 'none' };
+
+    const hold = (key, val, after) => {
+      const on = S.holding === key, done = S.copied === key;
+      return {
+        down: e => { if (e && e.preventDefault) e.preventDefault(); clearTimeout(this.ht); this.setState({ holding: key, copied: null }); this.ht = setTimeout(() => { this.copyTo(val); this.setState({ holding: null, copied: key }); clearTimeout(this.ct); this.ct = setTimeout(() => this.setState({ copied: null }), 1600); after && after(); }, 450); },
+        up: () => { if (this.state.holding === key) { clearTimeout(this.ht); this.setState({ holding: null }); } },
+        bar: { height: 2, borderRadius: 1, background: 'var(--ac)', width: on || done ? '100%' : '0%', transition: rm ? 'none' : on ? 'width 450ms linear' : 'width 120ms cubic-bezier(.2,.8,.2,1)' },
+        hint: done ? 'Gekopieerd' : on ? 'Vasthouden' : 'Houd vast', hintS: { fontSize: 13, fontWeight: 500, color: done ? 'var(--aci)' : 'var(--tx2)' }, done
+      };
+    };
+    const detail = [['Limiet', '80774,8', 'var(--tx)'], ['Stop', '81097,9', 'var(--loss)'], ['Doel 1 · 1 R', '80451,7', 'var(--win)'], ['Doel 2 · 2 R', '80128,6', 'var(--win)'], ['Grootte', '0,309 BTC', 'var(--tx)']].map(([lab, val, col], i) => {
+      const h = hold('d' + i, val);
+      return { ...h, lab: h.done ? 'Gekopieerd' : lab, labS: { fontSize: 15, color: h.done ? 'var(--aci)' : 'var(--tx2)', fontWeight: h.done ? 500 : 400 }, val, valS: mono(20, col) };
+    });
+
+    const CKD = [['Markt', 'BTC-PERP', 'Short · Limit', 'var(--tx)'], ['Limiet', '80774,8', 'Prijsveld', 'var(--tx)'], ['Stop', '81097,9', 'Stop-loss', 'var(--loss)'], ['Doel', '80128,6', 'Take-profit · 2 R', 'var(--win)'], ['Grootte', '0,309', 'BTC', 'var(--tx)']];
+    const cur = S.ck;
+    const ck = CKD.map(([title, val, sub, col], i) => {
+      const done = i < cur, isCur = i === cur;
+      const h = hold('c' + i, val, () => setTimeout(() => this.setState(s => s.ck === i ? { ck: i + 1 } : null), 380));
+      return {
+        ...h, title, val, sub, cur: isCur, notCur: !isCur, mark: done ? '✓' : String(i + 1),
+        seg: { height: 4, borderRadius: 2, background: done ? 'var(--ac)' : isCur ? 'var(--tx2)' : 'var(--s2)', transition: tr('background', 240) },
+        bigS: { font: `500 ${val.length > 7 ? 44 : 56}px 'Geist Mono',monospace`, letterSpacing: '-.04em', lineHeight: 1, color: col },
+        row: { minHeight: 48, display: 'flex', alignItems: 'center', gap: 12, cursor: 'pointer', color: done ? 'var(--tx2)' : 'var(--tx)', opacity: done ? 1 : .55 },
+        mk: { width: 24, height: 24, flex: 'none', borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', ...mono(12, done ? 'var(--onac)' : 'var(--tx2)', 600), background: done ? 'var(--ac)' : 'transparent', border: done ? 0 : '1.5px solid var(--bd)' },
+        smallS: mono(15, done ? 'var(--tx2)' : 'var(--tx)'),
+        go: () => this.setState({ ck: i })
+      };
+    });
+    const ckDone = cur >= CKD.length;
+
+    const CC = [80210,80260,80330,80410,80520,80610,80680,80720,80760,80690,80600,80540,80470,80420,80380,80350,80400,80470,80550,80630,80690,80730,80765,80700,80620,80540,80490,80430,80380,80320,80290,80340,80410,80480,80560,80640,80700,80755,80680,80610,80540,80500,80460,80430,80410,80420];
+    const HC = 540, yC = p => (HI - p) / (HI - LO) * HC, CW = 283, TOUCH = [8, 22, 37], N = CC.length;
+    const ch = {
+      zone: { position: 'absolute', left: 0, right: 0, top: yC(ZH), height: yC(ZL) - yC(ZH), background: 'var(--zone)' },
+      candles: CC.map((c, i) => { const o = i ? CC[i - 1] : c - 40, top = Math.max(o, c), bot = Math.min(o, c), hh = top + (TOUCH.includes(i) ? 45 : 26), ll = bot - 24, x = (i + .5) / N * CW, col = c >= o ? 'var(--cu)' : 'var(--cdn)'; return { wick: { position: 'absolute', left: x, top: yC(hh), height: yC(ll) - yC(hh), width: 1, background: col }, body: { position: 'absolute', left: -2, width: 5, top: yC(top) - yC(hh), height: Math.max(2, yC(bot) - yC(top)), background: col, borderRadius: 1 } }; }),
+      levels: [[ST, 'var(--loss)', 0], [EN, 'var(--aci)', 1], [D2, 'var(--win)', 0], [80420.5, 'var(--tx)', 0]].map(([p, col, dash]) => ({ val: f1(p), line: { position: 'absolute', left: 0, right: 0, top: yC(p), borderTop: `1px ${dash ? 'dashed' : 'solid'} ${col}` }, px: { position: 'absolute', right: 0, top: -9, padding: '1px 0 1px 6px', background: 'var(--bg)', ...mono(12, col, 500) } })),
+      marks: TOUCH.map(i => ({ position: 'absolute', left: (i + .5) / N * CW - 6, top: yC(Math.max(CC[i], CC[i - 1]) + 45) - 16, width: 12, height: 12, borderRadius: '50%', border: '1.5px solid var(--aci)' }))
+    };
+    const tfs = ['1m', '5m', '15m', '1u', '4u'].map(t => { const a = t === S.tf; return { t, go: () => this.setState({ tf: t }), s: { height: 44, borderRadius: 12, border: 0, cursor: 'pointer', font: "500 14px 'Geist Mono',monospace", background: a ? 'var(--s2)' : 'transparent', color: a ? 'var(--tx)' : 'var(--tx2)' } }; });
+
+    const badge = st => ({ height: 20, padding: '0 7px', border: `1px ${st === 'ongetest' ? 'dashed' : 'solid'} var(--tx2)`, borderRadius: 10, display: 'inline-flex', alignItems: 'center', ...mono(11, 'var(--tx2)', 500) });
+    const dLive = Math.max(0, (ZL - S.px) / S.px * 100);
+    const plans = [['BTC', 'short', 'Zone-sweep', 'ongetest', dLive], ['ETH', 'long', 'Structuur A/B', 'proef', 1.8], ['SOL', 'long', 'Zone-radar', 'ongetest', 2.6], ['LINK', 'short', 'Structuur C', 'ongetest', 3.1], ['AVAX', 'long', 'Zone-radar', 'ongetest', 4.4], ['BTC', 'long', 'Structuur A/B', 'proef', 5.2]].map(([c, dir, type, st, d]) => ({ c, dir, type, st, badge: badge(st), d: d.toFixed(2).replace('.', ',') + '%', dot: { position: 'absolute', left: -3, top: Math.min(34, 4 + d * 5.6), width: 10, height: 10, borderRadius: '50%', background: 'var(--tx)', transition: tr('top') } }));
+
+    const dot = c => ({ width: 10, height: 10, marginTop: 4, borderRadius: '50%', background: c, flex: 'none' });
+    const rS = c => mono(15, c, 500);
+    const log = [
+      ['23:20', 'BTC short', 'Doel 2 geraakt', '+2,0 R', 'var(--win)', 'var(--win)'],
+      ['21:40', 'BTC short gevuld', 'Order in 1 min 12 s', '', 'var(--tx2)', 'var(--ac)'],
+      ['19:05', 'SOL long overgeslagen', 'Haalde later doel 1', '0 R', 'var(--tx2)', 'var(--tx2)'],
+      ['14:30', 'ETH long', 'Stop geraakt na 40 min', '−1,0 R', 'var(--loss)', 'var(--loss)'],
+      ['09:12', 'Dag begonnen', '16 plannen actief', '', 'var(--tx2)', 'var(--bd)']
+    ].map(([t, title, sub, r, rc, dc]) => ({ t, title, sub, r, rS: rS(rc), dot: dot(dc) }));
+
+    const CL = [80420,80480,80510,80470,80530,80590,80560,80620,80660,80640,80700,80730,80710,80760,80790,80850,80920,80980,81010,80960,80900,80820,80760,80690,80600,80520,80440,80480,80400,80330,80270,80300,80220,80160,80110,80150,80090,80130,80060,80100];
+    const ri = S.ri, rpP = CL[ri], HR = 340, yR = p => (HI - p) / (HI - LO) * HR;
+    const filled = ri >= 14, be = ri >= 26, fin = ri >= 34;
+    const EV = [[0, 'Plan actief. Koers onder de zone.'], [13, 'In zone. Melding verstuurd.'], [14, 'Gevuld op 80774,8.'], [18, 'Tegen je in, 0,7 R van je stop.'], [26, 'Doel 1. Stop naar instap.'], [34, 'Doel 2. Gesloten.']];
+    const tm = i => { const m = 20 * 60 + 30 + i * 5; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+    const evI = EV.reduce((a, e, k) => e[0] <= ri ? k : a, 0);
+    const rNow = !filled ? null : fin ? 2 : (EN - rpP) / RU;
+    const stopP = be ? EN : ST;
+    const rpl = (p, name, col) => ({ name, val: f1(p), line: { position: 'absolute', left: L, right: 0, top: yR(p), borderTop: '1px solid ' + col, transition: tr('top') }, tag: { position: 'absolute', left: 0, bottom: 4, fontSize: 12, fontWeight: 500, color: col }, px: { position: 'absolute', right: 0, bottom: 4, ...mono(13, col) } });
+    const stopRun = () => { clearInterval(this.pt); this.pt = null; };
+    const setRi = v => this.setState({ ri: Math.max(0, Math.min(CL.length - 1, v)) });
+    const rp = {
+      i: ri, time: tm(ri), event: EV[evI][1], step: (evI + 1) + ' / ' + EV.length,
+      r: rNow === null ? '—' : fR(rNow), rLab: rNow === null ? 'Niet gevuld' : fin ? 'Resultaat' : 'Open',
+      levels: [rpl(stopP, be ? 'Stop = instap' : 'Stop', 'var(--loss)'), rpl(D2, 'Doel', 'var(--win)')],
+      zone: filled ? { position: 'absolute', left: L, right: 0, top: yR(EN), height: 0, borderTop: '1.5px solid var(--ac)', transition: tr('top height', 240, 'cubic-bezier(.32,.72,0,1)') } : { position: 'absolute', left: L, right: 0, top: yR(ZH), height: yR(ZL) - yR(ZH), background: 'var(--zone)', borderTop: '1px dashed var(--ac)', borderBottom: '1px dashed var(--ac)', transition: tr('top height', 240, 'cubic-bezier(.32,.72,0,1)') },
+      zoneName: filled ? 'Instap' : 'Zone',
+      zoneTag: { position: 'absolute', left: L, top: yR(ZH) - 20, fontSize: 12, fontWeight: 500, color: 'var(--aci)', opacity: be ? 0 : 1, transition: tr('opacity', 180) },
+      line: { position: 'absolute', left: L - 6, right: 0, top: yR(rpP), borderTop: '1.5px solid var(--tx)', transition: rm ? 'none' : 'top 220ms linear' },
+      dot: { position: 'absolute', left: L - 6, top: yR(rpP) - 5, width: 11, height: 11, borderRadius: '50%', background: 'var(--tx)', transition: rm ? 'none' : 'top 220ms linear' },
+      pxTag: { position: 'absolute', right: 0, top: yR(rpP) + 6, ...mono(13, 'var(--tx)', 500), transition: rm ? 'none' : 'top 220ms linear' },
+      pxVal: f1(rpP),
+      play: this.pt ? 'Pauze' : 'Speel af',
+      chips: EV.map(([i], k) => ({ t: tm(i), go: () => { stopRun(); setRi(i); }, s: { height: 36, padding: '0 10px', borderRadius: 18, cursor: 'pointer', ...mono(13, k === evI ? 'var(--tx)' : 'var(--tx2)', 500), border: '1px solid ' + (k === evI ? 'var(--ac)' : 'var(--bd)'), background: 'transparent' } }))
+    };
+
+    const WV = [1.2, -0.8, 2.4, 0.6, -1.5, 3.1, 1.9, 3.4];
+    const weeks = WV.map((v, i) => { const last = i === WV.length - 1, h = Math.abs(v) / 3.6 * 100; return { v: (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1).replace('.', ','), n: 'w' + (36 + i), bar: { position: 'absolute', left: 0, right: 0, borderRadius: 4, top: v >= 0 ? 110 - h : 111, height: Math.max(3, h), background: last ? 'var(--ac)' : 'var(--s2)' }, vS: mono(11, last ? 'var(--aci)' : 'var(--tx2)', 500) }; });
+
+    const proof = [['Structuur A/B', 'proef', 'WLWWLBWLWWLLWLWBWW', 4.2], ['Structuur C', 'ongetest', 'LLWLBL', -1.5], ['Zone-radar', 'ongetest', 'WLWWLLWBWLL', 2.0], ['Zone-sweep', 'ongetest', 'LWLLWBLWL', -0.6]].map(([name, st, seq, r]) => ({ name, st, badge: badge(st), r: fR(r), rS: { marginLeft: 'auto', ...mono(17, r >= 0 ? 'var(--win)' : 'var(--loss)', 500) }, n: seq.length + ' trades', dots: seq.split('').map(c => ({ width: 8, height: 8, borderRadius: '50%', background: c === 'W' ? 'var(--win)' : c === 'L' ? 'var(--loss)' : 'var(--tx2)' })) }));
+
+    return {
+      themes, tokens, navNu: navOf('Nu'), navPlan: navOf('Plannen'), navLog: navOf('Logboek'), navBew: navOf('Bewijs'),
+      lad, ladS, ladO, obNotes, card, detail, ck, ch, tfs, plans, log, rp, weeks, proof,
+      skipped: S.skipped, notSkipped: !S.skipped,
+      swDown: e => { if (S.skipped) return; this.sx = e.clientX; this.setState({ drag: true, dx: 0 }); try { e.currentTarget.setPointerCapture(e.pointerId); } catch (_) {} },
+      swMove: e => { if (this.state.drag) this.setState({ dx: e.clientX - this.sx }); },
+      swUp: () => { if (!this.state.drag) return; const dx = this.state.dx; if (Math.abs(dx) > 110) { this.setState({ drag: false, dx: Math.sign(dx) * 420, skipped: true }); clearTimeout(this.ut); this.ut = setTimeout(() => this.setState({ skipped: false, dx: 0 }), 4000); } else this.setState({ drag: false, dx: 0 }); },
+      undo: () => { clearTimeout(this.ut); this.setState({ skipped: false, dx: 0 }); },
+      ckCount: Math.min(cur + 1, 5) + '/5', ckCta: ckDone ? 'Order staat' : 'Volgende',
+      ckNext: () => this.setState({ ck: ckDone ? 0 : cur + 1 }), ckReset: () => this.setState({ ck: 0 }),
+      rpScrub: e => { stopRun(); setRi(+e.target.value); },
+      rpPrev: () => { stopRun(); const p = [...EV].reverse().find(e => e[0] < ri); setRi(p ? p[0] : 0); },
+      rpNext: () => { stopRun(); const n = EV.find(e => e[0] > ri); setRi(n ? n[0] : CL.length - 1); },
+      rpToggle: () => { if (this.pt) { stopRun(); this.forceUpdate(); return; } if (ri >= CL.length - 1) setRi(0); this.pt = setInterval(() => { const v = this.state.ri + 1; if (v >= CL.length) { stopRun(); this.forceUpdate(); } else this.setState({ ri: v }); }, 220); this.forceUpdate(); }
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -20,6 +20,11 @@ CREATE TABLE IF NOT EXISTS users (
     -- uren, altijd geluid bij een bevestigde kans (het bestaande gedrag).
     quiet_hours_start TEXT,
     quiet_hours_end TEXT,
+    -- Eigen bedrag in euro dat jij per trade riskeert (de waarde van 1R). Alleen voor weergave op de kaarten, nooit voor orders. NULL = niet ingevuld.
+    risk_per_trade_eur REAL,
+    push_budget INTEGER,
+    -- Pauzeknop (F3): tot dit moment (ISO, UTC) gaan er geen pushes naar deze gebruiker. NULL = geen pauze. Signalen en het journaal lopen gewoon door.
+    push_paused_until TEXT,
     -- Drempel (percentage) waarboven de gepoolde factoren voor DEZE
     -- gebruiker als "bevestigd" tellen. De twee harde eisen (Uitgerektheid,
     -- BTC-trend) blijven voor iedereen hard, dit percentage geldt alleen
@@ -32,7 +37,10 @@ CREATE TABLE IF NOT EXISTS users (
     -- default (60.0) is numeriek gelijk aan de "Normaal"-stand, dus de
     -- waarde alleen kan "nog niet gekozen" niet van "bewust Normaal
     -- gekozen" onderscheiden. Voedt de onboarding-checklist (Task 9).
-    confirm_threshold_set_at TEXT
+    confirm_threshold_set_at TEXT,
+    -- Volg-set (fase 2, R6): leeg is geen set. Een set filtert alleen de pushmeldingen van deze gebruiker (push_policy.in_follow_set), nooit
+    -- de data of de kaarten die hij ziet.
+    follow_set_id INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -191,6 +199,8 @@ CREATE TABLE IF NOT EXISTS signals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     message_id INTEGER REFERENCES messages(id),
     coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
     direction TEXT NOT NULL,
     category TEXT NOT NULL,
     price REAL,
@@ -240,6 +250,8 @@ CREATE TABLE IF NOT EXISTS signals (
     -- geraakt is.
     auto_outcome TEXT,
     auto_outcome_at TEXT,
+    -- Gezet als stop en doel in dezelfde candle vielen: de volgorde is dan onbekend en de uitkomst is conservatief als stop geteld.
+    auto_outcome_note TEXT,
     -- Dichtstbijzijnde zelf-gedetecteerde steun/weerstand-zonerand aan de
     -- stop-kant van de prijs op het moment van dit signaal (los prijsgetal,
     -- niet de hele zone) — NULL als er geen bruikbare zone dichtbij was.
@@ -492,14 +504,86 @@ CREATE TABLE IF NOT EXISTS smc_setups (
     signal_id INTEGER REFERENCES signals(id),
     created_at TEXT NOT NULL,
     -- Sluittijd van de laatste 15m-candle die tegen deze zone beoordeeld
-    -- is, geen wandklok-tijd: zie market_scanner._smc_candles_since.
+    -- is, geen wandklok-tijd: zie smc_eval.candles_since.
     updated_at TEXT NOT NULL,
     -- Gezet i.p.v. de rij te verwijderen zodra de setup vervalt: dezelfde
     -- breuk + sweep wordt vaak later nog eens gezien en mag dan niet als
     -- nieuwe bouwende setup (met nieuwe push) terugkomen.
-    invalidated_at TEXT
+    invalidated_at TEXT,
+    -- Eén keer een melding als de koers in de zone komt (de limietorder is dan waarschijnlijk geraakt), zie
+    -- market_scanner._notify_zone_touches.
+    zone_alert_sent INTEGER NOT NULL DEFAULT 0,
+    -- Het moment van die zonemelding: het Logboek en de replay tonen "in zone" alleen met een echt tijdstip. Leeg voor oudere setups.
+    zone_alert_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_smc_setups_coin ON smc_setups(coin);
+
+-- Gedwongen sluitingen (liquidaties) op Binance futures, per coin opgeteld per 5 minuten. long_usd is de waarde aan
+-- longs die geliquideerd werd, short_usd die aan shorts. Gevuld door app/liquidations.py (live stream, geen history).
+CREATE TABLE IF NOT EXISTS liquidations_5m (
+    coin TEXT NOT NULL,
+    bucket TEXT NOT NULL,
+    long_usd REAL NOT NULL DEFAULT 0,
+    short_usd REAL NOT NULL DEFAULT 0,
+    n INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (coin, bucket)
+);
+
+-- Markt-script (app/market_script.py): elke 4 uur per coin een korte duiding en maximaal twee scenario's met een
+-- voorwaarde. Een scenario dat afgaat wordt een gewoon signaal (trade_type 'script') zodat uitkomst en Bewijs vanzelf werken.
+CREATE TABLE IF NOT EXISTS market_scripts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    summary TEXT,
+    bias TEXT,
+    model TEXT,
+    n_dropped INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_market_scripts_coin ON market_scripts(coin, created_at);
+CREATE TABLE IF NOT EXISTS script_scenarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    script_id INTEGER NOT NULL REFERENCES market_scripts(id),
+    coin TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    trigger_type TEXT NOT NULL,
+    trigger_level REAL NOT NULL,
+    entry REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL NOT NULL,
+    reason TEXT,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    fired_at TEXT,
+    signal_id INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_script_scenarios_state ON script_scenarios(state, coin);
+
+-- Nieuws en events (app/news.py): koppen met de duiding van een goedkoop Claude-model.
+CREATE TABLE IF NOT EXISTS market_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    at TEXT NOT NULL,
+    source TEXT NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT UNIQUE,
+    coins TEXT,
+    direction TEXT,
+    impact TEXT,
+    summary TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_market_events_at ON market_events(at);
+
+-- Samenval: een SMC-signaal en een community-call op dezelfde coin en kant binnen het venster. Eén rij per
+-- SMC-signaal (UNIQUE) zodat er nooit twee keer gemeld wordt; de uitkomst staat op het signaal zelf.
+CREATE TABLE IF NOT EXISTS samenvallen (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    smc_signal_id INTEGER NOT NULL UNIQUE REFERENCES signals(id),
+    message_id INTEGER,
+    created_at TEXT NOT NULL
+);
 
 -- Indexen op kolommen waar steeds op gefilterd of gesorteerd wordt. Zonder
 -- deze doorzoekt SQLite bij elke dashboard- of coinpagina de volledige
@@ -516,3 +600,758 @@ CREATE INDEX IF NOT EXISTS idx_journal_signal_id ON journal_entries(signal_id);
 CREATE INDEX IF NOT EXISTS idx_journal_open ON journal_entries(entry_price, exit_price);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_username_time ON login_attempts(username, attempted_at);
 CREATE INDEX IF NOT EXISTS idx_registration_attempts_ip_time ON registration_attempts(ip_address, attempted_at);
+
+-- Structuur-setups (app/structure_live.py): breuk van een lijn of range op 30m, met een oordeel van Claude (A, B of C) en de
+-- levensloop tot de limiet gevuld wordt. UNIQUE zodat dezelfde breuk nooit twee keer gemeld wordt.
+CREATE TABLE IF NOT EXISTS structure_setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
+    direction TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    break_at TEXT NOT NULL,
+    p1_at TEXT NOT NULL,
+    line_a REAL NOT NULL,
+    line_slope REAL NOT NULL,
+    atr REAL NOT NULL,
+    grade TEXT,
+    reason TEXT,
+    features TEXT,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    fired_at TEXT,
+    signal_id INTEGER,
+    plan TEXT,
+    UNIQUE(coin, direction, kind, break_at)
+);
+CREATE INDEX IF NOT EXISTS idx_structure_setups_state ON structure_setups(state, coin);
+
+-- Eenmalige meldingen (agenda-herinneringen, motor uitgeschakeld): de sleutel voorkomt dat dezelfde melding twee keer gaat,
+-- ook als de scan als losse oneshot-process opnieuw draait.
+CREATE TABLE IF NOT EXISTS sent_alerts (
+    key TEXT PRIMARY KEY,
+    at TEXT NOT NULL
+);
+
+-- Levensteken per motor: wanneer liep hij voor het laatst. Zo valt "er zijn geen setups" te onderscheiden van "de motor draait niet".
+CREATE TABLE IF NOT EXISTS engine_heartbeat (
+    name TEXT PRIMARY KEY,
+    at TEXT NOT NULL,
+    detail TEXT
+);
+
+-- Kansen die een dagcap tegenhield (app/daycap.py): één rij per motor en kans, `at` is de laatste keer dat de cap hem tegenhield. Zo telt een kans die
+-- elke cyclus terugkomt één keer per 24 uur. Alleen meting: geen motor leest dit om te beslissen.
+CREATE TABLE IF NOT EXISTS cap_holds (
+    engine TEXT NOT NULL,
+    key TEXT NOT NULL,
+    at TEXT NOT NULL,
+    PRIMARY KEY (engine, key)
+);
+
+-- Trend-pullback-instappen (app/trend_live.py): de sleutel (coin, kant, tijd van de impuls) voorkomt dat dezelfde instap twee keer gemeld wordt.
+CREATE TABLE IF NOT EXISTS trend_entries (
+    key TEXT PRIMARY KEY,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    at TEXT NOT NULL,
+    signal_id INTEGER
+);
+
+-- Paginabezoeken per gebruiker per dag (UTC), alleen voor het overzicht van de CEO. Telt paginaweergaven, geen API-aanroepen.
+CREATE TABLE IF NOT EXISTS user_visits (
+    user_id INTEGER NOT NULL,
+    day TEXT NOT NULL,
+    views INTEGER NOT NULL DEFAULT 0,
+    last_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, day)
+);
+
+-- Ketting van vingerafdrukken over de signalen op het moment van melden (app/chain.py). Eigen tabel: de signals-tabel wordt bij een migratie soms herbouwd.
+CREATE TABLE IF NOT EXISTS signal_chain (
+    signal_id INTEGER PRIMARY KEY,
+    prev TEXT,
+    payload TEXT NOT NULL,
+    hash TEXT NOT NULL
+);
+
+-- Wat er als push naar een gebruiker is gegaan, voor het dagbudget en het weren van tegenstrijdige meldingen (app/push_policy.py).
+CREATE TABLE IF NOT EXISTS push_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    at TEXT NOT NULL,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    counts INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_push_log_user_at ON push_log(user_id, at);
+
+-- Pogingen die een push niet afleverden (en de pogingen van de niveaumelding, ook geslaagd), per gebruiker. Een claim tegen dubbele meldingen
+-- (alert_sent eerst) blijft staan; dit legt vast wat er misging, en level_check telt hier zijn herkansingen (MAX_LEVEL_ALERT_ATTEMPTS).
+CREATE TABLE IF NOT EXISTS push_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    ref TEXT NOT NULL,
+    attempted_at TEXT NOT NULL,
+    ok INTEGER NOT NULL,
+    error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_push_attempts_ref ON push_attempts(kind, ref);
+
+-- Vertraging per kansmelding (app/latency.py): het slot van de candle waarop de kans ontstond of vulde, de detectie door de motor en het moment
+-- dat de push verzonden was. Eén rij per gebruiker per verzonden push uit send_kans_push; een geweerde kans (budget, pauze) heeft geen rij.
+CREATE TABLE IF NOT EXISTS alert_timing (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    trade_type TEXT,
+    event TEXT,
+    ref TEXT NOT NULL,
+    candle_at TEXT NOT NULL,
+    detected_at TEXT NOT NULL,
+    sent_at TEXT NOT NULL,
+    ok INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_alert_timing_sent ON alert_timing(sent_at);
+
+-- Uitkomst van het strategie-lab per regel (scripts/strategy_lab.py --opslaan); de regel heet als de labvariant in kleine letters.
+CREATE TABLE IF NOT EXISTS rule_status (
+    rule TEXT PRIMARY KEY,
+    lab_passes INTEGER NOT NULL DEFAULT 0,
+    lab_json TEXT,
+    lab_at TEXT
+);
+
+-- Echte R van een meelopende stop (trailing); zonder rij geldt de vaste formule uit track_record.signal_r.
+CREATE TABLE IF NOT EXISTS trade_results (
+    signal_id INTEGER PRIMARY KEY,
+    r_value REAL NOT NULL,
+    closed_at TEXT NOT NULL
+);
+
+-- Hoe ver een afgeronde trade eerst tegen je in ging (MAE) en met je mee (MFE), in R, op candles van na de vulling tot de uitkomst (app/excursion.py).
+-- Gezet bij de uitkomst door level_check of de motor zelf (range_sweep_live.follow_trade). Alleen meting: niets in een motor leest dit.
+-- Leeg (mae_r NULL, timeframe 'onbekend'): de candles van vulling tot uitgang waren niet op te halen (app/outcome_measure.py).
+CREATE TABLE IF NOT EXISTS trade_excursions (
+    signal_id INTEGER PRIMARY KEY,
+    mae_r REAL,
+    mfe_r REAL,
+    timeframe TEXT,
+    measured_at TEXT NOT NULL
+);
+
+-- Funding van een afgeronde trade van een focus-soort (app/funding.py, opgehaald in app/outcome_measure.py): de som van de rates van vulling
+-- (start_at) tot het einde van de uitgangscandle (end_at), in procenten van de instap en in R. status 'onbekend' (funding_r NULL): het ophalen
+-- lukte niet, nooit als nul geteld. Alleen meting: Bewijs trekt het af van de netto R, geen motor leest het.
+CREATE TABLE IF NOT EXISTS trade_funding (
+    signal_id INTEGER PRIMARY KEY,
+    funding_r REAL,
+    funding_pct REAL,
+    events INTEGER,
+    status TEXT NOT NULL,
+    start_at TEXT NOT NULL,
+    end_at TEXT NOT NULL,
+    measured_at TEXT NOT NULL
+);
+
+-- Lopende trades van de proefmotor (app/rule_live.py). signals.stop_loss blijft de eerste stop, want risico, R en kosten rekenen daarmee;
+-- de meelopende stop staat hier. entered_at is het openmoment van de instapcandle: één trade per regel, coin en candle, ook na een herstart.
+-- checked_until is het openmoment van de laatst verwerkte gesloten candle: alleen nieuwere candles worden getoetst, anders raakt een oude candle
+-- een stop die toen nog lager lag (een trade ouder dan het opgehaalde venster).
+CREATE TABLE IF NOT EXISTS rule_trades (
+    signal_id INTEGER PRIMARY KEY,
+    rule TEXT NOT NULL,
+    coin TEXT NOT NULL,
+    entered_at TEXT NOT NULL,
+    initial_stop REAL NOT NULL,
+    current_stop REAL NOT NULL,
+    atr REAL NOT NULL,
+    checked_until TEXT NOT NULL,
+    UNIQUE (rule, coin, entered_at)
+);
+
+-- Range-watch (app/range_watch.py): een coin die in een geldige range ligt, zodat je weet waar een sweep of retest kan komen. Eén rij per coin,
+-- timeframe en eerste zwaaipunt; de randen mogen bijschuiven. edge_high_at/edge_low_at: wanneer "koers bij de rand" ging (één keer per rand,
+-- gezet vóór het versturen). state is actief, gesweept, gebroken of verlopen; een geëindigde range gaat nooit terug naar actief.
+CREATE TABLE IF NOT EXISTS range_watches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    tf TEXT NOT NULL,
+    range_high REAL NOT NULL,
+    range_low REAL NOT NULL,
+    first_at TEXT NOT NULL,
+    found_at TEXT NOT NULL,
+    atr REAL NOT NULL,
+    state TEXT NOT NULL DEFAULT 'actief',
+    edge_high_at TEXT,
+    edge_low_at TEXT,
+    ended_at TEXT,
+    UNIQUE (coin, tf, first_at)
+);
+-- Elke waarschuwing van de range-watch per gebruiker, ook als hij geen push werd: het eigen dagbudget telt de rijen met pushed = 1.
+CREATE TABLE IF NOT EXISTS range_watch_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    watch_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    at TEXT NOT NULL,
+    pushed INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_range_watch_log_user ON range_watch_log(user_id, at);
+-- Range sweep-setups (app/range_sweep_live.py), beide families: wachtend op de limiet. Wordt een signaal (trade_type 'range_sweep') zodra een limiet vult.
+CREATE TABLE IF NOT EXISTS range_sweep_setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
+    direction TEXT NOT NULL,
+    variant TEXT NOT NULL,
+    family TEXT NOT NULL,
+    stop_name TEXT NOT NULL,
+    range_tf TEXT NOT NULL,
+    range_high REAL NOT NULL,
+    range_low REAL NOT NULL,
+    range_first_at TEXT NOT NULL,
+    zone_low REAL NOT NULL,
+    zone_high REAL NOT NULL,
+    zone_at TEXT NOT NULL,
+    sweep_at TEXT,
+    extreme REAL,
+    placed_at TEXT NOT NULL,
+    legs TEXT NOT NULL,
+    stop REAL NOT NULL,
+    atr_t REAL NOT NULL,
+    score REAL NOT NULL,
+    grade TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    features TEXT NOT NULL,
+    liq_json TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    plan TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    signal_id INTEGER,
+    push_sent INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (coin, direction, variant, zone_at, placed_at)
+);
+-- Gevulde range sweep-trades. signals.stop_loss is de stop; deze rij houdt de meting bij die Bewijs toont (stopkwaliteit) en de referentie-uitgang
+-- (meelopende stop 3 ATR op 1u) die de R in trade_results geeft. checked_until: openmoment van de laatst verwerkte 15m-candle.
+CREATE TABLE IF NOT EXISTS range_sweep_trades (
+    signal_id INTEGER PRIMARY KEY,
+    setup_id INTEGER NOT NULL,
+    legs_filled TEXT NOT NULL,
+    entry REAL NOT NULL,
+    stop REAL NOT NULL,
+    filled_at TEXT NOT NULL,
+    checked_until TEXT NOT NULL,
+    mae_r REAL NOT NULL DEFAULT 0,
+    mfe_r REAL NOT NULL DEFAULT 0,
+    reached_1r_at TEXT,
+    reached_2r_at TEXT,
+    reached_3r_at TEXT,
+    reached_4r_at TEXT,
+    reached_5r_at TEXT,
+    reached_6r_at TEXT,
+    stop_hit_at TEXT,
+    ref_stop REAL NOT NULL,
+    ref_extreme REAL NOT NULL,
+    ref_r REAL,
+    ref_closed_at TEXT,
+    closed_at TEXT
+);
+
+-- Prijsalarm dat een gebruiker zelf op een niveau van een kaart zet (app/price_alerts.py). side ligt vast bij het aanmaken ('above' of
+-- 'below' de koers van dat moment). sent_at gezet = afgegaan; een alarm gaat precies één keer af (level_check markeert vóór het versturen).
+CREATE TABLE IF NOT EXISTS price_alerts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    coin TEXT NOT NULL,
+    price REAL NOT NULL,
+    side TEXT NOT NULL,
+    label TEXT NOT NULL,
+    url TEXT,
+    created_at TEXT NOT NULL,
+    sent_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_price_alerts_open ON price_alerts(sent_at, coin);
+
+-- Zone-radar (app/zone_radar_live.py): de dichtstbijzijnde actieve vraag- of aanbodzone op 1u/4u als limietplan op de Radar. Eén rij per zone per coin
+-- (UNIQUE): dezelfde zone komt na vullen of vervallen nooit als nieuwe kaart terug. state: waiting, filled (signal_id gezet, trade_type 'zone_radar'),
+-- doel_geraakt of zone_weg. alert_sent: de melding van de nieuwe kaart ging één keer uit; de vulling meldt zich via de overgang waiting -> filled.
+CREATE TABLE IF NOT EXISTS zone_radar_setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
+    direction TEXT NOT NULL,
+    tf TEXT NOT NULL,
+    zone_key TEXT NOT NULL,
+    zone_low REAL NOT NULL,
+    zone_high REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL NOT NULL,
+    rr REAL NOT NULL,
+    atr REAL NOT NULL,
+    target_tf TEXT NOT NULL,
+    target_low REAL NOT NULL,
+    target_high REAL NOT NULL,
+    created_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    ended_at TEXT,
+    signal_id INTEGER REFERENCES signals(id),
+    alert_sent INTEGER NOT NULL DEFAULT 0,
+    -- Marktcontext bij het ontstaan (app/market_context.snapshot): Binance-funding in % per 8u, Binance-OI over 24u in %, grootste fundingverschil
+    -- met Binance. De vulling schrijft ze niet over; leeg als er toen geen verse meting was. Ze beslissen niets, Bewijs toetst ze.
+    ctx_funding REAL,
+    ctx_oi_change_24h REAL,
+    ctx_spread REAL,
+    -- Kenmerk 'POC-samenval' (chance_checks.poc_checks): 1 als de limiet binnen 0,3% van een naakte dag- of week-POC lag, 0 als niet, leeg als er
+    -- toen geen POC-meting was. Beschrijvend: niets filtert erop, Bewijs toont via score_split of het samengaat.
+    poc_near INTEGER,
+    -- De tegenovergestelde zones voorbij de limiet bij het ontstaan (zone_radar.obstacles, JSON, hoogstens 5, de eerste is het doel), elk met
+    -- soort, tf, rand, R en known_at. Leeg op kaarten van voor 31 oktober 2026. Verandert nooit achteraf.
+    obstacles TEXT,
+    UNIQUE (coin, zone_key)
+);
+CREATE INDEX IF NOT EXISTS idx_zone_radar_setups_state ON zone_radar_setups(state);
+
+-- Zone-sweep (app/zone_sweep_live.py): een prik door een actieve zone met herstel (app/replay/zonesweep.py), ongetest live op verzoek van de
+-- gebruiker. Eén rij per zone per coin (UNIQUE): dezelfde zone geeft nooit een tweede kaart. state: waiting, filled (signal_id gezet, trade_type
+-- 'zone_sweep'), verlopen, weggelopen of stop_voor_vulling (dezelfde regels als het lab). quiet = 1: niet gemeld (dagcap of een plan dat bij het
+-- ontstaan al dood was), de kaart staat wel op de Radar en wordt gevolgd. take_profit leeg: geen tegenovergestelde zone op minstens 2R.
+CREATE TABLE IF NOT EXISTS zone_sweep_setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
+    direction TEXT NOT NULL,
+    variant TEXT NOT NULL,
+    stop_name TEXT NOT NULL,
+    tf TEXT NOT NULL,
+    zone_key TEXT NOT NULL,
+    zone_low REAL NOT NULL,
+    zone_high REAL NOT NULL,
+    zone_at TEXT NOT NULL,
+    sweep_at TEXT NOT NULL,
+    extreme REAL NOT NULL,
+    placed_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    ref_price REAL NOT NULL,
+    range_high REAL NOT NULL,
+    range_low REAL NOT NULL,
+    atr_t REAL NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    rr REAL,
+    target_tf TEXT,
+    target_low REAL,
+    target_high REAL,
+    prik_atr REAL NOT NULL,
+    herstel_bars INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    ended_at TEXT,
+    quiet INTEGER NOT NULL DEFAULT 0,
+    alert_sent INTEGER NOT NULL DEFAULT 0,
+    signal_id INTEGER REFERENCES signals(id),
+    poc_near INTEGER,                    -- zie zone_radar_setups.poc_near
+    UNIQUE (coin, zone_key)
+);
+CREATE INDEX IF NOT EXISTS idx_zone_sweep_setups_state ON zone_sweep_setups(state);
+-- Gevulde zone-sweeps zonder doel: de meting van de stop en de referentie-uitgang (meelopende stop 3 ATR op 1u) die de R in trade_results geeft,
+-- zoals range_sweep_trades. Met een doel is er geen rij: dan beslist level_check de uitkomst op doel en stop.
+CREATE TABLE IF NOT EXISTS zone_sweep_trades (
+    signal_id INTEGER PRIMARY KEY,
+    setup_id INTEGER NOT NULL UNIQUE,
+    entry REAL NOT NULL,
+    stop REAL NOT NULL,
+    filled_at TEXT NOT NULL,
+    checked_until TEXT NOT NULL,
+    mae_r REAL NOT NULL DEFAULT 0,
+    mfe_r REAL NOT NULL DEFAULT 0,
+    reached_1r_at TEXT,
+    reached_2r_at TEXT,
+    reached_3r_at TEXT,
+    reached_4r_at TEXT,
+    reached_5r_at TEXT,
+    reached_6r_at TEXT,
+    stop_hit_at TEXT,
+    ref_stop REAL NOT NULL,
+    ref_extreme REAL NOT NULL,
+    ref_r REAL,
+    ref_closed_at TEXT,
+    closed_at TEXT
+);
+
+-- POC-radar (app/poc.py, app/poc_radar.py, app/poc_radar_live.py). poc_levels: de POC van elke gesloten UTC-dag en ISO-week per coin, één keer
+-- berekend (een gesloten periode verandert niet meer), met de eerste 5m-candle daarna die hem raakte (touched_at leeg = naakt). poc_scans: tot
+-- welke gesloten 5m-candle de aanrakingen per coin zijn bijgewerkt, zodat de motor alleen nieuwe candles ophaalt (één keer per uur per coin).
+CREATE TABLE IF NOT EXISTS poc_levels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    period TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    price REAL NOT NULL,
+    touched_at TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (coin, period, period_start)
+);
+CREATE TABLE IF NOT EXISTS poc_scans (
+    coin TEXT PRIMARY KEY,
+    checked_until TEXT NOT NULL,
+    scanned_at TEXT NOT NULL
+);
+-- Kaarten van de POC-radar: één rij per coin en niveau (level_key = periode en begin, UNIQUE): hetzelfde niveau komt nooit terug. state: waiting,
+-- filled (signal_id gezet, trade_type 'poc_radar'), doel_geraakt of verlopen. take_profit leeg: het eerste niveau voorbij de koers haalde geen 2R.
+CREATE TABLE IF NOT EXISTS poc_radar_setups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    -- Markt van de candles bij het ontstaan (app/candle_source.py: perp of spot); leeg op rijen van vóór 2026-11-01 (toen spot).
+    candle_market TEXT,
+    direction TEXT NOT NULL,
+    period TEXT NOT NULL,
+    period_start TEXT NOT NULL,
+    level_key TEXT NOT NULL,
+    level REAL NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    rr REAL,
+    atr REAL NOT NULL,
+    target_kind TEXT,
+    target_text TEXT,
+    target_tf TEXT,
+    target_low REAL,
+    target_high REAL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    ended_at TEXT,
+    alert_sent INTEGER NOT NULL DEFAULT 0,
+    signal_id INTEGER REFERENCES signals(id),
+    obstacles TEXT,                      -- de niveaus voorbij de limiet (poc_radar.obstacles, JSON), zoals zone_radar_setups.obstacles
+    UNIQUE (coin, level_key)
+);
+CREATE INDEX IF NOT EXISTS idx_poc_radar_setups_state ON poc_radar_setups(state);
+-- Gevulde POC-kaarten zonder doel: dezelfde meting en referentie-uitgang als zone_sweep_trades (range_sweep_live.follow_trade).
+CREATE TABLE IF NOT EXISTS poc_radar_trades (
+    signal_id INTEGER PRIMARY KEY,
+    setup_id INTEGER NOT NULL UNIQUE,
+    entry REAL NOT NULL,
+    stop REAL NOT NULL,
+    filled_at TEXT NOT NULL,
+    checked_until TEXT NOT NULL,
+    mae_r REAL NOT NULL DEFAULT 0,
+    mfe_r REAL NOT NULL DEFAULT 0,
+    reached_1r_at TEXT,
+    reached_2r_at TEXT,
+    reached_3r_at TEXT,
+    reached_4r_at TEXT,
+    reached_5r_at TEXT,
+    reached_6r_at TEXT,
+    stop_hit_at TEXT,
+    ref_stop REAL NOT NULL,
+    ref_extreme REAL NOT NULL,
+    ref_r REAL,
+    ref_closed_at TEXT,
+    closed_at TEXT
+);
+
+-- Marktcontext (app/market_context_live.py): gemeten waarden van publieke bronnen, één rij per meting. coin is 'markt' voor wat bij geen coin hoort
+-- (Fear and Greed, stablecoins). bron: binance, hyperliquid, bybit, okx, alternative, defillama. Een mislukte ophaal schrijft niets, zodat de oude
+-- waarde met zijn eigen tijd blijft staan. Geen motor leest dit; het staat als feit op kaart en Vandaag.
+CREATE TABLE IF NOT EXISTS market_context (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    bron TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    waarde REAL NOT NULL,
+    gemeten_op TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_market_context_lookup ON market_context (coin, bron, metric, gemeten_op);
+CREATE INDEX IF NOT EXISTS idx_market_context_bron ON market_context (bron, gemeten_op);
+
+-- Overgeslagen plannen (fase 2, R1): per gebruiker, met het moment van de tik op Nu. De cookie hp_skip blijft voor het toestel; deze rij
+-- maakt het Logboek en de weekterugblik mogelijk. Eén rij per gebruiker en plan: een tweede tik houdt het eerste moment.
+CREATE TABLE IF NOT EXISTS plan_skips (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    plan_key TEXT NOT NULL,
+    coin TEXT,
+    direction TEXT,
+    skipped_at TEXT NOT NULL,
+    UNIQUE (user_id, plan_key)
+);
+CREATE INDEX IF NOT EXISTS idx_plan_skips_user ON plan_skips(user_id, skipped_at);
+
+-- De order-checklist (fase 2, R2): wanneer hij openging en wanneer alle stappen stonden, per gebruiker en plan. Alleen met beide tijden toont
+-- het Logboek "checklist in 1 min 12 s". Opnieuw openen voor het afronden zet opened_at opnieuw; na het afronden verandert de rij niet meer.
+CREATE TABLE IF NOT EXISTS checklist_runs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    plan_key TEXT NOT NULL,
+    coin TEXT,
+    direction TEXT,
+    opened_at TEXT NOT NULL,
+    done_at TEXT,
+    UNIQUE (user_id, plan_key)
+);
+CREATE INDEX IF NOT EXISTS idx_checklist_runs_user ON checklist_runs(user_id, opened_at);
+
+-- Volg-sets (fase 2, R6): een benoemde set coins van de eigenaar. coins is een kommalijst hoofdletters. Een leerling hoort bij geen of één set
+-- (users.follow_set_id); de set bepaalt alleen welke kansen hem als push bereiken.
+CREATE TABLE IF NOT EXISTS follow_sets (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    coins TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL
+);
+
+-- Uitnodigingen per code (fase 2, R6): bruikbaar tot max_uses keer en tot expires_at. Een geldige code bij het registreren kent zijn set toe;
+-- met REGISTRATION_REQUIRES_INVITE=true is er zonder geldige code geen account.
+CREATE TABLE IF NOT EXISTS invites (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT NOT NULL UNIQUE,
+    set_id INTEGER REFERENCES follow_sets(id) ON DELETE SET NULL,
+    max_uses INTEGER NOT NULL DEFAULT 1,
+    uses INTEGER NOT NULL DEFAULT 0,
+    expires_at TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+-- Eenmalige dingen per gebruiker, zoals het "Wat is nieuw"-verhaal van een versie (flag 'story:v3'). Eén rij betekent gedaan.
+CREATE TABLE IF NOT EXISTS user_flags (
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    flag TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (user_id, flag)
+);
+
+-- Verborgen kaarten op Kansen: per gebruiker een weergavekeuze ("Verberg"), geen oordeel en geen demping. De kaart staat niet in de lijst en telt
+-- niet in de tellers van die gebruiker; het signaal, de uitkomst, Bewijs, Logboek en de meldingen lezen deze tabel nooit. `key` is de
+-- kaartsleutel van app/kansen.py (zone:N, zsweep:N, setup:N, signal:N, structuur:N). Een nieuwe tabel: CREATE TABLE IF NOT EXISTS bereikt ook
+-- een bestaande database, geen ALTER nodig.
+CREATE TABLE IF NOT EXISTS kans_hidden (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    key TEXT NOT NULL,
+    at TEXT NOT NULL,
+    UNIQUE (user_id, key)
+);
+
+-- Automatische missers (app/auto_misser.py, scripts/auto_misser.py): grote omkeringen op gesloten 1u-candles, met wie ze zag (seen_by, JSON-lijst
+-- van bronnen; leeg = een misser) en per motor de weigerreden (reasons, JSON). Eén rij per coin, richting en begin; een nieuwe run overschrijft
+-- de meting. Nieuwe tabel: CREATE TABLE IF NOT EXISTS bereikt ook een bestaande database.
+CREATE TABLE IF NOT EXISTS auto_missers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    begin_at TEXT NOT NULL,
+    end_at TEXT NOT NULL,
+    begin_price REAL NOT NULL,
+    end_price REAL NOT NULL,
+    size_atr REAL NOT NULL,
+    size_pct REAL NOT NULL,
+    seen_by TEXT NOT NULL DEFAULT '[]',
+    reasons TEXT NOT NULL DEFAULT '{}',
+    found_at TEXT NOT NULL,
+    UNIQUE (coin, direction, begin_at)
+);
+
+-- Schaduwvarianten (app/shadow.py): elke variant vooraf vastgelegd met reden en parameterwijziging (JSON). Hoogstens één actieve schaduw per
+-- soort (de gedeeltelijke unieke index). status: schaduw, gepromoveerd of afgevallen.
+CREATE TABLE IF NOT EXISTS shadow_variants (
+    id TEXT PRIMARY KEY,
+    trade_type TEXT NOT NULL,
+    description TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    params TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'schaduw',
+    decided_at TEXT,
+    decision_note TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_shadow_one_active ON shadow_variants(trade_type) WHERE status = 'schaduw';
+
+-- Wat een schaduw meet: per variant de plannen van de hoofdversie (arm 'hoofd') en van de variant (arm 'variant') op dezelfde coins en momenten,
+-- gevolgd op dezelfde 5m-candles. Geen melding, geen journaal, geen signals-rij. state: waiting, filled, take_profit, stop_loss, gemist,
+-- verlopen, zonder_doel. r_net is na kosten (TRACK_RECORD_COST_PCT), zonder funding, voor beide armen gelijk.
+CREATE TABLE IF NOT EXISTS shadow_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    variant_id TEXT NOT NULL REFERENCES shadow_variants(id),
+    arm TEXT NOT NULL,
+    plan_key TEXT NOT NULL,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    state TEXT NOT NULL DEFAULT 'waiting',
+    filled_at TEXT,
+    outcome_at TEXT,
+    checked_until TEXT,
+    r_gross REAL,
+    r_net REAL,
+    UNIQUE (variant_id, arm, plan_key)
+);
+CREATE INDEX IF NOT EXISTS idx_shadow_results_state ON shadow_results(state);
+
+-- Gepromoveerde parameters (scripts/schaduw.py --promoveer): de motor leest ze bij de start (shadow.live_params). Eén waarde per soort en
+-- parameter; terugdraaien (--terug) haalt de rijen van die variant weg.
+CREATE TABLE IF NOT EXISTS engine_overrides (
+    trade_type TEXT NOT NULL,
+    param TEXT NOT NULL,
+    value REAL NOT NULL,
+    variant_id TEXT NOT NULL,
+    set_at TEXT NOT NULL,
+    PRIMARY KEY (trade_type, param)
+);
+
+-- HesPulse-model (app/model.py, app/model_live.py; docs/onderzoek/hespulse-model/preregistratie.md). Eén rij per coin en 4u-range (range_id,
+-- UNIQUE): één scenario per range, hooguit één entry. status: wacht_sweep, prik, wacht_shift, wacht_fvg (moment A, de kaart zegt waarop we wachten),
+-- afgerond (moment B: entry beschikbaar), context_weg of geen_pool. Elke stap met het moment van herkenbaarheid (*_at, uit de candles) en het
+-- moment dat de motor het vastlegde (detected_at voor A, entry_detected_at voor B). steps: alle stappen en mislukte pogingen als JSON.
+-- entry_state na moment B: wacht, gevuld (signal_id, trade_type 'hespulse_model'), vervallen, weggelopen, context_weg of niet_vulbaar.
+CREATE TABLE IF NOT EXISTS model_scenarios (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    coin TEXT NOT NULL,
+    candle_market TEXT,
+    direction TEXT NOT NULL,
+    range_id TEXT NOT NULL,
+    status TEXT NOT NULL,
+    range_low REAL NOT NULL,
+    range_high REAL NOT NULL,
+    eq REAL NOT NULL,
+    pool_level REAL NOT NULL,
+    candidates TEXT,
+    steps TEXT,
+    discovered_at TEXT NOT NULL,
+    detected_at TEXT NOT NULL,
+    sweep_at TEXT,
+    shift_at TEXT,
+    entry_at TEXT,
+    entry_detected_at TEXT,
+    ended_at TEXT,
+    limit_price REAL,
+    stop_loss REAL,
+    take_profit REAL,
+    rr REAL,
+    zone_low REAL,
+    zone_high REAL,
+    target_kind TEXT,
+    target_text TEXT,
+    ob_overlap INTEGER,
+    poc_samenval INTEGER,
+    shift_label TEXT,
+    extreme REAL,
+    expires_at TEXT,
+    entry_state TEXT,
+    price_at_publish REAL,
+    vulbaar INTEGER,
+    filled_at TEXT,
+    door_limiet INTEGER,
+    btc_context TEXT,                    -- app/btc_context.measure bij moment A ("a") en B ("b"), JSON; btc_4h van "b" is de BTC-poort (MODEL_BTC_GATE)
+    cf_state TEXT,                       -- entry_state 'btc_tegen': stil gevolgd. wacht, gevuld, klaar, of een eindstand zonder vulling
+    cf_filled_at TEXT,
+    cf_outcome TEXT,                     -- take_profit, stop_loss of tijd (model.outcome)
+    cf_r REAL,                           -- bruto R, zonder kosten
+    cf_ambiguous INTEGER,
+    cf_at TEXT,
+    alert_sent INTEGER NOT NULL DEFAULT 0,
+    signal_id INTEGER REFERENCES signals(id),
+    updated_at TEXT,
+    htf TEXT,
+    alt_log TEXT,
+    mae_r REAL,                          -- M2: MAE, MFE en stopslip van de A-trade in R; leeg = niet gemeten
+    mfe_r REAL,
+    slip_r REAL,
+    UNIQUE (coin, range_id)
+);
+CREATE INDEX IF NOT EXISTS idx_model_scenarios_status ON model_scenarios(status, entry_state);
+-- De andere instappunten van een scenario (aanvullend besluit CEO 2026-11-03): B (lagere top), B0 (zonder premium-eis, nergens getoond) en P
+-- (POC-limiet). Elk punt wordt gevolgd met de regels van H (model.walk_fill, model.outcome), ook als niemand hem neemt. Geen melding.
+-- state: wacht, gevuld, klaar, of een eindstand zonder vulling (vervallen, weggelopen, context_weg, niet_vulbaar).
+CREATE TABLE IF NOT EXISTS model_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    scenario_id INTEGER NOT NULL REFERENCES model_scenarios(id),
+    code TEXT NOT NULL,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    known_at TEXT NOT NULL,
+    detected_at TEXT NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    rr REAL,
+    expires_at TEXT,
+    basis TEXT,
+    state TEXT NOT NULL DEFAULT 'wacht',
+    filled_at TEXT,
+    outcome TEXT,
+    outcome_at TEXT,
+    r_gross REAL,
+    ambiguous INTEGER NOT NULL DEFAULT 0,
+    ended_at TEXT,
+    htf TEXT,
+    mae_r REAL,
+    mfe_r REAL,
+    slip_r REAL,
+    UNIQUE (scenario_id, code)
+);
+-- M1 (aanvulling 2026-11-03 avond): dezelfde plannen met de strenge vulregel (strikt door de limiet). kind 'A': model_scenarios.id, 'E':
+-- model_entries.id. Alleen meting: geen melding, journaal of signaal. state: wacht, gevuld, klaar of een eindstand van model.walk_fill.
+CREATE TABLE IF NOT EXISTS model_strict (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kind TEXT NOT NULL,
+    ref_id INTEGER NOT NULL,
+    code TEXT NOT NULL,
+    counter INTEGER NOT NULL DEFAULT 0,
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    start_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'wacht',
+    filled_at TEXT,
+    outcome TEXT,
+    outcome_at TEXT,
+    r_gross REAL,
+    ambiguous INTEGER NOT NULL DEFAULT 0,
+    ended_at TEXT,
+    UNIQUE (kind, ref_id)
+);
+-- M3: de bruto R van de willekeurige instappen per afgeronde modeltrade (scripts/model_placebo.py), als JSON-lijst.
+CREATE TABLE IF NOT EXISTS model_placebo (
+    kind TEXT NOT NULL,
+    ref_id INTEGER NOT NULL,
+    rs TEXT NOT NULL,
+    made_at TEXT NOT NULL,
+    PRIMARY KEY (kind, ref_id)
+);
+-- V1 (§6): de vroege limiet op de pool op moment A, stil gemeten. Geen melding, geen journaal, geen signals-rij. state: wacht, gevuld,
+-- vervallen (het scenario eindigde zonder vulling), weggelopen, context_weg, niet_vulbaar of geen_doel; outcome na de vulling op 5m.
+CREATE TABLE IF NOT EXISTS model_v1 (
+    scenario_id INTEGER PRIMARY KEY REFERENCES model_scenarios(id),
+    coin TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    limit_price REAL NOT NULL,
+    stop_loss REAL NOT NULL,
+    take_profit REAL,
+    rr REAL,
+    placed_at TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'wacht',
+    filled_at TEXT,
+    outcome TEXT,
+    outcome_at TEXT,
+    r_gross REAL,
+    ambiguous INTEGER NOT NULL DEFAULT 0,
+    ended_at TEXT,
+    htf TEXT
+);

@@ -1,0 +1,9 @@
+[Unit]
+Description=Draai het HesPulse kwaliteitsrapport elke zondag aan het eind van de middag
+
+[Timer]
+OnCalendar=Sun *-*-* 19:47:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

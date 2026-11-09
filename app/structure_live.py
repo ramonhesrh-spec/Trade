@@ -1,0 +1,579 @@
+"""Structuur-setups live: het recept achter de handgetekende trades (breuk van een lijn of range op 30m, of van de laatste top na een
+hogere bodem (CHOCH, gespiegeld voor short; breakretest.find_choch, live zonder labrun en ongetest), terugkeer naar het gebroken niveau, limietorder, stop net achter de terugkeer, ladder van doelen), gemeld vóórdat de trade uitspeelt.
+
+Drie stappen, elke 5 minuten in de SMC-snelcyclus:
+  1. Ontdekken: de detector uit app/replay/breakretest.py (zelfde code als de toets, alleen gesloten candles) vindt een verse
+     breuk. Claude geeft een oordeel A, B of C op de kwaliteit. Claude verzint geen prijzen: niveau, stop en doelen komen uit code.
+  2. Melden: elke breuk met een plan staat op de pagina en in de dagbrief en krijgt dezelfde stille melding met limietniveau, stop en doelen
+     (sinds 2026-11-02, CEO: te veel meldingen; alleen de vulling is luid). Het
+     oordeel van Claude (A, B of C) wordt alleen nog bewaard als meting: het filtert niets, ordent niets en bepaalt het volume niet (besluit van
+     de CEO, oktober 2026: C won live het meest). Bij een volle dagcap gaat de kans die het dichtst bij zijn limiet ligt voor.
+  3. Volgen: raakt de koers het niveau, dan wordt het een gewoon signaal (trade_type 'structuur'), zodat journaal, uitkomst en Bewijs
+     werken zonder extra code. Keert de koers terug voorbij het niveau, dan vervalt de setup.
+
+Eerlijk over wat dit is: op een jaar candles scoorde de mechanische versie van dit recept -0,16R netto (zie scripts/breakretest_scan.py).
+Het oordeel van Claude moet dat verschil maken en dat is een hypothese. Alles gaat live met het label ongetest, Bewijs toont de
+score, en de motor gaat vanzelf uit als de laatste STRUCTURE_MAX_NEGATIVE afgeronde signalen samen negatief zijn."""
+import asyncio
+import json
+import logging
+import re
+import time
+from datetime import datetime, timedelta, timezone
+from typing import Optional
+
+import numpy as np
+import pandas as pd
+
+from app import chance_checks, config, daycap, focus, latency, repo, setup_chart, shadow, shadow_live, smc_eval
+from app import trade_plan as tp
+from app.replay import breakretest as br
+from app.replay.lab import add_indicators
+from app.track_record import signal_r
+
+logger = logging.getLogger("structure_live")
+
+BAR = pd.Timedelta(minutes=br.BAR_MINUTES)
+CANDLES_SHOWN = 48
+CHART_BARS = 60
+MIN_RR = 2.0
+REASON_MAX = 240
+GRADES = ("A", "B", "C")
+
+SYSTEM_PROMPT = (
+    "Je bent een ervaren daytrader die breuken van een lijn, een range of de laatste top na een hogere bodem (of de laatste bodem na een lagere top) op de 30-minutengrafiek beoordeelt voor een eigen "
+    "handelsplan: breuk, terugkeer naar het gebroken niveau, limietorder daar, stop net erachter, doelen op liquiditeit. "
+    "De code heeft de cijfers al gecontroleerd en berekend: jij verzint of wijzigt geen prijs. Jij beoordeelt alleen de kwaliteit. "
+    "A: schone structuur (een duidelijke lijn of range met minstens drie aanrakingen), een breuk met overtuiging (volume boven gemiddeld), "
+    "een doel op minstens 2R en een terugkeer die waarschijnlijk is. B: bruikbaar met precies één zwak punt (weinig volume, korte lijn of "
+    "matig doel). C: overslaan bij rommelige structuur, te weinig ruimte tot het doel, een breuk zonder volume in een trage markt, "
+    "meer dan één zwak punt, of een breuk recht tegen een sterke hogere trend in. Twijfel je tussen A en B, kies B. Twijfel je tussen B en C, kies C. "
+    "Schrijf de reden in het Nederlands, in één of twee korte zinnen, zonder opsmuk."
+)
+TOOL = {
+    "name": "record_grade",
+    "description": "Leg het oordeel over deze structuur-setup vast.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"grade": {"type": "string", "enum": list(GRADES)},
+                       "reason": {"type": "string", "description": "Eén of twee korte zinnen, maximaal 240 tekens."}},
+        "required": ["grade", "reason"],
+    },
+}
+
+
+def _r(x: float) -> float:
+    return float(f"{x:.6g}")
+
+
+def line_value(setup: dict, at: pd.Timestamp) -> float:
+    """Waarde van de gebroken lijn op een tijdstip: de lijn loopt per 30m-candle door vanaf het eerste zwaaipunt."""
+    p1 = pd.Timestamp(setup["p1_at"])
+    return setup["line_a"] + setup["line_slope"] * ((at - p1) / BAR)
+
+
+def should_disable(results: list[dict], max_negative: int) -> bool:
+    """Zelfde regel als het markt-script: na genoeg afgeronde signalen die samen negatief zijn gaat de motor uit."""
+    if len(results) < max_negative:
+        return False
+    return sum(signal_r(r) or 0.0 for r in results) < 0
+
+
+def fresh_breaks(bars: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, np.ndarray, np.ndarray]:
+    """(bars met indicatoren, verse breuken, pivot-hoog, pivot-laag). Vers is een breuk die nog binnen het retest-venster ligt
+    en waarvan de koers het niveau sindsdien niet raakte of terug veroverde: dan staat de limietorder nog open."""
+    b = add_indicators(bars).reset_index(drop=True)
+    events = br.find_structure_breaks(bars)
+    n = len(b)
+    keep = []
+    for ev in events.itertuples():
+        if ev.bar < n - 1 - br.RETEST_BARS or ev.bar >= n:
+            continue
+        sign = 1 if ev.direction == "long" else -1
+        alive = True
+        for j in range(ev.bar + 1, n):
+            level = br.level_at(ev, j)
+            touched = b.at[j, "high"] >= level if ev.direction == br.SHORT else b.at[j, "low"] <= level
+            reclaimed = -sign * (b.at[j, "close"] - level) > br.BREAK_ATR * ev.atr
+            if touched or reclaimed:
+                alive = False
+                break
+        if alive:
+            keep.append(ev.Index)
+    p_high, p_low = br._pivots(b)
+    return b, events.loc[keep].reset_index(drop=True), p_high, p_low
+
+
+def stop_with_room(direction: str, level: float, extreme: float, atr: float, stop_atr: Optional[float] = None) -> float:
+    """Stop net voorbij de terugkeer (kwart ATR), minstens SMC_MIN_STOP_PCT van het niveau: een stop vlak achter het niveau wordt door een wick geraakt
+    waarna de koers alsnog de goede kant op gaat. stop_atr: alleen voor een schaduwvariant of een gepromoveerde waarde (app/shadow.py)."""
+    short = direction == br.SHORT
+    buf = br.STOP_ATR if stop_atr is None else stop_atr
+    stop = max(level, extreme) + buf * atr if short else min(level, extreme) - buf * atr
+    return smc_eval.floor_stop(direction, level, stop)
+
+
+def plan_for(ev, b: pd.DataFrame, levels: list[float], level: float, extreme: float, stop_atr: Optional[float] = None) -> Optional[dict]:
+    """Stop en doelen uit code. None als de stopafstand buiten het toegestane bereik valt of er geen doel ligt."""
+    short = ev.direction == br.SHORT
+    stop = stop_with_room(ev.direction, level, extreme, ev.atr, stop_atr)
+    risk = abs(level - stop)
+    risk_pct = risk / level * 100
+    if risk_pct > br.MAX_STOP_PCT or (short and level >= stop) or (not short and level <= stop):
+        return None
+    # Doelen op zwaaipunten als die ruim genoeg liggen, anders een vaste ladder van 1, 2 en 3R. De eis dat het tweede doel op een zwaaipunt minstens
+    # MIN_RR ver ligt hield in een stijging naar nieuwe hoogtes bijna elke breuk tegen, en het onderzoek liet zien dat zulke filters de kwaliteit niet verbeteren.
+    nearest = br.ladder_targets(ev.direction, level, risk, "niveaus", levels)
+    on_levels = nearest is not None and (nearest[0][1] if len(nearest[0]) > 1 else nearest[0][0]) >= MIN_RR
+    ladder = nearest if on_levels else br.ladder_targets(ev.direction, level, risk, "ladder 1-2-3R", levels)
+    r_list = ladder[0]
+    sign = -1 if short else 1
+    return {"level": level, "stop": stop, "risk_pct": risk_pct, "targets_r": list(r_list),
+            "targets": [level + sign * risk * r for r in r_list], "from_levels": on_levels}
+
+
+def explain_no_plan(ev, levels: list[float], level: float, extreme: float, stop_atr: Optional[float] = None) -> str:
+    """Waarom er geen plan kwam, met de getallen: de stopafstand, en de ruimte tot de eerstvolgende doelen op zwaaipunten."""
+    stop = stop_with_room(ev.direction, level, extreme, ev.atr, stop_atr)
+    risk = abs(level - stop)
+    risk_pct = risk / level * 100 if level else 0.0
+    if risk_pct > br.MAX_STOP_PCT:
+        return (f"Stop {risk_pct:.2f}% van het niveau, toegestaan is maximaal {br.MAX_STOP_PCT:g}%. "
+                f"Niveau {_r(level)}, stop {_r(stop)}.")
+    return "Stop in orde, geen plan om een andere reden."
+
+
+def take_profit_of(plan: dict) -> float:
+    """Het signaal meet één doel: het tweede van de ladder (of het eerste als er maar één is). De ladder staat in de melding."""
+    targets = plan["targets"]
+    return targets[1] if len(targets) > 1 else targets[0]
+
+
+STRUCTURE_KIND_WORDS = {"RANGE": "horizontale range", "LINE": "schuine lijn"}
+
+
+def swing_points(ev, b: pd.DataFrame) -> list[list]:
+    """De twee zwaaipunten van een CHOCH (bodems bij long, toppen bij short) als [iso, prijs], voor de grafiek; leeg bij LINE en RANGE."""
+    if ev.kind != br.CHOCH:
+        return []
+    col = "high" if ev.direction == br.SHORT else "low"
+    return [[b.at[p, "timestamp"].isoformat(), float(b.at[p, col])] for p in (ev.p1, ev.p2)]
+
+
+def judge_context(coin: str, ev, b: pd.DataFrame, plan: dict) -> dict:
+    tail = b.tail(CANDLES_SHOWN)
+    median_vol = float(b["volume"].tail(100).median()) or 1.0
+    return {
+        "coin": coin, "kant": ev.direction, "soort": STRUCTURE_KIND_WORDS.get(ev.kind) if ev.kind != br.CHOCH else setup_chart.structure_words({"kind": ev.kind, "direction": ev.direction}),
+        "aanrakingen": int(ev.touches), "lengte_candles": int(ev.span), "breukvolume_x_gemiddeld": _r(ev.vol_ratio),
+        "met_trend_ema21_200": bool(ev.with_trend), "atr_30m_pct": _r(ev.atr / float(b["close"].iloc[-1]) * 100),
+        "plan": {"limiet": _r(plan["level"]), "stop": _r(plan["stop"]), "risico_pct": _r(plan["risk_pct"]),
+                 "doelen": [_r(t) for t in plan["targets"]], "doelen_in_R": [_r(r) for r in plan["targets_r"]],
+                 "doelen_zijn_zwaaipunten": bool(plan["from_levels"])},
+        "laatste_candles_30m": [[c.timestamp.strftime("%d %H:%M"), _r(c.open), _r(c.high), _r(c.low), _r(c.close),
+                                 _r(c.volume / median_vol)] for c in tail.itertuples()],
+        "kolommen": "tijd UTC, open, hoog, laag, slot, volume relatief aan de mediaan",
+    }
+
+
+# Het oordeel is alleen nog een meting. Met de standaard van de SDK (600 s en twee herhalingen) hield één haperende aanroep de melding en de
+# hele 5-minutencyclus (ook zone-radar erna) tot een half uur op; een overgeslagen timer mist dan snelle retests. Bij een timeout geen
+# oordeel (None), de kans wordt gewoon gemeld.
+CLAUDE_TIMEOUT_S = 30.0
+
+
+def call_claude(context: dict) -> dict:
+    import anthropic
+    client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY, timeout=CLAUDE_TIMEOUT_S, max_retries=1)
+    response = client.messages.create(
+        model=config.STRUCTURE_MODEL, max_tokens=400, system=SYSTEM_PROMPT, tools=[TOOL],
+        tool_choice={"type": "tool", "name": "record_grade"},
+        messages=[{"role": "user", "content": json.dumps(context, ensure_ascii=False)}],
+    )
+    return next(blk for blk in response.content if blk.type == "tool_use").input
+
+
+def parse_grade(payload: dict) -> tuple[Optional[str], str]:
+    grade = str(payload.get("grade", "")).strip().upper()
+    return (grade if grade in GRADES else None), str(payload.get("reason", "")).strip()[:REASON_MAX]
+
+
+def alert_body(setup: dict, plan: dict) -> str:
+    """Zonder de toelichting van het oordeel: die zou het oordeel via een omweg weer laten meesturen."""
+    from app import push_notify
+    targets = " · ".join(f"{push_notify.fmt_price(t)} ({r:g}R)" for t, r in zip(plan["targets"], plan["targets_r"]))
+    return push_notify.trade_body("Limietorder", plan["level"], plan["stop"], take_profit_of(plan), None, f"Doelen {targets}", "")
+
+
+def distance_pct(direction: str, level: float, price: float) -> float:
+    """Hoever de koers nog van het limietniveau is, in procenten; positief is nog te gaan."""
+    return (level - price) / level * 100 if direction == br.SHORT else (price - level) / level * 100
+
+
+def choose(candidates: list[dict], room: int) -> tuple[list[dict], list[dict]]:
+    """(melden, houden) bij `room` plekken onder de dagcap: dichtst bij de limiet eerst, nooit op letter."""
+    ordered = sorted(candidates, key=lambda c: abs(c["dist_pct"]))
+    room = max(room, 0)
+    return ordered[:room], ordered[room:]
+
+
+async def _push_all(title: str, body: str, url: str, tag: str, loud: bool, coin: Optional[str] = None, direction: Optional[str] = None,
+                    timing: Optional[dict] = None, new_card: bool = False) -> None:
+    """Met coin en richting is het een kans en gelden de pushregels (geen tegenstrijdige richting, dagbudget). new_card: een nieuw plan, stil en
+    buiten het budget (CEO, 2026-11-02, te veel meldingen). Zonder coin is het een update van een lopende trade en komt de push altijd."""
+    from app import push_notify
+    if not focus.alerts_on("structuur"):
+        # Alleen het HesPulse-model meldt (MODEL_ONLY_ALERTS, besluit CEO 2026-11-02): Structuur meet stil mee, zonder push of meldingsrij.
+        # De uitkomst van een trade die je zelf nam, blijft level_check melden.
+        return
+    for user in repo.list_users():
+        quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
+        try:
+            if coin and direction and new_card:
+                await push_notify.send_new_card(user["id"], coin, direction, title, body, url, tag=tag, **({"timing": timing} if timing else {}))
+            elif coin and direction:
+                await push_notify.send_kans_push(user["id"], coin, direction, title, body, url, silent=quiet or not loud, tag=tag,
+                                                 **({"timing": timing} if timing else {}))
+            else:
+                await push_notify.send_push(user["id"], title, body, url, silent=quiet or not loud, tag=tag)
+        except Exception as exc:
+            logger.exception("Structuur-melding voor %s naar gebruiker %s is mislukt", tag, user["username"])
+            push_notify.record_failure(user["id"], "kans" if coin and direction else "update", url, exc)
+
+
+def _shadow_plans(coin: str, ev, b: pd.DataFrame, levels: list[float], level: float, extreme: float, price_now: float, break_at: str,
+                  expires_at: str, params: dict) -> list[dict]:
+    """Het plan met deze parameters als schaduwplan, met dezelfde weigeringen als hieronder (geen plan, of al voorbij doel of stop). De schaduw
+    volgt een vaste limiet op het niveau van nu, ook bij een schuine lijn; dat geldt voor beide armen."""
+    plan = plan_for(ev, b, levels, level, extreme, **params)
+    if plan is None or tp.plan_state(ev.direction, plan["level"], plan["level"], plan["stop"], price_now, take=plan["targets"][0]) in ("doel_geraakt", "ongeldig"):
+        return []
+    return [{"key": f"{coin}:{ev.direction}:{ev.kind}:{break_at}", "direction": ev.direction, "limit": plan["level"], "stop": plan["stop"],
+             "take": take_profit_of(plan), "expires_at": expires_at}]
+
+
+async def _discover(coin: str, now: datetime, params: Optional[dict] = None) -> list[dict]:
+    """Nieuwe breuken met een plan, opgeslagen in de stand 'oordeel'. Melden doet run(), over alle coins samen, zodat de dagcap op afstand kiest.
+    params: de parameters van deze cyclus (shadow.live_params); leeg = de constanten."""
+    from app import exchange
+    params = params or {}
+    df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="30m", limit=300)
+    closed = df[df["timestamp"] + BAR <= pd.Timestamp(now)].reset_index(drop=True)
+    if len(closed) < br.LOOKBACK + 20:
+        return []
+    found = []
+    b, events, p_high, p_low = fresh_breaks(closed)
+    n = len(b)
+    for ev in events.itertuples():
+        break_at = (b.at[ev.bar, "timestamp"] + BAR).isoformat()
+        next_start = b.at[n - 1, "timestamp"] + BAR
+        level = br.level_at(ev, n)
+        extreme = float(b["high" if ev.direction == br.SHORT else "low"].iloc[ev.bar:n].agg("max" if ev.direction == br.SHORT else "min"))
+        levels = br.known_levels(b, p_high, p_low, ev.direction, ev.bar)
+        price_now = float(b["close"].iloc[-1])
+        expires_at = (next_start + br.RETEST_BARS * BAR).isoformat()
+        shadow_live.observe("structuur", coin, lambda p, ev=ev, levels=levels, level=level, extreme=extreme, break_at=break_at:
+                            _shadow_plans(coin, ev, b, levels, level, extreme, price_now, break_at, expires_at, p), now)
+        plan = plan_for(ev, b, levels, level, extreme, **params)
+        if plan is None:
+            # Bewaard zodat de pagina Setups kan tonen hoeveel breuken er waren en waarom er niets uitkwam.
+            repo.insert_structure_setup({
+                "coin": coin, "direction": ev.direction, "kind": ev.kind, "break_at": break_at, "p1_at": b.at[ev.p1, "timestamp"].isoformat(),
+                "line_a": ev.a, "line_slope": ev.slope, "atr": ev.atr, "grade": None,
+                "reason": explain_no_plan(ev, levels, level, extreme, **params), "features": "{}", "state": "geen_plan",
+                "expires_at": break_at, "plan": None})
+            continue
+        # Een plan waarvan de koers al voorbij het eerste doel of de stop staat, valt op de pagina Setups direct weg (today.structure_state). Er valt
+        # niets meer te wachten, dus ook geen melding: anders krijg je een push voor een kans die je nergens kunt vinden.
+        gone = tp.plan_state(ev.direction, plan["level"], plan["level"], plan["stop"], price_now, take=plan["targets"][0])
+        if gone in ("doel_geraakt", "ongeldig"):
+            repo.insert_structure_setup({
+                "coin": coin, "direction": ev.direction, "kind": ev.kind, "break_at": break_at, "p1_at": b.at[ev.p1, "timestamp"].isoformat(),
+                "line_a": ev.a, "line_slope": ev.slope, "atr": ev.atr, "grade": None,
+                "reason": "De koers stond al voorbij het eerste doel of de stop toen het plan klaar was." if gone == "doel_geraakt"
+                          else "De koers stond al voorbij de stop toen het plan klaar was.",
+                "features": "{}", "state": "geen_plan", "expires_at": break_at, "plan": None})
+            continue
+        row = {"coin": coin, "direction": ev.direction, "kind": ev.kind, "break_at": break_at,
+               "p1_at": b.at[ev.p1, "timestamp"].isoformat(), "line_a": ev.a, "line_slope": ev.slope, "atr": ev.atr,
+               "grade": None, "reason": None, "state": "oordeel",
+               "features": json.dumps({"vol_ratio": ev.vol_ratio, "span": int(ev.span), "touches": int(ev.touches),
+                                       "with_trend": bool(ev.with_trend)}),
+               "expires_at": expires_at,
+               "plan": json.dumps({**plan, "levels": levels, "break_extreme": extreme, "points": swing_points(ev, b),
+                                   "candles": [[c.timestamp.isoformat(), c.open, c.high, c.low, c.close] for c in b.tail(CHART_BARS).itertuples()]})}
+        setup_id = repo.insert_structure_setup(row)
+        if setup_id is None:
+            continue
+        found.append({"id": setup_id, "coin": coin, "row": row, "plan": plan, "ev": ev, "b": b,
+                      "dist_pct": distance_pct(ev.direction, plan["level"], price_now)})
+    return found
+
+
+async def _announce(found: list[dict], now: datetime) -> None:
+    from app import push_notify
+    room = config.STRUCTURE_MAX_ALERTS_PER_DAY - repo.count_structure_alerts_since((now - timedelta(hours=24)).isoformat())
+    send, hold = choose(found, room)
+    for c in hold:
+        repo.update_structure_judgement(c["id"], None, "", "niet_gemeld")
+        repo.record_cap_hold("structuur", str(c["id"]), now.isoformat())
+        logger.info("Structuur %s %s: dagcap vol, niet gemeld (%.2f%% van de limiet)", c["coin"], c["ev"].direction, c["dist_pct"])
+    for c in send:
+        coin, ev, plan = c["coin"], c["ev"], c["plan"]
+        # Het oordeel blijft een meting (Bewijs telt C apart als structuur_c). Een kans die toch niet gemeld wordt, krijgt geen Claude-aanroep.
+        grade, reason = None, ""
+        try:
+            grade, reason = parse_grade(await asyncio.to_thread(call_claude, judge_context(coin, ev, c["b"], plan)))
+        except Exception:
+            logger.exception("Oordeel van Claude voor %s is mislukt", coin)
+        repo.update_structure_judgement(c["id"], grade, reason, "waiting")
+        logger.info("Structuur %s %s %s: gemeld, oordeel %s als meting", coin, ev.direction, ev.kind, grade)
+        await _push_all(push_notify.alert_title(coin, ev.direction, "Structuur wacht"), alert_body({**c["row"], "id": c["id"]}, plan),
+                        f"/structuur#structuur-{c['id']}", f"structuur-{coin}", loud=False, coin=coin, direction=ev.direction,
+                        timing=latency.timing("structuur", "nieuw", pd.Timestamp(c["row"]["break_at"]), now), new_card=True)
+
+
+async def _fire(setup: dict, plan: dict, entry: float, stop: float, filled_at: pd.Timestamp) -> None:
+    from app import push_notify
+    from app.signal_processor import fanout_confirmed_signal
+    coin, direction = setup["coin"], setup["direction"]
+    fired = {**plan, "level": entry, "stop": stop}
+    risk = abs(entry - stop)
+    sign = -1 if direction == br.SHORT else 1
+    fired["targets"] = [entry + sign * risk * r for r in plan["targets_r"]]
+    take = take_profit_of(fired)
+    narrative = f"Structuur, instap {push_notify.fmt_price(entry)}."
+    reason, pass_pct = chance_checks.finish(chance_checks.structure_checks(chance_checks.parse_features(setup.get("features")), plan, setup["grade"]))
+    signal_id = repo.insert_signal({
+        "message_id": None, "coin": coin, "direction": direction, "category": "day_trading", "trade_type": "structuur_c" if setup["grade"] == "C" else "structuur",
+        "pattern_name": "Structuur", "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None,
+        "ema9": None, "ema21": None, "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": pass_pct,
+        "hard_gates_ok": 1, "confidence": "Structuur", "reason": reason, "stop_loss": stop,
+        "take_profit": take, "context_note": None, "is_practice": 0, "plain_explanation": narrative, "suggested_entry_low": None,
+        "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
+    })
+    repo.set_structure_state(setup["id"], "fired", signal_id)
+    repo.update_structure_plan(setup["id"], json.dumps({**plan, "fired": {"entry": entry, "stop": stop, "targets": fired["targets"], "hits": 0, "closed": False, "at": filled_at.isoformat(),
+                                                                       "events": [{"at": filled_at.isoformat(), "text": "Limiet geraakt, de trade loopt"}]}}))
+    rr = abs(take - entry) / risk
+    targets = " · ".join(f"{push_notify.fmt_price(t)} ({r:g}R)" for t, r in zip(fired["targets"], plan["targets_r"]))
+    await fanout_confirmed_signal(
+        signal_id, coin, direction, entry, stop, take, entry,
+        title=push_notify.alert_title(coin, direction, "Structuur gevuld"),
+        make_body=lambda *_: push_notify.trade_body("Entry", entry, stop, take, rr, f"Doelen {targets}", "Limiet geraakt, de trade loopt."),
+        reason=reason, signal_type="structuur_c" if setup["grade"] == "C" else "structuur",
+        tag=trade_tag(signal_id), skip_push=not focus.alerts_on("structuur"),
+        timing=latency.timing("structuur_c" if setup["grade"] == "C" else "structuur", "vulling", filled_at + pd.Timedelta(minutes=5),
+                              datetime.now(timezone.utc)),
+    )
+
+
+def _shadow_levels(setup: dict, plan: dict, entry: float, stop: float) -> tuple[float, float]:
+    risk = abs(entry - stop)
+    sign = -1 if setup["direction"] == br.SHORT else 1
+    targets_r = plan["targets_r"]
+    return stop, entry + sign * risk * (targets_r[1] if len(targets_r) > 1 else targets_r[0])
+
+
+async def _fire_shadow(setup: dict, plan: dict, entry: float, stop: float) -> None:
+    """Een setup met oordeel C die toch vult: alleen een signaal voor Bewijs (trade_type 'structuur_c'), geen melding en geen journaalregels."""
+    stop, take = _shadow_levels(setup, plan, entry, stop)
+    signal_id = repo.insert_signal({
+        "message_id": None, "coin": setup["coin"], "direction": setup["direction"], "category": "day_trading", "trade_type": "structuur_c",
+        "pattern_name": "Structuur C", "price": entry, "rsi": None, "macd": None, "macd_signal": None, "volume_ratio": None, "ema9": None, "ema21": None,
+        "atr": None, "atr_avg20": None, "adx": None, "technical_confirmed": 1, "pass_pct": None, "hard_gates_ok": 1, "confidence": "Structuur C (schaduw)",
+        "reason": "Stil gevolgd (oude schaduwregel).", "stop_loss": stop, "take_profit": take, "context_note": None,
+        "is_practice": 0, "plain_explanation": None, "suggested_entry_low": None, "suggested_entry_high": None, "sniper_entry_price": None, "sniper_reason": None,
+    })
+    repo.set_structure_state(setup["id"], "fired", signal_id)
+
+
+async def _track(now: datetime, params: Optional[dict] = None) -> None:
+    from app import exchange
+    stop_atr = (params or {}).get("stop_atr")
+    waiting = repo.list_structure_setups(("waiting", "schaduw"))
+    for coin in sorted({s["coin"] for s in waiting}):
+        try:
+            df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="5m", limit=80)
+        except Exception:
+            logger.exception("5m-candles voor %s niet op te halen, setups blijven wachten", coin)
+            continue
+        for s in (x for x in waiting if x["coin"] == coin):
+            plan = json.loads(s["plan"])
+            after = df[df["timestamp"] >= pd.Timestamp(s["break_at"])]
+            extreme = plan["break_extreme"]
+            for c in after.itertuples():
+                level = line_value(s, c.timestamp)
+                # Een koers die voorbij het niveau gaat raakt het niveau ook: een limietorder daar vult dan, dus er is geen
+                # aparte "teruggewonnen"-tak. Een mislukte breuk eindigt zo meteen in de stop, zoals de toets het ook meet.
+                reach = c.high >= level if s["direction"] == br.SHORT else c.low <= level
+                if reach:
+                    stop = stop_with_room(s["direction"], level, extreme, s["atr"], stop_atr)
+                    risk_pct = abs(level - stop) / level * 100
+                    if risk_pct <= br.MAX_STOP_PCT:
+                        try:
+                            await (_fire(s, plan, level, stop, c.timestamp) if s["state"] == "waiting" else _fire_shadow(s, plan, level, stop))
+                        except Exception:
+                            logger.exception("Structuur-setup %s voor %s is niet gemeld", s["id"], coin)
+                    else:
+                        repo.set_structure_state(s["id"], "overgeslagen")
+                    break
+                extreme = max(extreme, c.high) if s["direction"] == br.SHORT else min(extreme, c.low)
+
+
+def trade_tag(signal_id: int) -> str:
+    """Eén lopende melding per trade: gevuld, T1, T2 en klaar vervangen elkaar, zodat je vergrendelscherm niet volloopt."""
+    return f"trade-{signal_id}"
+
+
+def progress_bar(hits: int, total: int) -> str:
+    return "▰" * hits + "▱" * (total - hits)
+
+
+def _target_message(setup: dict, plan: dict, fired: dict, n: int) -> tuple[str, str]:
+    """Melding bij het n-de doel (1-based). Bij het eerste doel hoort de instructie uit het recept: stop naar de instap."""
+    from app import push_notify
+    targets, r_list = fired["targets"], plan["targets_r"]
+    total = len(targets)
+    title = push_notify.alert_title(setup["coin"], setup["direction"], f"{progress_bar(n, total)} T{n} van {total}")
+    first = f"T{n} {push_notify.fmt_price(targets[n - 1])} ({r_list[n - 1]:g}R) geraakt."
+    if n == total:
+        return title, f"{first} Laatste doel: de trade is klaar."
+    nxt = f"Volgend doel T{n + 1} {push_notify.fmt_price(targets[n])} ({r_list[n]:g}R)."
+    if n == 1:
+        return title, f"{first}\nZet je stop op de instap {push_notify.fmt_price(fired['entry'])}.\n{nxt}"
+    return title, f"{first}\n{nxt}"
+
+
+async def _follow(now: datetime) -> None:
+    """Volgt gevulde setups: meldt elk doel dat raakt (bij het eerste hoort 'stop naar de instap') en sluit de setup bij
+    stop, terugkeer naar de instap of het laatste doel. Het signaal zelf meet alleen het tweede doel, deze ladder is voor jou."""
+    from app import exchange, push_notify
+    rows = [s for s in repo.list_structure_setups(("fired",), 30) if (json.loads(s["plan"]).get("fired") or {}).get("closed") is False]
+    for coin in sorted({s["coin"] for s in rows}):
+        try:
+            df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, timeframe="5m", limit=300)
+        except Exception:
+            logger.exception("5m-candles voor %s niet op te halen, ladder wordt later gevolgd", coin)
+            continue
+        for s in (x for x in rows if x["coin"] == coin):
+            plan = json.loads(s["plan"])
+            fired = plan["fired"]
+            short = s["direction"] == br.SHORT
+            hits, targets = fired["hits"], fired["targets"]
+            live_stop = fired["entry"] if hits >= 1 else fired["stop"]
+            changed, messages = False, []
+            # Alleen gesloten 5m-candles, en elke candle maar één keer: anders zou een stop op de instap (na T1) terugwerkend
+            # op candles van vóór T1 worden toegepast.
+            closed = df[df["timestamp"] + pd.Timedelta(minutes=5) <= pd.Timestamp(now)]
+            seen = fired.get("seen")
+            new = closed[closed["timestamp"] > pd.Timestamp(seen)] if seen else closed[closed["timestamp"] >= pd.Timestamp(fired["at"])]
+            for c in new.itertuples():
+                fired["seen"] = c.timestamp.isoformat()
+                changed = True
+                if (c.high >= live_stop) if short else (c.low <= live_stop):
+                    fired["closed"], changed = True, True
+                    fired.setdefault("events", []).append({"at": c.timestamp.isoformat(), "text": "Stop op de instap geraakt, break-even" if hits >= 1 else "Stop geraakt"})
+                    break
+                while hits < len(targets) and ((c.low <= targets[hits]) if short else (c.high >= targets[hits])):
+                    hits += 1
+                    # T1 en het laatste doel zijn luid (er moet iets gebeuren: stop naar de instap, of de trade is klaar), de doelen ertussen stil.
+                    messages.append((*_target_message(s, plan, fired, hits), hits == 1 or hits == len(targets)))
+                    fired.setdefault("events", []).append({"at": c.timestamp.isoformat(), "text": f"T{hits} geraakt ({plan['targets_r'][hits - 1]:.1f}R)"})
+                    if hits == 1:
+                        live_stop = fired["entry"]
+                    changed = True
+                if hits == len(targets):
+                    fired["closed"] = True
+                    break
+            if changed:
+                fired["hits"] = hits
+                repo.update_structure_plan(s["id"], json.dumps(plan))
+            # Eén melding per trade die zichzelf bijwerkt: T1 en het laatste doel klinken (stop naar de instap, de trade is klaar), de doelen
+            # ertussen vervangen stil dezelfde melding.
+            url = push_notify.signal_url(coin, s["signal_id"]) if s["signal_id"] else "/structuur"
+            for title, body, loud in messages:
+                await _push_all(title, body, url, trade_tag(s["signal_id"]) if s["signal_id"] else f"structuur-{s['id']}", loud=loud)
+
+
+async def run(now: Optional[datetime] = None) -> None:
+    """Draait in de SMC-snelcyclus."""
+    now = now or datetime.now(timezone.utc)
+    repo.expire_structure_setups(now.isoformat())
+    if not config.STRUCTURE_ENABLED:
+        return
+    if not focus.engine_on("structuur"):
+        # Alleen afmaken wat al loopt, en de dagbrief; geen nieuwe kaarten en geen vullingen van wachtende kaarten.
+        await _follow(now)
+        try:
+            from app import digest
+            await digest.run(now)
+        except Exception:
+            logger.exception("Dagbrief is mislukt")
+        repo.beat("structuur", focus.OFF_DETAIL)
+        return
+    if should_disable(repo.list_type_results("structuur", config.STRUCTURE_MAX_NEGATIVE), config.STRUCTURE_MAX_NEGATIVE):
+        repo.notify_engine_disabled("Structuur-breuken", f"De laatste {config.STRUCTURE_MAX_NEGATIVE} afgeronde signalen zijn samen negatief. Zie Bewijs.")
+        return
+    symbols = {c["symbol"] for c in repo.list_coins()}
+    params = shadow.live_params("structuur")           # een gepromoveerde schaduwwaarde geldt vanaf deze cyclus, ook bij de vulling
+    found, checked, failed = [], 0, []
+    started = time.monotonic()
+    # Alle gevolgde coins, niet alleen de basiscoins: meer breuken betekent eerder een cijfer waar we iets op kunnen afstellen.
+    for coin in config.FIXED_COINS:
+        if coin not in symbols:
+            continue
+        try:
+            found += await _discover(coin, now, params=params)
+            checked += 1
+        except Exception:
+            failed.append(coin)
+            logger.exception("Structuur-check voor %s is mislukt", coin)
+    missing = [c for c in config.FIXED_COINS if c not in symbols]
+    seconds = time.monotonic() - started
+    try:
+        await _announce(found, now)
+    except Exception:
+        logger.exception("Structuur-meldingen zijn mislukt")
+    await _track(now, params=params)
+    await _follow(now)
+    try:
+        from app import digest
+        await digest.run(now)
+    except Exception:
+        logger.exception("Dagbrief is mislukt")
+    kinds = {}
+    for c in found:
+        kinds[c["ev"].kind] = kinds.get(c["ev"].kind, 0) + 1
+    held = repo.count_cap_holds("structuur", (now - daycap.WINDOW).isoformat())
+    repo.beat("structuur", daycap.with_held(beat_detail(checked, len(config.FIXED_COINS), failed, missing, seconds, kinds), held,
+                                            config.STRUCTURE_MAX_ALERTS_PER_DAY))
+
+
+def beat_detail(checked: int, total: int, failed: list[str], missing: list[str], seconds: float, kinds: Optional[dict] = None) -> str:
+    """De hartslag zegt hoeveel coins echt bekeken zijn. Vroeger stond er altijd het aantal FIXED_COINS, ook als een coin faalde of niet in
+    de coinlijst stond, zodat een gat in de dekking onzichtbaar bleef (scripts/structuur_check.py leest dit terug met parse_beat)."""
+    parts = [f"{checked} van {total} coins gecontroleerd in {seconds:.0f} s"]
+    if kinds and sum(kinds.values()):
+        parts.append(f"nieuw: {sum(kinds.values())} plannen, waarvan {kinds.get(br.CHOCH, 0)} hogere bodem of lagere top")
+    if failed:
+        parts.append("mislukt: " + ", ".join(failed))
+    if missing:
+        parts.append("niet gevolgd: " + ", ".join(missing))
+    return "; ".join(parts)
+
+
+def parse_beat(detail: str) -> Optional[dict]:
+    """{"checked", "total"} uit de hartslag, ook uit de oude tekst "35 coins gecontroleerd"; None als het geen telling is (uit of focus)."""
+    m = re.match(r"(\d+) van (\d+) coins gecontroleerd", detail or "")
+    if m:
+        return {"checked": int(m.group(1)), "total": int(m.group(2))}
+    m = re.match(r"(\d+) coins gecontroleerd", detail or "")
+    return {"checked": int(m.group(1)), "total": int(m.group(1))} if m else None
+
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    from app import db
+    db.init_db()
+    asyncio.run(run())

@@ -9,8 +9,11 @@ import logging
 import time
 from typing import Callable, Optional
 
-from app import coinlist, config, exchange, explain, indicators, push_notify, repo, risk
+from app import coinlist, config, exchange, explain, focus, indicators, push_notify, repo, risk
 from app.anthropic_interpret import Interpretation, interpret_message
+from app.setup_eval import (  # noqa: F401  (market_scanner importeert deze namen hier)
+    MAX_STOP_DISTANCE_PCT, MIN_RISK_REWARD_RATIO, evaluate_day_trading_setup, stop_within_max_distance,
+)
 
 logger = logging.getLogger("signal_processor")
 
@@ -48,31 +51,6 @@ SWING_WATCH_ATR_MULTIPLIER = 0.5
 # Hoe lang een "wachtende" swing watch actief blijft zonder dat de prijs
 # ooit dichtbij kwam, voor hij automatisch vervalt (12 weken).
 SWING_WATCH_MAX_AGE_DAYS = 84
-
-# Onder deze verhouding is een setup geen goede trade meer, ongeacht hoeveel
-# andere factoren wel kloppen — een niveau-gebaseerde stop
-# (risk.compute_stop_take_from_levels) kan de verhouding laten zakken tot
-# zijn eigen ondergrens van 1:1, dat is lager dan hier acceptabel is.
-MIN_RISK_REWARD_RATIO = 2.0
-
-# Focus op de strakste, preciestste entries: een signaal met een stop
-# verder dan dit percentage van de entry af wordt niet gemeld, ongeacht
-# hoe goed de rest van de setup is. Minder meldingen, en de meldingen die
-# er nog wel zijn hebben een klein, beheersbaar risico per trade.
-MAX_STOP_DISTANCE_PCT = 1.5
-
-
-def stop_within_max_distance(entry_price: float, stop_loss: float) -> bool:
-    """True als de stop-afstand tot de entry binnen MAX_STOP_DISTANCE_PCT
-    ligt. Gedeelde check voor elk ATR-gebaseerd detectiepad (dagtrading,
-    uitbraak, trendlijn, patroon) — zelfde precedent als
-    MIN_RISK_REWARD_RATIO hierboven, nu op stopafstand in plaats van op
-    risico/rendement. Smc gebruikt dit bewust niet: die stop ligt vast op
-    de sweep-prijs, geen ATR, zie market_scanner.py::_complete_smc_setup."""
-    if not entry_price:
-        return False
-    distance_pct = abs(entry_price - stop_loss) / entry_price * 100
-    return distance_pct <= MAX_STOP_DISTANCE_PCT
 
 
 def _price_near_level(current_price: float, level_price: float, atr: float) -> bool:
@@ -175,6 +153,15 @@ async def handle_message(message_id: int, raw_text: str, image_paths: list[str])
             f"duplicaat van bericht #{duplicate['id']}, niet opnieuw verwerkt",
         )
         repo.mark_message_envelope_processed(message_id)
+        return
+
+    # Focus: day trading via Discord staat uit. Het bericht staat al in messages en is hierboven gededupliceerd; zonder interpretatie komt er
+    # geen signaal, journaalregel of push uit, en geen Anthropic-kosten. Hier en niet in process_day_trading_signal: daar kijkt de golden test.
+    if not focus.engine_on("day_trading"):
+        logger.info("Bericht %s opgeslagen, niet geïnterpreteerd: day trading %s", message_id, focus.OFF_DETAIL)
+        repo.mark_message_processed(message_id, None, None, None, False,
+                                    note=f"Opgeslagen, niet geïnterpreteerd: day trading {focus.OFF_DETAIL} (ENGINE_FOCUS)")
+        repo.beat("day_trading", focus.OFF_DETAIL)
         return
 
     global _consecutive_interpret_failures
@@ -376,6 +363,10 @@ async def _fanout_confirmed_signal(
     skip_push: bool = False,
     kansberekening=_KANSBEREKENING_NOT_APPLICABLE, hard_gates_ok: bool = True,
     reason: str = "",
+    signal_type: Optional[str] = None,
+    force_silent: bool = False,
+    tag: Optional[str] = None,
+    timing: Optional[dict] = None,
 ) -> None:
     """Deelt een al-bevestigd signaal (geen gepoold percentage, altijd
     gemeld) met alle gebruikers: journaalregel + pushmelding per gebruiker,
@@ -418,6 +409,9 @@ async def _fanout_confirmed_signal(
     chart-patroon) — dat kan inmiddels van entry_price afwijken (prijs
     beweegt tussen het zetten van het niveau en de latere bevestiging), dus
     de twee zijn expres losse parameters."""
+    # Zie config.SIGNAL_TYPE_INFO_ONLY: de journaalregel blijft, alleen de push vervalt.
+    if signal_type in config.SIGNAL_TYPE_INFO_ONLY:
+        skip_push, kansberekening = True, _KANSBEREKENING_NOT_APPLICABLE
     required_by_user = repo.list_required_factors_all_users()
     for user in repo.list_users():
         risk_eur, evaluation_id, cost_rate, effective_stop_loss, effective_take_profit = _resolve_signal_risk(
@@ -466,7 +460,10 @@ async def _fanout_confirmed_signal(
         quiet = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
             body = make_body(effective_stop_loss, effective_take_profit, stop_was_capped)
-            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=quiet)
+            extra = {"tag": tag} if tag else {}
+            if timing:
+                extra["timing"] = timing
+            await push_notify.send_kans_push(user["id"], coin, direction, title, body, push_notify.signal_url(coin, signal_id), silent=quiet or force_silent, **extra)
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
             logger.exception("Melding voor %s naar gebruiker %s is mislukt", coin, user["username"])
@@ -554,8 +551,8 @@ async def run_swing_check(watch_id: int) -> None:
     await _fanout_confirmed_signal(
         signal_id, coin, direction, ind_4h.price, stop_take.stop_loss, stop_take.take_profit,
         premise_level=watch["price_level"],
-        title=f"{push_notify.coin_symbol(coin)} {coin} {direction}, swing-kans",
-        make_body=_swing_body,
+        title=push_notify.alert_title(coin, direction, "Swing"),
+        make_body=_swing_body, signal_type="swing",
     )
 
 
@@ -604,7 +601,19 @@ def _build_context_note(coin: str, direction: str) -> str:
 
 async def compute_advanced_extra_factors(
     coin: str, direction: str, df, entry_price: float, atr: float, zones: list[indicators.SRZone],
-    daily_df=None, daily_ind: indicators.Indicators | None = None,
+    daily_df=None, daily_ind: indicators.Indicators | None = None, data=None,
+) -> list[tuple[str, bool, str]]:
+    """Async wrapper rond advanced_extra_factors_sync (zie daar voor de
+    volledige uitleg); data=None betekent de live exchange."""
+    return await asyncio.to_thread(
+        advanced_extra_factors_sync, coin, direction, df, entry_price, atr, zones,
+        daily_df, daily_ind, data or exchange,
+    )
+
+
+def advanced_extra_factors_sync(
+    coin: str, direction: str, df, entry_price: float, atr: float, zones: list[indicators.SRZone],
+    daily_df=None, daily_ind: indicators.Indicators | None = None, data=None,
 ) -> list[tuple[str, bool, str]]:
     """Berekent de losse checks voor de uitgebreide factorenset (BTC-trend,
     1u bevestiging, divergentie, liquiditeit). Elke check faalt individueel
@@ -619,11 +628,12 @@ async def compute_advanced_extra_factors(
     Premium/discount (dag), Liquidity sweep (dag)) die hem ook nodig
     hebben. Ontbreken ze (bv. de eerdere fetch faalde), dan valt deze
     functie terug op zijn eigen fetch hieronder."""
+    data = data or exchange
     factors: list[tuple[str, bool, str]] = []
 
     if coin.upper() != "BTC":
         try:
-            btc_df = await asyncio.to_thread(exchange.fetch_ohlcv, "BTC")
+            btc_df = data.fetch_ohlcv("BTC")
             btc_ind = indicators.compute_indicators(btc_df)
             # BTC-trend is nu een harde eis in confirms_direction (zie
             # daar). Bij een vlakke BTC is er geen "tegen de trade in"
@@ -640,7 +650,7 @@ async def compute_advanced_extra_factors(
 
     try:
         if daily_df is None or daily_ind is None:
-            daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
+            daily_df = data.fetch_ohlcv(coin, "1d")
             daily_ind = indicators.compute_indicators(daily_df)
         # Daily-trend zelf wordt niet meer hier berekend: die is nu een
         # altijd-actieve harde eis in confirms_direction, opgehaald in
@@ -661,7 +671,7 @@ async def compute_advanced_extra_factors(
         factors.append(("Liquidity sweep (dag)", False, "kon niet opgehaald worden, telt als niet bevestigd"))
 
     try:
-        df_1h = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1h")
+        df_1h = data.fetch_ohlcv(coin, "1h")
         ind_1h = indicators.compute_indicators(df_1h)
         factors.append(indicators.check_1h_trend(direction, ind_1h))
         factors.append(indicators.check_1h_rsi(direction, ind_1h))
@@ -684,7 +694,7 @@ async def compute_advanced_extra_factors(
         factors.append(("Candlepatroon", False, "kon niet berekend worden, telt als niet bevestigd"))
 
     try:
-        quote_volume = await asyncio.to_thread(exchange.fetch_24h_quote_volume, coin)
+        quote_volume = data.fetch_24h_quote_volume(coin)
         factors.append(indicators.check_liquidity(quote_volume))
     except Exception:
         logger.exception("Liquiditeitscheck voor %s kon niet berekend worden", coin)
@@ -714,7 +724,18 @@ async def compute_advanced_extra_factors(
 
 async def compute_full_confirmation(
     coin: str, direction: str, df, ind: indicators.Indicators, zones: list[indicators.SRZone],
-    daily_trend_hard_gate: bool = True,
+    daily_trend_hard_gate: bool = True, data=None,
+) -> tuple[bool, str, float, bool]:
+    """Async wrapper rond full_confirmation_sync (zie daar voor de
+    volledige uitleg); data=None betekent de live exchange."""
+    return await asyncio.to_thread(
+        full_confirmation_sync, coin, direction, df, ind, zones, daily_trend_hard_gate, data or exchange,
+    )
+
+
+def full_confirmation_sync(
+    coin: str, direction: str, df, ind: indicators.Indicators, zones: list[indicators.SRZone],
+    daily_trend_hard_gate: bool = True, data=None,
 ) -> tuple[bool, str, float, bool]:
     """Volledige factor-toetsing: dagtrend (met vlakke-markt-uitzondering)
     plus, bij config.ENABLE_ADVANCED_FACTORS, de uitgebreide factoren, dan
@@ -728,11 +749,12 @@ async def compute_full_confirmation(
     voor een omkeerpatroon) zet Daily-trend om naar puur informatief in
     plaats van blokkerend, zie indicators.confirms_direction's docstring
     voor de volledige redenering."""
+    data = data or exchange
     daily_trend_factor = None
     daily_df = None
     daily_ind = None
     try:
-        daily_df = await asyncio.to_thread(exchange.fetch_ohlcv, coin, "1d")
+        daily_df = data.fetch_ohlcv(coin, "1d")
         daily_ind = indicators.compute_indicators(daily_df)
         # Net als BTC-trend (indicators.btc_is_flat): een coin zonder
         # duidelijke eigen dagtrend mag niet hard geblokkeerd worden, dat
@@ -747,9 +769,8 @@ async def compute_full_confirmation(
 
     extra_factors = None
     if config.ENABLE_ADVANCED_FACTORS:
-        extra_factors = await compute_advanced_extra_factors(
-            coin, direction, df, ind.price, ind.atr, zones,
-            daily_df=daily_df, daily_ind=daily_ind,
+        extra_factors = advanced_extra_factors_sync(
+            coin, direction, df, ind.price, ind.atr, zones, daily_df, daily_ind, data,
         )
 
     return indicators.confirms_direction(
@@ -787,140 +808,33 @@ async def process_day_trading_signal(
 
     df = await asyncio.to_thread(exchange.fetch_ohlcv, interp.coin)
     ind = indicators.compute_indicators(df)
-    swing_low, swing_high = indicators.swing_levels(df)
     zones = indicators.detect_sr_zones(df)
 
     confirmed, reason, pass_pct, hard_gates_ok = await compute_full_confirmation(
         interp.coin, interp.direction, df, ind, zones,
     )
 
-    # Dezelfde edges/kant-bepaling-logica als indicators.check_sr_zone gebruikt
-    # intern, hier apart herhaald in plaats van check_sr_zone's eigen
-    # (name, ok, detail)-vorm uit te breiden — dat zou die vorm inconsistent
-    # maken met elke andere factor-functie hier, en de twee aanroepers van
-    # check_sr_zone (dit bestand, scripts/backtest_factors.py) zouden dan
-    # allebei aangepast moeten worden voor een waarde die alleen hier nodig is.
-    edges = [edge for zone in zones for edge in (zone.price_low, zone.price_high)]
-    if interp.direction.lower() == "long":
-        zone_candidates = [
-            e for e in edges
-            if e < ind.price and abs(ind.price - e) <= indicators.SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * ind.atr
-        ]
-        nearest_sr_zone_price = max(zone_candidates) if zone_candidates else None
-    else:
-        zone_candidates = [
-            e for e in edges
-            if e > ind.price and abs(ind.price - e) <= indicators.SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * ind.atr
-        ]
-        nearest_sr_zone_price = min(zone_candidates) if zone_candidates else None
-
-    # Zelfde zone die de laatste keer al een stop loss veroorzaakte: een
-    # nieuw signaal vlakbij diezelfde rand herhaalt vermoedelijk dezelfde
-    # fout, dus telt hier mee als harde eis naast de andere confirms_direction-
-    # uitkomst in plaats van als losse parallelle check.
-    if nearest_sr_zone_price is not None and repo.recent_sr_zone_failure(
-        interp.coin, interp.direction, nearest_sr_zone_price, ind.atr,
-    ):
-        hard_gates_ok = False
-        confirmed = False
-        reason += " | ✗ Zone recent gefaald: deze steun/weerstand-zone veroorzaakte de laatste 3 dagen al een stop loss"
-
     # Geen bericht (autonoom marktscan-signaal, zie app/market_scanner.py)
     # betekent geen bron-niveaus om mee te wegen — die komen altijd uit een
-    # gedeeld screenshot. De SR-zone-niveaus (zone_levels, hieronder)
-    # blijven wel gewoon meetellen, die komen niet uit een bericht.
+    # gedeeld screenshot. De SR-zone-niveaus (zone_levels, in
+    # setup_eval.evaluate_day_trading_setup) blijven wel gewoon meetellen,
+    # die komen niet uit een bericht.
     message_levels = (
         [lvl["price_level"] for lvl in repo.list_source_levels_for_message(message_id, interp.coin)]
         if message_id is not None else []
     )
-    zone_levels = [
-        edge for zone in zones for edge in (zone.price_low, zone.price_high)
-        if abs(edge - ind.price) <= indicators.SR_ZONE_MAX_DISTANCE_ATR_MULTIPLE * ind.atr
-    ]
-    combined_levels = message_levels + zone_levels
-    if combined_levels:
-        stop_take = risk.compute_stop_take_from_levels(
-            interp.direction, ind.price, ind.atr, combined_levels, swing_low=swing_low, swing_high=swing_high,
-        )
-    else:
-        stop_take = risk.compute_stop_take(
-            interp.direction, ind.price, ind.atr, swing_low=swing_low, swing_high=swing_high,
-        )
-
-    # Een bruikbare entry-zone ligt tussen de huidige prijs en de stop
-    # loss (in het voordeel van de trade: dichter bij de stop dan de
-    # huidige prijs bij long is een BETERE, niet slechtere, entry — bij
-    # short andersom), en is dus nooit voorbij de stop loss zelf. PUUR
-    # informatief (product owner): telt nergens mee in sizing/journaal/
-    # trackrecord, de live prijs (ind.price, hierboven) blijft de echte
-    # entry overal elders in deze functie.
-    # Geclampt op ind.price: de favorable-filters hierboven toetsen alleen
-    # de rand die het VERST van de live prijs af ligt, dus een zone die de
-    # prijs zelf overlapt sluiten ze niet uit. Zonder de clamp zou de
-    # getoonde range dan deels een "betere entry" adverteren die feitelijk
-    # slechter is dan de huidige prijs.
-    if interp.direction.lower() == "long":
-        favorable = [z for z in zones if stop_take.stop_loss < z.price_low < ind.price]
-        best_zone = max(favorable, key=lambda z: z.price_high) if favorable else None
-        suggested_entry_low = best_zone.price_low if best_zone else None
-        suggested_entry_high = min(best_zone.price_high, ind.price) if best_zone else None
-    else:
-        favorable = [z for z in zones if ind.price < z.price_high < stop_take.stop_loss]
-        best_zone = min(favorable, key=lambda z: z.price_low) if favorable else None
-        suggested_entry_low = max(best_zone.price_low, ind.price) if best_zone else None
-        suggested_entry_high = best_zone.price_high if best_zone else None
-
-    sniper = indicators.find_sniper_entry_price(interp.direction, df)
-    sniper_entry_price, sniper_reason = sniper if sniper else (None, None)
-    # Een sniper-prijs voorbij de stop loss is geen bruikbare entry-suggestie
-    # meer (zie indicators.sniper_beyond_stop): instappen daar zou de trade
-    # al ongeldig maken. Telt verderop hetzelfde als "geen sniper gevonden".
-    if sniper_entry_price is not None and indicators.sniper_beyond_stop(
-        interp.direction, sniper_entry_price, stop_take.stop_loss,
-    ):
-        sniper_entry_price, sniper_reason = None, None
-
-    # Harde eis: alleen melden bij een duidelijke sweep/stop-hunt-entry, niet
-    # bij de kale live prijs. Zonder dit vuurde elk dagtrading-signaal op
-    # ind.price, ongeacht of de prijs net een stop-hunt had of al een stuk
-    # verder was gelopen dan een scherpe entry nog zou toestaan — bij een
-    # grote positie (zie gesprek) is dat verschil geen rond-getal-ruis meer.
-    # Zelfde vergelijking als market_scanner._complete_smc_setup's
-    # entry_worse_than_sniper: bij long is een hogere prijs dan de sniper
-    # een slechtere entry (je koopt verder boven de swept low), bij short
-    # een lagere prijs een slechtere entry (je verkoopt verder onder de
-    # swept high). Geen sniper gevonden telt ook als een te late/onduidelijke
-    # entry, niet als "geen informatie dus toegestaan". Wie geen sniper-
-    # entry kreeg, krijgt via level_check.py's proactieve sniper-trigger
-    # alsnog een melding zodra er wél een duidelijke stop-hunt verschijnt.
-    entry_worse_than_sniper = (
-        sniper_entry_price is None
-        or (interp.direction.lower() == "short" and ind.price < sniper_entry_price)
-        or (interp.direction.lower() == "long" and ind.price > sniper_entry_price)
+    evaluation = evaluate_day_trading_setup(
+        interp.direction, df, ind, zones, (confirmed, reason, pass_pct, hard_gates_ok),
+        lambda zone_price: repo.recent_sr_zone_failure(interp.coin, interp.direction, zone_price, ind.atr),
+        message_levels,
     )
-    if entry_worse_than_sniper:
-        hard_gates_ok = False
-        confirmed = False
-        if sniper_entry_price is None:
-            reason += " | ✗ Sniper-entry: geen duidelijke stop-hunt gevonden binnen bereik"
-        else:
-            reason += (
-                f" | ✗ Sniper-entry: prijs {ind.price:.4f} ligt niet meer aan de juiste kant "
-                f"van de sniper-prijs {sniper_entry_price:.4f}"
-            )
-
-    risk_distance = abs(ind.price - stop_take.stop_loss)
-    reward_distance = abs(stop_take.take_profit - ind.price)
-    risk_reward_ratio = (reward_distance / risk_distance) if risk_distance else 0.0
-    if risk_reward_ratio < MIN_RISK_REWARD_RATIO:
-        hard_gates_ok = False
-        confirmed = False
-        reason += f" | ✗ Risico/rendement: {risk_reward_ratio:.1f} tegen 1, onder de ondergrens van {MIN_RISK_REWARD_RATIO}"
-    if not stop_within_max_distance(ind.price, stop_take.stop_loss):
-        hard_gates_ok = False
-        confirmed = False
-        stop_distance_pct = risk_distance / ind.price * 100 if ind.price else 0.0
-        reason += f" | ✗ Stopafstand: {stop_distance_pct:.1f}% van entry, boven de ondergrens van {MAX_STOP_DISTANCE_PCT}%"
+    confirmed, reason, pass_pct, hard_gates_ok = (
+        evaluation.confirmed, evaluation.reason, evaluation.pass_pct, evaluation.hard_gates_ok,
+    )
+    stop_take = risk.StopTake(stop_loss=evaluation.stop_loss, take_profit=evaluation.take_profit)
+    nearest_sr_zone_price = evaluation.nearest_sr_zone_price
+    suggested_entry_low, suggested_entry_high = evaluation.suggested_entry_low, evaluation.suggested_entry_high
+    sniper_entry_price, sniper_reason = evaluation.sniper_entry_price, evaluation.sniper_reason
     context_note = _build_context_note(interp.coin, interp.direction)
 
     confidence = "hoog vertrouwen" if confirmed else "laag vertrouwen"
@@ -1085,6 +999,10 @@ async def process_day_trading_signal(
                         interp.coin, user["username"])
             continue
 
+        if "day_trading" in config.SIGNAL_TYPE_INFO_ONLY:
+            logger.info("day_trading staat op alleen-informatie, geen pushmelding voor %s", interp.coin)
+            continue
+
         if not confirmed:
             # Laag vertrouwen (technical_confirmed=0) krijgt nooit meer een
             # pushmelding, ongeacht de bron (gedeeld bericht of autonome
@@ -1100,7 +1018,7 @@ async def process_day_trading_signal(
 
         force_silent = push_notify.is_quiet_now(user["quiet_hours_start"], user["quiet_hours_end"])
         try:
-            title = f"{push_notify.coin_symbol(interp.coin)} {interp.coin} {interp.direction}, {signal_data['confidence']}"
+            title = push_notify.alert_title(interp.coin, interp.direction, f"Community, {signal_data['confidence']}")
             body = (
                 f"Entry {signal_data['price']:.4f}\n"
                 f"Stop {effective_stop_loss:.4f} · Take profit {effective_take_profit:.4f}"
@@ -1113,8 +1031,9 @@ async def process_day_trading_signal(
                 body += f"\n{signal_data['repeated_loss_note']}"
             if signal_data.get("context_note"):
                 body += f"\n{signal_data['context_note']}"
-            await push_notify.send_push(
-                user["id"], title, body, f"/coins/{interp.coin}", silent=force_silent,
+            body += f"\n{push_notify.OPEN_PLAN_LINE}"
+            await push_notify.send_kans_push(
+                user["id"], interp.coin, interp.direction, title, body, push_notify.signal_url(interp.coin, signal_id), silent=force_silent,
             )
             repo.mark_journal_telegram_sent(entry_id)
         except Exception:
@@ -1199,7 +1118,9 @@ async def _notify_signal_update(signal_id: int, signal_data: dict) -> None:
                 body = f"Nieuwe prijs {message_data['price']:.4f} · nog geen sterke kans"
             if message_data.get("repeated_loss_note"):
                 body += f"\n{message_data['repeated_loss_note']}"
-            await push_notify.send_push(user["id"], title, body, f"/coins/{coin}", silent=force_silent)
+            if confirmed:
+                body += f"\n{push_notify.OPEN_PLAN_LINE}"
+            await push_notify.send_push(user["id"], title, body, push_notify.signal_url(coin, signal_id), silent=force_silent)
         except Exception:
             logger.exception("Pushmelding (update) voor gebruiker %s, signaal %s is mislukt",
                               user["username"], signal_id)

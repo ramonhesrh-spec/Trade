@@ -27,6 +27,10 @@ ANTHROPIC_EXPLAIN_MODEL = _get("ANTHROPIC_EXPLAIN_MODEL", "claude-haiku-4-5-2025
 
 EXCHANGE_ID = _get("EXCHANGE_ID", "binance")
 QUOTE_CURRENCY = _get("QUOTE_CURRENCY", "USDT")
+# Waar candles en koersen vandaan komen (app/candle_source.py): 'perp' = Binance USDⓈ-M perpetuals (de CEO en zijn kring handelen perps,
+# dus niveaus, vullingen en uitkomsten horen op die markt), 'spot' = de spotmarkt van EXCHANGE_ID als terugval. Een coin zonder perp valt
+# per coin terug op spot. Perps alleen met EXCHANGE_ID=binance. Lab en replay lezen hun eigen data en volgen dit niet.
+CANDLE_MARKET = _get("CANDLE_MARKET", "perp").strip().lower()
 TIMEFRAME = "4h"
 
 # Vaste coinlijst (HesPulse-verkleinen, 2026-09-30): geen onbeperkte
@@ -35,7 +39,16 @@ TIMEFRAME = "4h"
 # daadwerkelijk draait. repo.add_coin_if_new is het enige handhavingspunt
 # — een coin hier niet in mag nooit toegevoegd worden, ongeacht wie
 # aanroept (Discord-verwerking, bron-niveaus, dagtradinginterpretatie).
-FIXED_COINS = ["BTC", "ETH", "SOL", "BNB", "AVAX", "DOGE", "SUI"]
+BASE_COINS = ["BTC", "ETH", "SOL", "BNB", "AVAX", "DOGE", "SUI"]
+# Extra coins (komma-gescheiden in .env, bijvoorbeeld XRP,HBAR): alleen de SMC-check draait erop, niet de 4u-detectoren
+# (patroon, uitbraak, trendlijn), want die verliezen op de basiscoins. Eerst met scripts/replay_smc_report.py toetsen.
+# De standaardlijst van de extra coins (2026-10-27, gekozen uit de marktenlijst van de eigenaar op Kraken: alle 5x en 3x met veel handel, plus
+# een paar 2x). Wat in .env bij EXTRA_COINS staat komt erbij; zo hoeft een nieuwe VPS geen lijst over te typen.
+DEFAULT_EXTRA_COINS = ["AAVE", "APT", "ARB", "HYPE", "TIA", "WLD", "ADA", "BCH", "DOT", "ETC", "FIL", "HBAR", "INJ", "LINK", "LTC", "TAO", "TRX", "UNI",
+                       "XRP", "ENA", "NEAR", "ONDO", "PEPE", "ZEC", "PUMP", "XLM", "OP", "RENDER"]
+_env_extra = [c.strip().upper() for c in _get("EXTRA_COINS", "").split(",") if c.strip()]
+EXTRA_COINS = [c for c in dict.fromkeys(DEFAULT_EXTRA_COINS + _env_extra) if c not in BASE_COINS]
+FIXED_COINS = BASE_COINS + EXTRA_COINS
 
 # De uitgebreide factoren (ADX, volatiliteit, BTC-trend, 1u bevestiging,
 # divergentie, liquiditeit) staan standaard uit. De drempels zijn
@@ -43,6 +56,23 @@ FIXED_COINS = ["BTC", "ETH", "SOL", "BNB", "AVAX", "DOGE", "SUI"]
 # Draai eerst scripts/backtest_factors.py en zet deze pas aan als dat
 # overzicht laat zien dat de drempels niet bijna alles wegfilteren.
 ENABLE_ADVANCED_FACTORS = _get("ENABLE_ADVANCED_FACTORS", "false").lower() == "true"
+
+# Gebruikersnaam van de CEO (de eigenaar). Alle andere gebruikers zijn leerlingen. Leeg: de eerst aangemaakte gebruiker.
+CEO_USERNAME = _get("CEO_USERNAME", "").strip()
+
+# Minimale stopafstand van een SMC-signaal, in procenten van de entry. Uit het meetraam (12 maanden, 7 coins,
+# 122 signalen): signalen met een stop onder 0,1% wonnen 6% en verloren gemiddeld -0,73R bruto, omdat zo'n
+# stop binnen de ruis van een minuutcandle ligt. Vanaf 0,2% was het +0,12R bruto. Een krappere stop wordt verbreed tot deze afstand, nooit geweigerd.
+# Staat op 0,4% omdat een stop van 0,2% (24 cent op SOL) al door een prijsverschil tussen twee beurzen geraakt wordt. Geldt voor SMC, Structuur,
+# Trend en het markt-script. 0 zet het uit.
+SMC_MIN_STOP_PCT = float(_get("SMC_MIN_STOP_PCT", "0.4"))
+# Meld een SMC-kans met een waarschuwing (late entry of lage verhouding) in plaats van hem te weigeren. Standaard uit zodat de golden-tests van de
+# gedeelde SMC-logica ongewijzigd blijven; zet op true in .env om elke kans te zien.
+SMC_WARNING_ALERTS = _get("SMC_WARNING_ALERTS", "false").lower() == "true"
+
+# Kosten per rondreis (fee plus slippage, beide kanten samen) in procenten van de entry, voor de netto-cijfers op
+# /bewijs en in het weekrapport. Een aanname: wat iemand echt betaalt hangt van de beurs af.
+TRACK_RECORD_COST_PCT = float(_get("TRACK_RECORD_COST_PCT", "0.06"))
 
 # Dashboard accounts staan in de database (tabel users). Open registratie
 # staat aan op /registreer, daarnaast kan een account ook via
@@ -53,6 +83,12 @@ SESSION_HOURS = 24 * 7
 
 # Maximum aantal registraties per IP per uur, tegen geautomatiseerde spam.
 MAX_REGISTRATIONS_PER_HOUR = int(_get("MAX_REGISTRATIONS_PER_HOUR", "5"))
+# Registreren alleen met een geldige uitnodigingscode van Beheer (/beheer). Standaard uit: dan blijft /registreer open zoals het was, en kent een
+# meegegeven code alleen zijn volg-set toe.
+REGISTRATION_REQUIRES_INVITE = _get("REGISTRATION_REQUIRES_INVITE", "false").strip().lower() == "true"
+# Startwaarde voor het moment van de aankondiging (/nieuw, het verhaal en de push), Amsterdamse tijd zoals 2026-11-02T18:00. De database wint:
+# scripts/aankondiging.py --zet/--wis verandert het zonder herstart (repo.get_announcement_at).
+ANNOUNCEMENT_AT = _get("ANNOUNCEMENT_AT", "")
 
 # Standaard risicopercentage voor een nieuwe gebruiker, aan te passen per
 # gebruiker in het dashboard.
@@ -65,6 +101,10 @@ BACKUP_PATH = str(BASE_DIR / _get("BACKUP_PATH", "data/backups"))
 # bijvoorbeeld user@andere-server:/pad/naar/backups/. Leeg = geen externe
 # kopie, alleen lokaal op de VPS.
 BACKUP_REMOTE = _get("BACKUP_REMOTE")
+# Automatische verbeterlus (scripts/nacht_export.py --git): de SSH-url van de GitHub-repo en de deploy key waarmee de nacht alleen naar de tak
+# hespulse-data pusht. Leeg: --git weigert. Zie README, "Automatische verbeterlus".
+HESPULSE_DATA_REMOTE = _get("HESPULSE_DATA_REMOTE")
+HESPULSE_DATA_KEY = _get("HESPULSE_DATA_KEY")
 
 MAX_LOGIN_ATTEMPTS = int(_get("MAX_LOGIN_ATTEMPTS", "5"))
 LOGIN_LOCKOUT_MINUTES = int(_get("LOGIN_LOCKOUT_MINUTES", "15"))
@@ -93,3 +133,97 @@ ADMIN_USERNAME = _get("ADMIN_USERNAME")
 # Kraken Pro referral, getoond op de openbare landingspagina.
 KRAKEN_REFERRAL_URL = "https://proinvite.kraken.com/9f1e/4zto3wcm"
 KRAKEN_REFERRAL_CODE = "dc992yg8"
+
+
+# Soorten die wel gemeten en getoond worden maar geen pushmelding meer geven (komma-gescheiden uit smc, patroon,
+# swing, day_trading). Standaard leeg: niets gaat uit tenzij jij het kiest, zie Bewijs voor de cijfers per soort.
+SIGNAL_TYPE_INFO_ONLY = {t.strip() for t in _get("SIGNAL_TYPE_INFO_ONLY", "").split(",") if t.strip()}
+
+# Samenval: SMC-signaal en community-call op dezelfde coin en kant binnen dit aantal uren. Ongetest: gaat vanzelf
+# uit zodra er SAMENVAL_MAX_NEGATIVE afgeronde samenvallen zijn met een negatieve som in R.
+SAMENVAL_ENABLED = _get("SAMENVAL_ENABLED", "true").lower() == "true"
+SAMENVAL_WINDOW_HOURS = float(_get("SAMENVAL_WINDOW_HOURS", "6"))
+SAMENVAL_MAX_NEGATIVE = int(_get("SAMENVAL_MAX_NEGATIVE", "30"))
+
+
+# Markt-script (app/market_script.py): elke 4 uur per coin een duiding met twee scenario's. Een scenario dat afgaat geeft
+# een melding met het label ongetest. Gaat vanzelf uit als de laatste SCRIPT_MAX_NEGATIVE afgeronde scenario's negatief zijn.
+SCRIPT_ENABLED = _get("SCRIPT_ENABLED", "true").lower() == "true"
+# Haiku 5.5 kost een twintigste van Sonnet 5 ($0,10 en $0,50 per miljoen tokens tegen $2 en $10). Bij 42 aanroepen per dag plus herkansingen was het script de
+# grootste kostenpost; de harde toets in code (validate_scenarios) blijft gelden, vergelijk n_dropped per model in market_scripts voor je terugschakelt.
+SCRIPT_MODEL = _get("SCRIPT_MODEL", "claude-haiku-5-5")
+SCRIPT_MAX_ALERTS_PER_DAY = int(_get("SCRIPT_MAX_ALERTS_PER_DAY", "6"))
+SCRIPT_MAX_NEGATIVE = int(_get("SCRIPT_MAX_NEGATIVE", "30"))
+
+# Structuur-setups (app/structure_live.py): breuk van een lijn of range op 30m, een oordeel van Claude en een melding vóórdat
+# de limiet gevuld wordt. Altijd met het label ongetest. Gaat vanzelf uit als de laatste STRUCTURE_MAX_NEGATIVE afgeronde
+# signalen samen negatief zijn.
+STRUCTURE_ENABLED = _get("STRUCTURE_ENABLED", "true").lower() == "true"
+STRUCTURE_MODEL = _get("STRUCTURE_MODEL", ANTHROPIC_MODEL)
+# Dagcap 30 (was 12, gelijk aan .env.example): op 2026-10-29 hield de volle cap de WLD-breuk tegen (structure_setups.state 'niet_gemeld'). De CEO
+# wil elke kans zien en zelf kiezen; de hartslag en Beheer tonen hoeveel kansen de cap nog tegenhoudt (app/daycap.py).
+STRUCTURE_MAX_ALERTS_PER_DAY = int(_get("STRUCTURE_MAX_ALERTS_PER_DAY", "30"))
+STRUCTURE_MAX_NEGATIVE = int(_get("STRUCTURE_MAX_NEGATIVE", "30"))
+
+# Trend plus pullback (app/trend_live.py): 4u en 1u trend, impuls op 15m, zone, bevestiging op 5m. Gemeten op een jaar: -0,06R netto, dus altijd ongetest en alleen als stille
+# melding. Gaat vanzelf uit na TREND_MAX_NEGATIVE afgeronde signalen die samen negatief zijn.
+TREND_ENABLED = _get("TREND_ENABLED", "true").lower() == "true"
+TREND_MAX_PER_DAY = int(_get("TREND_MAX_PER_DAY", "6"))
+TREND_MAX_NEGATIVE = int(_get("TREND_MAX_NEGATIVE", "40"))
+TREND_RR = float(_get("TREND_RR", "2.0"))
+
+# Rejectie op een niveau (app/rejection_live.py): een niveau met minstens drie aanrakingen houdt en de koers sluit er weer van weg, short bij weerstand en
+# long bij steun (ook na een sweep). Altijd ongetest. Draait op alle gevolgde coins, ook EXTRA_COINS. Gaat vanzelf uit na REJECTION_MAX_NEGATIVE
+# afgeronde signalen die samen negatief zijn.
+REJECTION_ENABLED = _get("REJECTION_ENABLED", "true").lower() == "true"
+REJECTION_MAX_PER_DAY = int(_get("REJECTION_MAX_PER_DAY", "8"))
+REJECTION_MAX_NEGATIVE = int(_get("REJECTION_MAX_NEGATIVE", "30"))
+
+# Range sweep (app/range_sweep_live.py) en range-watch (app/range_watch.py): onze lezing van de strategie van Cos867, zie
+# docs/onderzoek/range-sweep/preregistratie.md. Standaard uit: de setupmotor gaat pas aan na een geslaagde toets op stopkwaliteit
+# (rule_status 'range_sweep_stop'), de range-watch na de keuring met het oog (poort 1). Alleen de CEO ziet de proef tot hij beslist (poort 4):
+# zet RANGE_SWEEP_PUBLIC op true om leerlingen de kansen en cijfers te tonen.
+RANGE_SWEEP_ENABLED = _get("RANGE_SWEEP_ENABLED", "false").lower() == "true"
+# true: setups ook zonder geslaagde labtoets (altijd ongetest). Met RANGE_SWEEP_PUBLIC zien ook leerlingen ze.
+RANGE_SWEEP_UNTESTED = _get("RANGE_SWEEP_UNTESTED", "false").lower() == "true"
+RANGE_WATCH_ENABLED = _get("RANGE_WATCH_ENABLED", "false").lower() == "true"
+RANGE_SWEEP_PUBLIC = _get("RANGE_SWEEP_PUBLIC", "false").lower() == "true"
+RANGE_WATCH_MAX_PER_DAY = int(_get("RANGE_WATCH_MAX_PER_DAY", "3"))
+RANGE_SWEEP_MAX_PER_DAY = int(_get("RANGE_SWEEP_MAX_PER_DAY", "6"))
+RANGE_SWEEP_MAX_NEGATIVE = int(_get("RANGE_SWEEP_MAX_NEGATIVE", "30"))
+
+# Focus (app/focus.py): alleen Structuur A/B, Structuur C en de zone-radar zoeken en melden nog nieuwe kansen; alle andere motoren (day trading via
+# Discord, patroon, trend, rejectie, markt-script, SMC, swing, range sweep en range-watch, de proefmotor) staan uit, hun open trades lopen door tot ze
+# sluiten. Standaard aan; false zet alles terug zoals het was. Een eigen vlag hierboven of hieronder (TREND_ENABLED enz.) blijft daarnaast gelden.
+ENGINE_FOCUS = _get("ENGINE_FOCUS", "true").strip().lower() != "false"
+
+# Zone-radar (app/zone_radar.py, app/zone_radar_live.py): de dichtstbijzijnde actieve vraag- en aanbodzone op 1u en 4u als limietplan op de Radar,
+# met een melding bij een nieuwe kaart en bij de vulling. Voor iedereen, altijd ongetest: Bewijs telt hem apart (trade_type 'zone_radar').
+ZONE_RADAR_ENABLED = _get("ZONE_RADAR_ENABLED", "true").lower() == "true"
+# Dagcap 40 (was 20): sinds 2026-10-29 zonder minimale R:R, en bij een volle cap gaat de kaart dichtst bij de koers voor, dus kon een kaart van 0,5R
+# een van 3R verdringen. Dezelfde aanleiding als Structuur hierboven (WLD, 29 okt, niet_gemeld): elke kans zien, zelf kiezen.
+ZONE_RADAR_MAX_PER_DAY = int(_get("ZONE_RADAR_MAX_PER_DAY", "40"))
+# Zone-sweep (app/zone_sweep.py, app/zone_sweep_live.py): prik door een actieve zone met herstel, docs/onderzoek/zone-sweep/preregistratie.md.
+# De pre-registratie wil eerst een geslaagde labrun; op 2026-10-27 koos de gebruiker (CEO) uitdrukkelijk voor live zonder labrun, met het label
+# ongetest, zoals RANGE_SWEEP_UNTESTED. De labrun (zs_*, zone_sweep_stop, zone_sweep) blijft de toets die later volgt; Bewijs toont de live score apart.
+ZONE_SWEEP_ENABLED = _get("ZONE_SWEEP_ENABLED", "true").lower() == "true"
+# false: alleen de CEO ziet kaarten, signalen en cijfers (rule_live.CEO_ONLY_TYPES), zoals de range sweep zonder RANGE_SWEEP_PUBLIC.
+ZONE_SWEEP_PUBLIC = _get("ZONE_SWEEP_PUBLIC", "true").lower() == "true"
+ZONE_SWEEP_MAX_PER_DAY = int(_get("ZONE_SWEEP_MAX_PER_DAY", "10"))
+# POC-radar (app/poc.py, app/poc_radar.py, app/poc_radar_live.py): de dichtstbijzijnde naakte dag- of week-POC als limietplan. Live op verzoek van de
+# CEO (2026-10-28) zonder labrun, altijd ongetest; Bewijs toont de score (trade_type 'poc_radar'). false bij PUBLIC: alleen de CEO (rule_live.CEO_ONLY_TYPES).
+POC_RADAR_ENABLED = _get("POC_RADAR_ENABLED", "true").lower() == "true"
+POC_RADAR_PUBLIC = _get("POC_RADAR_PUBLIC", "true").lower() == "true"
+# 30 sinds 2026-11-02: de eerste nachtexport telde in 7 dagen 57 POC-kansen die de cap van 10 tegenhield, tegen 15 vullingen.
+POC_RADAR_MAX_PER_DAY = int(_get("POC_RADAR_MAX_PER_DAY", "30"))
+# HesPulse-model (app/model.py, app/model_live.py; docs/onderzoek/hespulse-model/preregistratie.md): het hoofdmodel uit hoofdstuk 25 van het
+# boek, ongetest, voor iedereen. Besluit CEO 2026-11-02: live direct (de getekende kaarten van scripts/model_kaarten.py zijn een controle achteraf).
+HESPULSE_MODEL_ENABLED = _get("HESPULSE_MODEL_ENABLED", "true").strip().lower() == "true"
+# Alleen het model meldt (besluit CEO 2026-11-02): Structuur, Zone-radar, Zone-sweep en POC-radar maken nog kaarten en signalen voor de meting,
+# maar sturen geen push meer (ook geen stille) en hebben geen tab op Kansen. Standaard aan zodra het model aan staat; false zet het terug.
+# Besluit CEO 2026-11-02 ("de short is gebaseerd op het BTC-verhaal"): een model-entry tegen de BTC-richting op 4u (btc_context.bias) wordt
+# niet gemeld en komt niet als uitvoerbare kaart; model_live volgt hem stil (cf_*) zodat te meten blijft of de poort winnaars kost.
+MODEL_BTC_GATE = _get("MODEL_BTC_GATE", "true").strip().lower() == "true"
+MODEL_ONLY_ALERTS = _get("MODEL_ONLY_ALERTS", "true" if HESPULSE_MODEL_ENABLED else "false").strip().lower() == "true"
+# Marktcontext (app/market_context_live.py): funding, OI, Fear and Greed en stablecoins van publieke bronnen naast Binance. Alleen weergave en opslag.
+MARKET_CONTEXT_ENABLED = _get("MARKET_CONTEXT_ENABLED", "true").lower() == "true"

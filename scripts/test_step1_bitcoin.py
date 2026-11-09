@@ -11,7 +11,8 @@ from app import exchange, indicators, risk
 
 def main() -> None:
     coin = "BTC"
-    print(f"Bestaat {exchange.to_symbol(coin)} op {exchange.get_exchange().id}? "
+    src = exchange.resolve(coin)
+    print(f"Bestaat {src.symbol} ({src.market}, schaal {src.scale})? "
           f"{exchange.market_exists(coin)}")
 
     df = exchange.fetch_ohlcv(coin)

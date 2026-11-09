@@ -1,44 +1,66 @@
 <!doctype html>
-<html lang="nl">
+{% set _theme = theme_of(request) %}
+<html lang="nl" data-theme="{{ _theme }}"{% if user %} class="has-glow"{% endif %}>
 <head>
 <meta charset="utf-8">
+<meta name="live-exchange" content="{{ live_exchange }}">
+<meta name="live-quote" content="{{ live_quote }}">
+<meta name="live-market" content="{{ live_market() }}">
+<meta name="live-symbols" content="{{ live_symbols()|tojson|forceescape }}">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0a0e0f">
-<meta name="color-scheme" content="dark">
-<style>html{background:#0a0e0f}</style>
+<meta name="color-scheme" content="{{ 'dark light' if _theme == 'system' else _theme }}">
+<style>html{background:{{ theme_bg['light' if _theme == 'light' else 'dark'] }}}{% if _theme == 'system' %}@media (prefers-color-scheme: light){html{background:{{ theme_bg.light }}}}{% endif %}</style>
+<script>
+  // Een bewaarde pagina (service worker) kan een oudere keuze dragen dan dit toestel nu heeft; localStorage wint, vóór de eerste verf.
+  (function () {
+    // Alleen licht (CEO 2026-11-03): een oude keuze op dit toestel telt niet meer.
+    try { localStorage.removeItem("hp_theme"); } catch (e) {}
+  })();
+</script>
+<script>
+  // Met minder beweging aangevraagd slaat de overgang tussen pagina's helemaal over, ook het vastleggen van de oude pagina.
+  window.addEventListener("pagereveal", function (e) {
+    if (e.viewTransition && window.matchMedia("(prefers-reduced-motion: reduce)").matches) e.viewTransition.skipTransition();
+  });
+</script>
 <title>{% block title %}HesPulse{% endblock %}</title>
 <link rel="icon" href="/static/hespulse-logo.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="/static/icon-192.png">
-<link rel="manifest" href="/static/manifest.json">
-<!-- iOS negeert manifest.json's display:standalone volledig; zonder deze
-     drie meta-tags blijft "Zet op beginscherm" gewoon Safari met adresbalk
-     openen, ononderscheidbaar van de site zelf. -->
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="HesPulse">
+{% include "_pwa_head.html" %}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/static/style.css">
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;700;800&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="{{ asset('style.css') }}">
+{# Het verhaal "Wat is nieuw" (app/announce.py): de stijl alleen op de pagina waar het opent, zodat het andere pagina's niets kost. #}
+{% set _an = announce|default({}) %}
+{% set _story = user and ((_an.story_due and not bare|default(false)) or request.url.path == "/wat-is-nieuw") %}
+{% if _story %}<link rel="stylesheet" href="{{ asset('announce.css') }}">{% endif %}
 </head>
-<body>
+{% import "_macros.html" as macros %}
+{# Vier tabs (ontwerp V4): Kansen is de startpagina, Markt de oude Vandaag zonder Nu. De oude /structuur stuurt door naar Kansen. #}
+{% set main_tabs = (("/smc", "Kansen"), ("/signalen", "Logboek"), ("/bewijs", "Bewijs"), ("/vandaag", "Markt")) %}
+{% set nav_here = "/smc" if request.url.path == "/structuur" else request.url.path %}
+{% set _pt %}{% block page_title %}{% endblock %}{% endset %}
+{# Zoekveld alleen op pagina's die het blok dock_search vullen; de body-klasse laat de CSS de onderruimte aanpassen. #}
+{% set _fs %}{% block dock_search %}{% endblock %}{% endset %}
+{# `bare`: een schermvullende stap (de order-checklist) zonder kop, dok en blad; terug gaat via de knoppen op de pagina zelf. #}
+{% set _bare = bare|default(false) %}
+<body{% if user and _fs|trim %} class="has-fsearch"{% elif _bare %} class="is-bare"{% endif %}{% if not user %} data-hp-anon{% endif %}>
+{% if user %}<div class="glow-edge-tint" aria-hidden="true"></div>{% endif %}
 <div id="page-progress" aria-hidden="true"></div>
-<div class="page-ambient" aria-hidden="true">
-  <span class="ambient-glow glow-accent"></span>
-  <span class="ambient-glow glow-green"></span>
-  <span class="ambient-glow glow-red"></span>
-  <div class="ambient-pulse-line">
-    <svg viewBox="0 0 640 120" preserveAspectRatio="none"><path d="M0 60h80l16-44 32 88 16-44h80l16-28 32 60 16-32h352" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
-    <svg viewBox="0 0 640 120" preserveAspectRatio="none"><path d="M0 60h80l16-44 32 88 16-44h80l16-28 32 60 16-32h352" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
-  </div>
-  <div id="signal-wave" class="signal-wave"></div>
-</div>
 <div id="offline-banner" class="offline-banner" hidden role="status">Geen internetverbinding. Koersen en meldingen worden niet bijgewerkt tot je weer online bent.</div>
+<button type="button" id="sw-update" class="sw-update" hidden>Nieuwe versie beschikbaar, tik om te laden</button>
+{% if user %}
+<div id="push-banner" class="push-banner" hidden role="status">
+  <span id="push-banner-text">Meldingen staan uit op dit apparaat.</span>
+  <button type="button" id="push-banner-btn">Zet aan</button>
+  <button type="button" id="push-banner-close" class="push-banner-close" aria-label="Banner verbergen">&times;</button>
+</div>
+{% endif %}
 {% if request.url.path == "/signalen" %}
 <div id="boot-pulse" class="boot-pulse" hidden aria-hidden="true">
   <svg class="boot-pulse-logo" viewBox="0 0 32 32" fill="none">
-    <circle class="boot-circle" cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="1.6"/>
-    <path class="boot-path" d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#0ABAB5" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" pathLength="1"/>
+    <circle class="boot-circle" cx="16" cy="16" r="15" stroke="#1b2324" stroke-width="1.6"/>
+    <path class="boot-path" d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#1b2324" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" pathLength="1"/>
   </svg>
 </div>
 <script>
@@ -79,11 +101,18 @@
     var timer = null;
     var width = 0;
 
+    // Kan de browser zelf tussen pagina's overvloeien (view transitions over documenten, herkenbaar aan pagereveal), dan doet hij
+    // dat; de eigen uitfade zou de oude pagina als leeg plaatje vastleggen en dan flitsen. Eén mechanisme, nooit twee.
+    var nativeTransition = "onpagereveal" in window;
     function start() {
       // Zelfde moment als de voortgangsbalk zelf: content vervaagt terwijl
       // de nieuwe pagina laadt, geen tweede losse click-listener nodig
       // met dezelfde origin/target-checks als hieronder.
-      document.documentElement.classList.add("page-transition-out");
+      if (!nativeTransition) {
+        document.documentElement.classList.add("page-transition-out");
+        // Een navigatie die niet doorgaat (download, geannuleerd) mag de pagina niet onzichtbaar laten.
+        setTimeout(function () { document.documentElement.classList.remove("page-transition-out"); }, 4000);
+      }
       if (bar.classList.contains("is-active")) return;
       width = 0;
       bar.style.width = "0%";
@@ -114,6 +143,7 @@
     window.HP.progressDone = done;
 
     document.addEventListener("click", function (e) {
+      if (e.defaultPrevented) return;      // tabbar.js vangt een tik op de actieve tab af: geen navigatie, dus geen uitfade
       var a = e.target.closest("a[href]");
       if (!a || a.target === "_blank" || a.hasAttribute("download")) return;
       if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
@@ -124,40 +154,6 @@
       start();
     });
     document.addEventListener("submit", function () { start(); });
-  })();
-</script>
-<script>
-  // Winst-confetti: viert een net gesloten, echt winstgevende trade. Getriggerd
-  // door een echte gebeurtenis (result_eur > 0 bij het sluiten van een
-  // niet-oefentrade, zie /journal/{id}/close), niet decoratief op een timer.
-  (function () {
-    var COLORS = ["#17e5d6", "#33d69f", "#f2c94c", "#eaf1f0"];
-    function fireConfetti() {
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-      var container = document.createElement("div");
-      container.className = "confetti-burst";
-      container.setAttribute("aria-hidden", "true");
-      for (var i = 0; i < 28; i++) {
-        var piece = document.createElement("span");
-        piece.className = "confetti-piece";
-        piece.style.left = Math.random() * 100 + "vw";
-        piece.style.background = COLORS[i % COLORS.length];
-        piece.style.animationDuration = (1.6 + Math.random() * 1.2) + "s";
-        piece.style.animationDelay = (Math.random() * 0.3) + "s";
-        piece.style.setProperty("--rot", (Math.random() * 720 - 360) + "deg");
-        container.appendChild(piece);
-      }
-      document.body.appendChild(container);
-      setTimeout(function () { container.remove(); }, 3200);
-    }
-    window.HP.confetti = fireConfetti;
-
-    if (location.search.indexOf("closed_win=1") !== -1) {
-      fireConfetti();
-      var url = new URL(location.href);
-      url.searchParams.delete("closed_win");
-      history.replaceState(null, "", url.pathname + url.search + url.hash);
-    }
   })();
 </script>
 <script>
@@ -223,19 +219,13 @@
     new MutationObserver(scan).observe(document.body, { childList: true, subtree: true });
   })();
 </script>
-<header class="topbar">
-  <div class="topbar-watermark-clip" aria-hidden="true">
-    <div class="topbar-watermark">
-      <svg viewBox="0 0 320 60" preserveAspectRatio="none"><path d="M0 30h40l8-22 16 44 8-22h40l8-14 16 30 8-16h176" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
-      <svg viewBox="0 0 320 60" preserveAspectRatio="none"><path d="M0 30h40l8-22 16 44 8-22h40l8-14 16 30 8-16h176" fill="none" stroke="var(--accent)" stroke-width="1.5"/></svg>
-    </div>
-  </div>
+<header class="topbar{% if not (user and _pt|trim) %} topbar-flow{% endif %}"{% if _bare %} hidden{% endif %}>
   <div class="topbar-top">
-    <a href="/signalen" class="brand">
+    <a href="/smc" class="brand">
       <span class="brand-logo-wrap">
         <svg class="brand-logo" viewBox="0 0 32 32" fill="none" aria-hidden="true">
-          <circle cx="16" cy="16" r="15" stroke="#0ABAB5" stroke-width="2"/>
-          <path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#0ABAB5" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="16" cy="16" r="15" stroke="#1b2324" stroke-width="2"/>
+          <path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#1b2324" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </span>
       <span>HesPulse</span>
@@ -244,6 +234,14 @@
       <span class="last-signal-pill" id="last-signal-banner" title="Laatste signaal" aria-live="polite" {% if not last_signal_text %}hidden{% endif %}>
         <span id="last-signal-text">{{ last_signal_text or "" }}</span>
       </span>
+      {% if user %}{% set pause_left = pause_minutes_left(user) %}
+      <button type="button" id="push-pause" class="push-pause{% if pause_left %} is-paused{% endif %}" aria-pressed="{{ 'true' if pause_left else 'false' }}"
+              title="{{ 'Tik om meldingen weer aan te zetten' if pause_left else 'Meldingen 2 uur stil' }}">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>
+        <span id="push-pause-label">{{ pause_text(pause_left) }}</span>
+      </button>
+      {% endif %}
+      <span id="price-dot" class="price-dot" data-stale-after="{{ stale_after_s }}" hidden role="img" aria-label="Koersen zijn actueel" title="Koersen zijn actueel"></span>
       <span class="live-pill"><span class="ping"></span><span id="live-clock">--:--:--</span></span>
       <button type="button" id="system-status" class="system-status" title="Systeemstatus" aria-label="Systeemstatus tonen" aria-expanded="false" aria-controls="system-status-popover">
         <span class="status-dot"></span><span class="status-label">systeem</span>
@@ -257,10 +255,7 @@
         <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
       </button>
       <button type="button" id="shortcuts-hint" class="shortcuts-hint" title="Sneltoetsen (?)" aria-label="Sneltoetsen tonen">?</button>
-      <form action="/logout" method="post" class="logout-form">
-        {% if user %}<span class="muted">{{ user.username }}</span>{% endif %}
-        <button type="submit">Uitloggen</button>
-      </form>
+      {% if user %}<button type="button" class="topbar-avatar" data-more-toggle aria-controls="more-sheet" aria-expanded="false" aria-label="Menu: account en meer" title="{{ user.username }}">{{ (user.username or "?")[0]|upper }}</button>{% endif %}
     </div>
   </div>
   {% if ticker_coins %}
@@ -277,11 +272,8 @@
   {% endif %}
   <nav>
     <div class="nav-links">
-      <a href="/signalen">Signalen</a>
-      <a href="/smc">SMC</a>
-      <a href="/account">Mijn account</a>
-      <a href="/meldingen">Meldingen</a>
-      <a href="/uitleg">Uitleg</a>
+      {% for href, label in main_tabs %}<a href="{{ href }}"{% if nav_here == href %} class="is-active" aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
     </div>
     <details class="coin-menu js-accordion">
       <summary>
@@ -290,7 +282,7 @@
       </summary>
       <div class="coin-menu-list">
         {% for c in coins %}
-          <a href="/coins/{{ c.symbol }}" data-symbol="{{ c.symbol }}">{{ c.symbol }}</a>
+          <a href="/coins/{{ c.symbol }}" data-symbol="{{ c.symbol }}">{{ macros.coin_avatar(c.symbol, 20) }}{{ c.symbol }}</a>
         {% endfor %}
       </div>
     </details>
@@ -298,8 +290,30 @@
 </header>
 
 <main>
+{% if user and _pt|trim and not _bare %}{{ macros.page_header(user, _pt|trim, logo=ph_logo|default(false)) }}{% endif %}
 {% block content %}{% endblock %}
 </main>
+{% if user and not _bare %}
+<div class="dock">
+{{ _fs }}
+<nav class="tabbar" aria-label="Hoofdmenu">
+  {% for href, label in main_tabs %}<a class="tab{% if nav_here == href %} is-active{% endif %}" href="{{ href }}"{% if nav_here == href %} aria-current="page"{% endif %}><span>{{ label }}</span>{% if href == "/smc" and nav_counts and nav_counts.in_zone %}
+    <i class="tab-badge" aria-label="{{ nav_counts.in_zone }} in de zone">{{ nav_counts.in_zone }}</i>{% endif %}</a>
+  {% endfor %}
+</nav>
+</div>
+<div class="more-sheet" id="more-sheet" hidden>
+  <div class="more-sheet-panel" role="dialog" aria-label="Account en meer">
+    <p class="more-who"><span class="more-av" aria-hidden="true">{{ (user.username or "?")[0]|upper }}</span><span>{{ user.username }}<span class="muted">{{ "Eigenaar" if is_ceo(user) else "Leerling" }}</span></span></p>
+    <div class="more-links">
+      <a href="/account">Account</a><a href="/meldingen">Meldingen</a><a href="/uitleg">Handleiding</a><a href="/zone-radar">Zone-radar uitleg</a><a href="/week">Kwartaalcijfers</a><a href="/wat-is-nieuw">Wat is nieuw</a>{% if _an.link_visible %}<a href="/nieuw">{{ "Aftellen naar de update" if _an.phase == "before" else "Aankondiging" }}</a>{% endif %}{% if is_ceo(user) %}<a href="/beheer">Beheer</a><a href="/galerij">Galerij</a>{% endif %}
+    </div>
+    <p class="muted more-label">Coins</p>
+    <div class="more-coins">{% for c in coins %}<a href="/coins/{{ c.symbol }}">{{ macros.coin_avatar(c.symbol, 22) }}{{ c.symbol }}</a>{% endfor %}</div>
+    <form action="/logout" method="post" class="more-logout"><button type="submit">Uitloggen</button></form>
+  </div>
+</div>
+{% endif %}
 <footer class="footer">{{ disclaimer }}</footer>
 
 <div id="shortcuts-help" class="shortcuts-help" hidden>
@@ -321,7 +335,7 @@
   <div class="cmdk-panel" role="dialog" aria-modal="true" aria-label="Snel zoeken">
     <div class="cmdk-input-row">
       <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input id="cmdk-input" type="text" placeholder="Zoek een coin of pagina... (bv. eth, uitleg)" autocomplete="off"
+      <input id="cmdk-input" type="text" placeholder="Zoek een coin of pagina... (bv. eth, handleiding)" autocomplete="off"
              role="combobox" aria-expanded="true" aria-controls="cmdk-results" aria-autocomplete="list" aria-label="Zoeken">
       <kbd>Esc</kbd>
     </div>
@@ -445,11 +459,17 @@
   // (dezelfde click/submit-detectie als de voortgangsbalk, geen tweede
   // losse listener met dezelfde origin-checks).
   (function () {
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    document.documentElement.classList.add("page-transition-in");
-    requestAnimationFrame(function () {
-      document.documentElement.classList.remove("page-transition-in");
-    });
+    // Het binnenkomen is geschrapt: een class die in requestAnimationFrame werd weggehaald liet de pagina zwart staan als de
+    // pagina verborgen laadde, zoals bij een tik op een melding. Wat blijft is de veiligheidsklep voor het verlaten: elke
+    // keer dat de pagina zichtbaar wordt (ook uit de terug-cache) gaat een eventuele rest van de uitfade eraf.
+    function clearTransition() {
+      document.documentElement.classList.remove("page-transition-out", "page-transition-in");
+    }
+    window.addEventListener("pageshow", clearTransition);
+    document.addEventListener("visibilitychange", function () { if (!document.hidden) clearTransition(); });
+    clearTransition();
+    // Tweede klep: blijven de binnenkomst-animaties van de secties steken (pagina laadde verborgen), dan zet dit alles zichtbaar.
+    setTimeout(function () { document.documentElement.classList.add("reveal-done"); }, 1500);
   })();
 
   // Sneltoetsen, alleen voor navigatie. Bewust geen sneltoets voor iets
@@ -518,12 +538,18 @@
 
     function buildItems() {
       var list = [
-        { label: "Signalen", href: "/signalen", hint: "pagina" },
+        { label: "Kansen", href: "/smc", hint: "pagina" },
+        { label: "Kansen: Structuur", href: "/smc?tab=structuur", hint: "pagina" },
+        { label: "Markt", href: "/vandaag", hint: "pagina" },
+        { label: "Logboek", href: "/signalen", hint: "pagina" },
+        { label: "Bewijs", href: "/bewijs", hint: "pagina" },
+        { label: "Meldingen", href: "/meldingen", hint: "pagina" },
+        { label: "Kwartaalcijfers", href: "/week", hint: "pagina" },
         { label: "Mijn account", href: "/account", hint: "pagina" },
-        { label: "Uitleg", href: "/uitleg", hint: "pagina" },
+        { label: "Handleiding", href: "/uitleg", hint: "pagina" },
       ];
       document.querySelectorAll(".coin-menu-list a").forEach(function (a) {
-        list.push({ label: a.textContent.trim(), href: a.getAttribute("href"), hint: "coin" });
+        list.push({ label: a.getAttribute("data-symbol") || a.textContent.trim(), href: a.getAttribute("href"), hint: "coin" });
       });
       return list;
     }
@@ -571,6 +597,7 @@
     var openedFrom = null;
 
     function open() {
+      document.dispatchEvent(new Event("hp:close-more"));
       openedFrom = document.activeElement;
       items = buildItems();
       overlay.hidden = false;
@@ -617,6 +644,10 @@
     overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
     var cmdkHint = document.getElementById("cmdk-hint");
     if (cmdkHint) cmdkHint.addEventListener("click", open);
+    var fsearch = document.getElementById("fsearch");
+    if (fsearch) fsearch.addEventListener("click", open);
+    window.HP = window.HP || {};
+    window.HP.openSearch = open;
   })();
 
   // Systeemstatus: is de exchange nu bereikbaar, wanneer kwam het laatste
@@ -654,30 +685,6 @@
       return "3.6s";
     }
 
-    // Dezelfde gedachte, maar voor de trage achtergrond-puls: hoe recenter
-    // er echt iets binnenkwam, hoe levendiger de achtergrond meebeweegt.
-    // Nooit snel genoeg om af te leiden van de cijfers erboven.
-    function ambientScrollDuration(iso) {
-      if (!iso) return "46s";
-      var mins = (Date.now() - new Date(iso).getTime()) / 60000;
-      if (mins < 15) return "22s";
-      if (mins < 60) return "32s";
-      if (mins < 360) return "46s";
-      return "64s";
-    }
-
-    // Kleurbalans van de ambient gloed volgt hoe de week gaat: bij een
-    // positief weekresultaat iets meer teal/groen, bij een negatief iets
-    // meer rood. Subtiel (zie de calc() in style.css), geen fel wisselende
-    // kleur, en bij "geen data" (nog niets gesloten deze week) blijft de
-    // balans precies zoals hij al was: 0.
-    function portfolioGlow(weekResultPct) {
-      if (weekResultPct === null || weekResultPct === undefined) return 0;
-      if (weekResultPct > 0) return 1;
-      if (weekResultPct < 0) return -1;
-      return 0;
-    }
-
     // Het logo ademt sneller naarmate de markt onder je open posities
     // heftiger beweegt dan zijn eigen 20-daags gemiddelde (atr/atr_avg20).
     // Zonder open posities of zonder die data: de neutrale basissnelheid.
@@ -697,16 +704,7 @@
     var lastSignalId = null;
     var lastKnownMessageAt = null;
 
-    function triggerSignalWave() {
-      var wave = document.getElementById("signal-wave");
-      if (wave) {
-        wave.classList.remove("is-active");
-        // Force reflow zodat de animatie ook afgaat als hij kort na elkaar
-        // twee keer wordt getriggerd (anders blijft de class gewoon staan
-        // en speelt de animatie niet opnieuw af).
-        void wave.offsetWidth;
-        wave.classList.add("is-active");
-      }
+    function boostHeartbeat() {
       // Kortstondige hartslag-boost op het exacte moment van een nieuw signaal,
       // in plaats van te wachten tot de eerstvolgende minuten-drempel van
       // heartbeatDuration. Na 3 seconden valt de eerstvolgende refresh()-cyclus
@@ -728,8 +726,6 @@
           document.getElementById("status-message").textContent = timeAgo(s.last_message_at);
           document.getElementById("status-uptime").textContent = timeAgo(s.server_started_at);
           document.documentElement.style.setProperty("--heartbeat-duration", heartbeatDuration(s.last_message_at));
-          document.documentElement.style.setProperty("--ambient-scroll-duration", ambientScrollDuration(s.last_message_at));
-          document.documentElement.style.setProperty("--portfolio-glow", portfolioGlow(s.week_result_pct));
           document.documentElement.style.setProperty("--brand-breathe-duration", brandBreatheDuration(s.volatility_ratio));
           lastKnownMessageAt = s.last_message_at;
 
@@ -747,24 +743,24 @@
                   banner.style.opacity = 1;
                 }, 300);
               }
-              triggerSignalWave();
+              boostHeartbeat();
             }
           }
 
           if (lastPendingCount !== null && s.pending_count > lastPendingCount) {
-            triggerSignalWave();
+            boostHeartbeat();
           }
           lastPendingCount = s.pending_count;
 
-          // App-icoon badge: aantal meldingen dat nog op een keuze wacht.
-          // Werkt alleen zolang deze pagina ergens open staat (tab of
-          // geïnstalleerde app), geen vervanging van de pushmelding zelf
-          // die ook bereikt als alles dicht is.
-          if ("setAppBadge" in navigator) {
-            var badgeTotal = s.pending_count + s.unread_notifications;
-            if (badgeTotal > 0) navigator.setAppBadge(badgeTotal).catch(function () {});
-            else navigator.clearAppBadge().catch(function () {});
-          }
+          // App-icoon: aantal kansen waarvan de koers nu in de zone staat (radar.in_zone_count). Dit verving het oude getal
+          // (wachtende meldingen plus ongelezen); die tellers staan nog in de API voor de rest van de pagina. De service worker zet een
+          // benadering bij een zone-melding als de app dicht is; deze pagina zet het exacte getal zodra hij open is.
+          try {
+            if ("setAppBadge" in navigator) {
+              if (s.in_zone > 0) navigator.setAppBadge(s.in_zone).catch(function () {});
+              else navigator.clearAppBadge().catch(function () {});
+            }
+          } catch (e) {}
         })
         .catch(function () {
           dot.classList.remove("status-ok");
@@ -823,33 +819,7 @@
     });
   })();
 
-  // Offline-banner: direct zichtbaar zodra de browser meldt dat de
-  // verbinding weg is, niet pas als je toevallig een actie probeert.
-  // navigator.onLine is niet waterdicht (kan "online" blijven zeggen bij
-  // een kapotte verbinding zonder echte internettoegang), maar vangt wel
-  // het duidelijke geval (vliegtuigmodus, geen wifi) meteen op.
-  (function () {
-    var banner = document.getElementById("offline-banner");
-    if (!banner) return;
-    function update() { banner.hidden = navigator.onLine; }
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    update();
-  })();
-
-  // Service worker: maakt de site installeerbaar en toont een nette
-  // offline-pagina bij een mislukte navigatie. Cachet bewust geen
-  // koersen, meldingen of trade-status, zie service-worker.js.
-  if ("serviceWorker" in navigator) {
-    window.addEventListener("load", function () {
-      // Op de root geserveerd (/service-worker.js), niet onder /static/:
-      // een service worker kan alleen pagina's binnen zijn eigen pad
-      // beheren, dus vanaf /static/ zou hij /dashboard nooit kunnen
-      // bedienen en zou navigator.serviceWorker.ready daar voor altijd
-      // blijven hangen (zie web/main.py se /service-worker.js-route).
-      navigator.serviceWorker.register("/service-worker.js").catch(function () {});
-    });
-  }
+  // Offline-balk, updatemelding, registratie van de service worker en de themakleur staan in pwa.js.
 
   // Tijdelijke debug-console (?debug=1): toont console-logs/fouten op het
   // scherm zelf, voor het opsporen van de iOS-pushmeldingbug zonder Mac +
@@ -873,5 +843,28 @@
     }
   } catch (e) {}
 </script>
+<script src="{{ asset('pwa.js') }}" defer></script>
+<script src="{{ asset('theme.js') }}" defer></script>
+<script src="{{ asset('install.js') }}" defer></script>
+<script src="{{ asset('hints.js') }}" defer></script>
+<script src="{{ asset('kansen.js') }}" defer></script>
+<script src="{{ asset('tabbar.js') }}" defer></script>
+<script src="{{ asset('utabs.js') }}" defer></script>
+<script src="{{ asset('ring.js') }}" defer></script>
+<script src="{{ asset('stack.js') }}" defer></script>
+<script src="{{ asset('session.js') }}" defer></script>
+<script src="{{ asset('ticker.js') }}" defer></script>
+<script src="{{ asset('live.js') }}" defer></script>
+<script src="{{ asset('share.js') }}" defer></script>
+<script src="{{ asset('smooth.js') }}" defer></script>
+<script src="{{ asset('pause.js') }}" defer></script>
+<script src="{{ asset('copy.js') }}" defer></script>
+<script src="{{ asset('alarm.js') }}" defer></script>
+<script src="{{ asset('stale.js') }}" defer></script>
+<script src="{{ asset('spark.js') }}" defer></script>
+{% if _story and request.url.path != "/wat-is-nieuw" %}{% import "_announce.html" as an %}{{ an.story(_an.cards, _an.version) }}{% endif %}
+{% if _story %}<script src="{{ asset('story.js') }}" defer></script>{% endif %}
+{% if user %}<script src="{{ asset('push-subscribe.js') }}" defer></script>
+<script src="{{ asset('push-banner.js') }}" defer></script>{% endif %}
 </body>
 </html>

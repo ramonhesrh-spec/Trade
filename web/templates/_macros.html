@@ -26,7 +26,8 @@
    richting long") — geen " | " en geen leidende ✓/✗, dus die valt door
    naar de plain-tekst-tak hieronder in plaats van als kapotte
    factor-styling (0/1 "mislukt") te renderen. #}
-{% for factor in entry.reason.split(" | ") %}
+{# Oudere structuursignalen dragen nog het kenmerk "De CEO keurt goed (A of B)"; het oordeel staat niet meer op een scherm (app/structure_live.py). #}
+{% for factor in entry.reason.split(" | ") if "De CEO keurt" not in factor %}
 <p class="{{ 'factor-ok' if factor.startswith('✓') else 'factor-bad' }}"{% if p_style %} style="{{ p_style }}"{% endif %}>{{ factor }}</p>
 {% endfor %}
 {% elif entry.trade_type == 'swing' %}
@@ -46,7 +47,13 @@
 {% if entry.trade_type == "swing" %}
 <p class="muted reason-legend">Twee losse toetsen, geen gecombineerd cijfer: dit is nog niet gevalideerd op deze tijdshorizon zoals de day-trading-toets dat wel is.</p>
 {% elif entry.trade_type == "patroon" %}
-<p class="muted reason-legend">Autonoom gedetecteerd door HesPulse, zonder doorgestuurd bericht. De vinkjes hieronder zijn de gepoolde factoren die deze kans ondersteunen of tegenspreken; het percentage hierboven combineert dat met de historische winrate van dit type.</p>
+<p class="muted reason-legend">Autonoom gedetecteerd door HesPulse, zonder doorgestuurd bericht. De vinkjes hieronder zijn de gepoolde factoren die deze kans ondersteunen of tegenspreken; de score hierboven is het gemiddelde van dat percentage en de historische winrate van dit type, een samengestelde score en geen winkans.</p>
+{% elif entry.trade_type in ("structuur", "structuur_c", "trend", "rejectie", "script", "smc_waarschuwing") %}
+<p class="muted reason-legend">Elk vinkje is een kenmerk dat bij het melden gemeten is. Het percentage telt hoeveel er kloppen. Het is nog niet bewezen dat een hoge score vaker wint: Bewijs meet dat per soort.</p>
+{% elif entry.trade_type == "zone_sweep" %}
+<p class="muted reason-legend">Gemeten bij het ontstaan: hoe diep de prik door de zone ging en hoe snel de koers terugsloot. Ongetest: de labrun volgt later, Bewijs toont de score.</p>
+{% elif entry.trade_type == "poc_radar" %}
+<p class="muted reason-legend">Gemeten: de prijs met het meeste volume op die dag of in die week, en dat de koers er daarna niet meer kwam. Ongetest: Bewijs toont de score.</p>
 {% elif entry.trade_type == "smc" %}
 <p class="muted reason-legend">Structuurbreuk, liquidity sweep en een terugtrek-zone hieronder zijn de feitelijke onderbouwing — geen los gemeten technische factoren zoals bij day-trading.</p>
 {% else %}
@@ -140,7 +147,7 @@
 {% set anchor_id = entry.signal_id if entry.signal_id is defined and entry.signal_id else entry.id %}
 <div class="signal-card {{ 'is-confirmed' if entry.user_confirmed else 'is-rejected' }}" id="signal-{{ anchor_id }}">
   <div class="signal-card-head">
-    <a class="coin-symbol" href="/coins/{{ entry.coin }}#signal-{{ anchor_id }}">{{ entry.coin }}</a>
+    {{ coin_avatar(entry.coin, 22) }}<a class="coin-symbol" href="/coins/{{ entry.coin }}#signal-{{ anchor_id }}">{{ entry.coin }}</a>
     <span class="direction {{ entry.direction }}">{{ entry.direction|upper }}</span>
     {% if entry.trade_type == "swing" %}
     <span class="badge badge-swing" title="Bevestigd op een bewaakt steun/weerstand-niveau, geen gepoold percentage">swing</span>
@@ -149,7 +156,10 @@
     {% elif entry.trade_type == "smc" %}
     <span class="badge badge-swing" title="Autonoom herkend door HesPulse: structuurbreuk + liquidity sweep op 30m, afwijzing in de terugtrek-zone op 15m — geen gepoold percentage">SMC</span>
     {% endif %}
-    {% if entry.auto_outcome == "take_profit" %}<span class="badge badge-outcome-win">✓ take profit</span>
+    {# Een range sweep (en een zone-sweep zonder doel) heeft geen doel: de uitkomst is de referentie-uitgang en leest nooit als een geraakt doel. #}
+    {% if (entry.trade_type == "range_sweep" or (entry.trade_type in ("zone_sweep", "poc_radar") and entry.take_profit is none)) and entry.auto_outcome in ("take_profit", "stop_loss") %}
+    <span class="badge {{ 'badge-outcome-win' if entry.auto_outcome == 'take_profit' else 'badge-outcome-loss' }}" title="Uitgang volgens de referentie (meelopende stop), geen doel">referentie {{ ('%+.2f'|format(entry.ref_r))|replace('.', ',') if entry.ref_r is defined and entry.ref_r is not none else '' }}R</span>
+    {% elif entry.auto_outcome == "take_profit" %}<span class="badge badge-outcome-win">✓ take profit</span>
     {% elif entry.auto_outcome == "stop_loss" %}<span class="badge badge-outcome-loss">✗ stop loss</span>
     {% elif entry.auto_outcome == "vervallen" %}<span class="badge badge-outcome-expired">vervallen</span>
     {% endif %}
@@ -157,7 +167,9 @@
        pass-pct), die samen vaak naar een tweede regel omsloegen. Zelfde
        informatie, ✓ + percentage samen wanneer bevestigd. #}
     {% if entry.trade_type == "patroon" and entry.success_rate is defined and entry.success_rate is not none %}
-    <span class="signal-pct{{ ' is-confirmed' if entry.user_confirmed else '' }}" title="kansberekening: gepoolde factoren + historische winrate van dit patroontype">{{ '✓ ' if entry.user_confirmed }}kans {{ "%.0f"|format(entry.success_rate) }}%</span>
+    <span class="signal-pct{{ ' is-confirmed' if entry.user_confirmed else '' }}" title="Samengestelde score: gemiddelde van de gepoolde factoren en de historische winrate van dit patroontype. Geen winkans.">{{ '✓ ' if entry.user_confirmed }}score {{ "%.0f"|format(entry.success_rate) }}</span>
+    {% elif entry.pass_pct is not none and entry.trade_type in ("structuur", "structuur_c", "trend", "rejectie", "script", "smc_waarschuwing") %}
+    <span class="signal-pct" title="Aantal gemeten kenmerken dat klopt. Geen slagingskans.">{{ entry.reason.count("✓") }}/{{ entry.reason.split(" | ")|length }} kenmerken</span>
     {% elif entry.pass_pct is not none %}
     <span class="signal-pct{{ ' is-confirmed' if entry.user_confirmed else '' }}">{{ '✓ ' if entry.user_confirmed }}{{ "%.0f"|format(entry.pass_pct) }}%</span>
     {% elif entry.user_confirmed %}
@@ -190,7 +202,7 @@
      openklapte. Percentage/badges hierboven blijven de snelle scan,
      de redenering is er nog steeds, nu pas na een klik. #}
   <details class="confidence-detail js-accordion">
-    <summary class="confidence-why">waarom {% if entry.trade_type == "patroon" %}{% if entry.success_rate is defined and entry.success_rate is not none %}kans {{ "%.0f"|format(entry.success_rate) }}%{% else %}dit patroon{% endif %}{% elif entry.trade_type == "smc" %}deze SMC-setup{% elif entry.pass_pct is not none %}{{ "%.0f"|format(entry.pass_pct) }}%{% else %}dit bewaakte niveau{% endif %}?</summary>
+    <summary class="confidence-why">waarom {% if entry.trade_type == "patroon" %}{% if entry.success_rate is defined and entry.success_rate is not none %}score {{ "%.0f"|format(entry.success_rate) }}{% else %}dit patroon{% endif %}{% elif entry.trade_type == "smc" %}deze SMC-setup{% elif entry.trade_type in ("structuur", "structuur_c", "trend", "rejectie", "script", "smc_waarschuwing") %}deze kenmerken{% elif entry.pass_pct is not none %}{{ "%.0f"|format(entry.pass_pct) }}%{% else %}dit bewaakte niveau{% endif %}?</summary>
     <div class="reason-popup">
       {{ reason_popup(entry) }}
     </div>
@@ -206,4 +218,586 @@
     {% endif %}
   </div>
 </div>
+{% endmacro %}
+
+
+{% macro mood_bar(mood) %}
+{# Met wachtende scenario's toont de balk die (de echte kansen), anders de bias per coin: Claude noemt vaak alles neutraal. #}
+{% if mood.wait_total %}
+<div class="vd-mood-bar" role="img" aria-label="{{ mood.wait_long }} long en {{ mood.wait_short }} short scenario's wachten">
+  <span class="vd-mood-long" style="width: {{ mood.wait_long_pct }}%"></span>
+  <span class="vd-mood-short" style="width: {{ 100 - mood.wait_long_pct }}%"></span>
+</div>
+<div class="vd-mood-legend"><span class="pos">{{ mood.wait_long }} long-scenario's</span><span class="neg">{{ mood.wait_short }} short-scenario's</span></div>
+<p class="muted vd-fine">Bias per coin: {{ mood.long }} long, {{ mood.neutraal }} neutraal, {{ mood.short }} short.</p>
+{% else %}
+<div class="vd-mood-bar" role="img" aria-label="{{ mood.long }} long, {{ mood.neutraal }} neutraal, {{ mood.short }} short">
+  <span class="vd-mood-long" style="width: {{ mood.long_pct }}%"></span>
+  <span class="vd-mood-flat" style="width: {{ mood.neutraal_pct }}%"></span>
+  <span class="vd-mood-short" style="width: {{ mood.short_pct }}%"></span>
+</div>
+<div class="vd-mood-legend"><span class="pos">{{ mood.long }} long</span><span class="muted">{{ mood.neutraal }} neutraal</span><span class="neg">{{ mood.short }} short</span></div>
+<p class="muted vd-fine">Geen scenario dat nu wacht op een voorwaarde.</p>
+{% endif %}
+{% endmacro %}
+
+
+{# Drie stappen voor elke kans (app/chance_steps.py): wat je nu doet staat helder, de rest gedempt. Met een ingevuld bedrag per trade
+   staat bij stap 3 het verlies bij de stop en de winst bij het doel in euro. #}
+{% macro steps_list(steps, risk_eur=none) %}
+<ol class="vd-steps">
+  {% for s in steps %}
+  <li class="vd-step{% if s.state == 'now' %} is-now{% elif s.state == 'done' %} is-done{% endif %}">
+    <span class="vd-step-n">{{ loop.index }}</span>
+    <span class="vd-step-text"><strong>{{ s.title }}</strong>
+      {# De balk staat in dezelfde span als de afstand: live.js en kansen.js halen het hidden van de ouder weg zodra er een koers is. #}
+      {% if s.dist is defined %}<span class="muted step-dist"{% if s.dist == "-" %} hidden{% endif %}>{% if s.approach is defined %}<span class="step-approach" aria-hidden="true"><i style="width: {{ "%.0f"|format(s.approach or 0) }}%"></i></span>{% endif %}Nog <span {{ s.dist_key }}="distance"{% if s.live_coin is defined %} data-live-coin="{{ s.live_coin }}" data-live-level="{{ s.live_level }}" data-live-mode="{{ s.live_mode }}"{% endif %}>{{ s.dist }}</span> te gaan.</span>{% endif %}
+      {% if s.sub and s.dist is not defined %}<span class="muted">{{ s.sub }}</span>{% endif %}
+      {% if s.rr is defined and risk_eur %}<span class="steps-money">Raakt de stop, dan verlies je ongeveer € {{ "%.0f"|format(risk_eur) }}. Het doel levert ongeveer € {{ "%.0f"|format(risk_eur * s.rr) }}.</span>{% endif %}
+    </span>
+  </li>
+  {% endfor %}
+</ol>
+{% endmacro %}
+
+
+{# Candlegrafiek met de niveaus van een plan (web/static/levelchart.js tekent hem zodra hij in beeld komt). `chart` is
+   trade_plan.chart_spec; zonder JavaScript blijft de aria-tekst met de niveaus staan. Een tik op de grafiek of op de knop opent hem
+   schermvullend (levelchart.js); de regel eronder zegt wat de vlakken betekenen, het bijschrift in de grafiek de candlegrootte. #}
+{% macro level_chart(coin, chart, tf="15m", extra_class="", legend=true) %}
+<figure class="lc {{ extra_class }}{% if not legend %} lc-bare{% endif %}">
+  <div class="level-chart" data-levelchart='{{ chart|tojson }}' data-coin="{{ coin }}" data-tf="{{ tf }}" data-caption="Candles van {{ {'5m': '5 minuten', '15m': '15 minuten', '1h': '1 uur', '4h': '4 uur'}.get(tf, tf) }} · jouw tijd" role="img" aria-label="{{ chart.label }}"></div>
+  <figcaption class="lc-foot">
+    {% if not legend %}<span class="lc-cap">{{ {'5m': '5 min', '15m': '15 min', '1h': '1 uur', '4h': '4 uur'}.get(tf, tf) }} per candle · jouw tijd</span>{% endif %}
+    {% if legend %}<span class="lc-legend"><span class="lc-key is-risk">Rood vlak: risico tot je stop</span>{% if chart.take is not none %}<span class="lc-key is-reward">Groen vlak: winst tot je doel</span>{% endif %}{% if chart.zone_low is defined and chart.zone_low is not none %}<span class="lc-key is-zone">Band: de zone</span>{% endif %}</span>{% endif %}
+    <button type="button" class="lc-expand" data-lc-expand aria-label="Grafiek van {{ coin }} groot openen, op het tijdframe van het niveau"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><span>Groot</span></button>
+  </figcaption>
+</figure>
+{% endmacro %}
+
+
+{# Deelknop: maakt van de kaart een afbeelding voor een groepschat (web/static/share.js). #}
+{% macro share_button(coin, direction, steps) %}
+<button type="button" class="share-btn" data-share-card='{{ {"title": coin ~ " " ~ direction, "lines": steps|map(attribute="title")|list}|tojson }}'>Deel</button>
+{% endmacro %}
+
+
+{# Het plan als blok: per niveau een regel met het getal (tik = kopiëren, web/static/copy.js) en een bel voor een prijsalarm
+   (web/static/alarm.js). `levels` komt uit chance_steps.level_chips (of range_chips); `rr` is de R:R van het plan, als die er is.
+   `url` is waar een prijsalarm naartoe linkt. #}
+{% macro level_chips(coin, levels, url="", rr=none) %}
+{% if levels %}
+<div class="level-chips" data-chips-coin="{{ coin }}" data-chips-url="{{ url }}">
+  <div class="level-rows">
+  {% for l in levels %}
+  <div class="level-chip level-chip-{{ l.key }}">
+    <button type="button" class="level-copy" data-copy="{{ l.text }}" aria-label="Kopieer {{ l.label|lower }} {{ l.text }}"><span class="level-chip-label">{{ l.label }}</span><span class="level-chip-num">{{ l.text }}</span></button>
+    <button type="button" class="level-bell" data-alarm-price="{{ l.value }}" data-alarm-label="{{ l.label }}" aria-pressed="false" aria-label="Prijsalarm op {{ l.label|lower }} {{ l.text }}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button>
+  </div>
+  {% endfor %}
+  {% if rr %}<div class="level-rr"><span class="level-chip-label">R:R</span><span class="level-chip-num">1:{{ "%.1f"|format(rr) }}</span></div>{% endif %}
+  </div>
+  <p class="level-hint">Tik een getal om het te kopiëren. De bel zet een prijsalarm.</p>
+</div>
+{% endif %}
+{% endmacro %}
+
+
+{# Kop onder de coinrij (of, met `direction`, de kop van een scenario): de stand als pil (live bijgewerkt via `hook`), de soort en "ongetest" als stille labels, rechts de leeftijd. #}
+{% macro card_tags(short, state, label="", kind=none, untested=false, age=none, hook="data-radar", direction=none) %}
+<div class="card-tags">
+  {% if direction %}<span class="radar-dir radar-dir-{{ direction }}">{{ direction }}</span>{% endif %}
+  <span class="state-pill is-{{ state or 'laden' }}" {{ hook }}="state"{% if label %} title="{{ label }}"{% endif %}>{{ short }}</span>
+  {% if kind %}<span class="kind-tag">{{ kind }}</span>{% endif %}
+  {% if untested %}<span class="kind-tag is-untested">ongetest</span>{% endif %}
+  {% if age %}<span class="card-age">{{ age }}</span>{% endif %}
+</div>
+{% endmacro %}
+
+
+{# De zin bovenaan een kaart: wat je nu doet (chance_steps.now_line). #}
+{% macro now_line(text, hook="data-radar") %}
+{% if text %}<p class="now-line" {{ hook }}="action">{{ text }}</p>{% endif %}
+{% endmacro %}
+
+
+{# Lege staat met een uitnodiging: wat gebeurt hier straks en wat kun je intussen doen. #}
+{% macro empty_state(title, text, link_text=none, link_href=none) %}
+<div class="empty-state">
+  <strong>{{ title }}</strong>
+  <p class="muted">{{ text }}</p>
+  {% if link_text %}<a class="chip" href="{{ link_href }}">{{ link_text }}</a>{% endif %}
+</div>
+{% endmacro %}
+
+
+{# Balken per doel: hoe verder het doel, hoe langer de balk, in R. #}
+{% macro r_bars(targets) %}
+{% set top = targets|map(attribute=1)|max %}
+<div class="r-bars" aria-label="Opbrengst per doel in R">
+  {% for price, r in targets %}
+  <div class="r-bar"><span class="r-bar-label">T{{ loop.index }}</span><span class="r-bar-track"><i style="width: {{ "%.0f"|format(r / top * 100) }}%"></i></span><span class="r-bar-value">{{ "%.1f"|format(r) }}R</span></div>
+  {% endfor %}
+</div>
+{% endmacro %}
+
+
+{# Tijdlijn van een kans: wat er gebeurde en wanneer, oud naar nieuw. #}
+{% macro timeline_list(events) %}
+<ol class="kans-timeline">
+  {% for e in events %}
+  <li><span class="kans-time">{{ e.at.strftime("%d-%m %H:%M") }}</span><span>{{ e.text }}</span></li>
+  {% endfor %}
+</ol>
+{% endmacro %}
+
+
+{# Een structuur-setup als getekende trade (app/setup_chart.py), met het plan eronder. Gebruikt op Setups en op Vandaag. #}
+{% macro setup_card(c, risk_eur=none) %}
+{# Geen oordeel op de kaart: A, B en C zijn alleen een meting in de database (app/structure_live.py), elke gespotte kans ziet er hetzelfde uit. #}
+<article class="setup-card" id="structuur-{{ c.id }}">
+  <header class="setup-head">
+    {{ coin_avatar(c.coin, 36, "setup-av") }}
+    <div class="setup-id">
+      <p class="setup-title"><a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a><span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span></p>
+      <p class="setup-sub"><span class="muted setup-kind">Structuur</span>{{ proof_tag("structuur", "s" ~ c.id) }}</p>
+    </div>
+    <span class="muted setup-age">{{ c.created_at | age }}</span>
+  </header>
+  {{ c.chart }}
+  {{ steps_list(c.steps, risk_eur) }}
+  {{ r_bars(c.targets) }}
+  <a class="order-link" href="/nu/order/structuur:{{ c.id }}">Zet de order, stap voor stap</a>
+  {{ share_button(c.coin, c.direction, c.steps) }}
+  {# Kenmerken en toelichting achter één tik: ze beschrijven de kans, de stappen hierboven zijn wat je doet. #}
+  {% if c.checks %}
+  <details class="setup-why">
+    <summary>Waarom <span class="muted">{{ c.checks|selectattr(1)|list|length }} van {{ c.checks|length }} kenmerken</span></summary>
+    <ul class="setup-checks" aria-label="Wat er klopt en wat niet">{% for label, ok in c.checks %}<li class="{{ 'is-ok' if ok else 'is-no' }}"><span aria-hidden="true">{{ "✓" if ok else "✗" }}</span> {{ label }}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+</article>
+{% endmacro %}
+
+{# Een range sweep of zone-retest: de stop is het product, het doel kies je zelf. De kop is de stopafstand (gemeten uit het plan), de doelkans komt uit
+   het lab (historisch, geen belofte). Midden en overkant van de range staan als referentie in de grafiek, de stappen en de chips. #}
+{% macro range_sweep_card(c) %}
+<article class="setup-card rs-card{% if c.grade == 'C' %} is-weak{% endif %}" id="range-sweep-{{ c.id }}">
+  <header class="setup-head">
+    {{ coin_avatar(c.coin, 36, "setup-av") }}
+    <div class="setup-id">
+      <p class="setup-title"><a class="radar-coin" href="/coins/{{ c.coin }}">{{ c.coin }}</a><span class="radar-dir radar-dir-{{ c.direction }}">{{ c.direction }}</span></p>
+      <p class="setup-sub"><span class="setup-grade setup-grade-{{ c.grade|lower }}" title="Score {{ "%.0f"|format(c.score) }} van 100">{{ c.grade | grade_word }}</span><span class="muted rs-kind">{{ "Zone-retest" if c.family == "zone" else "Range sweep" }} {{ c.range_tf|replace('h', 'u') }} · ongetest</span>{{ proof_tag("range_sweep", "rs" ~ c.id) }}</p>
+    </div>
+    <span class="muted setup-age">{{ c.created_at | age }}</span>
+  </header>
+  {{ headline(c.headline.label, c.headline.value, c.headline.unit, delta=c.headline.delta, pop_id="rs-hl-" ~ c.id,
+       explain="Afstand van je gemiddelde instap tot de stop, en wat een rondreis aan kosten is in R. Allebei gemeten uit dit plan.") }}
+  {{ c.chart }}
+  {{ steps_list(c.steps) }}
+  {{ level_chips(c.coin, c.chips, "/structuur#range-sweep-" ~ c.id) }}
+  {% if c.headline.doelkans %}
+  <div class="rs-doelkans-wrap">
+    <table class="rs-doelkans" aria-label="Historische kans uit het lab, geen belofte">
+      <caption class="muted">Historische kans (lab, {{ c.headline.doelkans[0].n }} trades): haalde de koers dit voor de stop? Gemeten op historie, geen belofte.</caption>
+      <tr>{% for d in c.headline.doelkans %}<th scope="col">+{{ d.r }}R</th>{% endfor %}</tr>
+      <tr>{% for d in c.headline.doelkans %}<td title="95%-interval {{ d.ci_text }}">{{ d.p_text }}</td>{% endfor %}</tr>
+    </table>
+  </div>
+  {% endif %}
+  {{ share_button(c.coin, c.direction, c.steps) }}
+  <details class="setup-why">
+    <summary>Waarom <span class="muted">score {{ "%.0f"|format(c.score) }} van 100</span></summary>
+    <ul class="setup-checks" aria-label="Wat er klopt en wat niet">{% for label, ok in c.checks %}<li class="{{ 'is-ok' if ok else 'is-no' }}"><span aria-hidden="true">{{ "✓" if ok else "✗" }}</span> {{ label }}</li>{% endfor %}
+      <li class="{{ 'is-ok' if c.liq.ok else 'is-no' }}"><span aria-hidden="true">{{ "✓" if c.liq.ok else "✗" }}</span> Liquidaties bij de prik <span class="muted">(niet getoetst, geen historie)</span></li></ul>
+    <p class="setup-reason muted">De score beschrijft de setup (40 punten voor de range, 60 voor de zone). Het is geen bewezen voorspeller: Bewijs toont per soort of een hoge score vaker wint.</p>
+  </details>
+</article>
+{% endmacro %}
+
+
+{# R-liniaal: waar een gemiddeld resultaat op de schaal van -1R (stop) tot +2R valt. De streep bij 0 is break-even. #}
+{% macro r_ruler(value) %}
+{% set clamped = [[value, -1.0]|max, 2.0]|min %}
+<div class="r-ruler" role="img" aria-label="Gemiddeld {{ '%+.2f'|format(value) }} R per trade op een schaal van min 1 tot plus 2 R">
+  <span class="r-ruler-fill {{ 'pos' if value > 0 else 'neg' }}" style="left: {{ (33.333 if value > 0 else (clamped + 1) / 3 * 100) }}%; width: {{ ((clamped|abs) / 3 * 100) }}%"></span>
+  <span class="r-ruler-tick" style="left: 0%"><i>-1R</i></span>
+  <span class="r-ruler-tick is-zero" style="left: 33.333%"><i>0</i></span>
+  <span class="r-ruler-tick" style="left: 66.667%"><i>+1R</i></span>
+  <span class="r-ruler-tick" style="left: 100%"><i>+2R</i></span>
+  <span class="r-ruler-mark" style="left: {{ (clamped + 1) / 3 * 100 }}%"></span>
+</div>
+{% endmacro %}
+
+
+{# Bewijsregel onder een kans: wat deze soort tot nu toe deed, met aantallen, en een balk naar de 50 trades waarna we oordelen. #}
+{% macro proof_line(trade_type, uid="") %}
+{% set p = proof(trade_type) %}
+{% set pid = "pl-" ~ trade_type ~ "-" ~ (uid or "x") %}
+<p class="proof-line is-{{ p.state }}" title="Uit afgeronde trades van deze soort. Bewijs toont de details.">
+  {# De uitleg staat achter een tik op het label: dezelfde zin op elke kaart maakte de lijst druk. #}
+  <button type="button" class="proof-term" popovertarget="{{ pid }}"><strong>{{ p.label }}</strong></button>
+  <span class="kl-pop" id="{{ pid }}" popover>{{ p.text }}</span>
+  {% if p.state == "proef" %}<span class="proof-bar" aria-hidden="true"><i style="width: {{ (p.progress * 100)|round(0) }}%"></i></span>{% endif %}
+  <a href="/bewijs">Bewijs</a>
+</p>
+{% endmacro %}
+
+{# Bewijsstand als stil woord onder de coin: de uitleg, de voortgang naar een oordeel en de link naar Bewijs zitten achter een tik.
+   Een pil met balk op elke kaart las als rommel. #}
+{% macro proof_tag(trade_type, uid="") %}
+{% set p = proof(trade_type) %}
+{% set pid = "pt-" ~ trade_type ~ "-" ~ (uid or "x") %}
+<span class="proof-tag is-{{ p.state }}"><button type="button" class="kl-term" popovertarget="{{ pid }}">{{ p.label }}</button><span class="kl-pop proof-pop" id="{{ pid }}" popover>
+  <strong class="proof-pop-title">{{ p.label }}</strong>
+  <span class="proof-pop-text">{{ p.text }}</span>
+  {% if p.state == "proef" %}<span class="proof-bar" aria-hidden="true"><i style="width: {{ (p.progress * 100)|round(0) }}%"></i></span>{% endif %}
+  <a class="proof-pop-link" href="/bewijs">Bekijk Bewijs</a>
+</span></span>
+{% endmacro %}
+
+{# ===== Indeling (plan 2026-10-13). Kop, groot getal, kernregels, tabs, rijen en zoekveld: elke pagina bouwt hiermee,
+   zodat de indeling op één plek bijgehouden wordt. ===== #}
+
+{# Kop van een pagina: avatar naar Account, titel die het Meer-blad opent (pagina wisselen), rechts de vaste knoppen uit base.html. #}
+{% macro page_header(user, title, logo=false) %}
+{# Het initiaal rechtsboven opent het blad met Account, Handleiding, Meldingen en de rest (tabbar.js); de vier tabs staan in het dok.
+   `logo`: Nu toont het merk met zijn teken in plaats van een paginatitel, zoals in het ontwerp; de kop van het scherm zelf is de titel. #}
+<div class="ph{% if logo %} ph-logo{% endif %}">
+  <div class="ph-main">
+    {% if logo %}<svg class="ph-mark" viewBox="0 0 32 32" fill="none" aria-hidden="true"><circle cx="16" cy="16" r="15" stroke="#1b2324" stroke-width="2"/><path d="M5 16h4l2.5-7 4 14 2.5-7H27" stroke="#1b2324" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endif %}
+    <span class="ph-brand">HesPulse</span>
+    {% if logo %}<h1 class="sr-only">{{ title }}</h1>{% else %}<h1 class="ph-title"><span>{{ title }}</span></h1>{% endif %}
+  </div>
+  {{ caller() if caller }}
+  <button type="button" class="ph-avatar" data-more-toggle aria-controls="more-sheet" aria-expanded="false" aria-label="Menu: account en meer">{{ (user.username or "?")[0]|upper }}</button>
+</div>
+{% endmacro %}
+
+{# Rond coinplaatje: het echte logo uit web/static/coins (zie SOURCES.md), anders de letters. Of er een logo is weet de server al
+   (coin_logo); laadt het toch niet, dan haalt onerror het weg en blijven de letters staan. #}
+{% macro coin_avatar(coin, size=36, extra="") %}{% set logo = coin_logo(coin) %}<span class="coin-av {{ extra }}{% if logo %} has-logo{% if logo.dark %} is-dark{% endif %}{% endif %}" style="--av: {{ size }}px" aria-hidden="true">{% if logo %}<img src="{{ logo.src }}" alt="" width="{{ size }}" height="{{ size }}" loading="lazy" decoding="async" onerror="this.parentNode.classList.remove('has-logo');this.remove()">{% endif %}<span class="coin-av-txt">{{ (coin or "?")[:4] }}</span></span>{% endmacro %}
+
+{# Een woord met stippellijn dat een uitleg opent (native popover, geen JS). Uitleg die eerst als losse alinea op de pagina stond, staat
+   hier: bereikbaar met één tik, zonder dat de pagina er druk van wordt. #}
+{% macro term(label, text, id) %}<button type="button" class="kl-term" popovertarget="{{ id }}">{{ label }}</button><span class="kl-pop" id="{{ id }}" popover>{{ text }}</span>{% endmacro %}
+
+{# Eén groot meetgetal. `spark` is kant-en-klare SVG (track_record.sparkline_svg) of leeg; `spark_coin` tekent de live koerslijn via
+   spark.js. `delta` is tekst met `tone` pos/neg; `delta_coin` laat spark.js de 24u-verandering invullen. `attrs` komt op het getal,
+   zodat live.js of coin.js het kan bijwerken (bv. {"id": "coin-price", "data-symbol": "BTC"}). #}
+{% macro headline(label, value, unit="", spark=none, spark_coin=none, delta=none, tone="", delta_coin=none, href=none, attrs={}, explain=none, icon_coin=none, pop_id="hl-pop") %}
+<section class="hl">
+  <div class="hl-text">
+    <p class="hl-label">{% if icon_coin %}{{ coin_avatar(icon_coin, 28, "hl-coin") }}{% endif %}{% if explain %}{{ term(label, explain, pop_id) }}{% elif href %}<a href="{{ href }}">{{ label }}</a>{% else %}{{ label }}{% endif %}</p>
+    <p class="hl-value"><span class="hl-num"{{ attrs|xmlattr }}>{{ value }}</span>{% if unit %}<span class="hl-unit">{{ unit }}</span>{% endif %}</p>
+    {% if delta_coin %}<p class="hl-delta" data-spark-chg="{{ delta_coin }}"></p>
+    {% elif delta %}<p class="hl-delta {{ tone }}">{{ delta }}</p>{% endif %}
+  </div>
+  {% if spark %}<div class="hl-spark">{{ spark }}</div>
+  {% elif spark_coin %}<div class="hl-spark"><svg class="radar-spark" data-spark-coin="{{ spark_coin }}" viewBox="0 0 120 28" preserveAspectRatio="none" role="img" aria-label="Koers {{ spark_coin }}, laatste 24 uur"><path d=""/></svg></div>{% endif %}
+</section>
+{% endmacro %}
+
+{# Drie (of meer) kernregels. Elke regel: {"label", "value", "unit"?, "explain"?, "tone"?, "href"?, "html"?}. `html` is Markup die naast
+   de waarde komt (bv. de dagbudgetring). Een uitleg opent met het native popover-attribuut: geen JS nodig, en in een browser zonder
+   popover blijft het label gewoon tekst met een stippellijn. #}
+{% macro keylines(rows, id_prefix="kl") %}
+<dl class="kl">
+  {% for r in rows %}
+  <div class="kl-row">
+    <dt>{% if r.explain %}{{ term(r.label, r.explain, id_prefix ~ "-" ~ loop.index) }}{% else %}{{ r.label }}{% endif %}</dt>
+    <dd class="{{ r.tone or '' }}">{% if r.href %}<a href="{{ r.href }}">{% endif %}{{ r.html or "" }}<span class="kl-num">{{ r.value }}</span>{% if r.unit %}<span class="kl-unit">{{ r.unit }}</span>{% endif %}{% if r.href %}</a>{% endif %}</dd>
+  </div>
+  {% endfor %}
+</dl>
+{% endmacro %}
+
+{# Tekst-tabs met streep. items: lijst van {"key", "label", "href", "count"?}. Een href die met # begint is een paneeltab (utabs.js
+   toont alleen dat paneel); anders is het een gewone link. `menu` is een lijst {"label", "href"} achter de drie puntjes; met {% call %} komt er vrije inhoud bij (een POST-formulier kan
+   geen link zijn). Roep alleen met {% call %} aan als er iets in het menu hoort: een lege caller geeft lege puntjes. #}
+{# Getallen in een tab: `num` (stil, ook 0) naast de naam en `badge` (accent) voor wat nu aandacht vraagt; `count` is de oudere accentteller. #}
+{% macro ut_nums(t) %}{% if t.num is defined and t.num is not none %}<span class="ut-num" data-ut-num>{{ t.num }}</span>{% endif %}{% if t.badge %}<i class="ut-badge" data-ut-badge>{{ t.badge }}<span class="sr-only"> in de zone</span></i>{% endif %}{% if t.count %} <i class="ut-count">{{ t.count }}</i>{% endif %}{% endmacro %}
+
+{% macro utabs(items, active, group="main", menu=none) %}
+<div class="ut" data-utabs="{{ group }}">
+  {% set ns = namespace(all_panels=true) %}{% for t in items %}{% if not t.href.startswith('#') %}{% set ns.all_panels = false %}{% endif %}{% endfor %}
+  <div class="ut-list"{% if ns.all_panels %} role="tablist"{% endif %} aria-label="Onderdelen">
+    {# Een #-href wisselt een paneel en is een echte tab; elke andere href navigeert en is een gewone link met aria-current. #}
+    {% for t in items %}
+    {% if t.href.startswith('#') %}
+    <a class="ut-tab{% if t.key == active %} is-active{% endif %}" id="{{ t.href[1:] }}-tab" href="{{ t.href }}" role="tab" aria-selected="{{ 'true' if t.key == active else 'false' }}"
+       aria-controls="{{ t.href[1:] }}">{{ t.label }}{{ ut_nums(t) }}</a>
+    {% else %}
+    <a class="ut-tab{% if t.key == active %} is-active{% endif %}" href="{{ t.href }}"{% if t.key == active %} aria-current="page"{% endif %}>{{ t.label }}{% if t.count %} <i class="ut-count">{{ t.count }}</i>{% endif %}</a>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% if menu or caller %}
+  <details class="ut-more">
+    <summary aria-label="Meer opties"><svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor" aria-hidden="true"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></summary>
+    <nav class="ut-menu">{% for m in (menu or []) %}<a href="{{ m.href }}">{{ m.label }}</a>{% endfor %}{{ caller() if caller }}</nav>
+  </details>
+  {% endif %}
+</div>
+{% endmacro %}
+
+{# Kolomkoppen boven een lijst rijen, zoals "Markten / Prijs / 24 uur" in de referentie. #}
+{% macro row_head(left, mid="", right="") %}
+<div class="mrow-head" aria-hidden="true"><span>{{ left }}</span><span>{{ mid }}</span><span>{{ right }}</span></div>
+{% endmacro %}
+
+{# Eén rij per coin of soort. `el` is a, div of summary (in een <details> voor een uitklapbare rij). `price_coin` laat live.js de koers
+   bijwerken; `chg_coin` laat spark.js de 24u-verandering invullen. Zonder die twee tonen `price_text`/`right_text` vaste tekst. #}
+{% macro market_row(icon, title, chip=none, chip_tone="", subtitle="", price_coin=none, price_text="", chg_coin=none, right_text=none, right_tone="", href=none, el="a", attrs={}, coin=none) %}
+<{{ el }} class="mrow"{% if el == "a" and href %} href="{{ href }}"{% endif %}{{ attrs|xmlattr }}>
+  {% if coin %}{{ coin_avatar(coin, 36, "mrow-icon") }}{% else %}<span class="mrow-icon" aria-hidden="true">{{ icon[:4] }}</span>{% endif %}
+  <span class="mrow-main">
+    <span class="mrow-title">{% if href and el != "a" %}<a class="mrow-link" href="{{ href }}">{{ title }}</a>{% else %}{{ title }}{% endif %}{% if chip %} <i class="mrow-chip {{ chip_tone }}">{{ chip }}</i>{% endif %}</span>
+    {% if subtitle %}<span class="mrow-sub">{{ subtitle }}</span>{% endif %}
+  </span>
+  <span class="mrow-price"{% if price_coin %} data-vd-price="{{ price_coin }}"{% endif %}>{{ price_text }}</span>
+  {% if chg_coin %}<span class="mrow-chg" data-spark-chg="{{ chg_coin }}" data-spark-short></span>
+  {% else %}<span class="mrow-chg {{ right_tone }}">{{ right_text or "" }}</span>{% endif %}
+</{{ el }}>
+{% endmacro %}
+
+{# Zwevend zoekveld boven de tabbalk. Een knop, geen echt veld: een tik opent de bestaande command palette (base.html), zodat er
+   één zoekfunctie blijft. #}
+{% macro float_search() %}
+<button type="button" class="fsearch" id="fsearch" aria-haspopup="dialog" aria-controls="cmdk">
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+  <span>Zoek een coin of pagina</span>
+</button>
+{% endmacro %}
+
+{# Installatiehulp (install.js): kind "card" op Account, "banner" op Vandaag. Server-zijdig verborgen; install.js toont hem alleen als de app
+   niet vanaf het beginscherm draait. De iOS-stappen tonen het echte Delen-teken, want dat is wat je in Safari moet vinden. #}
+{% macro install_help(kind) %}
+{% set share_icon %}<svg class="install-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 7l4-4 4 4"/><path d="M12 3v12"/><path d="M7 10H5v11h14V10h-2"/></svg>{% endset %}
+{% if kind == "card" %}
+<section class="card install-help" id="install-help" data-install="card" hidden>
+  <h3><svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="2" width="12" height="20" rx="2.5"/><path d="M11 18h2"/></svg>Zet HesPulse op je beginscherm</h3>
+  <p class="install-lead">Dan opent HesPulse als app, zonder adresbalk, en zie je zonder bereik de laatst bekende Radar en Vandaag. Op iPhone komen meldingen alleen binnen in de app op je beginscherm.</p>
+  <ol class="install-steps" data-install-ios hidden>
+    <li><span class="install-num" aria-hidden="true">1</span><div><strong>Tik op Delen {{ share_icon }}</strong><span>Het vierkantje met de pijl omhoog, onderaan in Safari. Op een iPad staat het bovenaan.</span></div></li>
+    <li><span class="install-num" aria-hidden="true">2</span><div><strong>Kies Zet op beginscherm</strong><span>Staat hij er niet tussen? Scroll in het menu omlaag. Tik daarna rechtsboven op Voeg toe.</span></div></li>
+    <li><span class="install-num" aria-hidden="true">3</span><div><strong>Open HesPulse vanaf je beginscherm</strong><span>Log daar één keer in en zet meldingen aan bij Instellingen hieronder.</span></div></li>
+  </ol>
+  <div class="install-actions" data-install-android hidden>
+    <button type="button" class="install-btn" data-install-prompt>Installeer HesPulse</button>
+  </div>
+  <p class="install-lead" data-install-menu hidden>Open het menu van je browser en kies Installeren of Toevoegen aan startscherm.</p>
+</section>
+{% else %}
+<aside class="install-banner" id="install-banner" data-install="banner" hidden aria-label="HesPulse installeren">
+  <p><strong>Zet HesPulse op je beginscherm</strong>
+    <span data-install-ios hidden>Tik op Delen {{ share_icon }} en kies Zet op beginscherm.</span>
+    <span data-install-android hidden>Opent als app, ook zonder bereik.</span></p>
+  <a class="install-banner-act" href="/account#install-help" data-install-ios hidden>Uitleg</a>
+  <button type="button" class="install-banner-act" data-install-prompt data-install-android hidden>Installeer</button>
+  <button type="button" class="install-banner-close" data-install-dismiss aria-label="Niet meer tonen">&times;</button>
+</aside>
+{% endif %}
+{% endmacro %}
+
+{# Marktcontext (app/market_context.py): gemeten waarden met bron en leeftijd, nooit een advies. lines: {"label", "value", "note", "flag", "source", "age"};
+   een lege lijst geeft niets, zodat een ontbrekende bron nooit als lege regel of streepje verschijnt. #}
+{% macro context_block(lines, title="Context", foot=none) %}
+{% if lines %}
+<section class="ctx" aria-label="{{ title }}, gemeten">
+  <header class="ctx-head"><h4 class="ctx-title">{{ title }}</h4><span class="ctx-tag" title="Gemeten bij de bron, geen schatting en geen advies">gemeten</span></header>
+  <dl class="ctx-list">
+    {% for l in lines %}
+    <div class="ctx-row">
+      <dt>{{ l.label }}</dt>
+      <dd class="ctx-val"><span class="ctx-num">{{ l.value }}</span>{% if l.flag %}<span class="ctx-flag">{{ l.flag }}</span>{% endif %}</dd>
+      <dd class="ctx-meta">{{ [l.note, l.source, l.age]|select|join(" · ") }}</dd>
+    </div>
+    {% endfor %}
+  </dl>
+  {% if foot %}<p class="ctx-foot">{{ foot }}</p>{% endif %}
+</section>
+{% endif %}
+{% endmacro %}
+
+{# De momenten van één dag in het Logboek (app/logbook.timeline), van laat naar vroeg: tijd, een stip in de kleur van het moment en een kaart.
+   Alleen een gesloten trade kleurt naar zijn uitkomst; de rest is accent (jij deed iets), grijs (overgeslagen) of stil (wat de app zag). #}
+{% macro log_events(events) %}
+<ol class="lb-list">
+  {% for e in events %}
+  <li class="lb-ev is-{{ e.tone }}" data-lb-kind="{{ e.kind }}">
+    <time class="lb-time" datetime="{{ e.at.isoformat() }}">{{ e.time }}</time>
+    <span class="lb-rail" aria-hidden="true"><i></i></span>
+    <div class="lb-card">
+      <div class="lb-row">
+        {% if e.url %}<a class="lb-title" href="{{ e.url }}">{{ e.title }}</a>{% else %}<span class="lb-title">{{ e.title }}</span>{% endif %}
+        {% if e.r_text %}<span class="lb-r">{{ e.r_text }}</span>{% endif %}
+      </div>
+      <span class="lb-sub">{{ e.sub }}</span>
+      {% if e.replay_url %}<a class="lb-replay" href="{{ e.replay_url }}">Bekijk replay <span aria-hidden="true">›</span></a>{% endif %}
+    </div>
+  </li>
+  {% endfor %}
+</ol>
+{% endmacro %}
+
+{# ===== De prijsladder in het detailblad (app/ladder.py tekent de maths, web/static/ladder.js schuift de koers live) =====
+   `lad` is ladder.build(...). mode: "plan" (wacht op vulling) of "trade" (gevulde order, het getal is de live R). Drie kolommen, zodat tekst
+   nooit botst: links het koerslabel, in het midden de lijnen, rechts alleen de namen (de getallen staan één keer in de tabel eronder).
+   Het grote getal staat erboven en is altijd gemeten (afstand of live R) of de staat ("In zone"). #}
+{% macro ladder(lad, mode="plan", coin="", limit=none, num_text="", num_label="", num_hook="distance", stop=none, num_class="") %}
+<div class="lad lad-{{ mode }}{% if lad.in_zone %} is-in-zone{% endif %}" data-ladder="{{ mode }}" data-lad-coin="{{ coin }}"
+     data-lad-hi="{{ lad.hi }}" data-lad-lo="{{ lad.lo }}" data-lad-dir="{{ lad.direction }}"
+     {% if limit is not none %}data-lad-limit="{{ limit }}" {% endif %}{% if lad.zone %}data-lad-zlo="{{ lad.zone.low }}" data-lad-zhi="{{ lad.zone.high }}" {% endif %}
+     {% if lad.trade %}data-lad-entry="{{ lad.entry }}" data-lad-stop="{{ stop }}" {% endif %}role="group" aria-label="Prijsladder {{ coin }}: boven is duurder">
+  {% if num_text %}<p class="lad-head"><span class="lad-num{% if num_class %} {{ num_class }}{% endif %}" data-lad="{{ num_hook }}">{{ num_text }}</span>{% if num_label %}<span class="lad-num-label">{{ num_label }}</span>{% endif %}</p>{% endif %}
+  <div class="lad-plot">
+    {% if lad.zone %}<div class="lad-zone" style="top: {{ '%.2f'|format(lad.zone.top) }}%; height: {{ '%.2f'|format(lad.zone.height) }}%" aria-hidden="true"></div>{% endif %}
+    {% for ln in lad.lines %}<i class="lad-line is-{{ ln.tone }}" style="top: {{ '%.2f'|format(ln.y) }}%" aria-hidden="true"></i>
+    <span class="lad-tag is-{{ ln.tone }}" style="top: {{ '%.2f'|format(ln.tag_y) }}%">{{ ln.name }}</span>
+    {% endfor %}
+    {% if lad.gap %}<i class="lad-gap" data-lad="gap" style="top: {{ '%.2f'|format(lad.gap.top) }}%; height: {{ '%.2f'|format(lad.gap.height) }}%" aria-hidden="true"></i>{% endif %}
+    {% if lad.price %}
+    <i class="lad-px" data-lad="price" style="top: {{ '%.2f'|format(lad.price.y) }}%" aria-hidden="true"></i>
+    <span class="lad-px-val" data-lad="price-label" style="top: {{ '%.2f'|format(lad.price.label_y) }}%"><span class="lad-px-k">Koers</span><span data-lad="price-text">{{ lad.price.text }}</span></span>
+    {% endif %}
+  </div>
+</div>
+{% endmacro %}
+
+{# Pil voor de bewijsstand: "ongetest" gestippeld, "proef" doorgetrokken; rustig, nooit gekleurd per soort. #}
+{% macro pill(text, dashed=true) %}<span class="pill {{ 'is-untested' if dashed else 'is-proef' }}">{{ text }}</span>{% endmacro %}
+
+
+{# ===== Kansen (ontwerp V4, app/kansen.py) =====
+   Eén kans als compacte kaart: coin en richting in tekst, de stand, het bewijslabel als rustige pil en de grafiek met zone en niveaus. Een tik
+   op de kop (of op de kaart naast de grafiek) opent het detailblad (kaarten.js); een tik op de grafiek opent hem groot (levelchart.js). #}
+{% macro kans_label(it) %}{% if it.untested %}{{ pill("ongetest") }}{% else %}{{ pill(proof(it.trade_type).label|lower) }}{% endif %}{% endmacro %}
+
+{% macro kans_card(it) %}
+<article class="kc is-{{ it.state or 'laden' }}{% if it.compact %} is-compact{% endif %}" id="{{ it.dom_id }}" data-kc="{{ it.key }}" data-kc-keys="{{ (it.get('keys') or [it.key])|join(',') }}"
+         data-kc-title="{{ it.title }}" data-kc-group="{{ it.group }}"{% if it.kind == "plan" and not it.key.startswith("structuur:") %} data-radar-key="{{ it.key }}"{% endif %}>
+  {# Verberg (kans_hidden, kaarten.js) staat naast de kop en niet erin: een knop in een knop kan niet, en zo opent een mis-tik nooit het blad. #}
+  <div class="kc-top">
+  <button type="button" class="kc-head" data-kc-open="{{ it.key }}" aria-haspopup="dialog" aria-controls="kd">
+    <span class="kc-title">{{ it.title }}</span>
+    <span class="kc-tags">{% if it.skipped %}<span class="kc-skipped">overgeslagen</span>{% endif %}<span class="state-pill is-{{ it.state or 'laden' }}"{% if it.kind == "plan" %} data-radar="state"{% endif %}>{{ it.state_short }}</span>{% if it.rr_text %}<span class="kc-rr">{{ it.rr_text }}</span>{% endif %}{% if it.dist_text %}<span class="kc-rr kc-dist">{{ it.dist_text }}</span>{% endif %}{{ kans_label(it) }}</span>
+    <svg class="kc-chev" viewBox="0 0 20 20" width="18" height="18" aria-hidden="true"><path d="M7 4l6 6-6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <span class="sr-only">Details</span>
+  </button>
+  <button type="button" class="kc-hide" data-kc-hide aria-label="Verberg {{ it.title }}"><svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true"><path d="M5.5 5.5l9 9M14.5 5.5l-9 9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
+  </div>
+  {# Een wachtend scenario zonder plan is een korte regel (B-2026-11-03-07); "Grafiek" klapt hem uit tot de volle kaart (kaarten.js). #}
+  {% if it.compact %}<button type="button" class="kc-unfold" data-kc-unfold>Grafiek</button>{% endif %}
+  {% if it.shared_text %}<p class="kc-when">{{ it.shared_text }}</p>{% endif %}
+  {% if it.model_face %}<p class="kc-when kc-model">{{ it.model_face }}</p>{% endif %}
+  {# Het ene plan van een scenario (model_card.ready_plan): de getallen op de kaart zelf en de orderknop, zolang het plan geldig is. #}
+  {% if it.plan %}<p class="kc-plan"><b>{{ it.plan.line }}</b>{% if it.plan.valid_text %} · {{ it.plan.valid_text }}{% endif %}</p>
+  {% if it.plan.url %}<a class="kc-order" href="{{ it.plan.url }}">Zet de order, stap voor stap</a>{% endif %}{% endif %}
+  {% if it.counter %}<p class="kc-counter">Tegen de dagtrend · ongetest · geen melding</p>{% endif %}
+  {# Structuur tekent zijn eigen momentopname (svg, setup_chart): de breuk, het retest-niveau, de stop en T1 tot T3. Een tik erop opent het
+     detailblad zoals elders op de kaart; de koerslijn schuift live mee (live.js, data-chart-coin). De andere soorten krijgen de kaartgrafiek. #}
+  {% if it.svg %}<figure class="kc-svg is-structuur">{{ it.svg }}<figcaption class="lc-cap">30 min per candle · getekend bij de breuk</figcaption></figure>
+  {% elif it.svg_src %}
+  {# Zone-radar en Zone-sweep: hun eigen tekening (app/card_chart.py) komt lazy van /api/kaart_svg zodra de kaart in beeld komt (kaarten.js).
+     De verborgen level-chart is alleen de bron voor "Groot" (levelchart.js tekent een verborgen grafiek nooit). #}
+  {% set is_model = it.trade_type == "hespulse_model" %}
+  <figure class="lc kc-svg is-zone{% if is_model %} is-model{% endif %}" data-kc-svg="{{ it.svg_src }}">
+    <div class="kc-svg-box" role="img" aria-label="{{ it.chart.label if it.chart else it.title }}"><span class="kc-svg-wait">Grafiek laden…</span></div>
+    {% if it.chart %}<div class="level-chart" data-levelchart='{{ it.chart|tojson }}' data-coin="{{ it.coin }}" data-tf="15m" aria-label="{{ it.chart.label }}" hidden></div>{% endif %}
+    <figcaption class="lc-foot"><span class="lc-cap">{{ "POC op 1u of 4u" if it.trade_type == "poc_radar" else "Range 4u, entry 15m" if is_model else "Zone op zijn eigen tijdframe" }} · jouw tijd</span>
+      {# Ook het model opent "Groot" als schuifbare candlegrafiek met keuze 15m/1u/4u (levelchart.js); de tekening blijft op de kaart. #}
+      {% if it.chart %}<button type="button" class="lc-expand" data-lc-expand aria-label="Grafiek van {{ it.coin }} groot openen"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg><span>Groot</span></button>{% endif %}
+    </figcaption>
+  </figure>
+  {% elif it.chart %}{{ level_chart(it.coin, it.chart, legend=false) }}{% endif %}
+  <i data-live-coin="{{ it.coin }}" hidden></i>
+</article>
+{% endmacro %}
+
+{# Een verborgen kaart als rij onder "Verborgen (N)" (app/kansen.py `hidden`); kaarten.js bouwt dezelfde rij als je een kaart net verbergt. #}
+{% macro kans_hidden_row(h) %}<li class="kt-hid-row" data-kh="{{ h.key }}" data-kh-keys="{{ h["keys"]|join(',') }}" data-kh-group="{{ h.group }}"><b>{{ h.title }}</b><span>{{ h.state_short }}</span><button type="button" class="kt-show" data-kt-show>Toon weer</button></li>{% endmacro %}
+
+{# Het detail van één kans in het blad: de opgeschoonde ladder, de getallen één keer (houd vast om te kopiëren), de herkomst in één regel,
+   de gemeten context en vast onderaan de knop. `ctx` is market_context.coin_lines van deze coin. #}
+{% macro kans_detail(it, ctx=[]) %}
+{% set kinds = {"zone_radar": "Zone-radar", "zone_sweep": "Zone-sweep", "poc_radar": "POC-radar", "smc": "SMC", "structuur": "Structuur", "structuur_c": "Structuur", "hespulse_model": "HesPulse-model"} %}
+<section class="kd-item" data-kd-item="{{ it.key }}" aria-labelledby="kd-t-{{ it.dom_id }}" hidden>
+  <div class="kd-head">
+    <h3 class="kd-title" id="kd-t-{{ it.dom_id }}" tabindex="-1">{{ it.title }}</h3>
+    <button type="button" class="kd-x" data-kd-close aria-label="Sluiten"><svg class="ico" viewBox="0 0 20 20" aria-hidden="true"><path d="M5 5l10 10M15 5L5 15"/></svg></button>
+  </div>
+  <p class="kd-kind"><span class="state-pill is-{{ it.state or 'laden' }}">{{ it.state_short }}</span><span class="kd-type">{{ kinds.get(it.trade_type, it.trade_type) }}</span>{{ kans_label(it) }}{% if it.shared_text %}<span class="kd-type">{{ it.shared_text }}</span>{% endif %}</p>
+  {% if it.say %}<p class="kd-say">{{ it.say }}</p>{% endif %}
+  {% if it.kind == "scenario" %}
+  {# HesPulse-model, moment A: nog geen order. De stappen met het moment waarop ze herkenbaar waren (app/model_card.step_lines). #}
+  {{ model_steps(it.steps_done) }}
+  {% if it.candidates_text %}<p class="kd-origin kd-wrap">{{ it.candidates_text }}</p>{% endif %}
+  {% elif it.kind == "trade" %}
+  {{ ladder(it.ladder, "trade", coin=it.coin, num_text=it.num_text, num_label=it.num_label, num_hook="live_r",
+       stop=it.rows|selectattr('tone', 'equalto', 'loss')|map(attribute='value')|first,
+       num_class=("pos" if (it.live_r or 0) > 0 else "neg" if (it.live_r or 0) < 0 else "")) }}
+  {% else %}
+  {{ ladder(it.ladder, "plan", coin=it.coin, limit=it.limit, num_text=it.num_text, num_label=it.num_label, num_hook=it.num_hook) }}
+  {% endif %}
+  <ul class="hold-list" data-chips-coin="{{ it.coin }}" data-chips-url="/smc#{{ it.dom_id }}">
+    {% for r in it.rows %}
+    <li class="hold-row"><button type="button" class="hold is-{{ r.tone }}" data-hold-copy="{{ r["copy"] }}" aria-label="{{ r.label }} {{ r.text }}, houd vast om te kopiëren">
+      <span class="hold-top"><span class="hold-lab" data-hold-label>{{ r.label }}</span><span class="hold-val">{{ r.text }}</span></span>
+      <span class="hold-bar" aria-hidden="true"><i></i></span>
+    </button><button type="button" class="level-bell" data-alarm-price="{{ r.value }}" data-alarm-label="{{ r.label }}" aria-pressed="false" aria-label="Prijsalarm op {{ r.label|lower }} {{ r.text }}"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg></button></li>
+    {% endfor %}
+  </ul>
+  <p class="kd-hint">Houd een getal vast om te kopiëren. De bel zet een prijsalarm.</p>
+  {% if it.steps_done and it.kind != "scenario" %}{{ model_steps(it.steps_done) }}{% endif %}
+  <p class="kd-origin">{{ it.origin or kinds.get(it.trade_type, it.trade_type) }} · {{ "open trade" if it.kind == "trade" else "scenario, nog geen order" if it.kind == "scenario" else "limietplan" }}</p>
+  {# HesPulse-model: context, entrytype en stand apart (model_card.context_lines); de BTC-context is gemeten, geen filter. #}
+  {% for line in it.model_lines or [] %}<p class="kd-origin kd-wrap kd-model">{{ line }}</p>{% endfor %}
+  {# Alle instappunten van het scenario (model_card.entry_points): de letter staat ook op de grafiek. De gebruiker kiest; elk punt wordt
+     gemeten, ook als niemand hem neemt. #}
+  {% if it.entry_points and it.entry_points|length > 1 or (it.entry_points and it.kind == "scenario") %}
+  <section class="kd-entries" aria-label="Instappunten">
+    <h3 class="kd-entries-h">Instappunten</h3>
+    {% for p in it.entry_points %}
+    <details class="kd-entry">
+      <summary><b class="kd-entry-code">{{ p.code }}</b> {{ p.name }}<span class="kd-entry-state">{{ p.state_text }}</span></summary>
+      <p class="kd-entry-basis">{{ p.basis }}</p>
+      <p class="kd-entry-levels">{{ p.levels }}{% if p.rr_text %} · {{ p.rr_text }}{% endif %}</p>
+    </details>
+    {% endfor %}
+  </section>
+  {% endif %}
+  {# Obstakels vanaf de instap (kansen.obstacle_lines): alleen op kaarten die ze bewaarden; het eerste is het doel. #}
+  {% for line in it.obstacle_lines or [] %}<p class="kd-origin kd-obstacle">{{ line }}</p>{% endfor %}
+  {# Dubbele kaarten (zelfde soort, coin, richting en instap, app/kansen.dedupe) staan één keer op Kansen; hier het gemeten aantal dat wegviel. #}
+  {% if it.similar_text %}<p class="kd-origin kd-similar">{{ it.similar_text }}</p>{% endif %}
+  {# De markt van de candles (app/candle_source.py, kansen.source_text); oude kaarten zonder meting tonen niets. #}
+  {% if it.source_text %}<p class="kd-origin kd-source">Bron: {{ it.source_text }}</p>{% endif %}
+  {% if ctx %}
+  <dl class="kd-ctx" aria-label="Context, gemeten">
+    {% for l in ctx %}<div class="kd-ctx-row"><dt>{{ l.label }}{% if l.note %}<span class="kd-ctx-note">{{ l.note }}</span>{% endif %}</dt>
+      <dd class="kd-ctx-v">{{ l.value }}{% if l.flag %} <span class="ctx-flag">{{ l.flag }}</span>{% endif %}</dd>
+      <dd class="kd-ctx-m">{{ [l.source, l.age]|select|join(" · ") }}</dd></div>{% endfor %}
+  </dl>
+  {% endif %}
+  {# Twee rustige acties onder de hoofdknop. Sla over voor vandaag (plan_skips, hp_skip) houdt het plan in de lijst, een dag achteraan; Verberg
+     (kans_hidden) haalt de kaart weg tot je hem terugzet. Zonder JavaScript gaat Verberg als formulier naar dezelfde route. #}
+  <div class="kd-foot">
+    {% if it.kind == "trade" %}<a class="kd-cta is-quiet" href="{{ it.url }}">Bekijk de trade</a>{% elif it.kind == "scenario" and it.counter %}<p class="kd-cta is-quiet" aria-disabled="true">Tegen de dagtrend: alleen gemeten, geen order</p>{% elif it.kind == "scenario" and it.plan %}<a class="kd-cta" href="{{ it.plan.url }}">Zet de order voor plan {{ it.plan.code }}, stap voor stap</a>{% elif it.kind == "scenario" %}<p class="kd-cta is-quiet" aria-disabled="true">Nog geen order: wacht op de entry</p>{% else %}<a class="kd-cta" href="{{ it.checklist_url }}">Zet de order, stap voor stap</a>{% endif %}
+    <div class="kd-alt">
+      {# Deel (web/static/share.js): een afbeelding van de kaart voor een groepschat, met de grafiek van de kaart en de getallen die je zelf ziet. #}
+      <div class="kd-skip-form"><button type="button" class="kd-skip kd-share" data-share-for="{{ it.key }}" data-share-card='{{ {"title": it.title, "lines": it.share_lines, "plain": true}|tojson }}'>Deel</button></div>
+      {% if it.kind == "plan" %}<form method="post" action="/nu/overslaan" class="kd-skip-form"><input type="hidden" name="key" value="{{ it.key }}"><button type="submit" class="kd-skip">Sla over voor vandaag</button></form>{% endif %}
+      <form method="post" action="/api/kans/verberg" class="kd-skip-form"><input type="hidden" name="key" value="{{ it.key }}"><button type="submit" class="kd-skip" data-kd-hide="{{ it.key }}">Verberg</button></form>
+    </div>
+  </div>
+</section>
+{% endmacro %}
+
+{# De stappen van een HesPulse-scenario (app/model_card.step_lines): gedaan met het tijdstip waarop ze herkenbaar waren, open zonder tijd,
+   mislukte pogingen met hun reden. #}
+{% macro model_steps(lines) %}
+<ol class="ms-steps" aria-label="Stappen van het scenario">
+  {% for l in lines %}<li class="ms-step{% if l.done %} is-done{% elif l.when %} is-failed{% endif %}"><span class="ms-name">{{ l.name }}</span>{% if l.when %}<span class="ms-when">{{ l.when }}</span>{% else %}<span class="ms-when">nog niet</span>{% endif %}{% if l.note %}<span class="ms-note">{{ l.note }}</span>{% endif %}</li>{% endfor %}
+</ol>
 {% endmacro %}

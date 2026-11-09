@@ -5,9 +5,17 @@ data/*.db
 data/*.db-journal
 data/backups/
 data/images/
+data/candles/
+data/replay/
 .venv/
 venv/
 *.log
 
 .superpowers/
 scratchpad/
+.claude/worktrees/
+data/export/
+data/export-git/
+
+# Deploy key van de nachtelijke export op de VPS (README, Automatische verbeterlus); nooit committen.
+.ssh/

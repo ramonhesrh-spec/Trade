@@ -1,0 +1,174 @@
+"""Licht en donker thema: tokens uit het ontwerp, de keuze in Account zonder flits (cookie, data-theme) en het contrast van beide thema's."""
+import os
+import re
+import tempfile
+import unittest
+from unittest import mock
+
+from fastapi.testclient import TestClient
+
+from app import config, db, repo, security
+from web import main
+
+CSS = (main.BASE_DIR / "static" / "style.css").read_text(encoding="utf-8")
+
+
+def block(selector: str) -> str:
+    start = CSS.index(selector + " {")
+    return CSS[start + len(selector) + 2:CSS.index("}", start)]
+
+
+def tokens(body: str) -> dict:
+    return dict(re.findall(r"(--[\w-]+):\s*([^;]+);", body))
+
+
+def lum(hex_: str) -> float:
+    h = hex_.strip().lstrip("#")
+    def ch(c):
+        c = int(c, 16) / 255
+        return c / 12.92 if c <= 0.03928 else ((c + 0.055) / 1.055) ** 2.4
+    r, g, b = (ch(h[i:i + 2]) for i in (0, 2, 4))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def contrast(a: str, b: str) -> float:
+    la, lb = sorted((lum(a), lum(b)), reverse=True)
+    return (la + 0.05) / (lb + 0.05)
+
+
+DARK = tokens(block(":root"))
+LIGHT = {**DARK, **tokens(block(':root[data-theme="light"]'))}
+
+
+def resolve(theme: dict, name: str) -> str:
+    v = theme[name].strip()
+    while v.startswith("var("):
+        v = theme[v[4:-1].strip()].strip()
+    return v
+
+
+class TokenTests(unittest.TestCase):
+    def test_systeem_en_gekozen_licht_zijn_dezelfde_regels(self):
+        self.assertEqual(block(':root[data-theme="light"]').split(), block(':root[data-theme="system"]').split())
+        self.assertIn('@media (prefers-color-scheme: light) {\n  :root[data-theme="system"] {', CSS)
+
+    def test_donker_blijft_zoals_het_was(self):
+        for name, value in (("--bg", "#0a0e0f"), ("--panel", "#131a1b"), ("--text", "#eaf1f0"), ("--accent", "#0ABAB5"), ("--glow-edge", "#0c3a42")):
+            self.assertEqual(DARK[name].strip(), value, name)
+
+    def test_ontwerptokens_bestaan_in_beide_themas(self):
+        for name in ("--s1", "--s2", "--bd", "--tx", "--tx2", "--ac", "--aci", "--onac", "--win", "--loss", "--actint"):
+            self.assertIn(name, DARK, name)
+            self.assertIn(name, LIGHT, name)
+        self.assertEqual(LIGHT["--bg"].strip(), "#f4f6f6")           # TH.light uit het ontwerp
+        for name in ("--zone", "--cu", "--cdn"):                       # V3: zonevlak en candlekleuren
+            self.assertIn(name, DARK, name)
+            self.assertIn(name, LIGHT, name)
+
+    def test_v3_tokens_uit_het_ontwerp(self):
+        # TH uit docs/design/hespulse_v3.dc.html. Bijtekst is een tint donkerder (licht) of lichter (donker) dan het ontwerp, zodat hij
+        # de 6,9:1 haalt die het ontwerp zelf eist; --bg en --s1 blijven de bestaande, een stap ervan af en niet te zien.
+        for name, dark, light in (("--s2", "#1c2427", "#e7ecec"), ("--bd", "#263235", "#d3dbdb"), ("--tx", "#eef3f3", "#0d1415"),
+                                  ("--aci", "#3fd3ce", "#1b2324"), ("--win", "#3dd68c", "#0b7a47"), ("--loss", "#ff6b6b", "#c42f2c"),
+                                  ("--cu", "#8f9b9e", "#a9b3b5"), ("--cdn", "#55625f", "#6b7779")):
+            self.assertEqual(resolve(DARK, name).lower(), dark, name)
+            self.assertEqual(resolve(LIGHT, name).lower(), light, name)
+
+    def test_bijtekst_haalt_6_9_en_accent_als_tekst_4_5(self):
+        for theme_name, theme in (("donker", DARK), ("licht", LIGHT)):
+            for bg in ("--bg", "--s1"):
+                for fg, need in (("--tx2", 6.9), ("--muted", 6.9), ("--aci", 4.5), ("--win", 4.5), ("--loss", 4.5)):
+                    ratio = contrast(resolve(theme, fg), resolve(theme, bg))
+                    self.assertGreaterEqual(ratio, need, f"{theme_name}: {fg} op {bg} = {ratio:.2f}")
+            self.assertGreaterEqual(contrast(resolve(theme, "--aci"), resolve(theme, "--s2")), 4.5, theme_name)
+
+    def test_tekst_haalt_4_5_in_beide_themas(self):
+        pairs = [("--text", "--bg"), ("--text-dim", "--panel"), ("--muted", "--bg"), ("--muted", "--panel"), ("--tx2", "--s1"),
+                 ("--aci", "--bg"), ("--accent", "--bg"), ("--on-accent", "--accent"), ("--onac", "--ac"), ("--green", "--panel"), ("--red", "--panel")]
+        for theme_name, theme in (("donker", DARK), ("licht", LIGHT)):
+            for fg, bg in pairs:
+                ratio = contrast(resolve(theme, fg), resolve(theme, bg))
+                self.assertGreaterEqual(ratio, 4.5, f"{theme_name}: {fg} op {bg} = {ratio:.2f}")
+
+    def test_modelkaart_zonenaam_haalt_4_5_op_het_vlak(self):
+        """card_chart.model_svg: de naam van een zone staat in het lichtpaarse vlak; tekst en labels rechts op de achtergrond."""
+        for theme in (DARK, LIGHT):
+            bg = resolve(theme, "--bg")
+            r, g, b_, a = (float(v) for v in re.search(r"rgba\(([\d.]+), ([\d.]+), ([\d.]+), ([\d.]+)\)", theme["--mz"]).groups())
+            base = [int(bg.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+            mixed = "#" + "".join(f"{round(c * a + o * (1 - a)):02x}" for c, o in zip((r, g, b_), base))
+            self.assertGreaterEqual(contrast(resolve(theme, "--mz-tx"), mixed), 4.5)
+            for name in ("--tx", "--tx2"):
+                self.assertGreaterEqual(contrast(resolve(theme, name), bg), 4.5, name)
+            self.assertGreaterEqual(contrast(resolve(theme, "--mc-ink"), resolve(theme, "--mc-paper")), 4.5)
+
+    def test_velden_halen_3_tegen_het_paneel(self):
+        for theme in (DARK, LIGHT):
+            self.assertGreaterEqual(contrast(resolve(theme, "--border-interactive"), resolve(theme, "--panel")), 3.0)
+
+    def test_grafiek_leest_rasterkleur_uit_het_thema(self):
+        src = (main.BASE_DIR / "static" / "levelchart.js").read_text(encoding="utf-8")
+        self.assertIn('css("--chart-grid"', src)
+        self.assertNotIn('color: "rgba(255,255,255,0.04)"', src)
+
+
+class ThemeChoiceTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.patch = mock.patch.object(config, "DATABASE_PATH", os.path.join(self.tmp.name, "t.db"))
+        self.patch.start()
+        db.init_db()
+        main._price_cache.clear()
+        self.client = TestClient(main.app)
+        uid = repo.create_user("tester", security.hash_password("wachtwoord-123456"), 1000.0, 1.0)
+        self.client.cookies.set(main.SESSION_COOKIE, security.create_session_token(uid))
+        self.prices = mock.patch.object(main.exchange, "fetch_last_price", side_effect=lambda coin: 100.0)
+        self.prices.start()
+
+    def tearDown(self):
+        self.prices.stop()
+        self.patch.stop()
+        self.tmp.cleanup()
+
+    def test_altijd_licht_wat_de_cookie_ook_zegt(self):
+        # CEO 2026-11-03: "alleen een witte versie". Ook een oude keuze, "systeem" of een rare cookie geeft licht.
+        for value in (None, "dark", "system", '"><script>'):
+            if value is None:
+                self.client.cookies.clear()
+            else:
+                self.client.cookies.set(main.THEME_COOKIE, value)
+            html = self.client.get("/vandaag").text
+            self.assertIn('<html lang="nl" data-theme="light"', html, value)
+            self.assertIn('<meta name="color-scheme" content="light">', html, value)
+            self.assertNotIn("<script>\"", html)
+
+    def test_gekozen_licht_komt_van_de_server_zonder_flits(self):
+        self.client.cookies.set(main.THEME_COOKIE, "light")
+        html = self.client.get("/vandaag").text
+        self.assertIn('<html lang="nl" data-theme="light"', html)
+        self.assertIn('<meta name="color-scheme" content="light">', html)
+        self.assertIn("html{background:#f4f6f6}", html)
+        self.assertEqual(html.count('content="#f4f6f6"'), 2)          # beide theme-color-varianten
+
+    def test_account_heeft_geen_themakeuze_meer(self):
+        html = self.client.get("/account").text
+        self.assertNotIn('id="weergave"', html)
+        self.assertNotIn("data-theme-pick", html)
+
+    def test_zonder_js_bewaart_het_formulier_de_keuze(self):
+        r = self.client.post("/instellingen/thema", data={"thema": "light"}, follow_redirects=False)
+        self.assertEqual(r.status_code, 303)
+        self.assertEqual(r.headers["location"], "/account#weergave")
+        self.assertIn(f"{main.THEME_COOKIE}=light", r.headers["set-cookie"])
+        r = self.client.post("/instellingen/thema", data={"thema": "paars"}, follow_redirects=False)
+        self.assertIn(f"{main.THEME_COOKIE}=dark", r.headers["set-cookie"])
+
+    def test_een_oude_keuze_op_het_toestel_wordt_gewist(self):
+        html = self.client.get("/vandaag").text
+        head = html[:html.index("</head>")]
+        self.assertRegex(head, r"try \{[^}]*localStorage\.removeItem\(\"hp_theme\"\)")
+        self.assertNotIn('localStorage.getItem("hp_theme")', head)
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -1,54 +1,131 @@
 {% extends "base.html" %}
 {% import "_macros.html" as macros %}
-{% block title %}SMC — HesPulse{% endblock %}
+{% block title %}Kansen — HesPulse{% endblock %}
+{% block page_title %}Kansen{% endblock %}
+{% block dock_search %}{{ macros.float_search() }}{% endblock %}
 {% block content %}
+{# Kansen (ontwerp V4, app/kansen.py): een tab per soort, per kans een compacte kaart met de grafiek. Een tik op de kop opent het detailblad
+   (kaarten.js), een tik op de grafiek opent hem groot (levelchart.js). De ankers van de meldingen (/smc#radar-zone-N, /smc#radar-zsweep-N,
+   /structuur#structuur-N) wijzen naar het id van de kaart: utabs.js opent dan de juiste tab en scrolt erheen. #}
+{% set empty = {
+  "hespulse_model": ("Geen scenario", "Een kaart verschijnt als de 4u-structuur een richting heeft en er een onaangeraakte pool in discount of premium binnen 6% ligt. Je krijgt pas een melding als de entry er is."),
+  "structuur": ("Geen plan klaar", "Zodra een lijn of range breekt en het plan genoeg ruimte heeft, krijg je een melding en staat hier de kaart. De motor kijkt elke 5 minuten."),
+  "zone_radar": ("Geen zone binnen bereik", "Een kaart verschijnt als de dichtstbijzijnde vraag- of aanbodzone op 1u of 4u binnen 6% van de koers ligt."),
+  "zone_sweep": ("Geen sweep", "Een kaart verschijnt als de koers door een zone prikt en binnen een paar candles terug sluit."),
+  "poc_radar": ("Geen POC binnen bereik", "Een kaart verschijnt als een naakte dag- of week-POC binnen 6% van de koers ligt. De POC's worden elk uur bijgewerkt."),
+  "smc": ("Geen SMC-setup", "Een kaart verschijnt als structuur breekt en een sweep de liquiditeit pakt.")} %}
+{# Het totaal over alle tabs, zonder te tikken (app/kansen.py summary): wachtend, in de zone en open. kaarten.js telt hem opnieuw als een kaart
+   van stand verandert (radar.js). #}
+<p class="kt-total" data-kansen-total aria-live="polite">{{ page.total.text }}</p>
+{{ macros.utabs(page.tabs, page.active, "kansen") }}
 
-<div class="page-head">
-  <h2>SMC liquidity setups</h2>
+<div class="ut-panels" data-utabs-panels="kansen">
+{% for t in page.tabs %}
+<section id="tab-{{ t.key }}" data-utab-panel{% if t.key == page.active %} class="is-shown"{% endif %}>
+  <p class="kt-sum">{{ t.summary }}</p>
+  {# Beide groepen staan er altijd (leeg verborgen): Toon weer en Ongedaan zetten een kaart terug zonder te herladen (kaarten.js). "Verberg alles"
+     staat er pas bij twee kaarten; bij één doet het kruisje op de kaart hetzelfde. #}
+  <div class="kt-group" data-kt-group="plans"{% if not t.plans %} hidden{% endif %}>
+    <div class="kt-subrow is-first"><h3 class="kt-sub">Wachtend</h3><button type="button" class="kt-hide-all" data-kt-hide-all{% if t.plans|length < 2 %} hidden{% endif %}>Verberg alles</button></div>
+    <div class="kc-list" data-kt-plans>{% for it in t.plans %}{{ macros.kans_card(it) }}{% endfor %}</div>
+  </div>
+  {# HesPulse-model, moment A (app/model_card.scenario_item): nog geen order, dus buiten [data-kt-plans] en buiten de tellers. #}
+  <div class="kt-group" data-kt-group="scenarios"{% if not t.scenarios %} hidden{% endif %}>
+    <div class="kt-subrow{% if not t.plans %} is-first{% endif %}"><h3 class="kt-sub">{{ t.scenarios_label }}</h3><button type="button" class="kt-hide-all" data-kt-hide-all{% if t.scenarios|length < 2 %} hidden{% endif %}>Verberg alles</button></div>
+    <div class="kc-list" data-kt-scenarios>{% for it in t.scenarios %}{{ macros.kans_card(it) }}{% endfor %}</div>
+  </div>
+  {# Tegen de dagtrend (B-2026-11-03-11): standaard dicht achter een schakelaar; kaarten.js onthoudt de keuze op dit toestel. #}
+  {% if t.tegen %}
+  <div class="kt-group kt-tegen" data-kt-group="tegen">
+    <div class="kt-subrow"><h3 class="kt-sub">Tegen de dagtrend</h3>
+      <button type="button" class="kt-switch" role="switch" aria-checked="false" data-tegen-toggle><span class="kt-switch-track" aria-hidden="true"><i></i></span><span>{{ t.tegen|length }}</span></button></div>
+    <p class="kt-note">Omkeer tegen de richting van de dag. Stil gemeten, ongetest, nooit een melding.</p>
+    <div class="kc-list" data-kt-tegen hidden>{% for it in t.tegen %}{{ macros.kans_card(it) }}{% endfor %}</div>
+  </div>
+  {% endif %}
+  {% if not t.plans and not t.scenarios and not (t.hidden|selectattr("group", "in", ["plans", "scenarios"])|list) and t.key in empty %}
+  {{ macros.empty_state(empty[t.key][0], empty[t.key][1]) }}
+  {% endif %}
+  <div class="kt-group" data-kt-group="trades"{% if not t.trades %} hidden{% endif %}>
+    <div class="kt-subrow"><h3 class="kt-sub">Open</h3><button type="button" class="kt-hide-all" data-kt-hide-all{% if t.trades|length < 2 %} hidden{% endif %}>Verberg alles</button></div>
+    <div class="kc-list" data-kt-trades>{% for it in t.trades %}{{ macros.kans_card(it) }}{% endfor %}</div>
+  </div>
+
+  {# Verborgen (kans_hidden): alleen jouw weergave. De kaarten zelf staan onzichtbaar klaar in de voorraad, met hun detailblad, zodat Toon weer
+     direct werkt; een melding die naar een verborgen kaart wijst, klapt deze regel open (kaarten.js). #}
+  <details class="kt-more kt-hid" data-kt-hidden{% if not t.hidden %} hidden{% endif %}>
+    <summary><span data-kt-hidden-label>{{ t.hidden_label }}</span></summary>
+    <ul class="kt-rows" data-kt-hidden-rows>{% for h in t.hidden %}{{ macros.kans_hidden_row(h) }}{% endfor %}</ul>
+    <button type="button" class="kt-show-all" data-kt-show-all>Toon alles weer</button>
+  </details>
+  <div class="kt-stash" data-kt-stash hidden>{% for it in t.hidden_cards %}{{ macros.kans_card(it) }}{% endfor %}</div>
+
+  {% if t.moot %}
+  <details class="kt-more">
+    <summary>Niet meer actief <span class="kt-n">{{ t.moot|length }}</span></summary>
+    <ul class="kt-rows">{% for m in t.moot %}<li id="{{ m.dom_id }}"><b>{{ m.title }}</b><span>{{ m.reason }}</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% if t.ended %}
+  {# Het anker van de kaart blijft (radar-zone-N): een melding die naar een geëindigde kaart wijst, landt hier bij de reden. #}
+  <details class="kt-more">
+    <summary>Uitgevallen, gemist of vervallen, 7 dagen <span class="kt-n">{{ t.ended|length }}</span></summary>
+    <ul class="kt-rows">{% for e in t.ended %}<li id="{{ e.dom_id }}"><b>{{ e.title }}</b><span>{{ e.ended_at | age }}</span><span class="kt-reason">{{ e.reason }}</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+
+  {% if t.key == "structuur" %}
+  {% if not (engine_on and engine_minutes is not none and engine_minutes <= 15) %}
+  <p class="engine-status {% if not engine_on %}is-off{% else %}is-stale{% endif %}">
+    {% if is_ceo(user) %}
+      {% if not engine_on %}De motor staat uit (STRUCTURE_ENABLED=false).
+      {% elif engine_minutes is none %}De motor heeft nog niet gedraaid. Hij start in de eerstvolgende scan van 5 minuten, na een herstart van de bot.
+      {% else %}Let op: de motor draaide {{ engine_minutes }} minuten geleden voor het laatst. Controleer crypto-market-scan-smc.timer.{% endif %}
+    {% else %}Controle tijdelijk niet actueel.{% endif %}
+  </p>
+  {% endif %}
+  {% if history %}
+  <details class="kt-more">
+    <summary>Uitgevallen, gemist of vervallen, 7 dagen <span class="kt-n">{{ history|length }}</span></summary>
+    <ul class="kt-rows">{% for h in history %}<li><b>{{ h.coin }} {{ h.direction }}</b><span>{{ h.state_label }} · {{ h.created_at | age }}</span>{% if h.reason_text %}<span class="kt-reason">{{ h.reason_text }}</span>{% endif %}{% if h.state == "geen_plan" and h.reason %}<span class="kt-reason">{{ h.reason }}</span>{% endif %}</li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% if trend_signals %}
+  <details class="kt-more">
+    <summary>Trend, laatste 24 uur <span class="kt-n">{{ trend_signals|length }}</span></summary>
+    <ul class="kt-rows">{% for s in trend_signals %}<li><a href="/coins/{{ s.coin }}#signal-{{ s.id }}"><b>{{ s.coin }} {{ s.direction }}</b></a><span>{{ s.auto_outcome | outcome_word }}</span></li>{% endfor %}</ul>
+  </details>
+  {% endif %}
+  {% if range_visible %}
+  <details class="kt-more" id="tab-ranges"{% if range_sweep_cards %} open{% endif %}>
+    <summary>Range sweep, proef <span class="kt-n">{{ range_sweep_cards|length }}</span></summary>
+    <p class="muted tab-meta">Ongetest. De stop is het plan, het doel kies je zelf.{% if is_ceo(user) %} <a href="/galerij">Galerij</a>{% endif %}</p>
+    <div class="setup-grid">{% for c in range_sweep_cards %}{{ macros.range_sweep_card(c) }}{% endfor %}</div>
+    {% if range_watches %}
+    <ul class="kt-rows">{% for r in range_watches %}<li><b>{{ r.coin }} {{ r.tf_label }}</b><span>{{ r.low_text }} tot {{ r.high_text }} · {{ r.dist_text }}</span></li>{% endfor %}</ul>
+    {% endif %}
+  </details>
+  {% endif %}
+  <p class="kt-meta">Laatste 24 uur: {{ counts.total }} gezien, {{ counts.met_plan }} met plan.</p>
+  {% endif %}
+  {% if t.key in ("zone_radar", "zone_sweep") %}<p class="kt-meta"><a href="/zone-radar">Zone-radar en zone-sweep: zo werkt het</a></p>{% endif %}
+  {% if t.key == "poc_radar" %}<p class="kt-meta"><a href="/zone-radar#poc">POC-radar: zo werkt het</a></p>{% endif %}
+  {% if t.key == "hespulse_model" %}<p class="kt-meta">Ongetest. Context op 4u, pools op 1u, sweep, shift en gap op 15m. Eén melding per entry; Bewijs toont de score.</p>{% endif %}
+</section>
+{% endfor %}
 </div>
-<p class="page-intro">Structuurbreuk, liquidity sweep, terugtrek in een fair value gap of order block, afwijzing.</p>
 
-<section class="card" style="--i: 0">
-  <h3>Bouwende setups</h3>
-  {% if not forming %}
-  <p class="muted empty">Nog geen bouwende setup gevonden.</p>
-  {% else %}
-  {% for setup in forming %}
-  <div class="smc-setup-card">
-    <div class="smc-setup-head">
-      <strong>{{ setup.coin }}</strong>
-      <span class="muted">{{ setup.direction }}</span>
-    </div>
-    <div class="smc-setup-zone">Entry-zone {{ "%.4f"|format(setup.zone_low) }} - {{ "%.4f"|format(setup.zone_high) }}</div>
-    <div class="smc-setup-levels muted">
-      Stop {{ "%.4f"|format(setup.preview_stop_loss) }} · Doel {{ "%.4f"|format(setup.preview_take_profit) }}
-    </div>
-    <details class="confidence-detail js-accordion">
-      <summary>Waarom</summary>
-      <p class="muted">
-        Structuur brak op {{ "%.4f"|format(setup.structure_level) }},
-        sweep op {{ "%.4f"|format(setup.sweep_price) }},
-        doel bij liquidity {{ "%.4f"|format(setup.liquidity_target) }}.
-        Stop en doel liggen al vast, dit wordt pas een melding als de zone
-        een afwijzende candle geeft en risico/rendement boven de ondergrens ligt.
-      </p>
-    </details>
-    <div class="smc-setup-meta muted">{{ setup.created_at | age }}</div>
+{# Eén blad voor alle kansen: kaarten.js toont alleen het gekozen deel. Het blad hangt aan body (main heeft z-index 1, het dok ligt erboven). #}
+<div class="kd" id="kd" role="dialog" aria-modal="true" aria-label="Details van de kans" data-kd hidden>
+  <div class="kd-panel" data-kd-panel>
+    <button type="button" class="kd-grab" data-kd-close aria-label="Details sluiten"><i aria-hidden="true"></i></button>
+    {% for it in items %}{{ macros.kans_detail(it, context.get(it.coin, [])) }}{% endfor %}
   </div>
-  {% endfor %}
-  {% endif %}
-</section>
+</div>
 
-<section class="card" style="--i: 1">
-  <h3>Afgeronde signalen</h3>
-  {% if not entries %}
-  <p class="muted empty">Nog geen afgeronde SMC-signalen.</p>
-  {% else %}
-  <div class="signal-list">
-    {% for entry in entries %}
-    {{ macros.signal_card(entry, dismissible=False, showing_all=True) }}
-    {% endfor %}
-  </div>
-  {% endif %}
-</section>
+<script defer src="{{ asset('vendor/lightweight-charts-4.2.0.standalone.production.js') }}"></script>
+<script defer src="{{ asset('levelchart.js') }}"></script>
+<script defer src="{{ asset('radar.js') }}"></script>
+<script defer src="{{ asset('ladder.js') }}"></script>
+<script defer src="{{ asset('kaarten.js') }}"></script>
 {% endblock %}

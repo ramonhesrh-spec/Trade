@@ -21,7 +21,9 @@ from typing import Optional
 
 from datetime import datetime, timedelta, timezone
 
-from app import db, exchange, indicators, push_notify, repo
+import pandas as pd
+
+from app import db, exchange, excursion, focus, indicators, outcome_measure, price_alerts, push_notify, range_sweep_live, repo, rule_live
 from app.signal_processor import (
     SWING_WATCH_MAX_AGE_DAYS, _price_broke_through, _price_near_level, run_swing_check,
 )
@@ -68,6 +70,12 @@ PENDING_LEVEL_MIN_AGE_MINUTES = 90
 LEVEL_CHECK_CANDLE_TIMEFRAME = "5m"
 LEVEL_CHECK_CANDLE_LOOKBACK = 6
 
+# Een niveaumelding die niet aankwam, wordt de volgende ronde opnieuw geprobeerd, hoogstens zo vaak; daarna gaat de vlag toch aan, anders
+# herhaalt een kapot abonnement zich elk kwartier zonder einde. Elke poging staat in push_attempts.
+MAX_LEVEL_ALERT_ATTEMPTS = 3
+# Soort in push_attempts voor het seintje "terug bij een niveau" (check_pending_signals); de stop-/doelmelding heet "niveau".
+PENDING_ALERT_KIND = "terug_bij_niveau"
+
 
 def _level_hit_in_candles(
     direction: str, stop_loss: Optional[float], take_profit: Optional[float], candles,
@@ -91,12 +99,40 @@ def _level_hit_in_candles(
     return None
 
 
+# Stop en doel in dezelfde candle: zonder fijnere candles in dit pad is de volgorde onbekend. De stop telt (conservatief), en dat staat er dan bij.
+AMBIGUOUS_NOTE = "Stop en doel in dezelfde candle: volgorde onbekend, conservatief als stop geteld."
+
+
+def _both_levels_at(direction: str, stop_loss: Optional[float], take_profit: Optional[float], candles, hit_at) -> bool:
+    """True als de candle van de treffer ook het andere niveau raakte (alleen zinvol bij een stoptreffer: die wint in _level_hit_in_candles)."""
+    if stop_loss is None or take_profit is None:
+        return False
+    candle = candles[candles["timestamp"] == hit_at].iloc[0]
+    if direction == "long":
+        return candle["low"] <= stop_loss and candle["high"] >= take_profit
+    return candle["high"] >= stop_loss and candle["low"] <= take_profit
+
+
+MODEL_TRADE_TYPE = "hespulse_model"          # gelijk aan model.TRADE_TYPE; hier als tekst om de modelimport uit level_check te houden
+
+
+def _self_measured(row: dict) -> bool:
+    """Soorten die hun uitkomst zelf zetten: de proefmotor (meelopende stop), de range sweep en een zone-sweep of POC-radar zonder doel (referentie-uitgang).
+    Een zone-sweep met doel blijft hier, die beslist op doel en stop zoals elk plan."""
+    if row["trade_type"] in (rule_live.RULE, range_sweep_live.TRADE_TYPE):
+        return True
+    return row["trade_type"] in (rule_live.ZONE_SWEEP, rule_live.POC_RADAR) and row.get("take_profit") is None
+
+
 async def check_open_trades() -> None:
     entries = repo.list_open_entries_with_levels()
     logger.info("%d open logboekregels om te checken", len(entries))
 
     coin_candles: dict[str, object] = {}
 
+    # De proefmotor volgt zijn eigen meelopende stop (rule_live.update_open); de vaste stop hier zou op een verouderd niveau melden.
+    # Geen vast doel en een eigen meting: range_sweep_live zet uitkomst en R zelf.
+    entries = [e for e in entries if not _self_measured(e)]
     for entry in entries:
         coin = entry["coin"]
         if coin not in coin_candles:
@@ -111,11 +147,15 @@ async def check_open_trades() -> None:
         candles = coin_candles[coin]
         if candles is None:
             continue
+        # De 30 minuten terug kunnen van vóór het signaal zijn: een stopaanraking van daarvoor gaf een stopmelding voor een trade die toen nog
+        # niet bestond (externe review 2026-10-31).
+        candles = candles_after(candles, entry["signal_created_at"])
 
         hit_result = _level_hit_in_candles(entry["direction"], entry["stop_loss"], entry["take_profit"], candles)
         if hit_result is None:
             continue
-        hit, hit_price, _hit_at = hit_result
+        hit, hit_price, hit_at = hit_result
+        ambiguous = _both_levels_at(entry["direction"], entry["stop_loss"], entry["take_profit"], candles, hit_at)
 
         # Geen telegram_chat_id-gate meer hier (Taak 11): push_notify.send_push
         # slaat een gebruiker zonder push-abonnement zelf al stilzwijgend over,
@@ -123,14 +163,49 @@ async def check_open_trades() -> None:
         # ingevuld voor nieuwe gebruikers, dus zou hier iedereen overslaan.
         hit_emoji = "🎯" if hit == "take profit" else "🛑"
         title = f"{hit_emoji} {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
-        body = f"{hit.capitalize()} geraakt\nEntry {entry['entry_price']:.4f} · Op {hit_price:.4f}"
+        # Het niveau zelf, niet het candle-extreem: dat stond eerder achter "Op" en las als de prijs waarop je eruit ging.
+        level_name, level = ("Doel", entry["take_profit"]) if hit == "take profit" else ("Stop", entry["stop_loss"])
+        body = (f"{hit.capitalize()} geraakt\nEntry {entry['entry_price']:.4f} · {level_name} {level:.4f} (koers raakte {hit_price:.4f})\n"
+                + (f"{AMBIGUOUS_NOTE}\n" if ambiguous else "") + "Tik voor de uitkomst en je journaal.")
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
+        ref = f"journal:{entry['id']}"
         try:
-            await push_notify.send_push(entry["user_id"], title, body, f"/coins/{coin}", silent=silent)
-            logger.info("Seintje verstuurd naar %s voor %s (%s)", entry["username"], coin, hit)
-        except Exception:
+            error = await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
+        except Exception as exc:
             logger.exception("Seintje naar %s voor %s is mislukt", entry["username"], coin)
+            error = repr(exc)
+        repo.record_push_attempt(entry["user_id"], "niveau", ref, not error, error)
+        if not error:
+            logger.info("Seintje verstuurd naar %s voor %s (%s)", entry["username"], coin, hit)
+        elif repo.count_failed_push_attempts("niveau", ref) < MAX_LEVEL_ALERT_ATTEMPTS:
+            continue
         repo.mark_level_alert_sent(entry["id"])
+
+
+def candles_in_validity(candles, created_at: str):
+    """Alleen candles vanaf het aanmaakmoment en binnen de geldigheid van het signaal. Daarna vervalt een signaal; een raak op dag vijf telt dus niet
+    als uitkomst, anders geldt voor oude en nieuwe signalen een andere regel en klopt Bewijs niet."""
+    created = pd.Timestamp(_aware(datetime.fromisoformat(created_at)))
+    end = created + timedelta(days=SIGNAL_MAX_AGE_DAYS + 1)
+    return candles_after(candles, created_at)[lambda c: c["timestamp"] < end]
+
+
+def candles_after(candles, created_at: str):
+    """Alleen candles die op of na het ontstaan openden. Een candle die het ontstaansmoment overlapt, telt niet: zijn hoog of laag kan van
+    vóór het signaal zijn."""
+    created = pd.Timestamp(_aware(datetime.fromisoformat(created_at)))
+    return candles[candles["timestamp"] >= created]
+
+
+def _aware(moment: datetime) -> datetime:
+    return moment if moment.tzinfo else moment.replace(tzinfo=timezone.utc)
+
+
+def _fetch_since(coin: str, since: datetime):
+    """5m-candles vanaf `since` (maximaal 1000, ongeveer 3,5 dag); voor een ouder signaal 15m, wat ver genoeg terugreikt."""
+    age = datetime.now(timezone.utc) - since
+    timeframe = LEVEL_CHECK_CANDLE_TIMEFRAME if age <= timedelta(days=3) else "15m"
+    return exchange.fetch_ohlcv(coin, timeframe=timeframe, limit=1000, since=int((since - timedelta(minutes=15)).timestamp() * 1000))
 
 
 async def check_signal_outcomes() -> None:
@@ -140,24 +215,32 @@ async def check_signal_outcomes() -> None:
     Onafhankelijk van of een gebruiker het signaal ooit als "genomen"
     markeerde — dit is precies waarom het trackrecord niet meer van een
     handmatige actie afhangt."""
-    signals = repo.list_unresolved_signals_with_levels()
+    # Geen vast doel en een meelopende stop: rule_live zet de uitkomst en de echte R zelf. Geen vast doel en een eigen meting: range_sweep_live idem.
+    # Het HesPulse-model zet zijn uitkomst zelf vanaf de vulcandle, met een tijdslimiet van 7 dagen (preregistratie §4.14,
+    # model_live.track_trade). De stop- en doelmelding aan de gebruiker (check_open_trades) blijft hier.
+    signals = [s for s in repo.list_unresolved_signals_with_levels() if not _self_measured(s) and s["trade_type"] != MODEL_TRADE_TYPE]
     logger.info("%d signalen zonder vastgestelde uitkomst om te checken", len(signals))
 
+    # Per coin candles vanaf het oudste openstaande signaal, niet alleen de laatste 30 minuten: een doel of stop dat geraakt werd terwijl deze taak
+    # even niet draaide (herstart, vertraagde cyclus) werd anders nooit gezien en het signaal vervalde als "geen uitkomst". Elk signaal wordt
+    # daarna alleen getoetst op candles vanaf zijn eigen aanmaakmoment.
+    oldest: dict[str, datetime] = {}
+    for signal in signals:
+        created = _aware(datetime.fromisoformat(signal["created_at"]))
+        oldest[signal["coin"]] = min(created, oldest.get(signal["coin"], created))
     coin_candles: dict[str, object] = {}
+    for coin, since in oldest.items():
+        try:
+            coin_candles[coin] = await asyncio.to_thread(_fetch_since, coin, since)
+        except Exception:
+            logger.exception("Kon geen candles ophalen voor %s, sla over", coin)
+            coin_candles[coin] = None
     for signal in signals:
         coin = signal["coin"]
-        if coin not in coin_candles:
-            try:
-                coin_candles[coin] = await asyncio.to_thread(
-                    exchange.fetch_ohlcv, coin,
-                    timeframe=LEVEL_CHECK_CANDLE_TIMEFRAME, limit=LEVEL_CHECK_CANDLE_LOOKBACK,
-                )
-            except Exception:
-                logger.exception("Kon geen candles ophalen voor %s, sla over", coin)
-                coin_candles[coin] = None
-        candles = coin_candles[coin]
+        candles = coin_candles.get(coin)
         if candles is None:
             continue
+        candles = candles_in_validity(candles, signal["created_at"])
 
         hit_result = _level_hit_in_candles(signal["direction"], signal["stop_loss"], signal["take_profit"], candles)
         if hit_result is not None:
@@ -167,7 +250,12 @@ async def check_signal_outcomes() -> None:
             # het trackrecord, en kan door de bredere candle-lookback
             # hierboven best een stukje in het verleden liggen.
             occurred_at = hit_at.isoformat()
-            repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at)
+            ambiguous = _both_levels_at(signal["direction"], signal["stop_loss"], signal["take_profit"], candles, hit_at)
+            repo.mark_signal_auto_outcome(signal["id"], outcome, occurred_at, AMBIGUOUS_NOTE if ambiguous else None)
+            _store_excursion(signal, candles)
+            # Funding tot het einde van de uitgangscandle (app/funding.py); alleen de focus-soorten, één aanroep, bij falen 'onbekend'.
+            await asyncio.to_thread(outcome_measure.record_funding, signal, signal["created_at"],
+                                    hit_at + pd.Timedelta(excursion.timeframe_of(candles) or outcome_measure.TIMEFRAME))
             # Een zelf-gedetecteerde zone die net een stop loss veroorzaakte
             # gaat op cooldown (zie repo.recent_sr_zone_failure) zodat een
             # volgend signaal vlakbij dezelfde rand niet meteen dezelfde fout
@@ -187,6 +275,16 @@ async def check_signal_outcomes() -> None:
             logger.info("Signaal %s (%s) vervallen na %s dagen zonder uitkomst", signal["id"], coin, age_days)
 
 
+def _store_excursion(signal: dict, candles) -> None:
+    """MAE en MFE op dezelfde candles die de uitkomst vonden; een meting die faalt, mag de uitkomst niet tegenhouden."""
+    try:
+        x = excursion.measure(signal["direction"], signal["price"], signal["stop_loss"], signal["take_profit"], candles)
+        if x:
+            repo.set_trade_excursion(signal["id"], x["mae_r"], x["mfe_r"], excursion.timeframe_of(candles))
+    except Exception:
+        logger.exception("MAE/MFE van signaal %s niet vastgelegd", signal["id"])
+
+
 def _nearest_level(current_price: float, atr: float, levels: list[dict]) -> Optional[dict]:
     """Bron niveau (support/weerstand uit een gedeelde screenshot) binnen
     dezelfde ATR-marge als het signaalniveau zelf. Geeft het dichtstbijzijnde
@@ -204,7 +302,7 @@ def _nearest_level(current_price: float, atr: float, levels: list[dict]) -> Opti
 # betere-entry-zone hieronder: een candle moet de zone geraakt hebben EN
 # aan de gunstige kant weer gesloten zijn voordat de melding afgaat, niet
 # alleen "de live prijs staat er toevallig". Zelfde afwijzingslogica als
-# market_scanner._smc_last_candle_state, hier toegepast op de gewone
+# smc_eval.last_candle_state, hier toegepast op de gewone
 # suggested_entry_low/high van een dagtradingsignaal in plaats van een
 # SMC-zone. Vaste terugkijkperiode, geen bijgehouden status: zelfde
 # aanpak als LEVEL_CHECK_CANDLE_TIMEFRAME/LOOKBACK hierboven, voor
@@ -339,7 +437,7 @@ async def check_pending_signals() -> None:
             if candles is not None:
                 # Alleen candles die sloten NA het ontstaan van dit signaal
                 # tellen mee als bevestiging — zelfde reden als
-                # market_scanner._smc_candles_since: een candle die al sloot
+                # smc_eval.candles_since: een candle die al sloot
                 # vóór het signaal (en daarmee de zone) bestond, heeft de
                 # zone nooit 'gezien' en mag hem dus ook niet afwijzen.
                 # Zonder deze filter kan ruis van vóór het signaal de zone
@@ -446,7 +544,7 @@ async def check_pending_signals() -> None:
         # tegenstrijdige kant is opgelost (genomen, genegeerd, of vervallen).
         opposite = "short" if entry["direction"].lower() == "long" else "long"
         if coin not in coin_directions:
-            coin_directions[coin] = repo.pending_directions_for_coin(coin)
+            coin_directions[coin] = repo.pending_directions_for_coin(coin, exclude_types=rule_live.CEO_ONLY_TYPES)
         if opposite in coin_directions[coin]:
             continue
 
@@ -456,7 +554,7 @@ async def check_pending_signals() -> None:
         if sniper_hit is not None:
             sniper_price, sniper_reason = sniper_hit
             title = f"🎯 {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()} — sniper-trigger geraakt"
-            body = f"{sniper_price:.4f} · {sniper_reason}\nNu {current_price:.4f}"
+            body = f"{sniper_price:.4f} · {sniper_reason}\nNu {current_price:.4f}\nTik voor de grafiek en het plan."
         else:
             if in_entry_zone:
                 level_line = f"Betere entry: {entry['suggested_entry_low']:.4f}–{entry['suggested_entry_high']:.4f}"
@@ -470,14 +568,22 @@ async def check_pending_signals() -> None:
 
             title = f"🔔 {push_notify.coin_symbol(coin)} {coin} {entry['direction'].upper()}"
             heading = "Terug in de betere-entry-zone" if in_entry_zone else "Terug bij een interessant niveau"
-            body = f"{heading} ({entry['confidence']})\n{level_line} · Nu {current_price:.4f}"
+            body = f"{heading} ({entry['confidence']})\n{level_line} · Nu {current_price:.4f}\nTik voor de grafiek en het plan."
 
+        # Zelfde patroon als check_open_trades: pas verzonden na een geslaagde push of na MAX_LEVEL_ALERT_ATTEMPTS mislukte, elke poging in
+        # push_attempts. Eerder ging de vlag ook na een mislukte push aan, en verdween het seintje stil.
         silent = push_notify.is_quiet_now(entry["quiet_hours_start"], entry["quiet_hours_end"])
+        ref = f"journal:{entry['id']}"
         try:
-            await push_notify.send_push(entry["user_id"], title, body, f"/coins/{coin}", silent=silent)
-            logger.info("Niveau-seintje verstuurd naar %s voor %s", entry["username"], coin)
-        except Exception:
+            error = await push_notify.send_push(entry["user_id"], title, body, push_notify.signal_url(coin, entry["signal_id"]), silent=silent)
+        except Exception as exc:
             logger.exception("Niveau-seintje naar %s voor %s is mislukt", entry["username"], coin)
+            error = repr(exc)
+        repo.record_push_attempt(entry["user_id"], PENDING_ALERT_KIND, ref, not error, error)
+        if not error:
+            logger.info("Niveau-seintje verstuurd naar %s voor %s", entry["username"], coin)
+        elif repo.count_failed_push_attempts(PENDING_ALERT_KIND, ref) < MAX_LEVEL_ALERT_ATTEMPTS:
+            continue
         repo.mark_level_alert_sent(entry["id"])
 
 
@@ -539,14 +645,65 @@ async def check_narratives() -> None:
         logger.info("%d narrative(s) verlopen wegens inactiviteit", len(expired))
 
 
+async def check_price_alerts() -> None:
+    """Prijsalarmen die gebruikers op een kaart zetten. Eerst markeren, dan versturen: een mislukte push mag nooit betekenen dat hetzelfde
+    alarm elke 15 minuten opnieuw afgaat. De melding staat ook op de meldingenpagina, zodat een alarm tijdens een pauze niet verdwijnt."""
+    by_coin: dict[str, list[dict]] = {}
+    for alert in repo.list_open_price_alerts():
+        by_coin.setdefault(alert["coin"], []).append(alert)
+    for coin, alerts in by_coin.items():
+        try:
+            # Vanaf het oudste alarm, niet alleen de laatste 30 minuten: een overgeslagen run mag een aanraking niet missen.
+            oldest = min(_aware(datetime.fromisoformat(a["created_at"])) for a in alerts)
+            candles = await asyncio.to_thread(_fetch_since, coin, oldest)
+        except Exception:
+            logger.exception("Kon geen candles ophalen voor prijsalarm %s, sla over", coin)
+            continue
+        for alert in alerts:
+            try:
+                await _handle_price_alert(coin, alert, candles)
+            except Exception:
+                logger.exception("Prijsalarm %s afhandelen mislukt", alert["id"])
+
+
+async def _handle_price_alert(coin: str, alert: dict, candles) -> None:
+    created = pd.Timestamp(_aware(datetime.fromisoformat(alert["created_at"])))
+    # Een candle die vóór het alarm begon, bevat koersen van vóór het aanmaken; die tellen niet.
+    after = candles[candles["timestamp"] >= created]
+    hit = price_alerts.first_hit(alert["side"], alert["price"], zip(after["high"], after["low"]))
+    if hit is None or not repo.mark_price_alert_sent(alert["id"]):
+        return
+    title, body = price_alerts.alert_text(coin, alert["label"], alert["price"], hit)
+    url = alert["url"] or "/smc"
+    repo.create_notification(alert["user_id"], "prijsalarm", title, body, url)
+    try:
+        await push_notify.send_push(alert["user_id"], title, body, url, tag=f"prijsalarm-{alert['id']}")
+    except Exception:
+        logger.exception("Prijsalarm %s versturen mislukt", alert["id"])
+
+
 async def run_all_checks() -> None:
     await check_open_trades()
+    try:
+        await check_price_alerts()
+    except Exception:
+        logger.exception("Prijsalarmen controleren is mislukt")
     await check_signal_outcomes()
+    try:
+        await rule_live.update_open()
+    except Exception:
+        logger.exception("Proefmotor volgen is mislukt")
     await check_pending_signals()
-    await check_swing_watches()
+    if focus.engine_on("swing"):
+        await check_swing_watches()
+    else:
+        # Een swing-watch die raakt wordt een nieuw signaal; de wachtende watches blijven staan voor als swing weer aan gaat.
+        logger.info("Swing: %s, wachtende watches niet getoetst", focus.OFF_DETAIL)
+        repo.beat("swing", focus.OFF_DETAIL)
     await check_narratives()
 
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+    db.init_db()      # een nieuwe tabel (zoals rule_trades) bestaat dan ook als deze timer eerder draait dan de bot na een deploy
     asyncio.run(run_all_checks())
