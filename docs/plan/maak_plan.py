@@ -9,6 +9,8 @@ import sys
 OUT = pathlib.Path(__file__).parent
 sys.path.insert(0, str(OUT.parent / "cursus"))
 import maak_cursus as C  # noqa: E402
+sys.path.insert(0, str(OUT))
+import voorbeelden as V  # noqa: E402
 
 INK = C.INK
 STAND = "9 november 2026"
@@ -127,6 +129,35 @@ sec("De andere instappunten en de poorten", f"""
 <div class="box"><b>Eerlijk over de herkomst.</b> Een deel van de regels ontstond uit voorbeelden die een trader aandroeg, zoals K uit één geval op SOL.
 Zo'n regel scoort op zijn eigen aanleiding altijd goed en dat telt niet als bewijs. Daarom geldt voor elk instappunt een eigen meting vanaf het
 bevriezingsmoment en een stopregel.</div>
+""")
+
+_fig1, _tab1, _e = V.voorbeeld_een()
+_fig2, _reden2, _att2 = V.voorbeeld_twee()
+_push = (f'<div class="push">{C.LOGO.format(cls="", c=INK)}<div><div class="pt">▼ DEMO short · HesPulse A</div>'
+         f'<div class="pb">Limiet {V.fmt(_e["limit"])} · Stop {V.fmt(_e["stop"])} · Doel {V.fmt(_e["take"])}</div></div></div>')
+
+sec("Voorbeelden", f"""
+<p>Drie voorbeelden. De eerste twee zijn getekende koersen waarop het model zelf rekent. De getallen komen uit de code, niet uit de hand.
+Er is geen echte trade bij betrokken en ze bewijzen niets over winst. Ze laten zien hoe een beslissing van het model eruitziet.</p>
+<h3>Voorbeeld 1: een volledig plan</h3>
+{_fig1}
+{_tab1}
+<p>De limiet ligt in het gat dat de harde beweging achterliet. De stop staat voorbij de top van de prik. Het doel is de onderkant van de range.
+Zo ziet de melding eruit:</p>
+{_push}
+<p class="note">Meer staat er niet in. De trader opent de kaart, ziet het positievak en zet de order met een checklist. Vult de limiet niet binnen zes uur, dan vervalt het plan.</p>
+<h3>Voorbeeld 2: een run geeft geen plan</h3>
+{_fig2}
+<p>De reden die het model vastlegt: <i>{html.escape(_reden2)}</i> Dit scenario eindigde zonder plan, want er lag daarna geen pool meer in de range.
+Zo'n uitkomst hoort bij het model: liever geen plan dan een plan op een koers die doorloopt.</p>
+<h3>Voorbeeld 3: vier gevallen waaruit regels groeiden</h3>
+<p>Een deel van de instapregels ontstond uit echte grafieken die de eigenaar aandroeg. Dat is nuttig en riskant tegelijk: een regel scoort altijd goed op zijn eigen aanleiding.
+Daarom krijgt elke regel uit één voorbeeld een eigen meting vanaf het bevriezingsmoment.</p>
+<table><tr><th>Geval</th><th>Wat er te zien was</th><th>Wat er veranderde</th></tr>
+<tr><td>PUMP en ZEC, begin november</td><td>Shorts vanaf een lagere top, zonder sweep. A vraagt een sweep en gaf niets.</td><td>B toegevoegd. Bij PUMP viel B af op de eis van een gat, daarom kwam R erbij: limiet op het gebroken niveau.</td></tr>
+<tr><td>SOL, 30 oktober</td><td>Een rechte stijging. Het laatste dal ligt dan zo ver weg dat B en R te laat breken.</td><td>K toegevoegd: de breuk van de consolidatie van twee uur na de top.</td></tr>
+<tr><td>ZEC, begin november</td><td>Een 4u-candle sloot door de rand van de range terwijl de dag omlaag bleef wijzen. Het scenario viel weg.</td><td>De range rekt op naar het nieuwe uiterste en er mag een nieuw scenario in beginnen.</td></tr>
+<tr><td>NEAR, 3 november</td><td>Een short in discount na een lange daling. Er lag geen pool in premium binnen 6% van de koers.</td><td>Niets. Het model meldt die soort niet. Dit staat op de lijst voor na de bevriezing.</td></tr></table>
 """)
 
 sec("De indicator en het product", f"""
@@ -254,7 +285,7 @@ def build():
     body = ""
     for i, (t, b) in enumerate(SECTIONS):
         kick = "Woordenlijst" if t == "Woordenlijst" else f"Hoofdstuk {i + 1}"
-        cls = ' class="nieuw"' if t in ("Hoe HesPulse setups vindt", "Het instappunt A, regel voor regel", "Risico's", "Woordenlijst") else ""
+        cls = ' class="nieuw"' if t in ("Hoe HesPulse setups vindt", "Het instappunt A, regel voor regel", "Voorbeelden", "Risico's", "Woordenlijst") else ""
         body += f'<section{cls}><p class="kicker">{kick}</p><h2>{html.escape(t)}</h2>{b}</section>'
     # De hoofdstukken lopen door, zodat er geen halve pagina's leeg blijven; alleen de kern (hoofdstuk 4) begint op een nieuwe pagina.
     css = C.CSS + """
@@ -267,6 +298,7 @@ table { break-inside: auto; } tr { break-inside: avoid; }
 section .dia { width: 66%; display: block; margin: 0 auto; }
 section .flow-wide .dia { width: 100%; }
 figure { margin: 3.5mm 0; }
+section figure.ex .dia { width: 100%; }
 """
     head = f'<!doctype html><html lang="nl"><head><meta charset="utf-8"><title>HesPulse, plan en visie</title><style>{css}</style></head><body>'
     cover = f"""{head}<div class="cover"><div class="cover-top">{C.LOGO.format(cls="cover-logo", c=INK)}
